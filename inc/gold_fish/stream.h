@@ -453,7 +453,7 @@ namespace gold_fish { namespace stream
 			{
 				if (data.size() <= m_free_space.size())
 				{
-					std::copy(data.begin(), data.end(), m_free_space.begin());
+					std::copy(data.begin(), data.end(), stdext::make_unchecked_array_iterator(m_free_space.begin()));
 					m_free_space.remove_front(data.size());
 					return;
 				}

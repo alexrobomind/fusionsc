@@ -16,7 +16,7 @@ namespace gold_fish
 
 	#define TEST_CASE(name) \
 		void name(); \
-		static bool CONCAT(add, __COUNTER__) = []{ test_cases().push_back({#name, &name}); return true; }(); \
+		static bool CONCAT(add, __COUNTER__) = []{ gold_fish::test_cases().push_back({#name, &name}); return true; }(); \
 		void name()
 
 	#define STRINGIFY(x) #x

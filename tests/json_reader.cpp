@@ -1,5 +1,5 @@
-#include "json_reader.h"
-#include "dom_reader.h"
+#include <gold_fish/json_reader.h>
+#include <gold_fish/dom_reader.h>
 #include "unit_test.h"
 
 namespace gold_fish { namespace dom

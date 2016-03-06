@@ -1,9 +1,9 @@
-#include "dom_reader.h"
-#include "dom_writer.h"
-#include "json_reader.h"
-#include "json_writer.h"
+#include <gold_fish/dom_reader.h>
+#include <gold_fish/dom_writer.h>
+#include <gold_fish/json_reader.h>
+#include <gold_fish/json_writer.h>
+#include <gold_fish/stream.h>
 #include "unit_test.h"
-#include "stream.h"
 
 namespace gold_fish { namespace dom
 {

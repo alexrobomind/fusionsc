@@ -137,6 +137,7 @@
     <ClCompile Include="match.cpp" />
     <ClCompile Include="sax_reader.cpp" />
     <ClCompile Include="stream.cpp" />
+    <ClCompile Include="tutorial.cpp" />
     <ClCompile Include="unit_test.cpp" />
     <ClCompile Include="variant.cpp" />
   </ItemGroup>

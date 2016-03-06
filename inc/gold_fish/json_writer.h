@@ -4,6 +4,7 @@
 #include "array_ref.h"
 #include "base64_stream.h"
 #include "debug_checks_writer.h"
+#include "sax_writer.h"
 
 namespace gold_fish { namespace json
 {
@@ -184,6 +185,11 @@ namespace gold_fish { namespace json
 		{
 			stream::write(m_stream, '{');
 			return{ m_stream };
+		}
+
+		template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, void> write(Document& d)
+		{
+			copy_document(*this, d);
 		}
 	private:
 		Stream m_stream;

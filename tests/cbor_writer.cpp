@@ -1,6 +1,6 @@
-#include "dom_writer.h"
-#include "cbor_writer.h"
-#include "stream.h"
+#include <gold_fish/dom_writer.h>
+#include <gold_fish/cbor_writer.h>
+#include <gold_fish/stream.h>
 #include "unit_test.h"
 
 namespace gold_fish { namespace dom

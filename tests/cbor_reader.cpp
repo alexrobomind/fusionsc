@@ -1,7 +1,7 @@
-#include "cbor_reader.h"
-#include "dom_reader.h"
+#include <gold_fish/cbor_reader.h>
+#include <gold_fish/dom_reader.h>
+#include <gold_fish/stream.h>
 #include "unit_test.h"
-#include "stream.h"
 
 #include <vector>
 

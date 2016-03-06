@@ -101,7 +101,7 @@ namespace gold_fish
 	size_t copy(array_ref<T> from, array_ref<U> to)
 	{
 		assert(from.size() == to.size());
-		std::copy(from.begin(), from.end(), to.begin());
+		std::copy(from.begin(), from.end(), stdext::make_unchecked_array_iterator(to.begin()));
 		return from.size();
 	}
 

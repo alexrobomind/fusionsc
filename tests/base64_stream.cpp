@@ -1,4 +1,4 @@
-#include "base64_stream.h"
+#include <gold_fish/base64_stream.h>
 #include "unit_test.h"
 
 namespace gold_fish { namespace stream

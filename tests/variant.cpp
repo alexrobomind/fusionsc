@@ -1,4 +1,4 @@
-#include "variant.h"
+#include <gold_fish/variant.h>
 #include "unit_test.h"
 
 namespace gold_fish

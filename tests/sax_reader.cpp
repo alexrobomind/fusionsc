@@ -1,5 +1,5 @@
-#include "json_reader.h"
-#include "sax_reader.h"
+#include <gold_fish/json_reader.h>
+#include <gold_fish/sax_reader.h>
 #include "unit_test.h"
 
 namespace gold_fish
@@ -9,7 +9,7 @@ namespace gold_fish
 		return std::distance(keys.begin(), std::find_if(keys.begin(), keys.end(),
 			[&](auto&& key)
 		{
-			return key.size() == value.size() && std::equal(value.begin(), value.end(), key.begin());
+			return key.size() == value.size() && std::equal(value.begin(), value.end(), stdext::make_unchecked_array_iterator(key.begin()));
 		}));
 	}
 

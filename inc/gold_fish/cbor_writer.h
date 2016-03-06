@@ -5,6 +5,7 @@
 #include "debug_checks_writer.h"
 #include <limits>
 #include "numbers.h"
+#include "sax_writer.h"
 
 namespace gold_fish { namespace cbor
 {
@@ -119,12 +120,12 @@ namespace gold_fish { namespace cbor
 		}
 		indefinite_stream_writer<Stream, 2> write_binary()
 		{
-			details::write_integer<2>(31);
+			details::write_integer<2>(m_stream, 31);
 			return{ m_stream };
 		}
 		indefinite_stream_writer<Stream, 3> write_text()
 		{
-			details::write_integer<3>(31);
+			details::write_integer<3>(m_stream, 31);
 			return{ m_stream };
 		}
 
@@ -133,6 +134,11 @@ namespace gold_fish { namespace cbor
 
 		map_writer<Stream> write_map(uint64_t size);
 		indefinite_map_writer<Stream> write_map();
+
+		template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, void> write(Document& d)
+		{
+			copy_document(*this, d);
+		}
 
 	private:
 		Stream m_stream;

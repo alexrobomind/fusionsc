@@ -191,6 +191,10 @@ namespace gold_fish { namespace debug_check
 		auto write_map(uint64_t size) { return check_size_of_map(add_write_checks_on_map(m_writer.write_map(size)), size); }
 		auto write_map() { return add_write_checks_on_map(m_writer.write_map()); }
 
+		template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, void> write(Document& d)
+		{
+			copy_document(*this, d);
+		}
 	private:
 		inner m_writer;
 	};

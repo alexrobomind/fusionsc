@@ -1,5 +1,5 @@
-#include "code_gen.h"
-#include "stream.h"
+#include <gold_fish/code_gen.h>
+#include <gold_fish/stream.h>
 #include "unit_test.h"
 #include <sstream>
 
