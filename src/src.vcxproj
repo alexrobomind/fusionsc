@@ -110,6 +110,28 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\inc\array_ref.h" />
+    <ClInclude Include="..\inc\base64_stream.h" />
+    <ClInclude Include="..\inc\cbor_reader.h" />
+    <ClInclude Include="..\inc\cbor_writer.h" />
+    <ClInclude Include="..\inc\code_gen.h" />
+    <ClInclude Include="..\inc\debug_checks_reader.h" />
+    <ClInclude Include="..\inc\debug_checks_writer.h" />
+    <ClInclude Include="..\inc\dom.h" />
+    <ClInclude Include="..\inc\dom_reader.h" />
+    <ClInclude Include="..\inc\dom_writer.h" />
+    <ClInclude Include="..\inc\file_stream.h" />
+    <ClInclude Include="..\inc\json_reader.h" />
+    <ClInclude Include="..\inc\json_writer.h" />
+    <ClInclude Include="..\inc\match.h" />
+    <ClInclude Include="..\inc\numbers.h" />
+    <ClInclude Include="..\inc\optional.h" />
+    <ClInclude Include="..\inc\sax_reader.h" />
+    <ClInclude Include="..\inc\stream.h" />
+    <ClInclude Include="..\inc\tags.h" />
+    <ClInclude Include="..\inc\type_helper.h" />
+    <ClInclude Include="..\inc\uncaught_exception.h" />
+    <ClInclude Include="..\inc\variant.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
