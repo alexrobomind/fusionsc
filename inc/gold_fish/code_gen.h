@@ -139,9 +139,9 @@ namespace gold_fish {
 	}
 
 	template <class Stream, class OutputStream>
-	void generate_code(OutputStream& output, Stream s)
+	void generate_code(OutputStream& output, Stream& s)
 	{
-		auto x = json::read(std::move(s));
+		auto x = json::read(s);
 		if (!x.is<tags::map>())
 			throw bad_type_declaration();
 		auto& list_of_types = x.as<tags::map>();

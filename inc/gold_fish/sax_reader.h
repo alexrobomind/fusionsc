@@ -53,12 +53,12 @@ namespace gold_fish
 	
 	template <class Document> void skip(Document&& d);
 
-	template <class type> void skip(type&& x, tags::undefined) {}
-	template <class type> void skip(type&& x, tags::floating_point) {}
-	template <class type> void skip(type&& x, tags::unsigned_int) {}
-	template <class type> void skip(type&& x, tags::signed_int) {}
-	template <class type> void skip(type&& x, tags::boolean) {}
-	template <class type> void skip(type&& x, tags::null) {}
+	template <class type> void skip(type&&, tags::undefined) {}
+	template <class type> void skip(type&&, tags::floating_point) {}
+	template <class type> void skip(type&&, tags::unsigned_int) {}
+	template <class type> void skip(type&&, tags::signed_int) {}
+	template <class type> void skip(type&&, tags::boolean) {}
+	template <class type> void skip(type&&, tags::null) {}
 	template <class type> void skip(type&& x, tags::byte_string)
 	{
 		stream::skip(x, std::numeric_limits<uint64_t>::max());
@@ -84,7 +84,7 @@ namespace gold_fish
 
 	template <class Document> void skip(Document&& d)
 	{
-		d.visit([&](auto&& x, auto tag) { skip(std::forward<decltype(x)>(x), tags::get_tag(x)); });
+		d.visit([&](auto&& x, auto) { skip(std::forward<decltype(x)>(x), tags::get_tag(x)); });
 	}
 	
 	size_t index_of(const_buffer_ref value, array_ref<const array_ref<const char>> keys);

@@ -9,7 +9,7 @@ namespace gold_fish { namespace dom
 {
 	TEST_CASE(read_valid_examples)
 	{
-		auto to_hex = [](char c)
+		auto to_hex = [](char c) -> uint8_t
 		{
 			     if ('0' <= c && c <= '9') return c - '0';
 			else if ('a' <= c && c <= 'f') return c - 'a' + 10;
@@ -31,7 +31,7 @@ namespace gold_fish { namespace dom
 		{
 			auto binary = to_vector(input);
 			stream::array_ref_reader s(array_ref<const uint8_t>{ binary });
-			auto result = load_in_memory(cbor::read(stream::ref(s)));
+			auto result = load_in_memory(cbor::read(s));
 			TEST(skip(s, 1) == 0);
 			return result;
 		};

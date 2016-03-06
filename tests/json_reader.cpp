@@ -9,7 +9,7 @@ namespace gold_fish { namespace dom
 		auto r = [&](std::string input)
 		{
 			stream::array_ref_reader s({ reinterpret_cast<const uint8_t*>(input.data()), input.size() });
-			auto result = load_in_memory(json::read(stream::ref(s)));
+			auto result = load_in_memory(json::read(s));
 			TEST(skip(s, 1) == 0);
 			return result;
 		};
@@ -86,7 +86,7 @@ namespace gold_fish { namespace dom
 			auto s = stream::read_string_literal(text);
 			expect_exception<decltype(exception)>([&]
 			{
-				dom::load_in_memory(json::read(stream::ref(s)));
+				dom::load_in_memory(json::read(s));
 				if (skip(s, 1) == 1)
 					throw data_partially_parsed{};
 			});
@@ -129,7 +129,7 @@ namespace gold_fish { namespace dom
 		auto run = [](const char* text)
 		{
 			auto s = stream::read_string_literal(text);
-			dom::load_in_memory(json::read(stream::ref(s)));
+			dom::load_in_memory(json::read(s));
 			TEST(json::details::peek_non_space(s) == nullopt);
 		};
 

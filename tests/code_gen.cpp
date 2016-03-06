@@ -52,7 +52,8 @@ namespace gold_fish
 		{
 			auto parse_type_from_json = [](auto s)
 			{
-				return parse_type(dom::load_in_memory(json::read(stream::ref(stream::read_string_literal(s)))));
+				auto input_stream = stream::read_string_literal(s);
+				return parse_type(dom::load_in_memory(json::read(input_stream)));
 			};
 
 			TEST(parse_type_from_json("\"int\"") == "simple_type<tags::signed_int>");
@@ -86,13 +87,14 @@ namespace gold_fish
 
 	TEST_CASE(test_generate_code)
 	{
-		TEST(generate_code(stream::ref(stream::read_string_literal(
+		auto input_stream = stream::read_string_literal(
 			R"json({
 				"point":{
 					"x":{"type":"uint"},
 					"y":{"type":"uint"}
 				}
-			})json"))) == R"cpp(template <class Map> class point
+			})json");
+		TEST(generate_code(input_stream) == R"cpp(template <class Map> class point
 {
 public:
 	point(Map map)

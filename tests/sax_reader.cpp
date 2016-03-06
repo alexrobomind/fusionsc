@@ -18,7 +18,7 @@ namespace gold_fish
 		uint8_t buffer[1024];
 
 		auto s = stream::read_string_literal(R"json({"1":1,"12":2,"123":3})json");
-		auto map = json::read(stream::ref(s));
+		auto map = json::read(s);
 		auto& x = map.as<tags::map>();
 
 		auto index = skip_to_key(x, buffer, make_array_ref(keys));

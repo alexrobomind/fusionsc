@@ -29,7 +29,7 @@ namespace gold_fish { namespace dom
 
 	TEST_CASE(write_valid_examples)
 	{
-		auto to_hex = [](char c)
+		auto to_hex = [](char c) -> uint8_t
 		{
 			if ('0' <= c && c <= '9') return c - '0';
 			else if ('a' <= c && c <= 'f') return c - 'a' + 10;
@@ -50,7 +50,7 @@ namespace gold_fish { namespace dom
 		auto w = [&](const document& d)
 		{
 			stream::vector_writer s;
-			write(cbor::write(stream::ref(s)), d);
+			write(cbor::write(s), d);
 			s.flush();
 			return to_hex_string(s.data);
 		};

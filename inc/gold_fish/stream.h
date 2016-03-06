@@ -69,8 +69,8 @@ namespace gold_fish { namespace stream
 	class empty
 	{
 	public:
-		size_t read_buffer(buffer_ref data) { return 0; }
-		uint64_t skip(uint64_t x) { return 0; }
+		size_t read_buffer(buffer_ref) { return 0; }
+		uint64_t skip(uint64_t) { return 0; }
 		template <class T> std::enable_if_t<std::is_standard_layout<T>::value, optional<T>> peek() { return nullopt; }
 	};
 
@@ -117,8 +117,8 @@ namespace gold_fish { namespace stream
 	template <class inner> struct ref_type<ref_reader<inner>> { using reader = ref_reader<inner>; };
 	template <class inner> struct ref_type<ref_writer<inner>> { using writer = ref_writer<inner>; };
 
-	template <class inner> std::enable_if_t<is_reader<inner>::value && !is_ref<inner>::value, ref_reader<inner>> ref(inner& stream) { return{ std::move(stream) }; }
-	template <class inner> std::enable_if_t<is_writer<inner>::value && !is_ref<inner>::value, ref_writer<inner>> ref(inner& stream) { return{ std::move(stream) }; }
+	template <class inner> std::enable_if_t<is_reader<inner>::value && !is_ref<inner>::value, ref_reader<inner>> ref(inner& stream) { return{ stream }; }
+	template <class inner> std::enable_if_t<is_writer<inner>::value && !is_ref<inner>::value, ref_writer<inner>> ref(inner& stream) { return{ stream }; }
 	template <class inner> ref_reader<inner> ref(ref_reader<inner>& stream) { return stream; }
 	template <class inner> ref_writer<inner> ref(ref_writer<inner>& stream) { return stream; }
 
