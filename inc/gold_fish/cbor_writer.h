@@ -182,7 +182,7 @@ namespace gold_fish { namespace cbor
 	}
 	template <class Stream> indefinite_array_writer<Stream> document_writer<Stream>::write_array()
 	{
-		details::write_integer<4>(m_stream, 31);
+		stream::write(m_stream, static_cast<uint8_t>((4 << 5) | 31));
 		return{ m_stream };
 	}
 
@@ -219,7 +219,7 @@ namespace gold_fish { namespace cbor
 	}
 	template <class Stream> indefinite_map_writer<Stream> document_writer<Stream>::write_map()
 	{
-		details::write_integer<5>(m_stream, 31);
+		stream::write(m_stream, static_cast<uint8_t>((5 << 5) | 31));
 		return{ m_stream };
 	}
 }}

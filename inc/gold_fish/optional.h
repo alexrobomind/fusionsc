@@ -171,7 +171,7 @@ namespace gold_fish
 		const T* operator ->() const { return &reinterpret_cast<const T&>(m_data); }
 		explicit operator bool() const { return !invalid_state::is(m_data); }
 
-		friend bool operator == (const optional& lhs, nullopt_t) { return static_cast<bool>(lhs); }
+		friend bool operator == (const optional& lhs, nullopt_t) { return !static_cast<bool>(lhs); }
 		friend bool operator == (const optional& lhs, const T& t) { return lhs && *lhs == t; }
 		friend bool operator == (const optional& lhs, const optional& rhs)
 		{

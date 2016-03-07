@@ -29,9 +29,13 @@ namespace gold_fish
 				return l(std::forward<decltype(x)>(x), tags::get_tag(x));
 			});
 		}
-		template <class tag> auto& as() noexcept
+		template <class tag> auto& as() & noexcept
 		{
 			return m_data.as<tags::type_with_tag_t<tag, types...>>();
+		}
+		template <class tag> auto&& as() && noexcept
+		{
+			return std::move(m_data).as<tags::type_with_tag_t<tag, types...>>();
 		}
 		template <class tag> bool is() const noexcept
 		{

@@ -10,70 +10,70 @@ namespace gold_fish { namespace dom
 		{
 			stream::array_ref_reader s({ reinterpret_cast<const uint8_t*>(input.data()), input.size() });
 			auto result = load_in_memory(json::read(s));
-			TEST(skip(s, 1) == 0);
+			test(skip(s, 1) == 0);
 			return result;
 		};
 		using namespace std::string_literals;
 
-		TEST(r("\"\"") == text_string(""));
-		TEST(r("\"a\"") == text_string("a"));
-		TEST(r("\"a\\u0001\\b\\n\\r\\t\\\"\\/\""s) == text_string(u8"a\u0001\b\n\r\t\"/"));
-		TEST(r("\"\\uD801\\uDC37\""s) == text_string(u8"\U00010437"));
+		test(r("\"\"") == text_string(""));
+		test(r("\"a\"") == text_string("a"));
+		test(r("\"a\\u0001\\b\\n\\r\\t\\\"\\/\""s) == text_string(u8"a\u0001\b\n\r\t\"/"));
+		test(r("\"\\uD801\\uDC37\""s) == text_string(u8"\U00010437"));
 		
 		expect_exception<json::ill_formatted>([&] { r("\"\\uD801\""s); });
 		expect_exception<json::ill_formatted>([&] { r("\"\\uD801a\""s); });
 		expect_exception<json::ill_formatted>([&] { r("\"\\uD801\\n\""s); });
 
-		TEST(r("true") == true);
-		TEST(r("false") == false);
-		TEST(r("null") == nullptr);
+		test(r("true") == true);
+		test(r("false") == false);
+		test(r("null") == nullptr);
 
-		TEST(r("0") == 0ull);
-		TEST(r("1") == 1ull);
-		TEST(r("10") == 10ull);
-		TEST(r("4294967295") == 4294967295ull);
-		TEST(r("18446744073709551615") == 18446744073709551615ull);
+		test(r("0") == 0ull);
+		test(r("1") == 1ull);
+		test(r("10") == 10ull);
+		test(r("4294967295") == 4294967295ull);
+		test(r("18446744073709551615") == 18446744073709551615ull);
 		expect_exception<json::integer_overflow>([&] { r("18446744073709551616"s); });
 		expect_exception<json::integer_overflow>([&] { r("18446744073709551617"s); });
 		expect_exception<json::integer_overflow>([&] { r("18446744073709551618"s); });
 		expect_exception<json::integer_overflow>([&] { r("18446744073709551619"s); });
 		//expect_exception<integer_overflow>([&] { r("[00]"s); });
 
-		TEST(r("-0") == 0ll);
-		TEST(r("-1") == -1ll);
-		TEST(r("-10") == -10ll);
-		TEST(r("-2147483647") == -2147483647ll);
-		TEST(r("-2147483648") == -2147483648ll);
-		TEST(r("-9223372036854775808") == -9223372036854775808ll);
+		test(r("-0") == 0ll);
+		test(r("-1") == -1ll);
+		test(r("-10") == -10ll);
+		test(r("-2147483647") == -2147483647ll);
+		test(r("-2147483648") == -2147483648ll);
+		test(r("-9223372036854775808") == -9223372036854775808ll);
 		expect_exception<json::integer_overflow>([&] { r("-9223372036854775809"s); });
 
-		TEST(r("0.0") == 0.);
-		TEST(r("0.5") == 0.5);
-		TEST(r("0.50") == 0.5);
-		TEST(r("0.05") == 0.05);
-		TEST(r("50.05") == 50.05);
-		TEST(r("-0.0") == 0.);
-		TEST(r("-0.5") == -0.5);
+		test(r("0.0") == 0.);
+		test(r("0.5") == 0.5);
+		test(r("0.50") == 0.5);
+		test(r("0.05") == 0.05);
+		test(r("50.05") == 50.05);
+		test(r("-0.0") == 0.);
+		test(r("-0.5") == -0.5);
 
-		TEST(r("-0.5e1") == -5.);
-		TEST(r("-0.5e01") == -5.);
-		TEST(r("-0.5e001") == -5.);
-		TEST(r("-0.5e+1") == -5.);
-		TEST(r("-0.5E+1") == -5.);
-		TEST(r("-0.5E+10") == -5000000000.);
+		test(r("-0.5e1") == -5.);
+		test(r("-0.5e01") == -5.);
+		test(r("-0.5e001") == -5.);
+		test(r("-0.5e+1") == -5.);
+		test(r("-0.5E+1") == -5.);
+		test(r("-0.5E+10") == -5000000000.);
 
-		TEST(r("-5E-1") == -0.5);
+		test(r("-5E-1") == -0.5);
 
-		TEST(r("[]") == array{});
-		TEST(r("[ ]") == array{});
-		TEST(r(" [ ]") == array{});
+		test(r("[]") == array{});
+		test(r("[ ]") == array{});
+		test(r(" [ ]") == array{});
 
-		TEST(r("[1]") == array{ 1ull });
-		TEST(r("[1,2]") == array{ 1ull, 2ull });
-		TEST(r("[[]]") == array{ dom::document(array{}) });
+		test(r("[1]") == array{ 1ull });
+		test(r("[1,2]") == array{ 1ull, 2ull });
+		test(r("[[]]") == array{ dom::document(array{}) });
 
-		TEST(r("{}") == map{});
-		TEST(r("{\"foo\":1}") == map{ { text_string("foo"), 1ull } });
+		test(r("{}") == map{});
+		test(r("{\"foo\":1}") == map{ { text_string("foo"), 1ull } });
 	}
 
 
@@ -130,7 +130,7 @@ namespace gold_fish { namespace dom
 		{
 			auto s = stream::read_string_literal(text);
 			dom::load_in_memory(json::read(s));
-			TEST(json::details::peek_non_space(s) == nullopt);
+			test(json::details::peek_non_space(s) == nullopt);
 		};
 
 		run(R"json([

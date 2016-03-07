@@ -8,7 +8,10 @@ src/x64/
 tests/Debug/
 tests/Release/
 tests/x64/
+ipch/
+TestResults/
 
 *.sdf
 *.VC.opendb
 *.vcxproj.filters
+*.vcxproj.user

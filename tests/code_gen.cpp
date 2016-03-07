@@ -56,24 +56,24 @@ namespace gold_fish
 				return parse_type(dom::load_in_memory(json::read(input_stream)));
 			};
 
-			TEST(parse_type_from_json("\"int\"") == "simple_type<tags::signed_int>");
-			TEST(parse_type_from_json("\"uint\"") == "simple_type<tags::unsigned_int>");
-			TEST(parse_type_from_json("\"float\"") == "simple_type<tags::floating_point>");
-			TEST(parse_type_from_json("\"bool\"") == "simple_type<tags::boolean>");
-			TEST(parse_type_from_json("\"blob\"") == "simple_type<tags::byte_string>");
-			TEST(parse_type_from_json("\"string\"") == "simple_type<tags::text_string>");
-			TEST(parse_type_from_json("\"document\"") == "untyped");
-			TEST(parse_type_from_json("\"point\"") == "custom_type<point>");
+			test(parse_type_from_json("\"int\"") == "simple_type<tags::signed_int>");
+			test(parse_type_from_json("\"uint\"") == "simple_type<tags::unsigned_int>");
+			test(parse_type_from_json("\"float\"") == "simple_type<tags::floating_point>");
+			test(parse_type_from_json("\"bool\"") == "simple_type<tags::boolean>");
+			test(parse_type_from_json("\"blob\"") == "simple_type<tags::byte_string>");
+			test(parse_type_from_json("\"string\"") == "simple_type<tags::text_string>");
+			test(parse_type_from_json("\"document\"") == "untyped");
+			test(parse_type_from_json("\"point\"") == "custom_type<point>");
 
-			TEST(parse_type_from_json("[\"document\"]") == "typed_array_type<untyped>");
-			TEST(parse_type_from_json("[\"int\"]") == "typed_array_type<simple_type<tags::signed_int>>");
-			TEST(parse_type_from_json("[[\"int\"]]") == "typed_array_type<typed_array_type<simple_type<tags::signed_int>>>");
+			test(parse_type_from_json("[\"document\"]") == "typed_array_type<untyped>");
+			test(parse_type_from_json("[\"int\"]") == "typed_array_type<simple_type<tags::signed_int>>");
+			test(parse_type_from_json("[[\"int\"]]") == "typed_array_type<typed_array_type<simple_type<tags::signed_int>>>");
 
-			TEST(parse_type_from_json("{\"document\":\"document\"}") == "typed_map_type<untyped, untyped>");
-			TEST(parse_type_from_json("{\"blob\":[\"string\"]}") == "typed_map_type<simple_type<tags::byte_string>, typed_array_type<simple_type<tags::text_string>>>");
+			test(parse_type_from_json("{\"document\":\"document\"}") == "typed_map_type<untyped, untyped>");
+			test(parse_type_from_json("{\"blob\":[\"string\"]}") == "typed_map_type<simple_type<tags::byte_string>, typed_array_type<simple_type<tags::text_string>>>");
 
 			// A map from a map<array<int>,int> to int
-			TEST(parse_type_from_json(R"json({{["int"]:"int"}:"int"})json") == "typed_map_type<typed_map_type<typed_array_type<simple_type<tags::signed_int>>, simple_type<tags::signed_int>>, simple_type<tags::signed_int>>");
+			test(parse_type_from_json(R"json({{["int"]:"int"}:"int"})json") == "typed_map_type<typed_map_type<typed_array_type<simple_type<tags::signed_int>>, simple_type<tags::signed_int>>, simple_type<tags::signed_int>>");
 		}
 	}
 
@@ -94,7 +94,7 @@ namespace gold_fish
 					"y":{"type":"uint"}
 				}
 			})json");
-		TEST(generate_code(input_stream) == R"cpp(template <class Map> class point
+		test(generate_code(input_stream) == R"cpp(template <class Map> class point
 {
 public:
 	point(Map map)
@@ -163,8 +163,8 @@ private:
 	TEST_CASE(test_point)
 	{
 		//auto pt = custom_type<point>::cast(json::read(stream::ref(stream::read_string_literal(R"json({"x":2, "y":3})json"))));
-		//TEST(pt.x() == 2);
-		//TEST(pt.y() == 3);
+		//test(pt.x() == 2);
+		//test(pt.y() == 3);
 		//sax::skip(pt);
 	}
 }

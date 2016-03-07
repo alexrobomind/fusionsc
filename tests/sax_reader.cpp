@@ -31,11 +31,11 @@ namespace gold_fish
 	}
 	TEST_CASE(test_skip_to_key)
 	{
-		TEST(test_skip_to_key_helper({ make_array_ref("1").without_end(1) }) == std::make_pair(0, 1));
-		TEST(test_skip_to_key_helper({ make_array_ref("12").without_end(1) }) == std::make_pair(0, 2));
-		TEST(test_skip_to_key_helper({ make_array_ref("123").without_end(1) }) == std::make_pair(0, 3));
-		TEST(test_skip_to_key_helper({ make_array_ref("123").without_end(1), make_array_ref("12").without_end(1) }) == std::make_pair(1, 2));
-		TEST(test_skip_to_key_helper({ make_array_ref("a").without_end(1) }) == nullopt);
+		test(test_skip_to_key_helper({ make_array_ref("1").without_end(1) }) == std::make_pair(0, 1));
+		test(test_skip_to_key_helper({ make_array_ref("12").without_end(1) }) == std::make_pair(0, 2));
+		test(test_skip_to_key_helper({ make_array_ref("123").without_end(1) }) == std::make_pair(0, 3));
+		test(test_skip_to_key_helper({ make_array_ref("123").without_end(1), make_array_ref("12").without_end(1) }) == std::make_pair(1, 2));
+		test(test_skip_to_key_helper({ make_array_ref("a").without_end(1) }) == nullopt);
 	}
 
 	class text

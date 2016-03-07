@@ -1,7 +1,7 @@
-#include "uncaught_exception.h"
+#include <gold_fish/uncaught_exception.h>
 #include "unit_test.h"
 
-namespace cson
+namespace gold_fish
 {
 	struct Test
 	{
@@ -10,7 +10,7 @@ namespace cson
 		{}
 		~Test() noexcept(false)
 		{
-			TEST(checker() == expected);
+			test(checker() == expected);
 		}
 
 		bool expected;
@@ -19,7 +19,7 @@ namespace cson
 
 	TEST_CASE(uncaught_no_exceptions)
 	{
-		TEST(uncaught_exception_checker()() == false);
+		test(uncaught_exception_checker()() == false);
 	}
 	TEST_CASE(uncaught_no_exceptions_destructor)
 	{

@@ -39,8 +39,8 @@ namespace gold_fish { namespace stream
 		while (x >= sizeof(buffer))
 		{
 			auto cb = s.read_buffer(buffer);
-			if (cb == 0)
-				return original - x;
+			if (cb < sizeof(buffer))
+				return original;
 			x -= cb;
 		}
 		x -= s.read_buffer({ buffer, buffer + x });
@@ -260,6 +260,7 @@ namespace gold_fish { namespace stream
 	};
 	template <size_t N> array_reader<N> read_array(const std::array<uint8_t, N>& x) { return{ x }; }
 	inline vector_reader read_array(std::vector<uint8_t> x) { return{ std::move(x) }; }
+	inline array_ref_reader read_array_ref(const_buffer_ref x) { return{ x }; }
 	template <size_t N> array_ref_reader read_string_literal(const char(&s)[N]) { assert(s[N - 1] == 0); return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), N - 1 }; }
 	inline array_ref_reader read_string_literal(const char* s) { return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), strlen(s) }; }
 

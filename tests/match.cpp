@@ -14,9 +14,9 @@ namespace gold_fish
 			[](A&&) { return 2; }
 		);
 
-		TEST(x(A{}) == 2);
-		TEST(x(B{}) == 1);
-		TEST(x(C{}) == 2);
+		test(x(A{}) == 2);
+		test(x(B{}) == 1);
+		test(x(C{}) == 2);
 	}
 }
 

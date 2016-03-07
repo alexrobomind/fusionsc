@@ -16,6 +16,10 @@ namespace gold_fish
 		template <> struct conjunction<> { enum { value = true }; };
 		template <class Head, class... Tail> struct conjunction<Head, Tail...> { enum { value = Head::value && conjunction<Tail...>::value }; };
 
+		template <class...> struct disjunction {};
+		template <> struct disjunction<> { enum { value = false }; };
+		template <class Head, class... Tail> struct disjunction<Head, Tail...> { enum { value = Head::value || disjunction<Tail...>::value }; };
+
 		template <size_t...> struct largest {};
 		template <size_t x> struct largest<x> { enum { value = x }; };
 		template <size_t x, size_t y> struct largest<x, y> { enum { value = x > y ? x : y }; };
@@ -36,7 +40,9 @@ namespace gold_fish
 		template <size_t N, class Head, class... Tail> struct nth_type<N, Head, Tail...> { using type = typename nth_type<N - 1, Tail...>::type; };
 		template <class Head, class... Tail> struct nth_type<0, Head, Tail...> { using type = Head; };
 		template <size_t N, class... Tail> using nth_type_t = typename nth_type<N, Tail...>::type;
-		
+
+		template <class T, class... Types> using is_one_of = disjunction<std::is_same<T, Types>...>;
+
 		template <class... types> class variant_base
 		{
 		public:		
@@ -191,23 +197,6 @@ namespace gold_fish
 				}
 				set_which(rhs.which());
 			}
-
-			variant_copy_impl& operator = (variant_copy_impl&& rhs)
-			{
-				rhs.visit([&](auto& x)
-				{
-					*this = std::move(x);
-				});
-				return *this;
-			}
-			variant_copy_impl& operator = (const variant_copy_impl& rhs)
-			{
-				rhs.visit([&](auto& x)
-				{
-					*this = x;
-				});
-				return *this;
-			}
 		};
 		template <class... types> using variant_copy = variant_copy_impl<
 			conjunction<std::is_trivially_copy_constructible<types>...>::value &&
@@ -258,10 +247,24 @@ namespace gold_fish
 
 		variant(const variant&) = default;
 		variant(variant&&) = default;
-		variant& operator = (const variant&) = default;
-		variant& operator = (variant&&) = default;
-	
-		template <class U> variant& operator = (U&& u)
+
+		variant& operator = (variant&& rhs)
+		{
+			rhs.visit([&](auto& x)
+			{
+				*this = std::move(x);
+			});
+			return *this;
+		}
+		variant& operator = (const variant& rhs)
+		{
+			rhs.visit([&](auto& x)
+			{
+				*this = x;
+			});
+			return *this;
+		}
+		template <class U> std::enable_if_t<details::is_one_of<std::decay_t<U>, types...>::value, variant>& operator = (U&& u)
 		{
 			if (details::conjunction<std::is_trivially_destructible<types>...>::value && std::is_trivially_copyable<std::decay_t<U>>::value)
 			{
