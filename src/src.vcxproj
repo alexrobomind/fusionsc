@@ -19,29 +19,29 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\inc\gold_fish\array_ref.h" />
-    <ClInclude Include="..\inc\gold_fish\base64_stream.h" />
-    <ClInclude Include="..\inc\gold_fish\cbor_reader.h" />
-    <ClInclude Include="..\inc\gold_fish\cbor_writer.h" />
-    <ClInclude Include="..\inc\gold_fish\code_gen.h" />
-    <ClInclude Include="..\inc\gold_fish\debug_checks_reader.h" />
-    <ClInclude Include="..\inc\gold_fish\debug_checks_writer.h" />
-    <ClInclude Include="..\inc\gold_fish\dom.h" />
-    <ClInclude Include="..\inc\gold_fish\dom_reader.h" />
-    <ClInclude Include="..\inc\gold_fish\dom_writer.h" />
-    <ClInclude Include="..\inc\gold_fish\file_stream.h" />
-    <ClInclude Include="..\inc\gold_fish\json_reader.h" />
-    <ClInclude Include="..\inc\gold_fish\json_writer.h" />
-    <ClInclude Include="..\inc\gold_fish\match.h" />
-    <ClInclude Include="..\inc\gold_fish\numbers.h" />
-    <ClInclude Include="..\inc\gold_fish\optional.h" />
-    <ClInclude Include="..\inc\gold_fish\sax_reader.h" />
-    <ClInclude Include="..\inc\gold_fish\sax_writer.h" />
-    <ClInclude Include="..\inc\gold_fish\stream.h" />
-    <ClInclude Include="..\inc\gold_fish\tags.h" />
-    <ClInclude Include="..\inc\gold_fish\type_helper.h" />
-    <ClInclude Include="..\inc\gold_fish\uncaught_exception.h" />
-    <ClInclude Include="..\inc\gold_fish\variant.h" />
+    <ClInclude Include="..\inc\goldfish\array_ref.h" />
+    <ClInclude Include="..\inc\goldfish\base64_stream.h" />
+    <ClInclude Include="..\inc\goldfish\cbor_reader.h" />
+    <ClInclude Include="..\inc\goldfish\cbor_writer.h" />
+    <ClInclude Include="..\inc\goldfish\code_gen.h" />
+    <ClInclude Include="..\inc\goldfish\debug_checks_reader.h" />
+    <ClInclude Include="..\inc\goldfish\debug_checks_writer.h" />
+    <ClInclude Include="..\inc\goldfish\dom.h" />
+    <ClInclude Include="..\inc\goldfish\dom_reader.h" />
+    <ClInclude Include="..\inc\goldfish\dom_writer.h" />
+    <ClInclude Include="..\inc\goldfish\file_stream.h" />
+    <ClInclude Include="..\inc\goldfish\json_reader.h" />
+    <ClInclude Include="..\inc\goldfish\json_writer.h" />
+    <ClInclude Include="..\inc\goldfish\match.h" />
+    <ClInclude Include="..\inc\goldfish\numbers.h" />
+    <ClInclude Include="..\inc\goldfish\optional.h" />
+    <ClInclude Include="..\inc\goldfish\sax_reader.h" />
+    <ClInclude Include="..\inc\goldfish\sax_writer.h" />
+    <ClInclude Include="..\inc\goldfish\stream.h" />
+    <ClInclude Include="..\inc\goldfish\tags.h" />
+    <ClInclude Include="..\inc\goldfish\type_helper.h" />
+    <ClInclude Include="..\inc\goldfish\uncaught_exception.h" />
+    <ClInclude Include="..\inc\goldfish\variant.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{E76234F7-8867-4F75-B6CF-958C76E307C9}</ProjectGuid>
