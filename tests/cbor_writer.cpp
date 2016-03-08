@@ -74,6 +74,7 @@ namespace goldfish { namespace dom
 		test(w(-10ll) == "29");
 		test(w(-100ll) == "3863");
 		test(w(-1000ll) == "3903e7");
+		test(w(-1000000ll) == "3a000f423f");
 
 		//test(w(0.0) == "f90000");
 		//test(w(-0.0) == "f98000");

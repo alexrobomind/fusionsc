@@ -58,16 +58,16 @@ namespace goldfish { namespace cbor
 
 		uint64_t skip(uint64_t cb)
 		{
-			uint64_t cb_skipped = 0;
+			uint64_t original = cb;
 			while (cb > 0 && ensure_block())
 			{
 				auto to_skip = std::min(cb, m_remaining_in_current_block);
 				if (stream::skip(m_stream, to_skip) != to_skip)
 					throw ill_formatted{};
+				cb -= to_skip;
 				m_remaining_in_current_block -= to_skip;
-				cb_skipped += to_skip;
 			}
-			return cb_skipped;
+			return original - cb;
 		}
 
 	private:

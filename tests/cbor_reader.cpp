@@ -7,35 +7,35 @@
 
 namespace goldfish { namespace dom
 {
+	static uint8_t to_hex(char c)
+	{
+		if ('0' <= c && c <= '9') return c - '0';
+		else if ('a' <= c && c <= 'f') return c - 'a' + 10;
+		else if ('A' <= c && c <= 'F') return c - 'A' + 10;
+		else throw "Invalid hex character";
+	};
+	static auto to_vector(const std::string& input)
+	{
+		std::vector<uint8_t> data;
+		for (auto it = input.begin(); it != input.end(); it += 2)
+		{
+			uint8_t high = to_hex(*it);
+			uint8_t low = to_hex(*next(it));
+			data.push_back((high << 4) | low);
+		}
+		return data;
+	}
+	static auto r(std::string input)
+	{
+		auto binary = to_vector(input);
+		stream::array_ref_reader s(binary);
+		auto result = load_in_memory(cbor::read(s));
+		test(skip(s, 1) == 0);
+		return result;
+	};
+
 	TEST_CASE(read_valid_examples)
 	{
-		auto to_hex = [](char c) -> uint8_t
-		{
-			     if ('0' <= c && c <= '9') return c - '0';
-			else if ('a' <= c && c <= 'f') return c - 'a' + 10;
-			else if ('A' <= c && c <= 'F') return c - 'A' + 10;
-			else throw "Invalid hex character";
-		};
-		auto to_vector = [&](const std::string& input) -> std::vector<uint8_t>
-		{
-			std::vector<uint8_t> data;
-			for (auto it = input.begin(); it != input.end(); it += 2)
-			{
-				uint8_t high = to_hex(*it);
-				uint8_t low = to_hex(*next(it));
-				data.push_back((high << 4) | low);
-			}
-			return data;
-		};
-		auto r = [&](std::string input)
-		{
-			auto binary = to_vector(input);
-			stream::array_ref_reader s(array_ref<const uint8_t>{ binary });
-			auto result = load_in_memory(cbor::read(s));
-			test(skip(s, 1) == 0);
-			return result;
-		};
-
 		test(r("00") == 0ull);
 		test(r("01") == 1ull);
 		test(r("0a") == 10ull);
@@ -57,6 +57,7 @@ namespace goldfish { namespace dom
 		test(r("29") == -10ll);
 		test(r("3863") == -100ll);
 		test(r("3903e7") == -1000ll);
+		test(r("3a000f423F") == -1000000ll);
 
 		test(r("f90000") ==  0.0);
 		test(r("f98000") == -0.0);
@@ -147,5 +148,50 @@ namespace goldfish { namespace dom
 		});
 		test(r("826161bf61626163ff") == array{ text_string("a"), map{ { text_string("b"), text_string("c") } } });
 		test(r("bf6346756ef563416d7421ff") == map{ { text_string("Fun"), true }, { text_string("Amt"), -2ll } });
+	}
+
+	TEST_CASE(skip_in_finite_string)
+	{
+		auto binary = to_vector("6449455446"); // IETF
+		stream::array_ref_reader s(binary);
+		auto result = cbor::read(s).as<tags::text_string>();
+
+		test(stream::skip(result, 0) == 0);
+		test(stream::read<char>(result) == 'I');
+		test(stream::skip(result, 1) == 1);
+		test(stream::read<char>(result) == 'T');
+		test(stream::skip(result, 2) == 1);
+	}
+
+	TEST_CASE(skip_in_chunked_string_to_beginning_of_block)
+	{
+		auto binary = to_vector("7f657374726561646d696e67ff"); // "strea" "ming"
+		stream::array_ref_reader s(binary);
+		auto result = cbor::read(s).as<tags::text_string>();
+
+		test(stream::skip(result, 0) == 0);
+		test(stream::read<char>(result) == 's');
+		test(stream::skip(result, 1) == 1);
+		test(stream::read<char>(result) == 'r');
+		test(stream::skip(result, 2) == 2); // skip to exactly the beginning of a block
+		test(stream::read<char>(result) == 'm');
+		test(stream::skip(result, 4) == 3);
+	}
+
+	TEST_CASE(skip_in_chunked_string_across_block)
+	{
+		auto binary = to_vector("7f657374726561646d696e67ff"); // "strea" "ming"
+		stream::array_ref_reader s(binary);
+		auto result = cbor::read(s).as<tags::text_string>();
+
+		test(stream::skip(result, 8) == 8);
+		test(stream::read<char>(result) == 'g');
+	}
+
+	TEST_CASE(skip_in_chunked_string_all)
+	{
+		auto binary = to_vector("7f657374726561646d696e67ff"); // "strea" "ming"
+		stream::array_ref_reader s(binary);
+		test(stream::skip(cbor::read(s).as<tags::text_string>(), 10) == 9);
 	}
 }}
