@@ -1,11 +1,11 @@
-#include <gold_fish/cbor_reader.h>
-#include <gold_fish/dom_reader.h>
-#include <gold_fish/stream.h>
+#include <goldfish/cbor_reader.h>
+#include <goldfish/dom_reader.h>
+#include <goldfish/stream.h>
 #include "unit_test.h"
 
 #include <vector>
 
-namespace gold_fish { namespace dom
+namespace goldfish { namespace dom
 {
 	TEST_CASE(read_valid_examples)
 	{

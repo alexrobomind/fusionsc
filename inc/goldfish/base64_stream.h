@@ -3,7 +3,7 @@
 #include "array_ref.h"
 #include "stream.h"
 
-namespace gold_fish { namespace stream
+namespace goldfish { namespace stream
 { 
 	// Reads binary data assuming inner reads base64
 	template <class inner>

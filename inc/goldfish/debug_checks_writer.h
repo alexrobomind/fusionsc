@@ -3,7 +3,7 @@
 #include "uncaught_exception.h"
 
 #ifndef NDEBUG
-namespace gold_fish { namespace debug_check
+namespace goldfish { namespace debug_check
 {
 	template <class inner> class document_writer;
 	template <class inner> document_writer<std::decay_t<inner>> add_write_checks(inner&& t);
@@ -213,7 +213,7 @@ namespace gold_fish { namespace debug_check
 	}
 }}
 #else
-namespace gold_fish { namespace debug_check
+namespace goldfish { namespace debug_check
 {
 	template <class T> decltype(auto) add_write_checks(T&& t)
 	{

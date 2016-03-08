@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace gold_fish { namespace tags
+namespace goldfish { namespace tags
 {
 	template <class T> struct is_tag : std::false_type {};
 

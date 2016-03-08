@@ -8,13 +8,13 @@ It has some similarities to a [SAX](https://en.wikipedia.org/wiki/Simple_API_for
 ## Quick tutorial
 ### Converting a JSON stream to a CBOR stream
 ~~~~~~~~~~cpp
-#include <gold_fish/stream.h>
-#include <gold_fish/json_reader.h>
-#include <gold_fish/cbor_writer.h>
+#include <goldfish/stream.h>
+#include <goldfish/json_reader.h>
+#include <goldfish/cbor_writer.h>
 
 int main()
 {
-	using namespace gold_fish;
+	using namespace goldfish;
 
 	// Read the string literal as a stream and parse it as a JSON document
 	// This doesn't really do any work, the stream will be read as we parse the document

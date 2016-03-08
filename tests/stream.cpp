@@ -1,7 +1,7 @@
-#include <gold_fish/stream.h>
+#include <goldfish/stream.h>
 #include "unit_test.h"
 
-namespace gold_fish { namespace stream {
+namespace goldfish { namespace stream {
 
 static_assert(is_reader<empty>::value, "empty is a reader");
 static_assert(!is_reader<vector_writer>::value, "vector_writer is not a reader");

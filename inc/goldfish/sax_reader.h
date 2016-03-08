@@ -4,7 +4,7 @@
 #include "stream.h"
 #include "optional.h"
 
-namespace gold_fish
+namespace goldfish
 {
 	template <class... types>
 	class document_on_variant

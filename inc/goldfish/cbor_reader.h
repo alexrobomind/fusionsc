@@ -9,7 +9,7 @@
 #include "match.h"
 #include "stream.h"
 
-namespace gold_fish { namespace cbor
+namespace goldfish { namespace cbor
 {
 	struct ill_formatted {};
 

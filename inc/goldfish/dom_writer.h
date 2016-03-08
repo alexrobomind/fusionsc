@@ -2,7 +2,7 @@
 
 #include "dom.h"
 
-namespace gold_fish { namespace dom
+namespace goldfish { namespace dom
 {
 	namespace details
 	{

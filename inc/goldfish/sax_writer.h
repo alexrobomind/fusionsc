@@ -4,7 +4,7 @@
 #include "tags.h"
 #include <type_traits>
 
-namespace gold_fish {
+namespace goldfish {
 	template <class DocumentWriter, class Document>
 	std::enable_if_t<tags::has_tag<std::decay_t<Document>, tags::document>::value, void> copy_document(DocumentWriter&& writer, Document&& document)
 	{

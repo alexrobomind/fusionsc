@@ -2,7 +2,7 @@
 
 #include "variant.h"
 
-namespace gold_fish
+namespace goldfish
 {
 	struct nullopt_t {};
 	constexpr nullopt_t nullopt{};

@@ -3,7 +3,7 @@
 #include <tuple>
 #include <type_traits>
 
-namespace gold_fish
+namespace goldfish
 {
 	namespace details
 	{

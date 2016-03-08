@@ -1,11 +1,11 @@
-#include <gold_fish/dom_reader.h>
-#include <gold_fish/dom_writer.h>
-#include <gold_fish/json_reader.h>
-#include <gold_fish/json_writer.h>
-#include <gold_fish/stream.h>
+#include <goldfish/dom_reader.h>
+#include <goldfish/dom_writer.h>
+#include <goldfish/json_reader.h>
+#include <goldfish/json_writer.h>
+#include <goldfish/stream.h>
 #include "unit_test.h"
 
-namespace gold_fish { namespace dom
+namespace goldfish { namespace dom
 {
 	TEST_CASE(string)
 	{

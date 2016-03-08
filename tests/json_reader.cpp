@@ -1,8 +1,8 @@
-#include <gold_fish/json_reader.h>
-#include <gold_fish/dom_reader.h>
+#include <goldfish/json_reader.h>
+#include <goldfish/dom_reader.h>
 #include "unit_test.h"
 
-namespace gold_fish { namespace dom
+namespace goldfish { namespace dom
 {
 	TEST_CASE(json_reader)
 	{

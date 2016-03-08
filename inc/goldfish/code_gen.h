@@ -34,7 +34,7 @@
 	The optional field is optional and defaults to false. If true, the field might be ommitted from the data.
 */
 
-namespace gold_fish {
+namespace goldfish {
 	struct bad_type_declaration {};
 
 	namespace details

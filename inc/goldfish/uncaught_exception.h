@@ -4,7 +4,7 @@
 #include <utility>
 #include <exception>
 
-namespace gold_fish
+namespace goldfish
 {
 
 class uncaught_exception_checker

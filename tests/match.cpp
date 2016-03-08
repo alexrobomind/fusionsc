@@ -1,7 +1,7 @@
 #include "unit_test.h"
-#include <gold_fish/match.h>
+#include <goldfish/match.h>
 
-namespace gold_fish
+namespace goldfish
 {
 	struct A {};
 	struct B : A {};

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace gold_fish
+namespace goldfish
 {
 	inline uint16_t byte_swap(uint16_t x) { return _byteswap_ushort(x); }
 	inline uint32_t byte_swap(uint32_t x) { return _byteswap_ulong(x); }

@@ -5,7 +5,7 @@
 #include <iterator>
 #include <vector>
 
-namespace gold_fish
+namespace goldfish
 {
 	template <class T>
 	class array_ref

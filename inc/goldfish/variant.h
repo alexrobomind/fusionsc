@@ -6,7 +6,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace gold_fish
+namespace goldfish
 {
 	struct bad_variant_access {};
 

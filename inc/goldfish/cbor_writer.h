@@ -7,7 +7,7 @@
 #include "numbers.h"
 #include "sax_writer.h"
 
-namespace gold_fish { namespace cbor
+namespace goldfish { namespace cbor
 {
 	namespace details
 	{

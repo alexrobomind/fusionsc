@@ -1,8 +1,8 @@
-#include <gold_fish/json_reader.h>
-#include <gold_fish/sax_reader.h>
+#include <goldfish/json_reader.h>
+#include <goldfish/sax_reader.h>
 #include "unit_test.h"
 
-namespace gold_fish
+namespace goldfish
 {
 	size_t index_of(const_buffer_ref value, array_ref<const array_ref<const char>> keys)
 	{

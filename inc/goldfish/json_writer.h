@@ -7,7 +7,7 @@
 #include "sax_writer.h"
 #include "stream.h"
 
-namespace gold_fish { namespace json
+namespace goldfish { namespace json
 {
 	struct ill_formatted_utf8 {};
 	template <class Stream> class document_writer;

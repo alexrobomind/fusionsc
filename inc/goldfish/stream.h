@@ -7,7 +7,7 @@
 #include "match.h"
 #include "optional.h"
 
-namespace gold_fish { namespace stream 
+namespace goldfish { namespace stream 
 {
 	struct unexpected_end_of_stream {};
 

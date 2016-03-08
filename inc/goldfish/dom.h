@@ -9,7 +9,7 @@
 #include <type_traits>
 #include "tags.h"
 
-namespace gold_fish { namespace dom
+namespace goldfish { namespace dom
 {
 	struct document;
 

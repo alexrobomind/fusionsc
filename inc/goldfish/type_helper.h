@@ -1,6 +1,6 @@
 #pragma once
 
-namespace gold_fish
+namespace goldfish
 {
 	constexpr bool conjunction() { return true; }
 	template <class... T> constexpr bool conjunction(bool x, T... tail) { return x && conjunction(tail...); }

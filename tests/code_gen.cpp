@@ -1,9 +1,9 @@
-#include <gold_fish/code_gen.h>
-#include <gold_fish/stream.h>
+#include <goldfish/code_gen.h>
+#include <goldfish/stream.h>
 #include "unit_test.h"
 #include <sstream>
 
-namespace gold_fish
+namespace goldfish
 {
 	namespace details
 	{

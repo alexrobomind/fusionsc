@@ -1,7 +1,7 @@
-#include <gold_fish/variant.h>
+#include <goldfish/variant.h>
 #include "unit_test.h"
 
-namespace gold_fish
+namespace goldfish
 {
 	static_assert(details::index_of<int, int, std::string>::value == 0, "");
 	static_assert(std::is_trivially_destructible<variant<int, char>>::value, "");

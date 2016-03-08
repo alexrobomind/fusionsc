@@ -4,7 +4,7 @@
 #include "uncaught_exception.h"
 #include <string>
 
-namespace gold_fish { namespace stream
+namespace goldfish { namespace stream
 {
 	class file_reader
 	{

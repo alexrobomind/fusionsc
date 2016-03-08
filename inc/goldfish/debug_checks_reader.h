@@ -7,7 +7,7 @@
 #include <type_traits>
 
 #ifndef NDEBUG
-namespace gold_fish { namespace debug_check
+namespace goldfish { namespace debug_check
 {
 	template <class T, class _tag> class string;
 	template <class T> class array;
@@ -148,7 +148,7 @@ namespace gold_fish { namespace debug_check
 	}
 }}
 #else
-namespace gold_fish { namespace debug_check
+namespace goldfish { namespace debug_check
 {
 	template <class T> decltype(auto) add_read_checks(T&& t)
 	{

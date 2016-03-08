@@ -2,16 +2,16 @@
 #include <numeric>
 #include <chrono>
 
-#include <gold_fish/stream.h>
-#include <gold_fish/file_stream.h>
-#include <gold_fish/json_reader.h>
-#include <gold_fish/json_writer.h>
-#include <gold_fish/cbor_reader.h>
-#include <gold_fish/cbor_writer.h>
-#include <gold_fish/dom_reader.h>
+#include <goldfish/stream.h>
+#include <goldfish/file_stream.h>
+#include <goldfish/json_reader.h>
+#include <goldfish/json_writer.h>
+#include <goldfish/cbor_reader.h>
+#include <goldfish/cbor_writer.h>
+#include <goldfish/dom_reader.h>
 
 using namespace std;
-using namespace gold_fish;
+using namespace goldfish;
 
 template <class Lambda>
 auto measure_one(const Lambda& l)
@@ -54,12 +54,12 @@ template <class Document> int64_t sum_ints(Document&& t)
 		int64_t sum = 0;
 		while (auto key = x.read_key())
 		{
-			gold_fish::skip(*key);
+			goldfish::skip(*key);
 			sum += sum_ints(x.read_value());
 		}
 		return sum;
 	},
-		[](auto& x, auto tag) { gold_fish::skip(x, tag); return 0ull; }));
+		[](auto& x, auto tag) { goldfish::skip(x, tag); return 0ull; }));
 }
 
 int main(int argc, char* argv[])

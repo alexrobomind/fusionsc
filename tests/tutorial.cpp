@@ -1,12 +1,12 @@
 #include "unit_test.h"
 
-#include <gold_fish/stream.h>
-#include <gold_fish/json_reader.h>
-#include <gold_fish/cbor_writer.h>
+#include <goldfish/stream.h>
+#include <goldfish/json_reader.h>
+#include <goldfish/cbor_writer.h>
 
 TEST_CASE(convert_json_to_cbor)
 {
-	using namespace gold_fish;
+	using namespace goldfish;
 
 	// Read the string literal as a stream and parse it as a JSON document
 	// This doesn't really do any work, the stream will be read as we parse the document
@@ -25,7 +25,7 @@ TEST_CASE(convert_json_to_cbor)
 
 TEST_CASE(parse_document)
 {
-	using namespace gold_fish;
+	using namespace goldfish;
 
 	auto input_stream = stream::read_string_literal("{\"a\":1,\"b\":3.0}");
 	auto document = json::read(input_stream).as<tags::map>();

@@ -1,7 +1,7 @@
-#include <gold_fish/uncaught_exception.h>
+#include <goldfish/uncaught_exception.h>
 #include "unit_test.h"
 
-namespace gold_fish
+namespace goldfish
 {
 	struct Test
 	{

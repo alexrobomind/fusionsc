@@ -8,7 +8,7 @@
 #include "optional.h"
 #include "sax_reader.h"
 
-namespace gold_fish { namespace json
+namespace goldfish { namespace json
 {
 	struct ill_formatted {};
 	struct integer_overflow {};

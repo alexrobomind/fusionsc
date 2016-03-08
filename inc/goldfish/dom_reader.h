@@ -6,7 +6,7 @@
 #include "tags.h"
 #include "stream.h"
 
-namespace gold_fish { namespace dom
+namespace goldfish { namespace dom
 {
 	inline uint64_t load_in_memory(uint64_t d) { return d; }
 	inline int64_t load_in_memory(int64_t d) { return d; }

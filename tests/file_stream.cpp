@@ -1,5 +1,5 @@
-#include <gold_fish/file_stream.h>
+#include <goldfish/file_stream.h>
 
-namespace gold_fish { namespace stream
+namespace goldfish { namespace stream
 {
 }}

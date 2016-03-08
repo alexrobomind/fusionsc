@@ -1,9 +1,9 @@
-#include <gold_fish/dom_writer.h>
-#include <gold_fish/cbor_writer.h>
-#include <gold_fish/stream.h>
+#include <goldfish/dom_writer.h>
+#include <goldfish/cbor_writer.h>
+#include <goldfish/stream.h>
 #include "unit_test.h"
 
-namespace gold_fish { namespace dom
+namespace goldfish { namespace dom
 {
 	struct in_memory_write_stream
 	{
