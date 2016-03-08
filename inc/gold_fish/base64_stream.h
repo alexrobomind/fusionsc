@@ -148,8 +148,11 @@ namespace gold_fish { namespace stream
 					data.remove_front(2);
 					m_cb_in_buffer = 0;
 				}
-				else if (!data.empty())
+				else
 				{
+					if (data.empty())
+						return;
+
 					m_buffer[1] = data.front();
 					++m_cb_in_buffer;
 					return;
@@ -197,25 +200,25 @@ namespace gold_fish { namespace stream
 		void write_triplet(uint32_t a, uint32_t b, uint32_t c)
 		{
 			uint32_t x = (a << 16) | (b << 8) | c;
-			m_stream.write(byte_for((x >> 18) & 63));
-			m_stream.write(byte_for((x >> 12) & 63));
-			m_stream.write(byte_for((x >> 6 ) & 63));
-			m_stream.write(byte_for((x      ) & 63));
+			stream::write(m_stream, byte_for((x >> 18) & 63));
+			stream::write(m_stream, byte_for((x >> 12) & 63));
+			stream::write(m_stream, byte_for((x >> 6 ) & 63));
+			stream::write(m_stream, byte_for((x      ) & 63));
 		}
 		void write_triplet_flush(uint32_t a)
 		{
-			m_stream.write(byte_for((a >> 2) & 63));
-			m_stream.write(byte_for((a & 3) << 4));
-			m_stream.write('=');
-			m_stream.write('=');
+			stream::write(m_stream, byte_for((a >> 2) & 63));
+			stream::write(m_stream, byte_for((a & 3) << 4));
+			stream::write(m_stream, '=');
+			stream::write(m_stream, '=');
 		}
 		void write_triplet_flush(uint32_t a, uint32_t b)
 		{
 			uint32_t x = (a << 8) | b;
-			m_stream.write(byte_for((x >> 10) & 63));
-			m_stream.write(byte_for((x >> 4) & 63));
-			m_stream.write(byte_for((x & 15) << 2));
-			m_stream.write('=');
+			stream::write(m_stream, byte_for((x >> 10) & 63));
+			stream::write(m_stream, byte_for((x >> 4) & 63));
+			stream::write(m_stream, byte_for((x & 15) << 2));
+			stream::write(m_stream, '=');
 		}
 
 		inner m_stream;
