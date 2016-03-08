@@ -39,9 +39,9 @@ namespace goldfish { namespace stream
 		while (x >= sizeof(buffer))
 		{
 			auto cb = s.read_buffer(buffer);
-			if (cb < sizeof(buffer))
-				return original;
 			x -= cb;
+			if (cb < sizeof(buffer))
+				return original - x;
 		}
 		x -= s.read_buffer({ buffer, buffer + x });
 		return original - x;
