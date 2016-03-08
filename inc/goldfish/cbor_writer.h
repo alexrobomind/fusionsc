@@ -106,8 +106,6 @@ namespace goldfish { namespace cbor
 
 		void write(uint64_t x) { details::write_integer<0>(m_stream, x); }
 		void write(int64_t x) { details::write_integer<1>(m_stream, static_cast<uint64_t>(-1ll - x)); }
-		void write(uint32_t x) { details::write_integer<0>(m_stream, x); }
-		void write(int32_t x) { details::write_integer<1>(m_stream, static_cast<uint64_t>(-1ll - x)); }
 		stream_writer<Stream> write_binary(uint64_t cb)
 		{
 			details::write_integer<2>(m_stream, cb);
@@ -120,12 +118,12 @@ namespace goldfish { namespace cbor
 		}
 		indefinite_stream_writer<Stream, 2> write_binary()
 		{
-			details::write_integer<2>(m_stream, 31);
+			stream::write(m_stream, static_cast<uint8_t>((2 << 5) | 31));
 			return{ m_stream };
 		}
 		indefinite_stream_writer<Stream, 3> write_text()
 		{
-			details::write_integer<3>(m_stream, 31);
+			stream::write(m_stream, static_cast<uint8_t>((3 << 5) | 31));
 			return{ m_stream };
 		}
 

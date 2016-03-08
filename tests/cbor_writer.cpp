@@ -26,27 +26,26 @@ namespace goldfish { namespace dom
 		}
 		return result;
 	}
-
+	static uint8_t to_hex(char c)
+	{
+		if ('0' <= c && c <= '9') return c - '0';
+		else if ('a' <= c && c <= 'f') return c - 'a' + 10;
+		else if ('A' <= c && c <= 'F') return c - 'A' + 10;
+		else throw "Invalid hex character";
+	};
+	static auto to_vector(const std::string& input)
+	{
+		std::vector<uint8_t> data;
+		for (auto it = input.begin(); it != input.end(); it += 2)
+		{
+			uint8_t high = to_hex(*it);
+			uint8_t low = to_hex(*next(it));
+			data.push_back((high << 4) | low);
+		}
+		return data;
+	};
 	TEST_CASE(write_valid_examples)
 	{
-		auto to_hex = [](char c) -> uint8_t
-		{
-			if ('0' <= c && c <= '9') return c - '0';
-			else if ('a' <= c && c <= 'f') return c - 'a' + 10;
-			else if ('A' <= c && c <= 'F') return c - 'A' + 10;
-			else throw "Invalid hex character";
-		};
-		auto to_vector = [&](const std::string& input)
-		{
-			std::vector<uint8_t> data;
-			for (auto it = input.begin(); it != input.end(); it += 2)
-			{
-				uint8_t high = to_hex(*it);
-				uint8_t low = to_hex(*next(it));
-				data.push_back((high << 4) | low);
-			}
-			return data;
-		};
 		auto w = [&](const document& d)
 		{
 			stream::vector_writer s;
@@ -150,23 +149,93 @@ namespace goldfish { namespace dom
 
 		// input used indefinite array
 		//
-		//test(w(byte_string(to_vector("0102030405"))) == "5f42010243030405ff");
-		//test(w("streaming"s) == "7f657374726561646d696e67ff");   
-		//test(w(array{}) == "9fff");                              
 		//test(w(array{ 1ull, array{ 2ull, 3ull }, array{ 4ull, 5ull }}) == "9f018202039f0405ffff");
 		//test(w(array{ 1ull, array{ 2ull, 3ull }, array{ 4ull, 5ull }}) == "9f01820203820405ff");
 		//test(w(array{ 1ull, array{ 2ull, 3ull }, array{ 4ull, 5ull }}) == "83018202039f0405ff");
 		//test(w(array{ 1ull, array{ 2ull, 3ull }, array{ 4ull, 5ull }}) == "83019f0203ff820405");
-		//test(w(array{
-		//	1ull, 2ull, 3ull, 4ull, 5ull, 6ull, 7ull, 8ull,
-		//	9ull, 10ull, 11ull, 12ull, 13ull, 14ull, 15ull,
-		//	16ull, 17ull, 18ull, 19ull, 20ull, 21ull, 22ull,
-		//	23ull, 24ull, 25ull }) == "9f0102030405060708090a0b0c0d0e0f101112131415161718181819ff");
 		//test(w(map{
 		//	{ "a"s, 1ull },
 		//	{ "b"s, array{ 2ull, 3ull } }
 		//}) == "bf61610161629f0203ffff");
 		//test(w(array{ "a"s, map{ { "b"s, "c"s } } }) == "826161bf61626163ff");
-		//test(w(map{ { "Fun"s, true },{ "Amt"s, -2ll } }) == "bf6346756ef563416d7421ff");
+	}
+
+	TEST_CASE(write_infinite_array)
+	{
+		auto w = [&](const std::vector<document>& data)
+		{
+			stream::vector_writer s;
+			auto writer = cbor::write(s);
+			auto array = writer.write_array();
+			for (auto d : data)
+				write(array.append(), d);
+			array.flush();
+			s.flush();
+			return to_hex_string(s.data);
+		};
+		test(w({}) == "9fff");
+
+		test(w({
+			1ull, 2ull, 3ull, 4ull, 5ull, 6ull, 7ull, 8ull,
+			9ull, 10ull, 11ull, 12ull, 13ull, 14ull, 15ull,
+			16ull, 17ull, 18ull, 19ull, 20ull, 21ull, 22ull,
+			23ull, 24ull, 25ull }) == "9f0102030405060708090a0b0c0d0e0f101112131415161718181819ff");
+	}
+
+	TEST_CASE(write_infinite_map)
+	{
+		auto w = [&](const std::vector<std::pair<document, document>>& data)
+		{
+			stream::vector_writer s;
+			auto writer = cbor::write(s);
+			auto map = writer.write_map();
+			for (auto d : data)
+			{
+				write(map.append_key(), d.first);
+				write(map.append_value(), d.second);
+			}
+			map.flush();
+			s.flush();
+			return to_hex_string(s.data);
+		};
+
+		test(w({
+			{text_string("Fun"), true},
+			{text_string("Amt"), -2ll}
+		}) == "bf6346756ef563416d7421ff");
+	}
+
+	TEST_CASE(write_infinite_text_string)
+	{
+		auto w = [&](const std::vector<std::string>& data)
+		{
+			stream::vector_writer s;
+			auto writer = cbor::write(s);
+			auto string = writer.write_text();
+			for (auto s : data)
+				string.write_buffer({ reinterpret_cast<const uint8_t*>(s.data()), s.size() });
+			string.flush();
+			s.flush();
+			return to_hex_string(s.data);
+		};
+
+		test(w({ "strea", "ming" }) == "7f657374726561646d696e67ff");
+	}
+
+	TEST_CASE(write_infinite_binary_string)
+	{
+		auto w = [&](const std::vector<std::vector<uint8_t>>& data)
+		{
+			stream::vector_writer s;
+			auto writer = cbor::write(s);
+			auto binary = writer.write_binary();
+			for (auto d : data)
+				binary.write_buffer(d);
+			binary.flush();
+			s.flush();
+			return to_hex_string(s.data);
+		};
+
+		test(w({ to_vector("0102"), to_vector("030405") }) == "5f42010243030405ff");
 	}
 }}
