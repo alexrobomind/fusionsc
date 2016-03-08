@@ -121,75 +121,13 @@ namespace goldfish
 		return nullopt;
 	}
 
-	struct untyped
-	{
-		template <class Document> static decltype(auto) cast(Document& d) { return d; }
-	};
-	template <class Tag> struct simple_type
-	{
-		template <class Document> static decltype(auto) cast(Document& d) { return d.as<Tag>(); }
-	};
-	template <template <class Map> class T> struct custom_type
-	{
-		template <class Document> static auto cast(Document& d) { return T<std::decay_t<decltype(d.as<tags::map>())>>{ d.as<tags::map>() }; }
-	};
-
-	template <class SubType, class Array> class typed_array
-	{
-	public:
-		typed_array(Array array)
-			: m_array(std::move(array))
-		{}
-
-		auto read() -> optional<std::decay_t<decltype(SubType::cast(std::declval<Array>().read()))>>
-		{
-			auto d = m_array.read();
-			if (d)
-				return SubType::cast(d);
-			else
-				return nullopt;
-		}
-	private:
-		Array m_array;
-	};
-	template <class SubType, class Array> typed_array<SubType, std::decay_t<Array>> make_typed_array(Array&& array) { return{ std::forward<Array>(array) }; }
-	template <class SubType> struct typed_array_type
-	{
-		template <class Document> static auto cast(Document& d) { return make_typed_array<SubType>(d.as<tags::array>()); }
-	};
-
-	template <class Map, class SubTypeKey, class SubTypeValue> class typed_map
-	{
-	public:
-		typed_map(Map map)
-			: m_map(std::move(map))
-		{}
-
-		auto read_key() -> optional<std::decay_t<decltype(SubTypeKey::cast(std::declval<Map>().read_key()))>>
-		{
-			auto d = m_array.read_key();
-			if (d)
-				return SubTypeKey::cast(d);
-			else
-				return nullopt;
-		}
-		auto read_value() { return SubTypeValue::cast(m_map.read_value()); }
-	private:
-		Map m_map;
-	};
-	template <class SubTypeKey, class SubTypeValue, class Map> typed_map<SubTypeKey, SubTypeValue, std::decay_t<Map>> make_typed_map(Map&& map) { return{ std::forward<Map>(map) }; }
-	template <class SubTypeKey, class SubTypeValue> struct typed_map_type
-	{
-		template <class Document> static auto cast(Document& d) { return make_typed_map<SubTypeKey, SubTypeValue>(d.as<tags::map>()); }
-	};
-
 	template <class Map> class filtered_map
 	{
 	public:
-		filtered_map(Map&& map)
+		filtered_map(Map&& map, array_ref<const array_ref<const char>> key_names)
 			: m_map(std::move(map))
 		{}
-		bool try_move_to(array_ref<const array_ref<const char>> key_names, buffer_ref buffer, size_t desired_field_index, size_t max_field_index)
+		bool try_move_to(buffer_ref buffer, size_t desired_field_index, size_t max_field_index)
 		{
 			if (m_next_index > desired_field_index)
 				return false;
