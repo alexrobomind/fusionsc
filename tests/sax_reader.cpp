@@ -1,52 +1,61 @@
 #include <goldfish/json_reader.h>
 #include <goldfish/sax_reader.h>
 #include "unit_test.h"
+#include <goldfish/json_reader.h>
+#include <goldfish/dom_reader.h>
 
 namespace goldfish
 {
-	size_t index_of(const_buffer_ref value, array_ref<const array_ref<const char>> keys)
+	TEST_CASE(test_filtered_map_empty_map)
 	{
-		return std::distance(keys.begin(), std::find_if(keys.begin(), keys.end(),
-			[&](auto&& key)
-		{
-			return key.size() == value.size() && std::equal(value.begin(), value.end(), stdext::make_unchecked_array_iterator(key.begin()));
-		}));
-	}
+		auto json_stream = stream::read_string_literal("{}");
 
-	template <class... String> optional<std::pair<size_t, uint64_t>> test_skip_to_key_helper(const std::vector<array_ref<const char>>& keys)
-	{
-		uint8_t buffer[1024];
+		static const uint64_t schema[] = { 10, 20, 30 };
+		auto map = filter_map(json::read(json_stream).as<tags::map>(), schema);
 
-		auto s = stream::read_string_literal(R"json({"1":1,"12":2,"123":3})json");
-		auto map = json::read(s);
-		auto& x = map.as<tags::map>();
+		test(map.read_value_by_index(0) == nullopt);
 
-		auto index = skip_to_key(x, buffer, make_array_ref(keys));
-		if (index == nullopt)
-			return nullopt;
-				
-		auto result = std::make_pair(*index, x.read_value().as<tags::unsigned_int>());
 		skip(map);
-		return result;
-	}
-	TEST_CASE(test_skip_to_key)
-	{
-		test(test_skip_to_key_helper({ make_array_ref("1").without_end(1) }) == std::make_pair(0, 1));
-		test(test_skip_to_key_helper({ make_array_ref("12").without_end(1) }) == std::make_pair(0, 2));
-		test(test_skip_to_key_helper({ make_array_ref("123").without_end(1) }) == std::make_pair(0, 3));
-		test(test_skip_to_key_helper({ make_array_ref("123").without_end(1), make_array_ref("12").without_end(1) }) == std::make_pair(1, 2));
-		test(test_skip_to_key_helper({ make_array_ref("a").without_end(1) }) == nullopt);
 	}
 
-	class text
+	TEST_CASE(test_filtered_map)
 	{
-		static auto test()
-		{
-			static const array_ref<const char> result[] = {
-				array_ref<const char>("a").without_end(1),
-				array_ref<const char>("ab").without_end(1)
-			};
-			return make_array_ref(result);
-		}
-	};
-}
+		auto json_stream = stream::read_string_literal("{10:1,15:2,\"a\":\"b\",40:3,50:4,60:5,80:6}");
+
+		static const uint64_t schema[] = { 10, 20, 30, 40, 50, 60, 70, 80, 90 };
+		auto map = filter_map(json::read(json_stream).as<tags::map>(), schema);
+
+		// Reading the very first key
+		test(dom::load_in_memory(*map.read_value_by_index(0)) == 1ull);
+
+		// Reading index 1 will force to skip the entry 15 and go to entry 40
+		test(map.read_value_by_index(1) == nullopt);
+
+		// Reading index 2 will fail because we are already at index 3 of the schema
+		test(map.read_value_by_index(2) == nullopt);
+		
+		// We are currently at index 3 but are asking for index 5, that should skip the pair 40:3 and 50:4 and find 60:5
+		test(dom::load_in_memory(*map.read_value_by_index(5)) == 5ull);
+
+		// We ask for index 6, which brings to index 7 (and returns null)
+		// Asking for index 7 should return the value on an already read key
+		test(map.read_value_by_index(6) == nullopt);
+		test(dom::load_in_memory(*map.read_value_by_index(7)) == 6ull);
+
+		// finally, ask for index 8, but we reach the end of the map before we find it
+		test(map.read_value_by_index(8) == nullopt);
+
+		skip(map);
+	}
+
+	TEST_CASE(filtered_map_skip_while_on_value)
+	{
+		auto json_stream = stream::read_string_literal("{20:1}");
+
+		static const uint64_t schema[] = { 10, 20 };
+		auto map = filter_map(json::read(json_stream).as<tags::map>(), schema);
+
+		test(map.read_value_by_index(0) == nullopt);
+		skip(map);
+	}
+}	

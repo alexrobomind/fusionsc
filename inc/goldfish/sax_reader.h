@@ -54,9 +54,11 @@ namespace goldfish
 	private:
 		variant<types...> m_data;
 	};
-	
-	template <class Document> void skip(Document&& d);
 
+	template <class Document> std::enable_if_t<tags::has_tag<std::decay_t<Document>, tags::document>::value, void> skip(Document&& d)
+	{
+		d.visit([&](auto&& x, auto) { skip(std::forward<decltype(x)>(x), tags::get_tag(x)); });
+	}
 	template <class type> void skip(type&&, tags::undefined) {}
 	template <class type> void skip(type&&, tags::floating_point) {}
 	template <class type> void skip(type&&, tags::unsigned_int) {}
@@ -86,67 +88,92 @@ namespace goldfish
 		}
 	}
 
-	template <class Document> void skip(Document&& d)
-	{
-		d.visit([&](auto&& x, auto) { skip(std::forward<decltype(x)>(x), tags::get_tag(x)); });
-	}
-	
-	size_t index_of(const_buffer_ref value, array_ref<const array_ref<const char>> keys);
-
-	template <class T> struct number_of_characters {};
-	template <size_t N> struct number_of_characters<const char(&)[N]> { enum { value = N - 1 }; };
-	template <class First> constexpr auto constexpr_max(First v) { return v; }
-	template <class First, class Second> constexpr auto constexpr_max(First x, Second y) { return x < y ? y : x; }
-	template <class First, class... Values> constexpr auto constexpr_max(First head, Values... v)
-	{
-		return constexpr_max(head, constexpr_max(v...));
-	}
-	template <class Map> std::enable_if_t<tags::has_tag<Map, tags::map>::value, optional<size_t>> skip_to_key(Map& map, buffer_ref buffer, array_ref<const array_ref<const char>> keys)
-	{
-		while (auto key = map.read_key())
-		{
-			auto index_match = key->visit(first_match(
-				[&](auto&& value, tags::text_string)
-				{
-					auto cb = value.read_buffer(buffer);
-					return index_of({ buffer.data(), cb }, keys);
-				},
-				[&](auto&&, auto&&) { return keys.size(); }
-			));
-			skip(*key);
-			if (index_match != keys.size())
-				return index_match;
-			skip(map.read_value());
-		}
-		return nullopt;
-	}
-
 	template <class Map> class filtered_map
 	{
 	public:
-		filtered_map(Map&& map, array_ref<const array_ref<const char>> key_names)
+		filtered_map(Map&& map, array_ref<const uint64_t> key_names)
 			: m_map(std::move(map))
+			, m_key_names(key_names)
 		{}
-		bool try_move_to(buffer_ref buffer, size_t desired_field_index, size_t max_field_index)
+		optional<decltype(std::declval<Map>().read_value())> read_value_by_index(size_t index)
 		{
-			if (m_next_index > desired_field_index)
-				return false;
+			assert(m_index < m_key_names.size());
+			if (m_index > index)
+				return nullopt;
 
-			if (auto i = skip_to_key(m_map, buffer, key_names.slice(desired_field_index, max_field_index)))
+			if (m_on_value)
 			{
-				m_next_index = desired_field_index + 1 + *i;
-				return *i == 0;
+				m_on_value = false;
+				if (m_index == index)
+					return m_map.read_value();
+				else
+					skip(m_map.read_value());
 			}
-			else
+			assert(!m_on_value);
+
+			while (auto key = m_map.read_key())
 			{
-				m_next_index = key_names.size();
-				return false;
+				// We currently only support unsigned int key types
+				if (!key->is<tags::unsigned_int>())
+				{
+					skip(*key);
+					skip(m_map.read_value());
+					continue;
+				}
+
+				// do any of the keys match?
+				auto it = std::find(m_key_names.begin() + m_index, m_key_names.end(), key->as<tags::unsigned_int>());
+				if (it == m_key_names.end())
+				{
+					// This was a new key that we didn't know about, skip it
+					skip(m_map.read_value());
+					continue;
+				}
+
+				// We found the key, compute its index
+				m_index = std::distance(m_key_names.begin(), it);
+				if (m_index == index)
+				{
+					// That's the key we were looking for, return its value
+					// at that point, we assume not being on value any more because the caller will process the value
+					assert(!m_on_value);
+					return m_map.read_value();
+				}
+				else if (m_index > index)
+				{
+					// Our key was not found (we found a key later in the list of keys)
+					// We are on the value of that later key
+					m_on_value = true;
+					return nullopt;
+				}
+				else
+				{
+					// We found a key that is still before us, skip the value and keep searching
+					skip(m_map.read_value());
+				}
 			}
+
+			return nullopt;
 		}
-		auto read_value() { return m_map.read_value(); }
+		friend void skip(filtered_map& m)
+		{
+			if (m.m_on_value)
+			{
+				skip(m.m_map.read_value());
+				m.m_on_value = false;
+			}
+
+			goldfish::skip(m.m_map, tags::map{});
+			m.m_index = m.m_key_names.size();
+		}
 	private:
 		Map m_map;
-		size_t m_next_index = 0;
+		array_ref<const uint64_t> m_key_names;
+		size_t m_index = 0;
+		bool m_on_value = false;
 	};
-
+	template <class Map> filtered_map<std::decay_t<Map>> filter_map(Map&& map, array_ref<const uint64_t> key_names)
+	{
+		return{ std::forward<Map>(map), key_names };
+	}
 }

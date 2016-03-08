@@ -4,6 +4,7 @@
 ## Why GoldFish?
 GoldFish can parse and generate very large [JSON](http://json.org) or [CBOR](http://cbor.io) documents.
 It has some similarities to a [SAX](https://en.wikipedia.org/wiki/Simple_API_for_XML) parser, but doesn't use an event driven API, instead the user of the GoldFish interface is in control.
+GoldFish intends to be the easiest and fastest JSON and CBOR streaming parser and serializer to use (even though not necessarily the fastest/easiest DOM parser/generator).
 
 ## Quick tutorial
 ### Converting a JSON stream to a CBOR stream

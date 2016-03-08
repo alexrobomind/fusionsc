@@ -115,12 +115,10 @@ namespace goldfish { namespace debug_check
 
 		optional<decltype(add_read_checks(*std::declval<T>().read_key()))> read_key()
 		{
-			assert(!is_work_done());
 			assert(m_expect_read_key);
-			m_expect_read_key = false;
-			auto d = m_inner.read_key();
-			if (d)
+			if (auto d = m_inner.read_key())
 			{
+				m_expect_read_key = false;
 				return add_read_checks(std::move(*d));
 			}
 			else
