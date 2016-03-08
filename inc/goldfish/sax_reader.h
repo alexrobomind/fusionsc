@@ -57,29 +57,28 @@ namespace goldfish
 
 	template <class Document> std::enable_if_t<tags::has_tag<std::decay_t<Document>, tags::document>::value, void> skip(Document&& d)
 	{
-		d.visit([&](auto&& x, auto) { skip(std::forward<decltype(x)>(x), tags::get_tag(x)); });
+		d.visit([&](auto&& x, auto) { skip(std::forward<decltype(x)>(x)); });
 	}
-	template <class type> void skip(type&&, tags::undefined) {}
-	template <class type> void skip(type&&, tags::floating_point) {}
-	template <class type> void skip(type&&, tags::unsigned_int) {}
-	template <class type> void skip(type&&, tags::signed_int) {}
-	template <class type> void skip(type&&, tags::boolean) {}
-	template <class type> void skip(type&&, tags::null) {}
-	template <class type> void skip(type&& x, tags::byte_string)
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::undefined>::value, void> skip(type&&) {}
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::floating_point>::value, void> skip(type&&) {}
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::unsigned_int>::value, void> skip(type&&) {}
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::signed_int>::value, void> skip(type&&) {}
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::boolean>::value, void> skip(type&&) {}
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::null>::value, void> skip(type&&) {}
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::byte_string>::value, void> skip(type&& x)
 	{
 		stream::skip(x, std::numeric_limits<uint64_t>::max());
 	}
-	template <class type> void skip(type&& x, tags::text_string)
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::text_string>::value, void> skip(type&& x)
 	{
 		stream::skip(x, std::numeric_limits<uint64_t>::max());
 	}
-	template <class type> void skip(type&& x, tags::array)
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::array>::value, void> skip(type&& x)
 	{
 		while (auto d = x.read())
 			skip(*d);
 	}
-
-	template <class type> void skip(type&& x, tags::map)
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::map>::value, void> skip(type&& x)
 	{
 		while (auto d = x.read_key())
 		{
@@ -163,7 +162,7 @@ namespace goldfish
 				m.m_on_value = false;
 			}
 
-			goldfish::skip(m.m_map, tags::map{});
+			goldfish::skip(m.m_map);
 			m.m_index = m.m_key_names.size();
 		}
 	private:

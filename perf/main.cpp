@@ -43,23 +43,23 @@ template <class Document> int64_t sum_ints(Document&& t)
 		[](auto x, tags::unsigned_int) { return x; },
 		[](auto x, tags::signed_int) { return x; },
 		[](auto& x, tags::array)
-	{
-		int64_t sum = 0;
-		while (auto d = x.read())
-			sum += sum_ints(*d);
-		return sum;
-	},
-		[](auto& x, tags::map)
-	{
-		int64_t sum = 0;
-		while (auto key = x.read_key())
 		{
-			goldfish::skip(*key);
-			sum += sum_ints(x.read_value());
-		}
-		return sum;
-	},
-		[](auto& x, auto tag) { goldfish::skip(x, tag); return 0ull; }));
+			int64_t sum = 0;
+			while (auto d = x.read())
+				sum += sum_ints(*d);
+			return sum;
+		},
+		[](auto& x, tags::map)
+		{
+			int64_t sum = 0;
+			while (auto key = x.read_key())
+			{
+				goldfish::skip(*key);
+				sum += sum_ints(x.read_value());
+			}
+			return sum;
+		},
+		[](auto& x, auto tag) { goldfish::skip(x); return 0ull; }));
 }
 
 int main(int argc, char* argv[])
