@@ -169,7 +169,6 @@
     <ClCompile Include="base64_stream.cpp" />
     <ClCompile Include="cbor_reader.cpp" />
     <ClCompile Include="cbor_writer.cpp" />
-    <ClCompile Include="code_gen.cpp" />
     <ClCompile Include="file_stream.cpp" />
     <ClCompile Include="json_reader.cpp" />
     <ClCompile Include="json_writer.cpp" />
