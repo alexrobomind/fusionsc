@@ -12,6 +12,7 @@ namespace goldfish { namespace debug_check
 	template <class T, class _tag> class string;
 	template <class T> class array;
 	template <class T> class map;
+	struct undefined { using tag = tags::undefined; };
 
 	template <class Document> using document = document_on_variant<
 		bool,
@@ -19,6 +20,7 @@ namespace goldfish { namespace debug_check
 		int64_t,
 		uint64_t,
 		double,
+		undefined,
 		string<std::decay_t<decltype(std::declval<Document>().as<tags::text_string>())>, tags::text_string>,
 		string<std::decay_t<decltype(std::declval<Document>().as<tags::byte_string>())>, tags::byte_string>,
 		array<std::decay_t<decltype(std::declval<Document>().as<tags::array>())>>,
@@ -31,6 +33,10 @@ namespace goldfish { namespace debug_check
 	template <class T, class tag> auto add_read_checks(T&& t, tag)
 	{
 		return std::forward<T>(t);
+	}
+	template <class T> auto add_read_checks(T&&, tags::undefined)
+	{
+		return undefined{};
 	}
 
 	template <class T, class _tag> class string : private assert_work_done

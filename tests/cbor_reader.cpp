@@ -186,6 +186,7 @@ namespace goldfish { namespace dom
 
 		test(stream::skip(result, 8) == 8);
 		test(stream::read<char>(result) == 'g');
+		test(stream::skip(result, 1) == 0);
 	}
 
 	TEST_CASE(skip_in_chunked_string_all)

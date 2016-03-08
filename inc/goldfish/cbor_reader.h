@@ -18,7 +18,7 @@ namespace goldfish { namespace cbor
 	template <class Stream> using text_string = string<Stream, 3, tags::text_string>;
 	template <class Stream> class array;
 	template <class Stream> class map;
-	struct undefined;
+	struct undefined { using tag = tags::undefined; };
 
 	template <class Stream> using document = document_on_variant<
 		bool,
@@ -174,8 +174,6 @@ namespace goldfish { namespace cbor
 		Stream& m_stream;
 		uint64_t m_remaining_length;
 	};
-
-	struct undefined { using tag = tags::undefined; };
 
 	inline float to_float(uint32_t x) { return *reinterpret_cast<float*>(&x); }
 	inline double to_double(uint64_t x) { return *reinterpret_cast<double*>(&x); }
@@ -353,6 +351,6 @@ namespace goldfish { namespace cbor
 		auto d = read_no_debug_check(s);
 		if (!d)
 			throw ill_formatted{};
-		return std::move(*d);
+		return debug_check::add_read_checks(std::move(*d));
 	}
 }}

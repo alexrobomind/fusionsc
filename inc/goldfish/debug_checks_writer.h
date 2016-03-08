@@ -177,8 +177,6 @@ namespace goldfish { namespace debug_check
 		void write_undefined() { m_writer.write_undefined(); }
 		void write(uint64_t x) { m_writer.write(x); }
 		void write(int64_t x) { m_writer.write(x); }
-		void write(uint32_t x) { m_writer.write(x); }
-		void write(int32_t x) { m_writer.write(x); }
 
 		auto write_binary(uint64_t cb) { return check_size_of_stream(add_write_checks_on_stream(m_writer.write_binary(cb)), cb); }
 		auto write_text(uint64_t cb) { return check_size_of_stream(add_write_checks_on_stream(m_writer.write_text(cb)), cb); }
