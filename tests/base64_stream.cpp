@@ -12,7 +12,7 @@ namespace goldfish { namespace stream
 	}
 	std::string my_base64_decode(const std::string& data)
 	{
-		return read_all_as_string(base64(buffer<4>(read_string_literal(data.c_str()))));
+		return read_all_as_string(base64(read_string_literal(data.c_str())));
 	}
 
 	TEST_CASE(base64_encode_0)  { test(my_base64_encode("") == ""); }

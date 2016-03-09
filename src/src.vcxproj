@@ -21,6 +21,7 @@
   <ItemGroup>
     <ClInclude Include="..\inc\goldfish\array_ref.h" />
     <ClInclude Include="..\inc\goldfish\base64_stream.h" />
+    <ClInclude Include="..\inc\goldfish\buffered_stream.h" />
     <ClInclude Include="..\inc\goldfish\cbor_reader.h" />
     <ClInclude Include="..\inc\goldfish\cbor_writer.h" />
     <ClInclude Include="..\inc\goldfish\debug_checks_reader.h" />

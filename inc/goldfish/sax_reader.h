@@ -4,6 +4,7 @@
 #include "stream.h"
 #include "optional.h"
 #include "base64_stream.h"
+#include "buffered_stream.h"
 #include "typed_erased_stream.h"
 #include <type_traits>
 
