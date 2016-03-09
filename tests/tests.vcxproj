@@ -175,6 +175,7 @@
     <ClCompile Include="json_writer.cpp" />
     <ClCompile Include="match.cpp" />
     <ClCompile Include="sax_reader.cpp" />
+    <ClCompile Include="schema.cpp" />
     <ClCompile Include="stream.cpp" />
     <ClCompile Include="tutorial.cpp" />
     <ClCompile Include="typed_erased_stream.cpp" />
