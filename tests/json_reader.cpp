@@ -9,7 +9,7 @@ namespace goldfish { namespace dom
 		auto r = [&](std::string input)
 		{
 			stream::array_ref_reader s({ reinterpret_cast<const uint8_t*>(input.data()), input.size() });
-			auto result = load_in_memory(json::read(s));
+			auto result = load_in_memory(json::read(stream::ref(s)));
 			test(skip(s, 1) == 0);
 			return result;
 		};
@@ -33,10 +33,10 @@ namespace goldfish { namespace dom
 		test(r("10") == 10ull);
 		test(r("4294967295") == 4294967295ull);
 		test(r("18446744073709551615") == 18446744073709551615ull);
-		expect_exception<json::integer_overflow>([&] { r("18446744073709551616"s); });
-		expect_exception<json::integer_overflow>([&] { r("18446744073709551617"s); });
-		expect_exception<json::integer_overflow>([&] { r("18446744073709551618"s); });
-		expect_exception<json::integer_overflow>([&] { r("18446744073709551619"s); });
+		expect_exception<integer_overflow>([&] { r("18446744073709551616"s); });
+		expect_exception<integer_overflow>([&] { r("18446744073709551617"s); });
+		expect_exception<integer_overflow>([&] { r("18446744073709551618"s); });
+		expect_exception<integer_overflow>([&] { r("18446744073709551619"s); });
 		//expect_exception<integer_overflow>([&] { r("[00]"s); });
 
 		test(r("-0") == 0ll);
@@ -45,7 +45,7 @@ namespace goldfish { namespace dom
 		test(r("-2147483647") == -2147483647ll);
 		test(r("-2147483648") == -2147483648ll);
 		test(r("-9223372036854775808") == -9223372036854775808ll);
-		expect_exception<json::integer_overflow>([&] { r("-9223372036854775809"s); });
+		expect_exception<integer_overflow>([&] { r("-9223372036854775809"s); });
 
 		test(r("0.0") == 0.);
 		test(r("0.5") == 0.5);
@@ -86,7 +86,7 @@ namespace goldfish { namespace dom
 			auto s = stream::read_string_literal(text);
 			expect_exception<decltype(exception)>([&]
 			{
-				dom::load_in_memory(json::read(s));
+				dom::load_in_memory(json::read(stream::ref(s)));
 				if (skip(s, 1) == 1)
 					throw data_partially_parsed{};
 			});
@@ -129,7 +129,7 @@ namespace goldfish { namespace dom
 		auto run = [](const char* text)
 		{
 			auto s = stream::read_string_literal(text);
-			dom::load_in_memory(json::read(s));
+			dom::load_in_memory(json::read(stream::ref(s)));
 			test(json::details::peek_non_space(s) == nullopt);
 		};
 

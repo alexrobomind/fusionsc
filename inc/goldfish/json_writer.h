@@ -15,8 +15,8 @@ namespace goldfish { namespace json
 	template <class Stream> class text_writer
 	{
 	public:
-		text_writer(Stream& s)
-			: m_stream(s)
+		text_writer(Stream&& s)
+			: m_stream(std::move(s))
 		{}
 		void write_buffer(const_buffer_ref buffer)
 		{
@@ -56,21 +56,14 @@ namespace goldfish { namespace json
 			stream::write(m_stream, '"');
 		}
 	private:
-		Stream& m_stream;
+		Stream m_stream;
 	};
 
-	/*
-		Even though JSON doesn't differentiate binary and text, we want to
-		Binary will be encoded as a string with the following format: \/B
-		Note that \/ is the / escaped.
-		Our version of text serializer doesn't escape /, such that the string "/B" is encoded
-		as "/B" whereas an empty binary stream is encoded as "\/B"
-	*/
 	template <class Stream> class binary_writer
 	{
 	public:
-		binary_writer(Stream& s)
-			: m_stream(s)
+		binary_writer(Stream&& s)
+			: m_stream(std::move(s))
 		{}
 		void write_buffer(const_buffer_ref buffer)
 		{
@@ -82,42 +75,42 @@ namespace goldfish { namespace json
 			stream::write(m_stream.base(), '"');
 		}
 	private:
-		stream::base64_writer<stream::ref_writer<Stream>> m_stream;
+		stream::base64_writer<Stream> m_stream;
 	};
 
 	template <class Stream> class array_writer
 	{
 	public:
-		array_writer(Stream& s)
-			: m_stream(s)
+		array_writer(Stream&& s)
+			: m_stream(std::move(s))
 		{}
 
-		document_writer<Stream> append();
+		document_writer<stream::writer_ref_type_t<Stream>> append();
 		void flush() { stream::write(m_stream, ']'); }
 	private:
-		Stream& m_stream;
+		Stream m_stream;
 		bool m_first = true;
 	};
 
 	template <class Stream> class map_writer
 	{
 	public:
-		map_writer(Stream& s)
-			: m_stream(s)
+		map_writer(Stream&& s)
+			: m_stream(std::move(s))
 		{}
-		document_writer<Stream> append_key();
-		document_writer<Stream> append_value();
+		document_writer<stream::writer_ref_type_t<Stream>> append_key();
+		document_writer<stream::writer_ref_type_t<Stream>> append_value();
 		void flush() { stream::write(m_stream, '}'); }
 	private:
-		Stream& m_stream;
+		Stream m_stream;
 		bool m_first = true;
 	};
 
 	template <class Stream> class document_writer
 	{
 	public:
-		document_writer(Stream& s)
-			: m_stream(s)
+		document_writer(Stream&& s)
+			: m_stream(std::move(s))
 		{}
 		void write(bool x)
 		{
@@ -166,26 +159,26 @@ namespace goldfish { namespace json
 		binary_writer<Stream> write_binary()
 		{
 			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>("\"\\/B"), 4 });
-			return{ m_stream };
+			return{ std::move(m_stream) };
 		}
 		text_writer<Stream> write_text()
 		{
 			stream::write(m_stream, '"');
-			return{ m_stream };
+			return{ std::move(m_stream) };
 		}
 
 		auto write_array(uint64_t size) { return write_array(); }
 		array_writer<Stream> write_array()
 		{
 			stream::write(m_stream, '[');
-			return{ m_stream };
+			return{ std::move(m_stream) };
 		}
 		
 		auto write_map(uint64_t size) { return write_map(); }
 		map_writer<Stream> write_map()
 		{
 			stream::write(m_stream, '{');
-			return{ m_stream };
+			return{ std::move(m_stream) };
 		}
 
 		template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, void> write(Document& d)
@@ -193,32 +186,32 @@ namespace goldfish { namespace json
 			copy_document(*this, d);
 		}
 	private:
-		Stream& m_stream;
+		Stream m_stream;
 	};
-	template <class Stream> document_writer<Stream> write_no_debug_check(Stream& s) { return{ s }; }
-	template <class Stream> auto write(Stream& s) { return debug_check::add_write_checks(write_no_debug_check(s)); }
+	template <class Stream> document_writer<std::decay_t<Stream>> write_no_debug_check(Stream&& s) { return{ std::forward<Stream>(s) }; }
+	template <class Stream> auto write(Stream&& s) { return debug_check::add_write_checks(write_no_debug_check(std::forward<Stream>(s))); }
 
-	template <class Stream> document_writer<Stream> array_writer<Stream>::append()
+	template <class Stream> document_writer<stream::writer_ref_type_t<Stream>> array_writer<Stream>::append()
 	{
 		if (m_first)
 			m_first = false;
 		else
 			stream::write(m_stream, ',');
 
-		return{ m_stream };
+		return{ stream::ref(m_stream) };
 	}
 
-	template <class Stream> document_writer<Stream> map_writer<Stream>::append_key()
+	template <class Stream> document_writer<stream::writer_ref_type_t<Stream>> map_writer<Stream>::append_key()
 	{
 		if (m_first)
 			m_first = false;
 		else
 			stream::write(m_stream, ',');
-		return{ m_stream };
+		return{ stream::ref(m_stream) };
 	}
-	template <class Stream> document_writer<Stream> map_writer<Stream>::append_value()
+	template <class Stream> document_writer<stream::writer_ref_type_t<Stream>> map_writer<Stream>::append_value()
 	{
 		stream::write(m_stream, ':');
-		return{ m_stream };
+		return{ stream::ref(m_stream) };
 	}
 }}

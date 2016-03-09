@@ -38,6 +38,7 @@
     <ClInclude Include="..\inc\goldfish\sax_writer.h" />
     <ClInclude Include="..\inc\goldfish\stream.h" />
     <ClInclude Include="..\inc\goldfish\tags.h" />
+    <ClInclude Include="..\inc\goldfish\typed_erased_stream.h" />
     <ClInclude Include="..\inc\goldfish\uncaught_exception.h" />
     <ClInclude Include="..\inc\goldfish\variant.h" />
   </ItemGroup>

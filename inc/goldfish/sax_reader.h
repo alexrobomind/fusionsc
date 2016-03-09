@@ -3,14 +3,22 @@
 #include "tags.h"
 #include "stream.h"
 #include "optional.h"
+#include "base64_stream.h"
+#include "typed_erased_stream.h"
+#include <type_traits>
 
 namespace goldfish
 {
-	template <class... types>
+	struct integer_overflow {};
+
+	template <bool _does_json_conversions, class... types>
 	class document_on_variant
 	{
 	public:
 		using tag = tags::document;
+		template <class tag> using type_with_tag_t = tags::type_with_tag_t<tag, types...>;
+		enum { does_json_conversions = _does_json_conversions };
+
 		template <class... Args> document_on_variant(Args&&... args)
 			: m_data(std::forward<Args>(args)...)
 		{}
@@ -29,14 +37,72 @@ namespace goldfish
 				return l(std::forward<decltype(x)>(x), tags::get_tag(x));
 			});
 		}
-		template <class tag> auto& as() & noexcept
+
+		template <class tag> decltype(auto) as() & { return as_impl(tag{}, std::integral_constant<bool, does_json_conversions>{}); }
+		template <class tag> decltype(auto) as() && { return std::move(*this).as_impl(tag{}, std::integral_constant<bool, does_json_conversions>{}); }
+
+		// Default: no conversion
+		template <class tag, class json_conversion> decltype(auto) as_impl(tag, json_conversion) &
 		{
-			return m_data.as<tags::type_with_tag_t<tag, types...>>();
+			return m_data.as<type_with_tag_t<tag>>();
 		}
-		template <class tag> auto&& as() && noexcept
+		template <class tag, class json_conversion> decltype(auto) as_impl(tag, json_conversion) &&
 		{
-			return std::move(m_data).as<tags::type_with_tag_t<tag, types...>>();
+			return std::move(m_data).as<type_with_tag_t<tag>>();
 		}
+
+		// Floating point can be converted from an int
+		template <class json_conversion> double as_impl(tags::floating_point, json_conversion)
+		{
+			return visit(first_match(
+				[](auto&& x, tags::floating_point) -> double { return x; },
+				[](auto&& x, tags::unsigned_int) -> double { return static_cast<double>(x); },
+				[](auto&& x, tags::signed_int) -> double { return static_cast<double>(x); },
+				[](auto&& x, tags::text_string) -> double
+				{
+					if (!does_json_conversions)
+						throw bad_variant_access();
+
+					auto s = stream::buffer<8>(stream::ref(x));
+					return json::read_number(s).visit([](auto&& x) -> double { return static_cast<double>(x); });
+				},
+				[](auto&&, auto) -> double { throw bad_variant_access{}; }
+			));
+		}
+		
+		// Signed ints can be converted from unsigned ints
+		template <class json_conversion> int64_t as_impl(tags::signed_int, json_conversion)
+		{
+			return visit(first_match(
+				[](auto&& x, tags::signed_int) -> int64_t { return x; },
+				[](auto&& x, tags::unsigned_int) -> int64_t
+				{
+					if (x > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
+						throw integer_overflow{};
+					return static_cast<int64_t>(x);
+				},
+				[](auto&& x, tags::text_string) -> int64_t
+				{
+					if (!does_json_conversions)
+						throw bad_variant_access();
+
+					auto s = stream::buffer<8>(stream::ref(x));
+					return json::read_number(s).visit([](auto&& x) -> int64_t { return static_cast<int64_t>(x); });
+				},
+				[](auto&&, auto) -> int64_t { throw bad_variant_access{}; }
+			));
+		}
+
+		// Byte strings can be converted from text strings (assuming base64 text)
+		stream::typed_erased_reader as_impl(tags::byte_string, std::true_type /*json_conversion*/) &&
+		{
+			return std::move(*this).visit(first_match(
+				[](auto&& x, tags::byte_string) -> stream::typed_erased_reader { return stream::erase_type(std::forward<decltype(x)>(x)); },
+				[](auto&& x, tags::text_string) -> stream::typed_erased_reader { return stream::erase_type(base64(std::forward<decltype(x)>(x))); },
+				[](auto&&, auto) -> stream::typed_erased_reader { throw bad_variant_access{}; }
+			));
+		}
+				
 		template <class tag> bool is() const noexcept
 		{
 			static_assert(tags::is_tag<tag>::value, "document::is must be called with a tag (see tags.h)");
@@ -44,10 +110,6 @@ namespace goldfish
 			{
 				return std::is_same<tag, decltype(tags::get_tag(x))>::value;
 			});
-		}
-		template <class T> bool is_exactly() const noexcept
-		{
-			return m_data.is<T>();
 		}
 
 		using invalid_state = typename variant<types...>::invalid_state;

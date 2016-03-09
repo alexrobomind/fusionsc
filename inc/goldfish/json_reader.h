@@ -11,13 +11,13 @@
 namespace goldfish { namespace json
 {
 	struct ill_formatted {};
-	struct integer_overflow {};
 
 	class byte_string;
 	template <class Stream> class text_string;
 	template <class Stream> class array;
 	template <class Stream> class map;
 	template <class Stream> using document = document_on_variant<
+		true /*does_json_conversions*/,
 		bool,
 		nullptr_t,
 		int64_t,
@@ -27,7 +27,7 @@ namespace goldfish { namespace json
 		byte_string,
 		array<Stream>,
 		map<Stream>>;
-	template <class Stream> document<Stream> read_no_debug_check(Stream& s);
+	template <class Stream> document<std::decay_t<Stream>> read_no_debug_check(Stream&& s);
 
 	namespace details
 	{
@@ -54,8 +54,8 @@ namespace goldfish { namespace json
 	template <class Stream> class text_string
 	{
 	public:
-		text_string(Stream& s)
-			: m_stream(s)
+		text_string(Stream&& s)
+			: m_stream(std::move(s))
 		{}
 		using tag = tags::text_string;
 
@@ -198,7 +198,7 @@ namespace goldfish { namespace json
 
 		// 0xFF is an invalid UTF-8 character
 		// The list of characters that were converted from a \u command (that is in UTF16) are in m_converted as non 0xFF bytes
-		Stream& m_stream;
+		Stream m_stream;
 		uint32_t m_converted = 0xFFFFFFFF;
 	public:
 		uint8_t padding_for_variant;
@@ -207,10 +207,10 @@ namespace goldfish { namespace json
 	template <class Stream, char end_character> class comma_separated_reader
 	{
 	public:
-		comma_separated_reader(Stream& s)
-			: m_stream(s)
+		comma_separated_reader(Stream&& s)
+			: m_stream(std::move(s))
 		{}
-		optional<document<Stream>> read_comma_separated()
+		optional<document<stream::reader_ref_type_t<Stream>>> read_comma_separated()
 		{
 			switch (m_state)
 			{
@@ -229,7 +229,7 @@ namespace goldfish { namespace json
 					else
 					{
 						m_state = state::middle;
-						return read_no_debug_check(m_stream);
+						return read_no_debug_check(stream::ref(m_stream));
 					}
 				}
 
@@ -241,7 +241,7 @@ namespace goldfish { namespace json
 
 					switch (*c)
 					{
-					case ',': stream::read<char>(m_stream); return read_no_debug_check(m_stream);
+					case ',': stream::read<char>(m_stream); return read_no_debug_check(stream::ref(m_stream));
 					case end_character: stream::read<char>(m_stream); m_state = state::ended; return nullopt;
 					default: throw ill_formatted{};
 					}
@@ -252,7 +252,7 @@ namespace goldfish { namespace json
 			}
 		}
 
-		Stream& m_stream;
+		Stream m_stream;
 		enum class state
 		{
 			first,
@@ -267,7 +267,7 @@ namespace goldfish { namespace json
 	public:
 		using tag = tags::array;
 		using comma_separated_reader<Stream, ']'>::comma_separated_reader;
-		optional<document<Stream>> read() { return read_comma_separated(); }
+		auto read() { return read_comma_separated(); }
 	};
 	template <class Stream> class map : public comma_separated_reader<Stream, '}'>
 	{
@@ -275,11 +275,8 @@ namespace goldfish { namespace json
 		using tag = tags::map;
 		using comma_separated_reader<Stream, '}'>::comma_separated_reader;
 
-		optional<document<Stream>> read_key()
-		{
-			return read_comma_separated();
-		}
-		document<Stream> read_value()
+		auto read_key() { return read_comma_separated(); }
+		document<stream::reader_ref_type_t<Stream>> read_value()
 		{
 			auto c = details::peek_non_space(m_stream);
 			if (c == nullopt)
@@ -287,24 +284,24 @@ namespace goldfish { namespace json
 			else if (*c != ':')
 				throw ill_formatted{};
 			stream::read<char>(m_stream);
-			return read_no_debug_check(m_stream);
+			return read_no_debug_check(stream::ref(m_stream));
 		}
 	};
 
-	template <class Stream> text_string<Stream> read_text(Stream& s)
+	template <class Stream> text_string<std::decay_t<Stream>> read_text(Stream&& s)
 	{
 		if (stream::read<char>(s) != '"') std::terminate();
-		return{ s };
+		return{ std::forward<Stream>(s) };
 	}
-	template <class Stream> array<Stream> read_array(Stream& s)
+	template <class Stream> array<std::decay_t<Stream>> read_array(Stream&& s)
 	{
 		if (stream::read<char>(s) != '[') std::terminate();
-		return{ s };
+		return{ std::forward<Stream>(s) };
 	}
-	template <class Stream> map<Stream> read_map(Stream& s)
+	template <class Stream> map<std::decay_t<Stream>> read_map(Stream&& s)
 	{
 		if (stream::read<char>(s) != '{') std::terminate();
-		return{ s };
+		return{ std::forward<Stream>(s) };
 	}
 	template <class Stream> bool read_true(Stream& s)
 	{
@@ -385,7 +382,7 @@ namespace goldfish { namespace json
 			stream::read<char>(s);
 		}
 	}
-	template <class Stream> document<std::decay_t<Stream>> read_number(Stream& s)
+	template <class Stream> variant<uint64_t, int64_t, double> read_number(Stream& s)
 	{
 		bool negative = false;
 		auto first = stream::read<char>(s);
@@ -437,7 +434,7 @@ namespace goldfish { namespace json
 
 		return multiplier * ((double)integer + decimals);
 	}
-	template <class Stream> document<Stream> read_no_debug_check(Stream& s)
+	template <class Stream> document<std::decay_t<Stream>> read_no_debug_check(Stream&& s)
 	{
 		auto optC = details::peek_non_space(s);
 		if (optC == nullopt)
@@ -445,17 +442,18 @@ namespace goldfish { namespace json
 
 		switch (*optC)
 		{
-			case '[': return read_array(s);
-			case '{': return read_map(s);
+			case '[': return read_array(std::forward<Stream>(s));
+			case '{': return read_map(std::forward<Stream>(s));
 			case 't': return read_true(s);
 			case 'f': return read_false(s);
 			case 'n': return read_null(s);
-			case '"': return read_text(s);
+			case '"': return read_text(std::forward<Stream>(s));
 			case '-':
 			case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
-				return read_number(s);
+				return read_number(s).visit([](auto&& x) -> document<Stream> { return x; });
+
 			default: throw ill_formatted();
 		}
 	}
-	template <class Stream> auto read(Stream& s) { return debug_check::add_read_checks(read_no_debug_check(s)); }
+	template <class Stream> auto read(Stream&& s) { return debug_check::add_read_checks(read_no_debug_check(std::forward<Stream>(s))); }
 }}

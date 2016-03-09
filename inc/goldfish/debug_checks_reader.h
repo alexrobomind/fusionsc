@@ -15,16 +15,17 @@ namespace goldfish { namespace debug_check
 	struct undefined { using tag = tags::undefined; };
 
 	template <class Document> using document = document_on_variant<
+		Document::does_json_conversions,
 		bool,
 		nullptr_t,
 		int64_t,
 		uint64_t,
 		double,
 		undefined,
-		string<std::decay_t<decltype(std::declval<Document>().as<tags::text_string>())>, tags::text_string>,
-		string<std::decay_t<decltype(std::declval<Document>().as<tags::byte_string>())>, tags::byte_string>,
-		array<std::decay_t<decltype(std::declval<Document>().as<tags::array>())>>,
-		map<std::decay_t<decltype(std::declval<Document>().as<tags::map>())>>>;
+		string<typename Document::template type_with_tag_t<tags::text_string>, tags::text_string>,
+		string<typename Document::template type_with_tag_t<tags::byte_string>, tags::byte_string>,
+		array<typename Document::template type_with_tag_t<tags::array>>,
+		map<typename Document::template type_with_tag_t<tags::map>>>;
 
 	template <class Document> document<std::decay_t<Document>> add_read_checks(Document&& t);
 	template <class T> document<T> add_read_checks(document<T>&& t) { return std::move(t); }

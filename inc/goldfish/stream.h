@@ -113,9 +113,13 @@ namespace goldfish { namespace stream
 		inner& m_stream;
 	};
 
-	template <class inner> struct ref_type { using reader = ref_reader<inner>; using writer = ref_writer<inner>; };
-	template <class inner> struct ref_type<ref_reader<inner>> { using reader = ref_reader<inner>; };
-	template <class inner> struct ref_type<ref_writer<inner>> { using writer = ref_writer<inner>; };
+	template <class inner> struct reader_ref_type { using type = ref_reader<inner>; };
+	template <class inner> struct reader_ref_type<ref_reader<inner>> { using type = ref_reader<inner>; };
+	template <class inner> using reader_ref_type_t = typename reader_ref_type<inner>::type;
+
+	template <class inner> struct writer_ref_type { using type = ref_writer<inner>; };
+	template <class inner> struct writer_ref_type<ref_writer<inner>> { using type = ref_writer<inner>; };
+	template <class inner> using writer_ref_type_t = typename writer_ref_type<inner>::type;
 
 	template <class inner> std::enable_if_t<is_reader<inner>::value && !is_ref<inner>::value, ref_reader<inner>> ref(inner& stream) { return{ stream }; }
 	template <class inner> std::enable_if_t<is_writer<inner>::value && !is_ref<inner>::value, ref_writer<inner>> ref(inner& stream) { return{ stream }; }

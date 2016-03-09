@@ -29,7 +29,7 @@ namespace goldfish { namespace dom
 	{
 		auto binary = to_vector(input);
 		stream::array_ref_reader s(binary);
-		auto result = load_in_memory(cbor::read(s));
+		auto result = load_in_memory(cbor::read(stream::ref(s)));
 		test(skip(s, 1) == 0);
 		return result;
 	};
@@ -154,7 +154,7 @@ namespace goldfish { namespace dom
 	{
 		auto binary = to_vector("6449455446"); // IETF
 		stream::array_ref_reader s(binary);
-		auto result = cbor::read(s).as<tags::text_string>();
+		auto result = cbor::read(stream::ref(s)).as<tags::text_string>();
 
 		test(stream::skip(result, 0) == 0);
 		test(stream::read<char>(result) == 'I');
@@ -167,7 +167,7 @@ namespace goldfish { namespace dom
 	{
 		auto binary = to_vector("7f657374726561646d696e67ff"); // "strea" "ming"
 		stream::array_ref_reader s(binary);
-		auto result = cbor::read(s).as<tags::text_string>();
+		auto result = cbor::read(stream::ref(s)).as<tags::text_string>();
 
 		test(stream::skip(result, 0) == 0);
 		test(stream::read<char>(result) == 's');
@@ -182,7 +182,7 @@ namespace goldfish { namespace dom
 	{
 		auto binary = to_vector("7f657374726561646d696e67ff"); // "strea" "ming"
 		stream::array_ref_reader s(binary);
-		auto result = cbor::read(s).as<tags::text_string>();
+		auto result = cbor::read(stream::ref(s)).as<tags::text_string>();
 
 		test(stream::skip(result, 8) == 8);
 		test(stream::read<char>(result) == 'g');
@@ -193,6 +193,6 @@ namespace goldfish { namespace dom
 	{
 		auto binary = to_vector("7f657374726561646d696e67ff"); // "strea" "ming"
 		stream::array_ref_reader s(binary);
-		test(stream::skip(cbor::read(s).as<tags::text_string>(), 10) == 9);
+		test(stream::skip(cbor::read(stream::ref(s)).as<tags::text_string>(), 10) == 9);
 	}
 }}

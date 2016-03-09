@@ -176,6 +176,7 @@
     <ClCompile Include="sax_reader.cpp" />
     <ClCompile Include="stream.cpp" />
     <ClCompile Include="tutorial.cpp" />
+    <ClCompile Include="typed_erased_stream.cpp" />
     <ClCompile Include="uncaught_exception.cpp" />
     <ClCompile Include="variant.cpp" />
   </ItemGroup>

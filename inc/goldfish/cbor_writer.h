@@ -6,6 +6,7 @@
 #include <limits>
 #include "numbers.h"
 #include "sax_writer.h"
+#include "stream.h"
 
 namespace goldfish { namespace cbor
 {
@@ -42,8 +43,8 @@ namespace goldfish { namespace cbor
 	template <class Stream> class stream_writer
 	{
 	public:
-		stream_writer(Stream& s)
-			: m_stream(s)
+		stream_writer(Stream&& s)
+			: m_stream(std::move(s))
 		{}
 		void write_buffer(const_buffer_ref buffer)
 		{
@@ -51,14 +52,14 @@ namespace goldfish { namespace cbor
 		}
 		void flush() { }
 	private:
-		Stream& m_stream;
+		Stream m_stream;
 	};
 
 	template <class Stream, uint8_t major> class indefinite_stream_writer
 	{
 	public:
-		indefinite_stream_writer(Stream& s)
-			: m_stream(s)
+		indefinite_stream_writer(Stream&& s)
+			: m_stream(std::move(s))
 		{}
 		void write_buffer(const_buffer_ref buffer)
 		{
@@ -70,7 +71,7 @@ namespace goldfish { namespace cbor
 			stream::write(m_stream, static_cast<uint8_t>(0xFF));
 		}
 	private:
-		Stream& m_stream;
+		Stream m_stream;
 	};
 
 	template <class Stream> class array_writer;
@@ -81,8 +82,8 @@ namespace goldfish { namespace cbor
 	template <class Stream> class document_writer
 	{
 	public:
-		document_writer(Stream& s)
-			: m_stream(s)
+		document_writer(Stream&& s)
+			: m_stream(std::move(s))
 		{}
 		void write(bool x)
 		{
@@ -109,22 +110,22 @@ namespace goldfish { namespace cbor
 		stream_writer<Stream> write_binary(uint64_t cb)
 		{
 			details::write_integer<2>(m_stream, cb);
-			return{ m_stream };
+			return{ std::move(m_stream) };
 		}
 		stream_writer<Stream> write_text(uint64_t cb)
 		{
 			details::write_integer<3>(m_stream, cb);
-			return{ m_stream };
+			return{ std::move(m_stream) };
 		}
 		indefinite_stream_writer<Stream, 2> write_binary()
 		{
 			stream::write(m_stream, static_cast<uint8_t>((2 << 5) | 31));
-			return{ m_stream };
+			return{ std::move(m_stream) };
 		}
 		indefinite_stream_writer<Stream, 3> write_text()
 		{
 			stream::write(m_stream, static_cast<uint8_t>((3 << 5) | 31));
-			return{ m_stream };
+			return{ std::move(m_stream) };
 		}
 
 		array_writer<Stream> write_array(uint64_t size);
@@ -139,28 +140,28 @@ namespace goldfish { namespace cbor
 		}
 
 	private:
-		Stream& m_stream;
+		Stream m_stream;
 	};
-	template <class Stream> document_writer<Stream> write_no_debug_check(Stream& s)
+	template <class Stream> document_writer<std::decay_t<Stream>> write_no_debug_check(Stream&& s)
 	{
-		return{ s };
+		return{ std::forward<Stream>(s) };
 	}
-	template <class Stream> auto write(Stream& s)
+	template <class Stream> auto write(Stream&& s)
 	{
-		return debug_check::add_write_checks(write_no_debug_check(s));
+		return debug_check::add_write_checks(write_no_debug_check(std::forward<Stream>(s)));
 	}
 	
 	template <class Stream> class array_writer
 	{
 	public:
-		array_writer(Stream& s)
-			: m_stream(s)
+		array_writer(Stream&& s)
+			: m_stream(std::move(s))
 		{}
 
-		document_writer<Stream> append() { return{ m_stream }; }
+		document_writer<stream::writer_ref_type_t<Stream>> append() { return{ stream::ref(m_stream) }; }
 		void flush() {}
 	private:
-		Stream& m_stream;
+		Stream m_stream;
 	};
 	template <class Stream> class indefinite_array_writer
 	{
@@ -168,56 +169,56 @@ namespace goldfish { namespace cbor
 		indefinite_array_writer(Stream& s)
 			: m_stream(s)
 		{}
-		document_writer<Stream> append() { return{ m_stream }; }
+		document_writer<stream::writer_ref_type_t<Stream>> append() { return{ stream::ref(m_stream) }; }
 		void flush() { stream::write(m_stream, static_cast<uint8_t>(0xFF)); }
 	private:
-		Stream& m_stream;
+		Stream m_stream;
 	};
 	template <class Stream> array_writer<Stream> document_writer<Stream>::write_array(uint64_t size)
 	{
 		details::write_integer<4>(m_stream, size);
-		return{ m_stream };
+		return{ std::move(m_stream) };
 	}
 	template <class Stream> indefinite_array_writer<Stream> document_writer<Stream>::write_array()
 	{
 		stream::write(m_stream, static_cast<uint8_t>((4 << 5) | 31));
-		return{ m_stream };
+		return{ std::move(m_stream) };
 	}
 
 	template <class Stream> class map_writer
 	{
 	public:
-		map_writer(Stream& s)
-			: m_stream(s)
+		map_writer(Stream&& s)
+			: m_stream(std::move(s))
 		{}
 
-		document_writer<Stream> append_key() { return{ m_stream }; }
-		document_writer<Stream> append_value() { return{ m_stream }; }
+		document_writer<stream::writer_ref_type_t<Stream>> append_key() { return{ stream::ref(m_stream) }; }
+		document_writer<stream::writer_ref_type_t<Stream>> append_value() { return{ stream::ref(m_stream) }; }
 		void flush() {}
 	private:
-		Stream& m_stream;
+		Stream m_stream;
 	};
 	template <class Stream> class indefinite_map_writer
 	{
 	public:
-		indefinite_map_writer(Stream& s)
-			: m_stream(s)
+		indefinite_map_writer(Stream&& s)
+			: m_stream(std::move(s))
 		{}
 
-		document_writer<Stream> append_key() { return{ m_stream }; }
-		document_writer<Stream> append_value() { return{ m_stream }; }
+		document_writer<stream::writer_ref_type_t<Stream>> append_key() { return{ stream::ref(m_stream) }; }
+		document_writer<stream::writer_ref_type_t<Stream>> append_value() { return{ stream::ref(m_stream) }; }
 		void flush() { stream::write(m_stream, static_cast<uint8_t>(0xFF)); }
 	private:
-		Stream& m_stream;
+		Stream m_stream;
 	};
 	template <class Stream> map_writer<Stream> document_writer<Stream>::write_map(uint64_t size)
 	{
 		details::write_integer<5>(m_stream, size);
-		return{ m_stream };
+		return{ std::move(m_stream) };
 	}
 	template <class Stream> indefinite_map_writer<Stream> document_writer<Stream>::write_map()
 	{
 		stream::write(m_stream, static_cast<uint8_t>((5 << 5) | 31));
-		return{ m_stream };
+		return{ std::move(m_stream) };
 	}
 }}
