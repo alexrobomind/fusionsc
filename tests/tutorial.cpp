@@ -27,10 +27,10 @@ TEST_CASE(parse_document)
 
 	auto document = json::read(stream::read_string_literal("{\"a\":1,\"b\":3.0}")).as<tags::map>();
 
-	test(read_all_as_string(document.read_key()->as<tags::text_string>()) == "a");
+	test(stream::read_all_as_string(document.read_key()->as<tags::text_string>()) == "a");
 	test(document.read_value().as<tags::unsigned_int>() == 1);
 
-	test(read_all_as_string(document.read_key()->as<tags::text_string>()) == "b");
+	test(stream::read_all_as_string(document.read_key()->as<tags::text_string>()) == "b");
 	test(document.read_value().as<tags::floating_point>() == 3.0);
 
 	test(document.read_key() == nullopt);

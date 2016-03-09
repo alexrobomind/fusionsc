@@ -69,11 +69,11 @@ namespace goldfish { namespace stream
 		template <class T, size_t s, bool fits> T read_helper(std::integral_constant<size_t, s>, std::bool_constant<fits>)
 		{
 			T t;
-			if (self().read_buffer({ reinterpret_cast<uint8_t*>(&t), sizeof(t) }) != sizeof(t))
+			if (read_buffer({ reinterpret_cast<uint8_t*>(&t), sizeof(t) }) != sizeof(t))
 				throw unexpected_end_of_stream();
 			return t;
 		}
-		template <class T, size_t s> T read_helper(std::integral_constant<size_t, 1>, std::bool_constant<true> /*fits*/)
+		template <class T> T read_helper(std::integral_constant<size_t, 1>, std::bool_constant<true> /*fits*/)
 		{
 			if (m_buffered.empty())
 				fill_in_buffer_ensure_size(1);

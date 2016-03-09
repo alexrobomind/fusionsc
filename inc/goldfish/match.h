@@ -34,7 +34,7 @@ namespace goldfish
 	template <class... Lambdas>
 	auto first_match(Lambdas&&... lambdas)
 	{
-		return [lambdas = std::make_tuple(std::forward<Lambdas>(lambdas)...)](auto&&... args)
+		return [lambdas = std::make_tuple(std::forward<Lambdas>(lambdas)...)](auto&&... args) -> decltype(auto)
 		{
 			return std::get<details::info<Lambdas...>::first_callable<decltype(args)...>::value>(lambdas)(std::forward<decltype(args)>(args)...);
 		};

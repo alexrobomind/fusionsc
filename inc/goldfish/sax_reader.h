@@ -39,9 +39,20 @@ namespace goldfish
 			});
 		}
 
+		template <class tag> bool is() const noexcept
+		{
+			static_assert(tags::is_tag<tag>::value, "document::is must be called with a tag (see tags.h)");
+			return m_data.visit([&](auto&& x)
+			{
+				return std::is_same<tag, decltype(tags::get_tag(x))>::value;
+			});
+		}
+
 		template <class tag> decltype(auto) as() & { return as_impl(tag{}, std::integral_constant<bool, does_json_conversions>{}); }
 		template <class tag> decltype(auto) as() && { return std::move(*this).as_impl(tag{}, std::integral_constant<bool, does_json_conversions>{}); }
 
+		using invalid_state = typename variant<types...>::invalid_state;
+	private:
 		// Default: no conversion
 		template <class tag, class json_conversion> decltype(auto) as_impl(tag, json_conversion) &
 		{
@@ -94,27 +105,12 @@ namespace goldfish
 			));
 		}
 
-		// Byte strings can be converted from text strings (assuming base64 text)
-		stream::typed_erased_reader as_impl(tags::byte_string, std::true_type /*json_conversion*/) &&
+		// Byte strings are converted from text strings (assuming base64 text)
+		auto as_impl(tags::byte_string, std::true_type /*json_conversion*/) &&
 		{
-			return std::move(*this).visit(first_match(
-				[](auto&& x, tags::byte_string) -> stream::typed_erased_reader { return stream::erase_type(std::forward<decltype(x)>(x)); },
-				[](auto&& x, tags::text_string) -> stream::typed_erased_reader { return stream::erase_type(base64(std::forward<decltype(x)>(x))); },
-				[](auto&&, auto) -> stream::typed_erased_reader { throw bad_variant_access{}; }
-			));
-		}
-				
-		template <class tag> bool is() const noexcept
-		{
-			static_assert(tags::is_tag<tag>::value, "document::is must be called with a tag (see tags.h)");
-			return m_data.visit([&](auto&& x)
-			{
-				return std::is_same<tag, decltype(tags::get_tag(x))>::value;
-			});
+			return base64(std::move(*this).as<tags::text_string>());
 		}
 
-		using invalid_state = typename variant<types...>::invalid_state;
-	private:
 		variant<types...> m_data;
 	};
 
