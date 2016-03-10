@@ -125,34 +125,7 @@ namespace goldfish { namespace stream
 	template <class inner> std::enable_if_t<is_writer<inner>::value && !is_ref<inner>::value, ref_writer<inner>> ref(inner& stream) { return{ stream }; }
 	template <class inner> ref_reader<inner> ref(ref_reader<inner>& stream) { return stream; }
 	template <class inner> ref_writer<inner> ref(ref_writer<inner>& stream) { return stream; }
-
-	template <class inner>
-	class assert_read_entirely_reader
-	{
-	public:
-		assert_read_entirely_reader(inner&& stream)
-			: m_stream(std::move(stream))
-		{}
-		assert_read_entirely_reader(assert_read_entirely_reader&&) = default;
-		~assert_read_entirely_reader()
-		{
-			assert(!m_work_needed() || m_uncaught_exceptions() || stream::skip(m_stream, 1) == 0);
-		}
-		size_t read_buffer(buffer_ref data) { return m_stream.read_buffer(data); }
-		template <class T> auto read() { return stream::read<T>(m_stream); }
-		uint64_t skip(uint64_t x) { return stream::skip(m_stream, x); }
-	private:
-		inner m_stream;
-		uncaught_exception_checker m_uncaught_exceptions;
-		is_work_needed m_work_needed;
-	};
-	#if _DEBUG
-	template <class inner> enable_if_reader_t<inner, assert_read_entirely_reader<std::decay_t<inner>>> assert_read_entirely(inner&& stream) { return{ std::forward<inner>(stream) }; }
-	#else
-	template <class inner> enable_if_reader_t<inner, inner> assert_read_entirely(inner stream) { return std::move(stream); }
-	#endif
-
-
+	
 	class array_ref_reader
 	{
 	public:
@@ -218,53 +191,7 @@ namespace goldfish { namespace stream
 		const_buffer_ref m_data;
 	};
 
-	template <size_t N>
-	class array_reader : public array_ref_reader
-	{
-	public:
-		array_reader(const std::array<uint8_t, N>& buffer)
-			: array_ref_reader(m_buffer)
-			, m_buffer(buffer)
-		{}
-		
-		template <size_t M, std::enable_if_t<M < N, bool> = true>
-		array_reader(const std::array<uint8_t, M>& buffer)
-		{
-			std::copy(buffer.begin(), buffer.end(), m_buffer.begin());
-			m_data = { m_buffer.data(), m_buffer.data() + M };
-		}
-		array_reader(const array_reader& rhs)
-			: m_buffer(rhs.m_buffer)
-		{
-			m_data = { m_buffer.data() + std::distance(rhs.m_buffer.data(), rhs.m_data.data()), rhs.m_data.size() };
-		}
-
-	private:
-		std::array<uint8_t, N> m_buffer;
-	};
-	class vector_reader : public array_ref_reader
-	{
-	public:
-		vector_reader(std::vector<uint8_t> buffer)
-			: m_buffer(std::move(buffer))
-		{
-			m_data = { m_buffer.data(), m_buffer.data() + m_buffer.size() };
-		}
-		vector_reader(vector_reader&& rhs)
-		{
-			auto d = std::distance(const_cast<const uint8_t*>(rhs.m_buffer.data()), rhs.m_data.data());
-			auto s = rhs.m_data.size();
-
-			m_buffer = std::move(rhs.m_buffer);
-			m_data = { m_buffer.data() + d, s };
-		}
-
-	private:
-		std::vector<uint8_t> m_buffer;
-	};
-	template <size_t N> array_reader<N> read_array(const std::array<uint8_t, N>& x) { return{ x }; }
-	inline vector_reader read_array(std::vector<uint8_t> x) { return{ std::move(x) }; }
-	inline array_ref_reader read_array_ref(const_buffer_ref x) { return{ x }; }
+	inline array_ref_reader read_buffer_ref(const_buffer_ref x) { return{ x }; }
 	template <size_t N> array_ref_reader read_string_literal(const char(&s)[N]) { assert(s[N - 1] == 0); return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), N - 1 }; }
 	inline array_ref_reader read_string_literal(const char* s) { return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), strlen(s) }; }
 

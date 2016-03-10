@@ -73,7 +73,7 @@ int main(int argc, char* argv[])
 	auto json_data = stream::read_all(stream::file_reader(argv[1]));
 	auto cbor_data = [&]
 	{
-		auto document = json::read(stream::read_array_ref(json_data));
+		auto document = json::read(stream::read_buffer_ref(json_data));
 
 		stream::vector_writer output_stream;
 		cbor::write(stream::ref(output_stream)).write(document);
@@ -87,20 +87,20 @@ int main(int argc, char* argv[])
 	cout << "\nDeserialize CBOR in streaming mode\n";
 	measure([&]
 	{
-		return sum_ints(cbor::read(stream::read_array_ref(cbor_data)));
+		return sum_ints(cbor::read(stream::read_buffer_ref(cbor_data)));
 	}, cbor_data.size());
 
 	cout << "\nDeserialize JSON in streaming mode\n";
 	measure([&]
 	{
-		return sum_ints(json::read(stream::read_array_ref(json_data)));
+		return sum_ints(json::read(stream::read_buffer_ref(json_data)));
 	}, json_data.size());
 
 	cout << "\nDOM MODE\n";
 	cout << "\nDeserialize CBOR in DOM mode\n";
 	measure([&]
 	{
-		dom::load_in_memory(cbor::read(stream::read_array_ref(cbor_data)));
+		dom::load_in_memory(cbor::read(stream::read_buffer_ref(cbor_data)));
 	}, cbor_data.size());
 
 	cout << "\nDeserialize JSON in DOM mode\n";

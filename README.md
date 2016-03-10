@@ -54,3 +54,24 @@ int main()
 	skip(document);
 }
 ~~~~~~~~~~
+
+## Documentation
+### Streams
+Goldfish parses documents from read streams and serializes documents to write streams.
+
+Goldfish comes with a few readers: a reader over an in memory buffer (see stream::read_buffer_ref) or over a file (see stream::file_reader). It also provides a buffering (see stream::buffer). You might find yourself in a position where you want to implement your own stream, for example, as a network stream on top of your favorite network library.
+Not to worry, the interface for a read stream is fairly straightforward, with a single read_buffer API:
+~~~~~~~~~~cpp
+struct read_stream
+{
+	// Copies some bytes from the stream to the "buffer"
+	// Returns the number of bytes copied.
+	// If the API returns something else than buffer.size(), the end of stream was reached.
+	// Can throw on IO error.
+	//
+	// buffer_ref is an object that contains a pointer to the buffer (buffer.data() is the pointer)
+	// as well as the number of bytes in the buffer (buffer.size())
+	size_t read_buffer(buffer_ref buffer);
+}
+~~~~~~~~~~
+

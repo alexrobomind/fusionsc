@@ -57,7 +57,6 @@ namespace goldfish
 		constexpr T& back() const { return *(m_end - 1); }
 		T& pop_front() { assert(!empty()); return *(m_begin++); }
 		constexpr T& operator[](size_t i) const { assert(i < size()); return m_begin[i]; }
-		std::vector<std::decay_t<T>> vec() const { return{ begin(), end() }; }
 
 		void clear()
 		{
