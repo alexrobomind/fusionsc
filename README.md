@@ -30,3 +30,27 @@ int main()
 	output_stream.flush();
 }
 ~~~~~~~~~~
+
+### Parsing a JSON document with a schema
+SAX parsers are notoriably more complicated to use than DOM parser. The order of the fields in a JSON object matters for a SAX parser.
+Defining a schema (which is simply an ordering of the expected key names in the object) helps keep the code simple.
+Note that the example below is O(1) in memory (meaning the amount of memory used does not depend on the size of the document)
+
+~~~~~~~~~~cpp
+#include <goldfish/stream.h>
+#include <goldfish/json_reader.h>
+#include <goldfish/schema.h>
+
+TEST_CASE(parse_document)
+{
+	using namespace goldfish;
+
+	static const schema s{ "a", "b", "c" };
+	auto document = filter_map(json::read(stream::read_string_literal("{\"a\":1,\"b\":3.0}")).as<tags::map>(), s);
+
+	test(document.read_value("a")->as<tags::unsigned_int>() == 1);
+	test(document.read_value("b")->as<tags::floating_point>() == 3.0);
+	test(document.read_value("c") == nullopt);
+	skip(document);
+}
+~~~~~~~~~~

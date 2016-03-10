@@ -21,17 +21,19 @@ TEST_CASE(convert_json_to_cbor)
 	output_stream.flush();
 }
 
+#include <goldfish/stream.h>
+#include <goldfish/json_reader.h>
+#include <goldfish/schema.h>
+
 TEST_CASE(parse_document)
 {
 	using namespace goldfish;
 
-	auto document = json::read(stream::read_string_literal("{\"a\":1,\"b\":3.0}")).as<tags::map>();
+	static const schema s{ "a", "b", "c" };
+	auto document = filter_map(json::read(stream::read_string_literal("{\"a\":1,\"b\":3.0}")).as<tags::map>(), s);
 
-	test(stream::read_all_as_string(document.read_key()->as<tags::text_string>()) == "a");
-	test(document.read_value().as<tags::unsigned_int>() == 1);
-
-	test(stream::read_all_as_string(document.read_key()->as<tags::text_string>()) == "b");
-	test(document.read_value().as<tags::floating_point>() == 3.0);
-
-	test(document.read_key() == nullopt);
+	test(document.read_value("a")->as<tags::unsigned_int>() == 1);
+	test(document.read_value("b")->as<tags::floating_point>() == 3.0);
+	test(document.read_value("c") == nullopt);
+	skip(document);
 }

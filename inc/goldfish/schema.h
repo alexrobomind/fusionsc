@@ -2,19 +2,78 @@
 
 #include "array_ref.h"
 #include "optional.h"
+#include "tags.h"
+#include <vector>
 
 namespace goldfish
 {
+	class schema
+	{
+		static const size_t max_length = 8 * 1024;
+		
+	public:
+		schema(std::initializer_list<array_ref<const char>> key_names)
+		{
+			m_key_names.reserve(key_names.size());
+			for (auto&& name : key_names)
+			{
+				assert(name.size() <= max_length);
+				assert(name.back() == '\0');
+				m_key_names.push_back(name.without_end(1));
+			}
+		}
+
+		template <size_t N> optional<size_t> search_text(const char(&text)[N]) const
+		{
+			auto it = std::find_if(m_key_names.begin(), m_key_names.end(), [&](auto key_name)
+			{
+				return key_name.size() == N - 1 &&
+					std::equal(key_name.begin(), key_name.end(), text);
+			});
+			if (it == m_key_names.end())
+				return nullopt;
+			else
+				return std::distance(m_key_names.begin(), it);
+		}
+		template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, optional<size_t>> search(Document& d) const
+		{
+			return d.visit(first_match(
+				[&](auto& text, tags::text_string) -> optional<size_t>
+				{
+					uint8_t buffer[max_length];
+					auto length = text.read_buffer(buffer);
+					if (stream::skip(text, std::numeric_limits<uint64_t>::max()) != 0)
+						return nullopt;
+
+					auto it = std::find_if(m_key_names.begin(), m_key_names.end(), [&](auto key_name)
+					{
+						return key_name.size() == length &&
+							std::equal(key_name.begin(), key_name.end(), buffer);
+					});
+					if (it == m_key_names.end())
+						return nullopt;
+					else
+						return std::distance(m_key_names.begin(), it);
+				},
+				[&](auto&, auto) -> optional<size_t>
+				{
+					skip(d);
+					return nullopt; /*We currently only support text strings as keys*/
+				}));
+		}
+	private:
+		std::vector<array_ref<const char>> m_key_names;
+	};
+
 	template <class Map> class filtered_map
 	{
 	public:
-		filtered_map(Map&& map, array_ref<const uint64_t> key_names)
+		filtered_map(Map&& map, const schema& s)
 			: m_map(std::move(map))
-			, m_key_names(key_names)
+			, m_schema(s)
 		{}
 		optional<decltype(std::declval<Map>().read_value())> read_value_by_index(size_t index)
 		{
-			assert(m_index < m_key_names.size());
 			if (m_index > index)
 				return nullopt;
 
@@ -30,25 +89,17 @@ namespace goldfish
 
 			while (auto key = m_map.read_key())
 			{
-				// We currently only support unsigned int key types
-				if (!key->is<tags::unsigned_int>())
+				if (auto index = m_schema.search(*key))
 				{
-					skip(*key);
+					m_index = *index;
+				}
+				else
+				{
 					skip(m_map.read_value());
 					continue;
 				}
 
-				// do any of the keys match?
-				auto it = std::find(m_key_names.begin() + m_index, m_key_names.end(), key->as<tags::unsigned_int>());
-				if (it == m_key_names.end())
-				{
-					// This was a new key that we didn't know about, skip it
-					skip(m_map.read_value());
-					continue;
-				}
-
-				// We found the key, compute its index
-				m_index = std::distance(m_key_names.begin(), it);
+				// We found a key in the schema, is it the right one?
 				if (m_index == index)
 				{
 					// That's the key we were looking for, return its value
@@ -72,6 +123,13 @@ namespace goldfish
 
 			return nullopt;
 		}
+		template <size_t N> auto read_value(const char(&text)[N])
+		{
+			if (auto index = m_schema.search_text(text))
+				return read_value_by_index(*index);
+			else
+				std::terminate();			
+		}
 		friend void skip(filtered_map& m)
 		{
 			if (m.m_on_value)
@@ -81,16 +139,15 @@ namespace goldfish
 			}
 
 			goldfish::skip(m.m_map);
-			m.m_index = m.m_key_names.size();
 		}
 	private:
 		Map m_map;
-		array_ref<const uint64_t> m_key_names;
+		const schema& m_schema;
 		size_t m_index = 0;
 		bool m_on_value = false;
 	};
-	template <class Map> filtered_map<std::decay_t<Map>> filter_map(Map&& map, array_ref<const uint64_t> key_names)
+	template <class Map> filtered_map<std::decay_t<Map>> filter_map(Map&& map, const schema& s)
 	{
-		return{ std::forward<Map>(map), key_names };
+		return{ std::forward<Map>(map), s };
 	}
 }
