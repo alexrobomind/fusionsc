@@ -41,16 +41,16 @@ Note that the example below is O(1) in memory (meaning the amount of memory used
 #include <goldfish/json_reader.h>
 #include <goldfish/schema.h>
 
-TEST_CASE(parse_document)
+int main()
 {
 	using namespace goldfish;
 
 	static const schema s{ "a", "b", "c" };
 	auto document = filter_map(json::read(stream::read_string_literal("{\"a\":1,\"b\":3.0}")).as<tags::map>(), s);
 
-	test(document.read_value("a")->as<tags::unsigned_int>() == 1);
-	test(document.read_value("b")->as<tags::floating_point>() == 3.0);
-	test(document.read_value("c") == nullopt);
+	assert(document.read_value("a")->as<tags::unsigned_int>() == 1);
+	assert(document.read_value("b")->as<tags::floating_point>() == 3.0);
+	assert(document.read_value("c") == nullopt);
 	skip(document);
 }
 ~~~~~~~~~~
