@@ -48,8 +48,8 @@ namespace goldfish
 			});
 		}
 
-		template <class tag> decltype(auto) as() & { return as_impl(tag{}, std::integral_constant<bool, does_json_conversions>{}); }
-		template <class tag> decltype(auto) as() && { return std::move(*this).as_impl(tag{}, std::integral_constant<bool, does_json_conversions>{}); }
+		template <class tag> decltype(auto) as() & { return as_impl(tags::tag_t<tag>{}, std::integral_constant<bool, does_json_conversions>{}); }
+		template <class tag> decltype(auto) as() && { return std::move(*this).as_impl(tags::tag_t<tag>{}, std::integral_constant<bool, does_json_conversions>{}); }
 
 		using invalid_state = typename variant<types...>::invalid_state;
 	private:

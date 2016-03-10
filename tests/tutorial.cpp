@@ -32,8 +32,8 @@ TEST_CASE(parse_document)
 	static const schema s{ "a", "b", "c" };
 	auto document = filter_map(json::read(stream::read_string_literal("{\"a\":1,\"b\":3.0}")).as<tags::map>(), s);
 
-	test(document.read_value("a")->as<tags::unsigned_int>() == 1);
-	test(document.read_value("b")->as<tags::floating_point>() == 3.0);
+	test(document.read_value("a")->as<uint64_t>() == 1);
+	test(document.read_value("b")->as<double>() == 3.0);
 	test(document.read_value("c") == nullopt);
 	skip(document);
 }
