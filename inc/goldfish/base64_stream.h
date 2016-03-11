@@ -4,7 +4,9 @@
 #include "stream.h"
 
 namespace goldfish { namespace stream
-{ 
+{
+	struct ill_formatted_base64_data {};
+
 	// Reads binary data assuming inner reads base64
 	template <class inner>
 	class base64_reader
@@ -49,17 +51,24 @@ namespace goldfish { namespace stream
 		{
 			uint8_t buffer[4];
 			auto c_read = m_stream.read_buffer(buffer);
-			while (c_read && buffer[c_read - 1] == '=')
-				--c_read;
+			if (c_read == 4 && buffer[3] == '=') // Presence of padding means the stream is made of blocks of 4 bytes
+			{
+				if (buffer[2] == '=') c_read = 2;
+				else c_read = 3;
+				
+				if (stream::seek(m_stream, 1) != 0) // Padding is only allowed at the end of the stream
+					throw ill_formatted_base64_data{};
+			}
+
 			switch (c_read)
 			{
 			case 0: return 0;
-			case 1: throw 0;
+			case 1: throw ill_formatted_base64_data{};
 			case 2:
 			{
 				auto a = character_to_6bits(buffer[0]);
 				auto b = character_to_6bits(buffer[1]);
-				if (b & 0xF) throw 0;
+				if (b & 0xF) throw ill_formatted_base64_data{};
 				output[0] = ((a << 2) | (b >> 4));
 				return 1;
 			}
@@ -68,7 +77,7 @@ namespace goldfish { namespace stream
 				auto a = character_to_6bits(buffer[0]);
 				auto b = character_to_6bits(buffer[1]);
 				auto c = character_to_6bits(buffer[2]);
-				if (c & 0x3) throw 0;
+				if (c & 0x3) throw ill_formatted_base64_data{};
 				output[0] = ((a << 2) | (b >> 4));
 				output[1] = (((b & 0xF) << 4) | (c >> 2));
 				return 2;
@@ -120,7 +129,7 @@ namespace goldfish { namespace stream
 			static_assert(sizeof(lookup_table) == 256, "");
 			auto result = lookup_table[c];
 			if (result >= 64)
-				throw 0;
+				throw ill_formatted_base64_data{};
 			return result;
 		}
 		inner m_stream;

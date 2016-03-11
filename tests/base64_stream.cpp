@@ -34,6 +34,11 @@ namespace goldfish { namespace stream
 	TEST_CASE(base64_decode_2_no_padding) { test(my_base64_decode("c3U") == "su"); }
 	TEST_CASE(base64_decode_20_no_padding) { test(my_base64_decode("YW55IGNhcm5hbCBwbGVhc3VyZS4") == "any carnal pleasure."); }
 
+	TEST_CASE(base64_decode_wrong_padding_size_1) { expect_exception<ill_formatted_base64_data>([] { my_base64_decode("="); }); }
+	TEST_CASE(base64_decode_wrong_padding_size_2) { expect_exception<ill_formatted_base64_data>([] { my_base64_decode("cw="); }); }
+	TEST_CASE(base64_decode_wrong_padding_size_3) { expect_exception<ill_formatted_base64_data>([] { my_base64_decode("===="); }); }
+	TEST_CASE(base64_padding_in_middle) { expect_exception<ill_formatted_base64_data>([] { my_base64_decode("cw==cw=="); }); }
+
 	TEST_CASE(decode_partial_buffer)
 	{
 		auto s = base64(read_string_literal("YW55IGNhcm5hbCBwbGVhc3VyZS4"));
