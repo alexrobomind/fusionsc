@@ -146,7 +146,7 @@ namespace goldfish { namespace cbor
 	{
 		return{ std::forward<Stream>(s) };
 	}
-	template <class Stream> auto write(Stream&& s)
+	template <class Stream> auto create_writer(Stream&& s)
 	{
 		return debug_check::add_write_checks(write_no_debug_check(std::forward<Stream>(s)));
 	}

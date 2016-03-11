@@ -114,35 +114,35 @@ namespace goldfish
 		variant<types...> m_data;
 	};
 
-	template <class Document> std::enable_if_t<tags::has_tag<std::decay_t<Document>, tags::document>::value, void> skip(Document&& d)
+	template <class Document> std::enable_if_t<tags::has_tag<std::decay_t<Document>, tags::document>::value, void> seek_to_end(Document&& d)
 	{
-		d.visit([&](auto&& x, auto) { skip(std::forward<decltype(x)>(x)); });
+		d.visit([&](auto&& x, auto) { seek_to_end(std::forward<decltype(x)>(x)); });
 	}
-	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::undefined>::value, void> skip(type&&) {}
-	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::floating_point>::value, void> skip(type&&) {}
-	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::unsigned_int>::value, void> skip(type&&) {}
-	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::signed_int>::value, void> skip(type&&) {}
-	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::boolean>::value, void> skip(type&&) {}
-	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::null>::value, void> skip(type&&) {}
-	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::byte_string>::value, void> skip(type&& x)
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::undefined>::value, void> seek_to_end(type&&) {}
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::floating_point>::value, void> seek_to_end(type&&) {}
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::unsigned_int>::value, void> seek_to_end(type&&) {}
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::signed_int>::value, void> seek_to_end(type&&) {}
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::boolean>::value, void> seek_to_end(type&&) {}
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::null>::value, void> seek_to_end(type&&) {}
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::byte_string>::value, void> seek_to_end(type&& x)
 	{
-		stream::skip(x, std::numeric_limits<uint64_t>::max());
+		stream::seek(x, std::numeric_limits<uint64_t>::max());
 	}
-	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::text_string>::value, void> skip(type&& x)
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::text_string>::value, void> seek_to_end(type&& x)
 	{
-		stream::skip(x, std::numeric_limits<uint64_t>::max());
+		stream::seek(x, std::numeric_limits<uint64_t>::max());
 	}
-	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::array>::value, void> skip(type&& x)
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::array>::value, void> seek_to_end(type&& x)
 	{
 		while (auto d = x.read())
-			skip(*d);
+			seek_to_end(*d);
 	}
-	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::map>::value, void> skip(type&& x)
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::map>::value, void> seek_to_end(type&& x)
 	{
 		while (auto d = x.read_key())
 		{
-			skip(*d);
-			skip(x.read_value());
+			seek_to_end(*d);
+			seek_to_end(x.read_value());
 		}
 	}
 }

@@ -13,14 +13,14 @@ namespace goldfish { namespace stream
 		{}
 
 		size_t read_buffer(buffer_ref buffer) { return get().read_buffer(buffer); }
-		uint64_t skip(uint64_t cb) { return get().skip(cb); }
+		uint64_t seek(uint64_t cb) { return get().seek(cb); }
 
 	private:
 		struct reader_interface
 		{
 			virtual ~reader_interface() = default;
 			virtual size_t read_buffer(buffer_ref) = 0;
-			virtual uint64_t skip(uint64_t) = 0;
+			virtual uint64_t seek(uint64_t) = 0;
 		};
 		template <class inner> class reader_impl : public reader_interface
 		{
@@ -29,7 +29,7 @@ namespace goldfish { namespace stream
 				: m_stream(std::move(stream))
 			{}
 			size_t read_buffer(buffer_ref buffer) override { return m_stream.read_buffer(buffer); }
-			uint64_t skip(uint64_t cb) override { return stream::skip(m_stream, cb); }
+			uint64_t seek(uint64_t cb) override { return stream::seek(m_stream, cb); }
 
 		private:
 			inner m_stream;

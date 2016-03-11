@@ -32,7 +32,7 @@ TEST_CASE(test_skip)
 	auto t = [&](size_t initial, size_t to_skip)
 	{
 		fake_stream s{ initial };
-		test(skip(s, to_skip) == std::min(initial, to_skip));
+		test(seek(s, to_skip) == std::min(initial, to_skip));
 		test(s.m_size == (initial > to_skip ? initial - to_skip : 0));
 		test(s.m_calls == std::min(initial, to_skip) / chunk_size + 1);
 	};

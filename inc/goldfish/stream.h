@@ -22,17 +22,17 @@ namespace goldfish { namespace stream
 	template <class T, class elem, class dummy = void> struct has_write : std::false_type {};
 	template <class T, class elem> struct has_write<T, elem, decltype(std::declval<T>().write(std::declval<elem>()))> : std::true_type {};
 
-	template <class T, class dummy = uint64_t> struct has_skip : std::false_type {};
-	template <class T> struct has_skip<T, decltype(std::declval<T>().skip(0ull))> : std::true_type {};
+	template <class T, class dummy = uint64_t> struct has_seek : std::false_type {};
+	template <class T> struct has_seek<T, decltype(std::declval<T>().seek(0ull))> : std::true_type {};
 
 	template <class T, class elem, class dummy = elem> struct has_read : std::false_type {};
 	template <class T, class elem> struct has_read<T, elem, decltype(std::declval<T>().read<elem>())> : std::true_type {};
 
-	template <class Stream> std::enable_if_t< has_skip<Stream>::value, uint64_t> skip(Stream& s, uint64_t x)
+	template <class Stream> std::enable_if_t< has_seek<Stream>::value, uint64_t> seek(Stream& s, uint64_t x)
 	{
-		return s.skip(x);
+		return s.seek(x);
 	}
-	template <class Stream> std::enable_if_t<!has_skip<Stream>::value, uint64_t> skip(Stream& s, uint64_t x)
+	template <class Stream> std::enable_if_t<!has_seek<Stream>::value, uint64_t> seek(Stream& s, uint64_t x)
 	{
 		auto original = x;
 		uint8_t buffer[8 * 1024];
@@ -70,7 +70,7 @@ namespace goldfish { namespace stream
 	{
 	public:
 		size_t read_buffer(buffer_ref) { return 0; }
-		uint64_t skip(uint64_t) { return 0; }
+		uint64_t seek(uint64_t) { return 0; }
 		template <class T> std::enable_if_t<std::is_standard_layout<T>::value, optional<T>> peek() { return nullopt; }
 	};
 
@@ -91,7 +91,7 @@ namespace goldfish { namespace stream
 		{}
 		size_t read_buffer(buffer_ref data) { return m_stream.read_buffer(data); }
 		template <class T> auto read() { return stream::read<T>(m_stream); }
-		uint64_t skip(uint64_t x) { return stream::skip(m_stream, x); }
+		uint64_t seek(uint64_t x) { return stream::seek(m_stream, x); }
 		template <class T> auto peek() { return m_stream.peek<T>(); }
 	private:
 		inner& m_stream;
@@ -138,13 +138,14 @@ namespace goldfish { namespace stream
 		{}
 		size_t read_buffer(buffer_ref data)
 		{
-			return copy_and_pop(m_data, data);
+			auto to_copy = std::min(m_data.size(), data.size());
+			return copy(m_data.remove_front(to_copy), data.remove_front(to_copy));
 		}
-		uint64_t skip(uint64_t x)
+		uint64_t seek(uint64_t x)
 		{
-			auto to_skip = static_cast<size_t>(std::min<uint64_t>(x, m_data.size()));
-			m_data.remove_front(to_skip);
-			return to_skip;
+			auto to_seek = static_cast<size_t>(std::min<uint64_t>(x, m_data.size()));
+			m_data.remove_front(to_seek);
+			return to_seek;
 		}
 
 		template <class T> std::enable_if_t<std::is_standard_layout<T>::value, T> read()

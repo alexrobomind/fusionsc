@@ -30,7 +30,7 @@ namespace goldfish { namespace dom
 		auto binary = to_vector(input);
 		stream::array_ref_reader s(binary);
 		auto result = load_in_memory(cbor::read(stream::ref(s)));
-		test(skip(s, 1) == 0);
+		test(seek(s, 1) == 0);
 		return result;
 	};
 
@@ -150,49 +150,49 @@ namespace goldfish { namespace dom
 		test(r("bf6346756ef563416d7421ff") == map{ { text_string("Fun"), true }, { text_string("Amt"), -2ll } });
 	}
 
-	TEST_CASE(skip_in_finite_string)
+	TEST_CASE(seek_in_finite_string)
 	{
 		auto binary = to_vector("6449455446"); // IETF
 		stream::array_ref_reader s(binary);
 		auto result = cbor::read(stream::ref(s)).as<tags::text_string>();
 
-		test(stream::skip(result, 0) == 0);
+		test(stream::seek(result, 0) == 0);
 		test(stream::read<char>(result) == 'I');
-		test(stream::skip(result, 1) == 1);
+		test(stream::seek(result, 1) == 1);
 		test(stream::read<char>(result) == 'T');
-		test(stream::skip(result, 2) == 1);
+		test(stream::seek(result, 2) == 1);
 	}
 
-	TEST_CASE(skip_in_chunked_string_to_beginning_of_block)
+	TEST_CASE(seek_in_chunked_string_to_beginning_of_block)
 	{
 		auto binary = to_vector("7f657374726561646d696e67ff"); // "strea" "ming"
 		stream::array_ref_reader s(binary);
 		auto result = cbor::read(stream::ref(s)).as<tags::text_string>();
 
-		test(stream::skip(result, 0) == 0);
+		test(stream::seek(result, 0) == 0);
 		test(stream::read<char>(result) == 's');
-		test(stream::skip(result, 1) == 1);
+		test(stream::seek(result, 1) == 1);
 		test(stream::read<char>(result) == 'r');
-		test(stream::skip(result, 2) == 2); // skip to exactly the beginning of a block
+		test(stream::seek(result, 2) == 2); // seek to exactly the beginning of a block
 		test(stream::read<char>(result) == 'm');
-		test(stream::skip(result, 4) == 3);
+		test(stream::seek(result, 4) == 3);
 	}
 
-	TEST_CASE(skip_in_chunked_string_across_block)
+	TEST_CASE(seek_in_chunked_string_across_block)
 	{
 		auto binary = to_vector("7f657374726561646d696e67ff"); // "strea" "ming"
 		stream::array_ref_reader s(binary);
 		auto result = cbor::read(stream::ref(s)).as<tags::text_string>();
 
-		test(stream::skip(result, 8) == 8);
+		test(stream::seek(result, 8) == 8);
 		test(stream::read<char>(result) == 'g');
-		test(stream::skip(result, 1) == 0);
+		test(stream::seek(result, 1) == 0);
 	}
 
-	TEST_CASE(skip_in_chunked_string_all)
+	TEST_CASE(seek_in_chunked_string_all)
 	{
 		auto binary = to_vector("7f657374726561646d696e67ff"); // "strea" "ming"
 		stream::array_ref_reader s(binary);
-		test(stream::skip(cbor::read(stream::ref(s)).as<tags::text_string>(), 10) == 9);
+		test(stream::seek(cbor::read(stream::ref(s)).as<tags::text_string>(), 10) == 9);
 	}
 }}

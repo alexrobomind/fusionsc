@@ -70,15 +70,15 @@ namespace goldfish { namespace stream
 			test(buffer == std::array<uint8_t, 4>{'k', 'l', 'i', 'j'});
 		}
 	}
-	TEST_CASE(test_buffered_skip)
+	TEST_CASE(test_buffered_seek)
 	{
 		auto s = buffer<3>(read_string_literal("abcdef"));
-		test(stream::skip(s, 1) == 1);
+		test(stream::seek(s, 1) == 1);
 		test(s.peek<char>() == 'b');
-		test(stream::skip(s, 1) == 1);
+		test(stream::seek(s, 1) == 1);
 		test(s.peek<char>() == 'c');
-		test(stream::skip(s, 5) == 4);
-		test(stream::skip(s, 1) == 0);
+		test(stream::seek(s, 5) == 4);
+		test(stream::seek(s, 1) == 0);
 	}
 	TEST_CASE(test_move_buffered_reader)
 	{

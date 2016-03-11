@@ -84,7 +84,7 @@ namespace goldfish { namespace json
 				throw stream::unexpected_end_of_stream();
 			return reinterpret_cast<T&>(c);
 		}
-		uint64_t skip(uint64_t x)
+		uint64_t seek(uint64_t x)
 		{
 			for (uint64_t i = 0; i < x; ++i)
 			{

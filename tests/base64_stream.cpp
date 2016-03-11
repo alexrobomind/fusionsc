@@ -8,7 +8,7 @@ namespace goldfish { namespace stream
 		auto s = base64(string_writer{});
 		s.write_buffer({ reinterpret_cast<const uint8_t*>(data.data()), data.size() });
 		s.flush();
-		return std::move(s.base().data);
+		return std::move(s.inner_stream().data);
 	}
 	std::string my_base64_decode(const std::string& data)
 	{
@@ -101,6 +101,6 @@ namespace goldfish { namespace stream
 
 		s.flush();
 
-		test(s.base().data == "YW55IGNhcm5hbCBwbGVhc3VyZS4=");
+		test(s.inner_stream().data == "YW55IGNhcm5hbCBwbGVhc3VyZS4=");
 	}
 }}

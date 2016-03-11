@@ -17,8 +17,10 @@ TEST_CASE(convert_json_to_cbor)
 	// Note that all the streams need to be flushed to ensure that there any potentially
 	// buffered data is serialized.
 	stream::vector_writer output_stream;
-	cbor::write(stream::ref(output_stream)).write(document);
+	cbor::create_writer(stream::ref(output_stream)).write(document);
 	output_stream.flush();
+
+	// output_stream.data contains the CBOR document
 }
 
 #include <goldfish/stream.h>
@@ -30,10 +32,10 @@ TEST_CASE(parse_document)
 	using namespace goldfish;
 
 	static const schema s{ "a", "b", "c" };
-	auto document = filter_map(json::read(stream::read_string_literal("{\"a\":1,\"b\":3.0}")).as<tags::map>(), s);
+	auto document = apply_schema(json::read(stream::read_string_literal("{\"a\":1,\"c\":3.0}")).as<tags::map>(), s);
 
 	test(document.read_value("a")->as<uint64_t>() == 1);
-	test(document.read_value("b")->as<double>() == 3.0);
-	test(document.read_value("c") == nullopt);
-	skip(document);
+	test(document.read_value("b") == nullopt);
+	test(document.read_value("c")->as<double>() == 3.0);
+	seek_to_end(document);
 }

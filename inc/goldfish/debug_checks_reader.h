@@ -55,9 +55,9 @@ namespace goldfish { namespace debug_check
 				mark_work_done();
 			return result;
 		}
-		uint64_t skip(uint64_t cb)
+		uint64_t seek(uint64_t cb)
 		{
-			auto skipped = stream::skip(m_inner, cb);
+			auto skipped = stream::seek(m_inner, cb);
 			if (skipped < cb)
 				mark_work_done();
 			return skipped;

@@ -42,7 +42,7 @@ namespace goldfish
 				{
 					uint8_t buffer[max_length];
 					auto length = text.read_buffer(buffer);
-					if (stream::skip(text, std::numeric_limits<uint64_t>::max()) != 0)
+					if (stream::seek(text, std::numeric_limits<uint64_t>::max()) != 0)
 						return nullopt;
 
 					auto it = std::find_if(m_key_names.begin(), m_key_names.end(), [&](auto key_name)
@@ -57,7 +57,7 @@ namespace goldfish
 				},
 				[&](auto&, auto) -> optional<size_t>
 				{
-					skip(d);
+					seek_to_end(d);
 					return nullopt; /*We currently only support text strings as keys*/
 				}));
 		}
@@ -65,10 +65,10 @@ namespace goldfish
 		std::vector<array_ref<const char>> m_key_names;
 	};
 
-	template <class Map> class filtered_map
+	template <class Map> class map_with_schema
 	{
 	public:
-		filtered_map(Map&& map, const schema& s)
+		map_with_schema(Map&& map, const schema& s)
 			: m_map(std::move(map))
 			, m_schema(s)
 		{}
@@ -83,7 +83,7 @@ namespace goldfish
 				if (m_index == index)
 					return m_map.read_value();
 				else
-					skip(m_map.read_value());
+					seek_to_end(m_map.read_value());
 			}
 			assert(!m_on_value);
 
@@ -95,7 +95,7 @@ namespace goldfish
 				}
 				else
 				{
-					skip(m_map.read_value());
+					seek_to_end(m_map.read_value());
 					continue;
 				}
 
@@ -117,7 +117,7 @@ namespace goldfish
 				else
 				{
 					// We found a key that is still before us, skip the value and keep searching
-					skip(m_map.read_value());
+					seek_to_end(m_map.read_value());
 				}
 			}
 
@@ -130,15 +130,15 @@ namespace goldfish
 			else
 				std::terminate();			
 		}
-		friend void skip(filtered_map& m)
+		friend void seek_to_end(map_with_schema& m)
 		{
 			if (m.m_on_value)
 			{
-				skip(m.m_map.read_value());
+				goldfish::seek_to_end(m.m_map.read_value());
 				m.m_on_value = false;
 			}
 
-			goldfish::skip(m.m_map);
+			goldfish::seek_to_end(m.m_map);
 		}
 	private:
 		Map m_map;
@@ -146,7 +146,7 @@ namespace goldfish
 		size_t m_index = 0;
 		bool m_on_value = false;
 	};
-	template <class Map> filtered_map<std::decay_t<Map>> filter_map(Map&& map, const schema& s)
+	template <class Map> map_with_schema<std::decay_t<Map>> apply_schema(Map&& map, const schema& s)
 	{
 		return{ std::forward<Map>(map), s };
 	}

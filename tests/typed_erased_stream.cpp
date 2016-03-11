@@ -7,10 +7,10 @@ namespace goldfish { namespace stream
 	{
 		auto s = erase_type(read_string_literal("abcdef"));
 		test(read<char>(s) == 'a');
-		test(stream::skip(s, 2) == 2);
+		test(stream::seek(s, 2) == 2);
 		test(read<char>(s) == 'd');
 
 		auto t = std::move(s);
-		test(stream::skip(t, 3) == 2);
+		test(stream::seek(t, 3) == 2);
 	}
 }}

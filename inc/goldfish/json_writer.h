@@ -72,7 +72,7 @@ namespace goldfish { namespace json
 		void flush()
 		{
 			m_stream.flush();
-			stream::write(m_stream.base(), '"');
+			stream::write(m_stream.inner_stream(), '"');
 		}
 	private:
 		stream::base64_writer<Stream> m_stream;
@@ -189,7 +189,7 @@ namespace goldfish { namespace json
 		Stream m_stream;
 	};
 	template <class Stream> document_writer<std::decay_t<Stream>> write_no_debug_check(Stream&& s) { return{ std::forward<Stream>(s) }; }
-	template <class Stream> auto write(Stream&& s) { return debug_check::add_write_checks(write_no_debug_check(std::forward<Stream>(s))); }
+	template <class Stream> auto create_writer(Stream&& s) { return debug_check::add_write_checks(write_no_debug_check(std::forward<Stream>(s))); }
 
 	template <class Stream> document_writer<stream::writer_ref_type_t<Stream>> array_writer<Stream>::append()
 	{

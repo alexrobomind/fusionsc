@@ -54,12 +54,12 @@ template <class Document> int64_t sum_ints(Document&& t)
 			int64_t sum = 0;
 			while (auto key = x.read_key())
 			{
-				goldfish::skip(*key);
+				goldfish::seek_to_end(*key);
 				sum += sum_ints(x.read_value());
 			}
 			return sum;
 		},
-		[](auto& x, auto tag) { goldfish::skip(x); return 0ull; }));
+		[](auto& x, auto tag) { goldfish::seek_to_end(x); return 0ull; }));
 }
 
 int main(int argc, char* argv[])
@@ -76,7 +76,7 @@ int main(int argc, char* argv[])
 		auto document = json::read(stream::read_buffer_ref(json_data));
 
 		stream::vector_writer output_stream;
-		cbor::write(stream::ref(output_stream)).write(document);
+		cbor::create_writer(stream::ref(output_stream)).write(document);
 		output_stream.flush();
 
 		return move(output_stream.data);

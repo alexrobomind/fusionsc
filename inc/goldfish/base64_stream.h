@@ -17,10 +17,10 @@ namespace goldfish { namespace stream
 		size_t read_buffer(buffer_ref data)
 		{
 			auto original_size = data.size();
-			read_from_buffer(data);
+			read_from_already_parsed(data);
 			while (data.size() >= 3)
 			{
-				auto c_read = read_up_to_3(data.data());
+				auto c_read = deserialize_up_to_3_bytes(data.data());
 				data.remove_front(c_read);
 				if (c_read != 3)
 					return original_size - data.size();
@@ -28,24 +28,26 @@ namespace goldfish { namespace stream
 
 			if (!data.empty())
 			{
-				m_cb_in_buffer = read_up_to_3(m_buffer.data());
-				read_from_buffer(data);
+				assert(m_cb_already_parsed == 0); // because there is left over in data, read_from_already_parsed emptied m_already_parsed 
+				m_cb_already_parsed = deserialize_up_to_3_bytes(m_already_parsed.data());
+				read_from_already_parsed(data);
 			}
 			return original_size - data.size();
 		}
-		auto& base() { return m_stream; }
 	private:
-		void read_from_buffer(buffer_ref& data)
+		void read_from_already_parsed(buffer_ref& data)
 		{
-			auto cb_to_copy = static_cast<uint8_t>(std::min<size_t>(data.size(), m_cb_in_buffer));
-			copy(const_buffer_ref{ m_buffer.data(), m_buffer.data() + cb_to_copy }, data.remove_front(cb_to_copy));
-			m_cb_in_buffer -= cb_to_copy;
-			std::copy(m_buffer.begin() + cb_to_copy, m_buffer.end(), m_buffer.begin());
+			auto cb_to_copy = static_cast<uint8_t>(std::min<size_t>(data.size(), m_cb_already_parsed));
+			copy(const_buffer_ref{ m_already_parsed.data(), m_already_parsed.data() + cb_to_copy }, data.remove_front(cb_to_copy));
+			m_cb_already_parsed -= cb_to_copy;
+			std::copy(m_already_parsed.begin() + cb_to_copy, m_already_parsed.end(), m_already_parsed.begin());
 		}
-		uint8_t read_up_to_3(uint8_t* output)
+
+		// Read up to 4 characters (or the end of stream), remove the potential padding (base64 can be padded with '=' characters at the end)
+		// and generate up to 3 bytes of data
+		uint8_t deserialize_up_to_3_bytes(uint8_t* output)
 		{
-			// Read 4 characters, output 3
-			uint8_t buffer[4] = { 0, 0, 0, 0 };
+			uint8_t buffer[4];
 			auto c_read = m_stream.read_buffer(buffer);
 			while (c_read && buffer[c_read - 1] == '=')
 				--c_read;
@@ -55,17 +57,17 @@ namespace goldfish { namespace stream
 			case 1: throw 0;
 			case 2:
 			{
-				auto a = to_byte(buffer[0]);
-				auto b = to_byte(buffer[1]);
+				auto a = character_to_6bits(buffer[0]);
+				auto b = character_to_6bits(buffer[1]);
 				if (b & 0xF) throw 0;
 				output[0] = ((a << 2) | (b >> 4));
 				return 1;
 			}
 			case 3:
 			{
-				auto a = to_byte(buffer[0]);
-				auto b = to_byte(buffer[1]);
-				auto c = to_byte(buffer[2]);
+				auto a = character_to_6bits(buffer[0]);
+				auto b = character_to_6bits(buffer[1]);
+				auto c = character_to_6bits(buffer[2]);
 				if (c & 0x3) throw 0;
 				output[0] = ((a << 2) | (b >> 4));
 				output[1] = (((b & 0xF) << 4) | (c >> 2));
@@ -73,10 +75,10 @@ namespace goldfish { namespace stream
 			}
 			case 4:
 			{
-				auto a = to_byte(buffer[0]);
-				auto b = to_byte(buffer[1]);
-				auto c = to_byte(buffer[2]);
-				auto d = to_byte(buffer[3]);
+				auto a = character_to_6bits(buffer[0]);
+				auto b = character_to_6bits(buffer[1]);
+				auto c = character_to_6bits(buffer[2]);
+				auto d = character_to_6bits(buffer[3]);
 				output[0] = ((a << 2) | (b >> 4));
 				output[1] = (((b & 0xF) << 4) | (c >> 2));
 				output[2] = (((c & 0x3) << 6) | d);
@@ -85,7 +87,7 @@ namespace goldfish { namespace stream
 			default: std::terminate();
 			}
 		}
-		uint8_t to_byte(uint8_t c)
+		uint8_t character_to_6bits(uint8_t c)
 		{
 			const uint8_t lookup_table[] = {
 				64,64,64,64,64,64,64,64,64,64,
@@ -122,8 +124,8 @@ namespace goldfish { namespace stream
 			return result;
 		}
 		inner m_stream;
-		std::array<uint8_t, 3> m_buffer;
-		uint8_t m_cb_in_buffer = 0;
+		std::array<uint8_t, 3> m_already_parsed;
+		uint8_t m_cb_already_parsed = 0;
 	};
 
 	// Write base64 data to inner when binary data is provided
@@ -187,7 +189,7 @@ namespace goldfish { namespace stream
 			m_cb_in_buffer = 0;
 			mark_work_done();
 		}
-		auto& base() { return m_stream; }
+		auto& inner_stream() { return m_stream; }
 	private:
 		uint8_t byte_for(uint8_t x)
 		{

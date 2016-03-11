@@ -10,7 +10,7 @@ namespace goldfish { namespace dom
 		{
 			stream::array_ref_reader s({ reinterpret_cast<const uint8_t*>(input.data()), input.size() });
 			auto result = load_in_memory(json::read(stream::ref(s)));
-			test(skip(s, 1) == 0);
+			test(seek(s, 1) == 0);
 			return result;
 		};
 		using namespace std::string_literals;
@@ -87,7 +87,7 @@ namespace goldfish { namespace dom
 			expect_exception<decltype(exception)>([&]
 			{
 				dom::load_in_memory(json::read(stream::ref(s)));
-				if (skip(s, 1) == 1)
+				if (seek(s, 1) == 1)
 					throw data_partially_parsed{};
 			});
 		};

@@ -4,6 +4,13 @@
 
 namespace goldfish { namespace stream
 {
+	template <class T, class U>
+	static size_t copy_and_pop(array_ref<T>& from, array_ref<U>& to)
+	{
+		auto to_copy = std::min(from.size(), to.size());
+		return copy(from.remove_front(to_copy), to.remove_front(to_copy));
+	}
+
 	template <size_t N, class inner>
 	class buffered_reader
 	{
@@ -51,7 +58,7 @@ namespace goldfish { namespace stream
 			}
 		}
 
-		uint64_t skip(uint64_t x)
+		uint64_t seek_to_end(uint64_t x)
 		{
 			if (x <= m_buffered.size())
 			{
@@ -60,7 +67,7 @@ namespace goldfish { namespace stream
 			}
 			else
 			{
-				auto skipped = m_buffered.size() + stream::skip(m_stream, x - m_buffered.size());
+				auto skipped = m_buffered.size() + stream::seek(m_stream, x - m_buffered.size());
 				m_buffered.clear();
 				return skipped;
 			}

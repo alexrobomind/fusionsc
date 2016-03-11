@@ -53,8 +53,8 @@ namespace goldfish
 		constexpr T* data() const { return m_begin; }
 		constexpr size_t size() const { return m_end - m_begin; }
 		constexpr bool empty() const { return m_begin == m_end; }
-		constexpr T& front() const { return *m_begin; }
-		constexpr T& back() const { return *(m_end - 1); }
+		constexpr T& front() const { assert(!empty()); return *m_begin; }
+		constexpr T& back() const { assert(!empty()); return *(m_end - 1); }
 		T& pop_front() { assert(!empty()); return *(m_begin++); }
 		constexpr T& operator[](size_t i) const { assert(i < size()); return m_begin[i]; }
 
@@ -104,38 +104,9 @@ namespace goldfish
 		return from.size();
 	}
 
-	template <class T, class U>
-	size_t copy_and_pop(array_ref<T>& from, array_ref<U>& to)
-	{
-		auto to_copy = std::min(from.size(), to.size());
-		return copy(from.remove_front(to_copy), to.remove_front(to_copy));
-	}
-
-	template <class T, size_t N> array_ref<T> make_array_ref(std::array<T, N>& rhs) { return{ rhs }; }
-	template <class T, size_t N> array_ref<const T> make_array_ref(const std::array<T, N>& rhs) { return{ rhs }; }
-	template <class T, size_t N> array_ref<T> make_array_ref(T(&rhs)[N]) { return{ rhs }; }
-	template <class T> array_ref<T> make_array_ref(std::vector<T>& rhs) { return{ rhs }; }
-	template <class T> array_ref<const T> make_array_ref(const std::vector<T>& rhs) { return{ rhs }; }
-	template <class T> array_ref<T> make_array_ref(const array_ref<T>& rhs) { return rhs; }
-
-	template <class T, class U> constexpr array_ref<std::enable_if_t<!std::is_const<U>::value, T>> reinterpret_helper(array_ref<U> from)
-	{
-		return{ reinterpret_cast<T*>(from.data()), from.size() * sizeof(U) / sizeof(T) };
-	}
-	template <class T, class U> constexpr array_ref<std::enable_if_t<std::is_const<U>::value && std::is_const<T>::value, T>> reinterpret_helper(array_ref<U> from)
-	{
-		return{ reinterpret_cast<T*>(from.data()), from.size() * sizeof(U) / sizeof(T) };
-	}
-	template <class T, class U> constexpr auto reinterpret(U&& u) { return reinterpret_helper<T>(make_array_ref(std::forward<U>(u))); }
-
 	using const_buffer_ref = array_ref<const uint8_t>;
 	using buffer_ref = array_ref<uint8_t>;
 
 	template <class T> const_buffer_ref constexpr to_buffer(const T& t) { return{ reinterpret_cast<const uint8_t*>(&t), reinterpret_cast<const uint8_t*>(&t + 1) }; }
 	template <class T> buffer_ref constexpr to_buffer(T& t) { return{ reinterpret_cast<uint8_t*>(&t), reinterpret_cast<uint8_t*>(&t + 1) }; }
-
-	template <size_t N> constexpr array_ref<const char> string_literal_to_array_ref_without_null_terminator(const char(&s)[N])
-	{
-		return{ s, N - 1 };
-	}
 }
