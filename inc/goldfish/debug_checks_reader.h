@@ -11,7 +11,6 @@ namespace goldfish { namespace debug_checks
 	template <class error_handler, class T, class _tag> class string;
 	template <class error_handler, class T> class array;
 	template <class error_handler, class T> class map;
-	struct undefined { using tag = tags::undefined; };
 
 	template <class error_handler, class Document> using document = document_on_variant<
 		Document::does_json_conversions,
@@ -20,7 +19,7 @@ namespace goldfish { namespace debug_checks
 		int64_t,
 		uint64_t,
 		double,
-		undefined,
+		tags::undefined,
 		string<error_handler, typename Document::template type_with_tag_t<tags::string>, tags::string>,
 		string<error_handler, typename Document::template type_with_tag_t<tags::binary>, tags::binary>,
 		array<error_handler, typename Document::template type_with_tag_t<tags::array>>,
@@ -142,10 +141,6 @@ namespace goldfish { namespace debug_checks
 			[&](auto&& x, tags::string) -> document<error_handler, std::decay_t<Document>>
 			{
 				return make_string<error_handler, tags::string>(parent, std::forward<decltype(x)>(x));
-			},
-			[](auto&&, tags::undefined) -> document<error_handler, std::decay_t<Document>>
-			{
-				return undefined{};
 			},
 			[](auto&& x, auto) -> document<error_handler, std::decay_t<Document>>
 			{

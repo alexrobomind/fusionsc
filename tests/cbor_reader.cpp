@@ -85,7 +85,7 @@ namespace goldfish { namespace dom
 		test(r("f4") == false);
 		test(r("f5") == true);
 		test(r("f6") == nullptr);
-		test(r("f7") == undefined{});
+		test(r("f7") == tags::undefined{});
 
 		test(r("c074323031332d30332d32315432303a30343a30305a") == string("2013-03-21T20:04:00Z"));
 

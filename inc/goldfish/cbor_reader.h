@@ -18,7 +18,6 @@ namespace goldfish { namespace cbor
 	template <class Stream> using text_string = string<Stream, 3, tags::string>;
 	template <class Stream> class array;
 	template <class Stream> class map;
-	struct undefined { using tag = tags::undefined; };
 
 	template <class Stream> using document = document_on_variant<
 		false /*does_json_conversions*/,
@@ -31,7 +30,7 @@ namespace goldfish { namespace cbor
 		text_string<Stream>,
 		array<Stream>,
 		map<Stream>,
-		undefined>;
+		tags::undefined>;
 	template <class Stream> optional<document<std::decay_t<Stream>>> read_no_debug_check(Stream&& s);
 
 	template <class Stream, uint8_t expected_type, class _tag> class string
@@ -243,7 +242,7 @@ namespace goldfish { namespace cbor
 		static optional<document<Stream>> fn_false(Stream&&, uint8_t) { return false; }
 		static optional<document<Stream>> fn_true(Stream&&, uint8_t) { return true; }
 		static optional<document<Stream>> fn_null(Stream&&, uint8_t) { return nullptr; }
-		static optional<document<Stream>> fn_undefined(Stream&&, uint8_t) { return undefined{}; }
+		static optional<document<Stream>> fn_undefined(Stream&&, uint8_t) { return tags::undefined{}; }
 		static optional<document<Stream>> fn_end_of_structure(Stream&&, uint8_t) { return nullopt; }
 
 		static optional<document<Stream>> fn_float_16(Stream&& s, uint8_t) { return read_half_point_float(s); }

@@ -12,13 +12,7 @@
 namespace goldfish { namespace dom
 {
 	struct document;
-
-	struct undefined
-	{
-		friend bool operator == (const undefined&, const undefined&) { return true; }
-		friend bool operator < (const undefined&, const undefined&) { return false; }
-	};
-
+	
 	using array = std::vector<document>;
 	using map = std::vector<std::pair<document, document>>;
 
@@ -26,7 +20,7 @@ namespace goldfish { namespace dom
 	using document_variant = variant<
 		bool,
 		nullptr_t,
-		undefined,
+		tags::undefined,
 		uint64_t,
 		int64_t,
 		double,

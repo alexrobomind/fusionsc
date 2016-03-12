@@ -40,7 +40,7 @@ namespace goldfish { namespace dom
 		return result;
 	}
 
-	template <class D> std::enable_if_t<tags::has_tag<std::decay_t<D>, tags::undefined>::value, undefined> load_in_memory(D&& d) { return undefined{}; }
+	inline tags::undefined load_in_memory(tags::undefined) { return tags::undefined{}; }
 
 	struct unexpected_end_of_structure {};
 

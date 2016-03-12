@@ -18,13 +18,16 @@ namespace goldfish { namespace tags
 	struct null {};				 template <> struct is_tag<null> : std::true_type {};
 	struct document {};          template <> struct is_tag<document> : std::true_type {};
 
+	inline bool operator == (const undefined&, const undefined&) { return true; }
+	inline bool operator < (const undefined&, const undefined&) { return false; }
+
 	template <class T, class enable = void> struct tag { using type = typename T::tag; };
-	template <class T> struct tag<T, std::enable_if_t<is_tag<T>::value>> { using type = T; };
 	template <> struct tag<uint64_t> { using type = unsigned_int; };
 	template <> struct tag<int64_t> { using type = signed_int; };
 	template <> struct tag<bool> { using type = boolean; };
 	template <> struct tag<std::nullptr_t> { using type = null; };
 	template <> struct tag<double> { using type = floating_point; };
+	template <> struct tag<undefined> { using type = undefined; };
 	template <class T> using tag_t = typename tag<T>::type;
 
 	template <class T> constexpr auto get_tag(T&&) { return tag_t<std::decay_t<T>>{}; }

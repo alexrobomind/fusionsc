@@ -37,10 +37,12 @@ namespace goldfish
 				return l(std::forward<decltype(x)>(x), tags::get_tag(x));
 			});
 		}
-		auto as_binary() { return as<tags::binary>(); }
-		auto as_string() { return as<tags::string>(); }
-		auto as_array() { return as<tags::array>(); }
-		auto as_map() { return as<tags::map>(); }
+		type_with_tag_t<tags::string> as_string() { return std::move(m_data).as<type_with_tag_t<tags::string>>(); }
+		auto as_binary(std::true_type /*does_json_conversion*/) { return stream::base64(as_string()); }
+		auto as_binary(std::false_type /*does_json_conversion*/) { return std::move(m_data).as<type_with_tag_t<tags::binary>>(); }
+		auto as_binary() { return as_binary(std::integral_constant<bool, does_json_conversions>()); }
+		auto as_array() { return std::move(m_data).as<type_with_tag_t<tags::array>>(); }
+		auto as_map() { return std::move(m_data).as<type_with_tag_t<tags::map>>(); }
 		
 		// Floating point can be converted from an int
 		auto as_double()
@@ -120,19 +122,6 @@ namespace goldfish
 			if (x > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
 				throw integer_overflow{};
 			return static_cast<int64_t>(x);
-		}
-		template <class tag> auto as() { return std::move(*this).as_impl(tags::tag_t<tag>{}, std::integral_constant<bool, does_json_conversions>{}); }
-
-		// Default: no conversion
-		template <class tag, class json_conversion> decltype(auto) as_impl(tag, json_conversion)
-		{
-			return std::move(m_data).as<type_with_tag_t<tag>>();
-		}
-		
-		// Byte strings are converted from text strings (assuming base64 text)
-		auto as_impl(tags::binary, std::true_type /*json_conversion*/)
-		{
-			return base64(as<tags::string>());
 		}
 
 		variant<types...> m_data;

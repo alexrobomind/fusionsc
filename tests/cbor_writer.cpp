@@ -101,7 +101,7 @@ namespace goldfish { namespace dom
 		test(w(false) == "f4");
 		test(w(true) == "f5");
 		test(w(nullptr) == "f6");
-		test(w(undefined{}) == "f7");
+		test(w(tags::undefined{}) == "f7");
 
 		//test(w(tagged{ 0, "2013-03-21T20:04:00Z"s }) == "c074323031332d30332d32315432303a30343a30305a");
 
