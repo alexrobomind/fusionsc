@@ -1,36 +1,38 @@
 #pragma once
 
-#include "uncaught_exception.h"
+#include "debug_checks.h"
+#include "array_ref.h"
+#include "tags.h"
 
-#ifndef NDEBUG
 namespace goldfish { namespace debug_check
 {
-	template <class inner> class document_writer;
-	template <class inner> document_writer<std::decay_t<inner>> add_write_checks(inner&& t);
+	template <class error_handler, class inner> class document_writer;
+	template <class error_handler, class inner> document_writer<error_handler, std::decay_t<inner>> add_write_checks_impl(container_base<error_handler>* parent, inner&& t);
 
-	template <class inner> class stream_writer : private assert_work_done
+	template <class error_handler, class inner> class stream_writer : private container_base<error_handler>
 	{
 	public:
-		stream_writer(inner writer)
-			: m_writer(std::move(writer))
+		stream_writer(container_base<error_handler>* parent, inner writer)
+			: container_base<error_handler>(parent)
+			, m_writer(std::move(writer))
 		{}
 		void write_buffer(const_buffer_ref buffer)
 		{
-			assert(!is_work_done());
+			err_if_locked();
 			m_writer.write_buffer(buffer);
 		}
 		void flush()
 		{
-			assert(!is_work_done());
+			err_if_locked();
 			m_writer.flush();
-			mark_work_done();
+			unlock_parent_and_lock_self();
 		}
 	private:
 		inner m_writer;
 	};
-	template <class inner> stream_writer<std::decay_t<inner>> add_write_checks_on_stream(inner&& w) { return{ std::forward<inner>(w) }; }
+	template <class error_handler, class inner> stream_writer<error_handler, std::decay_t<inner>> add_write_checks_on_stream(container_base<error_handler>* parent, inner&& w) { return{ parent, std::forward<inner>(w) }; }
 
-	template <class inner> class check_size_of_stream_writer
+	template <class error_handler, class inner> class check_size_of_stream_writer
 	{
 	public:
 		check_size_of_stream_writer(inner writer, uint64_t cb)
@@ -39,44 +41,50 @@ namespace goldfish { namespace debug_check
 		{}
 		void write_buffer(const_buffer_ref buffer)
 		{
+			if (m_cb_left < buffer.size())
+				error_handler::on_error();
+
 			m_writer.write_buffer(buffer);
 			m_cb_left -= buffer.size();
 		}
 		void flush()
 		{
-			assert(m_cb_left == 0);
+			if (m_cb_left != 0)
+				error_handler::on_error();
+
 			m_writer.flush();
 		}
 	private:
 		inner m_writer;
 		uint64_t m_cb_left;
 	};
-	template <class inner> check_size_of_stream_writer<std::decay_t<inner>> check_size_of_stream(inner&& w, uint64_t cb) { return{ std::forward<inner>(w), cb }; }
+	template <class error_handler, class inner> check_size_of_stream_writer<error_handler, std::decay_t<inner>> check_size_of_stream(inner&& w, uint64_t cb) { return{ std::forward<inner>(w), cb }; }
 
-	template <class inner> class array_writer : private assert_work_done
+	template <class error_handler, class inner> class array_writer : private container_base<error_handler>
 	{
 	public:
-		array_writer(inner writer)
-			: m_writer(std::move(writer))
+		array_writer(container_base<error_handler>* parent, inner writer)
+			: container_base<error_handler>(parent)
+			, m_writer(std::move(writer))
 		{}
 
 		auto append()
 		{
-			assert(!is_work_done());
-			return add_write_checks(m_writer.append());
+			err_if_locked();
+			return add_write_checks_impl(this, m_writer.append());
 		}
 		void flush()
 		{
-			assert(!is_work_done());
+			err_if_locked();
 			m_writer.flush();
-			mark_work_done();
+			unlock_parent_and_lock_self();
 		}
 	private:
 		inner m_writer;
 	};
-	template <class inner> array_writer<std::decay_t<inner>> add_write_checks_on_array(inner&& w) { return{ std::forward<inner>(w) }; }
+	template <class error_handler, class inner> array_writer<error_handler, std::decay_t<inner>> add_write_checks_on_array(container_base<error_handler>* parent, inner&& w) { return{ parent, std::forward<inner>(w) }; }
 
-	template <class inner> class check_size_of_array_writer
+	template <class error_handler, class inner> class check_size_of_array_writer
 	{
 	public:
 		check_size_of_array_writer(inner writer, uint64_t c)
@@ -86,56 +94,58 @@ namespace goldfish { namespace debug_check
 
 		auto append()
 		{
-			assert(m_c_left > 0);
+			if (m_c_left == 0)
+				error_handler::on_error();
 			--m_c_left;
-			return add_write_checks(m_writer.append());
+			return m_writer.append();
 		}
 		void flush()
 		{
-			assert(m_c_left == 0);
+			if (m_c_left != 0)
+				error_handler::on_error();
 			m_writer.flush();
 		}
 	private:
 		inner m_writer;
 		uint64_t m_c_left;
 	};
-	template <class inner> check_size_of_array_writer<std::decay_t<inner>> check_size_of_array(inner&& w, uint64_t c) { return{ std::forward<inner>(w), c }; }
+	template <class error_handler, class inner> check_size_of_array_writer<error_handler, std::decay_t<inner>> check_size_of_array(inner&& w, uint64_t c) { return{ std::forward<inner>(w), c }; }
 
-	template <class inner> class map_writer : private assert_work_done
+	template <class error_handler, class inner> class map_writer : private container_base<error_handler>
 	{
 	public:
-		map_writer(inner writer)
-			: m_writer(std::move(writer))
+		map_writer(container_base<error_handler>* parent, inner writer)
+			: container_base<error_handler>(parent)
+			, m_writer(std::move(writer))
 		{}
 
 		auto append_key() 
 		{
-			assert(!is_work_done());
-			assert(m_expect_key);
-			m_expect_key = false;
-			return add_write_checks(m_writer.append_key());
+			err_if_locked();
+			err_if_flag_set();
+			set_flag();
+			return add_write_checks_impl(this, m_writer.append_key());
 		}
 		auto append_value()
 		{
-			assert(!is_work_done());
-			assert(!m_expect_key);
-			m_expect_key = true;
-			return add_write_checks(m_writer.append_value());
+			err_if_locked();
+			err_if_flag_not_set();
+			clear_flag();
+			return add_write_checks_impl(this, m_writer.append_value());
 		}
 		void flush()
 		{
-			assert(!is_work_done());
-			assert(m_expect_key);
+			err_if_locked();
+			err_if_flag_set();
 			m_writer.flush();
-			mark_work_done();
+			unlock_parent_and_lock_self();
 		}
 	private:
 		inner m_writer;
-		bool m_expect_key = true;
 	};
-	template <class inner> map_writer<std::decay_t<inner>> add_write_checks_on_map(inner&& w) { return{ std::forward<inner>(w) }; }
+	template <class error_handler, class inner> map_writer<error_handler, std::decay_t<inner>> add_write_checks_on_map(container_base<error_handler>* parent, inner&& w) { return{ parent, std::forward<inner>(w) }; }
 
-	template <class inner> class check_size_of_map_writer
+	template <class error_handler, class inner> class check_size_of_map_writer
 	{
 	public:
 		check_size_of_map_writer(inner writer, uint64_t c)
@@ -145,49 +155,129 @@ namespace goldfish { namespace debug_check
 
 		auto append_key()
 		{
-			assert(m_c_left > 0);
+			if (m_c_left == 0)
+				error_handler::on_error();
 			--m_c_left;
-			return add_write_checks(m_writer.append_key());
+			return m_writer.append_key();
 		}
 		auto append_value()
 		{
-			return add_write_checks(m_writer.append_value());
+			return m_writer.append_value();
 		}
 		void flush()
 		{
-			assert(m_c_left == 0);
+			if (m_c_left != 0)
+				error_handler::on_error();
 			m_writer.flush();
 		}
 	private:
 		inner m_writer;
 		uint64_t m_c_left;
 	};
-	template <class inner> check_size_of_map_writer<std::decay_t<inner>> check_size_of_map(inner&& w, uint64_t c) { return{ std::forward<inner>(w), c }; }
+	template <class error_handler, class inner> check_size_of_map_writer<error_handler, std::decay_t<inner>> check_size_of_map(inner&& w, uint64_t c) { return{ std::forward<inner>(w), c }; }
 
-
-	template <class inner> class document_writer
+	template <class error_handler, class inner> class document_writer : private container_base<error_handler>
 	{
 	public:
-		document_writer(inner writer)
-			: m_writer(std::move(writer))
+		document_writer(container_base<error_handler>* parent, inner writer)
+			: container_base<error_handler>(parent)
+			, m_writer(std::move(writer))
 		{}
-		void write(bool x) { m_writer.write(x); }
-		void write(nullptr_t x) { m_writer.write(x); }
-		void write(double x) { m_writer.write(x); }
-		void write_undefined() { m_writer.write_undefined(); }
-		void write(uint64_t x) { m_writer.write(x); }
-		void write(int64_t x) { m_writer.write(x); }
+		void write(bool x)
+		{
+			err_if_locked();
+			m_writer.write(x);
+			unlock_parent_and_lock_self();
+		}
+		void write(nullptr_t x)
+		{
+			err_if_locked();
+			m_writer.write(x);
+			unlock_parent_and_lock_self();
+		}
+		void write(double x)
+		{
+			err_if_locked();
+			m_writer.write(x);
+			unlock_parent_and_lock_self();
+		}
+		void write_undefined()
+		{
+			err_if_locked();
+			m_writer.write_undefined();
+			unlock_parent_and_lock_self();
+		}
+		void write(uint64_t x)
+		{
+			err_if_locked();
+			m_writer.write(x);
+			unlock_parent_and_lock_self();
+		}
+		void write(int64_t x)
+		{
+			err_if_locked();
+			m_writer.write(x);
+			unlock_parent_and_lock_self();
+		}
 
-		auto write_binary(uint64_t cb) { return check_size_of_stream(add_write_checks_on_stream(m_writer.write_binary(cb)), cb); }
-		auto write_text(uint64_t cb) { return check_size_of_stream(add_write_checks_on_stream(m_writer.write_text(cb)), cb); }
-		auto write_binary() { return add_write_checks_on_stream(m_writer.write_binary()); }
-		auto write_text() { return add_write_checks_on_stream(m_writer.write_text()); }
+		auto write_binary(uint64_t cb)
+		{
+			err_if_locked();
+			auto result = check_size_of_stream<error_handler>(add_write_checks_on_stream(parent(), m_writer.write_binary(cb)), cb);
+			lock();
+			return result;
+		}
+		auto write_text(uint64_t cb)
+		{
+			err_if_locked();
+			auto result = check_size_of_stream<error_handler>(add_write_checks_on_stream(parent(), m_writer.write_text(cb)), cb);
+			lock();
+			return result;
+		}
+		auto write_binary()
+		{
+			err_if_locked();
+			auto result = add_write_checks_on_stream(parent(), m_writer.write_binary());
+			lock();
+			return result;
+		}
+		auto write_text()
+		{
+			err_if_locked();
+			auto result = add_write_checks_on_stream(parent(), m_writer.write_text());
+			lock();
+			return result;
+		}
 
-		auto write_array(uint64_t size) { return check_size_of_array(add_write_checks_on_array(m_writer.write_array(size)), size); }
-		auto write_array() { return add_write_checks_on_array(m_writer.write_array()); }
+		auto write_array(uint64_t size)
+		{
+			err_if_locked();
+			auto result = check_size_of_array<error_handler>(add_write_checks_on_array(parent(), m_writer.write_array(size)), size);
+			lock();
+			return result;
+		}
+		auto write_array()
+		{
+			err_if_locked();
+			auto result = add_write_checks_on_array(parent(), m_writer.write_array());
+			lock();
+			return result;
+		}
 
-		auto write_map(uint64_t size) { return check_size_of_map(add_write_checks_on_map(m_writer.write_map(size)), size); }
-		auto write_map() { return add_write_checks_on_map(m_writer.write_map()); }
+		auto write_map(uint64_t size)
+		{
+			err_if_locked();
+			auto result = check_size_of_map<error_handler>(add_write_checks_on_map(parent(), m_writer.write_map(size)), size);
+			lock();
+			return result;
+		}
+		auto write_map()
+		{
+			err_if_locked();
+			auto result = add_write_checks_on_map(parent(), m_writer.write_map());
+			lock();
+			return result;
+		}
 
 		template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, void> write(Document& d)
 		{
@@ -197,25 +287,17 @@ namespace goldfish { namespace debug_check
 		inner m_writer;
 	};
 
-	template <class inner> document_writer<std::decay_t<inner>> add_write_checks(inner&& t)
+	template <class error_handler, class inner> document_writer<error_handler, std::decay_t<inner>> add_write_checks_impl(container_base<error_handler>* parent, inner&& t)
 	{
-		return std::forward<inner>(t);
+		return{ parent, std::forward<inner>(t) };
 	}
-	template <class inner> document_writer<inner> add_write_checks(document_writer<inner>&& t)
+
+	template <class error_handler, class Document> auto add_write_checks(Document&& t, error_handler)
 	{
-		return std::move(t);
+		return add_write_checks_impl<error_handler>(nullptr /*parent*/, std::forward<Document>(t));
 	}
-	template <class inner> document_writer<inner> add_write_checks(const document_writer<inner>& t)
+	template <class Document> auto add_write_checks(Document&& t, no_check)
 	{
-		return t;
-	}
-}}
-#else
-namespace goldfish { namespace debug_check
-{
-	template <class T> decltype(auto) add_write_checks(T&& t)
-	{
-		return std::forward<T>(t);
+		return std::forward<Document>(t);
 	}
 }}
-#endif

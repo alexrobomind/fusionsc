@@ -141,7 +141,7 @@ namespace goldfish { namespace stream
 	};
 
 	template <size_t N, class inner>
-	class buffered_writer : private assert_work_done
+	class buffered_writer
 	{
 	public:
 		buffered_writer(inner&& stream)
@@ -195,7 +195,6 @@ namespace goldfish { namespace stream
 			});
 			m_free_space = m_buffer_data;
 			m_stream.flush();
-			mark_work_done();
 		}
 	private:
 		template <size_t cb> void write_static(const uint8_t* t, std::false_type /*small*/) { write_buffer({ t, cb }); }

@@ -60,41 +60,29 @@ namespace goldfish { namespace stream
 					throw ill_formatted_base64_data{};
 			}
 
-			switch (c_read)
+			if (c_read == 0) return 0;
+			if (c_read == 1) throw ill_formatted_base64_data{};
+
+			auto a = character_to_6bits(buffer[0]);
+			auto b = character_to_6bits(buffer[1]);
+			output[0] = ((a << 2) | (b >> 4));
+			if (c_read == 2)
 			{
-			case 0: return 0;
-			case 1: throw ill_formatted_base64_data{};
-			case 2:
-			{
-				auto a = character_to_6bits(buffer[0]);
-				auto b = character_to_6bits(buffer[1]);
 				if (b & 0xF) throw ill_formatted_base64_data{};
-				output[0] = ((a << 2) | (b >> 4));
 				return 1;
 			}
-			case 3:
+
+			auto c = character_to_6bits(buffer[2]);
+			output[1] = (((b & 0xF) << 4) | (c >> 2));
+			if (c_read == 3)
 			{
-				auto a = character_to_6bits(buffer[0]);
-				auto b = character_to_6bits(buffer[1]);
-				auto c = character_to_6bits(buffer[2]);
 				if (c & 0x3) throw ill_formatted_base64_data{};
-				output[0] = ((a << 2) | (b >> 4));
-				output[1] = (((b & 0xF) << 4) | (c >> 2));
 				return 2;
 			}
-			case 4:
-			{
-				auto a = character_to_6bits(buffer[0]);
-				auto b = character_to_6bits(buffer[1]);
-				auto c = character_to_6bits(buffer[2]);
-				auto d = character_to_6bits(buffer[3]);
-				output[0] = ((a << 2) | (b >> 4));
-				output[1] = (((b & 0xF) << 4) | (c >> 2));
-				output[2] = (((c & 0x3) << 6) | d);
-				return 3;
-			}
-			default: std::terminate();
-			}
+
+			auto d = character_to_6bits(buffer[3]);
+			output[2] = (((c & 0x3) << 6) | d);
+			return 3;
 		}
 		uint8_t character_to_6bits(uint8_t c)
 		{
@@ -139,7 +127,7 @@ namespace goldfish { namespace stream
 
 	// Write base64 data to inner when binary data is provided
 	template <class inner>
-	class base64_writer : private assert_work_done
+	class base64_writer
 	{
 	public:
 		base64_writer(inner&& stream)
@@ -196,7 +184,6 @@ namespace goldfish { namespace stream
 				write_triplet_flush(m_buffer[0], m_buffer[1]);
 			m_stream.flush();
 			m_cb_in_buffer = 0;
-			mark_work_done();
 		}
 		auto& inner_stream() { return m_stream; }
 	private:

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "array_ref.h"
-#include "uncaught_exception.h"
 #include <string>
 
 namespace goldfish { namespace stream
@@ -38,7 +37,7 @@ namespace goldfish { namespace stream
 		FILE* m_fp;
 	};
 
-	class file_writer : private assert_work_done
+	class file_writer
 	{
 	public:
 		file_writer(const char* path)
@@ -47,8 +46,7 @@ namespace goldfish { namespace stream
 				throw error;
 		}
 		file_writer(file_writer&& rhs)
-			: assert_work_done(std::move(rhs))
-			, m_fp(rhs.m_fp)
+			: m_fp(rhs.m_fp)
 		{
 			rhs.m_fp = nullptr;
 		}
@@ -65,10 +63,7 @@ namespace goldfish { namespace stream
 			if (fwrite(data.data(), 1, data.size(), m_fp) != data.size())
 				throw 0;
 		}
-		void flush()
-		{
-			mark_work_done();
-		}
+		void flush() { }
 	private:
 		FILE* m_fp;
 	};

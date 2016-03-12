@@ -349,13 +349,18 @@ namespace goldfish { namespace cbor
 	};
 	template <class Stream> optional<document<std::decay_t<Stream>>> read_no_debug_check(Stream&& s)
 	{
+		static_assert(
+			!std::is_trivially_move_constructible<std::decay_t<Stream>>::value ||
+			std::is_trivially_move_constructible<document<std::decay_t<Stream>>>::value, "A cbor document on a trivially move constructible stream should be trivially move constructible");
 		return read_helper<std::decay_t<Stream>>::read(std::forward<Stream>(s), read<uint8_t>(s));
 	}
-	template <class Stream> auto read(Stream&& s)
+
+	template <class Stream, class error_handler> auto read(Stream&& s, error_handler e)
 	{
 		auto d = read_no_debug_check(std::forward<Stream>(s));
 		if (!d)
 			throw ill_formatted{};
-		return debug_check::add_read_checks(std::move(*d));
+		return debug_check::add_read_checks(std::move(*d), e);
 	}
+	template <class Stream> auto read(Stream&& s) { return read(std::forward<Stream>(s), debug_check::default_error_handler{}); }
 }}

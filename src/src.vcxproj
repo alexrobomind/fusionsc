@@ -24,6 +24,7 @@
     <ClInclude Include="..\inc\goldfish\buffered_stream.h" />
     <ClInclude Include="..\inc\goldfish\cbor_reader.h" />
     <ClInclude Include="..\inc\goldfish\cbor_writer.h" />
+    <ClInclude Include="..\inc\goldfish\debug_checks.h" />
     <ClInclude Include="..\inc\goldfish\debug_checks_reader.h" />
     <ClInclude Include="..\inc\goldfish\debug_checks_writer.h" />
     <ClInclude Include="..\inc\goldfish\dom.h" />
@@ -40,7 +41,6 @@
     <ClInclude Include="..\inc\goldfish\schema.h" />
     <ClInclude Include="..\inc\goldfish\stream.h" />
     <ClInclude Include="..\inc\goldfish\tags.h" />
-    <ClInclude Include="..\inc\goldfish\uncaught_exception.h" />
     <ClInclude Include="..\inc\goldfish\variant.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

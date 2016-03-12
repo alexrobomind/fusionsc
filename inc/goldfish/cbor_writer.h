@@ -146,11 +146,15 @@ namespace goldfish { namespace cbor
 	{
 		return{ std::forward<Stream>(s) };
 	}
+	template <class Stream, class error_handler> auto create_writer(Stream&& s, error_handler e)
+	{
+		return debug_check::add_write_checks(write_no_debug_check(std::forward<Stream>(s)), e);
+	}
 	template <class Stream> auto create_writer(Stream&& s)
 	{
-		return debug_check::add_write_checks(write_no_debug_check(std::forward<Stream>(s)));
+		return create_writer(std::forward<Stream>(s), debug_check::default_error_handler{});
 	}
-	
+
 	template <class Stream> class array_writer
 	{
 	public:

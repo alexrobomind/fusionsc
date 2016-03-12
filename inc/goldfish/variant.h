@@ -20,6 +20,8 @@ namespace goldfish
 		template <> struct disjunction<> { enum { value = false }; };
 		template <class Head, class... Tail> struct disjunction<Head, Tail...> { enum { value = Head::value || disjunction<Tail...>::value }; };
 
+		template <class T> struct negate { enum { value = !T::value }; };
+
 		template <size_t...> struct largest {};
 		template <size_t x> struct largest<x> { enum { value = x }; };
 		template <size_t x, size_t y> struct largest<x, y> { enum { value = x > y ? x : y }; };
@@ -157,30 +159,31 @@ namespace goldfish
 		};
 		template <class... types> using variant_destructor = variant_destructor_impl<conjunction<std::is_trivially_destructible<types>...>::value, types...>;
 
-		template <bool no_copy, class... types> class variant_copy_impl {};
-		template <class... types> class variant_copy_impl<true /*no_copy*/, types...> : public variant_destructor<types...>
+		template <bool no_move, class... types> class variant_move_impl {};
+		template <class... types> class variant_move_impl<true /*no_move*/, types...> : public variant_destructor<types...> {};
+		template <class... types> class variant_move_impl<false /*no_move*/, types...> : public variant_destructor<types...>
 		{
+		public:
+			variant_move_impl() = default;
+			variant_move_impl(variant_move_impl&& rhs) noexcept(conjunction<std::is_nothrow_move_constructible<types>...>::value)
+			{
+				rhs.visit([&](auto& x)
+				{
+					using T = std::decay_t<decltype(x)>;
+					new (&m_data) T(std::move(x));
+				});
+				set_which(rhs.which());
+			}
 		};
-		template <class... types> class variant_copy_impl<false /*no_copy*/, types...> : public variant_destructor<types...>
+		template <class... types> using variant_move = variant_move_impl<conjunction<std::is_trivially_move_constructible<types>...>::value, types...>;
+
+		template <bool no_copy, class... types> class variant_copy_impl {};
+		template <class... types> class variant_copy_impl<true /*no_copy*/, types...> : public variant_move<types...> { };
+		template <class... types> class variant_copy_impl<false /*no_copy*/, types...> : public variant_move<types...>
 		{
 		public:
 			variant_copy_impl() = default;
-			variant_copy_impl(variant_copy_impl&& rhs) noexcept(conjunction<std::is_nothrow_move_constructible<types>...>::value)
-			{
-				if (conjunction<std::is_trivially_copy_constructible<types>...>::value)
-				{
-					m_data = rhs.m_data;
-				}
-				else
-				{
-					rhs.visit([&](auto& x)
-					{
-						using T = std::decay_t<decltype(x)>;
-						new (&m_data) T(std::move(x));
-					});
-				}
-				set_which(rhs.which());
-			}
+			variant_copy_impl(variant_copy_impl&&) = default;
 			variant_copy_impl(const variant_copy_impl& rhs) noexcept(conjunction<std::is_nothrow_copy_constructible<types>...>::value)
 			{
 				if (conjunction<std::is_trivially_copy_constructible<types>...>::value)
@@ -199,8 +202,8 @@ namespace goldfish
 			}
 		};
 		template <class... types> using variant_copy = variant_copy_impl<
-			conjunction<std::is_trivially_copy_constructible<types>...>::value &&
-			conjunction<std::is_trivially_copy_assignable<types>...>::value,
+			conjunction<std::is_trivially_copy_constructible<types>...>::value ||
+			disjunction<negate<std::is_copy_constructible<types>>...>::value,
 			types...>;
 
 		template <class T, size_t index, class... types> struct add_constructors {};

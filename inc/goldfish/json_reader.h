@@ -455,5 +455,10 @@ namespace goldfish { namespace json
 			default: throw ill_formatted();
 		}
 	}
-	template <class Stream> auto read(Stream&& s) { return debug_check::add_read_checks(read_no_debug_check(std::forward<Stream>(s))); }
+
+	template <class Stream, class error_handler> auto read(Stream&& s, error_handler e)
+	{
+		return debug_check::add_read_checks(read_no_debug_check(std::forward<Stream>(s)), e);
+	}
+	template <class Stream> auto read(Stream&& s) { return read(std::forward<Stream>(s), debug_check::default_error_handler{}); }
 }}

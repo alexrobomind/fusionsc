@@ -3,7 +3,6 @@
 #include <array>
 #include <vector>
 #include "array_ref.h"
-#include "uncaught_exception.h"
 #include "match.h"
 #include "optional.h"
 
@@ -196,7 +195,7 @@ namespace goldfish { namespace stream
 	template <size_t N> array_ref_reader read_string_literal(const char(&s)[N]) { assert(s[N - 1] == 0); return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), N - 1 }; }
 	inline array_ref_reader read_string_literal(const char* s) { return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), strlen(s) }; }
 
-	struct vector_writer : private assert_work_done
+	struct vector_writer
 	{
 		vector_writer() = default;
 		vector_writer(vector_writer&&) = default;
@@ -206,13 +205,10 @@ namespace goldfish { namespace stream
 		{
 			data.insert(data.end(), d.begin(), d.end());
 		}
-		void flush()
-		{
-			mark_work_done();
-		}
+		void flush() { }
 		std::vector<uint8_t> data;
 	};
-	struct string_writer : private assert_work_done
+	struct string_writer
 	{
 		string_writer() = default;
 		string_writer(string_writer&&) = default;
@@ -222,10 +218,7 @@ namespace goldfish { namespace stream
 		{
 			data.insert(data.end(), reinterpret_cast<const char*>(d.begin()), reinterpret_cast<const char*>(d.end()));
 		}
-		void flush()
-		{
-			mark_work_done();
-		}
+		void flush() { }
 		std::string data;
 	};
 
@@ -233,9 +226,13 @@ namespace goldfish { namespace stream
 	{
 		std::string result;
 		uint8_t buffer[65536];
-		while (auto cb = s.read_buffer(buffer))
+		for (;;)
+		{
+			auto cb = s.read_buffer(buffer);
 			result.insert(result.end(), reinterpret_cast<const char*>(buffer), reinterpret_cast<const char*>(buffer + cb));
-		return result;
+			if (cb != sizeof(buffer))
+				return result;
+		}
 	}
 
 	template <class stream> enable_if_reader_t<stream, std::vector<uint8_t>> read_all(stream&& s)

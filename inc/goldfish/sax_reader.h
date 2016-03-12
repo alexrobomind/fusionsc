@@ -5,7 +5,6 @@
 #include "optional.h"
 #include "base64_stream.h"
 #include "buffered_stream.h"
-#include "typed_erased_stream.h"
 #include <type_traits>
 
 namespace goldfish
@@ -48,17 +47,12 @@ namespace goldfish
 			});
 		}
 
-		template <class tag> decltype(auto) as() & { return as_impl(tags::tag_t<tag>{}, std::integral_constant<bool, does_json_conversions>{}); }
-		template <class tag> decltype(auto) as() && { return std::move(*this).as_impl(tags::tag_t<tag>{}, std::integral_constant<bool, does_json_conversions>{}); }
+		template <class tag> auto as() { return std::move(*this).as_impl(tags::tag_t<tag>{}, std::integral_constant<bool, does_json_conversions>{}); }
 
 		using invalid_state = typename variant<types...>::invalid_state;
 	private:
 		// Default: no conversion
-		template <class tag, class json_conversion> decltype(auto) as_impl(tag, json_conversion) &
-		{
-			return m_data.as<type_with_tag_t<tag>>();
-		}
-		template <class tag, class json_conversion> decltype(auto) as_impl(tag, json_conversion) &&
+		template <class tag, class json_conversion> decltype(auto) as_impl(tag, json_conversion)
 		{
 			return std::move(m_data).as<type_with_tag_t<tag>>();
 		}
@@ -106,9 +100,9 @@ namespace goldfish
 		}
 
 		// Byte strings are converted from text strings (assuming base64 text)
-		auto as_impl(tags::byte_string, std::true_type /*json_conversion*/) &&
+		auto as_impl(tags::byte_string, std::true_type /*json_conversion*/)
 		{
-			return base64(std::move(*this).as<tags::text_string>());
+			return base64(as<tags::text_string>());
 		}
 
 		variant<types...> m_data;
