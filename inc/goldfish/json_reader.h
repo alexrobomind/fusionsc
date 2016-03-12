@@ -458,7 +458,7 @@ namespace goldfish { namespace json
 
 	template <class Stream, class error_handler> auto read(Stream&& s, error_handler e)
 	{
-		return debug_check::add_read_checks(read_no_debug_check(std::forward<Stream>(s)), e);
+		return debug_checks::add_read_checks(read_no_debug_check(std::forward<Stream>(s)), e);
 	}
-	template <class Stream> auto read(Stream&& s) { return read(std::forward<Stream>(s), debug_check::default_error_handler{}); }
+	template <class Stream> auto read(Stream&& s) { return read(std::forward<Stream>(s), debug_checks::default_error_handler{}); }
 }}

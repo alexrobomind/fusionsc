@@ -4,7 +4,7 @@
 #include <assert.h>
 #include <exception>
 
-namespace goldfish { namespace debug_check
+namespace goldfish { namespace debug_checks
 {
 	struct no_check {};
 	struct terminate_on_error

@@ -6,7 +6,7 @@
 #include "tags.h"
 #include <type_traits>
 
-namespace goldfish { namespace debug_check
+namespace goldfish { namespace debug_checks
 {
 	template <class error_handler, class T, class _tag> class string;
 	template <class error_handler, class T> class array;

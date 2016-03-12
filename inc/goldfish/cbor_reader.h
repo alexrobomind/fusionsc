@@ -360,7 +360,7 @@ namespace goldfish { namespace cbor
 		auto d = read_no_debug_check(std::forward<Stream>(s));
 		if (!d)
 			throw ill_formatted{};
-		return debug_check::add_read_checks(std::move(*d), e);
+		return debug_checks::add_read_checks(std::move(*d), e);
 	}
-	template <class Stream> auto read(Stream&& s) { return read(std::forward<Stream>(s), debug_check::default_error_handler{}); }
+	template <class Stream> auto read(Stream&& s) { return read(std::forward<Stream>(s), debug_checks::default_error_handler{}); }
 }}
