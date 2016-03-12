@@ -47,7 +47,7 @@ namespace goldfish { namespace json
 	class byte_string
 	{
 	public:
-		using tag = tags::byte_string;
+		using tag = tags::binary;
 		size_t read_buffer(buffer_ref) { std::terminate(); }
 	};
 
@@ -57,7 +57,7 @@ namespace goldfish { namespace json
 		text_string(Stream&& s)
 			: m_stream(std::move(s))
 		{}
-		using tag = tags::text_string;
+		using tag = tags::string;
 
 		size_t read_buffer(buffer_ref buffer)
 		{

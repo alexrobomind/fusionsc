@@ -8,7 +8,7 @@ namespace goldfish
 	{
 		auto document = json::read(stream::read_string_literal("[\"hello\"]"), debug_checks::throw_on_error{}).as<tags::array>();
 
-		auto string = document.read()->as<tags::text_string>();
+		auto string = document.read()->as<tags::string>();
 		test(stream::read<char>(string) == 'h');
 		test(stream::seek(string, 1) == 1);
 		expect_exception<debug_checks::library_missused>([&] { document.read(); });
@@ -17,7 +17,7 @@ namespace goldfish
 	{
 		auto document = json::read(stream::read_string_literal("[\"hello\"]"), debug_checks::throw_on_error{}).as<tags::array>();
 
-		auto string = document.read()->as<tags::text_string>();
+		auto string = document.read()->as<tags::string>();
 		test(stream::read_all_as_string(string) == "hello");
 		test(document.read() == nullopt);
 	}
@@ -25,7 +25,7 @@ namespace goldfish
 	{
 		auto document = json::read(stream::read_string_literal("[\"hello\"]"), debug_checks::throw_on_error{}).as<tags::array>();
 
-		auto string = document.read()->as<tags::text_string>();
+		auto string = document.read()->as<tags::string>();
 		test(stream::seek(string, 5) == 5);
 		expect_exception<debug_checks::library_missused>([&] { document.read(); });
 	}
@@ -33,7 +33,7 @@ namespace goldfish
 	{
 		auto document = json::read(stream::read_string_literal("[\"hello\"]"), debug_checks::throw_on_error{}).as<tags::array>();
 
-		auto string = document.read()->as<tags::text_string>();
+		auto string = document.read()->as<tags::string>();
 		test(stream::seek(string, 6) == 5);
 		test(document.read() == nullopt);
 	}
@@ -71,7 +71,7 @@ namespace goldfish
 		auto document = json::read(stream::read_string_literal("[{\"a\":1, \"b\":2}]"), debug_checks::throw_on_error{}).as<tags::array>();
 
 		auto map = document.read()->as<tags::map>();
-		test(stream::read_all_as_string(map.read_key()->as<tags::text_string>()) == "a");
+		test(stream::read_all_as_string(map.read_key()->as<tags::string>()) == "a");
 		expect_exception<debug_checks::library_missused>([&] { document.read(); });
 	}
 	TEST_CASE(reading_parent_at_exactly_end_of_map_throws)
@@ -79,9 +79,9 @@ namespace goldfish
 		auto document = json::read(stream::read_string_literal("[{\"a\":1, \"b\":2}]"), debug_checks::throw_on_error{}).as<tags::array>();
 
 		auto map = document.read()->as<tags::map>();
-		test(stream::read_all_as_string(map.read_key()->as<tags::text_string>()) == "a");
+		test(stream::read_all_as_string(map.read_key()->as<tags::string>()) == "a");
 		test(map.read_value().as<uint64_t>() == 1);
-		test(stream::read_all_as_string(map.read_key()->as<tags::text_string>()) == "b");
+		test(stream::read_all_as_string(map.read_key()->as<tags::string>()) == "b");
 		test(map.read_value().as<uint64_t>() == 2);
 		expect_exception<debug_checks::library_missused>([&] { document.read(); });
 	}
@@ -90,9 +90,9 @@ namespace goldfish
 		auto document = json::read(stream::read_string_literal("[{\"a\":1, \"b\":2}]"), debug_checks::throw_on_error{}).as<tags::array>();
 
 		auto map = document.read()->as<tags::map>();
-		test(stream::read_all_as_string(map.read_key()->as<tags::text_string>()) == "a");
+		test(stream::read_all_as_string(map.read_key()->as<tags::string>()) == "a");
 		test(map.read_value().as<uint64_t>() == 1);
-		test(stream::read_all_as_string(map.read_key()->as<tags::text_string>()) == "b");
+		test(stream::read_all_as_string(map.read_key()->as<tags::string>()) == "b");
 		test(map.read_value().as<uint64_t>() == 2);
 		test(map.read_key() == nullopt);
 
@@ -111,7 +111,7 @@ namespace goldfish
 		auto document = json::read(stream::read_string_literal("[{\"a\":\"1\", \"b\":2}]"), debug_checks::throw_on_error{}).as<tags::array>();
 
 		auto map = document.read()->as<tags::map>();
-		test(stream::read_all_as_string(map.read_key()->as<tags::text_string>()) == "a");
+		test(stream::read_all_as_string(map.read_key()->as<tags::string>()) == "a");
 		map.read_value();
 		expect_exception<debug_checks::library_missused>([&] { map.read_key(); });
 	}
@@ -127,7 +127,7 @@ namespace goldfish
 		auto document = json::read(stream::read_string_literal("[{\"a\":1, \"b\":2}]"), debug_checks::throw_on_error{}).as<tags::array>();
 
 		auto map = document.read()->as<tags::map>();
-		test(stream::read_all_as_string(map.read_key()->as<tags::text_string>()) == "a");
+		test(stream::read_all_as_string(map.read_key()->as<tags::string>()) == "a");
 		expect_exception<debug_checks::library_missused>([&] { map.read_key(); });
 	}
 }

@@ -38,15 +38,6 @@ namespace goldfish
 			});
 		}
 
-		template <class tag> bool is() const noexcept
-		{
-			static_assert(tags::is_tag<tag>::value, "document::is must be called with a tag (see tags.h)");
-			return m_data.visit([&](auto&& x)
-			{
-				return std::is_same<tag, decltype(tags::get_tag(x))>::value;
-			});
-		}
-
 		template <class tag> auto as() { return std::move(*this).as_impl(tags::tag_t<tag>{}, std::integral_constant<bool, does_json_conversions>{}); }
 
 		using invalid_state = typename variant<types...>::invalid_state;
@@ -64,7 +55,7 @@ namespace goldfish
 				[](auto&& x, tags::floating_point) -> double { return x; },
 				[](auto&& x, tags::unsigned_int) -> double { return static_cast<double>(x); },
 				[](auto&& x, tags::signed_int) -> double { return static_cast<double>(x); },
-				[](auto&& x, tags::text_string) -> double
+				[](auto&& x, tags::string) -> double
 				{
 					if (!does_json_conversions)
 						throw bad_variant_access();
@@ -87,7 +78,7 @@ namespace goldfish
 						throw integer_overflow{};
 					return static_cast<int64_t>(x);
 				},
-				[](auto&& x, tags::text_string) -> int64_t
+				[](auto&& x, tags::string) -> int64_t
 				{
 					if (!does_json_conversions)
 						throw bad_variant_access();
@@ -100,9 +91,9 @@ namespace goldfish
 		}
 
 		// Byte strings are converted from text strings (assuming base64 text)
-		auto as_impl(tags::byte_string, std::true_type /*json_conversion*/)
+		auto as_impl(tags::binary, std::true_type /*json_conversion*/)
 		{
-			return base64(as<tags::text_string>());
+			return base64(as<tags::string>());
 		}
 
 		variant<types...> m_data;
@@ -118,11 +109,11 @@ namespace goldfish
 	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::signed_int>::value, void> seek_to_end(type&&) {}
 	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::boolean>::value, void> seek_to_end(type&&) {}
 	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::null>::value, void> seek_to_end(type&&) {}
-	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::byte_string>::value, void> seek_to_end(type&& x)
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::binary>::value, void> seek_to_end(type&& x)
 	{
 		stream::seek(x, std::numeric_limits<uint64_t>::max());
 	}
-	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::text_string>::value, void> seek_to_end(type&& x)
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::string>::value, void> seek_to_end(type&& x)
 	{
 		stream::seek(x, std::numeric_limits<uint64_t>::max());
 	}

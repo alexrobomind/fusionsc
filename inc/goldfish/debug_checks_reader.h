@@ -21,8 +21,8 @@ namespace goldfish { namespace debug_checks
 		uint64_t,
 		double,
 		undefined,
-		string<error_handler, typename Document::template type_with_tag_t<tags::text_string>, tags::text_string>,
-		string<error_handler, typename Document::template type_with_tag_t<tags::byte_string>, tags::byte_string>,
+		string<error_handler, typename Document::template type_with_tag_t<tags::string>, tags::string>,
+		string<error_handler, typename Document::template type_with_tag_t<tags::binary>, tags::binary>,
 		array<error_handler, typename Document::template type_with_tag_t<tags::array>>,
 		map<error_handler, typename Document::template type_with_tag_t<tags::map>>>;
 
@@ -135,13 +135,13 @@ namespace goldfish { namespace debug_checks
 			{
 				return make_array<error_handler>(parent, std::forward<decltype(x)>(x));
 			},
-			[&](auto&& x, tags::byte_string) -> document<error_handler, std::decay_t<Document>>
+			[&](auto&& x, tags::binary) -> document<error_handler, std::decay_t<Document>>
 			{
-				return make_string<error_handler, tags::byte_string>(parent, std::forward<decltype(x)>(x));
+				return make_string<error_handler, tags::binary>(parent, std::forward<decltype(x)>(x));
 			},
-			[&](auto&& x, tags::text_string) -> document<error_handler, std::decay_t<Document>>
+			[&](auto&& x, tags::string) -> document<error_handler, std::decay_t<Document>>
 			{
-				return make_string<error_handler, tags::text_string>(parent, std::forward<decltype(x)>(x));
+				return make_string<error_handler, tags::string>(parent, std::forward<decltype(x)>(x));
 			},
 			[](auto&&, tags::undefined) -> document<error_handler, std::decay_t<Document>>
 			{

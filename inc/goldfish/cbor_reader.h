@@ -14,8 +14,8 @@ namespace goldfish { namespace cbor
 	struct ill_formatted {};
 
 	template <class Stream, uint8_t expected_type, class _tag> class string;
-	template <class Stream> using byte_string = string<Stream, 2, tags::byte_string>;
-	template <class Stream> using text_string = string<Stream, 3, tags::text_string>;
+	template <class Stream> using byte_string = string<Stream, 2, tags::binary>;
+	template <class Stream> using text_string = string<Stream, 3, tags::string>;
 	template <class Stream> class array;
 	template <class Stream> class map;
 	struct undefined { using tag = tags::undefined; };

@@ -34,11 +34,11 @@ namespace goldfish {
 		};
 
 		document.visit(first_match(
-			[&](auto&& x, tags::byte_string)
+			[&](auto&& x, tags::binary)
 			{
 				copy_stream(x, [&](auto cb) { return writer.write_binary(cb); }, [&] { return writer.write_binary(); });
 			},
-			[&](auto&& x, tags::text_string)
+			[&](auto&& x, tags::string)
 			{
 				copy_stream(x, [&](auto cb) { return writer.write_text(cb); }, [&] { return writer.write_text(); });
 			},

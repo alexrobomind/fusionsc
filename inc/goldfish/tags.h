@@ -6,8 +6,8 @@
 namespace goldfish { namespace tags
 {
 	template <class T> struct is_tag : std::false_type {};
-	struct byte_string {};       template <> struct is_tag<byte_string> : std::true_type {};
-	struct text_string {};		 template <> struct is_tag<text_string> : std::true_type {};
+	struct binary {};            template <> struct is_tag<binary> : std::true_type {};
+	struct string {};		     template <> struct is_tag<string> : std::true_type {};
 	struct array {};			 template <> struct is_tag<array> : std::true_type {};
 	struct map {};				 template <> struct is_tag<map> : std::true_type {};
 	struct undefined {};		 template <> struct is_tag<undefined> : std::true_type {};

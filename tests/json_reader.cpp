@@ -15,10 +15,10 @@ namespace goldfish { namespace dom
 		};
 		using namespace std::string_literals;
 
-		test(r("\"\"") == text_string(""));
-		test(r("\"a\"") == text_string("a"));
-		test(r("\"a\\u0001\\b\\n\\r\\t\\\"\\/\""s) == text_string(u8"a\u0001\b\n\r\t\"/"));
-		test(r("\"\\uD801\\uDC37\""s) == text_string(u8"\U00010437"));
+		test(r("\"\"") == string(""));
+		test(r("\"a\"") == string("a"));
+		test(r("\"a\\u0001\\b\\n\\r\\t\\\"\\/\""s) == string(u8"a\u0001\b\n\r\t\"/"));
+		test(r("\"\\uD801\\uDC37\""s) == string(u8"\U00010437"));
 		
 		expect_exception<json::ill_formatted>([&] { r("\"\\uD801\""s); });
 		expect_exception<json::ill_formatted>([&] { r("\"\\uD801a\""s); });
@@ -73,7 +73,7 @@ namespace goldfish { namespace dom
 		test(r("[[]]") == array{ dom::document(array{}) });
 
 		test(r("{}") == map{});
-		test(r("{\"foo\":1}") == map{ { text_string("foo"), 1ull } });
+		test(r("{\"foo\":1}") == map{ { string("foo"), 1ull } });
 	}
 
 

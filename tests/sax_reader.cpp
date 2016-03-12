@@ -45,7 +45,7 @@ namespace goldfish
 	{
 		auto r = [](auto input)
 		{
-			return stream::read_all_as_string(json::read(stream::read_string_literal(input)).as<tags::byte_string>());
+			return stream::read_all_as_string(json::read(stream::read_string_literal(input)).as<tags::binary>());
 		};
 		test(r("\"YW55IGNhcm5hbCBwbGVhc3VyZS4\"") == "any carnal pleasure.");
 	}

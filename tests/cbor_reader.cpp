@@ -48,10 +48,10 @@ namespace goldfish { namespace dom
 		test(r("1b000000e8d4a51000") == 1000000000000ull);
 		test(r("1bffffffffffffffff") == 18446744073709551615ull);
 
-		test(r("c249010000000000000000") == byte_string(to_vector("010000000000000000")));
+		test(r("c249010000000000000000") == binary(to_vector("010000000000000000")));
 		test(r("3b7fffffffffffffff") == -9223372036854775808ll);
 		expect_exception<cbor::ill_formatted>([&] { r("3b8000000000000000"); }); // overflow
-		test(r("c349010000000000000000") == byte_string(to_vector("010000000000000000")));
+		test(r("c349010000000000000000") == binary(to_vector("010000000000000000")));
 
 		test(r("20") == -1ll);
 		test(r("29") == -10ll);
@@ -87,25 +87,25 @@ namespace goldfish { namespace dom
 		test(r("f6") == nullptr);
 		test(r("f7") == undefined{});
 
-		test(r("c074323031332d30332d32315432303a30343a30305a") == text_string("2013-03-21T20:04:00Z"));
+		test(r("c074323031332d30332d32315432303a30343a30305a") == string("2013-03-21T20:04:00Z"));
 
 		test(r("c11a514b67b0") == 1363896240ull);
 		test(r("c1fb41d452d9ec200000") == 1363896240.5);
-		test(r("c074323031332d30332d32315432303a30343a30305a") == text_string("2013-03-21T20:04:00Z"));
-		test(r("c074323031332d30332d32315432303a30343a30305a") == text_string("2013-03-21T20:04:00Z"));
-		test(r("d74401020304") == byte_string(to_vector("01020304")));
-		test(r("d818456449455446") == byte_string(to_vector("6449455446")));
-		test(r("d82076687474703a2f2f7777772e6578616d706c652e636f6d") == text_string("http://www.example.com"));
+		test(r("c074323031332d30332d32315432303a30343a30305a") == string("2013-03-21T20:04:00Z"));
+		test(r("c074323031332d30332d32315432303a30343a30305a") == string("2013-03-21T20:04:00Z"));
+		test(r("d74401020304") == binary(to_vector("01020304")));
+		test(r("d818456449455446") == binary(to_vector("6449455446")));
+		test(r("d82076687474703a2f2f7777772e6578616d706c652e636f6d") == string("http://www.example.com"));
 
-		test(r("40") == byte_string(to_vector("")));
-		test(r("4401020304") == byte_string(to_vector("01020304")));
+		test(r("40") == binary(to_vector("")));
+		test(r("4401020304") == binary(to_vector("01020304")));
 
-		test(r("60") == text_string(""));
-		test(r("6161") == text_string("a"));
-		test(r("6449455446") == text_string("IETF"));
-		test(r("62225c") == text_string("\"\\"));
-		test(r("62c3bc") == text_string(u8"\u00fc"));
-		test(r("63e6b0b4") == text_string(u8"\u6c34"));
+		test(r("60") == string(""));
+		test(r("6161") == string("a"));
+		test(r("6449455446") == string("IETF"));
+		test(r("62225c") == string("\"\\"));
+		test(r("62c3bc") == string(u8"\u00fc"));
+		test(r("63e6b0b4") == string(u8"\u6c34"));
 		
 		test(r("80") == array{});
 		test(r("83010203") == array{ 1ull, 2ull, 3ull });
@@ -119,19 +119,19 @@ namespace goldfish { namespace dom
 		test(r("a0") == map{});
 		test(r("a201020304") == map{ { 1ull, 2ull }, { 3ull, 4ull } });
 		test(r("a26161016162820203") == map{
-			{ text_string("a"), 1ull },
-			{ text_string("b"), array{ 2ull, 3ull } }
+			{ string("a"), 1ull },
+			{ string("b"), array{ 2ull, 3ull } }
 		});
-		test(r("826161a161626163") == array{ text_string("a"), map{ { text_string("b"), text_string("c") } } });
+		test(r("826161a161626163") == array{ string("a"), map{ { string("b"), string("c") } } });
 		test(r("a56161614161626142616361436164614461656145") == map{
-			{ text_string("a"), text_string("A") },
-			{ text_string("b"), text_string("B") },
-			{ text_string("c"), text_string("C") },
-			{ text_string("d"), text_string("D") },
-			{ text_string("e"), text_string("E") }
+			{ string("a"), string("A") },
+			{ string("b"), string("B") },
+			{ string("c"), string("C") },
+			{ string("d"), string("D") },
+			{ string("e"), string("E") }
 		});
-		test(r("5f42010243030405ff") == byte_string(to_vector("0102030405")));
-		test(r("7f657374726561646d696e67ff") == text_string("streaming"));
+		test(r("5f42010243030405ff") == binary(to_vector("0102030405")));
+		test(r("7f657374726561646d696e67ff") == string("streaming"));
 		test(r("9fff") == array{});
 		test(r("9f018202039f0405ffff") == array{ 1ull, array{ 2ull, 3ull }, array{ 4ull, 5ull }});
 		test(r("9f01820203820405ff") == array{ 1ull, array{ 2ull, 3ull }, array{ 4ull, 5ull }});
@@ -143,18 +143,18 @@ namespace goldfish { namespace dom
 			16ull, 17ull, 18ull, 19ull, 20ull, 21ull, 22ull,
 			23ull, 24ull, 25ull });
 		test(r("bf61610161629f0203ffff") == map{
-			{ text_string("a"), 1ull },
-			{ text_string("b"), array{ 2ull, 3ull } }
+			{ string("a"), 1ull },
+			{ string("b"), array{ 2ull, 3ull } }
 		});
-		test(r("826161bf61626163ff") == array{ text_string("a"), map{ { text_string("b"), text_string("c") } } });
-		test(r("bf6346756ef563416d7421ff") == map{ { text_string("Fun"), true }, { text_string("Amt"), -2ll } });
+		test(r("826161bf61626163ff") == array{ string("a"), map{ { string("b"), string("c") } } });
+		test(r("bf6346756ef563416d7421ff") == map{ { string("Fun"), true }, { string("Amt"), -2ll } });
 	}
 
 	TEST_CASE(seek_in_finite_string)
 	{
 		auto binary = to_vector("6449455446"); // IETF
 		stream::array_ref_reader s(binary);
-		auto result = cbor::read(stream::ref(s)).as<tags::text_string>();
+		auto result = cbor::read(stream::ref(s)).as<tags::string>();
 
 		test(stream::seek(result, 0) == 0);
 		test(stream::read<char>(result) == 'I');
@@ -167,7 +167,7 @@ namespace goldfish { namespace dom
 	{
 		auto binary = to_vector("7f657374726561646d696e67ff"); // "strea" "ming"
 		stream::array_ref_reader s(binary);
-		auto result = cbor::read(stream::ref(s)).as<tags::text_string>();
+		auto result = cbor::read(stream::ref(s)).as<tags::string>();
 
 		test(stream::seek(result, 0) == 0);
 		test(stream::read<char>(result) == 's');
@@ -182,7 +182,7 @@ namespace goldfish { namespace dom
 	{
 		auto binary = to_vector("7f657374726561646d696e67ff"); // "strea" "ming"
 		stream::array_ref_reader s(binary);
-		auto result = cbor::read(stream::ref(s)).as<tags::text_string>();
+		auto result = cbor::read(stream::ref(s)).as<tags::string>();
 
 		test(stream::seek(result, 8) == 8);
 		test(stream::read<char>(result) == 'g');
@@ -193,6 +193,6 @@ namespace goldfish { namespace dom
 	{
 		auto binary = to_vector("7f657374726561646d696e67ff"); // "strea" "ming"
 		stream::array_ref_reader s(binary);
-		test(stream::seek(cbor::read(stream::ref(s)).as<tags::text_string>(), 10) == 9);
+		test(stream::seek(cbor::read(stream::ref(s)).as<tags::string>(), 10) == 9);
 	}
 }}

@@ -38,7 +38,7 @@ namespace goldfish
 		template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, optional<size_t>> search(Document& d) const
 		{
 			return d.visit(first_match(
-				[&](auto& text, tags::text_string) -> optional<size_t>
+				[&](auto& text, tags::string) -> optional<size_t>
 				{
 					uint8_t buffer[max_length];
 					auto length = text.read_buffer(buffer);

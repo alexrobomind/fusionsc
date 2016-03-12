@@ -44,10 +44,10 @@ namespace goldfish { namespace dom
 		{}
 	};
 
-	inline document text_string(const char* data, size_t size) { return std::string{ data, data + size }; }
-	inline document text_string(const char* data) { return text_string(data, strlen(data)); }
-	inline document text_string(const std::string& data) { return text_string(data.data(), data.size()); }
+	inline document string(const char* data, size_t size) { return std::string{ data, data + size }; }
+	inline document string(const char* data) { return string(data, strlen(data)); }
+	inline document string(const std::string& data) { return string(data.data(), data.size()); }
 
-	inline document byte_string(const uint8_t* data, size_t size) { return std::vector<uint8_t>{ data, data + size }; }
-	inline document byte_string(const std::vector<uint8_t>& data) { return byte_string(data.data(), data.size()); }
+	inline document binary(const uint8_t* data, size_t size) { return std::vector<uint8_t>{ data, data + size }; }
+	inline document binary(const std::vector<uint8_t>& data) { return binary(data.data(), data.size()); }
 }}
