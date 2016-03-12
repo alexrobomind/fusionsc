@@ -32,10 +32,10 @@ TEST_CASE(parse_document)
 	using namespace goldfish;
 
 	static const schema s{ "a", "b", "c" };
-	auto document = apply_schema(json::read(stream::read_string_literal("{\"a\":1,\"c\":3.0}")).as<tags::map>(), s);
+	auto document = apply_schema(json::read(stream::read_string_literal("{\"a\":1,\"c\":3.0}")).as_map(), s);
 
-	test(document.read_value("a")->as<uint64_t>() == 1);
+	test(document.read_value("a")->as_uint() == 1);
 	test(document.read_value("b") == nullopt);
-	test(document.read_value("c")->as<double>() == 3.0);
+	test(document.read_value("c")->as_double() == 3.0);
 	seek_to_end(document);
 }

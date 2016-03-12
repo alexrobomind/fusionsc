@@ -10,42 +10,54 @@ namespace goldfish
 	{
 		auto r = [](auto input)
 		{
-			return json::read(stream::read_string_literal(input)).as<tags::floating_point>();
+			return json::read(stream::read_string_literal(input)).as_double();
 		};
 		test(r("1") == 1);
 		test(r("-1") == -1);
 		test(r("1.0") == 1);
+		test(r("\"1.0\"") == 1);
+		test(r("\"1\"") == 1);
+		test(r("\"-1\"") == -1);
 		expect_exception<bad_variant_access>([&]{ r("[]"); });
 	}
 	TEST_CASE(test_conversion_to_signed_int)
 	{
 		auto r = [](auto input)
 		{
-			return json::read(stream::read_string_literal(input)).as<tags::signed_int>();
+			return json::read(stream::read_string_literal(input)).as_int();
 		};
 		test(r("1") == 1);
 		test(r("-1") == -1);
 		test(r("9223372036854775807") == 9223372036854775807ll);
+
+		test(r("\"1\"") == 1);
+		test(r("\"-1\"") == -1);
+
 		expect_exception<integer_overflow>([&] { r("9223372036854775808"); });
 		expect_exception<bad_variant_access>([&] { r("1.0"); });
+		expect_exception<bad_variant_access>([&] { r("\"1.0\""); });
 		expect_exception<bad_variant_access>([&] { r("[]"); });
 	}
 	TEST_CASE(test_conversion_to_unsigned_int)
 	{
 		auto r = [](auto input)
 		{
-			return json::read(stream::read_string_literal(input)).as<tags::unsigned_int>();
+			return json::read(stream::read_string_literal(input)).as_uint();
 		};
 		test(r("1") == 1);
-		expect_exception<bad_variant_access>([&] { r("-1"); });
+		expect_exception<integer_overflow>([&] { r("-1"); });
 		expect_exception<bad_variant_access>([&] { r("1.0"); });
 		expect_exception<bad_variant_access>([&] { r("[]"); });
+
+		test(r("\"1\"") == 1);
+		expect_exception<bad_variant_access>([&] { r("\"1.0\""); });
+		expect_exception<integer_overflow>([&] { r("\"-1\""); });
 	}
 	TEST_CASE(test_conversion_to_binary)
 	{
 		auto r = [](auto input)
 		{
-			return stream::read_all_as_string(json::read(stream::read_string_literal(input)).as<tags::binary>());
+			return stream::read_all_as_string(json::read(stream::read_string_literal(input)).as_binary());
 		};
 		test(r("\"YW55IGNhcm5hbCBwbGVhc3VyZS4\"") == "any carnal pleasure.");
 	}
