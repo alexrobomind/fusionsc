@@ -15,8 +15,8 @@ namespace goldfish { namespace dom
 		}
 
 		template <class writer> void write(writer& writer, bool x) { writer.write(x); }
-		template <class writer> void write(writer& writer, nullptr_t) { writer.write(nullptr); }
-		template <class writer> void write(writer& writer, tags::undefined) { writer.write_undefined(); }
+		template <class writer> void write(writer& writer, nullptr_t x) { writer.write(x); }
+		template <class writer> void write(writer& writer, tags::undefined x) { writer.write(x); }
 		template <class writer> void write(writer& writer, uint64_t x) { writer.write(x); }
 		template <class writer> void write(writer& writer, int64_t x) { writer.write(x); }
 		template <class writer> void write(writer& writer, double x) { writer.write(x); }

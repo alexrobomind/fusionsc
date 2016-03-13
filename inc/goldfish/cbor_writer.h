@@ -100,7 +100,7 @@ namespace goldfish { namespace cbor
 			auto i = *reinterpret_cast<uint64_t*>(&x);
 			stream::write(m_stream, byte_swap(i));
 		}
-		void write_undefined() 
+		void write(tags::undefined) 
 		{
 			stream::write(m_stream, static_cast<uint8_t>((7 << 5) | 23));
 		}

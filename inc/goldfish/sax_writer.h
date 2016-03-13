@@ -59,7 +59,7 @@ namespace goldfish {
 				}
 				map_writer.flush();
 			},
-			[&](auto&& x, tags::undefined) { writer.write_undefined(); },
+			[&](auto&& x, tags::undefined) { writer.write(x); },
 			[&](auto&& x, tags::floating_point) { writer.write(x); },
 			[&](auto&& x, tags::unsigned_int) { writer.write(x); },
 			[&](auto&& x, tags::signed_int) { writer.write(x); },

@@ -121,7 +121,7 @@ namespace goldfish { namespace json
 		{
 			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>("null"), 4 });
 		}
-		void write_undefined()
+		void write(tags::undefined)
 		{
 			write(nullptr);
 		}

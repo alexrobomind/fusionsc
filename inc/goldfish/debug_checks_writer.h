@@ -201,10 +201,10 @@ namespace goldfish { namespace debug_checks
 			m_writer.write(x);
 			unlock_parent_and_lock_self();
 		}
-		void write_undefined()
+		void write(tags::undefined x)
 		{
 			err_if_locked();
-			m_writer.write_undefined();
+			m_writer.write(x);
 			unlock_parent_and_lock_self();
 		}
 		void write(uint64_t x)
