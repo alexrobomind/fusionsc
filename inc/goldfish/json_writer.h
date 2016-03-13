@@ -85,6 +85,7 @@ namespace goldfish { namespace json
 			: m_stream(std::move(s))
 		{}
 
+		template <class... Args> auto write(Args... args) { return append().write(std::forward<Args>(args)...); }
 		document_writer<stream::writer_ref_type_t<Stream>> append();
 		void flush() { stream::write(m_stream, ']'); }
 	private:
@@ -98,6 +99,9 @@ namespace goldfish { namespace json
 		map_writer(Stream&& s)
 			: m_stream(std::move(s))
 		{}
+
+		template <class... Args> auto write_key(Args... args) { return append_key().write(std::forward<Args>(args)...); }
+		template <class... Args> auto write_value(Args... args) { return append_value().write(std::forward<Args>(args)...); }
 		document_writer<stream::writer_ref_type_t<Stream>> append_key();
 		document_writer<stream::writer_ref_type_t<Stream>> append_value();
 		void flush() { stream::write(m_stream, '}'); }
