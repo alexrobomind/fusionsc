@@ -166,7 +166,7 @@ namespace goldfish { namespace dom
 		{
 			stream::vector_writer s;
 			auto writer = cbor::create_writer(stream::ref(s));
-			auto array = writer.write_array();
+			auto array = writer.write(tags::array{});
 			for (auto d : data)
 				write(array.append(), d);
 			array.flush();
@@ -188,7 +188,7 @@ namespace goldfish { namespace dom
 		{
 			stream::vector_writer s;
 			auto writer = cbor::create_writer(stream::ref(s));
-			auto map = writer.write_map();
+			auto map = writer.write(tags::map{});
 			for (auto d : data)
 			{
 				write(map.append_key(), d.first);
@@ -211,7 +211,7 @@ namespace goldfish { namespace dom
 		{
 			stream::vector_writer s;
 			auto writer = cbor::create_writer(stream::ref(s));
-			auto string = writer.write_text();
+			auto string = writer.write(tags::string{});
 			for (auto s : data)
 				string.write_buffer({ reinterpret_cast<const uint8_t*>(s.data()), s.size() });
 			string.flush();
@@ -228,7 +228,7 @@ namespace goldfish { namespace dom
 		{
 			stream::vector_writer s;
 			auto writer = cbor::create_writer(stream::ref(s));
-			auto binary = writer.write_binary();
+			auto binary = writer.write(tags::binary{});
 			for (auto d : data)
 				binary.write_buffer(d);
 			binary.flush();

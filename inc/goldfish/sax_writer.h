@@ -36,22 +36,22 @@ namespace goldfish {
 		document.visit(first_match(
 			[&](auto&& x, tags::binary)
 			{
-				copy_stream(x, [&](auto cb) { return writer.write_binary(cb); }, [&] { return writer.write_binary(); });
+				copy_stream(x, [&](auto cb) { return writer.write(tags::binary{}, cb); }, [&] { return writer.write(tags::binary{}); });
 			},
 			[&](auto&& x, tags::string)
 			{
-				copy_stream(x, [&](auto cb) { return writer.write_text(cb); }, [&] { return writer.write_text(); });
+				copy_stream(x, [&](auto cb) { return writer.write(tags::string{}, cb); }, [&] { return writer.write(tags::string{}); });
 			},
 			[&](auto&& x, tags::array)
 			{
-				auto array_writer = writer.write_array();
+				auto array_writer = writer.write(tags::array{});
 				while (auto element = x.read())
 					copy_document(array_writer.append(), *element);
 				array_writer.flush();
 			},
 			[&](auto&& x, tags::map)
 			{
-				auto map_writer = writer.write_map();
+				auto map_writer = writer.write(tags::map{});
 				while (auto key = x.read_key())
 				{
 					copy_document(map_writer.append_key(), *key);

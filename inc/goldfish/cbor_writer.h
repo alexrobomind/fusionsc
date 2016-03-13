@@ -107,37 +107,34 @@ namespace goldfish { namespace cbor
 
 		void write(uint64_t x) { details::write_integer<0>(m_stream, x); }
 		void write(int64_t x) { details::write_integer<1>(m_stream, static_cast<uint64_t>(-1ll - x)); }
-		stream_writer<Stream> write_binary(uint64_t cb)
+
+		stream_writer<Stream> write(tags::binary, uint64_t cb)
 		{
 			details::write_integer<2>(m_stream, cb);
 			return{ std::move(m_stream) };
 		}
-		stream_writer<Stream> write_text(uint64_t cb)
-		{
-			details::write_integer<3>(m_stream, cb);
-			return{ std::move(m_stream) };
-		}
-		indefinite_stream_writer<Stream, 2> write_binary()
+		indefinite_stream_writer<Stream, 2> write(tags::binary)
 		{
 			stream::write(m_stream, static_cast<uint8_t>((2 << 5) | 31));
 			return{ std::move(m_stream) };
 		}
-		indefinite_stream_writer<Stream, 3> write_text()
+
+		stream_writer<Stream> write(tags::string, uint64_t cb)
+		{
+			details::write_integer<3>(m_stream, cb);
+			return{ std::move(m_stream) };
+		}
+		indefinite_stream_writer<Stream, 3> write(tags::string)
 		{
 			stream::write(m_stream, static_cast<uint8_t>((3 << 5) | 31));
 			return{ std::move(m_stream) };
 		}
 
-		array_writer<Stream> write_array(uint64_t size);
-		indefinite_array_writer<Stream> write_array();
+		array_writer<Stream> write(tags::array, uint64_t size);
+		indefinite_array_writer<Stream> write(tags::array);
 
-		map_writer<Stream> write_map(uint64_t size);
-		indefinite_map_writer<Stream> write_map();
-
-		template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, void> write(Document& d)
-		{
-			copy_document(*this, d);
-		}
+		map_writer<Stream> write(tags::map, uint64_t size);
+		indefinite_map_writer<Stream> write(tags::map);
 
 	private:
 		Stream m_stream;
@@ -178,12 +175,12 @@ namespace goldfish { namespace cbor
 	private:
 		Stream m_stream;
 	};
-	template <class Stream> array_writer<Stream> document_writer<Stream>::write_array(uint64_t size)
+	template <class Stream> array_writer<Stream> document_writer<Stream>::write(tags::array, uint64_t size)
 	{
 		details::write_integer<4>(m_stream, size);
 		return{ std::move(m_stream) };
 	}
-	template <class Stream> indefinite_array_writer<Stream> document_writer<Stream>::write_array()
+	template <class Stream> indefinite_array_writer<Stream> document_writer<Stream>::write(tags::array)
 	{
 		stream::write(m_stream, static_cast<uint8_t>((4 << 5) | 31));
 		return{ std::move(m_stream) };
@@ -215,12 +212,12 @@ namespace goldfish { namespace cbor
 	private:
 		Stream m_stream;
 	};
-	template <class Stream> map_writer<Stream> document_writer<Stream>::write_map(uint64_t size)
+	template <class Stream> map_writer<Stream> document_writer<Stream>::write(tags::map, uint64_t size)
 	{
 		details::write_integer<5>(m_stream, size);
 		return{ std::move(m_stream) };
 	}
-	template <class Stream> indefinite_map_writer<Stream> document_writer<Stream>::write_map()
+	template <class Stream> indefinite_map_writer<Stream> document_writer<Stream>::write(tags::map)
 	{
 		stream::write(m_stream, static_cast<uint8_t>((5 << 5) | 31));
 		return{ std::move(m_stream) };

@@ -76,7 +76,7 @@ int main(int argc, char* argv[])
 		auto document = json::read(stream::read_buffer_ref(json_data));
 
 		stream::vector_writer output_stream;
-		cbor::create_writer(stream::ref(output_stream)).write(document);
+		copy_document(cbor::create_writer(stream::ref(output_stream)), document);
 		output_stream.flush();
 
 		return move(output_stream.data);

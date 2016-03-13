@@ -154,37 +154,33 @@ namespace goldfish { namespace json
 			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(buffer), static_cast<size_t>(cb) });
 		}
 
-		auto write_binary(uint64_t cb) { return write_binary(); }
-		auto write_text(uint64_t cb) { return write_text(); }
-		binary_writer<Stream> write_binary()
+		auto write(tags::binary, uint64_t cb) { return write(tags::binary{}); }
+		auto write(tags::string, uint64_t cb) { return write(tags::string{}); }
+		binary_writer<Stream> write(tags::binary)
 		{
 			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>("\"\\/B"), 4 });
 			return{ std::move(m_stream) };
 		}
-		text_writer<Stream> write_text()
+		text_writer<Stream> write(tags::string)
 		{
 			stream::write(m_stream, '"');
 			return{ std::move(m_stream) };
 		}
 
-		auto write_array(uint64_t size) { return write_array(); }
-		array_writer<Stream> write_array()
+		auto write(tags::array, uint64_t size) { return write(tags::array{}); }
+		array_writer<Stream> write(tags::array)
 		{
 			stream::write(m_stream, '[');
 			return{ std::move(m_stream) };
 		}
 		
-		auto write_map(uint64_t size) { return write_map(); }
-		map_writer<Stream> write_map()
+		auto write(tags::map, uint64_t size) { return write(tags::map{}); }
+		map_writer<Stream> write(tags::map)
 		{
 			stream::write(m_stream, '{');
 			return{ std::move(m_stream) };
 		}
 
-		template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, void> write(Document& d)
-		{
-			copy_document(*this, d);
-		}
 	private:
 		Stream m_stream;
 	};
