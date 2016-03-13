@@ -68,7 +68,7 @@ namespace goldfish { namespace debug_checks
 			, m_writer(std::move(writer))
 		{}
 
-		template <class... Args> auto write(Args... args) { return append().write(std::forward<Args>(args)...); }
+		template <class... Args> auto write(Args&&... args) { return append().write(std::forward<Args>(args)...); }
 		auto append()
 		{
 			err_if_locked();
@@ -93,7 +93,7 @@ namespace goldfish { namespace debug_checks
 			, m_c_left(c)
 		{}
 
-		template <class... Args> auto write(Args... args) { return append().write(std::forward<Args>(args)...); }
+		template <class... Args> auto write(Args&&... args) { return append().write(std::forward<Args>(args)...); }
 		auto append()
 		{
 			if (m_c_left == 0)
@@ -121,8 +121,8 @@ namespace goldfish { namespace debug_checks
 			, m_writer(std::move(writer))
 		{}
 
-		template <class... Args> auto write_key(Args... args) { return append_key().write(std::forward<Args>(args)...); }
-		template <class... Args> auto write_value(Args... args) { return append_value().write(std::forward<Args>(args)...); }
+		template <class... Args> auto write_key(Args&&... args) { return append_key().write(std::forward<Args>(args)...); }
+		template <class... Args> auto write_value(Args&&... args) { return append_value().write(std::forward<Args>(args)...); }
 		auto append_key()
 		{
 			err_if_locked();
@@ -157,8 +157,8 @@ namespace goldfish { namespace debug_checks
 			, m_c_left(c)
 		{}
 
-		template <class... Args> auto write_key(Args... args) { return append_key().write(std::forward<Args>(args)...); }
-		template <class... Args> auto write_value(Args... args) { return append_value().write(std::forward<Args>(args)...); }
+		template <class... Args> auto write_key(Args&&... args) { return append_key().write(std::forward<Args>(args)...); }
+		template <class... Args> auto write_value(Args&&... args) { return append_value().write(std::forward<Args>(args)...); }
 		auto append_key()
 		{
 			if (m_c_left == 0)

@@ -49,7 +49,7 @@ namespace goldfish { namespace dom
 		auto w = [&](const document& d)
 		{
 			stream::vector_writer s;
-			write(cbor::create_writer(stream::ref(s)), d);
+			copy_dom_document(cbor::create_writer(stream::ref(s)), d);
 			s.flush();
 			return to_hex_string(s.data);
 		};
@@ -165,10 +165,9 @@ namespace goldfish { namespace dom
 		auto w = [&](const std::vector<document>& data)
 		{
 			stream::vector_writer s;
-			auto writer = cbor::create_writer(stream::ref(s));
-			auto array = writer.write(tags::array{});
+			auto array = cbor::write(stream::ref(s), tags::array{});
 			for (auto d : data)
-				write(array.append(), d);
+				copy_dom_document(array.append(), d);
 			array.flush();
 			s.flush();
 			return to_hex_string(s.data);
@@ -187,12 +186,11 @@ namespace goldfish { namespace dom
 		auto w = [&](const std::vector<std::pair<document, document>>& data)
 		{
 			stream::vector_writer s;
-			auto writer = cbor::create_writer(stream::ref(s));
-			auto map = writer.write(tags::map{});
+			auto map = cbor::write(stream::ref(s), tags::map{});
 			for (auto d : data)
 			{
-				write(map.append_key(), d.first);
-				write(map.append_value(), d.second);
+				copy_dom_document(map.append_key(), d.first);
+				copy_dom_document(map.append_value(), d.second);
 			}
 			map.flush();
 			s.flush();
@@ -210,8 +208,7 @@ namespace goldfish { namespace dom
 		auto w = [&](const std::vector<std::string>& data)
 		{
 			stream::vector_writer s;
-			auto writer = cbor::create_writer(stream::ref(s));
-			auto string = writer.write(tags::string{});
+			auto string = cbor::write(stream::ref(s), tags::string{});
 			for (auto s : data)
 				string.write_buffer({ reinterpret_cast<const uint8_t*>(s.data()), s.size() });
 			string.flush();
@@ -227,8 +224,7 @@ namespace goldfish { namespace dom
 		auto w = [&](const std::vector<std::vector<uint8_t>>& data)
 		{
 			stream::vector_writer s;
-			auto writer = cbor::create_writer(stream::ref(s));
-			auto binary = writer.write(tags::binary{});
+			auto binary = cbor::write(stream::ref(s), tags::binary{});
 			for (auto d : data)
 				binary.write_buffer(d);
 			binary.flush();

@@ -17,7 +17,7 @@ TEST_CASE(convert_json_to_cbor)
 	// Note that all the streams need to be flushed to ensure that there any potentially
 	// buffered data is serialized.
 	stream::vector_writer output_stream;
-	copy_document(cbor::create_writer(stream::ref(output_stream)), document);
+	copy_sax_document(cbor::create_writer(stream::ref(output_stream)), document);
 	output_stream.flush();
 
 	// output_stream.data contains the CBOR document

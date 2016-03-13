@@ -6,7 +6,7 @@
 
 namespace goldfish {
 	template <class DocumentWriter, class Document>
-	std::enable_if_t<tags::has_tag<std::decay_t<Document>, tags::document>::value, void> copy_document(DocumentWriter&& writer, Document&& document)
+	std::enable_if_t<tags::has_tag<std::decay_t<Document>, tags::document>::value, void> copy_sax_document(DocumentWriter&& writer, Document&& document)
 	{
 		auto copy_stream = [](auto& s, auto&& output_stream_generator_known_size, auto&& output_stream_generator_unknown_size)
 		{
@@ -46,7 +46,7 @@ namespace goldfish {
 			{
 				auto array_writer = writer.write(tags::array{});
 				while (auto element = x.read())
-					copy_document(array_writer.append(), *element);
+					copy_sax_document(array_writer.append(), *element);
 				array_writer.flush();
 			},
 			[&](auto&& x, tags::map)
@@ -54,8 +54,8 @@ namespace goldfish {
 				auto map_writer = writer.write(tags::map{});
 				while (auto key = x.read_key())
 				{
-					copy_document(map_writer.append_key(), *key);
-					copy_document(map_writer.append_value(), x.read_value());
+					copy_sax_document(map_writer.append_key(), *key);
+					copy_sax_document(map_writer.append_value(), x.read_value());
 				}
 				map_writer.flush();
 			},
