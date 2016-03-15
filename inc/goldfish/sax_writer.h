@@ -5,43 +5,37 @@
 #include <type_traits>
 
 namespace goldfish {
+	template <class Stream, class Writer, class Tag> auto copy_stream(Stream& s, Writer& writer, Tag tag)
+	{
+		uint8_t buffer[8 * 1024];
+		auto cb = s.read_buffer(buffer);
+		if (cb < sizeof(buffer))
+		{
+			// We read the entire stream
+			auto output_stream = writer.write(tag, cb);
+			output_stream.write_buffer({ buffer, cb });
+			output_stream.flush();
+		}
+		else
+		{
+			// We read only a portion of the stream
+			auto output_stream = writer.write(tag);
+			output_stream.write_buffer(buffer);
+			do
+			{
+				cb = s.read_buffer(buffer);
+				output_stream.write_buffer({ buffer, cb });
+			} while (cb == sizeof(buffer));
+			output_stream.flush();
+		}
+	};
+
 	template <class DocumentWriter, class Document>
 	std::enable_if_t<tags::has_tag<std::decay_t<Document>, tags::document>::value, void> copy_sax_document(DocumentWriter&& writer, Document&& document)
 	{
-		auto copy_stream = [](auto& s, auto&& output_stream_generator_known_size, auto&& output_stream_generator_unknown_size)
-		{
-			uint8_t buffer[8 * 1024];
-			auto cb = s.read_buffer(buffer);
-			if (cb < sizeof(buffer))
-			{
-				// We read the entire stream
-				auto output_stream = output_stream_generator_known_size(cb);
-				output_stream.write_buffer({ buffer, cb });
-				output_stream.flush();
-			}
-			else
-			{
-				// We read only a portion of the stream
-				auto output_stream = output_stream_generator_unknown_size();
-				output_stream.write_buffer(buffer);
-				do
-				{
-					cb = s.read_buffer(buffer);
-					output_stream.write_buffer({ buffer, cb });
-				} while (cb == sizeof(buffer));
-				output_stream.flush();
-			}
-		};
-
 		document.visit(first_match(
-			[&](auto&& x, tags::binary)
-			{
-				copy_stream(x, [&](auto cb) { return writer.write(tags::binary{}, cb); }, [&] { return writer.write(tags::binary{}); });
-			},
-			[&](auto&& x, tags::string)
-			{
-				copy_stream(x, [&](auto cb) { return writer.write(tags::string{}, cb); }, [&] { return writer.write(tags::string{}); });
-			},
+			[&](auto&& x, tags::binary) { copy_stream(x, writer, tags::binary{}); },
+			[&](auto&& x, tags::string) { copy_stream(x, writer, tags::string{}); },
 			[&](auto&& x, tags::array)
 			{
 				auto array_writer = writer.write(tags::array{});

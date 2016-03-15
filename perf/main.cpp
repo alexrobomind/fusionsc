@@ -33,7 +33,7 @@ void measure(Lambda&& l, size_t document_size)
 
 	sort(durations.begin(), durations.end());
 	double average_duration = (double)accumulate(durations.begin(), durations.end(), chrono::milliseconds(0)).count() / durations.size();
-	cout << "average: " << average_duration << "ms (" << document_size / (average_duration * 1000) << "MiB/s) on " << durations.size() << " samples\n";
+	cout << "average: " << average_duration << "ms (" << document_size / (average_duration * 1000) << "MB/s) on " << durations.size() << " samples\n";
 	cout << "best: " << durations.front().count() << "ms\tworst: " << durations.back().count() << "ms\n";
 }
 

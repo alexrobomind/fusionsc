@@ -37,7 +37,7 @@ namespace goldfish
 				return l(std::forward<decltype(x)>(x), tags::get_tag(x));
 			});
 		}
-		type_with_tag_t<tags::string> as_string() { return std::move(m_data).as<type_with_tag_t<tags::string>>(); }
+		auto as_string() { return std::move(m_data).as<type_with_tag_t<tags::string>>(); }
 		auto as_binary(std::true_type /*does_json_conversion*/) { return stream::base64(as_string()); }
 		auto as_binary(std::false_type /*does_json_conversion*/) { return std::move(m_data).as<type_with_tag_t<tags::binary>>(); }
 		auto as_binary() { return as_binary(std::integral_constant<bool, does_json_conversions>()); }
