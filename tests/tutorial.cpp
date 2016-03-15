@@ -39,3 +39,16 @@ TEST_CASE(parse_document)
 	test(document.read_value("c")->as_double() == 3.0);
 	seek_to_end(document);
 }
+
+#include <goldfish/dom_writer.h>
+#include <goldfish/json_writer.h>
+
+TEST_CASE(generate_json_document)
+{
+	using namespace goldfish;
+	
+	stream::string_writer output_stream;
+	copy_dom_document(json::create_writer(stream::ref(output_stream)), true);
+	output_stream.flush();
+	test(output_stream.data == "true");
+}

@@ -25,17 +25,17 @@ namespace goldfish { namespace cbor
 			else if (x <= std::numeric_limits<uint16_t>::max())
 			{
 				stream::write(s, static_cast<uint8_t>((major << 5) | 25));
-				stream::write(s, byte_swap(static_cast<uint16_t>(x)));
+				stream::write(s, to_big_endian(static_cast<uint16_t>(x)));
 			}
 			else if (x <= std::numeric_limits<uint32_t>::max())
 			{
 				stream::write(s, static_cast<uint8_t>((major << 5) | 26));
-				stream::write(s, byte_swap(static_cast<uint32_t>(x)));
+				stream::write(s, to_big_endian(static_cast<uint32_t>(x)));
 			}
 			else
 			{
 				stream::write(s, static_cast<uint8_t>((major << 5) | 27));
-				stream::write(s, byte_swap(x));
+				stream::write(s, to_big_endian(x));
 			}
 		}
 	}
@@ -98,7 +98,7 @@ namespace goldfish { namespace cbor
 		{
 			stream::write(m_stream, static_cast<uint8_t>((7 << 5) | 27));
 			auto i = *reinterpret_cast<uint64_t*>(&x);
-			stream::write(m_stream, byte_swap(i));
+			stream::write(m_stream, to_big_endian(i));
 		}
 		void write(tags::undefined) 
 		{
