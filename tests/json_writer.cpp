@@ -7,12 +7,12 @@
 
 namespace goldfish { namespace dom
 {
-	TEST_CASE(string)
+	TEST_CASE(test_string)
 	{
 		auto w = [&](const document& d)
 		{
 			stream::string_writer s;
-			write(json::create_writer(stream::ref(s)), d);
+			copy_dom_document(json::create_writer(stream::ref(s)), d);
 			s.flush();
 			return s.data;
 		};
@@ -20,7 +20,7 @@ namespace goldfish { namespace dom
 		test(w(true) == "true");
 		test(w(false) == "false");
 		test(w(nullptr) == "null");
-		test(w(undefined{}) == "null");
+		test(w(tags::undefined{}) == "null");
 		test(w(0ull) == "0");
 		test(w(1ull) == "1");
 		test(w(std::numeric_limits<uint64_t>::max()) == "18446744073709551615");
@@ -29,19 +29,19 @@ namespace goldfish { namespace dom
 		test(w(-1ll) == "-1");
 		test(w(std::numeric_limits<int64_t>::max()) == "9223372036854775807");
 		test(w(std::numeric_limits<int64_t>::min()) == "-9223372036854775808");
-		test(w(text_string("")) == "\"\"");
-		test(w(text_string(u8"a\u0001\b\n\r\t\"\\/")) == "\"a\\u0001\\b\\n\\r\\t\\\"\\\\/\"");
+		test(w(string("")) == "\"\"");
+		test(w(string(u8"a\u0001\b\n\r\t\"\\/")) == "\"a\\u0001\\b\\n\\r\\t\\\"\\\\/\"");
 		test(w(array{}) == "[]");
 		test(w(array{ 1ull }) == "[1]");
-		test(w(array{ 1ull, text_string("abc"), array{} }) == "[1,\"abc\",[]]");
+		test(w(array{ 1ull, string("abc"), array{} }) == "[1,\"abc\",[]]");
 		test(w(map{}) == "{}");
-		test(w(map{ { text_string("a"), 1ull } }) == "{\"a\":1}");
-		test(w(map{ { text_string("a"), 1ull }, { text_string("b"), 2ull } }) == "{\"a\":1,\"b\":2}");
+		test(w(map{ { string("a"), 1ull } }) == "{\"a\":1}");
+		test(w(map{ { string("a"), 1ull }, { string("b"), 2ull } }) == "{\"a\":1,\"b\":2}");
 
-		test(w(text_string("/B")) == "\"/B\"");
-		test(w(byte_string({})) == "\"\\/B\"");
-		test(w(byte_string({ 1 })) == "\"\\/BAQ==\"");
-		test(w(byte_string({ 1, 2, 3 })) == "\"\\/BAQID\"");
+		test(w(string("/B")) == "\"/B\"");
+		test(w(binary({})) == "\"\\/B\"");
+		test(w(binary({ 1 })) == "\"\\/BAQ==\"");
+		test(w(binary({ 1, 2, 3 })) == "\"\\/BAQID\"");
 		test(w(map{ { 1ull, 1ull } }) == "{1:1}");
 	}
 
@@ -50,7 +50,7 @@ namespace goldfish { namespace dom
 		auto run = [](const char* data)
 		{
 			auto w = stream::string_writer{};
-			dom::write(json::create_writer(stream::ref(w)), dom::load_in_memory(json::read(stream::read_string_literal(data))));
+			copy_dom_document(json::create_writer(stream::ref(w)), dom::load_in_memory(json::read(stream::read_string_literal(data))));
 			w.flush();
 			test(data == w.data);
 		};

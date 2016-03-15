@@ -37,34 +37,21 @@ namespace goldfish
 				return l(std::forward<decltype(x)>(x), tags::get_tag(x));
 			});
 		}
-
-		template <class tag> bool is() const noexcept
-		{
-			static_assert(tags::is_tag<tag>::value, "document::is must be called with a tag (see tags.h)");
-			return m_data.visit([&](auto&& x)
-			{
-				return std::is_same<tag, decltype(tags::get_tag(x))>::value;
-			});
-		}
-
-		template <class tag> auto as() { return std::move(*this).as_impl(tags::tag_t<tag>{}, std::integral_constant<bool, does_json_conversions>{}); }
-
-		using invalid_state = typename variant<types...>::invalid_state;
-	private:
-		// Default: no conversion
-		template <class tag, class json_conversion> decltype(auto) as_impl(tag, json_conversion)
-		{
-			return std::move(m_data).as<type_with_tag_t<tag>>();
-		}
+		auto as_string() { return std::move(m_data).as<type_with_tag_t<tags::string>>(); }
+		auto as_binary(std::true_type /*does_json_conversion*/) { return stream::base64(as_string()); }
+		auto as_binary(std::false_type /*does_json_conversion*/) { return std::move(m_data).as<type_with_tag_t<tags::binary>>(); }
+		auto as_binary() { return as_binary(std::integral_constant<bool, does_json_conversions>()); }
+		auto as_array() { return std::move(m_data).as<type_with_tag_t<tags::array>>(); }
+		auto as_map() { return std::move(m_data).as<type_with_tag_t<tags::map>>(); }
 
 		// Floating point can be converted from an int
-		template <class json_conversion> double as_impl(tags::floating_point, json_conversion)
+		auto as_double()
 		{
 			return visit(first_match(
 				[](auto&& x, tags::floating_point) -> double { return x; },
 				[](auto&& x, tags::unsigned_int) -> double { return static_cast<double>(x); },
 				[](auto&& x, tags::signed_int) -> double { return static_cast<double>(x); },
-				[](auto&& x, tags::text_string) -> double
+				[](auto&& x, tags::string) -> double
 				{
 					if (!does_json_conversions)
 						throw bad_variant_access();
@@ -76,33 +63,65 @@ namespace goldfish
 			));
 		}
 		
-		// Signed ints can be converted from unsigned ints
-		template <class json_conversion> int64_t as_impl(tags::signed_int, json_conversion)
+		// Unsigned ints can be converted from signed ints
+		uint64_t as_uint()
 		{
 			return visit(first_match(
-				[](auto&& x, tags::signed_int) -> int64_t { return x; },
-				[](auto&& x, tags::unsigned_int) -> int64_t
-				{
-					if (x > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
-						throw integer_overflow{};
-					return static_cast<int64_t>(x);
-				},
-				[](auto&& x, tags::text_string) -> int64_t
+				[](auto&& x, tags::unsigned_int) -> uint64_t { return x; },
+				[](auto&& x, tags::signed_int) -> uint64_t { return cast_signed_to_unsigned(x); },
+				[](auto&& x, tags::string) -> uint64_t
 				{
 					if (!does_json_conversions)
 						throw bad_variant_access();
 
 					auto s = stream::buffer<8>(stream::ref(x));
-					return json::read_number(s).visit([](auto&& x) -> int64_t { return static_cast<int64_t>(x); });
+					return json::read_number(s).visit(best_match(
+						[](uint64_t x) { return x; },
+						[](int64_t x) { return cast_signed_to_unsigned(x); },
+						[](double x) -> uint64_t { throw bad_variant_access{}; }));
+				},
+				[](auto&&, auto) -> uint64_t { throw bad_variant_access{}; }
+			));
+		}
+		
+		// Signed ints can be converted from unsigned ints
+		int64_t as_int()
+		{
+			return visit(first_match(
+				[](auto&& x, tags::signed_int) { return x; },
+				[](auto&& x, tags::unsigned_int) { return cast_unsigned_to_signed(x); },
+				[](auto&& x, tags::string) -> int64_t
+				{
+					if (!does_json_conversions)
+						throw bad_variant_access();
+
+					auto s = stream::buffer<8>(stream::ref(x));
+					return json::read_number(s).visit(best_match(
+						[](int64_t x) { return x; },
+						[](uint64_t x) { return cast_unsigned_to_signed(x); },
+						[](double x) -> int64_t { throw bad_variant_access{}; }
+					));
 				},
 				[](auto&&, auto) -> int64_t { throw bad_variant_access{}; }
 			));
 		}
+		auto as_bool() { return as<tags::boolean>(); }
+		bool is_undefined() { return m_data.is<type_with_tag_t<tags::undefined>>(); }
+		bool is_null() { return m_data.is<type_with_tag_t<tags::null>>(); }
 
-		// Byte strings are converted from text strings (assuming base64 text)
-		auto as_impl(tags::byte_string, std::true_type /*json_conversion*/)
+		using invalid_state = typename variant<types...>::invalid_state;
+	private:
+		static uint64_t cast_signed_to_unsigned(int64_t x)
 		{
-			return decode_base64(as<tags::text_string>());
+			if (x < 0)
+				throw integer_overflow{};
+			return static_cast<uint64_t>(x);
+		}
+		static int64_t cast_unsigned_to_signed(uint64_t x)
+		{
+			if (x > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
+				throw integer_overflow{};
+			return static_cast<int64_t>(x);
 		}
 
 		variant<types...> m_data;
@@ -118,11 +137,11 @@ namespace goldfish
 	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::signed_int>::value, void> seek_to_end(type&&) {}
 	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::boolean>::value, void> seek_to_end(type&&) {}
 	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::null>::value, void> seek_to_end(type&&) {}
-	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::byte_string>::value, void> seek_to_end(type&& x)
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::binary>::value, void> seek_to_end(type&& x)
 	{
 		stream::seek(x, std::numeric_limits<uint64_t>::max());
 	}
-	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::text_string>::value, void> seek_to_end(type&& x)
+	template <class type> std::enable_if_t<tags::has_tag<std::decay_t<type>, tags::string>::value, void> seek_to_end(type&& x)
 	{
 		stream::seek(x, std::numeric_limits<uint64_t>::max());
 	}

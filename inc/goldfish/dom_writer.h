@@ -2,11 +2,11 @@
 
 #include "dom.h"
 
-namespace goldfish { namespace dom
+namespace goldfish
 {
 	namespace details
 	{
-		template <class writer> void write(writer& writer, const document& d)
+		template <class writer> void write(writer& writer, const dom::document& d)
 		{
 			d.visit([&](auto&& x)
 			{ 
@@ -15,45 +15,45 @@ namespace goldfish { namespace dom
 		}
 
 		template <class writer> void write(writer& writer, bool x) { writer.write(x); }
-		template <class writer> void write(writer& writer, nullptr_t) { writer.write(nullptr); }
-		template <class writer> void write(writer& writer, undefined) { writer.write_undefined(); }
+		template <class writer> void write(writer& writer, nullptr_t x) { writer.write(x); }
+		template <class writer> void write(writer& writer, tags::undefined x) { writer.write(x); }
 		template <class writer> void write(writer& writer, uint64_t x) { writer.write(x); }
 		template <class writer> void write(writer& writer, int64_t x) { writer.write(x); }
 		template <class writer> void write(writer& writer, double x) { writer.write(x); }
 
 		template <class writer> void write(writer& writer, const std::vector<uint8_t>& x)
 		{
-			auto d = writer.write_binary(x.size());
+			auto d = writer.write(tags::binary{}, x.size());
 			d.write_buffer(const_buffer_ref{ x.data(), x.size() });
 			d.flush();
 		}
 		template <class writer> void write(writer& writer, const std::string& x)
 		{
-			auto d = writer.write_text(x.size());
+			auto d = writer.write(tags::string{}, x.size());
 			d.write_buffer(const_buffer_ref{ reinterpret_cast<const uint8_t*>(x.data()), x.size() });
 			d.flush();
 		}
-		template <class writer> void write(writer& writer, const array& xs)
+		template <class writer> void write(writer& writer, const dom::array& xs)
 		{
-			auto d = writer.write_array(xs.size());
+			auto d = writer.write(tags::array{}, xs.size());
 			for (auto&& x : xs)
-				write(d.append(), x);
+				copy_dom_document(d.append(), x);
 			d.flush();
 		}
-		template <class writer> void write(writer& writer, const map& xs)
+		template <class writer> void write(writer& writer, const dom::map& xs)
 		{
-			auto d = writer.write_map(xs.size());
+			auto d = writer.write(tags::map{}, xs.size());
 			for (auto&& x : xs)
 			{
-				write(d.append_key(), x.first);
-				write(d.append_value(), x.second);
+				copy_dom_document(d.append_key(), x.first);
+				copy_dom_document(d.append_value(), x.second);
 			}
 			d.flush();
 		}
 	}
 
-	template <class writer> void write(writer&& w, const document& d)
+	template <class writer> void copy_dom_document(writer&& w, const dom::document& d)
 	{
 		details::write(w, d);
 	}
-}}
+}

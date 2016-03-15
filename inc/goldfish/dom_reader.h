@@ -14,11 +14,11 @@ namespace goldfish { namespace dom
 	inline nullptr_t load_in_memory(nullptr_t d) { return d; }
 	inline double load_in_memory(double d) { return d; }
 
-	template <class D> std::enable_if_t<tags::has_tag<std::decay_t<D>, tags::byte_string>::value, std::vector<uint8_t>> load_in_memory(D&& d)
+	template <class D> std::enable_if_t<tags::has_tag<std::decay_t<D>, tags::binary>::value, std::vector<uint8_t>> load_in_memory(D&& d)
 	{
 		return stream::read_all(d);
 	}
-	template <class D> std::enable_if_t<tags::has_tag<std::decay_t<D>, tags::text_string>::value, std::string> load_in_memory(D&& d)
+	template <class D> std::enable_if_t<tags::has_tag<std::decay_t<D>, tags::string>::value, std::string> load_in_memory(D&& d)
 	{
 		return stream::read_all_as_string(d);
 	}
@@ -40,7 +40,7 @@ namespace goldfish { namespace dom
 		return result;
 	}
 
-	template <class D> std::enable_if_t<tags::has_tag<std::decay_t<D>, tags::undefined>::value, undefined> load_in_memory(D&& d) { return undefined{}; }
+	inline tags::undefined load_in_memory(tags::undefined) { return tags::undefined{}; }
 
 	struct unexpected_end_of_structure {};
 

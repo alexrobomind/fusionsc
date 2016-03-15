@@ -49,7 +49,7 @@ namespace goldfish { namespace dom
 		auto w = [&](const document& d)
 		{
 			stream::vector_writer s;
-			write(cbor::create_writer(stream::ref(s)), d);
+			copy_dom_document(cbor::create_writer(stream::ref(s)), d);
 			s.flush();
 			return to_hex_string(s.data);
 		};
@@ -101,7 +101,7 @@ namespace goldfish { namespace dom
 		test(w(false) == "f4");
 		test(w(true) == "f5");
 		test(w(nullptr) == "f6");
-		test(w(undefined{}) == "f7");
+		test(w(tags::undefined{}) == "f7");
 
 		//test(w(tagged{ 0, "2013-03-21T20:04:00Z"s }) == "c074323031332d30332d32315432303a30343a30305a");
 
@@ -113,15 +113,15 @@ namespace goldfish { namespace dom
 		//test(w(tagged{ 24, to_vector("6449455446") }) == "d818456449455446");
 		//test(w(tagged{ 32, "http://www.example.com"s }) == "d82076687474703a2f2f7777772e6578616d706c652e636f6d");
 
-		test(w(byte_string(to_vector(""))) == "40");
-		test(w(byte_string(to_vector("01020304"))) == "4401020304");
+		test(w(binary(to_vector(""))) == "40");
+		test(w(binary(to_vector("01020304"))) == "4401020304");
 
-		test(w(text_string("")) == "60");
-		test(w(text_string("a")) == "6161");
-		test(w(text_string("IETF")) == "6449455446");
-		test(w(text_string("\"\\")) == "62225c");
-		test(w(text_string(u8"\u00fc")) == "62c3bc");
-		test(w(text_string(u8"\u6c34")) == "63e6b0b4");
+		test(w(string("")) == "60");
+		test(w(string("a")) == "6161");
+		test(w(string("IETF")) == "6449455446");
+		test(w(string("\"\\")) == "62225c");
+		test(w(string(u8"\u00fc")) == "62c3bc");
+		test(w(string(u8"\u6c34")) == "63e6b0b4");
 
 		test(w(array{}) == "80");
 		test(w(array{ 1ull, 2ull, 3ull }) == "83010203");
@@ -135,16 +135,16 @@ namespace goldfish { namespace dom
 		test(w(map{}) == "a0");
 		test(w(map{ { 1ull, 2ull },{ 3ull, 4ull } }) == "a201020304");
 		test(w(map{
-			{ text_string("a"), 1ull },
-			{ text_string("b"), array{ 2ull, 3ull } }
+			{ string("a"), 1ull },
+			{ string("b"), array{ 2ull, 3ull } }
 		}) == "a26161016162820203");
-		test(w(array{ text_string("a"), map{ { text_string("b"), text_string("c") } } }) == "826161a161626163");
+		test(w(array{ string("a"), map{ { string("b"), string("c") } } }) == "826161a161626163");
 		test(w(map{
-			{ text_string("a"), text_string("A") },
-			{ text_string("b"), text_string("B") },
-			{ text_string("c"), text_string("C") },
-			{ text_string("d"), text_string("D") },
-			{ text_string("e"), text_string("E") }
+			{ string("a"), string("A") },
+			{ string("b"), string("B") },
+			{ string("c"), string("C") },
+			{ string("d"), string("D") },
+			{ string("e"), string("E") }
 		}) == "a56161614161626142616361436164614461656145");
 
 		// input used indefinite array
@@ -165,10 +165,9 @@ namespace goldfish { namespace dom
 		auto w = [&](const std::vector<document>& data)
 		{
 			stream::vector_writer s;
-			auto writer = cbor::create_writer(stream::ref(s));
-			auto array = writer.write_array();
+			auto array = cbor::write(stream::ref(s), tags::array{});
 			for (auto d : data)
-				write(array.append(), d);
+				copy_dom_document(array.append(), d);
 			array.flush();
 			s.flush();
 			return to_hex_string(s.data);
@@ -187,12 +186,11 @@ namespace goldfish { namespace dom
 		auto w = [&](const std::vector<std::pair<document, document>>& data)
 		{
 			stream::vector_writer s;
-			auto writer = cbor::create_writer(stream::ref(s));
-			auto map = writer.write_map();
+			auto map = cbor::write(stream::ref(s), tags::map{});
 			for (auto d : data)
 			{
-				write(map.append_key(), d.first);
-				write(map.append_value(), d.second);
+				copy_dom_document(map.append_key(), d.first);
+				copy_dom_document(map.append_value(), d.second);
 			}
 			map.flush();
 			s.flush();
@@ -200,18 +198,17 @@ namespace goldfish { namespace dom
 		};
 
 		test(w({
-			{text_string("Fun"), true},
-			{text_string("Amt"), -2ll}
+			{string("Fun"), true},
+			{string("Amt"), -2ll}
 		}) == "bf6346756ef563416d7421ff");
 	}
 
-	TEST_CASE(write_infinite_text_string)
+	TEST_CASE(write_infinite_string)
 	{
 		auto w = [&](const std::vector<std::string>& data)
 		{
 			stream::vector_writer s;
-			auto writer = cbor::create_writer(stream::ref(s));
-			auto string = writer.write_text();
+			auto string = cbor::write(stream::ref(s), tags::string{});
 			for (auto s : data)
 				string.write_buffer({ reinterpret_cast<const uint8_t*>(s.data()), s.size() });
 			string.flush();
@@ -227,8 +224,7 @@ namespace goldfish { namespace dom
 		auto w = [&](const std::vector<std::vector<uint8_t>>& data)
 		{
 			stream::vector_writer s;
-			auto writer = cbor::create_writer(stream::ref(s));
-			auto binary = writer.write_binary();
+			auto binary = cbor::write(stream::ref(s), tags::binary{});
 			for (auto d : data)
 				binary.write_buffer(d);
 			binary.flush();

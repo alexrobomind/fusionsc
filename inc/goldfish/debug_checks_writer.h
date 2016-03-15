@@ -4,7 +4,7 @@
 #include "array_ref.h"
 #include "tags.h"
 
-namespace goldfish { namespace debug_check
+namespace goldfish { namespace debug_checks
 {
 	template <class error_handler, class inner> class document_writer;
 	template <class error_handler, class inner> document_writer<error_handler, std::decay_t<inner>> add_write_checks_impl(container_base<error_handler>* parent, inner&& t);
@@ -68,6 +68,7 @@ namespace goldfish { namespace debug_check
 			, m_writer(std::move(writer))
 		{}
 
+		template <class... Args> auto write(Args&&... args) { return append().write(std::forward<Args>(args)...); }
 		auto append()
 		{
 			err_if_locked();
@@ -92,6 +93,7 @@ namespace goldfish { namespace debug_check
 			, m_c_left(c)
 		{}
 
+		template <class... Args> auto write(Args&&... args) { return append().write(std::forward<Args>(args)...); }
 		auto append()
 		{
 			if (m_c_left == 0)
@@ -119,7 +121,9 @@ namespace goldfish { namespace debug_check
 			, m_writer(std::move(writer))
 		{}
 
-		auto append_key() 
+		template <class... Args> auto write_key(Args&&... args) { return append_key().write(std::forward<Args>(args)...); }
+		template <class... Args> auto write_value(Args&&... args) { return append_value().write(std::forward<Args>(args)...); }
+		auto append_key()
 		{
 			err_if_locked();
 			err_if_flag_set();
@@ -153,6 +157,8 @@ namespace goldfish { namespace debug_check
 			, m_c_left(c)
 		{}
 
+		template <class... Args> auto write_key(Args&&... args) { return append_key().write(std::forward<Args>(args)...); }
+		template <class... Args> auto write_value(Args&&... args) { return append_value().write(std::forward<Args>(args)...); }
 		auto append_key()
 		{
 			if (m_c_left == 0)
@@ -201,10 +207,10 @@ namespace goldfish { namespace debug_check
 			m_writer.write(x);
 			unlock_parent_and_lock_self();
 		}
-		void write_undefined()
+		void write(tags::undefined x)
 		{
 			err_if_locked();
-			m_writer.write_undefined();
+			m_writer.write(x);
 			unlock_parent_and_lock_self();
 		}
 		void write(uint64_t x)
@@ -220,68 +226,63 @@ namespace goldfish { namespace debug_check
 			unlock_parent_and_lock_self();
 		}
 
-		auto write_binary(uint64_t cb)
+		auto write(tags::binary, uint64_t cb)
 		{
 			err_if_locked();
-			auto result = check_size_of_stream<error_handler>(add_write_checks_on_stream(parent(), m_writer.write_binary(cb)), cb);
+			auto result = check_size_of_stream<error_handler>(add_write_checks_on_stream(parent(), m_writer.write(tags::binary{}, cb)), cb);
 			lock();
 			return result;
 		}
-		auto write_text(uint64_t cb)
+		auto write(tags::string, uint64_t cb)
 		{
 			err_if_locked();
-			auto result = check_size_of_stream<error_handler>(add_write_checks_on_stream(parent(), m_writer.write_text(cb)), cb);
+			auto result = check_size_of_stream<error_handler>(add_write_checks_on_stream(parent(), m_writer.write(tags::string{}, cb)), cb);
 			lock();
 			return result;
 		}
-		auto write_binary()
+		auto write(tags::binary)
 		{
 			err_if_locked();
-			auto result = add_write_checks_on_stream(parent(), m_writer.write_binary());
+			auto result = add_write_checks_on_stream(parent(), m_writer.write(tags::binary{}));
 			lock();
 			return result;
 		}
-		auto write_text()
+		auto write(tags::string)
 		{
 			err_if_locked();
-			auto result = add_write_checks_on_stream(parent(), m_writer.write_text());
-			lock();
-			return result;
-		}
-
-		auto write_array(uint64_t size)
-		{
-			err_if_locked();
-			auto result = check_size_of_array<error_handler>(add_write_checks_on_array(parent(), m_writer.write_array(size)), size);
-			lock();
-			return result;
-		}
-		auto write_array()
-		{
-			err_if_locked();
-			auto result = add_write_checks_on_array(parent(), m_writer.write_array());
+			auto result = add_write_checks_on_stream(parent(), m_writer.write(tags::string{}));
 			lock();
 			return result;
 		}
 
-		auto write_map(uint64_t size)
+		auto write(tags::array, uint64_t size)
 		{
 			err_if_locked();
-			auto result = check_size_of_map<error_handler>(add_write_checks_on_map(parent(), m_writer.write_map(size)), size);
+			auto result = check_size_of_array<error_handler>(add_write_checks_on_array(parent(), m_writer.write(tags::array{}, size)), size);
 			lock();
 			return result;
 		}
-		auto write_map()
+		auto write(tags::array)
 		{
 			err_if_locked();
-			auto result = add_write_checks_on_map(parent(), m_writer.write_map());
+			auto result = add_write_checks_on_array(parent(), m_writer.write(tags::array{}));
 			lock();
 			return result;
 		}
 
-		template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, void> write(Document& d)
+		auto write(tags::map, uint64_t size)
 		{
-			copy_document(*this, d);
+			err_if_locked();
+			auto result = check_size_of_map<error_handler>(add_write_checks_on_map(parent(), m_writer.write(tags::map{}, size)), size);
+			lock();
+			return result;
+		}
+		auto write(tags::map)
+		{
+			err_if_locked();
+			auto result = add_write_checks_on_map(parent(), m_writer.write(tags::map{}));
+			lock();
+			return result;
 		}
 	private:
 		inner m_writer;

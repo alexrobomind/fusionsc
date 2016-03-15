@@ -85,6 +85,7 @@ namespace goldfish { namespace json
 			: m_stream(std::move(s))
 		{}
 
+		template <class... Args> auto write(Args&&... args) { return append().write(std::forward<Args>(args)...); }
 		document_writer<stream::writer_ref_type_t<Stream>> append();
 		void flush() { stream::write(m_stream, ']'); }
 	private:
@@ -98,6 +99,9 @@ namespace goldfish { namespace json
 		map_writer(Stream&& s)
 			: m_stream(std::move(s))
 		{}
+
+		template <class... Args> auto write_key(Args&&... args) { return append_key().write(std::forward<Args>(args)...); }
+		template <class... Args> auto write_value(Args&&... args) { return append_value().write(std::forward<Args>(args)...); }
 		document_writer<stream::writer_ref_type_t<Stream>> append_key();
 		document_writer<stream::writer_ref_type_t<Stream>> append_value();
 		void flush() { stream::write(m_stream, '}'); }
@@ -121,7 +125,7 @@ namespace goldfish { namespace json
 		{
 			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>("null"), 4 });
 		}
-		void write_undefined()
+		void write(tags::undefined)
 		{
 			write(nullptr);
 		}
@@ -154,43 +158,48 @@ namespace goldfish { namespace json
 			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(buffer), static_cast<size_t>(cb) });
 		}
 
-		auto write_binary(uint64_t cb) { return write_binary(); }
-		auto write_text(uint64_t cb) { return write_text(); }
-		binary_writer<Stream> write_binary()
+		auto write(tags::binary, uint64_t cb) { return write(tags::binary{}); }
+		auto write(tags::string, uint64_t cb) { return write(tags::string{}); }
+		binary_writer<Stream> write(tags::binary)
 		{
 			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>("\"\\/B"), 4 });
 			return{ std::move(m_stream) };
 		}
-		text_writer<Stream> write_text()
+		text_writer<Stream> write(tags::string)
 		{
 			stream::write(m_stream, '"');
 			return{ std::move(m_stream) };
 		}
 
-		auto write_array(uint64_t size) { return write_array(); }
-		array_writer<Stream> write_array()
+		auto write(tags::array, uint64_t size) { return write(tags::array{}); }
+		array_writer<Stream> write(tags::array)
 		{
 			stream::write(m_stream, '[');
 			return{ std::move(m_stream) };
 		}
 		
-		auto write_map(uint64_t size) { return write_map(); }
-		map_writer<Stream> write_map()
+		auto write(tags::map, uint64_t size) { return write(tags::map{}); }
+		map_writer<Stream> write(tags::map)
 		{
 			stream::write(m_stream, '{');
 			return{ std::move(m_stream) };
 		}
 
-		template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, void> write(Document& d)
-		{
-			copy_document(*this, d);
-		}
 	private:
 		Stream m_stream;
 	};
 	template <class Stream> document_writer<std::decay_t<Stream>> write_no_debug_check(Stream&& s) { return{ std::forward<Stream>(s) }; }
-	template <class Stream, class error_handler> auto create_writer(Stream&& s, error_handler e) { return debug_check::add_write_checks(write_no_debug_check(std::forward<Stream>(s)), e); }
-	template <class Stream> auto create_writer(Stream&& s) { return create_writer(std::forward<Stream>(s), debug_check::default_error_handler{}); }
+	template <class Stream, class error_handler> auto create_writer(Stream&& s, error_handler e) { return debug_checks::add_write_checks(write_no_debug_check(std::forward<Stream>(s)), e); }
+	template <class Stream> auto create_writer(Stream&& s) { return create_writer(std::forward<Stream>(s), debug_checks::default_error_handler{}); }
+
+	template <class Stream, class... Args> auto write(Stream&& s, Args&&... args)
+	{
+		return create_writer(std::forward<Stream>(s)).write(std::forward<Args>(args)...);
+	}
+	template <class Stream, class error_handler, class... Args> auto write_with_error_checks(Stream&& s, error_handler e, Args&&... args)
+	{
+		return create_writer(std::forward<Stream>(s), e).write(std::forward<Args>(args)...);
+	}
 
 	template <class Stream> document_writer<stream::writer_ref_type_t<Stream>> array_writer<Stream>::append()
 	{

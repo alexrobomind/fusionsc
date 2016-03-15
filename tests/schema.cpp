@@ -8,7 +8,7 @@ namespace goldfish
 	TEST_CASE(test_filtered_map_empty_map)
 	{
 		static const schema schema{ "10", "20", "30" };
-		auto map = apply_schema(json::read(stream::read_string_literal("{}")).as<tags::map>(), schema);
+		auto map = apply_schema(json::read(stream::read_string_literal("{}")).as_map(), schema);
 
 		test(map.read_value_by_index(0) == nullopt);
 
@@ -19,7 +19,7 @@ namespace goldfish
 	{
 		static const schema schema{ "10", "20", "30", "40", "50", "60", "70", "80", "90" };
 		auto map = apply_schema(json::read(
-			stream::read_string_literal("{\"10\":1,\"15\":2,\"a\":\"b\",\"40\":3,\"50\":4,\"60\":5,\"80\":6}")).as<tags::map>(), schema);
+			stream::read_string_literal("{\"10\":1,\"15\":2,\"a\":\"b\",\"40\":3,\"50\":4,\"60\":5,\"80\":6}")).as_map(), schema);
 
 		// Reading the very first key
 		test(dom::load_in_memory(*map.read_value_by_index(0)) == 1ull);
@@ -47,7 +47,7 @@ namespace goldfish
 	TEST_CASE(filtered_map_skip_while_on_value)
 	{
 		static const schema schema{ "10", "20" };
-		auto map = apply_schema(json::read(stream::read_string_literal("{\"20\":1}")).as<tags::map>(), schema);
+		auto map = apply_schema(json::read(stream::read_string_literal("{\"20\":1}")).as_map(), schema);
 
 		test(map.read_value_by_index(0) == nullopt);
 		seek_to_end(map);
@@ -56,7 +56,7 @@ namespace goldfish
 	TEST_CASE(test_filtered_map_by_value)
 	{
 		static const schema schema{ "A", "B" };
-		auto map = apply_schema(json::read(stream::read_string_literal("{\"B\":1}")).as<tags::map>(), schema);
+		auto map = apply_schema(json::read(stream::read_string_literal("{\"B\":1}")).as_map(), schema);
 		test(dom::load_in_memory(*map.read_value("B")) == 1ull);
 		seek_to_end(map);
 	}
