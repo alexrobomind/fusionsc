@@ -58,7 +58,7 @@ namespace goldfish { namespace stream
 			}
 		}
 
-		uint64_t seek_to_end(uint64_t x)
+		uint64_t seek(uint64_t x)
 		{
 			if (x <= m_buffered.size())
 			{

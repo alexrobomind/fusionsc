@@ -36,6 +36,7 @@
     <ClInclude Include="..\inc\goldfish\match.h" />
     <ClInclude Include="..\inc\goldfish\numbers.h" />
     <ClInclude Include="..\inc\goldfish\optional.h" />
+    <ClInclude Include="..\inc\goldfish\reader_writer_stream.h" />
     <ClInclude Include="..\inc\goldfish\sax_reader.h" />
     <ClInclude Include="..\inc\goldfish\sax_writer.h" />
     <ClInclude Include="..\inc\goldfish\schema.h" />
