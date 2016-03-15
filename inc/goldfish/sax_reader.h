@@ -102,7 +102,7 @@ namespace goldfish
 		// Byte strings are converted from text strings (assuming base64 text)
 		auto as_impl(tags::byte_string, std::true_type /*json_conversion*/)
 		{
-			return base64(as<tags::text_string>());
+			return decode_base64(as<tags::text_string>());
 		}
 
 		variant<types...> m_data;
