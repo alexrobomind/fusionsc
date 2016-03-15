@@ -43,7 +43,7 @@ namespace goldfish { namespace stream
 	{
 		auto s = decode_base64(read_string_literal("YW55IGNhcm5hbCBwbGVhc3VyZS4"));
 		
-		// read 1 by 1 (this tests reading 0 and 1 bytes with left overs 0,1,2)
+		// read one at a time (this tests reading 0 and 1 bytes with left overs 0,1,2)
 		{
 			test(s.read_buffer({}) == 0);
 			test(stream::read<char>(s) == 'a');
@@ -53,7 +53,7 @@ namespace goldfish { namespace stream
 			test(stream::read<char>(s) == 'y');
 		}
 
-		// read 2 by 2 (this tests reading 2 bytes with left overs 0,2,1)
+		// read two at a time (this tests reading 2 bytes with left overs 0,2,1)
 		{
 			uint8_t buffer[2];
 			test(s.read_buffer(buffer) == 2 && buffer[0] == ' ' && buffer[1] == 'c');
@@ -61,7 +61,7 @@ namespace goldfish { namespace stream
 			test(s.read_buffer(buffer) == 2 && buffer[0] == 'n' && buffer[1] == 'a');
 		}
 		
-		// read 3 by 3 (this tests reading 3 bytes with left overs 0,1,2)
+		// read three at a time (this tests reading 3 bytes with left overs 0,1,2)
 		{
 			uint8_t buffer[3];
 			test(s.read_buffer(buffer) == 3 && buffer[0] == 'l' && buffer[1] == ' ' && buffer[2] == 'p');
@@ -76,7 +76,7 @@ namespace goldfish { namespace stream
 	{
 		auto s = encode_base64_to(string_writer{});
 
-		// write 1 by 1 (this tests writing 0 and 1 byte with left overs 0,1,2)
+		// write one at a time (this tests writing 0 and 1 byte with left overs 0,1,2)
 		{
 			s.write_buffer({});
 			stream::write(s, 'a');
@@ -86,7 +86,7 @@ namespace goldfish { namespace stream
 			stream::write(s, 'y');
 		}
 
-		// write 2 by 2 (this tests writing 2 bytes with left overs 0,2,1)
+		// write two at a time (this tests writing 2 bytes with left overs 0,2,1)
 		{
 			uint8_t buffer[2];
 			buffer[0] = ' '; buffer[1] = 'c'; s.write_buffer(buffer);
@@ -94,7 +94,7 @@ namespace goldfish { namespace stream
 			buffer[0] = 'n'; buffer[1] = 'a'; s.write_buffer(buffer);
 		}
 
-		// write 3 by 3 (this tests writing 3 bytes with left overs 
+		// write three at a time (this tests writing 3 bytes with left overs)
 		{
 			uint8_t buffer[3];
 			buffer[0] = 'l'; buffer[1] = ' ';  buffer[2] = 'p'; s.write_buffer(buffer);

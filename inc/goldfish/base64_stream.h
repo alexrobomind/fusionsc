@@ -53,22 +53,27 @@ namespace goldfish { namespace stream
 			auto c_read = m_stream.read_buffer(buffer);
 			if (c_read == 4 && buffer[3] == '=') // Presence of padding means the stream is made of blocks of 4 bytes
 			{
-				if (buffer[2] == '=') c_read = 2;
-				else c_read = 3;
+				if (buffer[2] == '=')
+					c_read = 2;
+				else
+					c_read = 3;
 				
 				if (stream::seek(m_stream, 1) != 0) // Padding is only allowed at the end of the stream
 					throw ill_formatted_base64_data{};
 			}
 
-			if (c_read == 0) return 0;
-			if (c_read == 1) throw ill_formatted_base64_data{};
+			if (c_read == 0)
+				return 0;
+			if (c_read == 1)
+				throw ill_formatted_base64_data{};
 
 			auto a = character_to_6bits(buffer[0]);
 			auto b = character_to_6bits(buffer[1]);
 			output[0] = ((a << 2) | (b >> 4));
 			if (c_read == 2)
 			{
-				if (b & 0xF) throw ill_formatted_base64_data{};
+				if (b & 0xF)
+					throw ill_formatted_base64_data{};
 				return 1;
 			}
 
@@ -76,7 +81,8 @@ namespace goldfish { namespace stream
 			output[1] = (((b & 0xF) << 4) | (c >> 2));
 			if (c_read == 3)
 			{
-				if (c & 0x3) throw ill_formatted_base64_data{};
+				if (c & 0x3)
+					throw ill_formatted_base64_data{};
 				return 2;
 			}
 
@@ -139,32 +145,29 @@ namespace goldfish { namespace stream
 
 		void write_buffer(const_buffer_ref data)
 		{
-			if (m_cb_in_buffer == 1)
+			if (data.empty())
+				return;
+
+			if (m_cb_pending_encoding == 1)
 			{
 				if (data.size() >= 2)
 				{
-					write_triplet(m_buffer[0], data[0], data[1]);
+					write_triplet(m_pending_encoding[0], data[0], data[1]);
 					data.remove_front(2);
-					m_cb_in_buffer = 0;
+					m_cb_pending_encoding = 0;
 				}
 				else
 				{
-					if (data.empty())
-						return;
-
-					m_buffer[1] = data.front();
-					++m_cb_in_buffer;
+					m_pending_encoding[1] = data.front();
+					++m_cb_pending_encoding;
 					return;
 				}
 			}
-			else if (m_cb_in_buffer == 2)
+			else if (m_cb_pending_encoding == 2)
 			{
-				if (data.empty())
-					return;
-
-				write_triplet(m_buffer[0], m_buffer[1], data[0]);
+				write_triplet(m_pending_encoding[0], m_pending_encoding[1], data[0]);
 				data.remove_front(1);
-				m_cb_in_buffer = 0;
+				m_cb_pending_encoding = 0;
 			}
 
 			while (data.size() >= 3)
@@ -173,21 +176,21 @@ namespace goldfish { namespace stream
 				data.remove_front(3);
 			}
 
-			std::copy(data.begin(), data.end(), m_buffer.begin());
-			m_cb_in_buffer = static_cast<uint32_t>(data.size());
+			std::copy(data.begin(), data.end(), m_pending_encoding.begin());
+			m_cb_pending_encoding = static_cast<uint32_t>(data.size());
 		}
 		void flush()
 		{
-			if (m_cb_in_buffer == 1)
-				write_triplet_flush(m_buffer[0]);
-			else if (m_cb_in_buffer == 2)
-				write_triplet_flush(m_buffer[0], m_buffer[1]);
+			if (m_cb_pending_encoding == 1)
+				write_triplet_flush(m_pending_encoding[0]);
+			else if (m_cb_pending_encoding == 2)
+				write_triplet_flush(m_pending_encoding[0], m_pending_encoding[1]);
 			m_stream.flush();
-			m_cb_in_buffer = 0;
+			m_cb_pending_encoding = 0;
 		}
 		auto& inner_stream() { return m_stream; }
 	private:
-		uint8_t byte_for(uint8_t x)
+		uint8_t character_from_6bits(uint8_t x)
 		{
 			static const char table[65] =
 				"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -198,30 +201,30 @@ namespace goldfish { namespace stream
 		void write_triplet(uint32_t a, uint32_t b, uint32_t c)
 		{
 			uint32_t x = (a << 16) | (b << 8) | c;
-			stream::write(m_stream, byte_for((x >> 18) & 63));
-			stream::write(m_stream, byte_for((x >> 12) & 63));
-			stream::write(m_stream, byte_for((x >> 6 ) & 63));
-			stream::write(m_stream, byte_for((x      ) & 63));
+			stream::write(m_stream, character_from_6bits((x >> 18) & 63));
+			stream::write(m_stream, character_from_6bits((x >> 12) & 63));
+			stream::write(m_stream, character_from_6bits((x >> 6 ) & 63));
+			stream::write(m_stream, character_from_6bits((x      ) & 63));
 		}
 		void write_triplet_flush(uint32_t a)
 		{
-			stream::write(m_stream, byte_for((a >> 2) & 63));
-			stream::write(m_stream, byte_for((a & 3) << 4));
+			stream::write(m_stream, character_from_6bits((a >> 2) & 63));
+			stream::write(m_stream, character_from_6bits((a & 3) << 4));
 			stream::write(m_stream, '=');
 			stream::write(m_stream, '=');
 		}
 		void write_triplet_flush(uint32_t a, uint32_t b)
 		{
 			uint32_t x = (a << 8) | b;
-			stream::write(m_stream, byte_for((x >> 10) & 63));
-			stream::write(m_stream, byte_for((x >> 4) & 63));
-			stream::write(m_stream, byte_for((x & 15) << 2));
+			stream::write(m_stream, character_from_6bits((x >> 10) & 63));
+			stream::write(m_stream, character_from_6bits((x >> 4) & 63));
+			stream::write(m_stream, character_from_6bits((x & 15) << 2));
 			stream::write(m_stream, '=');
 		}
 
 		inner m_stream;
-		std::array<uint8_t, 2> m_buffer;
-		uint32_t m_cb_in_buffer = 0;
+		std::array<uint8_t, 2> m_pending_encoding;
+		uint8_t m_cb_pending_encoding = 0;
 	};
 
 	template <class inner> enable_if_reader_t<inner, base64_reader<std::decay_t<inner>>> decode_base64(inner&& stream) { return{ std::forward<inner>(stream) }; }

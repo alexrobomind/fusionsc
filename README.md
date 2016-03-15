@@ -28,6 +28,8 @@ int main()
 	stream::vector_writer output_stream;
 	cbor::write(stream::ref(output_stream)).write(document);
 	output_stream.flush();
+
+	// output_stream.data contains the CBOR document
 }
 ~~~~~~~~~~
 
