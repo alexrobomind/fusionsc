@@ -48,12 +48,72 @@ int main()
 	using namespace goldfish;
 
 	static const schema s{ "a", "b", "c" };
-	auto document = apply_schema(json::read(stream::read_string_literal("{\"a\":1,\"c\":3.0}")).as<tags::map>(), s);
+	auto document = apply_schema(json::read(stream::read_string_literal("{\"a\":1,\"c\":3.0}")).as_map(), s);
 
-	assert(document.read_value("a")->as<uint64_t>() == 1);
+	assert(document.read_value("a")->as_uint() == 1);
 	assert(document.read_value("b") == nullopt);
-	assert(document.read_value("c")->as<double>() == 3.0);
+	assert(document.read_value("c")->as_double() == 3.0);
 	seek_to_end(document);
+}
+~~~~~~~~~~
+
+### Generating a JSON or CBOR document
+You can get a JSON or CBOR writer by calling json::create_writer or cbor::create_writer on an output stream.
+
+~~~~~~~~~~cpp
+int main()
+{
+	using namespace goldfish;
+	
+	stream::string_writer output_stream;
+	auto map = json::create_writer(stream::ref(output_stream)).start_map();
+	map.write("A", 1);
+	map.write("B", "text");
+	{
+		const char binary_buffer[] = "Hello world!";
+		auto stream = map.start_binary("C", sizeof(binary_buffer) - 1);
+		stream.write_buffer(const_buffer_ref{ reinterpret_cast<const uint8_t*>(binary_buffer), sizeof(binary_buffer) - 1 });
+		stream.flush();
+	}
+	map.flush();
+	output_stream.flush();
+	assert(output_stream.data.size() == 41);
+	assert(output_stream.data == "{\"A\":1,\"B\":\"text\",\"C\":\"SGVsbG8gd29ybGQh\"}");
+}
+~~~~~~~~~~
+
+Note how similar the code is to generate a CBOR document. The only change is the creation of the writer (cbor::create_writer instead of json::create_writer) and the type of output_stream (vector<uint8_t> is better suited to storing the binary data than std::string).
+CBOR leads to some significant reduction in document size (the document above is 41 bytes in JSON but only 27 in CBOR format). Because CBOR supports binary data natively, there is also performance benefits (no need to encode the data in base64).
+
+~~~~~~~~~~cpp
+int main()
+{
+	using namespace goldfish;
+
+	stream::vector_writer output_stream;
+	auto map = cbor::create_writer(stream::ref(output_stream)).start_map();
+	map.write("A", 1);
+	map.write("B", "text");
+	{
+		const char binary_buffer[] = "Hello world!";
+		auto stream = map.start_binary("C", sizeof(binary_buffer) - 1);
+		stream.write_buffer(const_buffer_ref{ reinterpret_cast<const uint8_t*>(binary_buffer), sizeof(binary_buffer) - 1 });
+		stream.flush();
+	}
+	map.flush();
+	output_stream.flush();
+	test(output_stream.data.size() == 27);
+	test(output_stream.data == std::vector<uint8_t>{
+		0xbf,                               // start map marker
+		0x61,0x41,                          // key: "A"
+		0x01,                               // value : uint 1
+		0x61,0x42,                          // key : "B"
+		0x64,0x74,0x65,0x78,0x74,           // value : "text"
+		0x61,0x43,                          // key : "C"
+		0x4c,0x48,0x65,0x6c,0x6c,0x6f,0x20,
+		0x77,0x6f,0x72,0x6c,0x64,0x21,      // value : binary blob "Hello world!"
+		0xff                                // end of map
+	});
 }
 ~~~~~~~~~~
 
