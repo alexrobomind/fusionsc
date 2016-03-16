@@ -49,7 +49,7 @@ namespace goldfish { namespace dom
 		auto w = [&](const document& d)
 		{
 			stream::vector_writer s;
-			copy_dom_document(cbor::create_writer(stream::ref(s)), d);
+			cbor::create_writer(stream::ref(s)).write(d);
 			s.flush();
 			return to_hex_string(s.data);
 		};
@@ -168,7 +168,7 @@ namespace goldfish { namespace dom
 			stream::vector_writer s;
 			auto array = cbor::create_writer(stream::ref(s)).start_array();
 			for (auto d : data)
-				copy_dom_document(array.append(), d);
+				array.write(d);
 			array.flush();
 			s.flush();
 			return to_hex_string(s.data);
@@ -188,11 +188,9 @@ namespace goldfish { namespace dom
 		{
 			stream::vector_writer s;
 			auto map = cbor::create_writer(stream::ref(s)).start_map();
-			for (auto d : data)
-			{
-				copy_dom_document(map.append_key(), d.first);
-				copy_dom_document(map.append_value(), d.second);
-			}
+			for (auto&& d : data)
+				map.write(d.first, d.second);
+
 			map.flush();
 			s.flush();
 			return to_hex_string(s.data);

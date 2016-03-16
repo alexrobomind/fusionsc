@@ -1,69 +1,9 @@
 #pragma once
 
 #include "match.h"
+#include "stream.h"
 #include "tags.h"
 #include <type_traits>
-
-namespace goldfish
-{
-	template <class Stream, class Writer, class CreateWriterWithSize, class CreateWriterWithoutSize>
-	auto copy_stream(Stream& s, Writer& writer, CreateWriterWithSize&& create_writer_with_size, CreateWriterWithoutSize&& create_writer_without_size)
-	{
-		uint8_t buffer[8 * 1024];
-		auto cb = s.read_buffer(buffer);
-		if (cb < sizeof(buffer))
-		{
-			// We read the entire stream
-			auto output_stream = create_writer_with_size(cb);
-			output_stream.write_buffer({ buffer, cb });
-			output_stream.flush();
-		}
-		else
-		{
-			// We read only a portion of the stream
-			auto output_stream = create_writer_without_size();
-			output_stream.write_buffer(buffer);
-			do
-			{
-				cb = s.read_buffer(buffer);
-				output_stream.write_buffer({ buffer, cb });
-			} while (cb == sizeof(buffer));
-			output_stream.flush();
-		}
-	};
-
-	template <class DocumentWriter, class Document>
-	std::enable_if_t<tags::has_tag<std::decay_t<Document>, tags::document>::value, void> copy_sax_document(DocumentWriter&& writer, Document&& document)
-	{
-		document.visit(first_match(
-			[&](auto&& x, tags::binary) { copy_stream(x, writer, [&](size_t cb) { return writer.start_binary(cb); }, [&] { return writer.start_binary(); }); },
-			[&](auto&& x, tags::string) { copy_stream(x, writer, [&](size_t cb) { return writer.start_string(cb); }, [&] { return writer.start_string(); }); },
-			[&](auto&& x, tags::array)
-			{
-				auto array_writer = writer.start_array();
-				while (auto element = x.read())
-					copy_sax_document(array_writer.append(), *element);
-				array_writer.flush();
-			},
-			[&](auto&& x, tags::map)
-			{
-				auto map_writer = writer.start_map();
-				while (auto key = x.read_key())
-				{
-					copy_sax_document(map_writer.append_key(), *key);
-					copy_sax_document(map_writer.append_value(), x.read_value());
-				}
-				map_writer.flush();
-			},
-			[&](auto&& x, tags::undefined) { writer.write(x); },
-			[&](auto&& x, tags::floating_point) { writer.write(x); },
-			[&](auto&& x, tags::unsigned_int) { writer.write(x); },
-			[&](auto&& x, tags::signed_int) { writer.write(x); },
-			[&](auto&& x, tags::boolean) { writer.write(x); },
-			[&](auto&& x, tags::null) { writer.write(x); }
-		));
-	}
-}
 
 namespace goldfish { namespace sax
 {
@@ -191,8 +131,99 @@ namespace goldfish { namespace sax
 		auto start_map(uint64_t size) { return make_map_writer(m_writer.start_map(size)); }
 		auto start_map() { return make_map_writer(m_writer.start_map()); }
 
-		void write(const dom::document& d) { copy_dom_document(*this, d); }
+		template <class T> std::enable_if_t<stream::is_reader<std::decay_t<T>>::value, void> write_as_text(T&& s)
+		{
+			copy_stream(s, [&](size_t cb) { return start_string(cb); }, [&] { return start_string(); });
+		}
+		template <class T> std::enable_if_t<stream::is_reader<std::decay_t<T>>::value, void> write_as_binary(T&& s)
+		{
+			copy_stream(s, [&](size_t cb) { return start_binary(cb); }, [&] { return start_binary(); });
+		}
+
+		template <class T> std::enable_if_t<std::is_same<typename std::decay_t<T>::tag, tags::document>::value, void> write(T&& document)
+		{
+			document.visit(first_match(
+				[&](auto&& x, tags::binary) { write_as_binary(x); },
+				[&](auto&& x, tags::string) { write_as_text(x); },
+				[&](auto&& x, tags::array)
+				{
+					auto array_writer = start_array();
+					while (auto element = x.read())
+						array_writer.write(*element);
+					array_writer.flush();
+				},
+				[&](auto&& x, tags::map)
+				{
+					auto map_writer = start_map();
+					while (auto key = x.read_key())
+					{
+						map_writer.write_key(*key);
+						map_writer.write_value(x.read_value());
+					}
+					map_writer.flush();
+				},
+				[&](auto&& x, tags::undefined) { write(x); },
+				[&](auto&& x, tags::floating_point) { write(x); },
+				[&](auto&& x, tags::unsigned_int) { write(x); },
+				[&](auto&& x, tags::signed_int) { write(x); },
+				[&](auto&& x, tags::boolean) { write(x); },
+				[&](auto&& x, tags::null) { write(x); }
+			));
+		}
+		void write(const dom::document& document)
+		{
+			document.visit(best_match(
+				[&](bool x) { write(x); },
+				[&](nullptr_t x) { write(x); },
+				[&](tags::undefined x) { write(x); },
+				[&](uint64_t x) { write(x); },
+				[&](int64_t x) { write(x); },
+				[&](double x) { write(x); },
+				[&](const std::vector<uint8_t>& x) { write(const_buffer_ref{ x }); },
+				[&](const std::string& x) { write(x); },
+				[&](const dom::array& x)
+				{
+					auto array_writer = start_array(x.size());
+					for (auto&& y : x)
+						array_writer.write(y);
+					array_writer.flush();
+				},
+				[&](const dom::map& x)
+				{
+					auto map_writer = start_map(x.size());
+					for (auto&& y : x)
+						map_writer.write(y.first, y.second);
+					map_writer.flush();
+				}
+			));
+		}
 	private:
+		template <class Stream, class CreateWriterWithSize, class CreateWriterWithoutSize>
+		auto copy_stream(Stream& s, CreateWriterWithSize&& create_writer_with_size, CreateWriterWithoutSize&& create_writer_without_size)
+		{
+			uint8_t buffer[8 * 1024];
+			auto cb = s.read_buffer(buffer);
+			if (cb < sizeof(buffer))
+			{
+				// We read the entire stream
+				auto output_stream = create_writer_with_size(cb);
+				output_stream.write_buffer({ buffer, cb });
+				output_stream.flush();
+			}
+			else
+			{
+				// We read only a portion of the stream
+				auto output_stream = create_writer_without_size();
+				output_stream.write_buffer(buffer);
+				do
+				{
+					cb = s.read_buffer(buffer);
+					output_stream.write_buffer({ buffer, cb });
+				} while (cb == sizeof(buffer));
+				output_stream.flush();
+			}
+		};
+
 		void write(const char* text, size_t length)
 		{
 			auto stream = start_string(length);

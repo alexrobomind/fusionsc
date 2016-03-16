@@ -12,7 +12,7 @@ namespace goldfish { namespace dom
 		auto w = [&](const document& d)
 		{
 			stream::string_writer s;
-			copy_dom_document(json::create_writer(stream::ref(s)), d);
+			json::create_writer(stream::ref(s)).write(d);
 			s.flush();
 			return s.data;
 		};
@@ -49,7 +49,7 @@ namespace goldfish { namespace dom
 		auto run = [](const char* data)
 		{
 			auto w = stream::string_writer{};
-			copy_dom_document(json::create_writer(stream::ref(w)), dom::load_in_memory(json::read(stream::read_string_literal(data))));
+			json::create_writer(stream::ref(w)).write(json::read(stream::read_string_literal(data)));
 			w.flush();
 			test(data == w.data);
 		};
