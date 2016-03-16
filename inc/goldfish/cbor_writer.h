@@ -21,7 +21,8 @@ namespace goldfish { namespace cbor
 			}
 			else if (x <= std::numeric_limits<uint8_t>::max())
 			{
-				stream::write(s, static_cast<uint16_t>((major << 5) | 24 | (x << 8)));
+				stream::write(s, static_cast<uint8_t>((major << 5) | 24));
+				stream::write(s, static_cast<uint8_t>(x));
 			}
 			else if (x <= std::numeric_limits<uint16_t>::max())
 			{
@@ -131,13 +132,13 @@ namespace goldfish { namespace cbor
 	private:
 		Stream m_stream;
 	};
-	template <class Stream> document_writer<std::decay_t<Stream>> write_no_debug_check(Stream&& s)
+	template <class Stream> document_writer<std::decay_t<Stream>> create_writer_no_debug_check(Stream&& s)
 	{
 		return{ std::forward<Stream>(s) };
 	}
 	template <class Stream, class error_handler> auto create_writer(Stream&& s, error_handler e)
 	{
-		return sax::make_writer(debug_checks::add_write_checks(write_no_debug_check(std::forward<Stream>(s)), e));
+		return sax::make_writer(debug_checks::add_write_checks(create_writer_no_debug_check(std::forward<Stream>(s)), e));
 	}
 	template <class Stream> auto create_writer(Stream&& s)
 	{
@@ -151,7 +152,7 @@ namespace goldfish { namespace cbor
 			: m_stream(std::move(s))
 		{}
 
-		document_writer<stream::writer_ref_type_t<Stream>> append() { return{ stream::ref(m_stream) }; }
+		auto append() { return create_writer_no_debug_check(stream::ref(m_stream)); }
 		void flush() { m_stream.flush(); }
 	private:
 		Stream m_stream;
@@ -159,10 +160,10 @@ namespace goldfish { namespace cbor
 	template <class Stream> class indefinite_array_writer
 	{
 	public:
-		indefinite_array_writer(Stream& s)
-			: m_stream(s)
+		indefinite_array_writer(Stream&& s)
+			: m_stream(std::move(s))
 		{}
-		document_writer<stream::writer_ref_type_t<Stream>> append() { return{ stream::ref(m_stream) }; }
+		auto append() { return create_writer_no_debug_check(stream::ref(m_stream)); }
 		void flush()
 		{
 			stream::write(m_stream, static_cast<uint8_t>(0xFF));
