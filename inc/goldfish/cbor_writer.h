@@ -39,22 +39,7 @@ namespace goldfish { namespace cbor
 			}
 		}
 	}
-
-	template <class Stream> class stream_writer
-	{
-	public:
-		stream_writer(Stream&& s)
-			: m_stream(std::move(s))
-		{}
-		void write_buffer(const_buffer_ref buffer)
-		{
-			m_stream.write_buffer(buffer);
-		}
-		void flush() { }
-	private:
-		Stream m_stream;
-	};
-
+	
 	template <class Stream, uint8_t major> class indefinite_stream_writer
 	{
 	public:
@@ -69,6 +54,7 @@ namespace goldfish { namespace cbor
 		void flush()
 		{
 			stream::write(m_stream, static_cast<uint8_t>(0xFF));
+			m_stream.flush();
 		}
 	private:
 		Stream m_stream;
@@ -108,10 +94,10 @@ namespace goldfish { namespace cbor
 		void write(uint64_t x) { details::write_integer<0>(m_stream, x); }
 		void write(int64_t x) { details::write_integer<1>(m_stream, static_cast<uint64_t>(-1ll - x)); }
 
-		stream_writer<Stream> write(tags::binary, uint64_t cb)
+		auto write(tags::binary, uint64_t cb)
 		{
 			details::write_integer<2>(m_stream, cb);
-			return{ std::move(m_stream) };
+			return std::move(m_stream);
 		}
 		indefinite_stream_writer<Stream, 2> write(tags::binary)
 		{
@@ -119,10 +105,10 @@ namespace goldfish { namespace cbor
 			return{ std::move(m_stream) };
 		}
 
-		stream_writer<Stream> write(tags::string, uint64_t cb)
+		auto write(tags::string, uint64_t cb)
 		{
 			details::write_integer<3>(m_stream, cb);
-			return{ std::move(m_stream) };
+			return std::move(m_stream);
 		}
 		indefinite_stream_writer<Stream, 3> write(tags::string)
 		{
@@ -169,7 +155,7 @@ namespace goldfish { namespace cbor
 
 		template <class... Args> auto write(Args&&... args) { return append().write(std::forward<Args>(args)...); }
 		document_writer<stream::writer_ref_type_t<Stream>> append() { return{ stream::ref(m_stream) }; }
-		void flush() {}
+		void flush() { m_stream.flush(); }
 	private:
 		Stream m_stream;
 	};
@@ -181,7 +167,11 @@ namespace goldfish { namespace cbor
 		{}
 		template <class... Args> auto write(Args&&... args) { return append().write(std::forward<Args>(args)...); }
 		document_writer<stream::writer_ref_type_t<Stream>> append() { return{ stream::ref(m_stream) }; }
-		void flush() { stream::write(m_stream, static_cast<uint8_t>(0xFF)); }
+		void flush()
+		{
+			stream::write(m_stream, static_cast<uint8_t>(0xFF));
+			m_stream.flush();
+		}
 	private:
 		Stream m_stream;
 	};
@@ -206,7 +196,7 @@ namespace goldfish { namespace cbor
 		template <class... Args> auto write_value(Args&&... args) { return append_value().write(std::forward<Args>(args)...); }
 		document_writer<stream::writer_ref_type_t<Stream>> append_key() { return{ stream::ref(m_stream) }; }
 		document_writer<stream::writer_ref_type_t<Stream>> append_value() { return{ stream::ref(m_stream) }; }
-		void flush() {}
+		void flush() { m_stream.flush(); }
 	private:
 		Stream m_stream;
 	};
@@ -221,7 +211,11 @@ namespace goldfish { namespace cbor
 		template <class... Args> auto write_value(Args&&... args) { return append_value().write(std::forward<Args>(args)...); }
 		document_writer<stream::writer_ref_type_t<Stream>> append_key() { return{ stream::ref(m_stream) }; }
 		document_writer<stream::writer_ref_type_t<Stream>> append_value() { return{ stream::ref(m_stream) }; }
-		void flush() { stream::write(m_stream, static_cast<uint8_t>(0xFF)); }
+		void flush()
+		{
+			stream::write(m_stream, static_cast<uint8_t>(0xFF));
+			m_stream.flush();
+		}
 	private:
 		Stream m_stream;
 	};

@@ -181,11 +181,15 @@ namespace goldfish { namespace stream
 		}
 		void flush()
 		{
+			flush_no_inner_stream_flush();
+			m_stream.flush();
+		}
+		void flush_no_inner_stream_flush()
+		{
 			if (m_cb_pending_encoding == 1)
 				write_triplet_flush(m_pending_encoding[0]);
 			else if (m_cb_pending_encoding == 2)
 				write_triplet_flush(m_pending_encoding[0], m_pending_encoding[1]);
-			m_stream.flush();
 			m_cb_pending_encoding = 0;
 		}
 		auto& inner_stream() { return m_stream; }

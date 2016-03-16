@@ -54,6 +54,7 @@ namespace goldfish { namespace json
 		void flush()
 		{
 			stream::write(m_stream, '"');
+			m_stream.flush();
 		}
 	private:
 		Stream m_stream;
@@ -71,8 +72,9 @@ namespace goldfish { namespace json
 		}
 		void flush()
 		{
-			m_stream.flush();
+			m_stream.flush_no_inner_stream_flush();
 			stream::write(m_stream.inner_stream(), '"');
+			m_stream.inner_stream().flush();
 		}
 	private:
 		stream::base64_writer<Stream> m_stream;
@@ -87,7 +89,11 @@ namespace goldfish { namespace json
 
 		template <class... Args> auto write(Args&&... args) { return append().write(std::forward<Args>(args)...); }
 		document_writer<stream::writer_ref_type_t<Stream>> append();
-		void flush() { stream::write(m_stream, ']'); }
+		void flush()
+		{
+			stream::write(m_stream, ']');
+			m_stream.flush();
+		}
 	private:
 		Stream m_stream;
 		bool m_first = true;
@@ -104,7 +110,11 @@ namespace goldfish { namespace json
 		template <class... Args> auto write_value(Args&&... args) { return append_value().write(std::forward<Args>(args)...); }
 		document_writer<stream::writer_ref_type_t<Stream>> append_key();
 		document_writer<stream::writer_ref_type_t<Stream>> append_value();
-		void flush() { stream::write(m_stream, '}'); }
+		void flush()
+		{
+			stream::write(m_stream, '}');
+			m_stream.flush();
+		}
 	private:
 		Stream m_stream;
 		bool m_first = true;

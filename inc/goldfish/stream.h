@@ -96,8 +96,7 @@ namespace goldfish { namespace stream
 		inner& m_stream;
 	};
 
-	template <class inner>
-	class ref_writer
+	template <class inner> class ref_writer
 	{
 	public:
 		static_assert(!is_ref<inner>::value, "Don't nest ref");
@@ -107,7 +106,10 @@ namespace goldfish { namespace stream
 		{}
 		void write_buffer(const_buffer_ref data) { return m_stream.write_buffer(data); }
 		template <class T> auto write(const T& t) { return stream::write(m_stream, t); }
-		void flush() { m_stream.flush(); }
+
+		// Note that the ref_writer doesn't flush
+		// The actual owner of the stream should be the one flushing
+		void flush() { }
 	private:
 		inner& m_stream;
 	};
@@ -124,7 +126,7 @@ namespace goldfish { namespace stream
 	template <class inner> std::enable_if_t<is_writer<inner>::value && !is_ref<inner>::value, ref_writer<inner>> ref(inner& stream) { return{ stream }; }
 	template <class inner> ref_reader<inner> ref(ref_reader<inner>& stream) { return stream; }
 	template <class inner> ref_writer<inner> ref(ref_writer<inner>& stream) { return stream; }
-	
+
 	class array_ref_reader
 	{
 	public:
