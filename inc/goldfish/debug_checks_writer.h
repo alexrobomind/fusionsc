@@ -68,7 +68,6 @@ namespace goldfish { namespace debug_checks
 			, m_writer(std::move(writer))
 		{}
 
-		template <class... Args> auto write(Args&&... args) { return append().write(std::forward<Args>(args)...); }
 		auto append()
 		{
 			err_if_locked();
@@ -93,7 +92,6 @@ namespace goldfish { namespace debug_checks
 			, m_c_left(c)
 		{}
 
-		template <class... Args> auto write(Args&&... args) { return append().write(std::forward<Args>(args)...); }
 		auto append()
 		{
 			if (m_c_left == 0)
@@ -121,8 +119,6 @@ namespace goldfish { namespace debug_checks
 			, m_writer(std::move(writer))
 		{}
 
-		template <class... Args> auto write_key(Args&&... args) { return append_key().write(std::forward<Args>(args)...); }
-		template <class... Args> auto write_value(Args&&... args) { return append_value().write(std::forward<Args>(args)...); }
 		auto append_key()
 		{
 			err_if_locked();
@@ -157,8 +153,6 @@ namespace goldfish { namespace debug_checks
 			, m_c_left(c)
 		{}
 
-		template <class... Args> auto write_key(Args&&... args) { return append_key().write(std::forward<Args>(args)...); }
-		template <class... Args> auto write_value(Args&&... args) { return append_value().write(std::forward<Args>(args)...); }
 		auto append_key()
 		{
 			if (m_c_left == 0)
@@ -226,61 +220,61 @@ namespace goldfish { namespace debug_checks
 			unlock_parent_and_lock_self();
 		}
 
-		auto write(tags::binary, uint64_t cb)
+		auto start_binary(uint64_t cb)
 		{
 			err_if_locked();
-			auto result = check_size_of_stream<error_handler>(add_write_checks_on_stream(parent(), m_writer.write(tags::binary{}, cb)), cb);
+			auto result = check_size_of_stream<error_handler>(add_write_checks_on_stream(parent(), m_writer.start_binary(cb)), cb);
 			lock();
 			return result;
 		}
-		auto write(tags::string, uint64_t cb)
+		auto start_string(uint64_t cb)
 		{
 			err_if_locked();
-			auto result = check_size_of_stream<error_handler>(add_write_checks_on_stream(parent(), m_writer.write(tags::string{}, cb)), cb);
+			auto result = check_size_of_stream<error_handler>(add_write_checks_on_stream(parent(), m_writer.start_string(cb)), cb);
 			lock();
 			return result;
 		}
-		auto write(tags::binary)
+		auto start_binary()
 		{
 			err_if_locked();
-			auto result = add_write_checks_on_stream(parent(), m_writer.write(tags::binary{}));
+			auto result = add_write_checks_on_stream(parent(), m_writer.start_binary());
 			lock();
 			return result;
 		}
-		auto write(tags::string)
+		auto start_string()
 		{
 			err_if_locked();
-			auto result = add_write_checks_on_stream(parent(), m_writer.write(tags::string{}));
-			lock();
-			return result;
-		}
-
-		auto write(tags::array, uint64_t size)
-		{
-			err_if_locked();
-			auto result = check_size_of_array<error_handler>(add_write_checks_on_array(parent(), m_writer.write(tags::array{}, size)), size);
-			lock();
-			return result;
-		}
-		auto write(tags::array)
-		{
-			err_if_locked();
-			auto result = add_write_checks_on_array(parent(), m_writer.write(tags::array{}));
+			auto result = add_write_checks_on_stream(parent(), m_writer.start_string());
 			lock();
 			return result;
 		}
 
-		auto write(tags::map, uint64_t size)
+		auto start_array(uint64_t size)
 		{
 			err_if_locked();
-			auto result = check_size_of_map<error_handler>(add_write_checks_on_map(parent(), m_writer.write(tags::map{}, size)), size);
+			auto result = check_size_of_array<error_handler>(add_write_checks_on_array(parent(), m_writer.start_array(size)), size);
 			lock();
 			return result;
 		}
-		auto write(tags::map)
+		auto start_array()
 		{
 			err_if_locked();
-			auto result = add_write_checks_on_map(parent(), m_writer.write(tags::map{}));
+			auto result = add_write_checks_on_array(parent(), m_writer.start_array());
+			lock();
+			return result;
+		}
+
+		auto start_map(uint64_t size)
+		{
+			err_if_locked();
+			auto result = check_size_of_map<error_handler>(add_write_checks_on_map(parent(), m_writer.start_map(size)), size);
+			lock();
+			return result;
+		}
+		auto start_map()
+		{
+			err_if_locked();
+			auto result = add_write_checks_on_map(parent(), m_writer.start_map());
 			lock();
 			return result;
 		}

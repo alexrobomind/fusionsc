@@ -14,39 +14,39 @@ namespace goldfish
 	TEST_CASE(write_on_parent_before_stream_flushed)
 	{
 		stream::vector_writer output;
-		auto array = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto stream = array.write(tags::string{});
+		auto array = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto stream = array.start_string();
 		expect_exception<debug_checks::library_missused>([&] { array.append(); });
 	}
 	TEST_CASE(write_to_stream_after_flush)
 	{
 		stream::vector_writer output;
-		auto array = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto stream = array.write(tags::string{});
+		auto array = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto stream = array.start_string();
 		stream.flush();
 		expect_exception<debug_checks::library_missused>([&] { stream::write(stream, 'a'); });
 	}
 	TEST_CASE(flush_stream_twice)
 	{
 		stream::vector_writer output;
-		auto array = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto stream = array.write(tags::string{});
+		auto array = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto stream = array.start_string();
 		stream.flush();
 		expect_exception<debug_checks::library_missused>([&] { stream.flush(); });
 	}
 	TEST_CASE(flush_stream_without_writing_all)
 	{
 		stream::vector_writer output;
-		auto array = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto stream = array.write(tags::string{}, 2);
+		auto array = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto stream = array.start_string(2);
 		stream::write(stream, 'a');
 		expect_exception<debug_checks::library_missused>([&] { stream.flush(); });
 	}
 	TEST_CASE(write_too_much_to_stream)
 	{
 		stream::vector_writer output;
-		auto array = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto stream = array.write(tags::string{}, 1);
+		auto array = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto stream = array.start_string(1);
 		stream::write(stream, 'a');
 		expect_exception<debug_checks::library_missused>([&] { stream::write(stream, 'b'); });
 	}
@@ -54,47 +54,47 @@ namespace goldfish
 	TEST_CASE(write_on_parent_before_array_flushed)
 	{
 		stream::vector_writer output;
-		auto writer = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto array = writer.write(tags::array{});
+		auto writer = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto array = writer.start_array();
 		expect_exception<debug_checks::library_missused>([&] { writer.append(); });
 	}
 	TEST_CASE(write_to_array_after_flush)
 	{
 		stream::vector_writer output;
-		auto writer = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto array = writer.write(tags::array{});
+		auto writer = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto array = writer.start_array();
 		array.flush();
 		expect_exception<debug_checks::library_missused>([&] { array.append(); });
 	}
 	TEST_CASE(append_to_array_without_writing)
 	{
 		stream::vector_writer output;
-		auto writer = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto array = writer.write(tags::array{});
+		auto writer = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto array = writer.start_array();
 		array.append();
 		expect_exception<debug_checks::library_missused>([&] { array.flush(); });
 	}
 	TEST_CASE(flush_array_twice)
 	{
 		stream::vector_writer output;
-		auto writer = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto array = writer.write(tags::array{});
+		auto writer = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto array = writer.start_array();
 		array.flush();
 		expect_exception<debug_checks::library_missused>([&] { array.flush(); });
 	}
 	TEST_CASE(flush_array_without_writing_all)
 	{
 		stream::vector_writer output;
-		auto writer = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto array = writer.write(tags::array{}, 2);
+		auto writer = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto array = writer.start_array(2);
 		array.write(1ull);
 		expect_exception<debug_checks::library_missused>([&] { array.flush(); });
 	}
 	TEST_CASE(write_too_much_to_array)
 	{
 		stream::vector_writer output;
-		auto writer = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto array = writer.append().write(tags::array{}, 1);
+		auto writer = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto array = writer.start_array(1);
 		array.write(1ull);
 		expect_exception<debug_checks::library_missused>([&] { array.append(); });
 	}
@@ -102,39 +102,39 @@ namespace goldfish
 	TEST_CASE(write_on_parent_before_map_flushed)
 	{
 		stream::vector_writer output;
-		auto writer = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto map = writer.write(tags::map{});
+		auto writer = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto map = writer.start_map();
 		expect_exception<debug_checks::library_missused>([&] { writer.append(); });
 	}
 	TEST_CASE(write_to_map_after_flush)
 	{
 		stream::vector_writer output;
-		auto writer = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto map = writer.write(tags::map{});
+		auto writer = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto map = writer.start_map();
 		map.flush();
 		expect_exception<debug_checks::library_missused>([&] { map.append_key(); });
 	}
 	TEST_CASE(append_to_map_without_writing)
 	{
 		stream::vector_writer output;
-		auto writer = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto map = writer.write(tags::map{});
+		auto writer = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto map = writer.start_map();
 		map.append_key();
 		expect_exception<debug_checks::library_missused>([&] { map.append_value(); });
 	}
 	TEST_CASE(flush_map_twice)
 	{
 		stream::vector_writer output;
-		auto writer = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto map = writer.write(tags::map{});
+		auto writer = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto map = writer.start_map();
 		map.flush();
 		expect_exception<debug_checks::library_missused>([&] { map.flush(); });
 	}
 	TEST_CASE(flush_map_without_writing_all)
 	{
 		stream::vector_writer output;
-		auto writer = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto map = writer.write(tags::map{}, 2);
+		auto writer = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto map = writer.start_map(2);
 		map.write_key(1ull);
 		map.write_value(1ull);
 		expect_exception<debug_checks::library_missused>([&] { map.flush(); });
@@ -142,8 +142,8 @@ namespace goldfish
 	TEST_CASE(write_too_much_to_map)
 	{
 		stream::vector_writer output;
-		auto writer = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto map = writer.write(tags::map{}, 1);
+		auto writer = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto map = writer.start_map(1);
 		map.write_key(1ull);
 		map.write_value(1ull);
 		expect_exception<debug_checks::library_missused>([&] { map.append_key(); });
@@ -151,23 +151,23 @@ namespace goldfish
 	TEST_CASE(write_value_to_map_when_key_expected)
 	{
 		stream::vector_writer output;
-		auto writer = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto map = writer.write(tags::map{});
+		auto writer = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto map = writer.start_map();
 		expect_exception<debug_checks::library_missused>([&] { map.append_value(); });
 	}
 	TEST_CASE(write_key_to_map_when_value_expected)
 	{
 		stream::vector_writer output;
-		auto writer = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto map = writer.write(tags::map{});
+		auto writer = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto map = writer.start_map();
 		map.write_key(1ull);
 		expect_exception<debug_checks::library_missused>([&] { map.append_key(); });
 	}
 	TEST_CASE(flush_map_when_value_expected)
 	{
 		stream::vector_writer output;
-		auto writer = json::write_with_error_checks(stream::ref(output), debug_checks::throw_on_error{}, tags::array{});
-		auto map = writer.write(tags::map{});
+		auto writer = json::create_writer(stream::ref(output), debug_checks::throw_on_error{}).start_array();
+		auto map = writer.start_map();
 		map.write_key(1ull);
 		expect_exception<debug_checks::library_missused>([&] { map.flush(); });
 	}

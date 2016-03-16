@@ -42,13 +42,25 @@ TEST_CASE(parse_document)
 
 #include <goldfish/dom_writer.h>
 #include <goldfish/json_writer.h>
+#include <goldfish/cbor_writer.h>
 
 TEST_CASE(generate_json_document)
 {
 	using namespace goldfish;
 	
 	stream::string_writer output_stream;
-	copy_dom_document(json::create_writer(stream::ref(output_stream)), true);
+	auto map = json::create_writer(stream::ref(output_stream)).start_map();
+	map.write_key(1);
+	map.write_value(2);
+	map.flush();
 	output_stream.flush();
-	test(output_stream.data == "true");
+	test(output_stream.data == "{1:2}");
+}
+TEST_CASE(generate_cbor_document)
+{
+	using namespace goldfish;
+
+	stream::vector_writer output_stream;
+	cbor::create_writer(stream::ref(output_stream)).write(true);
+	output_stream.flush();
 }

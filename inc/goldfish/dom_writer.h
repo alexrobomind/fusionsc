@@ -23,26 +23,26 @@ namespace goldfish
 
 		template <class writer> void write(writer& writer, const std::vector<uint8_t>& x)
 		{
-			auto d = writer.write(tags::binary{}, x.size());
+			auto d = writer.start_binary(x.size());
 			d.write_buffer(const_buffer_ref{ x.data(), x.size() });
 			d.flush();
 		}
 		template <class writer> void write(writer& writer, const std::string& x)
 		{
-			auto d = writer.write(tags::string{}, x.size());
+			auto d = writer.start_string(x.size());
 			d.write_buffer(const_buffer_ref{ reinterpret_cast<const uint8_t*>(x.data()), x.size() });
 			d.flush();
 		}
 		template <class writer> void write(writer& writer, const dom::array& xs)
 		{
-			auto d = writer.write(tags::array{}, xs.size());
+			auto d = writer.start_array(xs.size());
 			for (auto&& x : xs)
 				copy_dom_document(d.append(), x);
 			d.flush();
 		}
 		template <class writer> void write(writer& writer, const dom::map& xs)
 		{
-			auto d = writer.write(tags::map{}, xs.size());
+			auto d = writer.start_map(xs.size());
 			for (auto&& x : xs)
 			{
 				copy_dom_document(d.append_key(), x.first);

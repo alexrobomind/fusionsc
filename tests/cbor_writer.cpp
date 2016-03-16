@@ -165,7 +165,7 @@ namespace goldfish { namespace dom
 		auto w = [&](const std::vector<document>& data)
 		{
 			stream::vector_writer s;
-			auto array = cbor::write(stream::ref(s), tags::array{});
+			auto array = cbor::create_writer(stream::ref(s)).start_array();
 			for (auto d : data)
 				copy_dom_document(array.append(), d);
 			array.flush();
@@ -186,7 +186,7 @@ namespace goldfish { namespace dom
 		auto w = [&](const std::vector<std::pair<document, document>>& data)
 		{
 			stream::vector_writer s;
-			auto map = cbor::write(stream::ref(s), tags::map{});
+			auto map = cbor::create_writer(stream::ref(s)).start_map();
 			for (auto d : data)
 			{
 				copy_dom_document(map.append_key(), d.first);
@@ -208,7 +208,7 @@ namespace goldfish { namespace dom
 		auto w = [&](const std::vector<std::string>& data)
 		{
 			stream::vector_writer s;
-			auto string = cbor::write(stream::ref(s), tags::string{});
+			auto string = cbor::create_writer(stream::ref(s)).start_string();
 			for (auto s : data)
 				string.write_buffer({ reinterpret_cast<const uint8_t*>(s.data()), s.size() });
 			string.flush();
@@ -224,7 +224,7 @@ namespace goldfish { namespace dom
 		auto w = [&](const std::vector<std::vector<uint8_t>>& data)
 		{
 			stream::vector_writer s;
-			auto binary = cbor::write(stream::ref(s), tags::binary{});
+			auto binary = cbor::create_writer(stream::ref(s)).start_binary();
 			for (auto d : data)
 				binary.write_buffer(d);
 			binary.flush();

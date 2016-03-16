@@ -4,6 +4,7 @@
 #include "array_ref.h"
 #include "base64_stream.h"
 #include "debug_checks_writer.h"
+#include "dom.h"
 #include "sax_writer.h"
 #include "stream.h"
 
@@ -87,7 +88,6 @@ namespace goldfish { namespace json
 			: m_stream(std::move(s))
 		{}
 
-		template <class... Args> auto write(Args&&... args) { return append().write(std::forward<Args>(args)...); }
 		document_writer<stream::writer_ref_type_t<Stream>> append();
 		void flush()
 		{
@@ -106,8 +106,6 @@ namespace goldfish { namespace json
 			: m_stream(std::move(s))
 		{}
 
-		template <class... Args> auto write_key(Args&&... args) { return append_key().write(std::forward<Args>(args)...); }
-		template <class... Args> auto write_value(Args&&... args) { return append_value().write(std::forward<Args>(args)...); }
 		document_writer<stream::writer_ref_type_t<Stream>> append_key();
 		document_writer<stream::writer_ref_type_t<Stream>> append_value();
 		void flush()
@@ -149,16 +147,6 @@ namespace goldfish { namespace json
 			auto string = std::to_string(x);
 			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(string.data()), string.size() });
 		}
-		void write(uint32_t x)
-		{
-			auto string = std::to_string(x);
-			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(string.data()), string.size() });
-		}
-		void write(int32_t x)
-		{
-			auto string = std::to_string(x);
-			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(string.data()), string.size() });
-		}
 		void write(double x)
 		{
 			char buffer[1024];
@@ -168,28 +156,28 @@ namespace goldfish { namespace json
 			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(buffer), static_cast<size_t>(cb) });
 		}
 
-		auto write(tags::binary, uint64_t cb) { return write(tags::binary{}); }
-		auto write(tags::string, uint64_t cb) { return write(tags::string{}); }
-		binary_writer<Stream> write(tags::binary)
+		auto start_binary(uint64_t cb) { return start_binary(); }
+		auto start_string(uint64_t cb) { return start_string(); }
+		binary_writer<Stream> start_binary()
 		{
 			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>("\"\\/B"), 4 });
 			return{ std::move(m_stream) };
 		}
-		text_writer<Stream> write(tags::string)
+		text_writer<Stream> start_string()
 		{
 			stream::write(m_stream, '"');
 			return{ std::move(m_stream) };
 		}
 
-		auto write(tags::array, uint64_t size) { return write(tags::array{}); }
-		array_writer<Stream> write(tags::array)
+		auto start_array(uint64_t size) { return start_array(); }
+		array_writer<Stream> start_array()
 		{
 			stream::write(m_stream, '[');
 			return{ std::move(m_stream) };
 		}
 		
-		auto write(tags::map, uint64_t size) { return write(tags::map{}); }
-		map_writer<Stream> write(tags::map)
+		auto start_map(uint64_t size) { return start_map(); }
+		map_writer<Stream> start_map()
 		{
 			stream::write(m_stream, '{');
 			return{ std::move(m_stream) };
@@ -199,16 +187,13 @@ namespace goldfish { namespace json
 		Stream m_stream;
 	};
 	template <class Stream> document_writer<std::decay_t<Stream>> write_no_debug_check(Stream&& s) { return{ std::forward<Stream>(s) }; }
-	template <class Stream, class error_handler> auto create_writer(Stream&& s, error_handler e) { return debug_checks::add_write_checks(write_no_debug_check(std::forward<Stream>(s)), e); }
-	template <class Stream> auto create_writer(Stream&& s) { return create_writer(std::forward<Stream>(s), debug_checks::default_error_handler{}); }
-
-	template <class Stream, class... Args> auto write(Stream&& s, Args&&... args)
+	template <class Stream, class error_handler> auto create_writer(Stream&& s, error_handler e)
 	{
-		return create_writer(std::forward<Stream>(s)).write(std::forward<Args>(args)...);
+		return sax::make_writer(debug_checks::add_write_checks(write_no_debug_check(std::forward<Stream>(s)), e));
 	}
-	template <class Stream, class error_handler, class... Args> auto write_with_error_checks(Stream&& s, error_handler e, Args&&... args)
+	template <class Stream> auto create_writer(Stream&& s)
 	{
-		return create_writer(std::forward<Stream>(s), e).write(std::forward<Args>(args)...);
+		return create_writer(std::forward<Stream>(s), debug_checks::default_error_handler{});
 	}
 
 	template <class Stream> document_writer<stream::writer_ref_type_t<Stream>> array_writer<Stream>::append()
