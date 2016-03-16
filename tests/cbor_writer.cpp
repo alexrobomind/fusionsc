@@ -1,4 +1,4 @@
-#include <goldfish/dom_writer.h>
+#include <goldfish/dom.h>
 #include <goldfish/cbor_writer.h>
 #include <goldfish/stream.h>
 #include "unit_test.h"

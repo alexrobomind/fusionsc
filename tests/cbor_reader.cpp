@@ -1,5 +1,5 @@
 #include <goldfish/cbor_reader.h>
-#include <goldfish/dom_reader.h>
+#include <goldfish/dom.h>
 #include <goldfish/stream.h>
 #include "unit_test.h"
 

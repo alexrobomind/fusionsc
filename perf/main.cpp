@@ -8,7 +8,7 @@
 #include <goldfish/json_writer.h>
 #include <goldfish/cbor_reader.h>
 #include <goldfish/cbor_writer.h>
-#include <goldfish/dom_reader.h>
+#include <goldfish/dom.h>
 
 using namespace std;
 using namespace goldfish;

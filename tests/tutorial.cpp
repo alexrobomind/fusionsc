@@ -40,7 +40,7 @@ TEST_CASE(parse_document)
 	seek_to_end(document);
 }
 
-#include <goldfish/dom_writer.h>
+#include <goldfish/dom.h>
 #include <goldfish/json_writer.h>
 #include <goldfish/cbor_writer.h>
 
