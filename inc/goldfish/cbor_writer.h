@@ -93,7 +93,13 @@ namespace goldfish { namespace cbor
 		}
 
 		void write(uint64_t x) { details::write_integer<0>(m_stream, x); }
-		void write(int64_t x) { details::write_integer<1>(m_stream, static_cast<uint64_t>(-1ll - x)); }
+		void write(int64_t x)
+		{
+			if (x < 0)
+				details::write_integer<1>(m_stream, static_cast<uint64_t>(-1ll - x));
+			else
+				write(static_cast<uint64_t>(x));
+		}
 
 		auto start_binary(uint64_t cb)
 		{

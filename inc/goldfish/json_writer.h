@@ -160,7 +160,7 @@ namespace goldfish { namespace json
 		auto start_string(uint64_t cb) { return start_string(); }
 		binary_writer<Stream> start_binary()
 		{
-			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>("\"\\/B"), 4 });
+			stream::write(m_stream, '"');
 			return{ std::move(m_stream) };
 		}
 		text_writer<Stream> start_string()

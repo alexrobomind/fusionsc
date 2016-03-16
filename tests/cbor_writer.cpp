@@ -64,12 +64,13 @@ namespace goldfish { namespace dom
 		test(w(1000000ull) == "1a000f4240");
 		test(w(1000000000000ull) == "1b000000e8d4a51000");
 		test(w(18446744073709551615ull) == "1bffffffffffffffff");
-
+		
 		//test(w(tagged{ 2, to_vector("010000000000000000") }) == "c249010000000000000000");
-		test(w(-18446744073709551615ll) == "3bfffffffffffffffe");
+		test(w(-9223372036854775808ll) == "3b7fffffffffffffff");
 		//test(w(tagged{ 3, to_vector("010000000000000000") }) == "c349010000000000000000");
 
 		test(w(-1ll) == "20");
+		test(w(1ll) == "01");
 		test(w(-10ll) == "29");
 		test(w(-100ll) == "3863");
 		test(w(-1000ll) == "3903e7");

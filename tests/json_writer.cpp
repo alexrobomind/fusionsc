@@ -38,10 +38,9 @@ namespace goldfish { namespace dom
 		test(w(map{ { string("a"), 1ull } }) == "{\"a\":1}");
 		test(w(map{ { string("a"), 1ull }, { string("b"), 2ull } }) == "{\"a\":1,\"b\":2}");
 
-		test(w(string("/B")) == "\"/B\"");
-		test(w(binary({})) == "\"\\/B\"");
-		test(w(binary({ 1 })) == "\"\\/BAQ==\"");
-		test(w(binary({ 1, 2, 3 })) == "\"\\/BAQID\"");
+		test(w(binary({})) == "\"\"");
+		test(w(binary({ 1 })) == "\"AQ==\"");
+		test(w(binary({ 1, 2, 3 })) == "\"AQID\"");
 		test(w(map{ { 1ull, 1ull } }) == "{1:1}");
 	}
 
