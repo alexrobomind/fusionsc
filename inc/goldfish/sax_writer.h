@@ -28,7 +28,7 @@ namespace goldfish { namespace sax
 		auto start_map() { return append().start_map(); }
 
 		auto append() { return make_writer(m_writer.append()); }
-		void flush() { m_writer.flush(); }
+		auto flush() { return m_writer.flush(); }
 	private:
 		inner m_writer;
 	};
@@ -77,7 +77,7 @@ namespace goldfish { namespace sax
 
 		auto append_key() { return make_writer(m_writer.append_key()); }
 		auto append_value() { return make_writer(m_writer.append_value()); }
-		void flush() { m_writer.flush(); }
+		auto flush() { return m_writer.flush(); }
 	private:
 		inner m_writer;
 	};
@@ -90,39 +90,39 @@ namespace goldfish { namespace sax
 			: m_writer(std::move(writer))
 		{}
 
-		void write(bool x)            { m_writer.write(x); }
-		void write(nullptr_t x)       { m_writer.write(x); }
-		void write(double x)          { m_writer.write(x); }
-		void write(tags::undefined x) { m_writer.write(x); }
+		auto write(bool x)            { return m_writer.write(x); }
+		auto write(nullptr_t x)       { return m_writer.write(x); }
+		auto write(double x)          { return m_writer.write(x); }
+		auto write(tags::undefined x) { return m_writer.write(x); }
 
-		void write(uint64_t x)        { m_writer.write(x); }
-		void write(uint32_t x)        { m_writer.write(static_cast<uint64_t>(x)); }
-		void write(uint16_t x)        { m_writer.write(static_cast<uint64_t>(x)); }
-		void write(uint8_t x)         { m_writer.write(static_cast<uint64_t>(x)); }
+		auto write(uint64_t x)        { return m_writer.write(x); }
+		auto write(uint32_t x)        { return m_writer.write(static_cast<uint64_t>(x)); }
+		auto write(uint16_t x)        { return m_writer.write(static_cast<uint64_t>(x)); }
+		auto write(uint8_t x)         { return m_writer.write(static_cast<uint64_t>(x)); }
 
-		void write(int64_t x)         { m_writer.write(x); }
-		void write(int32_t x)         { m_writer.write(static_cast<int64_t>(x)); }
-		void write(int16_t x)         { m_writer.write(static_cast<int64_t>(x)); }
-		void write(int8_t x)          { m_writer.write(static_cast<int64_t>(x)); }
+		auto write(int64_t x)         { return m_writer.write(x); }
+		auto write(int32_t x)         { return m_writer.write(static_cast<int64_t>(x)); }
+		auto write(int16_t x)         { return m_writer.write(static_cast<int64_t>(x)); }
+		auto write(int8_t x)          { return m_writer.write(static_cast<int64_t>(x)); }
 
 		auto start_binary(uint64_t cb) { return m_writer.start_binary(cb); }
 		auto start_binary() { return m_writer.start_binary(); }
-		void write(const_buffer_ref x)
+		auto write(const_buffer_ref x)
 		{
 			auto stream = start_binary(x.size());
 			stream.write_buffer(x);
-			stream.flush();
+			return stream.flush();
 		}
 
 		auto start_string(uint64_t cb) { return m_writer.start_string(cb); }
 		auto start_string() { return m_writer.start_string(); }
-		void write(const char* text) { return write(text, strlen(text)); }
-		void write(const std::string& text) { return write(text.data(), text.size()); }
-		template <size_t N> void write(const char(&text)[N])
+		auto write(const char* text) { return write(text, strlen(text)); }
+		auto write(const std::string& text) { return write(text.data(), text.size()); }
+		template <size_t N> auto write(const char(&text)[N])
 		{
 			static_assert(N > 0, "Expect null terminated strings");
 			assert(text[N - 1] == 0);
-			write(text, N - 1);
+			return write(text, N - 1);
 		}
 
 		auto start_array(uint64_t size) { return make_array_writer(m_writer.start_array(size)); }
@@ -131,26 +131,26 @@ namespace goldfish { namespace sax
 		auto start_map(uint64_t size) { return make_map_writer(m_writer.start_map(size)); }
 		auto start_map() { return make_map_writer(m_writer.start_map()); }
 
-		template <class T> std::enable_if_t<stream::is_reader<std::decay_t<T>>::value, void> write_as_text(T&& s)
+		template <class T> auto write_as_text(T&& s, std::enable_if_t<stream::is_reader<std::decay_t<T>>::value>* = 0)
 		{
-			copy_stream(s, [&](size_t cb) { return start_string(cb); }, [&] { return start_string(); });
+			return copy_stream(s, [&](size_t cb) { return start_string(cb); }, [&] { return start_string(); });
 		}
-		template <class T> std::enable_if_t<stream::is_reader<std::decay_t<T>>::value, void> write_as_binary(T&& s)
+		template <class T> auto write_as_binary(T&& s, std::enable_if_t<stream::is_reader<std::decay_t<T>>::value>* = 0)
 		{
-			copy_stream(s, [&](size_t cb) { return start_binary(cb); }, [&] { return start_binary(); });
+			return copy_stream(s, [&](size_t cb) { return start_binary(cb); }, [&] { return start_binary(); });
 		}
 
-		template <class T> std::enable_if_t<std::is_same<typename std::decay_t<T>::tag, tags::document>::value, void> write(T&& document)
+		template <class T> auto write(T&& document, std::enable_if_t<std::is_same<typename std::decay_t<T>::tag, tags::document>::value>* = 0)
 		{
-			document.visit(first_match(
-				[&](auto&& x, tags::binary) { write_as_binary(x); },
-				[&](auto&& x, tags::string) { write_as_text(x); },
+			return document.visit(best_match(
+				[&](auto&& x, tags::binary) { return write_as_binary(x); },
+				[&](auto&& x, tags::string) { return write_as_text(x); },
 				[&](auto&& x, tags::array)
 				{
 					auto array_writer = start_array();
 					while (auto element = x.read())
 						array_writer.write(*element);
-					array_writer.flush();
+					return array_writer.flush();
 				},
 				[&](auto&& x, tags::map)
 				{
@@ -160,40 +160,40 @@ namespace goldfish { namespace sax
 						map_writer.write_key(*key);
 						map_writer.write_value(x.read_value());
 					}
-					map_writer.flush();
+					return map_writer.flush();
 				},
-				[&](auto&& x, tags::undefined) { write(x); },
-				[&](auto&& x, tags::floating_point) { write(x); },
-				[&](auto&& x, tags::unsigned_int) { write(x); },
-				[&](auto&& x, tags::signed_int) { write(x); },
-				[&](auto&& x, tags::boolean) { write(x); },
-				[&](auto&& x, tags::null) { write(x); }
+				[&](auto&& x, tags::undefined) { return write(x); },
+				[&](auto&& x, tags::floating_point) { return write(x); },
+				[&](auto&& x, tags::unsigned_int) { return write(x); },
+				[&](auto&& x, tags::signed_int) { return write(x); },
+				[&](auto&& x, tags::boolean) { return write(x); },
+				[&](auto&& x, tags::null) { return write(x); }
 			));
 		}
-		void write(const dom::document& document)
+		auto write(const dom::document& document)
 		{
-			document.visit(best_match(
-				[&](bool x) { write(x); },
-				[&](nullptr_t x) { write(x); },
-				[&](tags::undefined x) { write(x); },
-				[&](uint64_t x) { write(x); },
-				[&](int64_t x) { write(x); },
-				[&](double x) { write(x); },
-				[&](const std::vector<uint8_t>& x) { write(const_buffer_ref{ x }); },
-				[&](const std::string& x) { write(x); },
+			return document.visit(best_match(
+				[&](bool x) { return write(x); },
+				[&](nullptr_t x) { return write(x); },
+				[&](tags::undefined x) { return write(x); },
+				[&](uint64_t x) { return write(x); },
+				[&](int64_t x) { return write(x); },
+				[&](double x) { return write(x); },
+				[&](const std::vector<uint8_t>& x) { return write(const_buffer_ref{ x }); },
+				[&](const std::string& x) { return write(x); },
 				[&](const dom::array& x)
 				{
 					auto array_writer = start_array(x.size());
 					for (auto&& y : x)
 						array_writer.write(y);
-					array_writer.flush();
+					return array_writer.flush();
 				},
 				[&](const dom::map& x)
 				{
 					auto map_writer = start_map(x.size());
 					for (auto&& y : x)
 						map_writer.write(y.first, y.second);
-					map_writer.flush();
+					return map_writer.flush();
 				}
 			));
 		}
@@ -208,7 +208,7 @@ namespace goldfish { namespace sax
 				// We read the entire stream
 				auto output_stream = create_writer_with_size(cb);
 				output_stream.write_buffer({ buffer, cb });
-				output_stream.flush();
+				return output_stream.flush();
 			}
 			else
 			{
@@ -220,15 +220,15 @@ namespace goldfish { namespace sax
 					cb = s.read_buffer(buffer);
 					output_stream.write_buffer({ buffer, cb });
 				} while (cb == sizeof(buffer));
-				output_stream.flush();
+				return output_stream.flush();
 			}
 		};
 
-		void write(const char* text, size_t length)
+		auto write(const char* text, size_t length)
 		{
 			auto stream = start_string(length);
 			stream.write_buffer({ reinterpret_cast<const uint8_t*>(text), length });
-			stream.flush();
+			return stream.flush();
 		}
 		inner m_writer;
 	};

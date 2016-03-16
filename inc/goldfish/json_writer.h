@@ -52,10 +52,10 @@ namespace goldfish { namespace json
 				}
 			}
 		}
-		void flush()
+		auto flush()
 		{
 			stream::write(m_stream, '"');
-			m_stream.flush();
+			return m_stream.flush();
 		}
 	private:
 		Stream m_stream;
@@ -71,11 +71,11 @@ namespace goldfish { namespace json
 		{
 			m_stream.write_buffer(buffer);
 		}
-		void flush()
+		auto flush()
 		{
 			m_stream.flush_no_inner_stream_flush();
 			stream::write(m_stream.inner_stream(), '"');
-			m_stream.inner_stream().flush();
+			return m_stream.inner_stream().flush();
 		}
 	private:
 		stream::base64_writer<Stream> m_stream;
@@ -89,10 +89,10 @@ namespace goldfish { namespace json
 		{}
 
 		document_writer<stream::writer_ref_type_t<Stream>> append();
-		void flush()
+		auto flush()
 		{
 			stream::write(m_stream, ']');
-			m_stream.flush();
+			return m_stream.flush();
 		}
 	private:
 		Stream m_stream;
@@ -108,10 +108,10 @@ namespace goldfish { namespace json
 
 		document_writer<stream::writer_ref_type_t<Stream>> append_key();
 		document_writer<stream::writer_ref_type_t<Stream>> append_value();
-		void flush()
+		auto flush()
 		{
 			stream::write(m_stream, '}');
-			m_stream.flush();
+			return m_stream.flush();
 		}
 	private:
 		Stream m_stream;
@@ -124,36 +124,41 @@ namespace goldfish { namespace json
 		document_writer(Stream&& s)
 			: m_stream(std::move(s))
 		{}
-		void write(bool x)
+		auto write(bool x)
 		{
 			if (x) m_stream.write_buffer({ reinterpret_cast<const uint8_t*>("true"), 4 });
 			else   m_stream.write_buffer({ reinterpret_cast<const uint8_t*>("false"), 5 });
+			return m_stream.flush();
 		}
-		void write(nullptr_t)
+		auto write(nullptr_t)
 		{
 			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>("null"), 4 });
+			return m_stream.flush();
 		}
-		void write(tags::undefined)
+		auto write(tags::undefined)
 		{
-			write(nullptr);
+			return write(nullptr);
 		}
-		void write(uint64_t x)
-		{
-			auto string = std::to_string(x);
-			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(string.data()), string.size() });
-		}
-		void write(int64_t x)
+		auto write(uint64_t x)
 		{
 			auto string = std::to_string(x);
 			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(string.data()), string.size() });
+			return m_stream.flush();
 		}
-		void write(double x)
+		auto write(int64_t x)
+		{
+			auto string = std::to_string(x);
+			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(string.data()), string.size() });
+			return m_stream.flush();
+		}
+		auto write(double x)
 		{
 			char buffer[1024];
 			auto cb = sprintf_s(buffer, "%g", x);
 			if (cb <= 0)
 				std::terminate();
 			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(buffer), static_cast<size_t>(cb) });
+			return m_stream.flush();
 		}
 
 		auto start_binary(uint64_t cb) { return start_binary(); }

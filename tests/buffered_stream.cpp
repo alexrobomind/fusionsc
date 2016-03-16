@@ -92,12 +92,13 @@ namespace goldfish { namespace stream
 		vector_writer x;
 		auto stream = buffer<2>(ref(x));
 		stream.write<uint8_t>(1);
-		test(x.data.empty());
+		test(x.data().empty());
 
 		stream.write<uint8_t>(2);
-		test(x.data.empty());
+		test(x.data().empty());
 
 		stream.flush();
-		test(x.data == std::vector<uint8_t>{1, 2});
+
+		test(x.data() == std::vector<uint8_t>{1, 2});
 	}
 }}

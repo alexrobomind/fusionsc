@@ -10,10 +10,7 @@ namespace goldfish { namespace dom
 	{
 		auto w = [&](const document& d)
 		{
-			stream::string_writer s;
-			json::create_writer(stream::ref(s)).write(d);
-			s.flush();
-			return s.data;
+			return json::create_writer(stream::string_writer{}).write(d);
 		};
 
 		test(w(true) == "true");
@@ -47,10 +44,7 @@ namespace goldfish { namespace dom
 	{
 		auto run = [](const char* data)
 		{
-			auto w = stream::string_writer{};
-			json::create_writer(stream::ref(w)).write(json::read(stream::read_string_literal(data)));
-			w.flush();
-			test(data == w.data);
+			test(json::create_writer(stream::string_writer{}).write(json::read(stream::read_string_literal(data))) == data);
 		};
 
 		run("[null]");

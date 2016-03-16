@@ -197,21 +197,38 @@ namespace goldfish { namespace stream
 	template <size_t N> array_ref_reader read_string_literal(const char(&s)[N]) { assert(s[N - 1] == 0); return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), N - 1 }; }
 	inline array_ref_reader read_string_literal(const char* s) { return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), strlen(s) }; }
 
-	struct vector_writer
+	class vector_writer
 	{
+	public:
 		vector_writer() = default;
 		vector_writer(vector_writer&&) = default;
 		vector_writer& operator=(vector_writer&&) = default;
 
 		void write_buffer(const_buffer_ref d)
 		{
-			data.insert(data.end(), d.begin(), d.end());
+			m_data.insert(m_data.end(), d.begin(), d.end());
 		}
-		void flush() { }
-		std::vector<uint8_t> data;
+		auto flush()
+		{
+			#ifndef NDEBUG
+			m_flushed = true;
+			#endif
+			return std::move(m_data);
+		}
+		const auto& data()
+		{
+			assert(!m_flushed);
+			return m_data;
+		}
+	private:
+		#ifndef NDEBUG
+		bool m_flushed = false;
+		#endif
+		std::vector<uint8_t> m_data;
 	};
-	struct string_writer
+	class string_writer
 	{
+	public:
 		string_writer() = default;
 		string_writer(string_writer&&) = default;
 		string_writer& operator=(string_writer&&) = default;
@@ -220,7 +237,8 @@ namespace goldfish { namespace stream
 		{
 			data.insert(data.end(), reinterpret_cast<const char*>(d.begin()), reinterpret_cast<const char*>(d.end()));
 		}
-		void flush() { }
+		auto flush() { return std::move(data); }
+	private:
 		std::string data;
 	};
 

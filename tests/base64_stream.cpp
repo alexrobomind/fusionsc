@@ -7,8 +7,7 @@ namespace goldfish { namespace stream
 	{
 		auto s = encode_base64_to(string_writer{});
 		s.write_buffer({ reinterpret_cast<const uint8_t*>(data.data()), data.size() });
-		s.flush();
-		return std::move(s.inner_stream().data);
+		return s.flush();
 	}
 	std::string my_base64_decode(const std::string& data)
 	{
@@ -104,8 +103,6 @@ namespace goldfish { namespace stream
 			buffer[0] = 'r'; buffer[1] = 'e';  buffer[2] = '.'; s.write_buffer(buffer);
 		}
 
-		s.flush();
-
-		test(s.inner_stream().data == "YW55IGNhcm5hbCBwbGVhc3VyZS4=");
+		test(s.flush() == "YW55IGNhcm5hbCBwbGVhc3VyZS4=");
 	}
 }}
