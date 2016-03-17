@@ -86,8 +86,20 @@ namespace goldfish { namespace cbor
 		}
 		auto write(double x)
 		{
+			if (static_cast<float>(x) == x)
+				return write(static_cast<float>(x));
+
+			static_assert(sizeof(double) == sizeof(uint64_t), "Expect 64 bit doubles");
 			stream::write(m_stream, static_cast<uint8_t>((7 << 5) | 27));
 			auto i = *reinterpret_cast<uint64_t*>(&x);
+			stream::write(m_stream, to_big_endian(i));
+			return m_stream.flush();
+		}
+		auto write(float x)
+		{
+			static_assert(sizeof(double) == sizeof(uint64_t), "Expect 32 bit floats");
+			stream::write(m_stream, static_cast<uint8_t>((7 << 5) | 26));
+			auto i = *reinterpret_cast<uint32_t*>(&x);
 			stream::write(m_stream, to_big_endian(i));
 			return m_stream.flush();
 		}
