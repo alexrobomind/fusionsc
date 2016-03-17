@@ -16,7 +16,7 @@ namespace goldfish { namespace json
 	template <class Stream> class text_string;
 	template <class Stream> class array;
 	template <class Stream> class map;
-	template <class Stream> using document = document_on_variant<
+	template <class Stream> using document = document_impl<
 		true /*does_json_conversions*/,
 		bool,
 		nullptr_t,

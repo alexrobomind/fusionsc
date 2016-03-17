@@ -19,7 +19,7 @@ namespace goldfish { namespace cbor
 	template <class Stream> class array;
 	template <class Stream> class map;
 
-	template <class Stream> using document = document_on_variant<
+	template <class Stream> using document = document_impl<
 		false /*does_json_conversions*/,
 		bool,
 		nullptr_t,

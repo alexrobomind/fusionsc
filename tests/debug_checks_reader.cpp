@@ -11,7 +11,7 @@ namespace goldfish
 		auto string = document.read()->as_string();
 		test(stream::read<char>(string) == 'h');
 		test(stream::seek(string, 1) == 1);
-		expect_exception<debug_checks::library_missused>([&] { document.read(); });
+		expect_exception<debug_checks::library_misused>([&] { document.read(); });
 	}
 	TEST_CASE(reading_parent_after_reading_all_ok)
 	{
@@ -27,7 +27,7 @@ namespace goldfish
 
 		auto string = document.read()->as_string();
 		test(stream::seek(string, 5) == 5);
-		expect_exception<debug_checks::library_missused>([&] { document.read(); });
+		expect_exception<debug_checks::library_misused>([&] { document.read(); });
 	}
 	TEST_CASE(reading_parent_after_seeking_past_end_ok)
 	{
@@ -44,7 +44,7 @@ namespace goldfish
 
 		auto array = document.read()->as_array();
 		test(array.read()->as_uint() == 1);
-		expect_exception<debug_checks::library_missused>([&] { document.read(); });
+		expect_exception<debug_checks::library_misused>([&] { document.read(); });
 	}
 	TEST_CASE(reading_parent_at_exactly_end_of_array_throws)
 	{
@@ -53,7 +53,7 @@ namespace goldfish
 		auto array = document.read()->as_array();
 		test(array.read()->as_uint() == 1);
 		test(array.read()->as_uint() == 2);
-		expect_exception<debug_checks::library_missused>([&] { document.read(); });
+		expect_exception<debug_checks::library_misused>([&] { document.read(); });
 	}
 	TEST_CASE(reading_parent_passed_end_of_array_ok)
 	{
@@ -72,7 +72,7 @@ namespace goldfish
 
 		auto map = document.read()->as_map();
 		test(stream::read_all_as_string(map.read_key()->as_string()) == "a");
-		expect_exception<debug_checks::library_missused>([&] { document.read(); });
+		expect_exception<debug_checks::library_misused>([&] { document.read(); });
 	}
 	TEST_CASE(reading_parent_at_exactly_end_of_map_throws)
 	{
@@ -83,7 +83,7 @@ namespace goldfish
 		test(map.read_value().as_uint() == 1);
 		test(stream::read_all_as_string(map.read_key()->as_string()) == "b");
 		test(map.read_value().as_uint() == 2);
-		expect_exception<debug_checks::library_missused>([&] { document.read(); });
+		expect_exception<debug_checks::library_misused>([&] { document.read(); });
 	}
 	TEST_CASE(reading_parent_passed_end_of_map_ok)
 	{
@@ -104,7 +104,7 @@ namespace goldfish
 
 		auto map = document.read()->as_map();
 		map.read_key();
-		expect_exception<debug_checks::library_missused>([&] { map.read_value(); });
+		expect_exception<debug_checks::library_misused>([&] { map.read_value(); });
 	}
 	TEST_CASE(reading_key_before_finishing_value_in_map)
 	{
@@ -113,14 +113,14 @@ namespace goldfish
 		auto map = document.read()->as_map();
 		test(stream::read_all_as_string(map.read_key()->as_string()) == "a");
 		map.read_value();
-		expect_exception<debug_checks::library_missused>([&] { map.read_key(); });
+		expect_exception<debug_checks::library_misused>([&] { map.read_key(); });
 	}
 	TEST_CASE(reading_value_instead_of_key_in_map)
 	{
 		auto document = json::read(stream::read_string_literal("[{\"a\":1, \"b\":2}]"), debug_checks::throw_on_error{}).as_array();
 
 		auto map = document.read()->as_map();
-		expect_exception<debug_checks::library_missused>([&] { map.read_value(); });
+		expect_exception<debug_checks::library_misused>([&] { map.read_value(); });
 	}
 	TEST_CASE(reading_key_instead_of_value_in_map)
 	{
@@ -128,6 +128,6 @@ namespace goldfish
 
 		auto map = document.read()->as_map();
 		test(stream::read_all_as_string(map.read_key()->as_string()) == "a");
-		expect_exception<debug_checks::library_missused>([&] { map.read_key(); });
+		expect_exception<debug_checks::library_misused>([&] { map.read_key(); });
 	}
 }

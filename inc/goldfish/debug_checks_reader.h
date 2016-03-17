@@ -12,7 +12,7 @@ namespace goldfish { namespace debug_checks
 	template <class error_handler, class T> class array;
 	template <class error_handler, class T> class map;
 
-	template <class error_handler, class Document> using document = document_on_variant<
+	template <class error_handler, class Document> using document = document_impl<
 		Document::does_json_conversions,
 		bool,
 		nullptr_t,

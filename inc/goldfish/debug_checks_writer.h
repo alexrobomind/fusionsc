@@ -89,25 +89,25 @@ namespace goldfish { namespace debug_checks
 	public:
 		check_size_of_array_writer(inner writer, uint64_t c)
 			: m_writer(std::move(writer))
-			, m_c_left(c)
+			, m_count_left(c)
 		{}
 
 		auto append()
 		{
-			if (m_c_left == 0)
+			if (m_count_left == 0)
 				error_handler::on_error();
-			--m_c_left;
+			--m_count_left;
 			return m_writer.append();
 		}
 		auto flush()
 		{
-			if (m_c_left != 0)
+			if (m_count_left != 0)
 				error_handler::on_error();
 			return m_writer.flush();
 		}
 	private:
 		inner m_writer;
-		uint64_t m_c_left;
+		uint64_t m_count_left;
 	};
 	template <class error_handler, class inner> check_size_of_array_writer<error_handler, std::decay_t<inner>> check_size_of_array(inner&& w, uint64_t c) { return{ std::forward<inner>(w), c }; }
 
@@ -183,41 +183,11 @@ namespace goldfish { namespace debug_checks
 			: container_base<error_handler>(parent)
 			, m_writer(std::move(writer))
 		{}
-		auto write(bool x)
+		template <class T> auto write(T&& t)
 		{
 			err_if_locked();
 			unlock_parent_and_lock_self();
-			return m_writer.write(x);
-		}
-		auto write(nullptr_t x)
-		{
-			err_if_locked();
-			unlock_parent_and_lock_self();
-			return m_writer.write(x);
-		}
-		auto write(double x)
-		{
-			err_if_locked();
-			unlock_parent_and_lock_self();
-			return m_writer.write(x);
-		}
-		auto write(tags::undefined x)
-		{
-			err_if_locked();
-			unlock_parent_and_lock_self();
-			return m_writer.write(x);
-		}
-		auto write(uint64_t x)
-		{
-			err_if_locked();
-			unlock_parent_and_lock_self();
-			return m_writer.write(x);
-		}
-		auto write(int64_t x)
-		{
-			err_if_locked();
-			unlock_parent_and_lock_self();
-			return m_writer.write(x);
+			return m_writer.write(std::forward<T>(t));
 		}
 
 		auto start_binary(uint64_t cb)

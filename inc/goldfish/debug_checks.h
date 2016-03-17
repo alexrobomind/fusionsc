@@ -12,10 +12,10 @@ namespace goldfish { namespace debug_checks
 		static void on_error() { std::terminate(); }
 	};
 
-	struct library_missused {};
+	struct library_misused {};
 	struct throw_on_error
 	{
-		static void on_error() { throw library_missused{}; }
+		static void on_error() { throw library_misused{}; }
 	};
 
 	#ifndef GOLDFISH_DEFAULT_SHIP_ERROR_HANDLER
@@ -46,7 +46,9 @@ namespace goldfish { namespace debug_checks
 			: m_parent_address_and_bits(rhs.m_parent_address_and_bits)
 		{
 			rhs.err_if_locked();
-			rhs.m_parent_address_and_bits = 0;
+			rhs.m_parent_address_and_bits = 1;
+			assert(rhs.is_locked());
+			assert(rhs.parent() == nullptr);
 		}
 		container_base& operator = (const container_base&) = delete;
 		container_base& operator = (container_base&&) = delete;
@@ -78,8 +80,8 @@ namespace goldfish { namespace debug_checks
 
 			if (auto p = parent())
 			{
-				parent()->unlock();
-				m_parent_address_and_bits &= 3;
+				p->unlock();
+				m_parent_address_and_bits &= 3; // Keep only the locked and flag bits, erase the parent point
 			}
 
 			assert(parent() == nullptr);

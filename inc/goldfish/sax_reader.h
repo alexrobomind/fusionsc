@@ -12,14 +12,14 @@ namespace goldfish
 	struct integer_overflow {};
 
 	template <bool _does_json_conversions, class... types>
-	class document_on_variant
+	class document_impl
 	{
 	public:
 		using tag = tags::document;
 		template <class tag> using type_with_tag_t = tags::type_with_tag_t<tag, types...>;
 		enum { does_json_conversions = _does_json_conversions };
 
-		template <class... Args> document_on_variant(Args&&... args)
+		template <class... Args> document_impl(Args&&... args)
 			: m_data(std::forward<Args>(args)...)
 		{}
 
