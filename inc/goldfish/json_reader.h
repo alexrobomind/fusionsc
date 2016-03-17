@@ -51,6 +51,11 @@ namespace goldfish { namespace json
 		size_t read_buffer(buffer_ref) { std::terminate(); }
 	};
 
+	/*
+	Represents a stream that ends when the end quote is found in the JSON document
+	The stream provided is expected to be right after the opening quote (the quote should have
+	already been read).
+	*/
 	template <class Stream> class text_string
 	{
 	public:
@@ -96,18 +101,12 @@ namespace goldfish { namespace json
 	private:
 		optional<char> read_char()
 		{
-			if (m_converted != 0xFFFFFFFF)
+			if (m_cb_converted != 0)
 			{
-				if (m_converted == 0xFFFFFFFE)
+				if (m_cb_converted == 255)
 					return nullopt;
 
-				// Send the first character
-				char c = static_cast<char>(m_converted >> 24);
-
-				// And shift m_converted to indicate we've sent it
-				m_converted = (m_converted << 8) | 0xFF;
-
-				return c;
+				return m_converted[--m_cb_converted];
 			}
 
 			auto c = stream::read<uint8_t>(m_stream);
@@ -123,13 +122,13 @@ namespace goldfish { namespace json
 				case 'n': return '\n';
 				case 'r': return '\r';
 				case 't': return '\t';
-				case 'u': populate_converted(); return read_char();
+				case 'u': populate_converted(read_utf32_character()); return read_char();
 				default: throw ill_formatted();
 				}
 			}
 			else if (c == '"')
 			{
-				m_converted = 0xFFFFFFFE; // Indicate we reached the end
+				m_cb_converted = 255; // Indicate we reached the end
 				return nullopt;
 			}
 			else if (c < 0x20)
@@ -148,24 +147,27 @@ namespace goldfish { namespace json
 			else if ('A' <= c && c <= 'F') return c - 'A' + 10;
 			else throw ill_formatted();
 		}
-		char16_t read_utf16_character()
+		uint16_t read_utf16_character()
 		{
-			char16_t value = 0;
+			uint16_t value = 0;
 			value = (value << 4) | parse_hex(stream::read<char>(m_stream));
 			value = (value << 4) | parse_hex(stream::read<char>(m_stream));
 			value = (value << 4) | parse_hex(stream::read<char>(m_stream));
 			value = (value << 4) | parse_hex(stream::read<char>(m_stream));
 			return value;
 		}
-		char32_t read_utf32_character()
+		uint32_t read_utf32_character()
 		{
-			char32_t a = read_utf16_character();
-			if (0xD800 <= a && a <= 0xE000)
+			uint32_t a = read_utf16_character();
+			if (0xD800 <= a && a <= 0xDFFF)
 			{
+				if (a > 0xDBFF)
+					throw ill_formatted{};
+
 				// We need a second character
 				if (stream::read<char>(m_stream) != '\\') throw ill_formatted{};
 				if (stream::read<char>(m_stream) != 'u') throw ill_formatted{};
-				char32_t b = read_utf16_character();
+				uint32_t b = read_utf16_character();
 				if (b < 0xDC00 || b > 0xDFFF)
 					throw ill_formatted{};
 
@@ -178,28 +180,44 @@ namespace goldfish { namespace json
 				return a;
 			}
 		}
-		void populate_converted()
+		void populate_converted(uint32_t codepoint)
 		{
-			auto codepoint = static_cast<uint32_t>(read_utf32_character());
-			auto get_6_bits = [&](int offset) { return 0b10000000 | ((codepoint >> offset) & 0b111111); };
-			auto convert = [&](uint32_t a, uint32_t b, uint32_t c, uint32_t d) { m_converted = ((a << 24) | (b << 16) | (c << 8) | d); };
-
+			auto get_6_bits = [&](uint32_t codepoint, int offset)
+			{
+				return static_cast<uint8_t>(0b10000000 | ((codepoint >> offset) & 0b111111));
+			};
+			
 			if (codepoint <= 0x7F)
-				convert(codepoint, 0xFF, 0xFF, 0xFF);
+			{
+				m_cb_converted = 1;
+				m_converted = { static_cast<uint8_t>(codepoint), 0, 0, 0 };
+			}
 			else if (codepoint <= 0x7FF)
-				convert(0b11000000 | (codepoint >> 6), get_6_bits(0), 0xFF, 0xFF);
+			{
+				m_cb_converted = 2;
+				m_converted = { get_6_bits(codepoint, 0), static_cast<uint8_t>(0b11000000 | (codepoint >> 6)), 0, 0 };
+			}
 			else if (codepoint <= 0xFFFF)
-				convert(0b11100000 | (codepoint >> 12), get_6_bits(6), get_6_bits(0), 0xFF);
+			{
+				m_cb_converted = 3;
+				m_converted = { get_6_bits(codepoint, 0), get_6_bits(codepoint, 6), static_cast<uint8_t>(0b11100000 | static_cast<uint8_t>(codepoint >> 12)), 0 };
+			}
 			else if (codepoint <= 0x10FFFF)
-				convert(0b11110000 | (codepoint >> 18), get_6_bits(12), get_6_bits(6), get_6_bits(0));
+			{
+				m_cb_converted = 4;
+				m_converted = { get_6_bits(codepoint, 0), get_6_bits(codepoint, 6), get_6_bits(codepoint, 12), static_cast<uint8_t>(0b11110000 | static_cast<uint8_t>(codepoint >> 18)) };
+			}
 			else
+			{
 				throw ill_formatted{};
+			}
 		}
 
 		// 0xFF is an invalid UTF-8 character
 		// The list of characters that were converted from a \u command (that is in UTF16) are in m_converted as non 0xFF bytes
 		Stream m_stream;
-		uint32_t m_converted = 0xFFFFFFFF;
+		std::array<uint8_t, 4> m_converted{ 0xFF, 0xFF, 0xFF, 0xFF };
+		uint8_t m_cb_converted = 0;
 	public:
 		uint8_t padding_for_variant;
 	};

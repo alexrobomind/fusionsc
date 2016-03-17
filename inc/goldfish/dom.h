@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <string>
+#include "match.h"
 #include "tags.h"
 #include "stream.h"
 
@@ -25,58 +26,52 @@ namespace goldfish { namespace dom
 		array,
 		map>;
 
-	struct document : document_variant
+	// This struct is necessary in order to be able to forward declare "document",
+	// which is necessary in order to define array
+	struct document : private document_variant
 	{
+		document(const char* s)
+			: document(std::string(s))
+		{}
 		template <class... Args> document(Args&&... args)
 			: document_variant(std::forward<Args>(args)...)
 		{}
+		using document_variant::as;
+		using document_variant::is;
+		using document_variant::visit;
+
+
+		// variant<bool, std::string>::operator== is dangerous: x == "" resolves as
+		// x == (bool)"". By forcing the conversion to document, we avoid this problem
+		friend bool operator == (const document& lhs, const document& rhs)
+		{
+			return static_cast<const document_variant&>(lhs) == static_cast<const document_variant&>(rhs);
+		}
 	};
 
-	inline document string(const char* data, size_t size) { return std::string{ data, data + size }; }
-	inline document string(const char* data) { return string(data, strlen(data)); }
-	inline document string(const std::string& data) { return string(data.data(), data.size()); }
-
-	inline document binary(const uint8_t* data, size_t size) { return std::vector<uint8_t>{ data, data + size }; }
-	inline document binary(const std::vector<uint8_t>& data) { return binary(data.data(), data.size()); }
-
-	inline uint64_t load_in_memory(uint64_t d) { return d; }
-	inline int64_t load_in_memory(int64_t d) { return d; }
-	inline bool load_in_memory(bool d) { return d; }
-	inline nullptr_t load_in_memory(nullptr_t d) { return d; }
-	inline double load_in_memory(double d) { return d; }
-
-	template <class D> std::enable_if_t<tags::has_tag<std::decay_t<D>, tags::binary>::value, std::vector<uint8_t>> load_in_memory(D&& d)
+	template <class D> std::enable_if_t<tags::has_tag<std::decay_t<D>, tags::document>::value, document> load_in_memory(D&& reader)
 	{
-		return stream::read_all(d);
-	}
-	template <class D> std::enable_if_t<tags::has_tag<std::decay_t<D>, tags::string>::value, std::string> load_in_memory(D&& d)
-	{
-		return stream::read_all_as_string(d);
-	}
-	template <class D> std::enable_if_t<tags::has_tag<std::decay_t<D>, tags::array>::value, array> load_in_memory(D&& d)
-	{
-		array result;
-		while (auto x = d.read())
-			result.emplace_back(load_in_memory(*x));
-		return result;
-	}
-	template <class D> std::enable_if_t<tags::has_tag<std::decay_t<D>, tags::map>::value, map> load_in_memory(D&& d)
-	{
-		map result;
-		while (auto x = d.read_key())
-		{
-			auto key = load_in_memory(*x);
-			result.emplace_back(key, load_in_memory(d.read_value()));
-		}
-		return result;
-	}
-
-	inline tags::undefined load_in_memory(tags::undefined) { return tags::undefined{}; }
-
-	struct unexpected_end_of_structure {};
-
-	template <class D> std::enable_if_t<tags::has_tag<std::decay_t<D>, tags::document>::value, document> load_in_memory(D&& d)
-	{
-		return d.visit([&](auto&& x, auto tag) -> document { return load_in_memory(x); });
+		return std::forward<D>(reader).visit(first_match(
+			[](auto&& d, tags::binary) -> document { return stream::read_all(d); },
+			[](auto&& d, tags::string) -> document { return stream::read_all_as_string(d); },
+			[](auto&& d, tags::array) -> document
+			{
+				array result;
+				while (auto x = d.read())
+					result.emplace_back(load_in_memory(*x));
+				return result;
+			},
+			[](auto&& d, tags::map) -> document
+			{
+				map result;
+				while (auto x = d.read_key())
+				{
+					auto key = load_in_memory(*x);
+					result.emplace_back(key, load_in_memory(d.read_value()));
+				}
+				return result;
+			},
+			[](auto&& x, auto) -> document { return std::forward<decltype(x)>(x); }
+		));
 	}
 }}

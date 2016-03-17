@@ -5,66 +5,80 @@
 
 namespace goldfish { namespace stream
 {
-	class file_reader
+	class file_handle
 	{
 	public:
-		file_reader(const char* path)
+		file_handle(const char* path, const char* mode, const wchar_t* wmode)
 		{
-			if (auto error = fopen_s(&m_fp, path, "rb"))
+			if (auto error = fopen_s(&m_fp, path, mode))
 				throw error;
 		}
-		file_reader(const std::string& path)
-			: file_reader(path.c_str())
+		file_handle(const wchar_t* path, const char* mode, const wchar_t* wmode)
+		{
+			if (auto error = _wfopen_s(&m_fp, path, wmode))
+				throw error;
+		}
+		file_handle(const std::string& path, const char* mode, const wchar_t* wmode)
+			: file_handle(path.c_str(), mode, wmode)
 		{}
-		file_reader(file_reader&& rhs)
+		file_handle(const std::wstring& path, const char* mode, const wchar_t* wmode)
+			: file_handle(path.c_str(), mode, wmode)
+		{}
+
+		file_handle(file_handle&& rhs)
 			: m_fp(rhs.m_fp)
 		{
 			rhs.m_fp = nullptr;
 		}
-		~file_reader()
+		~file_handle()
 		{
 			if (m_fp)
 				fclose(m_fp);
 		}
-		file_reader(const file_reader&) = delete;
-		file_reader& operator = (const file_reader&) = delete;
+		file_handle(const file_handle&) = delete;
+		file_handle& operator = (const file_handle&) = delete;
 
-		size_t read_buffer(buffer_ref data)
-		{
-			return fread(data.data(), 1, data.size(), m_fp);
-		}
+		FILE* get() const { return m_fp; }
 	private:
 		FILE* m_fp;
+	};
+
+	class file_reader
+	{
+	public:
+		template <class T> file_reader(T&& t)
+			: m_file(std::forward<T>(t), "rb", L"rb")
+		{}
+		size_t read_buffer(buffer_ref data)
+		{
+			auto cb = fread(data.data(), 1 /*size*/, data.size() /*count*/, m_file.get());
+			if (cb != data.size())
+			{
+				if (auto error = ferror(m_file.get()))
+					throw error;
+			}
+			return cb;
+		}
+	private:
+		file_handle m_file;
 	};
 
 	class file_writer
 	{
 	public:
-		file_writer(const char* path)
-		{
-			if (auto error = fopen_s(&m_fp, path, "wb"))
-				throw error;
-		}
-		file_writer(file_writer&& rhs)
-			: m_fp(rhs.m_fp)
-		{
-			rhs.m_fp = nullptr;
-		}
-		~file_writer()
-		{
-			if (m_fp)
-				fclose(m_fp);
-		}
-		file_writer(const file_writer&) = delete;
-		file_writer& operator = (const file_writer&) = delete;
-
+		template <class T> file_writer(T&& t)
+			: m_file(std::forward<T>(t), "wb", L"wb")
+		{}
 		void write_buffer(const_buffer_ref data)
 		{
-			if (fwrite(data.data(), 1, data.size(), m_fp) != data.size())
-				throw 0;
+			if (fwrite(data.data(), 1 /*size*/, data.size() /*count*/, m_file.get()) != data.size())
+			{
+				if (auto error = ferror(m_file.get()))
+					throw error;
+			}
 		}
 		void flush() { }
 	private:
-		FILE* m_fp;
+		file_handle m_file;
 	};
 }}

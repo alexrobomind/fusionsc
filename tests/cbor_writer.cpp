@@ -84,15 +84,15 @@ namespace goldfish { namespace dom
 		test(w(nullptr) == "f6");
 		test(w(tags::undefined{}) == "f7");
 		
-		test(w(binary(to_vector(""))) == "40");
-		test(w(binary(to_vector("01020304"))) == "4401020304");
+		test(w(to_vector("")) == "40");
+		test(w(to_vector("01020304")) == "4401020304");
 
-		test(w(string("")) == "60");
-		test(w(string("a")) == "6161");
-		test(w(string("IETF")) == "6449455446");
-		test(w(string("\"\\")) == "62225c");
-		test(w(string(u8"\u00fc")) == "62c3bc");
-		test(w(string(u8"\u6c34")) == "63e6b0b4");
+		test(w("") == "60");
+		test(w("a") == "6161");
+		test(w("IETF") == "6449455446");
+		test(w("\"\\") == "62225c");
+		test(w(u8"\u00fc") == "62c3bc");
+		test(w(u8"\u6c34") == "63e6b0b4");
 
 		test(w(array{}) == "80");
 		test(w(array{ 1ull, 2ull, 3ull }) == "83010203");
@@ -106,16 +106,16 @@ namespace goldfish { namespace dom
 		test(w(map{}) == "a0");
 		test(w(map{ { 1ull, 2ull },{ 3ull, 4ull } }) == "a201020304");
 		test(w(map{
-			{ string("a"), 1ull },
-			{ string("b"), array{ 2ull, 3ull } }
+			{ "a", 1ull },
+			{ "b", array{ 2ull, 3ull } }
 		}) == "a26161016162820203");
-		test(w(array{ string("a"), map{ { string("b"), string("c") } } }) == "826161a161626163");
+		test(w(array{ "a", map{ { "b", "c" } } }) == "826161a161626163");
 		test(w(map{
-			{ string("a"), string("A") },
-			{ string("b"), string("B") },
-			{ string("c"), string("C") },
-			{ string("d"), string("D") },
-			{ string("e"), string("E") }
+			{ "a", "A" },
+			{ "b", "B" },
+			{ "c", "C" },
+			{ "d", "D" },
+			{ "e", "E" }
 		}) == "a56161614161626142616361436164614461656145");
 	}
 
@@ -153,8 +153,8 @@ namespace goldfish { namespace dom
 		};
 
 		test(w({
-			{string("Fun"), true},
-			{string("Amt"), -2ll}
+			{"Fun", true},
+			{"Amt", -2ll}
 		}) == "bf6346756ef563416d7421ff");
 	}
 

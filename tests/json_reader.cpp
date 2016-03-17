@@ -15,14 +15,16 @@ namespace goldfish { namespace dom
 		};
 		using namespace std::string_literals;
 
-		test(r("\"\"") == string(""));
-		test(r("\"a\"") == string("a"));
-		test(r("\"a\\u0001\\b\\n\\r\\t\\\"\\/\""s) == string(u8"a\u0001\b\n\r\t\"/"));
-		test(r("\"\\uD801\\uDC37\""s) == string(u8"\U00010437"));
-		
+		test(r("\"\"") == "");
+		test(r("\"a\"") == "a");
+		test(r("\"a\\u0001\\b\\n\\r\\t\\\"\\/\""s) == u8"a\u0001\b\n\r\t\"/");
+		test(r("\"\\uD801\\uDC37\""s) == u8"\U00010437");
+		test(r("\"\\uE000\""s) == u8"\U0000E000");
+
 		expect_exception<json::ill_formatted>([&] { r("\"\\uD801\""s); });
 		expect_exception<json::ill_formatted>([&] { r("\"\\uD801a\""s); });
 		expect_exception<json::ill_formatted>([&] { r("\"\\uD801\\n\""s); });
+		expect_exception<json::ill_formatted>([&] { r("\"\\uDC41\\uDC37\""s); });
 
 		test(r("true") == true);
 		test(r("false") == false);
@@ -73,7 +75,7 @@ namespace goldfish { namespace dom
 		test(r("[[]]") == array{ dom::document(array{}) });
 
 		test(r("{}") == map{});
-		test(r("{\"foo\":1}") == map{ { string("foo"), 1ull } });
+		test(r("{\"foo\":1}") == map{ { "foo", 1ull } });
 	}
 
 
