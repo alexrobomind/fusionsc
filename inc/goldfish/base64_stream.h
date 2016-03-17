@@ -5,7 +5,7 @@
 
 namespace goldfish { namespace stream
 {
-	struct ill_formatted_base64_data {};
+	struct ill_formatted_base64_data : ill_formatted {};
 
 	// Reads binary data assuming inner reads base64
 	template <class inner>

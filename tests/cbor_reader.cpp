@@ -12,7 +12,7 @@ namespace goldfish { namespace dom
 		if ('0' <= c && c <= '9') return c - '0';
 		else if ('a' <= c && c <= 'f') return c - 'a' + 10;
 		else if ('A' <= c && c <= 'F') return c - 'A' + 10;
-		else throw "Invalid hex character";
+		else std::terminate();
 	};
 	static auto to_vector(const std::string& input)
 	{
@@ -50,7 +50,7 @@ namespace goldfish { namespace dom
 
 		test(r("c249010000000000000000") == to_vector("010000000000000000"));
 		test(r("3b7fffffffffffffff") == -9223372036854775808ll);
-		expect_exception<cbor::ill_formatted>([&] { r("3b8000000000000000"); }); // overflow
+		expect_exception<cbor::ill_formatted_cbor_data>([&] { r("3b8000000000000000"); }); // overflow
 		test(r("c349010000000000000000") == to_vector("010000000000000000"));
 
 		test(r("20") == -1ll);

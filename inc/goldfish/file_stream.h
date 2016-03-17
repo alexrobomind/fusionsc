@@ -5,18 +5,21 @@
 
 namespace goldfish { namespace stream
 {
+	struct io_exception : exception {};
+	struct io_exception_with_error_code { int error_code; };
+
 	class file_handle
 	{
 	public:
 		file_handle(const char* path, const char* mode, const wchar_t* wmode)
 		{
 			if (auto error = fopen_s(&m_fp, path, mode))
-				throw error;
+				throw io_exception_with_error_code{ error };
 		}
 		file_handle(const wchar_t* path, const char* mode, const wchar_t* wmode)
 		{
 			if (auto error = _wfopen_s(&m_fp, path, wmode))
-				throw error;
+				throw io_exception_with_error_code{ error };
 		}
 		file_handle(const std::string& path, const char* mode, const wchar_t* wmode)
 			: file_handle(path.c_str(), mode, wmode)
@@ -55,7 +58,7 @@ namespace goldfish { namespace stream
 			if (cb != data.size())
 			{
 				if (auto error = ferror(m_file.get()))
-					throw error;
+					throw io_exception_with_error_code{ error };
 			}
 			return cb;
 		}
@@ -74,7 +77,7 @@ namespace goldfish { namespace stream
 			if (fwrite(data.data(), 1 /*size*/, data.size() /*count*/, m_file.get()) != data.size())
 			{
 				if (auto error = ferror(m_file.get()))
-					throw error;
+					throw io_exception_with_error_code{ error };
 			}
 		}
 		void flush() { }

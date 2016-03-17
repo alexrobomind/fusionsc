@@ -9,7 +9,7 @@
 
 namespace goldfish
 {
-	struct integer_overflow {};
+	struct integer_overflow_while_casting : exception {};
 
 	template <bool _does_json_conversions, class... types>
 	class document_impl
@@ -114,13 +114,13 @@ namespace goldfish
 		static uint64_t cast_signed_to_unsigned(int64_t x)
 		{
 			if (x < 0)
-				throw integer_overflow{};
+				throw integer_overflow_while_casting{};
 			return static_cast<uint64_t>(x);
 		}
 		static int64_t cast_unsigned_to_signed(uint64_t x)
 		{
 			if (x > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
-				throw integer_overflow{};
+				throw integer_overflow_while_casting{};
 			return static_cast<int64_t>(x);
 		}
 

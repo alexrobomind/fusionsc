@@ -2,13 +2,14 @@
 
 #include <algorithm>
 #include <assert.h>
+#include "common.h"
 #include <memory>
 #include <type_traits>
 #include <utility>
 
 namespace goldfish
 {
-	struct bad_variant_access {};
+	struct bad_variant_access : exception {};
 
 	namespace details
 	{

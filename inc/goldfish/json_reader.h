@@ -10,7 +10,8 @@
 
 namespace goldfish { namespace json
 {
-	struct ill_formatted {};
+	struct ill_formatted_json_data : ill_formatted {};
+	struct integer_overflow_in_json : ill_formatted_json_data {};
 
 	class byte_string;
 	template <class Stream> class text_string;
@@ -123,7 +124,7 @@ namespace goldfish { namespace json
 				case 'r': return '\r';
 				case 't': return '\t';
 				case 'u': populate_converted(read_utf32_character()); return read_char();
-				default: throw ill_formatted();
+				default: throw ill_formatted_json_data();
 				}
 			}
 			else if (c == '"')
@@ -133,7 +134,7 @@ namespace goldfish { namespace json
 			}
 			else if (c < 0x20)
 			{
-				throw ill_formatted{};
+				throw ill_formatted_json_data{};
 			}
 			else
 			{
@@ -145,7 +146,7 @@ namespace goldfish { namespace json
 			if ('0' <= c && c <= '9') return c - '0';
 			else if ('a' <= c && c <= 'f') return c - 'a' + 10;
 			else if ('A' <= c && c <= 'F') return c - 'A' + 10;
-			else throw ill_formatted();
+			else throw ill_formatted_json_data();
 		}
 		uint16_t read_utf16_character()
 		{
@@ -162,14 +163,14 @@ namespace goldfish { namespace json
 			if (0xD800 <= a && a <= 0xDFFF)
 			{
 				if (a > 0xDBFF)
-					throw ill_formatted{};
+					throw ill_formatted_json_data{};
 
 				// We need a second character
-				if (stream::read<char>(m_stream) != '\\') throw ill_formatted{};
-				if (stream::read<char>(m_stream) != 'u') throw ill_formatted{};
+				if (stream::read<char>(m_stream) != '\\') throw ill_formatted_json_data{};
+				if (stream::read<char>(m_stream) != 'u') throw ill_formatted_json_data{};
 				uint32_t b = read_utf16_character();
 				if (b < 0xDC00 || b > 0xDFFF)
-					throw ill_formatted{};
+					throw ill_formatted_json_data{};
 
 				a -= 0xD800;
 				b -= 0xDC00;
@@ -209,7 +210,7 @@ namespace goldfish { namespace json
 			}
 			else
 			{
-				throw ill_formatted{};
+				throw ill_formatted_json_data{};
 			}
 		}
 
@@ -261,7 +262,7 @@ namespace goldfish { namespace json
 					{
 					case ',': stream::read<char>(m_stream); return read_no_debug_check(stream::ref(m_stream));
 					case end_character: stream::read<char>(m_stream); m_state = state::ended; return nullopt;
-					default: throw ill_formatted{};
+					default: throw ill_formatted_json_data{};
 					}
 				}
 
@@ -300,7 +301,7 @@ namespace goldfish { namespace json
 			if (c == nullopt)
 				throw stream::unexpected_end_of_stream{};
 			else if (*c != ':')
-				throw ill_formatted{};
+				throw ill_formatted_json_data{};
 			stream::read<char>(m_stream);
 			return read_no_debug_check(stream::ref(m_stream));
 		}
@@ -326,7 +327,7 @@ namespace goldfish { namespace json
 		for (auto c : { 't', 'r', 'u', 'e' })
 		{
 			if (stream::read<byte>(s) != c)
-				throw ill_formatted{};
+				throw ill_formatted_json_data{};
 		}
 		return true;
 	}
@@ -335,7 +336,7 @@ namespace goldfish { namespace json
 		for (auto c : { 'f', 'a', 'l', 's', 'e' })
 		{
 			if (stream::read<byte>(s) != c)
-				throw ill_formatted{};
+				throw ill_formatted_json_data{};
 		}
 		return false;
 	}
@@ -344,7 +345,7 @@ namespace goldfish { namespace json
 		for (auto c : { 'n', 'u', 'l', 'l' })
 		{
 			if (stream::read<byte>(s) != c)
-				throw ill_formatted{};
+				throw ill_formatted_json_data{};
 		}
 		return nullptr;
 	}
@@ -353,7 +354,7 @@ namespace goldfish { namespace json
 		if (allow_leading_zeroes)
 		{
 			if (first < '0' || first > '9')
-				throw ill_formatted{};
+				throw ill_formatted_json_data{};
 		}
 		else
 		{
@@ -361,7 +362,7 @@ namespace goldfish { namespace json
 				return 0u;
 
 			if (first < '1' || first > '9')
-				throw ill_formatted{};
+				throw ill_formatted_json_data{};
 		}
 
 		uint64_t result = (first - '0');
@@ -371,7 +372,7 @@ namespace goldfish { namespace json
 			if (c != nullopt && '0' <= *c && *c <= '9')
 			{
 				if (result > (std::numeric_limits<uint64_t>::max() - (*c - '0')) / 10)
-					throw integer_overflow{};
+					throw integer_overflow_in_json{};
 				result = (result * 10) + *c - '0';
 			}
 			else
@@ -383,7 +384,7 @@ namespace goldfish { namespace json
 	{
 		auto first = stream::read<char>(s);
 		if (first < '0' || first > '9')
-			throw ill_formatted{};
+			throw ill_formatted_json_data{};
 
 		double result = (first - '0') / 10.;
 		double divider = 100;
@@ -418,7 +419,7 @@ namespace goldfish { namespace json
 			if (negative)
 			{
 				if (integer > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1)
-					throw integer_overflow{};
+					throw integer_overflow_in_json{};
 				return -static_cast<int64_t>(integer);
 			}
 			else
@@ -470,7 +471,7 @@ namespace goldfish { namespace json
 			case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
 				return read_number(s).visit([](auto&& x) -> document<Stream> { return x; });
 
-			default: throw ill_formatted();
+			default: throw ill_formatted_json_data();
 		}
 	}
 

@@ -8,7 +8,7 @@
 
 namespace goldfish { namespace stream 
 {
-	struct unexpected_end_of_stream {};
+	struct unexpected_end_of_stream : ill_formatted {};
 
 	template <class T, class dummy = size_t> struct is_reader : std::false_type {};
 	template <class T> struct is_reader<T, decltype(std::declval<T>().read_buffer(buffer_ref{})) > : std::true_type {};

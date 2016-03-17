@@ -21,10 +21,10 @@ namespace goldfish { namespace dom
 		test(r("\"\\uD801\\uDC37\""s) == u8"\U00010437");
 		test(r("\"\\uE000\""s) == u8"\U0000E000");
 
-		expect_exception<json::ill_formatted>([&] { r("\"\\uD801\""s); });
-		expect_exception<json::ill_formatted>([&] { r("\"\\uD801a\""s); });
-		expect_exception<json::ill_formatted>([&] { r("\"\\uD801\\n\""s); });
-		expect_exception<json::ill_formatted>([&] { r("\"\\uDC41\\uDC37\""s); });
+		expect_exception<json::ill_formatted_json_data>([&] { r("\"\\uD801\""s); });
+		expect_exception<json::ill_formatted_json_data>([&] { r("\"\\uD801a\""s); });
+		expect_exception<json::ill_formatted_json_data>([&] { r("\"\\uD801\\n\""s); });
+		expect_exception<json::ill_formatted_json_data>([&] { r("\"\\uDC41\\uDC37\""s); });
 
 		test(r("true") == true);
 		test(r("false") == false);
@@ -35,10 +35,10 @@ namespace goldfish { namespace dom
 		test(r("10") == 10ull);
 		test(r("4294967295") == 4294967295ull);
 		test(r("18446744073709551615") == 18446744073709551615ull);
-		expect_exception<integer_overflow>([&] { r("18446744073709551616"s); });
-		expect_exception<integer_overflow>([&] { r("18446744073709551617"s); });
-		expect_exception<integer_overflow>([&] { r("18446744073709551618"s); });
-		expect_exception<integer_overflow>([&] { r("18446744073709551619"s); });
+		expect_exception<json::integer_overflow_in_json>([&] { r("18446744073709551616"s); });
+		expect_exception<json::integer_overflow_in_json>([&] { r("18446744073709551617"s); });
+		expect_exception<json::integer_overflow_in_json>([&] { r("18446744073709551618"s); });
+		expect_exception<json::integer_overflow_in_json>([&] { r("18446744073709551619"s); });
 		//expect_exception<integer_overflow>([&] { r("[00]"s); });
 
 		test(r("-0") == 0ll);
@@ -47,7 +47,7 @@ namespace goldfish { namespace dom
 		test(r("-2147483647") == -2147483647ll);
 		test(r("-2147483648") == -2147483648ll);
 		test(r("-9223372036854775808") == -9223372036854775808ll);
-		expect_exception<integer_overflow>([&] { r("-9223372036854775809"s); });
+		expect_exception<json::integer_overflow_in_json>([&] { r("-9223372036854775809"s); });
 
 		test(r("0.0") == 0.);
 		test(r("0.5") == 0.5);
@@ -94,36 +94,36 @@ namespace goldfish { namespace dom
 			});
 		};
 		run(stream::unexpected_end_of_stream{}, "[\"Unclosed array\"");
-		run(json::ill_formatted{}, "{unquoted_key: \"keys must be quoted\"}");
-		run(json::ill_formatted{}, "[\"extra comma\",]");
-		run(json::ill_formatted{}, "[\"double extra comma\",,]");
-		run(json::ill_formatted{}, "[   , \"<--missing value\"]");
+		run(json::ill_formatted_json_data{}, "{unquoted_key: \"keys must be quoted\"}");
+		run(json::ill_formatted_json_data{}, "[\"extra comma\",]");
+		run(json::ill_formatted_json_data{}, "[\"double extra comma\",,]");
+		run(json::ill_formatted_json_data{}, "[   , \"<--missing value\"]");
 		run(data_partially_parsed{}, "[\"Comma after the close\"],");
 		run(data_partially_parsed{}, "[\"Extra close\"]]");
-		run(json::ill_formatted{}, "{\"Extra comma\": true, }");
+		run(json::ill_formatted_json_data{}, "{\"Extra comma\": true, }");
 		run(data_partially_parsed{}, "{\"Extra value after close\": true} \"misplaced quoted value\"");
-		run(json::ill_formatted{}, "{\"Illegal expression\": 1 + 2}");
-		run(json::ill_formatted{}, "{\"Illegal invocation\": alert()}");
-		run(json::ill_formatted{}, "{\"Numbers cannot have leading zeroes\": 013}");
-		run(json::ill_formatted{}, "{\"Numbers cannot be hex\": 0x14}");
-		run(json::ill_formatted{}, "[\"Illegal backslash escape : \x15\"]");
-		run(json::ill_formatted{}, "[\naked]");
-		run(json::ill_formatted{}, "[\"Illegal backslash escape : \017\"]");
-		run(json::ill_formatted{}, "{\"Missing colon\" null}");
-		run(json::ill_formatted{}, "{\"Double colon\":: null}");
-		run(json::ill_formatted{}, "{\"Comma instead of colon\", null}");
-		run(json::ill_formatted{}, "[\"Colon instead of comma\": false]");
-		run(json::ill_formatted{}, "[\"Bad value\", truth]");
-		run(json::ill_formatted{}, "['single quote']");
-		run(json::ill_formatted{}, "[\"\ttab\tcharacter\tin\tstring\t\"]");
-		run(json::ill_formatted{}, "[\"tab\\   character\\   in\\  string\\  \"]");
-		run(json::ill_formatted{}, "[\"line\nbreak\"]");
-		run(json::ill_formatted{}, "[\"line\\\nbreak\"]");
-		run(json::ill_formatted{}, "[0e]");
-		run(json::ill_formatted{}, "[0e+]");
-		run(json::ill_formatted{}, "[0e+-1]");
+		run(json::ill_formatted_json_data{}, "{\"Illegal expression\": 1 + 2}");
+		run(json::ill_formatted_json_data{}, "{\"Illegal invocation\": alert()}");
+		run(json::ill_formatted_json_data{}, "{\"Numbers cannot have leading zeroes\": 013}");
+		run(json::ill_formatted_json_data{}, "{\"Numbers cannot be hex\": 0x14}");
+		run(json::ill_formatted_json_data{}, "[\"Illegal backslash escape : \x15\"]");
+		run(json::ill_formatted_json_data{}, "[\naked]");
+		run(json::ill_formatted_json_data{}, "[\"Illegal backslash escape : \017\"]");
+		run(json::ill_formatted_json_data{}, "{\"Missing colon\" null}");
+		run(json::ill_formatted_json_data{}, "{\"Double colon\":: null}");
+		run(json::ill_formatted_json_data{}, "{\"Comma instead of colon\", null}");
+		run(json::ill_formatted_json_data{}, "[\"Colon instead of comma\": false]");
+		run(json::ill_formatted_json_data{}, "[\"Bad value\", truth]");
+		run(json::ill_formatted_json_data{}, "['single quote']");
+		run(json::ill_formatted_json_data{}, "[\"\ttab\tcharacter\tin\tstring\t\"]");
+		run(json::ill_formatted_json_data{}, "[\"tab\\   character\\   in\\  string\\  \"]");
+		run(json::ill_formatted_json_data{}, "[\"line\nbreak\"]");
+		run(json::ill_formatted_json_data{}, "[\"line\\\nbreak\"]");
+		run(json::ill_formatted_json_data{}, "[0e]");
+		run(json::ill_formatted_json_data{}, "[0e+]");
+		run(json::ill_formatted_json_data{}, "[0e+-1]");
 		run(stream::unexpected_end_of_stream{}, "{\"Comma instead if closing brace\": true,");
-		run(json::ill_formatted{}, "[\"mismatch\"}");
+		run(json::ill_formatted_json_data{}, "[\"mismatch\"}");
 	}
 
 	TEST_CASE(test_success)

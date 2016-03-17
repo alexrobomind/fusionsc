@@ -14,4 +14,10 @@ namespace goldfish
 	inline uint16_t to_big_endian(uint16_t x) { return from_big_endian(x); }
 	inline uint32_t to_big_endian(uint32_t x) { return from_big_endian(x); }
 	inline uint64_t to_big_endian(uint64_t x) { return from_big_endian(x); }
+
+	// All goldfish exceptions subclass this exception
+	struct exception {};
+
+	// Base class for all formatting errors that happen while parsing a document
+	struct ill_formatted : exception {};
 }

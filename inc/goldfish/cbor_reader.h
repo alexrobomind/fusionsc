@@ -11,7 +11,7 @@
 
 namespace goldfish { namespace cbor
 {
-	struct ill_formatted {};
+	struct ill_formatted_cbor_data : ill_formatted {};
 
 	template <class Stream, byte expected_type, class _tag> class string;
 	template <class Stream> using byte_string = string<Stream, 2, tags::binary>;
@@ -50,7 +50,7 @@ namespace goldfish { namespace cbor
 			, m_remaining_in_current_block(cb_initial)
 		{
 			if (m_remaining_in_current_block >= invalid_remaining)
-				throw ill_formatted{};
+				throw ill_formatted_cbor_data{};
 		}
 
 		size_t read_buffer(buffer_ref buffer)
@@ -60,7 +60,7 @@ namespace goldfish { namespace cbor
 			{
 				auto to_read = static_cast<size_t>(std::min<uint64_t>(buffer.size(), m_remaining_in_current_block));
 				if (m_stream.read_buffer(buffer.remove_front(to_read)) != to_read)
-					throw ill_formatted{};
+					throw ill_formatted_cbor_data{};
 				m_remaining_in_current_block -= to_read;
 				cb_read += to_read;
 			}
@@ -74,7 +74,7 @@ namespace goldfish { namespace cbor
 			{
 				auto to_skip = std::min(cb, m_remaining_in_current_block);
 				if (stream::seek(m_stream, to_skip) != to_skip)
-					throw ill_formatted{};
+					throw ill_formatted_cbor_data{};
 				cb -= to_skip;
 				m_remaining_in_current_block -= to_skip;
 			}
@@ -100,11 +100,11 @@ namespace goldfish { namespace cbor
 					}
 
 					if ((b >> 5) != expected_type)
-						throw ill_formatted{};
+						throw ill_formatted_cbor_data{};
 
 					auto cb_next_block = read_integer(b & 31, m_stream);
 					if (cb_next_block >= invalid_remaining)
-						throw ill_formatted{};
+						throw ill_formatted_cbor_data{};
 					m_remaining_in_current_block = cb_next_block;
 				}
 				return m_remaining_in_current_block != invalid_remaining;
@@ -128,7 +128,7 @@ namespace goldfish { namespace cbor
 			, m_remaining_length(length)
 		{
 			if (m_remaining_length == std::numeric_limits<uint64_t>::max())
-				throw ill_formatted{};
+				throw ill_formatted_cbor_data{};
 		}
 		array(Stream&& s)
 			: m_stream(std::move(s))
@@ -149,7 +149,7 @@ namespace goldfish { namespace cbor
 				if (m_remaining_length == std::numeric_limits<uint64_t>::max())
 					m_remaining_length = 0;
 				else
-					throw ill_formatted{};
+					throw ill_formatted_cbor_data{};
 			}
 			return document;
 		}
@@ -168,7 +168,7 @@ namespace goldfish { namespace cbor
 			, m_remaining_length(remaining_length)
 		{
 			if (m_remaining_length == std::numeric_limits<uint64_t>::max())
-				throw ill_formatted{};
+				throw ill_formatted_cbor_data{};
 		}
 		map(Stream&& s)
 			: m_stream(std::move(s))
@@ -187,7 +187,7 @@ namespace goldfish { namespace cbor
 				if (m_remaining_length == std::numeric_limits<uint64_t>::max())
 					m_remaining_length = 0;
 				else
-					throw ill_formatted{};
+					throw ill_formatted_cbor_data{};
 			}
 			if (m_remaining_length != std::numeric_limits<uint64_t>::max())
 				--m_remaining_length;
@@ -197,7 +197,7 @@ namespace goldfish { namespace cbor
 		{
 			auto d = read_no_debug_check(stream::ref(m_stream));
 			if (!d)
-				throw ill_formatted{};
+				throw ill_formatted_cbor_data{};
 			return std::move(*d);
 		}
 	private:
@@ -226,7 +226,7 @@ namespace goldfish { namespace cbor
 		else if (additional == 27)
 			return from_big_endian(read<uint64_t>(s));
 		else
-			throw ill_formatted{};
+			throw ill_formatted_cbor_data{};
 	}
 	template <class stream> double read_half_point_float(stream& s)
 	{
@@ -253,7 +253,7 @@ namespace goldfish { namespace cbor
 		{
 			auto x = read_integer(static_cast<byte>(first_byte & 31), s);
 			if (x > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
-				throw ill_formatted{};
+				throw ill_formatted_cbor_data{};
 
 			return -1 - static_cast<int64_t>(x);
 		}
@@ -278,7 +278,7 @@ namespace goldfish { namespace cbor
 		static optional<document<Stream>> fn_float_16(Stream&& s, byte) { return read_half_point_float(s); }
 		static optional<document<Stream>> fn_float_32(Stream&& s, byte) { return double{ to_float(from_big_endian(stream::read<uint32_t>(s))) }; }
 		static optional<document<Stream>> fn_float_64(Stream&& s, byte) { return to_double(from_big_endian(stream::read<uint64_t>(s))); }
-		static optional<document<Stream>> fn_ill_formatted(Stream&&, byte) { throw ill_formatted{}; };
+		static optional<document<Stream>> fn_ill_formatted(Stream&&, byte) { throw ill_formatted_cbor_data{}; };
 
 		static optional<document<Stream>> fn_small_binary(Stream&& s, byte first_byte) { return byte_string<Stream>{ std::move(s), static_cast<uint8_t>(first_byte & 31) }; };
 		static optional<document<Stream>> fn_8_binary(Stream&& s, byte) { return byte_string<Stream>{ std::move(s), stream::read<uint8_t>(s) }; };
@@ -392,7 +392,7 @@ namespace goldfish { namespace cbor
 	{
 		auto d = read_no_debug_check(std::forward<Stream>(s));
 		if (!d)
-			throw ill_formatted{};
+			throw ill_formatted_cbor_data{};
 		return debug_checks::add_read_checks(std::move(*d), e);
 	}
 	template <class Stream> auto read(Stream&& s) { return read(std::forward<Stream>(s), debug_checks::default_error_handler{}); }

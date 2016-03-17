@@ -11,13 +11,7 @@ namespace goldfish { namespace debug_checks
 	{
 		static void on_error() { std::terminate(); }
 	};
-
-	struct library_misused {};
-	struct throw_on_error
-	{
-		static void on_error() { throw library_misused{}; }
-	};
-
+	
 	#ifndef GOLDFISH_DEFAULT_SHIP_ERROR_HANDLER
 		#define GOLDFISH_DEFAULT_SHIP_ERROR_HANDLER no_check
 	#endif
