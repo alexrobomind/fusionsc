@@ -34,7 +34,7 @@ namespace goldfish { namespace stream
 	template <class Stream> std::enable_if_t<!has_seek<Stream>::value, uint64_t> seek(Stream& s, uint64_t x)
 	{
 		auto original = x;
-		uint8_t buffer[8 * 1024];
+		byte buffer[8 * 1024];
 		while (x >= sizeof(buffer))
 		{
 			auto cb = s.read_buffer(buffer);
@@ -54,7 +54,7 @@ namespace goldfish { namespace stream
 	template <class T, class Stream> enable_if_reader_t<Stream, std::enable_if_t<!has_read<Stream, T>::value, T>> read(Stream& s)
 	{
 		T t;
-		if (s.read_buffer({ reinterpret_cast<uint8_t*>(&t), sizeof(t) }) != sizeof(t))
+		if (s.read_buffer({ reinterpret_cast<byte*>(&t), sizeof(t) }) != sizeof(t))
 			throw unexpected_end_of_stream();
 		return t;
 	}
@@ -62,7 +62,7 @@ namespace goldfish { namespace stream
 	template <class T, class stream> auto write(stream& s, const T& t) -> decltype(s.write(t)) { return s.write(t); }
 	template <class T, class stream> enable_if_writer_t<stream, std::enable_if_t<std::is_standard_layout<T>::value && !has_write<stream, T>::value, void>> write(stream& s, const T& t)
 	{
-		s.write_buffer({ reinterpret_cast<const uint8_t*>(&t), sizeof(t) });
+		s.write_buffer({ reinterpret_cast<const byte*>(&t), sizeof(t) });
 	}
 
 	template <class inner> class ref_reader;
@@ -186,8 +186,8 @@ namespace goldfish { namespace stream
 	};
 
 	inline const_buffer_ref_reader read_buffer_ref(const_buffer_ref x) { return{ x }; }
-	template <size_t N> const_buffer_ref_reader read_string_literal(const char(&s)[N]) { assert(s[N - 1] == 0); return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), N - 1 }; }
-	inline const_buffer_ref_reader read_string_literal(const char* s) { return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), strlen(s) }; }
+	template <size_t N> const_buffer_ref_reader read_string_literal(const char(&s)[N]) { assert(s[N - 1] == 0); return const_buffer_ref{ reinterpret_cast<const byte*>(s), N - 1 }; }
+	inline const_buffer_ref_reader read_string_literal(const char* s) { return const_buffer_ref{ reinterpret_cast<const byte*>(s), strlen(s) }; }
 
 	class vector_writer
 	{
@@ -216,7 +216,7 @@ namespace goldfish { namespace stream
 		#ifndef NDEBUG
 		bool m_flushed = false;
 		#endif
-		std::vector<uint8_t> m_data;
+		std::vector<byte> m_data;
 	};
 	class string_writer
 	{
@@ -237,7 +237,7 @@ namespace goldfish { namespace stream
 	template <class stream> std::string read_all_as_string(stream&& s)
 	{
 		std::string result;
-		uint8_t buffer[65536];
+		byte buffer[65536];
 		for (;;)
 		{
 			auto cb = s.read_buffer(buffer);
@@ -247,10 +247,10 @@ namespace goldfish { namespace stream
 		}
 	}
 
-	template <class stream> enable_if_reader_t<stream, std::vector<uint8_t>> read_all(stream&& s)
+	template <class stream> enable_if_reader_t<stream, std::vector<byte>> read_all(stream&& s)
 	{
-		std::vector<uint8_t> result;
-		uint8_t buffer[65536];
+		std::vector<byte> result;
+		byte buffer[65536];
 		while (auto cb = s.read_buffer(buffer))
 			result.insert(result.end(), buffer, buffer + cb);
 		return result;

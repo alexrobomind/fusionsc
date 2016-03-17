@@ -179,7 +179,7 @@ namespace goldfish { namespace sax
 				[&](uint64_t x) { return write(x); },
 				[&](int64_t x) { return write(x); },
 				[&](double x) { return write(x); },
-				[&](const std::vector<uint8_t>& x) { return write(const_buffer_ref{ x }); },
+				[&](const std::vector<byte>& x) { return write(const_buffer_ref{ x }); },
 				[&](const std::string& x) { return write(x); },
 				[&](const dom::array& x)
 				{
@@ -201,7 +201,7 @@ namespace goldfish { namespace sax
 		template <class Stream, class CreateWriterWithSize, class CreateWriterWithoutSize>
 		auto copy_stream(Stream& s, CreateWriterWithSize&& create_writer_with_size, CreateWriterWithoutSize&& create_writer_without_size)
 		{
-			uint8_t buffer[8 * 1024];
+			byte buffer[8 * 1024];
 			auto cb = s.read_buffer(buffer);
 			if (cb < sizeof(buffer))
 			{
@@ -227,7 +227,7 @@ namespace goldfish { namespace sax
 		auto write(const char* text, size_t length)
 		{
 			auto stream = start_string(length);
-			stream.write_buffer({ reinterpret_cast<const uint8_t*>(text), length });
+			stream.write_buffer({ reinterpret_cast<const byte*>(text), length });
 			return stream.flush();
 		}
 		inner m_writer;

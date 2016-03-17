@@ -109,10 +109,10 @@ namespace goldfish { namespace json
 				return m_converted[--m_cb_converted];
 			}
 
-			auto c = stream::read<uint8_t>(m_stream);
+			auto c = stream::read<byte>(m_stream);
 			if (c == '\\')
 			{
-				switch (stream::read<uint8_t>(m_stream))
+				switch (stream::read<byte>(m_stream))
 				{
 				case '"': return '"';
 				case '\\': return '\\';
@@ -184,28 +184,28 @@ namespace goldfish { namespace json
 		{
 			auto get_6_bits = [&](uint32_t codepoint, int offset)
 			{
-				return static_cast<uint8_t>(0b10000000 | ((codepoint >> offset) & 0b111111));
+				return static_cast<byte>(0b10000000 | ((codepoint >> offset) & 0b111111));
 			};
 			
 			if (codepoint <= 0x7F)
 			{
 				m_cb_converted = 1;
-				m_converted = { static_cast<uint8_t>(codepoint), 0, 0, 0 };
+				m_converted = { static_cast<byte>(codepoint), 0, 0, 0 };
 			}
 			else if (codepoint <= 0x7FF)
 			{
 				m_cb_converted = 2;
-				m_converted = { get_6_bits(codepoint, 0), static_cast<uint8_t>(0b11000000 | (codepoint >> 6)), 0, 0 };
+				m_converted = { get_6_bits(codepoint, 0), static_cast<byte>(0b11000000 | (codepoint >> 6)), 0, 0 };
 			}
 			else if (codepoint <= 0xFFFF)
 			{
 				m_cb_converted = 3;
-				m_converted = { get_6_bits(codepoint, 0), get_6_bits(codepoint, 6), static_cast<uint8_t>(0b11100000 | static_cast<uint8_t>(codepoint >> 12)), 0 };
+				m_converted = { get_6_bits(codepoint, 0), get_6_bits(codepoint, 6), static_cast<byte>(0b11100000 | (codepoint >> 12)), 0 };
 			}
 			else if (codepoint <= 0x10FFFF)
 			{
 				m_cb_converted = 4;
-				m_converted = { get_6_bits(codepoint, 0), get_6_bits(codepoint, 6), get_6_bits(codepoint, 12), static_cast<uint8_t>(0b11110000 | static_cast<uint8_t>(codepoint >> 18)) };
+				m_converted = { get_6_bits(codepoint, 0), get_6_bits(codepoint, 6), get_6_bits(codepoint, 12), static_cast<byte>(0b11110000 | (codepoint >> 18)) };
 			}
 			else
 			{
@@ -216,7 +216,7 @@ namespace goldfish { namespace json
 		// 0xFF is an invalid UTF-8 character
 		// The list of characters that were converted from a \u command (that is in UTF16) are in m_converted as non 0xFF bytes
 		Stream m_stream;
-		std::array<uint8_t, 4> m_converted{ 0xFF, 0xFF, 0xFF, 0xFF };
+		std::array<byte, 4> m_converted;
 		uint8_t m_cb_converted = 0;
 	public:
 		uint8_t padding_for_variant;
@@ -325,7 +325,7 @@ namespace goldfish { namespace json
 	{
 		for (auto c : { 't', 'r', 'u', 'e' })
 		{
-			if (stream::read<uint8_t>(s) != c)
+			if (stream::read<byte>(s) != c)
 				throw ill_formatted{};
 		}
 		return true;
@@ -334,7 +334,7 @@ namespace goldfish { namespace json
 	{
 		for (auto c : { 'f', 'a', 'l', 's', 'e' })
 		{
-			if (stream::read<uint8_t>(s) != c)
+			if (stream::read<byte>(s) != c)
 				throw ill_formatted{};
 		}
 		return false;
@@ -343,7 +343,7 @@ namespace goldfish { namespace json
 	{
 		for (auto c : { 'n', 'u', 'l', 'l' })
 		{
-			if (stream::read<uint8_t>(s) != c)
+			if (stream::read<byte>(s) != c)
 				throw ill_formatted{};
 		}
 		return nullptr;

@@ -2,10 +2,10 @@
 
 #include <exception>
 #include "array_ref.h"
+#include "common.h"
 #include "debug_checks_writer.h"
 #include "dom.h"
 #include <limits>
-#include "numbers.h"
 #include "sax_writer.h"
 #include "stream.h"
 
@@ -13,36 +13,36 @@ namespace goldfish { namespace cbor
 {
 	namespace details
 	{
-		template <uint8_t major, class Stream> void write_integer(Stream& s, uint64_t x)
+		template <byte major, class Stream> void write_integer(Stream& s, uint64_t x)
 		{
 			if (x <= 23)
 			{
-				stream::write(s, static_cast<uint8_t>((major << 5) | x));
+				stream::write(s, static_cast<byte>((major << 5) | x));
 			}
 			else if (x <= std::numeric_limits<uint8_t>::max())
 			{
-				stream::write(s, static_cast<uint8_t>((major << 5) | 24));
+				stream::write(s, static_cast<byte>((major << 5) | 24));
 				stream::write(s, static_cast<uint8_t>(x));
 			}
 			else if (x <= std::numeric_limits<uint16_t>::max())
 			{
-				stream::write(s, static_cast<uint8_t>((major << 5) | 25));
+				stream::write(s, static_cast<byte>((major << 5) | 25));
 				stream::write(s, to_big_endian(static_cast<uint16_t>(x)));
 			}
 			else if (x <= std::numeric_limits<uint32_t>::max())
 			{
-				stream::write(s, static_cast<uint8_t>((major << 5) | 26));
+				stream::write(s, static_cast<byte>((major << 5) | 26));
 				stream::write(s, to_big_endian(static_cast<uint32_t>(x)));
 			}
 			else
 			{
-				stream::write(s, static_cast<uint8_t>((major << 5) | 27));
+				stream::write(s, static_cast<byte>((major << 5) | 27));
 				stream::write(s, to_big_endian(x));
 			}
 		}
 	}
 	
-	template <class Stream, uint8_t major> class indefinite_stream_writer
+	template <class Stream, byte major> class indefinite_stream_writer
 	{
 	public:
 		indefinite_stream_writer(Stream&& s)
@@ -55,7 +55,7 @@ namespace goldfish { namespace cbor
 		}
 		auto flush()
 		{
-			stream::write(m_stream, static_cast<uint8_t>(0xFF));
+			stream::write(m_stream, static_cast<byte>(0xFF));
 			return m_stream.flush();
 		}
 	private:
@@ -75,13 +75,13 @@ namespace goldfish { namespace cbor
 		{}
 		auto write(bool x)
 		{
-			if (x) stream::write(m_stream, static_cast<uint8_t>((7 << 5) | 21));
-			else   stream::write(m_stream, static_cast<uint8_t>((7 << 5) | 20));
+			if (x) stream::write(m_stream, static_cast<byte>((7 << 5) | 21));
+			else   stream::write(m_stream, static_cast<byte>((7 << 5) | 20));
 			return m_stream.flush();
 		}
 		auto write(nullptr_t)
 		{
-			stream::write(m_stream, static_cast<uint8_t>((7 << 5) | 22));
+			stream::write(m_stream, static_cast<byte>((7 << 5) | 22));
 			return m_stream.flush();
 		}
 		auto write(double x)
@@ -90,7 +90,7 @@ namespace goldfish { namespace cbor
 				return write(static_cast<float>(x));
 
 			static_assert(sizeof(double) == sizeof(uint64_t), "Expect 64 bit doubles");
-			stream::write(m_stream, static_cast<uint8_t>((7 << 5) | 27));
+			stream::write(m_stream, static_cast<byte>((7 << 5) | 27));
 			auto i = *reinterpret_cast<uint64_t*>(&x);
 			stream::write(m_stream, to_big_endian(i));
 			return m_stream.flush();
@@ -98,14 +98,14 @@ namespace goldfish { namespace cbor
 		auto write(float x)
 		{
 			static_assert(sizeof(double) == sizeof(uint64_t), "Expect 32 bit floats");
-			stream::write(m_stream, static_cast<uint8_t>((7 << 5) | 26));
+			stream::write(m_stream, static_cast<byte>((7 << 5) | 26));
 			auto i = *reinterpret_cast<uint32_t*>(&x);
 			stream::write(m_stream, to_big_endian(i));
 			return m_stream.flush();
 		}
 		auto write(tags::undefined) 
 		{
-			stream::write(m_stream, static_cast<uint8_t>((7 << 5) | 23));
+			stream::write(m_stream, static_cast<byte>((7 << 5) | 23));
 			return m_stream.flush();
 		}
 
@@ -134,7 +134,7 @@ namespace goldfish { namespace cbor
 		}
 		indefinite_stream_writer<Stream, 2> start_binary()
 		{
-			stream::write(m_stream, static_cast<uint8_t>((2 << 5) | 31));
+			stream::write(m_stream, static_cast<byte>((2 << 5) | 31));
 			return{ std::move(m_stream) };
 		}
 
@@ -145,7 +145,7 @@ namespace goldfish { namespace cbor
 		}
 		indefinite_stream_writer<Stream, 3> start_string()
 		{
-			stream::write(m_stream, static_cast<uint8_t>((3 << 5) | 31));
+			stream::write(m_stream, static_cast<byte>((3 << 5) | 31));
 			return{ std::move(m_stream) };
 		}
 
@@ -191,7 +191,7 @@ namespace goldfish { namespace cbor
 		auto append() { return create_writer_no_debug_check(stream::ref(m_stream)); }
 		auto flush()
 		{
-			stream::write(m_stream, static_cast<uint8_t>(0xFF));
+			stream::write(m_stream, static_cast<byte>(0xFF));
 			return m_stream.flush();
 		}
 	private:
@@ -204,7 +204,7 @@ namespace goldfish { namespace cbor
 	}
 	template <class Stream> indefinite_array_writer<Stream> document_writer<Stream>::start_array()
 	{
-		stream::write(m_stream, static_cast<uint8_t>((4 << 5) | 31));
+		stream::write(m_stream, static_cast<byte>((4 << 5) | 31));
 		return{ std::move(m_stream) };
 	}
 
@@ -230,7 +230,7 @@ namespace goldfish { namespace cbor
 		document_writer<stream::writer_ref_type_t<Stream>> append_value() { return{ stream::ref(m_stream) }; }
 		auto flush()
 		{
-			stream::write(m_stream, static_cast<uint8_t>(0xFF));
+			stream::write(m_stream, static_cast<byte>(0xFF));
 			return m_stream.flush();
 		}
 	private:
@@ -243,7 +243,7 @@ namespace goldfish { namespace cbor
 	}
 	template <class Stream> indefinite_map_writer<Stream> document_writer<Stream>::start_map()
 	{
-		stream::write(m_stream, static_cast<uint8_t>((5 << 5) | 31));
+		stream::write(m_stream, static_cast<byte>((5 << 5) | 31));
 		return{ std::move(m_stream) };
 	}
 }}

@@ -32,7 +32,7 @@
     <ClInclude Include="..\inc\goldfish\json_reader.h" />
     <ClInclude Include="..\inc\goldfish\json_writer.h" />
     <ClInclude Include="..\inc\goldfish\match.h" />
-    <ClInclude Include="..\inc\goldfish\numbers.h" />
+    <ClInclude Include="..\inc\goldfish\common.h" />
     <ClInclude Include="..\inc\goldfish\optional.h" />
     <ClInclude Include="..\inc\goldfish\reader_writer_stream.h" />
     <ClInclude Include="..\inc\goldfish\sax_reader.h" />

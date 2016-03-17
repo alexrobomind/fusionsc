@@ -5,18 +5,7 @@
 
 namespace goldfish { namespace dom
 {
-	struct in_memory_write_stream
-	{
-		void write(uint8_t x) { data.push_back(x); }
-		template <class T> void write(T x) { write(&x, sizeof(x)); }
-		void write(const void* buffer, size_t size)
-		{
-			data.insert(data.end(), reinterpret_cast<const char*>(buffer), reinterpret_cast<const char*>(buffer) + size);
-		}
-		std::vector<uint8_t> data;
-	};
-
-	static std::string to_hex_string(const std::vector<uint8_t>& data)
+	static std::string to_hex_string(const std::vector<byte>& data)
 	{
 		std::string result;
 		for (auto&& x : data)
@@ -35,7 +24,7 @@ namespace goldfish { namespace dom
 	};
 	static auto to_vector(const std::string& input)
 	{
-		std::vector<uint8_t> data;
+		std::vector<byte> data;
 		for (auto it = input.begin(); it != input.end(); it += 2)
 		{
 			uint8_t high = to_hex(*it);
@@ -165,7 +154,7 @@ namespace goldfish { namespace dom
 			stream::vector_writer s;
 			auto string = cbor::create_writer(stream::ref(s)).start_string();
 			for (auto s : data)
-				string.write_buffer({ reinterpret_cast<const uint8_t*>(s.data()), s.size() });
+				string.write_buffer({ reinterpret_cast<const byte*>(s.data()), s.size() });
 			string.flush();
 			return to_hex_string(s.flush());
 		};
@@ -175,7 +164,7 @@ namespace goldfish { namespace dom
 
 	TEST_CASE(write_infinite_binary_string)
 	{
-		auto w = [&](const std::vector<std::vector<uint8_t>>& data)
+		auto w = [&](const std::vector<std::vector<byte>>& data)
 		{
 			stream::vector_writer s;
 			auto binary = cbor::create_writer(stream::ref(s)).start_binary();

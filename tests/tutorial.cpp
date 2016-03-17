@@ -16,7 +16,7 @@ TEST_CASE(convert_json_to_cbor)
 	// Note that all the streams need to be flushed to ensure that there any potentially
 	// buffered data is serialized.
 	auto cbor_document = cbor::create_writer(stream::vector_writer{}).write(document);
-	test(cbor_document == std::vector<uint8_t>{
+	test(cbor_document == std::vector<byte>{
 		0xbf,                    // start map
 		0x61,0x41,               // key: "A"
 		0x9f,0x01,0x02,0x03,0xff,// value : [1, 2, 3]
@@ -54,7 +54,7 @@ TEST_CASE(generate_json_document)
 	{
 		const char binary_buffer[] = "Hello world!";
 		auto stream = map.start_binary("C", sizeof(binary_buffer) - 1);
-		stream.write_buffer(const_buffer_ref{ reinterpret_cast<const uint8_t*>(binary_buffer), sizeof(binary_buffer) - 1 });
+		stream.write_buffer(const_buffer_ref{ reinterpret_cast<const byte*>(binary_buffer), sizeof(binary_buffer) - 1 });
 		stream.flush();
 	}
 	test(map.flush() == "{\"A\":1,\"B\":\"text\",\"C\":\"SGVsbG8gd29ybGQh\"}");
@@ -72,10 +72,10 @@ TEST_CASE(generate_cbor_document)
 	{
 		const char binary_buffer[] = "Hello world!";
 		auto stream = map.start_binary("C", sizeof(binary_buffer) - 1);
-		stream.write_buffer(const_buffer_ref{ reinterpret_cast<const uint8_t*>(binary_buffer), sizeof(binary_buffer) - 1 });
+		stream.write_buffer(const_buffer_ref{ reinterpret_cast<const byte*>(binary_buffer), sizeof(binary_buffer) - 1 });
 		stream.flush();
 	}
-	test(map.flush() == std::vector<uint8_t>{
+	test(map.flush() == std::vector<byte>{
 		0xbf,                               // start map marker
 		0x61,0x41,                          // key: "A"
 		0x01,                               // value : uint 1

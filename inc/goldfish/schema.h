@@ -40,7 +40,7 @@ namespace goldfish
 			return d.visit(first_match(
 				[&](auto& text, tags::string) -> optional<size_t>
 				{
-					uint8_t buffer[max_length];
+					byte buffer[max_length];
 					auto length = text.read_buffer(buffer);
 					if (stream::seek(text, std::numeric_limits<uint64_t>::max()) != 0)
 						return nullopt;

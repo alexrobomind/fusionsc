@@ -309,11 +309,11 @@ namespace goldfish
 		{
 			static void set(std::aligned_storage_t<sizeof(base), alignof(base)>& data)
 			{
-				reinterpret_cast<uint8_t*>(&data)[sizeof(base) - 1] = sizeof...(types);
+				reinterpret_cast<byte*>(&data)[sizeof(base) - 1] = sizeof...(types);
 			}
 			static bool is(const std::aligned_storage_t<sizeof(base), alignof(base)>& data)
 			{
-				return reinterpret_cast<const uint8_t*>(&data)[sizeof(base) - 1] == sizeof...(types);
+				return reinterpret_cast<const byte*>(&data)[sizeof(base) - 1] == sizeof...(types);
 			}
 		};
 	private:

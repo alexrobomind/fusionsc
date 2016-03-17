@@ -16,7 +16,7 @@ namespace goldfish { namespace dom
 	};
 	static auto to_vector(const std::string& input)
 	{
-		std::vector<uint8_t> data;
+		std::vector<byte> data;
 		for (auto it = input.begin(); it != input.end(); it += 2)
 		{
 			uint8_t high = to_hex(*it);

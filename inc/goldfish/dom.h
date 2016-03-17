@@ -13,7 +13,7 @@ namespace goldfish { namespace dom
 	using array = std::vector<document>;
 	using map = std::vector<std::pair<document, document>>;
 
-	using map_key = variant<bool, nullptr_t, uint64_t, int64_t, double, std::vector<uint8_t>, std::string>;
+	using map_key = variant<bool, nullptr_t, uint64_t, int64_t, double, std::vector<byte>, std::string>;
 	using document_variant = variant<
 		bool,
 		nullptr_t,
@@ -21,7 +21,7 @@ namespace goldfish { namespace dom
 		uint64_t,
 		int64_t,
 		double,
-		std::vector<uint8_t>,
+		std::vector<byte>,
 		std::string,
 		array,
 		map>;

@@ -34,9 +34,9 @@ namespace goldfish { namespace dom
 		test(w(map{ { "a", 1ull } }) == "{\"a\":1}");
 		test(w(map{ { "a", 1ull }, { "b", 2ull } }) == "{\"a\":1,\"b\":2}");
 
-		test(w(std::vector<uint8_t>{}) == "\"\"");
-		test(w(std::vector<uint8_t>({ 1 })) == "\"AQ==\"");
-		test(w(std::vector<uint8_t>({ 1, 2, 3 })) == "\"AQID\"");
+		test(w(std::vector<byte>{}) == "\"\"");
+		test(w(std::vector<byte>({ 1 })) == "\"AQ==\"");
+		test(w(std::vector<byte>({ 1, 2, 3 })) == "\"AQID\"");
 		test(w(map{ { 1ull, 1ull } }) == "{1:1}");
 	}
 

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <assert.h>
+#include "common.h"
 #include <iterator>
 #include <vector>
 
@@ -104,9 +105,9 @@ namespace goldfish
 		return from.size();
 	}
 
-	using const_buffer_ref = array_ref<const uint8_t>;
-	using buffer_ref = array_ref<uint8_t>;
+	using const_buffer_ref = array_ref<const byte>;
+	using buffer_ref = array_ref<byte>;
 
-	template <class T> const_buffer_ref constexpr to_buffer(const T& t) { return{ reinterpret_cast<const uint8_t*>(&t), reinterpret_cast<const uint8_t*>(&t + 1) }; }
-	template <class T> buffer_ref constexpr to_buffer(T& t) { return{ reinterpret_cast<uint8_t*>(&t), reinterpret_cast<uint8_t*>(&t + 1) }; }
+	template <class T> const_buffer_ref constexpr to_buffer(const T& t) { return{ reinterpret_cast<const byte*>(&t), reinterpret_cast<const byte*>(&t + 1) }; }
+	template <class T> buffer_ref constexpr to_buffer(T& t) { return{ reinterpret_cast<byte*>(&t), reinterpret_cast<byte*>(&t + 1) }; }
 }

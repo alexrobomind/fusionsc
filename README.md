@@ -25,7 +25,7 @@ int main()
 	// Note that all the streams need to be flushed to ensure that there any potentially
 	// buffered data is serialized.
 	auto cbor_document = cbor::create_writer(stream::vector_writer{}).write(document);
-	assert(cbor_document == std::vector<uint8_t>{
+	assert(cbor_document == std::vector<byte>{
 		0xbf,                    // start map
 		0x61,0x41,               // key: "A"
 		0x9f,0x01,0x02,0x03,0xff,// value : [1, 2, 3]
@@ -75,14 +75,14 @@ int main()
 	{
 		const char binary_buffer[] = "Hello world!";
 		auto stream = map.start_binary("C", sizeof(binary_buffer) - 1);
-		stream.write_buffer(const_buffer_ref{ reinterpret_cast<const uint8_t*>(binary_buffer), sizeof(binary_buffer) - 1 });
+		stream.write_buffer(const_buffer_ref{ reinterpret_cast<const byte*>(binary_buffer), sizeof(binary_buffer) - 1 });
 		stream.flush();
 	}
 	assert(map.flush() == "{\"A\":1,\"B\":\"text\",\"C\":\"SGVsbG8gd29ybGQh\"}");
 }
 ~~~~~~~~~~
 
-Note how similar the code is to generate a CBOR document. The only change is the creation of the writer (cbor::create_writer instead of json::create_writer) and the type of output_stream (vector<uint8_t> is better suited to storing the binary data than std::string).
+Note how similar the code is to generate a CBOR document. The only change is the creation of the writer (cbor::create_writer instead of json::create_writer) and the type of output_stream (vector<byte> is better suited to storing the binary data than std::string).
 CBOR leads to some significant reduction in document size (the document above is 41 bytes in JSON but only 27 in CBOR format). Because CBOR supports binary data natively, there is also performance benefits (no need to encode the data in base64).
 
 ~~~~~~~~~~cpp
@@ -98,10 +98,10 @@ int main()
 	{
 		const char binary_buffer[] = "Hello world!";
 		auto stream = map.start_binary("C", sizeof(binary_buffer) - 1);
-		stream.write_buffer(const_buffer_ref{ reinterpret_cast<const uint8_t*>(binary_buffer), sizeof(binary_buffer) - 1 });
+		stream.write_buffer(const_buffer_ref{ reinterpret_cast<const byte*>(binary_buffer), sizeof(binary_buffer) - 1 });
 		stream.flush();
 	}
-	assert(map.flush() == std::vector<uint8_t>{
+	assert(map.flush() == std::vector<byte>{
 		0xbf,                               // start map marker
 		0x61,0x41,                          // key: "A"
 		0x01,                               // value : uint 1
@@ -145,7 +145,7 @@ struct write_stream
 	// Finish writing to the stream
 	// This API must be called once the end of stream is reached
 	// It may return some data. For example, a vector_writer returns/
-	// the data written to the stream (in the form of an std::vector<uint8_t>)
+	// the data written to the stream (in the form of an std::vector<byte>)
 	auto flush();
 }
 ~~~~~~~~~~
@@ -160,7 +160,7 @@ There are a few helper APIs that you can use to ease the consumption of streams:
 uint64_t stream::seek(reader_stream&, uint64_t cb);
 
 // Read the entire stream in memory
-std::vector<uint8_t> stream::read_all(reader_stream&);
+std::vector<byte> stream::read_all(reader_stream&);
 std::string stream::read_all_as_string(reader_stream&);
 
 // Read an object of type T from the stream
@@ -189,7 +189,7 @@ Note that those streams can be composed. For example, `stream::decode_base64(str
 
 Here is the list of writers provided by the library:
 * `stream::ref_writer<writer_stream>` (created using `stream::ref(writer_stream&)`): copyable stream that stores a non owning reference to an existing stream
-* `stream::vector_writer`: stores the data in memory, in an std::vector<uint8_t>
+* `stream::vector_writer`: stores the data in memory, in an std::vector<byte>
 * `stream::string_writer`: stores the data in memory, in an std::string
 * `stream::base64_writer<writer_stream>` (created using `stream::encode_base64_to(writer_stream)`): data written to that stream is base64 encoded before being written to the writer_stream
 * `stream::buffered_writer<N, writer_stream>` (created using `stream::buffer<N>(writer_stream)`): add an N byte buffer to the writer_stream

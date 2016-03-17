@@ -42,7 +42,7 @@ namespace goldfish { namespace json
 						char data[6] = { '\\', 'u', '0', '0', '0', '0' };
 						data[4] = "0123456789ABCDEF"[c >> 4];
 						data[5] = "0123456789ABCDEF"[c & 15];
-						m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(data), 6 });
+						m_stream.write_buffer({ reinterpret_cast<const byte*>(data), 6 });
 					}
 					else
 					{
@@ -126,13 +126,13 @@ namespace goldfish { namespace json
 		{}
 		auto write(bool x)
 		{
-			if (x) m_stream.write_buffer({ reinterpret_cast<const uint8_t*>("true"), 4 });
-			else   m_stream.write_buffer({ reinterpret_cast<const uint8_t*>("false"), 5 });
+			if (x) m_stream.write_buffer({ reinterpret_cast<const byte*>("true"), 4 });
+			else   m_stream.write_buffer({ reinterpret_cast<const byte*>("false"), 5 });
 			return m_stream.flush();
 		}
 		auto write(nullptr_t)
 		{
-			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>("null"), 4 });
+			m_stream.write_buffer({ reinterpret_cast<const byte*>("null"), 4 });
 			return m_stream.flush();
 		}
 		auto write(tags::undefined)
@@ -142,13 +142,13 @@ namespace goldfish { namespace json
 		auto write(uint64_t x)
 		{
 			auto string = std::to_string(x);
-			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(string.data()), string.size() });
+			m_stream.write_buffer({ reinterpret_cast<const byte*>(string.data()), string.size() });
 			return m_stream.flush();
 		}
 		auto write(int64_t x)
 		{
 			auto string = std::to_string(x);
-			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(string.data()), string.size() });
+			m_stream.write_buffer({ reinterpret_cast<const byte*>(string.data()), string.size() });
 			return m_stream.flush();
 		}
 		auto write(double x)
@@ -157,7 +157,7 @@ namespace goldfish { namespace json
 			auto cb = sprintf_s(buffer, "%g", x);
 			if (cb <= 0)
 				std::terminate();
-			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(buffer), static_cast<size_t>(cb) });
+			m_stream.write_buffer({ reinterpret_cast<const byte*>(buffer), static_cast<size_t>(cb) });
 			return m_stream.flush();
 		}
 
