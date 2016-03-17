@@ -61,10 +61,7 @@ namespace goldfish { namespace dom
 		test(w(1000000ull) == "1a000f4240");
 		test(w(1000000000000ull) == "1b000000e8d4a51000");
 		test(w(18446744073709551615ull) == "1bffffffffffffffff");
-		
-		//test(w(tagged{ 2, to_vector("010000000000000000") }) == "c249010000000000000000");
 		test(w(-9223372036854775808ll) == "3b7fffffffffffffff");
-		//test(w(tagged{ 3, to_vector("010000000000000000") }) == "c349010000000000000000");
 
 		test(w(-1ll) == "20");
 		test(w(1ll) == "01");
@@ -73,42 +70,20 @@ namespace goldfish { namespace dom
 		test(w(-1000ll) == "3903e7");
 		test(w(-1000000ll) == "3a000f423f");
 
-		//test(w(0.0) == "f90000");
-		//test(w(-0.0) == "f98000");
-		//test(w(1.0) == "f93c00");
 		test(w(1.1) == "fb3ff199999999999a");
-		//test(w(1.5) == "f93e00");
-		//test(w(65504.0) == "f97bff");
 		test(w(100000.0) == "fa47c35000");
 		test(w(3.4028234663852886e+38) == "fa7f7fffff");
 		test(w(1.0e+300) == "fb7e37e43c8800759c");
-		//test(w(5.960464477539063e-8) == "f90001");
-		//test(w(0.00006103515625) == "f90400");
-		//test(w(-4.0) == "f9c400");
 		test(w(-4.1) == "fbc010666666666666");
-		//test(w(std::numeric_limits<double>::infinity()) == "f97c00");
-		//test(isnan(r("f97e00").as<double>()));
-		//test(w(-std::numeric_limits<double>::infinity()) == "f9fc00");
+		test(w(std::numeric_limits<double>::quiet_NaN()) == "fb7ff8000000000000");
 		test(w(std::numeric_limits<double>::infinity()) == "fa7f800000");
-		//test(isnan(r("fa7fc00000").as<double>()));
 		test(w(-std::numeric_limits<double>::infinity()) == "faff800000");
-		//test(isnan(r("fb7ff8000000000000").as<double>()));
 
 		test(w(false) == "f4");
 		test(w(true) == "f5");
 		test(w(nullptr) == "f6");
 		test(w(tags::undefined{}) == "f7");
-
-		//test(w(tagged{ 0, "2013-03-21T20:04:00Z"s }) == "c074323031332d30332d32315432303a30343a30305a");
-
-		//test(w(tagged{ 1, 1363896240ull }) == "c11a514b67b0");
-		//test(w(tagged{ 1, 1363896240.5 }) == "c1fb41d452d9ec200000");
-		//test(w(tagged{ 0, "2013-03-21T20:04:00Z"s }) == "c074323031332d30332d32315432303a30343a30305a");
-		//test(w(tagged{ 0, "2013-03-21T20:04:00Z"s }) == "c074323031332d30332d32315432303a30343a30305a");
-		//test(w(tagged{ 23, to_vector("01020304") }) == "d74401020304");
-		//test(w(tagged{ 24, to_vector("6449455446") }) == "d818456449455446");
-		//test(w(tagged{ 32, "http://www.example.com"s }) == "d82076687474703a2f2f7777772e6578616d706c652e636f6d");
-
+		
 		test(w(binary(to_vector(""))) == "40");
 		test(w(binary(to_vector("01020304"))) == "4401020304");
 
@@ -142,18 +117,6 @@ namespace goldfish { namespace dom
 			{ string("d"), string("D") },
 			{ string("e"), string("E") }
 		}) == "a56161614161626142616361436164614461656145");
-
-		// input used indefinite array
-		//
-		//test(w(array{ 1ull, array{ 2ull, 3ull }, array{ 4ull, 5ull }}) == "9f018202039f0405ffff");
-		//test(w(array{ 1ull, array{ 2ull, 3ull }, array{ 4ull, 5ull }}) == "9f01820203820405ff");
-		//test(w(array{ 1ull, array{ 2ull, 3ull }, array{ 4ull, 5ull }}) == "83018202039f0405ff");
-		//test(w(array{ 1ull, array{ 2ull, 3ull }, array{ 4ull, 5ull }}) == "83019f0203ff820405");
-		//test(w(map{
-		//	{ "a"s, 1ull },
-		//	{ "b"s, array{ 2ull, 3ull } }
-		//}) == "bf61610161629f0203ffff");
-		//test(w(array{ "a"s, map{ { "b"s, "c"s } } }) == "826161bf61626163ff");
 	}
 
 	TEST_CASE(write_infinite_array)
