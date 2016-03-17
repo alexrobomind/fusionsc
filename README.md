@@ -119,7 +119,7 @@ int main()
 ### Streams
 Goldfish parses documents from read streams and serializes documents to write streams.
 
-Goldfish comes with a few readers: a reader over an in memory buffer (see stream::read_buffer_ref) or over a file (see stream::file_reader). It also provides a buffering (see stream::buffer). You might find yourself in a position where you want to implement your own stream, for example, as a network stream on top of your favorite network library.
+Goldfish comes with a few readers: a reader over an in memory buffer (see `stream::read_buffer_ref`) or over a file (see `stream::file_reader`). It also provides a buffering (see `stream::buffer`). You might find yourself in a position where you want to implement your own stream, for example, as a network stream on top of your favorite network library.
 Not to worry, the interface for a read stream is fairly straightforward, with a single read_buffer API:
 ~~~~~~~~~~cpp
 struct read_stream
@@ -144,7 +144,8 @@ struct write_stream
 
 	// Finish writing to the stream
 	// This API must be called once the end of stream is reached
-	// It may return some data. For example, a vector_writer returns the data written to the stream (in the form of an std::vector<uint8_t>)
+	// It may return some data. For example, a vector_writer returns/
+	// the data written to the stream (in the form of an std::vector<uint8_t>)
 	auto flush();
 }
 ~~~~~~~~~~
@@ -152,8 +153,10 @@ struct write_stream
 There are a few helper APIs that you can use to ease the consumption of streams:
 ~~~~~~~~~~cpp
 // Seek forward in the stream up to cb bytes
-// This API returns the number of bytes skipped from the stream, which can be less than cb if the end of the stream is reached
-// It is implemented in terms of read_buffer, unless the reader_stream has a seek method on it (in which case that method is used)
+// This API returns the number of bytes skipped from the stream, which can be less
+// than cb if the end of the stream is reached
+// It is implemented in terms of read_buffer, unless the reader_stream has a seek
+//  method on it (in which case that method is used)
 uint64_t stream::seek(reader_stream&, uint64_t cb);
 
 // Read the entire stream in memory
@@ -162,13 +165,16 @@ std::string stream::read_all_as_string(reader_stream&);
 
 // Read an object of type T from the stream
 // The object must be a POD
-// This API is implemented in terms of read_buffer, unless the reader_stream has a read method on it (in which case that method is used)
-// If the end of stream is reached before sizeof(T) bytes could be read, this method throws unexpected_end_of_stream
+// This API is implemented in terms of read_buffer, unless the reader_stream has a
+// read method on it (in which case that method is used)
+// If the end of stream is reached before sizeof(T) bytes could be read, this method
+// throws unexpected_end_of_stream
 template <class T> T stream::read(reader_stream&);
 
 // Write an object of type T to the stream
 // The object must be a POD
-// This API is implemented in terms of write_buffer, unless the writer_stream has a write method on it (in which case that method is used)
+// This API is implemented in terms of write_buffer, unless the writer_stream has a
+// write method on it (in which case that method is used)
 template <class T> void stream::write(writer_stream&, const T&);
 ~~~~~~~~~~
 
