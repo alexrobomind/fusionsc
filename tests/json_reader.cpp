@@ -8,7 +8,7 @@ namespace goldfish { namespace dom
 	{
 		auto r = [&](std::string input)
 		{
-			stream::array_ref_reader s({ reinterpret_cast<const uint8_t*>(input.data()), input.size() });
+			stream::const_buffer_ref_reader s({ reinterpret_cast<const uint8_t*>(input.data()), input.size() });
 			auto result = load_in_memory(json::read(stream::ref(s)));
 			test(seek(s, 1) == 0);
 			return result;

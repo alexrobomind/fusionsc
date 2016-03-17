@@ -65,14 +65,6 @@ namespace goldfish { namespace stream
 		s.write_buffer({ reinterpret_cast<const uint8_t*>(&t), sizeof(t) });
 	}
 
-	class empty
-	{
-	public:
-		size_t read_buffer(buffer_ref) { return 0; }
-		uint64_t seek(uint64_t) { return 0; }
-		template <class T> std::enable_if_t<std::is_standard_layout<T>::value, optional<T>> peek() { return nullopt; }
-	};
-
 	template <class inner> class ref_reader;
 	template <class inner> class ref_writer;
 	template <class T> struct is_ref : std::false_type {};
@@ -127,14 +119,14 @@ namespace goldfish { namespace stream
 	template <class inner> ref_reader<inner> ref(ref_reader<inner>& stream) { return stream; }
 	template <class inner> ref_writer<inner> ref(ref_writer<inner>& stream) { return stream; }
 
-	class array_ref_reader
+	class const_buffer_ref_reader
 	{
 	public:
-		array_ref_reader() = default;
-		array_ref_reader(array_ref_reader&&) = default;
-		array_ref_reader& operator = (const array_ref_reader&) = delete;
+		const_buffer_ref_reader() = default;
+		const_buffer_ref_reader(const_buffer_ref_reader&&) = default;
+		const_buffer_ref_reader& operator = (const const_buffer_ref_reader&) = delete;
 
-		array_ref_reader(const_buffer_ref data)
+		const_buffer_ref_reader(const_buffer_ref data)
 			: m_data(data)
 		{}
 		size_t read_buffer(buffer_ref data)
@@ -193,9 +185,9 @@ namespace goldfish { namespace stream
 		const_buffer_ref m_data;
 	};
 
-	inline array_ref_reader read_buffer_ref(const_buffer_ref x) { return{ x }; }
-	template <size_t N> array_ref_reader read_string_literal(const char(&s)[N]) { assert(s[N - 1] == 0); return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), N - 1 }; }
-	inline array_ref_reader read_string_literal(const char* s) { return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), strlen(s) }; }
+	inline const_buffer_ref_reader read_buffer_ref(const_buffer_ref x) { return{ x }; }
+	template <size_t N> const_buffer_ref_reader read_string_literal(const char(&s)[N]) { assert(s[N - 1] == 0); return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), N - 1 }; }
+	inline const_buffer_ref_reader read_string_literal(const char* s) { return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), strlen(s) }; }
 
 	class vector_writer
 	{

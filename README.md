@@ -127,7 +127,7 @@ struct read_stream
 	// Copies some bytes from the stream to the "buffer"
 	// Returns the number of bytes copied.
 	// If the API returns something else than buffer.size(), the end of stream was reached.
-	// Can throw on IO error.
+	// read_buffer can still be called after the end is reached, in that case it returns 0
 	//
 	// buffer_ref is an object that contains a pointer to the buffer (buffer.data() is the pointer)
 	// as well as the number of bytes in the buffer (buffer.size())
@@ -135,3 +135,48 @@ struct read_stream
 }
 ~~~~~~~~~~
 
+Write streams have the following interface:
+~~~~~~~~~~cpp
+struct write_stream
+{
+	// Write some data to the stream
+	void write_buffer(const_buffer_ref data);
+
+	// Finish writing to the stream
+	// This API must be called once the end of stream is reached
+	// It may return some data. For example, a vector_writer returns the data written to the stream (in the form of an std::vector<uint8_t>)
+	auto flush();
+}
+~~~~~~~~~~
+
+There are a few helper APIs that you can use to ease the consumption of streams:
+~~~~~~~~~~cpp
+// Seek forward in the stream up to cb bytes
+// This API returns the number of bytes skipped from the stream, which can be less than cb if the end of the stream is reached
+// It is implemented in terms of read_buffer, unless the reader_stream has a seek method on it (in which case that method is used)
+uint64_t stream::seek(reader_stream&, uint64_t cb);
+
+// Read the entire stream in memory
+std::vector<uint8_t> stream::read_all(reader_stream&);
+std::string stream::read_all_as_string(reader_stream&);
+
+// Read an object of type T from the stream
+// The object must be a POD
+// This API is implemented in terms of read_buffer, unless the reader_stream has a read method on it (in which case that method is used)
+// If the end of stream is reached before sizeof(T) bytes could be read, this method throws unexpected_end_of_stream
+template <class T> T stream::read(reader_stream&);
+
+// Write an object of type T to the stream
+// The object must be a POD
+// This API is implemented in terms of write_buffer, unless the writer_stream has a write method on it (in which case that method is used)
+template <class T> void stream::write(writer_stream&, const T&);
+~~~~~~~~~~
+
+Here is the exhaustive list of readers provided by the library:
+* `stream::ref_reader<reader_stream>` (created using `stream::ref(reader_stream&)`): copyable stream that stores a non owning reference to another stream
+* `stream::const_buffer_ref_reader` (created using `stream::read_buffer_ref` or `stream::read_string_literal`): a stream that reads a buffer, without owning that buffer
+* `stream::base64_reader<reader_stream>` (created using `stream::decode_base64(reader_stream&&)`): convert a base64 stream into a binary stream
+* `stream::buffered_reader<N, reader_stream>` (created using `stream::buffer<N>(reader_stream&&)`): add an N byte buffer to the reader_stream
+* `stream::file_reader`: a reader stream on a file
+
+Note that those streams can be composed. For example, `stream::decode_base64(stream::buffer<8192>(stream::file_reader("foo.txt")))` opens the file "foo.txt", buffers that stream using an 8kB buffer and decodes the content of the file assuming it is base64 encoded.

@@ -28,7 +28,7 @@ namespace goldfish { namespace dom
 	static auto r(std::string input)
 	{
 		auto binary = to_vector(input);
-		stream::array_ref_reader s(binary);
+		stream::const_buffer_ref_reader s(binary);
 		auto result = load_in_memory(cbor::read(stream::ref(s)));
 		test(seek(s, 1) == 0);
 		return result;
@@ -153,7 +153,7 @@ namespace goldfish { namespace dom
 	TEST_CASE(seek_in_finite_string)
 	{
 		auto binary = to_vector("6449455446"); // IETF
-		stream::array_ref_reader s(binary);
+		stream::const_buffer_ref_reader s(binary);
 		auto result = cbor::read(stream::ref(s)).as_string();
 
 		test(stream::seek(result, 0) == 0);
@@ -166,7 +166,7 @@ namespace goldfish { namespace dom
 	TEST_CASE(seek_in_chunked_string_to_beginning_of_block)
 	{
 		auto binary = to_vector("7f657374726561646d696e67ff"); // "strea" "ming"
-		stream::array_ref_reader s(binary);
+		stream::const_buffer_ref_reader s(binary);
 		auto result = cbor::read(stream::ref(s)).as_string();
 
 		test(stream::seek(result, 0) == 0);
@@ -181,7 +181,7 @@ namespace goldfish { namespace dom
 	TEST_CASE(seek_in_chunked_string_across_block)
 	{
 		auto binary = to_vector("7f657374726561646d696e67ff"); // "strea" "ming"
-		stream::array_ref_reader s(binary);
+		stream::const_buffer_ref_reader s(binary);
 		auto result = cbor::read(stream::ref(s)).as_string();
 
 		test(stream::seek(result, 8) == 8);
@@ -192,7 +192,7 @@ namespace goldfish { namespace dom
 	TEST_CASE(seek_in_chunked_string_all)
 	{
 		auto binary = to_vector("7f657374726561646d696e67ff"); // "strea" "ming"
-		stream::array_ref_reader s(binary);
+		stream::const_buffer_ref_reader s(binary);
 		test(stream::seek(cbor::read(stream::ref(s)).as_string(), 10) == 9);
 	}
 }}

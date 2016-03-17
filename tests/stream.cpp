@@ -3,9 +3,9 @@
 
 namespace goldfish { namespace stream {
 
-static_assert(is_reader<empty>::value, "empty is a reader");
+static_assert(is_reader<const_buffer_ref_reader>::value, "empty is a reader");
 static_assert(!is_reader<vector_writer>::value, "vector_writer is not a reader");
-static_assert(!is_writer<empty>::value, "empty is not a writer");
+static_assert(!is_writer<const_buffer_ref_reader>::value, "empty is not a writer");
 static_assert(is_writer<vector_writer>::value, "vector_writer is a writer");
 
 TEST_CASE(test_skip)

@@ -104,7 +104,7 @@ int main(int argc, char* argv[])
 	cout << "\nDeserialize JSON in DOM mode\n";
 	measure([&]
 	{
-		dom::load_in_memory(json::read(stream::array_ref_reader(json_data)));
+		dom::load_in_memory(json::read(stream::const_buffer_ref_reader(json_data)));
 	}, json_data.size());
 }
 
