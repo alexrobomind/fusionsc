@@ -294,7 +294,13 @@ namespace goldfish { namespace json
 		using tag = tags::map;
 		using comma_separated_reader<Stream, '}'>::comma_separated_reader;
 
-		auto read_key() { return read_comma_separated(); }
+		auto read_key()
+		{
+			auto key = read_comma_separated();
+			if (key && !key->is_exactly<tags::string>())
+				throw ill_formatted_json_data{};
+			return key;
+		}
 		document<stream::reader_ref_type_t<Stream>> read_value()
 		{
 			auto c = details::peek_non_space(m_stream);

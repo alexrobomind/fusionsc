@@ -109,6 +109,8 @@ namespace goldfish
 		bool is_undefined() { return m_data.is<type_with_tag_t<tags::undefined>>(); }
 		bool is_null() { return m_data.is<type_with_tag_t<tags::null>>(); }
 
+		template <class tag> bool is_exactly() { return m_data.is<type_with_tag_t<tag>>(); }
+
 		using invalid_state = typename variant<types...>::invalid_state;
 	private:
 		static uint64_t cast_signed_to_unsigned(int64_t x)

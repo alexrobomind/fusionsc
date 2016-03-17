@@ -76,8 +76,27 @@ namespace goldfish { namespace dom
 
 		test(r("{}") == map{});
 		test(r("{\"foo\":1}") == map{ { "foo", 1ull } });
+		expect_exception<json::ill_formatted_json_data>([&] { r("{1:1}"); });
 	}
 
+	TEST_CASE(json_parse_key)
+	{
+		// From uint
+		test(json::read(stream::read_string_literal("{\"1\":1}")).as_map().read_key()->as_int() == 1);
+		test(json::read(stream::read_string_literal("{\"1\":1}")).as_map().read_key()->as_uint() == 1);
+		test(json::read(stream::read_string_literal("{\"1\":1}")).as_map().read_key()->as_double() == 1);
+
+		// From int
+		test(json::read(stream::read_string_literal("{\"-1\":1}")).as_map().read_key()->as_int() == -1);
+		test(json::read(stream::read_string_literal("{\"-1\":1}")).as_map().read_key()->as_double() == -1.0);
+
+		// From double
+		test(json::read(stream::read_string_literal("{\"-1.5\":1}")).as_map().read_key()->as_double() == -1.5);
+
+		// As binary
+		test(stream::read_all_as_string(json::read(stream::read_string_literal("{\"TWFu\":1}")).as_map().read_key()->as_binary()) == "Man");
+
+	}
 
 	struct data_partially_parsed {};
 
