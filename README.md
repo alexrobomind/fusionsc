@@ -179,10 +179,18 @@ template <class T> void stream::write(writer_stream&, const T&);
 ~~~~~~~~~~
 
 Here is the exhaustive list of readers provided by the library:
-* `stream::ref_reader<reader_stream>` (created using `stream::ref(reader_stream&)`): copyable stream that stores a non owning reference to another stream
+* `stream::ref_reader<reader_stream>` (created using `stream::ref(reader_stream&)`): copyable stream that stores a non owning reference to an existing stream
 * `stream::const_buffer_ref_reader` (created using `stream::read_buffer_ref` or `stream::read_string_literal`): a stream that reads a buffer, without owning that buffer
-* `stream::base64_reader<reader_stream>` (created using `stream::decode_base64(reader_stream&&)`): convert a base64 stream into a binary stream
-* `stream::buffered_reader<N, reader_stream>` (created using `stream::buffer<N>(reader_stream&&)`): add an N byte buffer to the reader_stream
+* `stream::base64_reader<reader_stream>` (created using `stream::decode_base64(reader_stream)`): convert a base64 stream into a binary stream
+* `stream::buffered_reader<N, reader_stream>` (created using `stream::buffer<N>(reader_stream)`): add an N byte buffer to the reader_stream
 * `stream::file_reader`: a reader stream on a file
 
 Note that those streams can be composed. For example, `stream::decode_base64(stream::buffer<8192>(stream::file_reader("foo.txt")))` opens the file "foo.txt", buffers that stream using an 8kB buffer and decodes the content of the file assuming it is base64 encoded.
+
+Here is the list of writers provided by the library:
+* `stream::ref_writer<writer_stream>` (created using `stream::ref(writer_stream&)`): copyable stream that stores a non owning reference to an existing stream
+* `stream::vector_writer`: stores the data in memory, in an std::vector<uint8_t>
+* `stream::string_writer`: stores the data in memory, in an std::string
+* `stream::base64_writer<writer_stream>` (created using `stream::encode_base64_to(writer_stream)`): data written to that stream is base64 encoded before being written to the writer_stream
+* `stream::buffered_writer<N, writer_stream>` (created using `stream::buffer<N>(writer_stream)`): add an N byte buffer to the writer_stream
+* `stream::file_writer`: a writer stream on a file
