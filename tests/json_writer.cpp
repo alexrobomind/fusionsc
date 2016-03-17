@@ -66,13 +66,24 @@ namespace goldfish { namespace dom
 		run("[4294967295]");
 		run("[1234567890123456789]");
 		run("[9223372036854775807]");
-		//run("[0.0]");
-		//run("[-0.0]");
-		run("[1.2345]");
-		run("[-1.2345]");
-		//run("[5e-324]");
-		//run("[2.225073858507201e-308]");
-		//run("[2.2250738585072014e-308]");
-		//run("[1.7976931348623157e308]");
+	}
+
+	TEST_CASE(test_lossless_floating_point)
+	{
+		auto run = [](const char* data)
+		{
+			auto original_float = json::read(stream::read_string_literal(data)).as_double();
+			auto round_tripped = json::create_writer(stream::string_writer{}).write(original_float);
+			auto new_float = json::read(stream::read_string_literal(round_tripped.c_str())).as_double();
+			test(original_float == new_float);
+		};
+		run("0.0");
+		//run("-0.0");
+		run("1.2345");
+		run("-1.2345");
+		run("5e-324");
+		//run("2.225073858507201e-308");
+		//run("2.2250738585072014e-308");
+		//run("1.7976931348623157e308");
 	}
 }}
