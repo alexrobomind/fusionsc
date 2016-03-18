@@ -10,7 +10,7 @@ namespace goldfish
 	{
 		auto r = [](auto input)
 		{
-			return json::read(stream::read_string_literal(input)).as_double();
+			return json::read(stream::read_string_non_owning(input)).as_double();
 		};
 		test(r("1") == 1);
 		test(r("-1") == -1);
@@ -24,7 +24,7 @@ namespace goldfish
 	{
 		auto r = [](auto input)
 		{
-			return json::read(stream::read_string_literal(input)).as_int();
+			return json::read(stream::read_string_non_owning(input)).as_int();
 		};
 		test(r("1") == 1);
 		test(r("-1") == -1);
@@ -42,7 +42,7 @@ namespace goldfish
 	{
 		auto r = [](auto input)
 		{
-			return json::read(stream::read_string_literal(input)).as_uint();
+			return json::read(stream::read_string_non_owning(input)).as_uint();
 		};
 		test(r("1") == 1);
 		expect_exception<integer_overflow>([&] { r("-1"); });
@@ -57,7 +57,7 @@ namespace goldfish
 	{
 		auto r = [](auto input)
 		{
-			return stream::read_all_as_string(json::read(stream::read_string_literal(input)).as_binary());
+			return stream::read_all_as_string(json::read(stream::read_string_non_owning(input)).as_binary());
 		};
 		test(r("\"YW55IGNhcm5hbCBwbGVhc3VyZS4\"") == "any carnal pleasure.");
 	}

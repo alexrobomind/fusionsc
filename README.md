@@ -18,7 +18,7 @@ int main()
 
 	// Read the string literal as a stream and parse it as a JSON document
 	// This doesn't really do any work, the stream will be read as we parse the document
-	auto document = json::read(stream::read_string_literal("{\"A\":[1,2,3],\"B\":true}"));
+	auto document = json::read(stream::read_string_non_owning("{\"A\":[1,2,3],\"B\":true}"));
 
 	// Generate a stream on a vector, a CBOR writer around that stream and write
 	// the JSON document to it
@@ -50,7 +50,7 @@ int main()
 	using namespace goldfish;
 
 	static const schema s{ "a", "b", "c" };
-	auto document = apply_schema(json::read(stream::read_string_literal("{\"a\":1,\"c\":3.0}")).as_map(), s);
+	auto document = apply_schema(json::read(stream::read_string_non_owning("{\"a\":1,\"c\":3.0}")).as_map(), s);
 
 	assert(document.read_value("a")->as_uint() == 1);
 	assert(document.read_value("b") == nullopt);
@@ -180,7 +180,7 @@ template <class T> void stream::write(writer_stream&, const T&);
 
 Here is the exhaustive list of readers provided by the library:
 * `stream::ref_reader<reader_stream>` (created using `stream::ref(reader_stream&)`): copyable stream that stores a non owning reference to an existing stream
-* `stream::const_buffer_ref_reader` (created using `stream::read_buffer_ref` or `stream::read_string_literal`): a stream that reads a buffer, without owning that buffer
+* `stream::const_buffer_ref_reader` (created using `stream::read_buffer_ref` or `stream::read_string_non_owning`): a stream that reads a buffer, without owning that buffer
 * `stream::base64_reader<reader_stream>` (created using `stream::decode_base64(reader_stream)`): convert a base64 stream into a binary stream
 * `stream::buffered_reader<N, reader_stream>` (created using `stream::buffer<N>(reader_stream)`): add an N byte buffer to the reader_stream
 * `stream::file_reader`: a reader stream on a file

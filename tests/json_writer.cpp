@@ -44,7 +44,7 @@ namespace goldfish { namespace dom
 	{
 		auto run = [](const char* data)
 		{
-			test(json::create_writer(stream::string_writer{}).write(json::read(stream::read_string_literal(data))) == data);
+			test(json::create_writer(stream::string_writer{}).write(json::read(stream::read_string_non_owning(data))) == data);
 		};
 
 		run("[null]");
@@ -72,9 +72,9 @@ namespace goldfish { namespace dom
 	{
 		auto run = [](const char* data)
 		{
-			auto original_float = json::read(stream::read_string_literal(data)).as_double();
+			auto original_float = json::read(stream::read_string_non_owning(data)).as_double();
 			auto round_tripped = json::create_writer(stream::string_writer{}).write(original_float);
-			auto new_float = json::read(stream::read_string_literal(round_tripped.c_str())).as_double();
+			auto new_float = json::read(stream::read_string_non_owning(round_tripped.c_str())).as_double();
 			test(original_float == new_float);
 		};
 		run("0.0");

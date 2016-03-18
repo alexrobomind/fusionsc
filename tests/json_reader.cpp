@@ -83,7 +83,7 @@ namespace goldfish { namespace dom
 	{
 		auto run = [](auto exception, const char* text)
 		{
-			auto s = stream::read_string_literal(text);
+			auto s = stream::read_string_non_owning(text);
 			expect_exception<decltype(exception)>([&]
 			{
 				dom::load_in_memory(json::read(stream::ref(s)));
@@ -128,7 +128,7 @@ namespace goldfish { namespace dom
 	{
 		auto run = [](const char* text)
 		{
-			auto s = stream::read_string_literal(text);
+			auto s = stream::read_string_non_owning(text);
 			dom::load_in_memory(json::read(stream::ref(s)));
 			test(json::details::peek_non_space(s) == nullopt);
 		};

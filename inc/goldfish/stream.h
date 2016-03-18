@@ -186,8 +186,9 @@ namespace goldfish { namespace stream
 	};
 
 	inline const_buffer_ref_reader read_buffer_ref(const_buffer_ref x) { return{ x }; }
-	template <size_t N> const_buffer_ref_reader read_string_literal(const char(&s)[N]) { assert(s[N - 1] == 0); return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), N - 1 }; }
-	inline const_buffer_ref_reader read_string_literal(const char* s) { return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), strlen(s) }; }
+	template <size_t N> const_buffer_ref_reader read_string_non_owning(const char(&s)[N]) { assert(s[N - 1] == 0); return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), N - 1 }; }
+	inline const_buffer_ref_reader read_string_non_owning(const char* s) { return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), strlen(s) }; }
+	inline const_buffer_ref_reader read_string_non_owning(const std::string& s) { return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s.data()), s.size() }; }
 
 	class vector_writer
 	{

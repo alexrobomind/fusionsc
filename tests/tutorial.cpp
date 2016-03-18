@@ -9,7 +9,7 @@ TEST_CASE(convert_json_to_cbor)
 
 	// Read the string literal as a stream and parse it as a JSON document
 	// This doesn't really do any work, the stream will be read as we parse the document
-	auto document = json::read(stream::read_string_literal("{\"A\":[1,2,3],\"B\":true}"));
+	auto document = json::read(stream::read_string_non_owning("{\"A\":[1,2,3],\"B\":true}"));
 
 	// Generate a stream on a vector, a CBOR writer around that stream and write
 	// the JSON document to it
@@ -34,7 +34,7 @@ TEST_CASE(parse_document)
 	using namespace goldfish;
 
 	static const schema s{ "a", "b", "c" };
-	auto document = apply_schema(json::read(stream::read_string_literal("{\"a\":1,\"c\":3.0}")).as_map(), s);
+	auto document = apply_schema(json::read(stream::read_string_non_owning("{\"a\":1,\"c\":3.0}")).as_map(), s);
 
 	test(document.read_value("a")->as_uint() == 1);
 	test(document.read_value("b") == nullopt);
