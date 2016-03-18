@@ -64,6 +64,15 @@ namespace goldfish { namespace dom
 		test(r("-0.5E+1") == -5.);
 		test(r("-0.5E+10") == -5000000000.);
 
+		test(r("1.7976931348623158e+308") == 1.7976931348623158e+308);
+		test(r("2.2204460492503131e-016") == 2.2204460492503131e-016);
+		test(r("2.2250738585072014e-308") == 2.2250738585072014e-308);
+		test(r("1e309") == std::numeric_limits<double>::infinity());
+		test(r("1e-309") == 0.);
+
+		expect_exception<json::ill_formatted_json_data>([&] { r("0."); });
+		expect_exception<json::ill_formatted_json_data>([&] { r("[0.]"); });
+
 		test(r("-5E-1") == -0.5);
 
 		test(r("[]") == array{});

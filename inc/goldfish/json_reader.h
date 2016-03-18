@@ -43,6 +43,23 @@ namespace goldfish { namespace json
 					stream::read<char>(s);
 			}
 		}
+		template <class Stream> char read_non_space(Stream& s)
+		{
+			for (;;)
+			{
+				auto c = stream::read<char>(s);
+				if (c != ' ' && c != '\t' && c != '\r' && c != '\n')
+					return c;
+			}
+		}
+		template <class Stream> void throw_if_stream_isnt(Stream& s, std::initializer_list<char> string)
+		{
+			for (auto c : string)
+			{
+				if (stream::read<char>(s) != c)
+					throw ill_formatted_json_data{};
+			}
+		}
 	}
 
 	class byte_string
@@ -70,9 +87,10 @@ namespace goldfish { namespace json
 			size_t cb = 0;
 			for (auto&& out : buffer)
 			{
-				if (auto in = read_char())
+				auto in = read_char();
+				if (in != 0xFF)
 				{
-					out = *in;
+					out = in;
 					cb++;
 				}
 				else
@@ -86,7 +104,7 @@ namespace goldfish { namespace json
 		template <class T> std::enable_if_t<sizeof(T) == 1, T> read()
 		{
 			auto c = x.read_char();
-			if (c == nullopt)
+			if (c == invalid_char)
 				throw stream::unexpected_end_of_stream();
 			return reinterpret_cast<T&>(c);
 		}
@@ -94,51 +112,85 @@ namespace goldfish { namespace json
 		{
 			for (uint64_t i = 0; i < x; ++i)
 			{
-				if (read_char() == nullopt)
+				if (read_char() == invalid_char)
 					return i;
 			}
 			return x;
 		}
 	private:
-		optional<char> read_char()
+		static const byte invalid_char = 0xFF;
+		static const byte end_of_stream = 0xFE;
+		byte read_char()
 		{
-			if (m_cb_converted != 0)
+			if (m_converted.front() != invalid_char)
 			{
-				if (m_cb_converted == 255)
-					return nullopt;
+				if (m_converted.front() == end_of_stream)
+					return invalid_char;
 
-				return m_converted[--m_cb_converted];
+				auto c = m_converted.front();
+				std::copy(m_converted.begin() + 1, m_converted.end(), m_converted.begin());
+				m_converted.back() = invalid_char;
+				return c;
 			}
+
+			enum category : uint8_t
+			{
+				S, // simple (just needs to be forwarded to the inner stream)
+				E, // escape: \ character 
+				Q, // quote: " character
+				I, // character should have been escaped or is not a valid UTF8 character
+			};
+			static const category lookup[] = {
+				/*       0 1 2 3 4 5 6 7 8 9 A B C D E F */
+				/*0x00*/ I,I,I,I,I,I,I,I,I,I,I,I,I,I,I,I,
+				/*0x10*/ I,I,I,I,I,I,I,I,I,I,I,I,I,I,I,I,
+				/*0x20*/ S,S,Q,S,S,S,S,S,S,S,S,S,S,S,S,S,
+				/*0x30*/ S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,
+				/*0x40*/ S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,
+				/*0x50*/ S,S,S,S,S,S,S,S,S,S,S,S,E,S,S,S,
+				/*0x60*/ S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,
+				/*0x70*/ S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,
+				/*0x80*/ S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,
+				/*0x90*/ S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,
+				/*0xA0*/ S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,
+				/*0xB0*/ S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,
+				/*0xC0*/ S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,
+				/*0xD0*/ S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,
+				/*0xE0*/ S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,
+				/*0xF0*/ S,S,S,S,S,S,S,S,I,I,I,I,I,I,I,I,
+			};
+			static_assert(sizeof(lookup) / sizeof(lookup[0]) == 256, "");
 
 			auto c = stream::read<byte>(m_stream);
-			if (c == '\\')
+			switch (lookup[c])
 			{
+			case S: return c;
+
+			case E:
 				switch (stream::read<byte>(m_stream))
 				{
-				case '"': return '"';
-				case '\\': return '\\';
-				case '/': return '/';
-				case 'b': return '\b';
-				case 'f': return '\f';
-				case 'n': return '\n';
-				case 'r': return '\r';
-				case 't': return '\t';
-				case 'u': populate_converted(read_utf32_character()); return read_char();
-				default: throw ill_formatted_json_data();
+					case '"': return '"';
+					case '\\': return '\\';
+					case '/': return '/';
+					case 'b': return '\b';
+					case 'f': return '\f';
+					case 'n': return '\n';
+					case 'r': return '\r';
+					case 't': return '\t';
+					case 'u':
+					{
+						auto converted = compute_converted(read_utf32_character());
+						std::copy(converted.begin() + 1, converted.end(), m_converted.begin());
+						return converted.front();
+					}
+					default: throw ill_formatted_json_data();
 				}
-			}
-			else if (c == '"')
-			{
-				m_cb_converted = 255; // Indicate we reached the end
-				return nullopt;
-			}
-			else if (c < 0x20)
-			{
-				throw ill_formatted_json_data{};
-			}
-			else
-			{
-				return c;
+
+			case Q:
+				m_converted.front() = end_of_stream; // Indicate we reached the end
+				return invalid_char;
+
+			default: throw ill_formatted_json_data{};
 			}
 		}
 		static uint8_t parse_hex(char c)
@@ -181,7 +233,7 @@ namespace goldfish { namespace json
 				return a;
 			}
 		}
-		void populate_converted(uint32_t codepoint)
+		std::array<byte, 4> compute_converted(uint32_t codepoint)
 		{
 			auto get_6_bits = [&](uint32_t codepoint, int offset)
 			{
@@ -189,37 +241,27 @@ namespace goldfish { namespace json
 			};
 			
 			if (codepoint <= 0x7F)
-			{
-				m_cb_converted = 1;
-				m_converted = { static_cast<byte>(codepoint), 0, 0, 0 };
-			}
+				return { static_cast<byte>(codepoint), invalid_char, invalid_char, invalid_char };
 			else if (codepoint <= 0x7FF)
-			{
-				m_cb_converted = 2;
-				m_converted = { get_6_bits(codepoint, 0), static_cast<byte>(0b11000000 | (codepoint >> 6)), 0, 0 };
-			}
+				return{ static_cast<byte>(0b11000000 | (codepoint >> 6)), get_6_bits(codepoint, 0), invalid_char, invalid_char };
 			else if (codepoint <= 0xFFFF)
-			{
-				m_cb_converted = 3;
-				m_converted = { get_6_bits(codepoint, 0), get_6_bits(codepoint, 6), static_cast<byte>(0b11100000 | (codepoint >> 12)), 0 };
-			}
+				return{ static_cast<byte>(0b11100000 | (codepoint >> 12)), get_6_bits(codepoint, 6), get_6_bits(codepoint, 0), invalid_char };
 			else if (codepoint <= 0x10FFFF)
-			{
-				m_cb_converted = 4;
-				m_converted = { get_6_bits(codepoint, 0), get_6_bits(codepoint, 6), get_6_bits(codepoint, 12), static_cast<byte>(0b11110000 | (codepoint >> 18)) };
-			}
+				return{ static_cast<byte>(0b11110000 | (codepoint >> 18)), get_6_bits(codepoint, 12), get_6_bits(codepoint, 6), get_6_bits(codepoint, 0) };
 			else
-			{
 				throw ill_formatted_json_data{};
-			}
 		}
 
-		// 0xFF is an invalid UTF-8 character
-		// The list of characters that were converted from a \u command (that is in UTF16) are in m_converted as non 0xFF bytes
 		Stream m_stream;
-		std::array<byte, 4> m_converted;
-		uint8_t m_cb_converted = 0;
+
+		// When parsing a unicode character encoded as \u????, we might generate up to 4 UTF-8 characters, but we won't necessarily output them all to the caller
+		// This buffer keeps characters that have already been parsed but not output yet
+		// The characters are "popped" from the front of the array, if they are not invalid
+		// Once the end of the text is found (the unescaped " character is read), we write end_of_stream (0xFE) in this array
+		std::array<byte, 3> m_converted{ invalid_char, invalid_char, invalid_char };
 	public:
+		// This member is used by variant to store the type info
+		// This helps lower the size of a variant that contains a text_string by allowing variant to store the type in the padding rather than appending a new field
 		uint8_t padding_for_variant;
 	};
 
@@ -254,31 +296,31 @@ namespace goldfish { namespace json
 
 				case state::middle:
 				{
-					auto c = details::peek_non_space(m_stream);
-					if (c == nullopt)
-						throw stream::unexpected_end_of_stream{};
-
-					switch (*c)
+					switch (details::read_non_space(m_stream))
 					{
-					case ',': stream::read<char>(m_stream); return read_no_debug_check(stream::ref(m_stream));
-					case end_character: stream::read<char>(m_stream); m_state = state::ended; return nullopt;
+					case ',': return read_no_debug_check(stream::ref(m_stream));
+					case end_character: m_state = state::ended; return nullopt;
 					default: throw ill_formatted_json_data{};
 					}
 				}
 
-				default:
+				case state::ended:
 					return nullopt;
+
+				default: std::terminate();
 			}
 		}
 
 		Stream m_stream;
-		enum class state
+		enum class state : uint8_t
 		{
 			first,
 			middle,
 			ended,
 		} m_state = state::first;
 	public:
+		// This member is used by variant to store the type info
+		// This helps lower the size of a variant that contains an array or a map by allowing variant to store the type in the padding rather than appending a new field
 		uint8_t padding_for_variant;
 	};
 	template <class Stream> class array : public comma_separated_reader<Stream, ']'>
@@ -303,58 +345,12 @@ namespace goldfish { namespace json
 		}
 		document<stream::reader_ref_type_t<Stream>> read_value()
 		{
-			auto c = details::peek_non_space(m_stream);
-			if (c == nullopt)
-				throw stream::unexpected_end_of_stream{};
-			else if (*c != ':')
+			if (details::read_non_space(m_stream) != ':')
 				throw ill_formatted_json_data{};
-			stream::read<char>(m_stream);
 			return read_no_debug_check(stream::ref(m_stream));
 		}
 	};
 
-	template <class Stream> text_string<std::decay_t<Stream>> read_text(Stream&& s)
-	{
-		if (stream::read<char>(s) != '"') std::terminate();
-		return{ std::forward<Stream>(s) };
-	}
-	template <class Stream> array<std::decay_t<Stream>> read_array(Stream&& s)
-	{
-		if (stream::read<char>(s) != '[') std::terminate();
-		return{ std::forward<Stream>(s) };
-	}
-	template <class Stream> map<std::decay_t<Stream>> read_map(Stream&& s)
-	{
-		if (stream::read<char>(s) != '{') std::terminate();
-		return{ std::forward<Stream>(s) };
-	}
-	template <class Stream> bool read_true(Stream& s)
-	{
-		for (auto c : { 't', 'r', 'u', 'e' })
-		{
-			if (stream::read<byte>(s) != c)
-				throw ill_formatted_json_data{};
-		}
-		return true;
-	}
-	template <class Stream> bool read_false(Stream& s)
-	{
-		for (auto c : { 'f', 'a', 'l', 's', 'e' })
-		{
-			if (stream::read<byte>(s) != c)
-				throw ill_formatted_json_data{};
-		}
-		return false;
-	}
-	template <class Stream> std::nullptr_t read_null(Stream& s)
-	{
-		for (auto c : { 'n', 'u', 'l', 'l' })
-		{
-			if (stream::read<byte>(s) != c)
-				throw ill_formatted_json_data{};
-		}
-		return nullptr;
-	}
 	template <class Stream> uint64_t read_unsigned_integer(Stream& s, char first, bool allow_leading_zeroes)
 	{
 		if (allow_leading_zeroes)
@@ -375,42 +371,37 @@ namespace goldfish { namespace json
 		for (;;)
 		{
 			auto c = s.peek<char>();
-			if (c != nullopt && '0' <= *c && *c <= '9')
-			{
-				if (result > (std::numeric_limits<uint64_t>::max() - (*c - '0')) / 10)
-					throw integer_overflow_in_json{};
-				result = (result * 10) + *c - '0';
-			}
-			else
+			if (c == nullopt || *c < '0' || *c > '9')
 				return result;
+
+			if (result > (std::numeric_limits<uint64_t>::max() - (*c - '0')) / 10)
+				throw integer_overflow_in_json{};
+			result = (result * 10) + *c - '0';
 			stream::read<char>(s);
 		}
 	}
 	template <class Stream> double read_decimals(Stream& s)
 	{
-		auto first = stream::read<char>(s);
-		if (first < '0' || first > '9')
+		auto first = s.peek<char>();
+		if (first == nullopt || *first < '0' || *first > '9')
 			throw ill_formatted_json_data{};
 
-		double result = (first - '0') / 10.;
-		double divider = 100;
+		double result = 0;
+		double divider = 1;
 		for (;;)
 		{
 			auto c = s.peek<char>();
-			if (c != nullopt && '0' <= *c && *c <= '9')
-			{
-				result += (*c - '0') / divider;
-				divider *= 10;
-			}
-			else
+			if (c == nullopt || *c < '0' || *c > '9')
 				return result;
+
+			divider *= 10;
+			result += (*c - '0') / divider;
 			stream::read<char>(s);
 		}
 	}
-	template <class Stream> variant<uint64_t, int64_t, double> read_number(Stream& s)
+	template <class Stream> variant<uint64_t, int64_t, double> read_number(Stream& s, char first)
 	{
 		bool negative = false;
-		auto first = stream::read<char>(s);
 		if (first == '-')
 		{
 			negative = true;
@@ -424,6 +415,8 @@ namespace goldfish { namespace json
 		{
 			if (negative)
 			{
+				static_assert(std::numeric_limits<int64_t>::min() + 1 == -std::numeric_limits<int64_t>::max(),
+					"our overflow check relies on int64_t range to be [-2^63 .. 2^63-1]");
 				if (integer > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1)
 					throw integer_overflow_in_json{};
 				return -static_cast<int64_t>(integer);
@@ -442,7 +435,7 @@ namespace goldfish { namespace json
 			floating_point_marker = s.peek<char>();
 		}
 
-		double multiplier = (negative ? -1. : 1.);
+		double multiplier = 1.;
 		if (floating_point_marker == 'e' || floating_point_marker == 'E')
 		{
 			stream::read<char>(s);
@@ -454,28 +447,29 @@ namespace goldfish { namespace json
 				first = stream::read<char>(s);
 			}
 			auto exponent_value = read_unsigned_integer(s, first, true /*allow_leading_zeroes*/);
-			multiplier *= pow(negative_exponent ? .1 : 10., exponent_value);
+			multiplier = pow(10., exponent_value);
+			if (negative_exponent)
+				multiplier = 1 / multiplier;
 		}
 
-		return multiplier * ((double)integer + decimals);
+		return (negative ? -1 : 1) * multiplier * ((double)integer + decimals);
 	}
+
 	template <class Stream> document<std::decay_t<Stream>> read_no_debug_check(Stream&& s)
 	{
-		auto optC = details::peek_non_space(s);
-		if (optC == nullopt)
-			throw stream::unexpected_end_of_stream{};
+		auto c = details::read_non_space(s);
 
-		switch (*optC)
+		switch (c)
 		{
-			case '[': return read_array(std::forward<Stream>(s));
-			case '{': return read_map(std::forward<Stream>(s));
-			case 't': return read_true(s);
-			case 'f': return read_false(s);
-			case 'n': return read_null(s);
-			case '"': return read_text(std::forward<Stream>(s));
+			case '[': return array<std::decay_t<Stream>>{ std::forward<Stream>(s) };
+			case '{': return map<std::decay_t<Stream>>{ std::forward<Stream>(s) };
+			case 't': details::throw_if_stream_isnt(s, { 'r', 'u', 'e' }); return true;
+			case 'f': details::throw_if_stream_isnt(s, { 'a', 'l', 's', 'e' }); return false;
+			case 'n': details::throw_if_stream_isnt(s, { 'u', 'l', 'l' }); return nullptr;
+			case '"': return text_string<std::decay_t<Stream>>{ std::forward<Stream>(s) };
 			case '-':
 			case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
-				return read_number(s).visit([](auto&& x) -> document<Stream> { return x; });
+				return read_number(s, c).visit([](auto&& x) -> document<Stream> { return x; });
 
 			default: throw ill_formatted_json_data();
 		}

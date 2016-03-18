@@ -12,8 +12,7 @@ namespace goldfish
 		auto first = first_match(
 			[](B&&) { return 1; },
 			[](A&&) { return 2; },
-			[](C&&) { return 3; }
-		);
+			[](C&&) { return 3; });
 
 		auto best = best_match(
 			[](B&&) { return 1; },
