@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <iterator>
 #include <stdlib.h>
 
 namespace goldfish
@@ -20,4 +21,8 @@ namespace goldfish
 
 	// Base class for all formatting errors that happen while parsing a document
 	struct ill_formatted : exception {};
+
+	// VC++ has a make_unchecked_array_iterator API to allow using raw iterators in APIs like std::copy or std::equal
+	// We implement our own that forwards to VC++ implementation or is identity depending on the compiler
+	template <class T> auto make_unchecked_array_iterator(T&& t) { return stdext::make_unchecked_array_iterator(std::forward<T>(t)); }
 }

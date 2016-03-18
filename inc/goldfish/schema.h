@@ -49,7 +49,7 @@ namespace goldfish
 			{
 				auto it = std::find_if(m_keys.begin(), m_keys.end(), [&](auto&& key)
 				{
-					return key.size() == text.size() && std::equal(key.begin(), key.end(), stdext::make_unchecked_array_iterator(text.begin()));
+					return key.size() == text.size() && std::equal(key.begin(), key.end(), make_unchecked_array_iterator(text.begin()));
 				});
 				if (it == m_keys.end())
 					return nullopt;
