@@ -7,70 +7,70 @@
 
 namespace goldfish
 {
-	class schema
+	namespace details
 	{
-		static const size_t max_length = 8 * 1024;
+		template <size_t N> const_buffer_ref make_key(const char(&text)[N])
+		{
+			static_assert(N > 0, "expect null terminated strings");
+			assert(text[N - 1] == 0);
+			return{ reinterpret_cast<const byte*>(text), N - 1 };
+		}
+		template <size_t N, size_t max_length> class schema
+		{
+		public:
+			template <class... Args> schema(Args&&... args)
+				: m_keys{ std::forward<Args>(args)... }
+			{}
 		
-	public:
-		schema(std::initializer_list<array_ref<const char>> key_names)
-		{
-			m_key_names.reserve(key_names.size());
-			for (auto&& name : key_names)
+			template <size_t N> optional<size_t> search_text(const char(&text)[N]) const
 			{
-				assert(name.size() <= max_length);
-				assert(name.back() == '\0');
-				m_key_names.push_back(name.without_end(1));
+				return search_impl({ reinterpret_cast<const byte*>(text), N - 1 }, std::integral_constant<size_t, 0>{});
 			}
-		}
-
-		template <size_t N> optional<size_t> search_text(const char(&text)[N]) const
-		{
-			auto it = std::find_if(m_key_names.begin(), m_key_names.end(), [&](auto key_name)
+			template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, optional<size_t>> search(Document& d) const
 			{
-				return key_name.size() == N - 1 &&
-					std::equal(key_name.begin(), key_name.end(), text);
-			});
-			if (it == m_key_names.end())
-				return nullopt;
-			else
-				return std::distance(m_key_names.begin(), it);
-		}
-		template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, optional<size_t>> search(Document& d) const
-		{
-			return d.visit(first_match(
-				[&](auto& text, tags::string) -> optional<size_t>
-				{
-					byte buffer[max_length];
-					auto length = text.read_buffer(buffer);
-					if (stream::seek(text, std::numeric_limits<uint64_t>::max()) != 0)
-						return nullopt;
-
-					auto it = std::find_if(m_key_names.begin(), m_key_names.end(), [&](auto key_name)
+				return d.visit(first_match(
+					[&](auto& text, tags::string) -> optional<size_t>
 					{
-						return key_name.size() == length &&
-							std::equal(key_name.begin(), key_name.end(), buffer);
-					});
-					if (it == m_key_names.end())
-						return nullopt;
-					else
-						return std::distance(m_key_names.begin(), it);
-				},
-				[&](auto&, auto) -> optional<size_t>
-				{
-					seek_to_end(d);
-					return nullopt; /*We currently only support text strings as keys*/
-				}));
-		}
-	private:
-		std::vector<array_ref<const char>> m_key_names;
-	};
+						byte buffer[max_length];
+						auto length = text.read_buffer(buffer);
+						if (stream::seek(text, std::numeric_limits<uint64_t>::max()) != 0)
+							return nullopt;
 
-	template <class Map> class map_with_schema
+						return search_impl({ buffer, length }, std::integral_constant<size_t, 0>{});
+					},
+					[&](auto&, auto) -> optional<size_t>
+					{
+						seek_to_end(d);
+						return nullopt; /*We currently only support text strings as keys*/
+					}));
+			}
+		private:
+			template <size_t cur_index> optional<size_t> search_impl(const_buffer_ref text, std::integral_constant<size_t, cur_index>) const
+			{
+				auto it = std::find_if(m_keys.begin(), m_keys.end(), [&](auto&& key)
+				{
+					return key.size() == text.size() && std::equal(key.begin(), key.end(), stdext::make_unchecked_array_iterator(text.begin()));
+				});
+				if (it == m_keys.end())
+					return nullopt;
+				else
+					return std::distance(m_keys.begin(), it);
+			}
+
+			std::array<const_buffer_ref, N> m_keys;
+		};
+	}
+	template <class... T> auto make_schema(T&&... keys)
+	{
+		return details::schema<sizeof...(T), 1024>(details::make_key(std::forward<T>(keys))...);
+	}
+
+	template <class Map, class Schema> class map_with_schema
 	{
 	public:
-		map_with_schema(Map&& map, const schema& s)
+		map_with_schema(Map&& map, const Schema& schema)
 			: m_map(std::move(map))
-			, m_schema(s)
+			, m_schema(schema)
 		{}
 		optional<decltype(std::declval<Map>().read_value())> read_value_by_index(size_t index)
 		{
@@ -142,11 +142,11 @@ namespace goldfish
 		}
 	private:
 		Map m_map;
-		const schema& m_schema;
+		Schema m_schema;
 		size_t m_index = 0;
 		bool m_on_value = false;
 	};
-	template <class Map> map_with_schema<std::decay_t<Map>> apply_schema(Map&& map, const schema& s)
+	template <class Map, class Schema> map_with_schema<std::decay_t<Map>, Schema> apply_schema(Map&& map, const Schema& s)
 	{
 		return{ std::forward<Map>(map), s };
 	}

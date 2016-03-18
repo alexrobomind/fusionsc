@@ -43,15 +43,12 @@ Note that the example below is O(1) in memory (meaning the amount of memory used
 
 ~~~~~~~~~~cpp
 #include <goldfish/json_reader.h>
-#include <goldfish/schema.h>
 
 int main()
 {
 	using namespace goldfish;
 
-	static const schema s{ "a", "b", "c" };
-	auto document = apply_schema(json::read(stream::read_string_literal("{\"a\":1,\"c\":3.0}")).as_map(), s);
-
+	auto document = json::read(stream::read_string_literal("{\"a\":1,\"c\":3.0}")).as_map("a", "b", "c");
 	assert(document.read_value("a")->as_uint() == 1);
 	assert(document.read_value("b") == nullopt);
 	assert(document.read_value("c")->as_double() == 3.0);

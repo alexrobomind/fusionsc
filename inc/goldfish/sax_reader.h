@@ -5,6 +5,7 @@
 #include "optional.h"
 #include "base64_stream.h"
 #include "buffered_stream.h"
+#include "schema.h"
 #include <type_traits>
 
 namespace goldfish
@@ -41,6 +42,10 @@ namespace goldfish
 		auto as_binary() { return as_binary(std::integral_constant<bool, does_json_conversions>()); }
 		auto as_array() { return std::move(m_data).as<type_with_tag_t<tags::array>>(); }
 		auto as_map() { return std::move(m_data).as<type_with_tag_t<tags::map>>(); }
+		template <class Head, class... Tail> auto as_map(Head&& head, Tail&&... tail)
+		{
+			return apply_schema(as_map(), make_schema(std::forward<Head>(head), std::forward<Tail>(tail)...));
+		}
 
 		// Floating point can be converted from an int
 		auto as_double()

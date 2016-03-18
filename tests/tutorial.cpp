@@ -27,15 +27,12 @@ TEST_CASE(convert_json_to_cbor)
 }
 
 #include <goldfish/json_reader.h>
-#include <goldfish/schema.h>
 
 TEST_CASE(parse_document)
 {
 	using namespace goldfish;
 
-	static const schema s{ "a", "b", "c" };
-	auto document = apply_schema(json::read(stream::read_string_literal("{\"a\":1,\"c\":3.0}")).as_map(), s);
-
+	auto document = json::read(stream::read_string_literal("{\"a\":1,\"c\":3.0}")).as_map("a", "b", "c");
 	test(document.read_value("a")->as_uint() == 1);
 	test(document.read_value("b") == nullopt);
 	test(document.read_value("c")->as_double() == 3.0);
