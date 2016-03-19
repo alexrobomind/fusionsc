@@ -84,54 +84,10 @@ namespace goldfish { namespace json
 
 		size_t read_buffer(buffer_ref buffer)
 		{
-			size_t cb = 0;
-			for (auto&& out : buffer)
-			{
-				auto in = read_char();
-				if (in != 0xFF)
-				{
-					out = in;
-					cb++;
-				}
-				else
-				{
-					break;
-				}
-			}
-			return cb;
-		}
+			if (m_converted.front() == end_of_stream)
+				return 0;
 
-		template <class T> std::enable_if_t<sizeof(T) == 1, T> read()
-		{
-			auto c = x.read_char();
-			if (c == invalid_char)
-				throw stream::unexpected_end_of_stream();
-			return reinterpret_cast<T&>(c);
-		}
-		uint64_t seek(uint64_t x)
-		{
-			for (uint64_t i = 0; i < x; ++i)
-			{
-				if (read_char() == invalid_char)
-					return i;
-			}
-			return x;
-		}
-	private:
-		static const byte invalid_char = 0xFF;
-		static const byte end_of_stream = 0xFE;
-		byte read_char()
-		{
-			if (m_converted.front() != invalid_char)
-			{
-				if (m_converted.front() == end_of_stream)
-					return invalid_char;
-
-				auto c = m_converted.front();
-				std::copy(m_converted.begin() + 1, m_converted.end(), m_converted.begin());
-				m_converted.back() = invalid_char;
-				return c;
-			}
+			auto it = copy_from_converted(buffer.begin(), buffer.begin());
 
 			enum category : uint8_t
 			{
@@ -160,38 +116,65 @@ namespace goldfish { namespace json
 				/*0xF0*/ S,S,S,S,S,S,S,S,I,I,I,I,I,I,I,I,
 			};
 			static_assert(sizeof(lookup) / sizeof(lookup[0]) == 256, "");
-
-			auto c = stream::read<byte>(m_stream);
-			switch (lookup[c])
+			
+			while (it != buffer.end())
 			{
-			case S: return c;
-
-			case E:
-				switch (stream::read<byte>(m_stream))
+				byte c;
+				while (lookup[c = stream::read<byte>(m_stream)] == S)
 				{
-					case '"': return '"';
-					case '\\': return '\\';
-					case '/': return '/';
-					case 'b': return '\b';
-					case 'f': return '\f';
-					case 'n': return '\n';
-					case 'r': return '\r';
-					case 't': return '\t';
+					*it++ = c;
+					if (it == buffer.end())
+						return it - buffer.begin();
+				}
+
+				switch (lookup[c])
+				{
+				case E:
+					switch (stream::read<byte>(m_stream))
+					{
+					case '"':  *it++ = '"';  break;
+					case '\\': *it++ = '\\'; break;
+					case '/':  *it++ = '/';  break;
+					case 'b':  *it++ = '\b'; break;
+					case 'f':  *it++ = '\f'; break;
+					case 'n':  *it++ = '\n'; break;
+					case 'r':  *it++ = '\r'; break;
+					case 't':  *it++ = '\t'; break;
 					case 'u':
 					{
 						auto converted = compute_converted(read_utf32_character());
 						std::copy(converted.begin() + 1, converted.end(), m_converted.begin());
-						return converted.front();
+						*it++ = converted.front();
+						it = copy_from_converted(it, buffer.end());
+						break;
 					}
 					default: throw ill_formatted_json_data();
+					}
+					break;
+
+				case Q:
+					m_converted.front() = end_of_stream; // Indicate we reached the end
+					return it - buffer.begin();
+
+				default:
+					throw ill_formatted_json_data{};
 				}
-
-			case Q:
-				m_converted.front() = end_of_stream; // Indicate we reached the end
-				return invalid_char;
-
-			default: throw ill_formatted_json_data{};
 			}
+			return it - buffer.begin();
+		}
+
+	private:
+		static const byte invalid_char = 0xFF;
+		static const byte end_of_stream = 0xFE;
+		byte* copy_from_converted(byte* it, byte* end)
+		{
+			while (m_converted.front() != invalid_char && it != end)
+			{
+				*it++ = m_converted.front();
+				std::copy(m_converted.begin() + 1, m_converted.end(), m_converted.begin());
+				m_converted.back() = invalid_char;
+			}
+			return it;
 		}
 		static uint8_t parse_hex(char c)
 		{

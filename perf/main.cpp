@@ -82,11 +82,11 @@ int main(int argc, char* argv[])
 
 	cout << "\nSTREAMING MODE\n";
 
-	//cout << "\nDeserialize CBOR in streaming mode\n";
-	//measure([&]
-	//{
-	//	return sum_ints(cbor::read(stream::read_buffer_ref(cbor_data)));
-	//}, cbor_data.size());
+	cout << "\nDeserialize CBOR in streaming mode\n";
+	measure([&]
+	{
+		return sum_ints(cbor::read(stream::read_buffer_ref(cbor_data)));
+	}, cbor_data.size());
 
 	cout << "\nDeserialize JSON in streaming mode\n";
 	measure([&]
