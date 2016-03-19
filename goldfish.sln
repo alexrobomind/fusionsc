@@ -7,6 +7,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "src", "src\src.vcxproj", "{
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{ECD9AE6E-BDDD-41F5-8941-80FEC112EA34}"
 	ProjectSection(SolutionItems) = preProject
+		Comparison.png = Comparison.png
 		README.md = README.md
 	EndProjectSection
 EndProject
