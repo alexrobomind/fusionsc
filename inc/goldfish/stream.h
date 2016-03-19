@@ -228,7 +228,14 @@ namespace goldfish { namespace stream
 
 		void write_buffer(const_buffer_ref d)
 		{
-			data.insert(data.end(), reinterpret_cast<const char*>(d.begin()), reinterpret_cast<const char*>(d.end()));
+			if (data.capacity() - data.size() < d.size())
+				data.reserve(data.capacity() + data.capacity() / 2);
+
+			data.append(reinterpret_cast<const char*>(d.begin()), reinterpret_cast<const char*>(d.end()));
+		}
+		template <class T> std::enable_if_t<std::is_standard_layout<T>::value && sizeof(T) == 1, void> write(const T& t)
+		{
+			data.push_back(reinterpret_cast<const char&>(t));
 		}
 		auto flush() { return std::move(data); }
 	private:

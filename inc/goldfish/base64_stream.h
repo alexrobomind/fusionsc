@@ -177,7 +177,7 @@ namespace goldfish { namespace stream
 			}
 
 			std::copy(data.begin(), data.end(), m_pending_encoding.begin());
-			m_cb_pending_encoding = static_cast<uint32_t>(data.size());
+			m_cb_pending_encoding = static_cast<uint8_t>(data.size());
 		}
 		auto flush()
 		{

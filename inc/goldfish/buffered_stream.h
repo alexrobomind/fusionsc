@@ -141,8 +141,7 @@ namespace goldfish { namespace stream
 			, m_begin_free_space(m_buffer_data.data())
 		{}
 		buffered_writer(buffered_writer&& rhs)
-			: assert_work_done(std::move(rhs))
-			, m_buffer_data(rhs.m_buffer_data)
+			: m_buffer_data(rhs.m_buffer_data)
 			, m_begin_free_space(m_buffer_data.data() + std::distance(rhs.m_buffer_data.data(), rhs.m_begin_free_space))
 			, m_stream(std::move(rhs.m_stream))
 		{}
