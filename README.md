@@ -58,7 +58,7 @@ int main()
 
 How about a more complicated example. Note again that this program doesn't allocate memory to parse the document and could run on very large documents backed by file (using `stream::file_reader`) or other type of stream even on resource constrained machines.
 
-```
+```cpp
 #include <goldfish/json_reader.h>
 #include <iostream>
 
