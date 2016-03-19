@@ -131,11 +131,7 @@ namespace goldfish { namespace sax
 		auto start_map(uint64_t size) { return make_map_writer(m_writer.start_map(size)); }
 		auto start_map() { return make_map_writer(m_writer.start_map()); }
 
-		template <class T> auto write_as_text(T&& s, std::enable_if_t<stream::is_reader<std::decay_t<T>>::value>* = 0)
-		{
-			return copy_stream(s, [&](size_t cb) { return start_string(cb); }, [&] { return start_string(); });
-		}
-		template <class T> auto write_as_binary(T&& s, std::enable_if_t<stream::is_reader<std::decay_t<T>>::value>* = 0)
+		template <class T> auto write(T&& s, std::enable_if_t<stream::is_reader<std::decay_t<T>>::value>* = 0)
 		{
 			return copy_stream(s, [&](size_t cb) { return start_binary(cb); }, [&] { return start_binary(); });
 		}
@@ -143,8 +139,8 @@ namespace goldfish { namespace sax
 		template <class T> auto write(T&& document, std::enable_if_t<std::is_same<typename std::decay_t<T>::tag, tags::document>::value>* = 0)
 		{
 			return document.visit(best_match(
-				[&](auto&& x, tags::binary) { return write_as_binary(x); },
-				[&](auto&& x, tags::string) { return write_as_text(x); },
+				[&](auto&& x, tags::binary) { return write(x); },
+				[&](auto&& x, tags::string) { return copy_stream(x, [&](size_t cb) { return start_string(cb); }, [&] { return start_string(); }); },
 				[&](auto&& x, tags::array)
 				{
 					auto array_writer = start_array();

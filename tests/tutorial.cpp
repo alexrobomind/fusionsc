@@ -48,12 +48,9 @@ TEST_CASE(generate_json_document)
 	auto map = json::create_writer(stream::string_writer{}).start_map();
 	map.write("A", 1);
 	map.write("B", "text");
-	{
-		const char binary_buffer[] = "Hello world!";
-		auto stream = map.start_binary("C", sizeof(binary_buffer) - 1);
-		stream.write_buffer(const_buffer_ref{ reinterpret_cast<const byte*>(binary_buffer), sizeof(binary_buffer) - 1 });
-		stream.flush();
-	}
+	map.write("C", stream::read_string_literal("Hello world!"));
+
+	// Streams are serialized as binary 64 data in JSON
 	test(map.flush() == "{\"A\":1,\"B\":\"text\",\"C\":\"SGVsbG8gd29ybGQh\"}");
 }
 
@@ -66,12 +63,8 @@ TEST_CASE(generate_cbor_document)
 	auto map = cbor::create_writer(stream::vector_writer{}).start_map();
 	map.write("A", 1);
 	map.write("B", "text");
-	{
-		const char binary_buffer[] = "Hello world!";
-		auto stream = map.start_binary("C", sizeof(binary_buffer) - 1);
-		stream.write_buffer(const_buffer_ref{ reinterpret_cast<const byte*>(binary_buffer), sizeof(binary_buffer) - 1 });
-		stream.flush();
-	}
+	map.write("C", stream::read_string_literal("Hello world!"));
+
 	test(map.flush() == std::vector<byte>{
 		0xbf,                               // start map marker
 		0x61,0x41,                          // key: "A"
