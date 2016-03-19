@@ -2,9 +2,9 @@
 
 #include <vector>
 #include <string>
-#include "match.h"
-#include "tags.h"
-#include "stream.h"
+#include <goldfish/match.h>
+#include <goldfish/tags.h>
+#include <goldfish/stream.h>
 
 namespace goldfish { namespace dom
 {
@@ -48,6 +48,33 @@ namespace goldfish { namespace dom
 			return static_cast<const document_variant&>(lhs) == static_cast<const document_variant&>(rhs);
 		}
 	};
+
+	template <class Writer> auto serialize_to_goldfish(Writer& writer, const dom::document& document)
+	{
+		return document.visit(best_match(
+			[&](bool x) { return writer.write(x); },
+			[&](nullptr_t x) { return writer.write(x); },
+			[&](tags::undefined x) { return writer.write(x); },
+			[&](uint64_t x) { return writer.write(x); },
+			[&](int64_t x) { return writer.write(x); },
+			[&](double x) { return writer.write(x); },
+			[&](const std::vector<byte>& x) { return writer.write(const_buffer_ref{ x }); },
+			[&](const std::string& x) { return writer.write(x); },
+			[&](const dom::array& x)
+			{
+				auto array_writer = writer.start_array(x.size());
+				for (auto&& y : x)
+					array_writer.write(y);
+				return array_writer.flush();
+			},
+			[&](const dom::map& x)
+			{
+				auto map_writer = writer.start_map(x.size());
+				for (auto&& y : x)
+					map_writer.write(y.first, y.second);
+				return map_writer.flush();
+			}));
+	}
 
 	template <class D> std::enable_if_t<tags::has_tag<std::decay_t<D>, tags::document>::value, document> load_in_memory(D&& reader)
 	{

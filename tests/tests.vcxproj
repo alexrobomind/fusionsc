@@ -184,6 +184,7 @@
     <ClCompile Include="variant.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="dom.h" />
     <ClInclude Include="unit_test.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

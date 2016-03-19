@@ -1,6 +1,6 @@
 #include <goldfish/schema.h>
 #include <goldfish/json_reader.h>
-#include <goldfish/dom.h>
+#include "dom.h"
 #include "unit_test.h"
 
 namespace goldfish

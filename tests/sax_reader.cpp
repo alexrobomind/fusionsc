@@ -2,7 +2,7 @@
 #include <goldfish/sax_reader.h>
 #include "unit_test.h"
 #include <goldfish/json_reader.h>
-#include <goldfish/dom.h>
+#include "dom.h"
 
 namespace goldfish
 {

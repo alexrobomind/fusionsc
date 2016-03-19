@@ -1,4 +1,4 @@
-#include <goldfish/dom.h>
+#include "dom.h"
 #include <goldfish/json_reader.h>
 #include <goldfish/json_writer.h>
 #include <goldfish/stream.h>

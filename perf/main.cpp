@@ -8,7 +8,6 @@
 #include <goldfish/json_writer.h>
 #include <goldfish/cbor_reader.h>
 #include <goldfish/cbor_writer.h>
-#include <goldfish/dom.h>
 
 using namespace std;
 using namespace goldfish;
@@ -92,19 +91,6 @@ int main(int argc, char* argv[])
 	measure([&]
 	{
 		return sum_ints(json::read(stream::read_buffer_ref(json_data)));
-	}, json_data.size());
-
-	cout << "\nDOM MODE\n";
-	cout << "\nDeserialize CBOR in DOM mode\n";
-	measure([&]
-	{
-		dom::load_in_memory(cbor::read(stream::read_buffer_ref(cbor_data)));
-	}, cbor_data.size());
-
-	cout << "\nDeserialize JSON in DOM mode\n";
-	measure([&]
-	{
-		dom::load_in_memory(json::read(stream::const_buffer_ref_reader(json_data)));
 	}, json_data.size());
 }
 

@@ -4,7 +4,6 @@
 #include "array_ref.h"
 #include "base64_stream.h"
 #include "debug_checks_writer.h"
-#include "dom.h"
 #include "sax_writer.h"
 #include "stream.h"
 

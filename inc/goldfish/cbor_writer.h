@@ -4,7 +4,6 @@
 #include "array_ref.h"
 #include "common.h"
 #include "debug_checks_writer.h"
-#include "dom.h"
 #include <limits>
 #include "sax_writer.h"
 #include "stream.h"

@@ -27,7 +27,6 @@
     <ClInclude Include="..\inc\goldfish\debug_checks.h" />
     <ClInclude Include="..\inc\goldfish\debug_checks_reader.h" />
     <ClInclude Include="..\inc\goldfish\debug_checks_writer.h" />
-    <ClInclude Include="..\inc\goldfish\dom.h" />
     <ClInclude Include="..\inc\goldfish\file_stream.h" />
     <ClInclude Include="..\inc\goldfish\json_reader.h" />
     <ClInclude Include="..\inc\goldfish\json_writer.h" />

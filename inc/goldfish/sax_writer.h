@@ -131,12 +131,12 @@ namespace goldfish { namespace sax
 		auto start_map(uint64_t size) { return make_map_writer(m_writer.start_map(size)); }
 		auto start_map() { return make_map_writer(m_writer.start_map()); }
 
-		template <class T> auto write(T&& s, std::enable_if_t<stream::is_reader<std::decay_t<T>>::value>* = 0)
+		template <class T> auto write(T&& s, std::enable_if_t<stream::is_reader<std::decay_t<T>>::value>* = nullptr)
 		{
 			return copy_stream(s, [&](size_t cb) { return start_binary(cb); }, [&] { return start_binary(); });
 		}
 
-		template <class T> auto write(T&& document, std::enable_if_t<std::is_same<typename std::decay_t<T>::tag, tags::document>::value>* = 0)
+		template <class T> auto write(T&& document, std::enable_if_t<std::is_same<typename std::decay_t<T>::tag, tags::document>::value>* = nullptr)
 		{
 			return document.visit(best_match(
 				[&](auto&& x, tags::binary) { return write(x); },
@@ -166,32 +166,10 @@ namespace goldfish { namespace sax
 				[&](auto&& x, tags::null) { return write(x); }
 			));
 		}
-		auto write(const dom::document& document)
+
+		template <class T> auto write(T&& t) -> decltype(serialize_to_goldfish(std::declval<document_writer&>(), std::declval<T>()))
 		{
-			return document.visit(best_match(
-				[&](bool x) { return write(x); },
-				[&](nullptr_t x) { return write(x); },
-				[&](tags::undefined x) { return write(x); },
-				[&](uint64_t x) { return write(x); },
-				[&](int64_t x) { return write(x); },
-				[&](double x) { return write(x); },
-				[&](const std::vector<byte>& x) { return write(const_buffer_ref{ x }); },
-				[&](const std::string& x) { return write(x); },
-				[&](const dom::array& x)
-				{
-					auto array_writer = start_array(x.size());
-					for (auto&& y : x)
-						array_writer.write(y);
-					return array_writer.flush();
-				},
-				[&](const dom::map& x)
-				{
-					auto map_writer = start_map(x.size());
-					for (auto&& y : x)
-						map_writer.write(y.first, y.second);
-					return map_writer.flush();
-				}
-			));
+			return serialize_to_goldfish(*this, std::forward<T>(t));
 		}
 	private:
 		template <class Stream, class CreateWriterWithSize, class CreateWriterWithoutSize>
