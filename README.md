@@ -8,7 +8,7 @@ GoldFish intends to be the easiest and fastest JSON and CBOR streaming parser an
 
 ## Quick tutorial
 ### Converting a JSON stream to a CBOR stream
-~~~~~~~~~~cpp
+```cpp
 #include <goldfish/json_reader.h>
 #include <goldfish/cbor_writer.h>
 
@@ -25,7 +25,7 @@ int main()
 	// Note that all the streams need to be flushed to ensure that there any potentially
 	// buffered data is serialized.
 	auto cbor_document = cbor::create_writer(stream::vector_writer{}).write(document);
-	assert(cbor_document == std::vector<uint8_t>{
+	assert(cbor_document == std::vector<byte>{
 		0xbf,                    // start map
 		0x61,0x41,               // key: "A"
 		0x9f,0x01,0x02,0x03,0xff,// value : [1, 2, 3]
@@ -34,35 +34,69 @@ int main()
 		0xff                     // end map
 	});
 }
-~~~~~~~~~~
+```
 
 ### Parsing a JSON document with a schema
 SAX parsers are notoriously more complicated to use than DOM parser. The order of the fields in a JSON object matters for a SAX parser.
 Defining a schema (which is simply an ordering of the expected key names in the object) helps keep the code simple.
 Note that the example below is O(1) in memory (meaning the amount of memory used does not depend on the size of the document)
 
-~~~~~~~~~~cpp
+```cpp
 #include <goldfish/json_reader.h>
-#include <goldfish/schema.h>
 
 int main()
 {
 	using namespace goldfish;
 
-	static const schema s{ "a", "b", "c" };
-	auto document = apply_schema(json::read(stream::read_string_non_owning("{\"a\":1,\"c\":3.0}")).as_map(), s);
-
+	auto document = json::read(stream::read_string_literal("{\"a\":1,\"c\":3.0}")).as_map("a", "b", "c");
 	assert(document.read_value("a")->as_uint() == 1);
 	assert(document.read_value("b") == nullopt);
 	assert(document.read_value("c")->as_double() == 3.0);
 	seek_to_end(document);
 }
-~~~~~~~~~~
+```
+
+How about a more complicated example. Note again that this program doesn't allocate memory to parse the document and could run on very large documents backed by file (using `stream::file_reader`) or other type of stream even on resource constrained machines.
+
+```cpp
+#include <goldfish/json_reader.h>
+#include <iostream>
+
+int main()
+{
+	using namespace goldfish;
+
+	auto document = json::read(stream::read_string_literal(
+		R"([
+			{"name":"Alice","friends":["Bob","Charlie"]},
+			{"name":"Bob","friends":["Alice"]}
+		])")).as_array();
+
+	while (auto entry_document = document.read())
+	{
+		auto entry = entry_document->as_map("name", "friends");
+		std::cout << entry.read_value("name").value().as_string() << " has the following friends: ";
+
+		auto friends = entry.read_value("friends").value().as_array();
+		while (auto friend_name = friends.read())
+			std::cout << friend_name->as_string() << " ";
+
+		std::cout << "\n";
+		seek_to_end(entry);
+	}
+
+	/*
+	This program outputs:
+		Alice has the following friends: Bob Charlie
+		Bob has the following friends: Alice
+	*/
+}
+```
 
 ### Generating a JSON or CBOR document
 You can get a JSON or CBOR writer by calling json::create_writer or cbor::create_writer on an output stream.
 
-~~~~~~~~~~cpp
+```cpp
 #include <goldfish/json_writer.h>
 
 int main()
@@ -72,20 +106,17 @@ int main()
 	auto map = json::create_writer(stream::string_writer{}).start_map();
 	map.write("A", 1);
 	map.write("B", "text");
-	{
-		const char binary_buffer[] = "Hello world!";
-		auto stream = map.start_binary("C", sizeof(binary_buffer) - 1);
-		stream.write_buffer(const_buffer_ref{ reinterpret_cast<const uint8_t*>(binary_buffer), sizeof(binary_buffer) - 1 });
-		stream.flush();
-	}
-	assert(map.flush() == "{\"A\":1,\"B\":\"text\",\"C\":\"SGVsbG8gd29ybGQh\"}");
-}
-~~~~~~~~~~
+	map.write("C", stream::read_string_literal("Hello world!"));
 
-Note how similar the code is to generate a CBOR document. The only change is the creation of the writer (cbor::create_writer instead of json::create_writer) and the type of output_stream (vector<uint8_t> is better suited to storing the binary data than std::string).
+	// Streams are serialized as binary 64 data in JSON
+	test(map.flush() == "{\"A\":1,\"B\":\"text\",\"C\":\"SGVsbG8gd29ybGQh\"}");
+}
+```
+
+Note how similar the code is to generate a CBOR document. The only change is the creation of the writer (cbor::create_writer instead of json::create_writer) and the type of output_stream (vector<byte> is better suited to storing the binary data than std::string).
 CBOR leads to some significant reduction in document size (the document above is 41 bytes in JSON but only 27 in CBOR format). Because CBOR supports binary data natively, there is also performance benefits (no need to encode the data in base64).
 
-~~~~~~~~~~cpp
+```cpp
 #include <goldfish/cbor_writer.h>
 
 int main()
@@ -95,13 +126,9 @@ int main()
 	auto map = cbor::create_writer(stream::vector_writer{}).start_map();
 	map.write("A", 1);
 	map.write("B", "text");
-	{
-		const char binary_buffer[] = "Hello world!";
-		auto stream = map.start_binary("C", sizeof(binary_buffer) - 1);
-		stream.write_buffer(const_buffer_ref{ reinterpret_cast<const uint8_t*>(binary_buffer), sizeof(binary_buffer) - 1 });
-		stream.flush();
-	}
-	assert(map.flush() == std::vector<uint8_t>{
+	map.write("C", stream::read_string_literal("Hello world!"));
+
+	test(map.flush() == std::vector<byte>{
 		0xbf,                               // start map marker
 		0x61,0x41,                          // key: "A"
 		0x01,                               // value : uint 1
@@ -113,7 +140,7 @@ int main()
 		0xff                                // end of map
 	});
 }
-~~~~~~~~~~
+```
 
 ## Documentation
 ### Streams
@@ -121,7 +148,7 @@ Goldfish parses documents from read streams and serializes documents to write st
 
 Goldfish comes with a few readers: a reader over an in memory buffer (see `stream::read_buffer_ref`) or over a file (see `stream::file_reader`). It also provides a buffering (see `stream::buffer`). You might find yourself in a position where you want to implement your own stream, for example, as a network stream on top of your favorite network library.
 Not to worry, the interface for a read stream is fairly straightforward, with a single read_buffer API:
-~~~~~~~~~~cpp
+```cpp
 struct read_stream
 {
 	// Copies some bytes from the stream to the "buffer"
@@ -133,10 +160,10 @@ struct read_stream
 	// as well as the number of bytes in the buffer (buffer.size())
 	size_t read_buffer(buffer_ref buffer);
 }
-~~~~~~~~~~
+```
 
 Write streams have the following interface:
-~~~~~~~~~~cpp
+```cpp
 struct write_stream
 {
 	// Write some data to the stream
@@ -145,13 +172,13 @@ struct write_stream
 	// Finish writing to the stream
 	// This API must be called once the end of stream is reached
 	// It may return some data. For example, a vector_writer returns/
-	// the data written to the stream (in the form of an std::vector<uint8_t>)
+	// the data written to the stream (in the form of an std::vector<byte>)
 	auto flush();
 }
-~~~~~~~~~~
+```
 
 There are a few helper APIs that you can use to ease the consumption of streams:
-~~~~~~~~~~cpp
+```cpp
 // Seek forward in the stream up to cb bytes
 // This API returns the number of bytes skipped from the stream, which can be less
 // than cb if the end of the stream is reached
@@ -160,7 +187,7 @@ There are a few helper APIs that you can use to ease the consumption of streams:
 uint64_t stream::seek(reader_stream&, uint64_t cb);
 
 // Read the entire stream in memory
-std::vector<uint8_t> stream::read_all(reader_stream&);
+std::vector<byte> stream::read_all(reader_stream&);
 std::string stream::read_all_as_string(reader_stream&);
 
 // Read an object of type T from the stream
@@ -176,7 +203,7 @@ template <class T> T stream::read(reader_stream&);
 // This API is implemented in terms of write_buffer, unless the writer_stream has a
 // write method on it (in which case that method is used)
 template <class T> void stream::write(writer_stream&, const T&);
-~~~~~~~~~~
+```
 
 Here is the exhaustive list of readers provided by the library:
 * `stream::ref_reader<reader_stream>` (created using `stream::ref(reader_stream&)`): copyable stream that stores a non owning reference to an existing stream
@@ -189,7 +216,7 @@ Note that those streams can be composed. For example, `stream::decode_base64(str
 
 Here is the list of writers provided by the library:
 * `stream::ref_writer<writer_stream>` (created using `stream::ref(writer_stream&)`): copyable stream that stores a non owning reference to an existing stream
-* `stream::vector_writer`: stores the data in memory, in an std::vector<uint8_t>
+* `stream::vector_writer`: stores the data in memory, in an std::vector<byte>
 * `stream::string_writer`: stores the data in memory, in an std::string
 * `stream::base64_writer<writer_stream>` (created using `stream::encode_base64_to(writer_stream)`): data written to that stream is base64 encoded before being written to the writer_stream
 * `stream::buffered_writer<N, writer_stream>` (created using `stream::buffer<N>(writer_stream)`): add an N byte buffer to the writer_stream

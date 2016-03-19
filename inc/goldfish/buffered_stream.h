@@ -71,7 +71,7 @@ namespace goldfish { namespace stream
 		template <class T, size_t alignment> T read_helper(std::integral_constant<size_t, alignment>, std::bool_constant<false>)
 		{
 			T t;
-			if (read_buffer({ reinterpret_cast<uint8_t*>(&t), sizeof(t) }) != sizeof(t))
+			if (read_buffer({ reinterpret_cast<byte*>(&t), sizeof(t) }) != sizeof(t))
 				throw unexpected_end_of_stream();
 			return t;
 		}
@@ -129,7 +129,7 @@ namespace goldfish { namespace stream
 
 		inner m_stream;
 		buffer_ref m_buffered;
-		std::array<uint8_t, N> m_buffer_data;
+		std::array<byte, N> m_buffer_data;
 	};
 
 	template <size_t N, class inner>
@@ -150,7 +150,7 @@ namespace goldfish { namespace stream
 
 		template <class T> std::enable_if_t<std::is_standard_layout<T>::value, void> write(const T& t)
 		{
-			write_static<sizeof(t)>(reinterpret_cast<const uint8_t*>(&t), std::bool_constant<(sizeof(t) < N)>());
+			write_static<sizeof(t)>(reinterpret_cast<const byte*>(&t), std::bool_constant<(sizeof(t) < N)>());
 		}
 		void write_buffer(const_buffer_ref data)
 		{
@@ -158,7 +158,7 @@ namespace goldfish { namespace stream
 			{
 				if (data.size() <= cb_free())
 				{
-					std::copy(data.begin(), data.end(), stdext::make_unchecked_array_iterator(m_begin_free_space));
+					std::copy(data.begin(), data.end(), make_unchecked_array_iterator(m_begin_free_space));
 					m_begin_free_space += data.size();
 					return;
 				}
@@ -186,14 +186,14 @@ namespace goldfish { namespace stream
 		}
 	private:
 		size_t cb_free() const { return m_buffer_data.data() + N - m_begin_free_space; }
-		template <size_t cb> void write_static(const uint8_t* t, std::false_type /*small*/) { write_buffer({ t, cb }); }
-		template <size_t cb> void write_static(const uint8_t* t, std::true_type /*small*/)
+		template <size_t cb> void write_static(const byte* t, std::false_type /*small*/) { write_buffer({ t, cb }); }
+		template <size_t cb> void write_static(const byte* t, std::true_type /*small*/)
 		{
 			if (cb_free() < cb)
 				send_data();
 			m_begin_free_space = std::copy(t, t + cb, m_begin_free_space);
 		}
-		template <> void write_static<1>(const uint8_t* t, std::true_type /*small*/)
+		template <> void write_static<1>(const byte* t, std::true_type /*small*/)
 		{
 			if (m_begin_free_space == m_buffer_data.data() + N)
 				send_data();
@@ -208,8 +208,8 @@ namespace goldfish { namespace stream
 			});
 			m_begin_free_space = m_buffer_data.data();
 		}
-		std::array<uint8_t, N> m_buffer_data;
-		uint8_t* m_begin_free_space;
+		std::array<byte, N> m_buffer_data;
+		byte* m_begin_free_space;
 		inner m_stream;
 	};
 	template <size_t N, class inner> enable_if_reader_t<inner, buffered_reader<N, std::decay_t<inner>>> buffer(inner&& stream) { return{ std::forward<inner>(stream) }; }

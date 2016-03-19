@@ -16,7 +16,7 @@ TEST_CASE(convert_json_to_cbor)
 	// Note that all the streams need to be flushed to ensure that there any potentially
 	// buffered data is serialized.
 	auto cbor_document = cbor::create_writer(stream::vector_writer{}).write(document);
-	test(cbor_document == std::vector<uint8_t>{
+	test(cbor_document == std::vector<byte>{
 		0xbf,                    // start map
 		0x61,0x41,               // key: "A"
 		0x9f,0x01,0x02,0x03,0xff,// value : [1, 2, 3]
@@ -26,20 +26,47 @@ TEST_CASE(convert_json_to_cbor)
 	});
 }
 
+#include <sstream>
 #include <goldfish/json_reader.h>
-#include <goldfish/schema.h>
 
-TEST_CASE(parse_document)
+TEST_CASE(parse_simple)
 {
 	using namespace goldfish;
 
-	static const schema s{ "a", "b", "c" };
-	auto document = apply_schema(json::read(stream::read_string_non_owning("{\"a\":1,\"c\":3.0}")).as_map(), s);
-
-	test(document.read_value("a")->as_uint() == 1);
-	test(document.read_value("b") == nullopt);
-	test(document.read_value("c")->as_double() == 3.0);
+	auto document = json::read(stream::read_string_non_owning("{\"a\":1,\"c\":3.0}")).as_map("a", "b", "c");
+	assert(document.read_value("a").value().as_uint() == 1);
+	assert(document.read_value("b") == nullopt);
+	assert(document.read_value("c").value().as_double() == 3.0);
 	seek_to_end(document);
+}
+
+TEST_CASE(parse_complex)
+{
+	using namespace goldfish;
+
+	auto document = json::read(stream::read_string_non_owning(
+		R"([
+			{"name":"Alice","friends":["Bob","Charlie"]},
+			{"name":"Bob","friends":["Alice"]}
+		])")).as_array();
+
+	std::stringstream output;
+	while (auto entry_document = document.read())
+	{
+		auto entry = entry_document->as_map("name", "friends");
+		output << entry.read_value("name").value().as_string() << " has the following friends: ";
+
+		auto friends = entry.read_value("friends").value().as_array();
+		while (auto friend_name = friends.read())
+			output << friend_name->as_string() << " ";
+
+		output << "\n";
+		seek_to_end(entry);
+	}
+
+	test(output.str() ==
+		"Alice has the following friends: Bob Charlie \n"
+		"Bob has the following friends: Alice \n");
 }
 
 #include <goldfish/json_writer.h>
@@ -51,12 +78,9 @@ TEST_CASE(generate_json_document)
 	auto map = json::create_writer(stream::string_writer{}).start_map();
 	map.write("A", 1);
 	map.write("B", "text");
-	{
-		const char binary_buffer[] = "Hello world!";
-		auto stream = map.start_binary("C", sizeof(binary_buffer) - 1);
-		stream.write_buffer(const_buffer_ref{ reinterpret_cast<const uint8_t*>(binary_buffer), sizeof(binary_buffer) - 1 });
-		stream.flush();
-	}
+	map.write("C", stream::read_string_non_owning("Hello world!"));
+
+	// Streams are serialized as binary 64 data in JSON
 	test(map.flush() == "{\"A\":1,\"B\":\"text\",\"C\":\"SGVsbG8gd29ybGQh\"}");
 }
 
@@ -69,13 +93,9 @@ TEST_CASE(generate_cbor_document)
 	auto map = cbor::create_writer(stream::vector_writer{}).start_map();
 	map.write("A", 1);
 	map.write("B", "text");
-	{
-		const char binary_buffer[] = "Hello world!";
-		auto stream = map.start_binary("C", sizeof(binary_buffer) - 1);
-		stream.write_buffer(const_buffer_ref{ reinterpret_cast<const uint8_t*>(binary_buffer), sizeof(binary_buffer) - 1 });
-		stream.flush();
-	}
-	test(map.flush() == std::vector<uint8_t>{
+	map.write("C", stream::read_string_non_owning("Hello world!"));
+
+	test(map.flush() == std::vector<byte>{
 		0xbf,                               // start map marker
 		0x61,0x41,                          // key: "A"
 		0x01,                               // value : uint 1

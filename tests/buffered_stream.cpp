@@ -47,27 +47,27 @@ namespace goldfish { namespace stream
 	{
 		auto s = buffer<3>(read_string_non_owning("abcdefghijkl"));
 		{
-			std::array<uint8_t, 1> buffer;
+			std::array<byte, 1> buffer;
 			test(s.read_buffer(buffer) == 1);
 			test(buffer == std::array<uint8_t, 1>{'a'});
 		}
 		{
-			std::array<uint8_t, 2> buffer;
+			std::array<byte, 2> buffer;
 			test(s.read_buffer(buffer) == 2);
-			test(buffer == std::array<uint8_t, 2>{'b', 'c'});
+			test(buffer == std::array<byte, 2>{'b', 'c'});
 		}
 		{
-			std::array<uint8_t, 3> buffer;
+			std::array<byte, 3> buffer;
 			test(s.read_buffer(buffer) == 3);
-			test(buffer == std::array<uint8_t, 3>{'d', 'e', 'f'});
+			test(buffer == std::array<byte, 3>{'d', 'e', 'f'});
 		}
 		{
-			std::array<uint8_t, 4> buffer;
+			std::array<byte, 4> buffer;
 			test(s.read_buffer(buffer) == 4);
-			test(buffer == std::array<uint8_t, 4>{'g', 'h', 'i', 'j'});
+			test(buffer == std::array<byte, 4>{'g', 'h', 'i', 'j'});
 
 			test(s.read_buffer(buffer) == 2);
-			test(buffer == std::array<uint8_t, 4>{'k', 'l', 'i', 'j'});
+			test(buffer == std::array<byte, 4>{'k', 'l', 'i', 'j'});
 		}
 	}
 	TEST_CASE(test_buffered_seek)
@@ -91,14 +91,14 @@ namespace goldfish { namespace stream
 	{
 		vector_writer x;
 		auto stream = buffer<2>(ref(x));
-		stream.write<uint8_t>(1);
+		stream.write<byte>(1);
 		test(x.data().empty());
 
-		stream.write<uint8_t>(2);
+		stream.write<byte>(2);
 		test(x.data().empty());
 
 		stream.flush();
 
-		test(x.data() == std::vector<uint8_t>{1, 2});
+		test(x.data() == std::vector<byte>{1, 2});
 	}
 }}

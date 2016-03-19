@@ -6,7 +6,7 @@ namespace goldfish { namespace stream
 	std::string my_base64_encode(const std::string& data)
 	{
 		auto s = encode_base64_to(string_writer{});
-		s.write_buffer({ reinterpret_cast<const uint8_t*>(data.data()), data.size() });
+		s.write_buffer({ reinterpret_cast<const byte*>(data.data()), data.size() });
 		return s.flush();
 	}
 	std::string my_base64_decode(const std::string& data)
@@ -54,7 +54,7 @@ namespace goldfish { namespace stream
 
 		// read two at a time (this tests reading 2 bytes with left overs 0,2,1)
 		{
-			uint8_t buffer[2];
+			byte buffer[2];
 			test(s.read_buffer(buffer) == 2 && buffer[0] == ' ' && buffer[1] == 'c');
 			test(s.read_buffer(buffer) == 2 && buffer[0] == 'a' && buffer[1] == 'r');
 			test(s.read_buffer(buffer) == 2 && buffer[0] == 'n' && buffer[1] == 'a');
@@ -62,7 +62,7 @@ namespace goldfish { namespace stream
 		
 		// read three at a time (this tests reading 3 bytes with left overs 0,1,2)
 		{
-			uint8_t buffer[3];
+			byte buffer[3];
 			test(s.read_buffer(buffer) == 3 && buffer[0] == 'l' && buffer[1] == ' ' && buffer[2] == 'p');
 			test(stream::read<char>(s) == 'l');
 			test(s.read_buffer(buffer) == 3 && buffer[0] == 'e' && buffer[1] == 'a' && buffer[2] == 's');
@@ -87,7 +87,7 @@ namespace goldfish { namespace stream
 
 		// write two at a time (this tests writing 2 bytes with left overs 0,2,1)
 		{
-			uint8_t buffer[2];
+			byte buffer[2];
 			buffer[0] = ' '; buffer[1] = 'c'; s.write_buffer(buffer);
 			buffer[0] = 'a'; buffer[1] = 'r'; s.write_buffer(buffer);
 			buffer[0] = 'n'; buffer[1] = 'a'; s.write_buffer(buffer);
@@ -95,7 +95,7 @@ namespace goldfish { namespace stream
 
 		// write three at a time (this tests writing 3 bytes with left overs)
 		{
-			uint8_t buffer[3];
+			byte buffer[3];
 			buffer[0] = 'l'; buffer[1] = ' ';  buffer[2] = 'p'; s.write_buffer(buffer);
 			stream::write(s, 'l');
 			buffer[0] = 'e'; buffer[1] = 'a';  buffer[2] = 's'; s.write_buffer(buffer);

@@ -131,11 +131,7 @@ namespace goldfish { namespace sax
 		auto start_map(uint64_t size) { return make_map_writer(m_writer.start_map(size)); }
 		auto start_map() { return make_map_writer(m_writer.start_map()); }
 
-		template <class T> auto write_as_text(T&& s, std::enable_if_t<stream::is_reader<std::decay_t<T>>::value>* = 0)
-		{
-			return copy_stream(s, [&](size_t cb) { return start_string(cb); }, [&] { return start_string(); });
-		}
-		template <class T> auto write_as_binary(T&& s, std::enable_if_t<stream::is_reader<std::decay_t<T>>::value>* = 0)
+		template <class T> auto write(T&& s, std::enable_if_t<stream::is_reader<std::decay_t<T>>::value>* = 0)
 		{
 			return copy_stream(s, [&](size_t cb) { return start_binary(cb); }, [&] { return start_binary(); });
 		}
@@ -143,8 +139,8 @@ namespace goldfish { namespace sax
 		template <class T> auto write(T&& document, std::enable_if_t<std::is_same<typename std::decay_t<T>::tag, tags::document>::value>* = 0)
 		{
 			return document.visit(best_match(
-				[&](auto&& x, tags::binary) { return write_as_binary(x); },
-				[&](auto&& x, tags::string) { return write_as_text(x); },
+				[&](auto&& x, tags::binary) { return write(x); },
+				[&](auto&& x, tags::string) { return copy_stream(x, [&](size_t cb) { return start_string(cb); }, [&] { return start_string(); }); },
 				[&](auto&& x, tags::array)
 				{
 					auto array_writer = start_array();
@@ -179,7 +175,7 @@ namespace goldfish { namespace sax
 				[&](uint64_t x) { return write(x); },
 				[&](int64_t x) { return write(x); },
 				[&](double x) { return write(x); },
-				[&](const std::vector<uint8_t>& x) { return write(const_buffer_ref{ x }); },
+				[&](const std::vector<byte>& x) { return write(const_buffer_ref{ x }); },
 				[&](const std::string& x) { return write(x); },
 				[&](const dom::array& x)
 				{
@@ -201,7 +197,7 @@ namespace goldfish { namespace sax
 		template <class Stream, class CreateWriterWithSize, class CreateWriterWithoutSize>
 		auto copy_stream(Stream& s, CreateWriterWithSize&& create_writer_with_size, CreateWriterWithoutSize&& create_writer_without_size)
 		{
-			uint8_t buffer[8 * 1024];
+			byte buffer[8 * 1024];
 			auto cb = s.read_buffer(buffer);
 			if (cb < sizeof(buffer))
 			{
@@ -227,7 +223,7 @@ namespace goldfish { namespace sax
 		auto write(const char* text, size_t length)
 		{
 			auto stream = start_string(length);
-			stream.write_buffer({ reinterpret_cast<const uint8_t*>(text), length });
+			stream.write_buffer({ reinterpret_cast<const byte*>(text), length });
 			return stream.flush();
 		}
 		inner m_writer;

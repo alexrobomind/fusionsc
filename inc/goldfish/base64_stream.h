@@ -5,7 +5,7 @@
 
 namespace goldfish { namespace stream
 {
-	struct ill_formatted_base64_data {};
+	struct ill_formatted_base64_data : ill_formatted {};
 
 	// Reads binary data assuming inner reads base64
 	template <class inner>
@@ -47,9 +47,9 @@ namespace goldfish { namespace stream
 
 		// Read up to 4 characters (or the end of stream), remove the potential padding (base64 can be padded with '=' characters at the end)
 		// and generate up to 3 bytes of data
-		uint8_t deserialize_up_to_3_bytes(uint8_t* output)
+		uint8_t deserialize_up_to_3_bytes(byte* output)
 		{
-			uint8_t buffer[4];
+			byte buffer[4];
 			auto c_read = m_stream.read_buffer(buffer);
 			if (c_read == 4 && buffer[3] == '=') // Presence of padding means the stream is made of blocks of 4 bytes
 			{
@@ -90,9 +90,9 @@ namespace goldfish { namespace stream
 			output[2] = (((c & 0x3) << 6) | d);
 			return 3;
 		}
-		uint8_t character_to_6bits(uint8_t c)
+		byte character_to_6bits(byte c)
 		{
-			const uint8_t lookup_table[] = {
+			const byte lookup_table[] = {
 				64,64,64,64,64,64,64,64,64,64,
 				64,64,64,64,64,64,64,64,64,64,
 				64,64,64,64,64,64,64,64,64,64,
@@ -127,7 +127,7 @@ namespace goldfish { namespace stream
 			return result;
 		}
 		inner m_stream;
-		std::array<uint8_t, 3> m_already_parsed;
+		std::array<byte, 3> m_already_parsed;
 		uint8_t m_cb_already_parsed = 0;
 	};
 
@@ -194,13 +194,13 @@ namespace goldfish { namespace stream
 		}
 		auto& inner_stream() { return m_stream; }
 	private:
-		uint8_t character_from_6bits(uint8_t x)
+		byte character_from_6bits(byte x)
 		{
 			static const char table[65] =
 				"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 				"abcdefghijklmnopqrstuvwxyz"
 				"0123456789+/";
-			return static_cast<uint8_t>(table[x]);
+			return static_cast<byte>(table[x]);
 		}
 		void write_triplet(uint32_t a, uint32_t b, uint32_t c)
 		{
@@ -227,7 +227,7 @@ namespace goldfish { namespace stream
 		}
 
 		inner m_stream;
-		std::array<uint8_t, 2> m_pending_encoding;
+		std::array<byte, 2> m_pending_encoding;
 		uint8_t m_cb_pending_encoding = 0;
 	};
 

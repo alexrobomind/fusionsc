@@ -18,7 +18,9 @@ namespace goldfish { namespace json
 	public:
 		text_writer(Stream&& s)
 			: m_stream(std::move(s))
-		{}
+		{
+			stream::write(m_stream, '"');
+		}
 		void write_buffer(const_buffer_ref buffer)
 		{
 			for (auto&& c : buffer)
@@ -42,7 +44,7 @@ namespace goldfish { namespace json
 						char data[6] = { '\\', 'u', '0', '0', '0', '0' };
 						data[4] = "0123456789ABCDEF"[c >> 4];
 						data[5] = "0123456789ABCDEF"[c & 15];
-						m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(data), 6 });
+						m_stream.write_buffer({ reinterpret_cast<const byte*>(data), 6 });
 					}
 					else
 					{
@@ -66,7 +68,9 @@ namespace goldfish { namespace json
 	public:
 		binary_writer(Stream&& s)
 			: m_stream(std::move(s))
-		{}
+		{
+			stream::write(m_stream.inner_stream(), '"');
+		}
 		void write_buffer(const_buffer_ref buffer)
 		{
 			m_stream.write_buffer(buffer);
@@ -86,7 +90,9 @@ namespace goldfish { namespace json
 	public:
 		array_writer(Stream&& s)
 			: m_stream(std::move(s))
-		{}
+		{
+			stream::write(m_stream, '[');
+		}
 
 		document_writer<stream::writer_ref_type_t<Stream>> append();
 		auto flush()
@@ -104,7 +110,9 @@ namespace goldfish { namespace json
 	public:
 		map_writer(Stream&& s)
 			: m_stream(std::move(s))
-		{}
+		{
+			stream::write(m_stream, '{');
+		}
 
 		document_writer<stream::writer_ref_type_t<Stream>> append_key();
 		document_writer<stream::writer_ref_type_t<Stream>> append_value();
@@ -126,13 +134,13 @@ namespace goldfish { namespace json
 		{}
 		auto write(bool x)
 		{
-			if (x) m_stream.write_buffer({ reinterpret_cast<const uint8_t*>("true"), 4 });
-			else   m_stream.write_buffer({ reinterpret_cast<const uint8_t*>("false"), 5 });
+			if (x) m_stream.write_buffer({ reinterpret_cast<const byte*>("true"), 4 });
+			else   m_stream.write_buffer({ reinterpret_cast<const byte*>("false"), 5 });
 			return m_stream.flush();
 		}
 		auto write(nullptr_t)
 		{
-			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>("null"), 4 });
+			m_stream.write_buffer({ reinterpret_cast<const byte*>("null"), 4 });
 			return m_stream.flush();
 		}
 		auto write(tags::undefined)
@@ -142,59 +150,40 @@ namespace goldfish { namespace json
 		auto write(uint64_t x)
 		{
 			auto string = std::to_string(x);
-			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(string.data()), string.size() });
+			m_stream.write_buffer({ reinterpret_cast<const byte*>(string.data()), string.size() });
 			return m_stream.flush();
 		}
 		auto write(int64_t x)
 		{
 			auto string = std::to_string(x);
-			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(string.data()), string.size() });
+			m_stream.write_buffer({ reinterpret_cast<const byte*>(string.data()), string.size() });
 			return m_stream.flush();
 		}
 		auto write(double x)
 		{
-			char buffer[1024];
-			auto cb = sprintf_s(buffer, "%g", x);
-			if (cb <= 0)
-				std::terminate();
-			m_stream.write_buffer({ reinterpret_cast<const uint8_t*>(buffer), static_cast<size_t>(cb) });
+			auto string = std::to_string(x);
+			m_stream.write_buffer({ reinterpret_cast<const byte*>(string.data()), string.size() });
 			return m_stream.flush();
 		}
 
 		auto start_binary(uint64_t cb) { return start_binary(); }
 		auto start_string(uint64_t cb) { return start_string(); }
-		binary_writer<Stream> start_binary()
-		{
-			stream::write(m_stream, '"');
-			return{ std::move(m_stream) };
-		}
-		text_writer<Stream> start_string()
-		{
-			stream::write(m_stream, '"');
-			return{ std::move(m_stream) };
-		}
+		binary_writer<Stream> start_binary() { return{ std::move(m_stream) }; }
+		text_writer<Stream> start_string() { return{ std::move(m_stream) }; }
 
 		auto start_array(uint64_t size) { return start_array(); }
-		array_writer<Stream> start_array()
-		{
-			stream::write(m_stream, '[');
-			return{ std::move(m_stream) };
-		}
+		array_writer<Stream> start_array() { return{ std::move(m_stream) }; }
 		
 		auto start_map(uint64_t size) { return start_map(); }
-		map_writer<Stream> start_map()
-		{
-			stream::write(m_stream, '{');
-			return{ std::move(m_stream) };
-		}
+		map_writer<Stream> start_map() { return{ std::move(m_stream) }; }
 
 	private:
 		Stream m_stream;
 	};
-	template <class Stream> document_writer<std::decay_t<Stream>> write_no_debug_check(Stream&& s) { return{ std::forward<Stream>(s) }; }
+	template <class Stream> document_writer<std::decay_t<Stream>> create_writer_no_debug_check(Stream&& s) { return{ std::forward<Stream>(s) }; }
 	template <class Stream, class error_handler> auto create_writer(Stream&& s, error_handler e)
 	{
-		return sax::make_writer(debug_checks::add_write_checks(write_no_debug_check(std::forward<Stream>(s)), e));
+		return sax::make_writer(debug_checks::add_write_checks(create_writer_no_debug_check(std::forward<Stream>(s)), e));
 	}
 	template <class Stream> auto create_writer(Stream&& s)
 	{

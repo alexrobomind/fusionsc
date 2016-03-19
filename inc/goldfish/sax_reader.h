@@ -5,11 +5,12 @@
 #include "optional.h"
 #include "base64_stream.h"
 #include "buffered_stream.h"
+#include "schema.h"
 #include <type_traits>
 
 namespace goldfish
 {
-	struct integer_overflow {};
+	struct integer_overflow_while_casting : exception {};
 
 	template <bool _does_json_conversions, class... types>
 	class document_impl
@@ -38,11 +39,13 @@ namespace goldfish
 			});
 		}
 		auto as_string() { return std::move(m_data).as<type_with_tag_t<tags::string>>(); }
-		auto as_binary(std::true_type /*does_json_conversion*/) { return stream::decode_base64(as_string()); }
-		auto as_binary(std::false_type /*does_json_conversion*/) { return std::move(m_data).as<type_with_tag_t<tags::binary>>(); }
 		auto as_binary() { return as_binary(std::integral_constant<bool, does_json_conversions>()); }
 		auto as_array() { return std::move(m_data).as<type_with_tag_t<tags::array>>(); }
 		auto as_map() { return std::move(m_data).as<type_with_tag_t<tags::map>>(); }
+		template <class Head, class... Tail> auto as_map(Head&& head, Tail&&... tail)
+		{
+			return apply_schema(as_map(), make_schema(std::forward<Head>(head), std::forward<Tail>(tail)...));
+		}
 
 		// Floating point can be converted from an int
 		auto as_double()
@@ -57,7 +60,7 @@ namespace goldfish
 						throw bad_variant_access();
 
 					auto s = stream::buffer<8>(stream::ref(x));
-					return json::read_number(s).visit([](auto&& x) -> double { return static_cast<double>(x); });
+					return json::read_number(s, stream::read<char>(s)).visit([](auto&& x) -> double { return static_cast<double>(x); });
 				},
 				[](auto&&, auto) -> double { throw bad_variant_access{}; }
 			));
@@ -75,7 +78,7 @@ namespace goldfish
 						throw bad_variant_access();
 
 					auto s = stream::buffer<8>(stream::ref(x));
-					return json::read_number(s).visit(best_match(
+					return json::read_number(s, stream::read<char>(s)).visit(best_match(
 						[](uint64_t x) { return x; },
 						[](int64_t x) { return cast_signed_to_unsigned(x); },
 						[](double x) -> uint64_t { throw bad_variant_access{}; }));
@@ -96,7 +99,7 @@ namespace goldfish
 						throw bad_variant_access();
 
 					auto s = stream::buffer<8>(stream::ref(x));
-					return json::read_number(s).visit(best_match(
+					return json::read_number(s, stream::read<char>(s)).visit(best_match(
 						[](int64_t x) { return x; },
 						[](uint64_t x) { return cast_unsigned_to_signed(x); },
 						[](double x) -> int64_t { throw bad_variant_access{}; }
@@ -109,18 +112,23 @@ namespace goldfish
 		bool is_undefined() { return m_data.is<type_with_tag_t<tags::undefined>>(); }
 		bool is_null() { return m_data.is<type_with_tag_t<tags::null>>(); }
 
+		template <class tag> bool is_exactly() { return m_data.is<type_with_tag_t<tag>>(); }
+
 		using invalid_state = typename variant<types...>::invalid_state;
 	private:
+		auto as_binary(std::true_type /*does_json_conversion*/) { return stream::decode_base64(as_string()); }
+		auto as_binary(std::false_type /*does_json_conversion*/) { return std::move(m_data).as<type_with_tag_t<tags::binary>>(); }
+
 		static uint64_t cast_signed_to_unsigned(int64_t x)
 		{
 			if (x < 0)
-				throw integer_overflow{};
+				throw integer_overflow_while_casting{};
 			return static_cast<uint64_t>(x);
 		}
 		static int64_t cast_unsigned_to_signed(uint64_t x)
 		{
 			if (x > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
-				throw integer_overflow{};
+				throw integer_overflow_while_casting{};
 			return static_cast<int64_t>(x);
 		}
 

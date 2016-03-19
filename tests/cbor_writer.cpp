@@ -5,18 +5,7 @@
 
 namespace goldfish { namespace dom
 {
-	struct in_memory_write_stream
-	{
-		void write(uint8_t x) { data.push_back(x); }
-		template <class T> void write(T x) { write(&x, sizeof(x)); }
-		void write(const void* buffer, size_t size)
-		{
-			data.insert(data.end(), reinterpret_cast<const char*>(buffer), reinterpret_cast<const char*>(buffer) + size);
-		}
-		std::vector<uint8_t> data;
-	};
-
-	static std::string to_hex_string(const std::vector<uint8_t>& data)
+	static std::string to_hex_string(const std::vector<byte>& data)
 	{
 		std::string result;
 		for (auto&& x : data)
@@ -31,11 +20,11 @@ namespace goldfish { namespace dom
 		if ('0' <= c && c <= '9') return c - '0';
 		else if ('a' <= c && c <= 'f') return c - 'a' + 10;
 		else if ('A' <= c && c <= 'F') return c - 'A' + 10;
-		else throw "Invalid hex character";
+		else std::terminate();
 	};
 	static auto to_vector(const std::string& input)
 	{
-		std::vector<uint8_t> data;
+		std::vector<byte> data;
 		for (auto it = input.begin(); it != input.end(); it += 2)
 		{
 			uint8_t high = to_hex(*it);
@@ -84,15 +73,15 @@ namespace goldfish { namespace dom
 		test(w(nullptr) == "f6");
 		test(w(tags::undefined{}) == "f7");
 		
-		test(w(binary(to_vector(""))) == "40");
-		test(w(binary(to_vector("01020304"))) == "4401020304");
+		test(w(to_vector("")) == "40");
+		test(w(to_vector("01020304")) == "4401020304");
 
-		test(w(string("")) == "60");
-		test(w(string("a")) == "6161");
-		test(w(string("IETF")) == "6449455446");
-		test(w(string("\"\\")) == "62225c");
-		test(w(string(u8"\u00fc")) == "62c3bc");
-		test(w(string(u8"\u6c34")) == "63e6b0b4");
+		test(w("") == "60");
+		test(w("a") == "6161");
+		test(w("IETF") == "6449455446");
+		test(w("\"\\") == "62225c");
+		test(w(u8"\u00fc") == "62c3bc");
+		test(w(u8"\u6c34") == "63e6b0b4");
 
 		test(w(array{}) == "80");
 		test(w(array{ 1ull, 2ull, 3ull }) == "83010203");
@@ -106,16 +95,16 @@ namespace goldfish { namespace dom
 		test(w(map{}) == "a0");
 		test(w(map{ { 1ull, 2ull },{ 3ull, 4ull } }) == "a201020304");
 		test(w(map{
-			{ string("a"), 1ull },
-			{ string("b"), array{ 2ull, 3ull } }
+			{ "a", 1ull },
+			{ "b", array{ 2ull, 3ull } }
 		}) == "a26161016162820203");
-		test(w(array{ string("a"), map{ { string("b"), string("c") } } }) == "826161a161626163");
+		test(w(array{ "a", map{ { "b", "c" } } }) == "826161a161626163");
 		test(w(map{
-			{ string("a"), string("A") },
-			{ string("b"), string("B") },
-			{ string("c"), string("C") },
-			{ string("d"), string("D") },
-			{ string("e"), string("E") }
+			{ "a", "A" },
+			{ "b", "B" },
+			{ "c", "C" },
+			{ "d", "D" },
+			{ "e", "E" }
 		}) == "a56161614161626142616361436164614461656145");
 	}
 
@@ -153,8 +142,8 @@ namespace goldfish { namespace dom
 		};
 
 		test(w({
-			{string("Fun"), true},
-			{string("Amt"), -2ll}
+			{"Fun", true},
+			{"Amt", -2ll}
 		}) == "bf6346756ef563416d7421ff");
 	}
 
@@ -165,7 +154,7 @@ namespace goldfish { namespace dom
 			stream::vector_writer s;
 			auto string = cbor::create_writer(stream::ref(s)).start_string();
 			for (auto s : data)
-				string.write_buffer({ reinterpret_cast<const uint8_t*>(s.data()), s.size() });
+				string.write_buffer({ reinterpret_cast<const byte*>(s.data()), s.size() });
 			string.flush();
 			return to_hex_string(s.flush());
 		};
@@ -175,7 +164,7 @@ namespace goldfish { namespace dom
 
 	TEST_CASE(write_infinite_binary_string)
 	{
-		auto w = [&](const std::vector<std::vector<uint8_t>>& data)
+		auto w = [&](const std::vector<std::vector<byte>>& data)
 		{
 			stream::vector_writer s;
 			auto binary = cbor::create_writer(stream::ref(s)).start_binary();

@@ -33,7 +33,7 @@ namespace goldfish
 		test(r("\"1\"") == 1);
 		test(r("\"-1\"") == -1);
 
-		expect_exception<integer_overflow>([&] { r("9223372036854775808"); });
+		expect_exception<integer_overflow_while_casting>([&] { r("9223372036854775808"); });
 		expect_exception<bad_variant_access>([&] { r("1.0"); });
 		expect_exception<bad_variant_access>([&] { r("\"1.0\""); });
 		expect_exception<bad_variant_access>([&] { r("[]"); });
@@ -45,13 +45,13 @@ namespace goldfish
 			return json::read(stream::read_string_non_owning(input)).as_uint();
 		};
 		test(r("1") == 1);
-		expect_exception<integer_overflow>([&] { r("-1"); });
+		expect_exception<integer_overflow_while_casting>([&] { r("-1"); });
 		expect_exception<bad_variant_access>([&] { r("1.0"); });
 		expect_exception<bad_variant_access>([&] { r("[]"); });
 
 		test(r("\"1\"") == 1);
 		expect_exception<bad_variant_access>([&] { r("\"1.0\""); });
-		expect_exception<integer_overflow>([&] { r("\"-1\""); });
+		expect_exception<integer_overflow_while_casting>([&] { r("\"-1\""); });
 	}
 	TEST_CASE(test_conversion_to_binary)
 	{
