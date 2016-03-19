@@ -26,17 +26,47 @@ TEST_CASE(convert_json_to_cbor)
 	});
 }
 
+#include <sstream>
 #include <goldfish/json_reader.h>
 
-TEST_CASE(parse_document)
+TEST_CASE(parse_simple)
 {
 	using namespace goldfish;
 
 	auto document = json::read(stream::read_string_literal("{\"a\":1,\"c\":3.0}")).as_map("a", "b", "c");
-	test(document.read_value("a")->as_uint() == 1);
-	test(document.read_value("b") == nullopt);
-	test(document.read_value("c")->as_double() == 3.0);
+	assert(document.read_value("a").value().as_uint() == 1);
+	assert(document.read_value("b") == nullopt);
+	assert(document.read_value("c").value().as_double() == 3.0);
 	seek_to_end(document);
+}
+
+TEST_CASE(parse_complex)
+{
+	using namespace goldfish;
+
+	auto document = json::read(stream::read_string_literal(
+		R"([
+			{"name":"Alice","friends":["Bob","Charlie"]},
+			{"name":"Bob","friends":["Alice"]}
+		])")).as_array();
+
+	std::stringstream output;
+	while (auto entry_document = document.read())
+	{
+		auto entry = entry_document->as_map("name", "friends");
+		output << entry.read_value("name").value().as_string() << " has the following friends: ";
+
+		auto friends = entry.read_value("friends").value().as_array();
+		while (auto friend_name = friends.read())
+			output << friend_name->as_string() << " ";
+
+		output << "\n";
+		seek_to_end(entry);
+	}
+
+	test(output.str() ==
+		"Alice has the following friends: Bob Charlie \n"
+		"Bob has the following friends: Alice \n");
 }
 
 #include <goldfish/json_writer.h>

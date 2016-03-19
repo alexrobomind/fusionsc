@@ -7,6 +7,8 @@ namespace goldfish
 	struct nullopt_t {};
 	constexpr nullopt_t nullopt{};
 
+	struct bad_optional_access : exception {};
+
 	template <class T> struct enable_if_exists { using type = void; };
 	template <class T> using enable_if_exists_t = typename enable_if_exists<T>::type;
 
@@ -63,20 +65,24 @@ namespace goldfish
 		optional& operator = (const T& t) { m_data = t; return *this; }
 		optional& operator = (T&& t) { m_data = std::move(t); return *this; }
 
-		T& operator*() & { return m_data.as<T>(); }
-		const T& operator*() const & { return m_data.as<T>(); }
-		T&& operator*() && { return std::move(m_data.as<T>()); }
+		T& operator*() & { return m_data.as_unchecked<T>(); }
+		const T& operator*() const & { return m_data.as_unchecked<T>(); }
+		T&& operator*() && { return std::move(m_data.as_unchecked<T>()); }
 
-		T* operator ->() { return &m_data.as<T>(); }
-		const T* operator ->() const { return &m_data.as<T>(); }
+		T* operator ->() { return &m_data.as_unchecked<T>(); }
+		const T* operator ->() const { return &m_data.as_unchecked<T>(); }
 		explicit operator bool() const { return m_data.is<T>(); }
 
+		T& value() & { if (*this) return **this; else throw bad_optional_access{}; }
+		const T& value() const & { if (*this) return **this; else throw bad_optional_access{}; }
+		T&& value() && { if (*this) return *std::move(*this); else throw bad_optional_access{}; }
+
 		friend bool operator == (const optional& lhs, nullopt_t) { return lhs.m_data.is<nullopt_t>(); }
-		friend bool operator == (const optional& lhs, const T& t) { return lhs.m_data.is<T>() && lhs.m_data.as<T>() == t; }
+		friend bool operator == (const optional& lhs, const T& t) { return lhs.m_data.is<T>() && lhs.m_data.as_unchecked<T>() == t; }
 		friend bool operator == (const optional& lhs, const optional& rhs) { return lhs.m_data == rhs.m_data; }
 
 		friend bool operator != (const optional& lhs, nullopt_t) { return !lhs.m_data.is<nullopt_t>(); }
-		friend bool operator != (const optional& lhs, const T& t) { return !lhs.m_data.is<T>() || lhs.m_data.as<T>() != t; }
+		friend bool operator != (const optional& lhs, const T& t) { return !lhs.m_data.is<T>() || lhs.m_data.as_unchecked<T>() != t; }
 		friend bool operator != (const optional& lhs, const optional& rhs) { return lhs.m_data != rhs.m_data; }
 
 	private:
@@ -170,6 +176,10 @@ namespace goldfish
 		T* operator ->() { return &reinterpret_cast<T&>(m_data); }
 		const T* operator ->() const { return &reinterpret_cast<const T&>(m_data); }
 		explicit operator bool() const { return !invalid_state::is(m_data); }
+
+		T& value() & { if (*this) return **this; else throw bad_optional_access{}; }
+		const T& value() const & { if (*this) return **this; else throw bad_optional_access{}; }
+		T&& value() && { if (*this) return *std::move(*this); else throw bad_optional_access{}; }
 
 		friend bool operator == (const optional& lhs, nullopt_t) { return !static_cast<bool>(lhs); }
 		friend bool operator == (const optional& lhs, const T& t) { return lhs && *lhs == t; }

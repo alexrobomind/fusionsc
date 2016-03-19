@@ -256,3 +256,11 @@ namespace goldfish { namespace stream
 		return result;
 	}
 }}
+
+template <class Stream> goldfish::stream::enable_if_reader_t<Stream, std::ostream&> operator << (std::ostream& s, Stream&& reader)
+{
+	goldfish::byte buffer[65536];
+	while (auto cb = reader.read_buffer(buffer))
+		s.write(reinterpret_cast<const char*>(buffer), cb);
+	return s;
+}
