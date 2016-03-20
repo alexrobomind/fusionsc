@@ -240,3 +240,107 @@ Here is the list of writers provided by the library:
 * `stream::base64_writer<writer_stream>` (created using `stream::encode_base64_to(writer_stream)`): data written to that stream is base64 encoded before being written to the writer_stream
 * `stream::buffered_writer<N, writer_stream>` (created using `stream::buffer<N>(writer_stream)`): add an N byte buffer to the writer_stream
 * `stream::file_writer`: a writer stream on a file
+
+### JSON/CBOR parser
+To start the parsing of a read stream use json::read or cbor::read (for JSON or CBOR documents respectively). Those APIs return "document reader" objects.
+A document reader offers the following APIs:
+* `as_string()`: if the document is a text (for example `"Hello"` in JSON, or an object of major type 3 in CBOR), return a reader stream on the text, otherwise throw `goldfish::bad_variant_access`
+* `as_binary()`:
+	* For CBOR documents, return a stream on the data of a byte string document (major type 2), or throw `goldfish::bad_variant_access` if the document is not of major type 2.
+	* For JSON documents, return a stream that decodes the base64 encoded text if the document is text (for example, if the document is `"SGVsbG8="`, this API returns a stream that reads `Hello`)
+* `as_array()`: if the document is an array (for example `[1,"Hello"]` in JSON, or an object of major type 4 in CBOR), return an `array reader` object, otherwise throw `goldfish::bad_variant_access`
+* `as_map()`, `as_object()`: if the document is an object (for example `{"Hello":1}` in JSON, or an object of major type 5 in CBOR), return a `map reader` object, otherwise throw `goldfish::bad_variant_access`
+* `as_map(...)`, `as_object(...)`: if parameters are specified to `as_map` or `as_object`, a `map reader with schema` object is returned. This allows for simpler parsing of documents when the keys and their order is known in advance.
+* `as_double`:
+	* if the document is an integer or a floating point (for example `1`, `-1` or `1.0` in JSON), return a double that represents the value of the document.
+	* For JSON, strings are parsed, which can lead (that means the JSON document `"8000"` can be read as either the text `8000` using as_text, the text `ÛM4` using as_binary, the double `8000`, the signed integer `8000` or the unsigned integer `8000`)
+	* otherwise, `goldfish::bad_variant_access` is thrown
+* `as_uint`:
+	* if the document is a positive integer (for example `1` in JSON), return a `uint64_t` that represents the value of the document
+	* if the document is a negative integer (for example `-1` in JSON), throws `goldfish::integer_overflow_while_casting`
+	* For JSON, strings are parsed
+	* otherwise, `goldfish::bad_variant_access` is thrown
+* `as_int`:
+	* if the document is an integer (for example `1` in JSON), return a `int64_t` that represents the value of the document, or throws `goldfish::integer_overflow_while_casting` if the value is not representable in a int64_t
+	* For JSON, strings are parsed
+	* otherwise, `goldfish::bad_variant_access` is thrown
+* `as_bool`: if the document is `true` or `false`, return the corresponding boolean value
+* `is_null`: return true if the document is `null` in JSON or the equivalent in CBOR (major type 7 and additional information 22).
+* `is_undefined`:
+	* For CBOR, return true if the document is of type "undefined"
+	* For JSON, this API is equivalent to is_null
+
+In addition, the document reader implements the visitor pattern and exposes a visit API.
+That API calls the provided callback with the object and a tag that represents the semantic type of the object.
+Here is an example on how to use that API:
+
+```cpp
+#include <iostream>
+#include <goldfish/json_reader.h>
+
+using namespace goldfish;
+
+struct my_handler
+{
+	template <class Stream> const char* operator()(Stream& s, tags::binary) { return "binary"; }
+	template <class Stream> const char* operator()(Stream& s, tags::string) { return "string"; }
+	template <class ArrayReader> const char* operator()(ArrayReader& s, tags::array) { return "array"; }
+	template <class MapReader> const char* operator()(MapReader& s, tags::map) { return "map"; }
+	const char* operator()(tags::undefined, tags::undefined) { return "undefined"; }
+	const char* operator()(double, tags::floating_point) { return "floating point"; }
+	const char* operator()(uint64_t, tags::unsigned_int) { return "uint"; }
+	const char* operator()(int64_t, tags::signed_int) { return "int"; }
+	const char* operator()(bool, tags::boolean) { return "bool"; }
+	const char* operator()(nullptr_t, tags::null) { return "null"; }
+};
+int main()
+{
+	my_handler sink;
+	std::cout << json::read(stream::read_string_non_owning("true")).visit(sink);
+	// outputs bool, the result of calling sink(true, tags::boolean{})
+}
+```
+
+For simplicity, you can use `goldfish::best_match` and work with lambdas. `best_match` is an API that takes any number of lambdas and forwards any call to the lambda that has the best matching signature (using the C++ overload resolution rules).
+
+```cpp
+#include <iostream>
+#include <goldfish/json_reader.h>
+
+int main()
+{
+	using namespace goldfish;
+
+	std::cout << json::read(stream::read_string_non_owning("true")).visit(best_match(
+		[](auto&&, tags::binary) { return "binary"; },
+		[](auto&&, tags::string) { return "string"; },
+		[](auto&&, tags::array) { return "array"; },
+		[](auto&&, tags::map) { return "map"; },
+		[](tags::undefined, tags::undefined) { return "undefined"; },
+		[](double, tags::floating_point) { return "floating point"; },
+		[](uint64_t, tags::unsigned_int) { return "uint"; },
+		[](int64_t, tags::signed_int) { return "int"; },
+		[](bool, tags::boolean) { return "bool"; },
+		[](nullptr_t, tags::null) { return "null"; }
+	));
+	// outputs "bool"
+}
+```
+
+Finally, you could also use `first_match`, which will forward to the first callable lambda. This allows specifying only some of the options:
+
+```cpp
+#include <iostream>
+#include <goldfish/json_reader.h>
+
+int main()
+{
+	using namespace goldfish;
+
+	std::cout << json::read(stream::read_string_non_owning("true")).visit(best_match(
+		[](bool, tags::boolean) { return "bool"; },
+		[](auto&&, auto) { return "not bool"; }
+	));
+	// outputs "bool"
+}
+```

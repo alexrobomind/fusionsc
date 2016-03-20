@@ -107,3 +107,50 @@ TEST_CASE(generate_cbor_document)
 		0xff                                // end of map
 	});
 }
+
+struct my_handler
+{
+	template <class Stream> const char* operator()(Stream& s, goldfish::tags::binary) { return "binary"; }
+	template <class Stream> const char* operator()(Stream& s, goldfish::tags::string) { return "string"; }
+	template <class ArrayReader> const char* operator()(ArrayReader& s, goldfish::tags::array) { return "array"; }
+	template <class MapReader> const char* operator()(MapReader& s, goldfish::tags::map) { return "map"; }
+	const char* operator()(goldfish::tags::undefined, goldfish::tags::undefined) { return "undefined"; }
+	const char* operator()(double, goldfish::tags::floating_point) { return "floating point"; }
+	const char* operator()(uint64_t, goldfish::tags::unsigned_int) { return "uint"; }
+	const char* operator()(int64_t, goldfish::tags::signed_int) { return "int"; }
+	const char* operator()(bool, goldfish::tags::boolean) { return "bool"; }
+	const char* operator()(nullptr_t, goldfish::tags::null) { return "null"; }
+};
+
+TEST_CASE(test_visit)
+{
+	using namespace goldfish;
+	my_handler sink;
+	test(json::read(stream::read_string_non_owning("true")).visit(sink) == "bool");
+}
+
+TEST_CASE(test_visit_with_best_match)
+{
+	using namespace goldfish;
+	test(json::read(stream::read_string_non_owning("true")).visit(best_match(
+		[](auto&&, tags::binary) { return "binary"; },
+		[](auto&&, tags::string) { return "string"; },
+		[](auto&&, tags::array) { return "array"; },
+		[](auto&&, tags::map) { return "map"; },
+		[](tags::undefined, tags::undefined) { return "undefined"; },
+		[](double, tags::floating_point) { return "floating point"; },
+		[](uint64_t, tags::unsigned_int) { return "uint"; },
+		[](int64_t, tags::signed_int) { return "int"; },
+		[](bool, tags::boolean) { return "bool"; },
+		[](nullptr_t, tags::null) { return "null"; }
+	)) == "bool");
+}
+
+TEST_CASE(test_visit_with_first_match)
+{
+	using namespace goldfish;
+	test(json::read(stream::read_string_non_owning("true")).visit(first_match(
+		[](bool, tags::boolean) { return "bool"; },
+		[](auto&&, auto) { return "not a bool"; }
+	)) == "bool");
+}

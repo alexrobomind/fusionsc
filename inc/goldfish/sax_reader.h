@@ -46,6 +46,7 @@ namespace goldfish
 		{
 			return apply_schema(as_map(), make_schema(std::forward<Head>(head), std::forward<Tail>(tail)...));
 		}
+		template <class... Args> auto as_object(Args&&... args) { return as_map(std::forward<Args>(args)...); }
 
 		// Floating point can be converted from an int
 		auto as_double()
@@ -109,7 +110,13 @@ namespace goldfish
 			));
 		}
 		auto as_bool() { return as<tags::boolean>(); }
-		bool is_undefined() { return m_data.is<type_with_tag_t<tags::undefined>>(); }
+		bool is_undefined()
+		{
+			if (does_json_conversions)
+				return m_data.is<nullptr_t>();
+			else
+				return m_data.is<tags::undefined>();
+		}
 		bool is_null() { return m_data.is<type_with_tag_t<tags::null>>(); }
 
 		template <class tag> bool is_exactly() { return m_data.is<type_with_tag_t<tag>>(); }
