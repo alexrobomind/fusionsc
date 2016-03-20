@@ -153,20 +153,17 @@ namespace goldfish { namespace stream
 		}
 		void write_buffer(const_buffer_ref data)
 		{
+			if (data.size() <= cb_free())
+			{
+				m_begin_free_space = std::copy(data.begin(), data.end(), m_begin_free_space);
+				return;
+			}
+
 			if (m_begin_free_space != m_buffer_data.data()) // If not all of the buffer is free
 			{
-				if (data.size() <= cb_free())
-				{
-					std::copy(data.begin(), data.end(), make_unchecked_array_iterator(m_begin_free_space));
-					m_begin_free_space += data.size();
-					return;
-				}
-				else
-				{
-					auto cb = cb_free();
-					m_begin_free_space = std::copy(data.begin(), data.begin() + cb, m_begin_free_space);
-					data.remove_front(cb);
-				}
+				auto cb = cb_free();
+				m_begin_free_space = std::copy(data.begin(), data.begin() + cb, m_begin_free_space);
+				data.remove_front(cb);
 				if (data.empty())
 					return;
 				send_data();

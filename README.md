@@ -148,7 +148,7 @@ This test was compiled using Visual C++ 2015,  ran on an Intel Core i7 CPU, both
 The chart below shows the performance of the 3 libraries, in MB of JSON per second (so 16MB divided by time to do the job, even for CBOR). The rapidjson implementation uses the SAX version of the library.
 Higher is better:
 
-![Comparison between Goldfish, rapidjson and Casablanca](Comparison.png)
+![Parsing comparison](ParsingComparison.png) ![Serialization comparison](SerializeComparison.png)
 
 Goldfish is slightly slower than rapidjson in 32 bit mode but slightly faster than rapidjson in 64 bit mode.
 Both libraries are significantly faster than Casablanca, simply because Casablance only offers a DOM interface and couldn't do the job in streaming mode.

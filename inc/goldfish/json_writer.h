@@ -22,35 +22,71 @@ namespace goldfish { namespace json
 		}
 		void write_buffer(const_buffer_ref buffer)
 		{
-			for (auto&& c : buffer)
+			enum category : uint8_t
 			{
-				switch (c)
-				{
-				case '\b': stream::write(m_stream, '\\'); stream::write(m_stream, 'b'); break;
-				case '\n': stream::write(m_stream, '\\'); stream::write(m_stream, 'n'); break;
-				case '\r': stream::write(m_stream, '\\'); stream::write(m_stream, 'r'); break;
-				case '\t': stream::write(m_stream, '\\'); stream::write(m_stream, 't'); break;
+				F, // forward to inner stream
+				B, // \b
+				N, // \n
+				R, // \r
+				T, // \t
+				Q, // \"
+				S, // \\ 
+				U, // \u00??
+			};
+			static const category lookup[] = {
+				/*       0 1 2 3 4 5 6 7 8 9 A B C D E F */
+				/*0x00*/ U,U,U,U,U,U,U,U,B,T,N,U,U,R,U,U,
+				/*0x10*/ U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,
+				/*0x20*/ F,F,Q,F,F,F,F,F,F,F,F,F,F,F,F,F,
+				/*0x30*/ F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,
+				/*0x40*/ F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,
+				/*0x50*/ F,F,F,F,F,F,F,F,F,F,F,F,S,F,F,F,
+				/*0x60*/ F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,
+				/*0x70*/ F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,
+				/*0x80*/ F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,
+				/*0x90*/ F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,
+				/*0xA0*/ F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,
+				/*0xB0*/ F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,
+				/*0xC0*/ F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,
+				/*0xD0*/ F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,
+				/*0xE0*/ F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,
+				/*0xF0*/ F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,
+			};
+			static_assert(sizeof(lookup) / sizeof(lookup[0]) == 256, "");
 
-				case '"':
-				case '\\':
-					stream::write(m_stream, '\\');
-					stream::write(m_stream, static_cast<char>(c));
+			if (buffer.empty())
+				return;
+
+			auto it = buffer.begin();
+			for (;;)
+			{
+				auto prev = it;
+				while (it != buffer.end() && lookup[*it] == F)
+					++it;
+				m_stream.write_buffer({ prev, it });
+				if (it == buffer.end())
 					break;
 
-				default:
-					if (c < 0x20)
+				switch (lookup[*it])
+				{
+					case B: stream::write(m_stream, '\\'); stream::write(m_stream, 'b'); break;
+					case N: stream::write(m_stream, '\\'); stream::write(m_stream, 'n'); break;
+					case R: stream::write(m_stream, '\\'); stream::write(m_stream, 'r'); break;
+					case T: stream::write(m_stream, '\\'); stream::write(m_stream, 't'); break;
+					case Q: stream::write(m_stream, '\\'); stream::write(m_stream, '"'); break;
+					case S: stream::write(m_stream, '\\'); stream::write(m_stream, '\\'); break;
+					case U: 
 					{
 						char data[6] = { '\\', 'u', '0', '0', '0', '0' };
-						data[4] = "0123456789ABCDEF"[c >> 4];
-						data[5] = "0123456789ABCDEF"[c & 15];
+						data[4] = "0123456789ABCDEF"[*it >> 4];
+						data[5] = "0123456789ABCDEF"[*it & 15];
 						m_stream.write_buffer({ reinterpret_cast<const byte*>(data), 6 });
-					}
-					else
-					{
-						stream::write(m_stream, c);
 					}
 					break;
 				}
+				++it;
+				if (it == buffer.end())
+					break;
 			}
 		}
 		auto flush()
@@ -148,15 +184,34 @@ namespace goldfish { namespace json
 		}
 		auto write(uint64_t x)
 		{
-			auto string = std::to_string(x);
-			m_stream.write_buffer({ reinterpret_cast<const byte*>(string.data()), string.size() });
+			if (x < 10)
+			{
+				stream::write(m_stream, static_cast<char>('0' + x));
+				return m_stream.flush();
+			}
+
+			uint8_t buffer[20];
+			uint8_t* it = buffer;
+			while (x != 0)
+			{
+				*it++ = '0' + (x % 10);
+				x /= 10;
+			}
+			std::reverse(buffer, it);
+			m_stream.write_buffer({ buffer, it });
 			return m_stream.flush();
 		}
 		auto write(int64_t x)
 		{
-			auto string = std::to_string(x);
-			m_stream.write_buffer({ reinterpret_cast<const byte*>(string.data()), string.size() });
-			return m_stream.flush();
+			if (x < 0)
+			{
+				stream::write(m_stream, '-');
+				return write(static_cast<uint64_t>(-x));
+			}
+			else
+			{
+				return write(static_cast<uint64_t>(x));
+			}
 		}
 		auto write(double x)
 		{
