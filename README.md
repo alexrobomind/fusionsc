@@ -143,16 +143,23 @@ int main()
 ```
 
 ## Comparison with other libraries
-Let's look at the performance of various libraries.
-For the parsing comparison, the task is to compute the sum of all the integers in a large JSON document. The rapidjson implementation uses the SAX model of that library. For Casablanca, we had no choice but to load the document as a DOM.
-For the serialization, the task is to regenerate the same document.
-This test was compiled using Visual C++ 2015,  ran on an Intel Core i7 CPU, both in 32 and 64 bits, on a 16MB JSON document. The document was converted in CBOR using the Goldfish library, which leads a slightly smaller document (around 14MB).
-The chart below shows the performance of the 3 libraries, in MB of JSON per second (so 16MB divided by time to do the job, even for CBOR).
+### Parsing performance
+The task is to compute the sum of all the integers in a large JSON document. The rapidjson implementation uses the SAX model of that library. For Casablanca, we had no choice but to load the document as a DOM.
+This test was compiled using Visual C++ 2015, ran on an Intel Core i7 CPU, both in 32 and 64 bits, on a 16MB JSON document.
+This chart shows the time it took to complete the task, normalized in MB of JSON per second (16MB/duration)
 
-![Parsing comparison](ParsingComparison.png) ![Serialization comparison](SerializeComparison.png)
+![Parsing comparison](ParsingComparison.png)
 
-Goldfish has similar performance compared to rapidjson. For parsing JSON, Goldfish is slower on x86 and faster on x64, whereas for serialization, Goldfish is faster on x86 and slower on x64.
-Both libraries are significantly faster than Casablanca, simply because Casablance only offers a DOM interface and couldn't do the job in streaming mode.
+Goldfish achieves similar performance to rapidjson (slower on x86 but faster on x64). Both Goldfish and rapidjson are significantly faster than Casablanca, simply because Casablance only offers a DOM interface and couldn't do the job in streaming mode.
+
+### Serialization performance
+We loaded the JSON document in a data structure in memory and used the various libraries to regenerate the document in a file on disk.
+Both rapidjson and Goldfish used a file stream with a 64kB buffer.
+
+![Serialization comparison](SerializeComparison.png)
+
+Again, Goldfish and rapidjson have achieve similar performance (this time Goldfish is faster on x86 but slower on x64).
+Those two libraries are again faster than Casablanca mostly because Casablanca doesn't offer a way to generate a JSON document without first creating a DOM in memory.
 
 ## Documentation
 ### Streams

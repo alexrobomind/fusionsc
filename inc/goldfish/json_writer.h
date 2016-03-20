@@ -9,8 +9,10 @@
 
 namespace goldfish { namespace json
 {
-	struct ill_formatted_utf8 {};
+	struct ill_formatted_utf8 : exception {};
+	struct invalid_key_type : exception {};
 	template <class Stream> class document_writer;
+	template <class Stream> class key_writer;
 
 	template <class Stream> class text_writer
 	{
@@ -140,6 +142,46 @@ namespace goldfish { namespace json
 		bool m_first = true;
 	};
 
+	namespace details
+	{
+		template <class Stream> void serialize_number(Stream& s, uint64_t x)
+		{
+			if (x < 10)
+			{
+				stream::write(s, static_cast<char>('0' + x));
+			}
+			else
+			{
+				uint8_t buffer[20];
+				uint8_t* it = buffer;
+				while (x != 0)
+				{
+					*it++ = '0' + (x % 10);
+					x /= 10;
+				}
+				std::reverse(buffer, it);
+				s.write_buffer({ buffer, it });
+			}
+		}
+		template <class Stream> void serialize_number(Stream& s, int64_t x)
+		{
+			if (x < 0)
+			{
+				stream::write(s, '-');
+				serialize_number(s, static_cast<uint64_t>(-x));
+			}
+			else
+			{
+				serialize_number(s, static_cast<uint64_t>(x));
+			}
+		}
+		template <class Stream> void serialize_number(Stream& s, double x)
+		{
+			auto string = std::to_string(x);
+			s.write_buffer({ reinterpret_cast<const byte*>(string.data()), string.size() });
+		}
+	}
+	
 	template <class Stream> class map_writer
 	{
 	public:
@@ -149,7 +191,7 @@ namespace goldfish { namespace json
 			stream::write(m_stream, '{');
 		}
 
-		document_writer<stream::writer_ref_type_t<Stream>> append_key();
+		key_writer<stream::writer_ref_type_t<Stream>> append_key();
 		document_writer<stream::writer_ref_type_t<Stream>> append_value();
 		auto flush()
 		{
@@ -159,6 +201,51 @@ namespace goldfish { namespace json
 	private:
 		Stream m_stream;
 		bool m_first = true;
+	};
+
+	template <class Stream> class key_writer
+	{
+	public:
+		key_writer(Stream&& s)
+			: m_stream(std::move(s))
+		{}
+		auto write(bool x) { throw invalid_key_type{}; }
+		auto write(nullptr_t) { throw invalid_key_type{}; }
+		auto write(tags::undefined) { throw invalid_key_type{}; }
+		auto write(uint64_t x)
+		{
+			stream::write(m_stream, '"');
+			details::serialize_number(m_stream, x);
+			stream::write(m_stream, '"');
+			return m_stream.flush();
+		}
+		auto write(int64_t x)
+		{
+			stream::write(m_stream, '"');
+			details::serialize_number(m_stream, x);
+			stream::write(m_stream, '"');
+			return m_stream.flush();
+		}
+		auto write(double x)
+		{
+			stream::write(m_stream, '"');
+			details::serialize_number(m_stream, x);
+			stream::write(m_stream, '"');
+			return m_stream.flush();
+		}
+
+		auto start_binary(uint64_t cb) { return start_binary(); }
+		auto start_string(uint64_t cb) { return start_string(); }
+		binary_writer<Stream> start_binary() { return{ std::move(m_stream) }; }
+		text_writer<Stream> start_string() { return{ std::move(m_stream) }; }
+
+		array_writer<Stream> start_array(uint64_t size) { throw invalid_key_type{}; }
+		array_writer<Stream> start_array() { throw invalid_key_type{}; }
+		map_writer<Stream> start_map(uint64_t size) { throw invalid_key_type{}; }
+		map_writer<Stream> start_map() { throw invalid_key_type{}; }
+
+	private:
+		Stream m_stream;
 	};
 
 	template <class Stream> class document_writer
@@ -184,39 +271,17 @@ namespace goldfish { namespace json
 		}
 		auto write(uint64_t x)
 		{
-			if (x < 10)
-			{
-				stream::write(m_stream, static_cast<char>('0' + x));
-				return m_stream.flush();
-			}
-
-			uint8_t buffer[20];
-			uint8_t* it = buffer;
-			while (x != 0)
-			{
-				*it++ = '0' + (x % 10);
-				x /= 10;
-			}
-			std::reverse(buffer, it);
-			m_stream.write_buffer({ buffer, it });
+			details::serialize_number(m_stream, x);
 			return m_stream.flush();
 		}
 		auto write(int64_t x)
 		{
-			if (x < 0)
-			{
-				stream::write(m_stream, '-');
-				return write(static_cast<uint64_t>(-x));
-			}
-			else
-			{
-				return write(static_cast<uint64_t>(x));
-			}
+			details::serialize_number(m_stream, x);
+			return m_stream.flush();
 		}
 		auto write(double x)
 		{
-			auto string = std::to_string(x);
-			m_stream.write_buffer({ reinterpret_cast<const byte*>(string.data()), string.size() });
+			details::serialize_number(m_stream, x);
 			return m_stream.flush();
 		}
 
@@ -254,7 +319,7 @@ namespace goldfish { namespace json
 		return{ stream::ref(m_stream) };
 	}
 
-	template <class Stream> document_writer<stream::writer_ref_type_t<Stream>> map_writer<Stream>::append_key()
+	template <class Stream> key_writer<stream::writer_ref_type_t<Stream>> map_writer<Stream>::append_key()
 	{
 		if (m_first)
 			m_first = false;

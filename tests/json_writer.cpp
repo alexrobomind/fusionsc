@@ -37,7 +37,7 @@ namespace goldfish { namespace dom
 		test(w(std::vector<byte>{}) == "\"\"");
 		test(w(std::vector<byte>({ 1 })) == "\"AQ==\"");
 		test(w(std::vector<byte>({ 1, 2, 3 })) == "\"AQID\"");
-		test(w(map{ { 1ull, 1ull } }) == "{1:1}");
+		test(w(map{ { 1ull, 1ull } }) == "{\"1\":1}");
 	}
 
 	TEST_CASE(test_roundtrip)
@@ -66,6 +66,18 @@ namespace goldfish { namespace dom
 		run("[4294967295]");
 		run("[1234567890123456789]");
 		run("[9223372036854775807]");
+	}
+
+	TEST_CASE(non_string_key)
+	{
+		auto map = json::create_writer(stream::string_writer{}).start_map();
+		map.write(1ull, 1);
+		map.write(-1ll, 2);
+		map.write(.5, 3);
+		map.write(stream::read_string_non_owning("Key"), 4);
+		map.write("Key", 5);
+
+		test(map.flush() == R"({"1":1,"-1":2,"0.500000":3,"S2V5":4,"Key":5})");
 	}
 
 	TEST_CASE(test_lossless_floating_point)
