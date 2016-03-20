@@ -143,14 +143,15 @@ int main()
 ```
 
 ## Comparison with other libraries
-Let's look at the performance of various libraries when doing a rather stupid task: computing the sum of all the integers in a large JSON document.
+Let's look at the performance of various libraries.
+For the parsing comparison, the task is to compute the sum of all the integers in a large JSON document. The rapidjson implementation uses the SAX model of that library. For Casablanca, we had no choice but to load the document as a DOM.
+For the serialization, the task is to regenerate the same document.
 This test was compiled using Visual C++ 2015,  ran on an Intel Core i7 CPU, both in 32 and 64 bits, on a 16MB JSON document. The document was converted in CBOR using the Goldfish library, which leads a slightly smaller document (around 14MB).
-The chart below shows the performance of the 3 libraries, in MB of JSON per second (so 16MB divided by time to do the job, even for CBOR). The rapidjson implementation uses the SAX version of the library.
-Higher is better:
+The chart below shows the performance of the 3 libraries, in MB of JSON per second (so 16MB divided by time to do the job, even for CBOR).
 
 ![Parsing comparison](ParsingComparison.png) ![Serialization comparison](SerializeComparison.png)
 
-Goldfish is slightly slower than rapidjson in 32 bit mode but slightly faster than rapidjson in 64 bit mode.
+Goldfish has similar performance compared to rapidjson. For parsing JSON, Goldfish is slower on x86 and faster on x64, whereas for serialization, Goldfish is faster on x86 and slower on x64.
 Both libraries are significantly faster than Casablanca, simply because Casablance only offers a DOM interface and couldn't do the job in streaming mode.
 
 ## Documentation
