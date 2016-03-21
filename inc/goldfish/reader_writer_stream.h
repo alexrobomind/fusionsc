@@ -15,6 +15,7 @@ namespace goldfish { namespace stream
 		size_t read_buffer(buffer_ref data)
 		{
 			std::unique_lock<std::mutex> lock(m_mutex);
+			assert(m_is_flushed || m_read_buffer_to_be_filled.empty());
 			m_read_buffer_to_be_filled = data;
 			m_condition_variable.notify_one(); // Wake up the writer (now that m_read_buffer_to_be_filled is likely not empty)
 			m_condition_variable.wait(lock, [&] { return m_is_flushed || m_read_buffer_to_be_filled.empty(); });
