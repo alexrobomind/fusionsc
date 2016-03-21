@@ -92,7 +92,7 @@ namespace goldfish { namespace stream
 		}
 		byte character_to_6bits(byte c)
 		{
-			const byte lookup_table[] = {
+			static const byte lookup_table[] = {
 				64,64,64,64,64,64,64,64,64,64,
 				64,64,64,64,64,64,64,64,64,64,
 				64,64,64,64,64,64,64,64,64,64,

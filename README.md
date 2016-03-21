@@ -158,7 +158,7 @@ Both rapidjson and Goldfish used a file stream with a 64kB buffer.
 
 ![Serialization comparison](SerializeComparison.png)
 
-Again, Goldfish and rapidjson have achieve similar performance (this time Goldfish is faster on x86 but slower on x64).
+Again, Goldfish and rapidjson achieve similar performance (this time Goldfish is faster on x86 but slower on x64).
 Those two libraries are again faster than Casablanca mostly because Casablanca doesn't offer a way to generate a JSON document without first creating a DOM in memory.
 
 ## Documentation
