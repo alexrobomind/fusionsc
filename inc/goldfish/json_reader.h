@@ -24,6 +24,7 @@ namespace goldfish { namespace json
 		int64_t,
 		uint64_t,
 		double,
+		tags::undefined,
 		text_string<Stream>,
 		byte_string,
 		array<Stream>,
