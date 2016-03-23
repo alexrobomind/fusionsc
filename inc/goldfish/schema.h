@@ -89,9 +89,9 @@ namespace goldfish
 
 			while (auto key = m_map.read_key())
 			{
-				if (auto index = m_schema.search(*key))
+				if (auto new_index = m_schema.search(*key))
 				{
-					m_index = *index;
+					m_index = *new_index;
 				}
 				else
 				{

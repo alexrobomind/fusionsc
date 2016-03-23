@@ -8,8 +8,7 @@ namespace goldfish { namespace stream
 	struct ill_formatted_base64_data : ill_formatted {};
 
 	// Reads binary data assuming inner reads base64
-	template <class inner>
-	class base64_reader
+	template <class inner> class base64_reader
 	{
 	public:
 		base64_reader(inner&& stream)
@@ -132,8 +131,7 @@ namespace goldfish { namespace stream
 	};
 
 	// Write base64 data to inner when binary data is provided
-	template <class inner>
-	class base64_writer
+	template <class inner> class base64_writer
 	{
 	public:
 		base64_writer(inner&& stream)

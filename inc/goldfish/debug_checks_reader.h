@@ -65,14 +65,14 @@ namespace goldfish { namespace debug_checks
 			, m_inner(std::move(inner))
 		{}
 
-		optional<decltype(add_read_checks_impl<error_handler>(nullptr /*parent*/, *std::declval<T>().read()))> read()
+		optional<decltype(add_read_checks_impl(static_cast<container_base<error_handler>*>(nullptr) /*parent*/, *std::declval<T>().read()))> read()
 		{
 			err_if_locked();
 
 			auto d = m_inner.read();
 			if (d)
 			{
-				return add_read_checks_impl<error_handler>(this /*parent*/, std::move(*d));
+				return add_read_checks_impl(this /*parent*/, std::move(*d));
 			}
 			else
 			{
@@ -95,7 +95,7 @@ namespace goldfish { namespace debug_checks
 			, m_inner(std::move(inner))
 		{}
 
-		optional<decltype(add_read_checks_impl<error_handler>(nullptr /*parent*/, *std::declval<T>().read_key()))> read_key()
+		optional<decltype(add_read_checks_impl(static_cast<container_base<error_handler>*>(nullptr) /*parent*/, *std::declval<T>().read_key()))> read_key()
 		{
 			err_if_locked();
 			err_if_flag_set();
@@ -103,7 +103,7 @@ namespace goldfish { namespace debug_checks
 			if (auto d = m_inner.read_key())
 			{
 				set_flag();
-				return add_read_checks_impl<error_handler>(this /*parent*/, std::move(*d));
+				return add_read_checks_impl(this /*parent*/, std::move(*d));
 			}
 			else
 			{
@@ -116,7 +116,7 @@ namespace goldfish { namespace debug_checks
 			err_if_locked();
 			err_if_flag_not_set();
 			clear_flag();
-			return add_read_checks_impl<error_handler>(this /*parent*/, m_inner.read_value());
+			return add_read_checks_impl(this /*parent*/, m_inner.read_value());
 		}
 	private:
 		T m_inner;
@@ -150,7 +150,7 @@ namespace goldfish { namespace debug_checks
 
 	template <class error_handler, class Document> auto add_read_checks(Document&& t, error_handler)
 	{
-		return add_read_checks_impl<error_handler>(nullptr /*parent*/, std::forward<Document>(t));
+		return add_read_checks_impl(static_cast<container_base<error_handler>*>(nullptr) /*parent*/, std::forward<Document>(t));
 	}
 	template <class Document> auto add_read_checks(Document&& t, no_check)
 	{

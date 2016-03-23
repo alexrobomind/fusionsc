@@ -91,12 +91,12 @@ namespace goldfish { namespace dom
 	TEST_CASE(json_parse_key)
 	{
 		// From uint
-		test(json::read(stream::read_string_non_owning("{\"1\":1}")).as_map().read_key()->as_int() == 1);
-		test(json::read(stream::read_string_non_owning("{\"1\":1}")).as_map().read_key()->as_uint() == 1);
+		test(json::read(stream::read_string_non_owning("{\"1\":1}")).as_map().read_key()->as_int64() == 1);
+		test(json::read(stream::read_string_non_owning("{\"1\":1}")).as_map().read_key()->as_uint64() == 1);
 		test(json::read(stream::read_string_non_owning("{\"1\":1}")).as_map().read_key()->as_double() == 1);
 
 		// From int
-		test(json::read(stream::read_string_non_owning("{\"-1\":1}")).as_map().read_key()->as_int() == -1);
+		test(json::read(stream::read_string_non_owning("{\"-1\":1}")).as_map().read_key()->as_int64() == -1);
 		test(json::read(stream::read_string_non_owning("{\"-1\":1}")).as_map().read_key()->as_double() == -1.0);
 
 		// From double
@@ -104,7 +104,20 @@ namespace goldfish { namespace dom
 
 		// As binary
 		test(stream::read_all_as_string(json::read(stream::read_string_non_owning("{\"TWFu\":1}")).as_map().read_key()->as_binary()) == "Man");
+	}
 
+	TEST_CASE(json_read_string_char_by_char)
+	{
+		auto r = [](auto input)
+		{
+			auto stream = json::read(stream::read_string_non_owning(input)).as_string();
+			std::string result;
+			byte buffer[1];
+			while (stream.read_buffer(buffer))
+				result.push_back(static_cast<byte>(buffer[0]));
+			return result;
+		};
+		test(r("\"\\uD801\\uDC37\"") == u8"\U00010437");
 	}
 
 	struct data_partially_parsed {};

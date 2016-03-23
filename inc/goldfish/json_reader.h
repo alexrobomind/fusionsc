@@ -88,7 +88,7 @@ namespace goldfish { namespace json
 			if (m_converted.front() == end_of_stream)
 				return 0;
 
-			auto it = copy_from_converted(buffer.begin(), buffer.begin());
+			auto it = copy_from_converted(buffer.begin(), buffer.end());
 
 			enum category : uint8_t
 			{
@@ -116,7 +116,7 @@ namespace goldfish { namespace json
 				/*0xE0*/ S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,
 				/*0xF0*/ S,S,S,S,S,S,S,S,I,I,I,I,I,I,I,I,
 			};
-			static_assert(sizeof(lookup) / sizeof(lookup[0]) == 256, "");
+			static_assert(sizeof(lookup) / sizeof(lookup[0]) == 256, "The lookup table should have 256 entries");
 			
 			while (it != buffer.end())
 			{
@@ -167,15 +167,17 @@ namespace goldfish { namespace json
 	private:
 		static const byte invalid_char = 0xFF;
 		static const byte end_of_stream = 0xFE;
-		byte* copy_from_converted(byte* it, byte* end)
+		byte* copy_from_converted(byte* begin, byte* end)
 		{
-			while (m_converted.front() != invalid_char && it != end)
+			while (m_converted.front() != invalid_char && begin != end)
 			{
-				*it++ = m_converted.front();
+				assert(m_converted.front() != end_of_stream);
+
+				*begin++ = m_converted.front();
 				std::copy(m_converted.begin() + 1, m_converted.end(), m_converted.begin());
 				m_converted.back() = invalid_char;
 			}
-			return it;
+			return begin;
 		}
 		static uint8_t parse_hex(char c)
 		{

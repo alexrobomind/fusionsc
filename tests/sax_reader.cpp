@@ -24,7 +24,7 @@ namespace goldfish
 	{
 		auto r = [](auto input)
 		{
-			return json::read(stream::read_string_non_owning(input)).as_int();
+			return json::read(stream::read_string_non_owning(input)).as_int64();
 		};
 		test(r("1") == 1);
 		test(r("-1") == -1);
@@ -42,7 +42,7 @@ namespace goldfish
 	{
 		auto r = [](auto input)
 		{
-			return json::read(stream::read_string_non_owning(input)).as_uint();
+			return json::read(stream::read_string_non_owning(input)).as_uint64();
 		};
 		test(r("1") == 1);
 		expect_exception<integer_overflow_while_casting>([&] { r("-1"); });
@@ -70,7 +70,7 @@ namespace goldfish
 		test(stream::read_all_as_string(json::read(stream::read_string_non_owning("\"8000\"")).as_string()) == "8000");
 		test(stream::read_all_as_string(json::read(stream::read_string_non_owning("\"8000\"")).as_binary()) == "óM4");
 		test(json::read(stream::read_string_non_owning("\"8000\"")).as_double() == 8000);
-		test(json::read(stream::read_string_non_owning("\"8000\"")).as_int() == 8000);
-		test(json::read(stream::read_string_non_owning("\"8000\"")).as_uint() == 8000);
+		test(json::read(stream::read_string_non_owning("\"8000\"")).as_int64() == 8000);
+		test(json::read(stream::read_string_non_owning("\"8000\"")).as_uint64() == 8000);
 	}
 }	

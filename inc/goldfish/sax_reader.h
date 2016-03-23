@@ -57,6 +57,7 @@ namespace goldfish
 				[](auto&& x, tags::signed_int) -> double { return static_cast<double>(x); },
 				[](auto&& x, tags::string) -> double
 				{
+					__pragma(warning(suppress:4127))
 					if (!does_json_conversions)
 						throw bad_variant_access();
 
@@ -68,13 +69,14 @@ namespace goldfish
 		}
 		
 		// Unsigned ints can be converted from signed ints
-		uint64_t as_uint()
+		uint64_t as_uint64()
 		{
 			return visit(first_match(
 				[](auto&& x, tags::unsigned_int) -> uint64_t { return x; },
 				[](auto&& x, tags::signed_int) -> uint64_t { return cast_signed_to_unsigned(x); },
 				[](auto&& x, tags::string) -> uint64_t
 				{
+					__pragma(warning(suppress:4127))
 					if (!does_json_conversions)
 						throw bad_variant_access();
 
@@ -87,15 +89,37 @@ namespace goldfish
 				[](auto&&, auto) -> uint64_t { throw bad_variant_access{}; }
 			));
 		}
+		uint32_t as_uint32()
+		{
+			auto x = as_uint64();
+			if (x > std::numeric_limits<uint32_t>::max())
+				throw integer_overflow_while_casting{};
+			return static_cast<uint32_t>(x);
+		}
+		uint16_t as_uint16()
+		{
+			auto x = as_uint64();
+			if (x > std::numeric_limits<uint16_t>::max())
+				throw integer_overflow_while_casting{};
+			return static_cast<uint16_t>(x);
+		}
+		uint8_t as_uint8()
+		{
+			auto x = as_uint64();
+			if (x > std::numeric_limits<uint8_t>::max())
+				throw integer_overflow_while_casting{};
+			return static_cast<uint8_t>(x);
+		}
 		
 		// Signed ints can be converted from unsigned ints
-		int64_t as_int()
+		int64_t as_int64()
 		{
 			return visit(first_match(
 				[](auto&& x, tags::signed_int) { return x; },
 				[](auto&& x, tags::unsigned_int) { return cast_unsigned_to_signed(x); },
 				[](auto&& x, tags::string) -> int64_t
 				{
+					__pragma(warning(suppress:4127))
 					if (!does_json_conversions)
 						throw bad_variant_access();
 
@@ -109,9 +133,33 @@ namespace goldfish
 				[](auto&&, auto) -> int64_t { throw bad_variant_access{}; }
 			));
 		}
+		int32_t as_int32()
+		{
+			auto x = as_int64();
+			if (x < std::numeric_limits<int32_t>::min() || x > std::numeric_limits<int32_t>::max())
+				throw integer_overflow_while_casting{};
+			return static_cast<int32_t>(x);
+		}
+		int16_t as_int16()
+		{
+			auto x = as_int64();
+			if (x < std::numeric_limits<int16_t>::min() || x > std::numeric_limits<int16_t>::max())
+				throw integer_overflow_while_casting{};
+			return static_cast<int16_t>(x);
+		}
+		int8_t as_int8()
+		{
+			auto x = as_int64();
+			if (x < std::numeric_limits<int8_t>::min() || x > std::numeric_limits<int8_t>::max())
+				throw integer_overflow_while_casting{};
+			return static_cast<int8_t>(x);
+		}
+
+
 		auto as_bool() { return as<tags::boolean>(); }
 		bool is_undefined()
 		{
+			__pragma(warning(suppress:4127))
 			if (does_json_conversions)
 				return m_data.is<nullptr_t>();
 			else

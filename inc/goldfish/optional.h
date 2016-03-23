@@ -35,7 +35,7 @@ namespace goldfish
 			if (invalid_state::is(rhs.m_data))
 				invalid_state::set(m_data);
 			else
-				new (&m_data) T(reinterpret_cast<T&&>(rhs.m_data));
+				new (&m_data) T(std::move(reinterpret_cast<T&>(rhs.m_data)));
 		}
 		~optional_with_invalid_base()
 		{
@@ -127,6 +127,7 @@ namespace goldfish
 		{
 			// Work around VC++ bug: the new operator would do a null check on &m_data
 			// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
+			__pragma(warning(suppress:4127))
 			if (std::is_trivially_copy_constructible<T>::value)
 				memcpy(&m_data, &t, sizeof(T));
 			else
@@ -137,6 +138,7 @@ namespace goldfish
 		{
 			// Work around VC++ bug: the new operator would do a null check on &m_data
 			// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
+			__pragma(warning(suppress:4127))
 			if (std::is_trivially_move_constructible<T>::value)
 				memcpy(&m_data, &t, sizeof(T));
 			else
@@ -161,6 +163,7 @@ namespace goldfish
 
 			// Work around VC++ bug: the new operator would do a null check on &m_data
 			// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
+			__pragma(warning(suppress:4127))
 			if (std::is_trivially_copy_assignable<T>::value)
 				memcpy(&m_data, &data, sizeof(T));
 			else
@@ -176,6 +179,9 @@ namespace goldfish
 				return *this;
 			}
 
+			// Work around VC++ bug: the new operator would do a null check on &m_data
+			// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
+			__pragma(warning(suppress:4127))
 			if (std::is_trivially_move_assignable<T>::value)
 				memcpy(&m_data, &data, sizeof(T));
 			else
