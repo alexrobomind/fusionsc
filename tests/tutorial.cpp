@@ -54,9 +54,9 @@ TEST_CASE(parse_complex)
 	while (auto entry_document = document.read())
 	{
 		auto entry = entry_document->as_map("name", "friends");
-		output << entry.read_value("name").value().as_string() << " has the following friends: ";
+		output << entry.read("name").value().as_string() << " has the following friends: ";
 
-		auto friends = entry.read_value("friends").value().as_array();
+		auto friends = entry.read("friends").value().as_array();
 		while (auto friend_name = friends.read())
 			output << friend_name->as_string() << " ";
 

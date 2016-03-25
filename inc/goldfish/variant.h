@@ -23,11 +23,6 @@ namespace goldfish
 
 		template <class T> struct negate { enum { value = !T::value }; };
 
-		template <size_t...> struct largest {};
-		template <size_t x> struct largest<x> { enum { value = x }; };
-		template <size_t x, size_t y> struct largest<x, y> { enum { value = x > y ? x : y }; };
-		template <size_t x, size_t y, size_t... z> struct largest<x, y, z...> { enum { value = largest<x, largest<y, z...>::value>::value }; };
-
 		template <class T, class dummy = uint8_t> struct with_padding
 		{
 			T data;

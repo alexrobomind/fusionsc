@@ -18,7 +18,7 @@ namespace goldfish { namespace stream
 			if (m_stream.bad() || (m_stream.fail() && !m_stream.eof()))
 				throw io_exception{};
 
-			return m_stream.gcount();
+			return static_cast<size_t>(m_stream.gcount());
 		}
 	private:
 		std::istream& m_stream;

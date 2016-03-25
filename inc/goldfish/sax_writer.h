@@ -178,7 +178,7 @@ namespace goldfish { namespace sax
 			));
 		}
 
-		template <class T> decltype(serialize_to_goldfish(std::declval<document_writer<inner>&>(), std::declval<T&>())) write(T&& t)
+		template <class T> decltype(serialize_to_goldfish(std::declval<document_writer<inner>&>(), std::declval<T&&>())) write(T&& t)
 		{
 			return serialize_to_goldfish(*this, std::forward<T>(t));
 		}

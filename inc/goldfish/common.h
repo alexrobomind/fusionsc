@@ -38,4 +38,9 @@ namespace goldfish
 	// We implement our own that forwards to VC++ implementation or is identity depending on the compiler
 	template <class T> auto make_unchecked_array_iterator(T&& t) { return stdext::make_unchecked_array_iterator(std::forward<T>(t)); }
 	template <class T> auto get_array_iterator_from_unchecked(T&& t) { return t.base(); }
+
+	template <size_t...> struct largest {};
+	template <size_t x> struct largest<x> { enum { value = x }; };
+	template <size_t x, size_t y> struct largest<x, y> { enum { value = x > y ? x : y }; };
+	template <size_t x, size_t y, size_t... z> struct largest<x, y, z...> { enum { value = largest<x, largest<y, z...>::value>::value }; };
 }

@@ -9,7 +9,7 @@ namespace goldfish
 {
 	namespace details
 	{
-		template <size_t N> const_buffer_ref make_key(const char(&text)[N])
+		template <size_t N> constexpr const_buffer_ref make_key(const char(&text)[N])
 		{
 			static_assert(N > 0, "expect null terminated strings");
 			assert(text[N - 1] == 0);
@@ -22,11 +22,11 @@ namespace goldfish
 				: m_keys{ std::forward<Args>(args)... }
 			{}
 		
-			template <size_t N> optional<size_t> search_text(const char(&text)[N]) const
+			optional<size_t> search_key(const_buffer_ref key, size_t start_index) const
 			{
-				return search_impl({ reinterpret_cast<const byte*>(text), N - 1 }, std::integral_constant<size_t, 0>{});
+				return search_impl(key, start_index);
 			}
-			template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, optional<size_t>> search(Document& d) const
+			template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, optional<size_t>> search(Document& d, size_t start_index) const
 			{
 				return d.visit(first_match(
 					[&](auto& text, tags::string) -> optional<size_t>
@@ -36,7 +36,7 @@ namespace goldfish
 						if (stream::seek(text, std::numeric_limits<uint64_t>::max()) != 0)
 							return nullopt;
 
-						return search_impl({ buffer, length }, std::integral_constant<size_t, 0>{});
+						return search_impl({ buffer, length }, start_index);
 					},
 					[&](auto&, auto) -> optional<size_t>
 					{
@@ -45,9 +45,9 @@ namespace goldfish
 					}));
 			}
 		private:
-			template <size_t cur_index> optional<size_t> search_impl(const_buffer_ref text, std::integral_constant<size_t, cur_index>) const
+			optional<size_t> search_impl(const_buffer_ref text, size_t start_index) const
 			{
-				auto it = std::find_if(m_keys.begin(), m_keys.end(), [&](auto&& key)
+				auto it = std::find_if(m_keys.begin() + start_index, m_keys.end(), [&](auto&& key)
 				{
 					return key.size() == text.size() && std::equal(key.begin(), key.end(), make_unchecked_array_iterator(text.begin()));
 				});
@@ -60,9 +60,12 @@ namespace goldfish
 			std::array<const_buffer_ref, N> m_keys;
 		};
 	}
-	template <class... T> auto make_schema(T&&... keys)
+	template <class... T> constexpr auto make_schema(T&&... keys)
 	{
-		return details::schema<sizeof...(T), 1024>(details::make_key(std::forward<T>(keys))...);
+		return details::schema<
+			sizeof...(T), 
+			largest<sizeof(T)...>::value - 1
+		>(details::make_key(std::forward<T>(keys))...);
 	}
 
 	template <class Map, class Schema> class map_with_schema
@@ -72,8 +75,14 @@ namespace goldfish
 			: m_map(std::move(map))
 			, m_schema(schema)
 		{}
-		optional<decltype(std::declval<Map>().read_value())> read_value_by_index(size_t index)
+		optional<decltype(std::declval<Map>().read_value())> read_by_schema_index(size_t index)
 		{
+			#ifndef NDEBUG
+			if (m_last_queried_index)
+				assert(*m_last_queried_index < index);
+			m_last_queried_index = index;
+			#endif
+
 			if (m_index > index)
 				return nullopt;
 
@@ -89,7 +98,7 @@ namespace goldfish
 
 			while (auto key = m_map.read_key())
 			{
-				if (auto new_index = m_schema.search(*key))
+				if (auto new_index = m_schema.search(*key, m_index /*start_index*/))
 				{
 					m_index = *new_index;
 				}
@@ -116,17 +125,17 @@ namespace goldfish
 				}
 				else
 				{
-					// We found a key that is still before us, skip the value and keep searching
+					// We found a key that is still before the one we are looking for, skip the value and keep searching
 					seek_to_end(m_map.read_value());
 				}
 			}
 
 			return nullopt;
 		}
-		template <size_t N> auto read_value(const char(&text)[N])
+		template <class Key> auto read(Key&& key)
 		{
-			if (auto index = m_schema.search_text(text))
-				return read_value_by_index(*index);
+			if (auto index = m_schema.search_key(details::make_key(std::forward<Key>(key)), 0 /*start_index*/))
+				return read_by_schema_index(*index);
 			else
 				std::terminate();			
 		}
@@ -145,6 +154,10 @@ namespace goldfish
 		Schema m_schema;
 		size_t m_index = 0;
 		bool m_on_value = false;
+
+		#ifndef NDEBUG
+		optional<size_t> m_last_queried_index;
+		#endif
 	};
 	template <class Map, class Schema> map_with_schema<std::decay_t<Map>, Schema> apply_schema(Map&& map, const Schema& s)
 	{
