@@ -6,17 +6,17 @@
 namespace goldfish { namespace tags
 {
 	template <class T> struct is_tag : std::false_type {};
-	struct binary {};            template <> struct is_tag<binary> : std::true_type {};
-	struct string {};		     template <> struct is_tag<string> : std::true_type {};
-	struct array {};			 template <> struct is_tag<array> : std::true_type {};
-	struct map {};				 template <> struct is_tag<map> : std::true_type {};
-	struct undefined {};		 template <> struct is_tag<undefined> : std::true_type {};
-	struct floating_point {};	 template <> struct is_tag<floating_point> : std::true_type {};
-	struct unsigned_int {};		 template <> struct is_tag<unsigned_int> : std::true_type {};
-	struct signed_int {};		 template <> struct is_tag<signed_int> : std::true_type {};
-	struct boolean {};			 template <> struct is_tag<boolean> : std::true_type {};
-	struct null {};				 template <> struct is_tag<null> : std::true_type {};
-	struct document {};          template <> struct is_tag<document> : std::true_type {};
+	struct binary {};         template <> struct is_tag<binary> : std::true_type {};
+	struct string {};         template <> struct is_tag<string> : std::true_type {};
+	struct array {};          template <> struct is_tag<array> : std::true_type {};
+	struct map {};            template <> struct is_tag<map> : std::true_type {};
+	struct undefined {};      template <> struct is_tag<undefined> : std::true_type {};
+	struct floating_point {}; template <> struct is_tag<floating_point> : std::true_type {};
+	struct unsigned_int {};   template <> struct is_tag<unsigned_int> : std::true_type {};
+	struct signed_int {};     template <> struct is_tag<signed_int> : std::true_type {};
+	struct boolean {};        template <> struct is_tag<boolean> : std::true_type {};
+	struct null {};           template <> struct is_tag<null> : std::true_type {};
+	struct document {};       template <> struct is_tag<document> : std::true_type {};
 
 	inline bool operator == (const undefined&, const undefined&) { return true; }
 	inline bool operator < (const undefined&, const undefined&) { return false; }
