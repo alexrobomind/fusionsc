@@ -1,13 +1,11 @@
 #pragma once
 
 #include "array_ref.h"
+#include "common.h"
 #include <string>
 
 namespace goldfish { namespace stream
 {
-	struct io_exception : exception {};
-	struct io_exception_with_error_code { int error_code; };
-
 	namespace details
 	{
 		class file_handle

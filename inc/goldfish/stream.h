@@ -249,24 +249,28 @@ namespace goldfish { namespace stream
 
 	template <class stream> std::string read_all_as_string(stream&& s)
 	{
-		std::string result;
-		byte buffer[65536];
-		for (;;)
-		{
-			auto cb = s.read_buffer(buffer);
-			result.insert(result.end(), reinterpret_cast<const char*>(buffer), reinterpret_cast<const char*>(buffer + cb));
-			if (cb != sizeof(buffer))
-				return result;
-		}
+		string_writer writer;
+		copy_stream(s, writer);
+		return writer.flush();
 	}
 
 	template <class stream> enable_if_reader_t<stream, std::vector<byte>> read_all(stream&& s)
 	{
-		std::vector<byte> result;
+		vector_writer writer;
+		copy_stream(s, writer);
+		return writer.flush();
+	}
+
+	template <class Reader, class Writer> 
+	std::enable_if_t<is_reader<std::decay_t<Reader>>::value && is_writer<std::decay_t<Writer>>::value, void> copy_stream(Reader&& r, Writer&& w)
+	{
 		byte buffer[65536];
-		while (auto cb = s.read_buffer(buffer))
-			result.insert(result.end(), buffer, buffer + cb);
-		return result;
+		size_t cb;
+		do
+		{
+			cb = r.read_buffer(buffer);
+			w.write_buffer({ buffer, cb });
+		} while (cb == sizeof(buffer));			
 	}
 }}
 

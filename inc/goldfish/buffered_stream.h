@@ -11,8 +11,7 @@ namespace goldfish { namespace stream
 		return copy(from.remove_front(to_copy), to.remove_front(to_copy));
 	}
 
-	template <size_t N, class inner>
-	class buffered_reader
+	template <size_t N, class inner> class buffered_reader
 	{
 	public:
 		buffered_reader(inner&& stream)
