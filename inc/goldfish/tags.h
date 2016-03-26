@@ -17,6 +17,7 @@ namespace goldfish { namespace tags
 	struct boolean {};			 template <> struct is_tag<boolean> : std::true_type {};
 	struct null {};				 template <> struct is_tag<null> : std::true_type {};
 	struct document {};          template <> struct is_tag<document> : std::true_type {};
+	using object = map;
 
 	inline bool operator == (const undefined&, const undefined&) { return true; }
 	inline bool operator < (const undefined&, const undefined&) { return false; }
