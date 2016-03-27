@@ -48,10 +48,10 @@ int main()
 {
 	using namespace goldfish;
 
-	auto document = json::read(stream::read_string_literal("{\"a\":1,\"c\":3.0}")).as_map("a", "b", "c");
-	assert(document.read_value("a")->as_uint() == 1);
+	auto document = json::read(stream::read_string_literal("{\"a\":1,\"c\":3.5}")).as_map("a", "b", "c");
+	assert(document.read_value("a")->as_uint64() == 1);
 	assert(document.read_value("b") == nullopt);
-	assert(document.read_value("c")->as_double() == 3.0);
+	assert(document.read_value("c")->as_double() == 3.5);
 	seek_to_end(document);
 }
 ```
@@ -66,25 +66,26 @@ int main()
 {
 	using namespace goldfish;
 
-	auto document = json::read(stream::read_string_literal(
+	auto document = json::read(stream::read_string(
 		R"([
 			{"name":"Alice","friends":["Bob","Charlie"]},
 			{"name":"Bob","friends":["Alice"]}
 		])")).as_array();
 
+	std::stringstream output;
 	while (auto entry_document = document.read())
 	{
 		auto entry = entry_document->as_map("name", "friends");
-		std::cout << entry.read_value("name").value().as_string() << " has the following friends: ";
+		output << entry.read_value("name").value().as_string() << " has the following friends: ";
 
 		auto friends = entry.read_value("friends").value().as_array();
 		while (auto friend_name = friends.read())
-			std::cout << friend_name->as_string() << " ";
+			output << friend_name->as_string() << " ";
 
-		std::cout << "\n";
+		output << "\n";
 		seek_to_end(entry);
 	}
-
+	
 	/*
 	This program outputs:
 		Alice has the following friends: Bob Charlie
@@ -106,10 +107,10 @@ int main()
 	auto map = json::create_writer(stream::string_writer{}).start_map();
 	map.write("A", 1);
 	map.write("B", "text");
-	map.write("C", stream::read_string_literal("Hello world!"));
+	map.write("C", stream::read_string("Hello world!"));
 
 	// Streams are serialized as binary 64 data in JSON
-	test(map.flush() == "{\"A\":1,\"B\":\"text\",\"C\":\"SGVsbG8gd29ybGQh\"}");
+	assert(map.flush() == "{\"A\":1,\"B\":\"text\",\"C\":\"SGVsbG8gd29ybGQh\"}");
 }
 ```
 
@@ -126,9 +127,9 @@ int main()
 	auto map = cbor::create_writer(stream::vector_writer{}).start_map();
 	map.write("A", 1);
 	map.write("B", "text");
-	map.write("C", stream::read_string_literal("Hello world!"));
+	map.write("C", stream::read_string("Hello world!"));
 
-	test(map.flush() == std::vector<byte>{
+	assert(map.flush() == std::vector<byte>{
 		0xbf,                               // start map marker
 		0x61,0x41,                          // key: "A"
 		0x01,                               // value : uint 1
@@ -232,7 +233,7 @@ Here is the exhaustive list of readers provided by the library:
 * `stream::base64_reader<reader_stream>` (created using `stream::decode_base64(reader_stream)`): convert a base64 stream into a binary stream
 * `stream::buffered_reader<N, reader_stream>` (created using `stream::buffer<N>(reader_stream)`): add an N byte buffer to the reader_stream
 * `stream::file_reader`: a reader stream on a file
-* `stream::
+* `stream::reader_on_reader_writer` (created using `create_reader_writer_stream`): the reader end of a reader/writer (or producer/consumer) stream
 
 Note that those streams can be composed. For example, `stream::decode_base64(stream::buffer<8192>(stream::file_reader("foo.txt")))` opens the file "foo.txt", buffers that stream using an 8kB buffer and decodes the content of the file assuming it is base64 encoded.
 
@@ -243,6 +244,7 @@ Here is the list of writers provided by the library:
 * `stream::base64_writer<writer_stream>` (created using `stream::encode_base64_to(writer_stream)`): data written to that stream is base64 encoded before being written to the writer_stream
 * `stream::buffered_writer<N, writer_stream>` (created using `stream::buffer<N>(writer_stream)`): add an N byte buffer to the writer_stream
 * `stream::file_writer`: a writer stream on a file
+* `stream::writer_on_reader_writer` (created using `create_reader_writer_stream`): the writer end of a reader/writer (or producer/consumer) stream
 
 ### JSON/CBOR parser
 To start the parsing of a read stream use json::read or cbor::read (for JSON or CBOR documents respectively). Those APIs return "document reader" objects.
@@ -256,22 +258,20 @@ A document reader offers the following APIs:
 * `as_map(...)`, `as_object(...)`: if parameters are specified to `as_map` or `as_object`, a `map reader with schema` object is returned. This allows for simpler parsing of documents when the keys and their order is known in advance.
 * `as_double`:
 	* if the document is an integer or a floating point (for example `1`, `-1` or `1.0` in JSON), return a double that represents the value of the document.
-	* For JSON, strings are parsed, which can lead (that means the JSON document `"8000"` can be read as either the text `8000` using as_text, the text `ÛM4` using as_binary, the double `8000`, the signed integer `8000` or the unsigned integer `8000`)
+	* Strings are parsed, which means the JSON document `"8000"` can be read as either the text `8000` using as_text, the text `ÛM4` using as_binary, the double `8000`, the signed integer `8000` or the unsigned integer `8000`
 	* otherwise, `goldfish::bad_variant_access` is thrown
-* `as_uint`:
-	* if the document is a positive integer (for example `1` in JSON), return a `uint64_t` that represents the value of the document
-	* if the document is a negative integer (for example `-1` in JSON), throws `goldfish::integer_overflow_while_casting`
-	* For JSON, strings are parsed
+* `as_uint64`, `as_uint32`, `as_uint16`, `as_uint8`:
+	* if the document is a positive integer (for example `1` in JSON), return an integer that represents the value of the document
+	* if the document is a negative integer (for example `-1` in JSON), or if the if the integer is too large to be represented as the requested type, throws `goldfish::integer_overflow_while_casting`
+	* Strings are parsed
 	* otherwise, `goldfish::bad_variant_access` is thrown
-* `as_int`:
-	* if the document is an integer (for example `1` in JSON), return a `int64_t` that represents the value of the document, or throws `goldfish::integer_overflow_while_casting` if the value is not representable in a int64_t
-	* For JSON, strings are parsed
+* `as_int64`, `as_int32`, `as_int16`, `as_int8`:
+	* if the document is an integer (for example `1` in JSON), return an integer that represents the value of the document, or throws `goldfish::integer_overflow_while_casting` if the value is not representable in the requested type
+	* Strings are parsed
 	* otherwise, `goldfish::bad_variant_access` is thrown
-* `as_bool`: if the document is `true` or `false`, return the corresponding boolean value
+* `as_bool`: if the document is `true` or `false`, `"true"` or `"false"` return the corresponding boolean value
 * `is_null`: return true if the document is `null` in JSON or the equivalent in CBOR (major type 7 and additional information 22).
-* `is_undefined`:
-	* For CBOR, return true if the document is of type "undefined"
-	* For JSON, this API is equivalent to is_null
+* `is_undefined_or_null`: return true if the document is null or, for CBOR, undefined
 
 In addition, the document reader implements the visitor pattern and exposes a visit API.
 That API calls the provided callback with the object and a tag that represents the semantic type of the object.
