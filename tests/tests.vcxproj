@@ -173,6 +173,7 @@
     <ClCompile Include="debug_checks_reader.cpp" />
     <ClCompile Include="debug_checks_writer.cpp" />
     <ClCompile Include="file_stream.cpp" />
+    <ClCompile Include="iostream_adaptor.cpp" />
     <ClCompile Include="json_reader.cpp" />
     <ClCompile Include="json_writer.cpp" />
     <ClCompile Include="match.cpp" />

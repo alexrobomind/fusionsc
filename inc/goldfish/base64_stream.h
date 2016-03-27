@@ -8,8 +8,7 @@ namespace goldfish { namespace stream
 	struct ill_formatted_base64_data : ill_formatted {};
 
 	// Reads binary data assuming inner reads base64
-	template <class inner>
-	class base64_reader
+	template <class inner> class base64_reader
 	{
 	public:
 		base64_reader(inner&& stream)
@@ -22,7 +21,7 @@ namespace goldfish { namespace stream
 			read_from_already_parsed(data);
 			while (data.size() >= 3)
 			{
-				auto c_read = deserialize_up_to_3_bytes(data.data());
+				auto c_read = deserialize_up_to_3_bytes(data);
 				data.remove_front(c_read);
 				if (c_read != 3)
 					return original_size - data.size();
@@ -31,7 +30,7 @@ namespace goldfish { namespace stream
 			if (!data.empty())
 			{
 				assert(m_cb_already_parsed == 0); // because there is left over in data, read_from_already_parsed emptied m_already_parsed 
-				m_cb_already_parsed = deserialize_up_to_3_bytes(m_already_parsed.data());
+				m_cb_already_parsed = deserialize_up_to_3_bytes(m_already_parsed);
 				read_from_already_parsed(data);
 			}
 			return original_size - data.size();
@@ -47,7 +46,7 @@ namespace goldfish { namespace stream
 
 		// Read up to 4 characters (or the end of stream), remove the potential padding (base64 can be padded with '=' characters at the end)
 		// and generate up to 3 bytes of data
-		uint8_t deserialize_up_to_3_bytes(byte* output)
+		uint8_t deserialize_up_to_3_bytes(buffer_ref output)
 		{
 			byte buffer[4];
 			auto c_read = m_stream.read_buffer(buffer);
@@ -132,8 +131,7 @@ namespace goldfish { namespace stream
 	};
 
 	// Write base64 data to inner when binary data is provided
-	template <class inner>
-	class base64_writer
+	template <class inner> class base64_writer
 	{
 	public:
 		base64_writer(inner&& stream)

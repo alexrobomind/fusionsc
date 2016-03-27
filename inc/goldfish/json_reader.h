@@ -24,6 +24,7 @@ namespace goldfish { namespace json
 		int64_t,
 		uint64_t,
 		double,
+		tags::undefined,
 		text_string<Stream>,
 		byte_string,
 		array<Stream>,
@@ -87,7 +88,9 @@ namespace goldfish { namespace json
 			if (m_converted.front() == end_of_stream)
 				return 0;
 
-			auto it = copy_from_converted(buffer.begin(), buffer.begin());
+			auto original = buffer.size();
+
+			copy_from_converted(buffer);
 
 			enum category : uint8_t
 			{
@@ -115,16 +118,16 @@ namespace goldfish { namespace json
 				/*0xE0*/ S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,
 				/*0xF0*/ S,S,S,S,S,S,S,S,I,I,I,I,I,I,I,I,
 			};
-			static_assert(sizeof(lookup) / sizeof(lookup[0]) == 256, "");
+			static_assert(sizeof(lookup) / sizeof(lookup[0]) == 256, "The lookup table should have 256 entries");
 			
-			while (it != buffer.end())
+			while (!buffer.empty())
 			{
 				byte c;
 				while (lookup[c = stream::read<byte>(m_stream)] == S)
 				{
-					*it++ = c;
-					if (it == buffer.end())
-						return it - buffer.begin();
+					buffer.pop_front() = c;
+					if (buffer.empty())
+						return original - buffer.size();
 				}
 
 				switch (lookup[c])
@@ -132,20 +135,20 @@ namespace goldfish { namespace json
 				case E:
 					switch (stream::read<byte>(m_stream))
 					{
-					case '"':  *it++ = '"';  break;
-					case '\\': *it++ = '\\'; break;
-					case '/':  *it++ = '/';  break;
-					case 'b':  *it++ = '\b'; break;
-					case 'f':  *it++ = '\f'; break;
-					case 'n':  *it++ = '\n'; break;
-					case 'r':  *it++ = '\r'; break;
-					case 't':  *it++ = '\t'; break;
+					case '"':  buffer.pop_front() = '"';  break;
+					case '\\': buffer.pop_front() = '\\'; break;
+					case '/':  buffer.pop_front() = '/';  break;
+					case 'b':  buffer.pop_front() = '\b'; break;
+					case 'f':  buffer.pop_front() = '\f'; break;
+					case 'n':  buffer.pop_front() = '\n'; break;
+					case 'r':  buffer.pop_front() = '\r'; break;
+					case 't':  buffer.pop_front() = '\t'; break;
 					case 'u':
 					{
 						auto converted = compute_converted(read_utf32_character());
 						std::copy(converted.begin() + 1, converted.end(), m_converted.begin());
-						*it++ = converted.front();
-						it = copy_from_converted(it, buffer.end());
+						buffer.pop_front() = converted.front();
+						copy_from_converted(buffer);
 						break;
 					}
 					default: throw ill_formatted_json_data();
@@ -154,27 +157,28 @@ namespace goldfish { namespace json
 
 				case Q:
 					m_converted.front() = end_of_stream; // Indicate we reached the end
-					return it - buffer.begin();
+					return original - buffer.size();
 
 				default:
 					throw ill_formatted_json_data{};
 				}
 			}
-			return it - buffer.begin();
+			return original - buffer.size();
 		}
 
 	private:
 		static const byte invalid_char = 0xFF;
 		static const byte end_of_stream = 0xFE;
-		byte* copy_from_converted(byte* it, byte* end)
+		void copy_from_converted(buffer_ref& buffer)
 		{
-			while (m_converted.front() != invalid_char && it != end)
+			while (m_converted.front() != invalid_char && !buffer.empty())
 			{
-				*it++ = m_converted.front();
+				assert(m_converted.front() != end_of_stream);
+
+				buffer.pop_front() = m_converted.front();
 				std::copy(m_converted.begin() + 1, m_converted.end(), m_converted.begin());
 				m_converted.back() = invalid_char;
 			}
-			return it;
 		}
 		static uint8_t parse_hex(char c)
 		{

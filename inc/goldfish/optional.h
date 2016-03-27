@@ -9,21 +9,26 @@ namespace goldfish
 
 	struct bad_optional_access : exception {};
 
-	template <class T> struct enable_if_exists { using type = void; };
-	template <class T> using enable_if_exists_t = typename enable_if_exists<T>::type;
+	// Useful for SFINAE: enable_if_exists_t<T> is always void, but if the expression "T" isn't valid, SFINAE will
+	// discard the overload
+	template <class T, class U> struct enable_if_exists { using type = U; };
+	template <class T, class U> using enable_if_exists_t = typename enable_if_exists<T, U>::type;
 
 	template <class T, bool complex> class optional_with_invalid_base
 	{
 	protected:
 		using invalid_state = typename T::invalid_state;
 	public:
-		optional_with_invalid_base() = default;
+		optional_with_invalid_base()
+		{
+			invalid_state::set(m_data);
+		}
 		optional_with_invalid_base(const optional_with_invalid_base& rhs)
 		{
 			if (invalid_state::is(rhs.m_data))
 				invalid_state::set(m_data);
 			else
-				new (&m_data) T(reinterpret_cast<T&>(rhs.m_data));
+				new (&m_data) T(reinterpret_cast<const T&>(rhs.m_data));
 		}
 		optional_with_invalid_base(optional_with_invalid_base&& rhs)
 		{
@@ -37,6 +42,7 @@ namespace goldfish
 			if (!invalid_state::is(m_data))
 				reinterpret_cast<T&>(m_data).~T();
 		}
+		optional_with_invalid_base& operator = (const optional_with_invalid_base&) = delete;
 
 	protected:
 		std::aligned_storage_t<sizeof(T), alignof(T)> m_data;
@@ -44,6 +50,10 @@ namespace goldfish
 	template <class T> class optional_with_invalid_base<T, false /*complex*/>
 	{
 	protected:
+		optional_with_invalid_base()
+		{
+			invalid_state::set(m_data);
+		}
 		using invalid_state = typename T::invalid_state;
 		std::aligned_storage_t<sizeof(T), alignof(T)> m_data;
 	};
@@ -53,10 +63,6 @@ namespace goldfish
 	{
 	public:
 		optional() = default;
-		optional(const optional&) = default;
-		optional(optional&&) = default;
-		optional& operator = (const optional&) = default;
-		optional& operator = (optional&&) = default;
 
 		optional(nullopt_t) {}
 		optional(const T& t) : m_data(t) {}
@@ -65,9 +71,9 @@ namespace goldfish
 		optional& operator = (const T& t) { m_data = t; return *this; }
 		optional& operator = (T&& t) { m_data = std::move(t); return *this; }
 
-		T& operator*() & { return m_data.as_unchecked<T>(); }
-		const T& operator*() const & { return m_data.as_unchecked<T>(); }
-		T&& operator*() && { return std::move(m_data.as_unchecked<T>()); }
+		T& operator*() & noexcept { return m_data.as_unchecked<T>(); }
+		const T& operator*() const & noexcept { return m_data.as_unchecked<T>(); }
+		T&& operator*() && noexcept { return std::move(m_data.as_unchecked<T>()); }
 
 		T* operator ->() { return &m_data.as_unchecked<T>(); }
 		const T* operator ->() const { return &m_data.as_unchecked<T>(); }
@@ -90,38 +96,38 @@ namespace goldfish
 	};
 
 
-	template <class T> class optional<T, enable_if_exists_t<typename T::invalid_state>> :
+	template <class T> class optional<T, enable_if_exists_t<typename T::invalid_state, void>> :
 		public optional_with_invalid_base<T,
 			std::is_trivially_copy_constructible<T>::value &&
 			std::is_trivially_move_constructible<T>::value &&
 			std::is_trivially_destructible<T>::value>
 	{
 	public:
-		optional()
-		{
-			invalid_state::set(m_data);
-		}
+		optional() = default;
 		optional(const optional&) = default;
 		optional(optional&&) = default;
 
 		optional& operator = (const optional& rhs)
 		{
 			if (rhs)
-				return *this = rhs;
+				return *this = *rhs;
 			else
 				return *this = nullopt;
 		}
 		optional& operator = (optional&& rhs)
 		{
 			if (rhs)
-				return *this = std::move(rhs);
+				return *this = *std::move(rhs);
 			else
 				return *this = nullopt;
 		}
 		
-		optional(nullopt_t) : optional() {}
+		optional(nullopt_t) {}
 		optional(const T& t)
 		{
+			// Work around VC++ bug: the new operator would do a null check on &m_data
+			// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
+			__pragma(warning(suppress:4127))
 			if (std::is_trivially_copy_constructible<T>::value)
 				memcpy(&m_data, &t, sizeof(T));
 			else
@@ -130,7 +136,10 @@ namespace goldfish
 		}
 		optional(T&& t)
 		{
-			if (std::is_trivially_copy_constructible<T>::value)
+			// Work around VC++ bug: the new operator would do a null check on &m_data
+			// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
+			__pragma(warning(suppress:4127))
+			if (std::is_trivially_move_constructible<T>::value)
 				memcpy(&m_data, &t, sizeof(T));
 			else
 				new (&m_data) T(std::move(t));
@@ -147,9 +156,15 @@ namespace goldfish
 		optional& operator = (const T& t)
 		{
 			if (*this)
-				return *this = t;
+			{
+				*(*this) = t;
+				return *this;
+			}
 
-			if (std::is_trivially_copy_constructible<T>::value)
+			// Work around VC++ bug: the new operator would do a null check on &m_data
+			// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
+			__pragma(warning(suppress:4127))
+			if (std::is_trivially_copy_assignable<T>::value)
 				memcpy(&m_data, &data, sizeof(T));
 			else
 				new (&m_data) T(data);
@@ -159,9 +174,15 @@ namespace goldfish
 		optional& operator = (T&& t)
 		{
 			if (*this)
-				return *this = std::move(t);
+			{
+				*(*this) = std::move(t);
+				return *this;
+			}
 
-			if (std::is_trivially_copy_constructible<T>::value)
+			// Work around VC++ bug: the new operator would do a null check on &m_data
+			// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
+			__pragma(warning(suppress:4127))
+			if (std::is_trivially_move_assignable<T>::value)
 				memcpy(&m_data, &data, sizeof(T));
 			else
 				new (&m_data) T(std::move(data));
@@ -173,8 +194,9 @@ namespace goldfish
 		const T& operator*() const & { assert(*this); return reinterpret_cast<const T&>(m_data); }
 		T&& operator*() && { assert(*this); return std::move(reinterpret_cast<T&>(m_data)); }
 
-		T* operator ->() { return &reinterpret_cast<T&>(m_data); }
-		const T* operator ->() const { return &reinterpret_cast<const T&>(m_data); }
+		T* operator ->() { assert(*this); return &reinterpret_cast<T&>(m_data); }
+		const T* operator ->() const { assert(*this); return &reinterpret_cast<const T&>(m_data); }
+
 		explicit operator bool() const { return !invalid_state::is(m_data); }
 
 		T& value() & { if (*this) return **this; else throw bad_optional_access{}; }

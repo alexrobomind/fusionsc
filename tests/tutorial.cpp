@@ -34,7 +34,7 @@ TEST_CASE(parse_simple)
 	using namespace goldfish;
 
 	auto document = json::read(stream::read_string("{\"a\":1,\"c\":3.0}")).as_map("a", "b", "c");
-	assert(document.read_value("a").value().as_uint() == 1);
+	assert(document.read_value("a").value().as_uint64() == 1);
 	assert(document.read_value("b") == nullopt);
 	assert(document.read_value("c").value().as_double() == 3.0);
 	seek_to_end(document);

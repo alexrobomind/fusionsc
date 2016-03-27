@@ -54,10 +54,7 @@ namespace goldfish { namespace json
 				/*0xE0*/ F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,
 				/*0xF0*/ F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,
 			};
-			static_assert(sizeof(lookup) / sizeof(lookup[0]) == 256, "");
-
-			if (buffer.empty())
-				return;
+			static_assert(sizeof(lookup) / sizeof(lookup[0]) == 256, "The lookup table should have 256 entries");
 
 			auto it = buffer.begin();
 			for (;;)
@@ -79,16 +76,12 @@ namespace goldfish { namespace json
 					case S: stream::write(m_stream, '\\'); stream::write(m_stream, '\\'); break;
 					case U: 
 					{
-						char data[6] = { '\\', 'u', '0', '0', '0', '0' };
-						data[4] = "0123456789ABCDEF"[*it >> 4];
-						data[5] = "0123456789ABCDEF"[*it & 15];
+						char data[6] = { '\\', 'u', '0', '0', "0123456789ABCDEF"[*it / 16], "0123456789ABCDEF"[*it % 16] };
 						m_stream.write_buffer({ reinterpret_cast<const byte*>(data), 6 });
 					}
 					break;
 				}
 				++it;
-				if (it == buffer.end())
-					break;
 			}
 		}
 		auto flush()
@@ -152,15 +145,17 @@ namespace goldfish { namespace json
 			}
 			else
 			{
+				//            12345678901234567890
+				static_assert(18446744073709551615 == std::numeric_limits<uint64_t>::max(), "The max value of uint64 fits on 20 base 10 digits");
 				uint8_t buffer[20];
-				uint8_t* it = buffer;
-				while (x != 0)
+				uint8_t* it = std::end(buffer);
+				do
 				{
-					*it++ = '0' + (x % 10);
+					--it;
+					*it = '0' + (x % 10);
 					x /= 10;
-				}
-				std::reverse(buffer, it);
-				s.write_buffer({ buffer, it });
+				} while (x != 0);
+				s.write_buffer({ it, std::end(buffer) });
 			}
 		}
 		template <class Stream> void serialize_number(Stream& s, int64_t x)
@@ -209,9 +204,21 @@ namespace goldfish { namespace json
 		key_writer(Stream&& s)
 			: m_stream(std::move(s))
 		{}
-		auto write(bool x) { throw invalid_key_type{}; }
-		auto write(nullptr_t) { throw invalid_key_type{}; }
-		auto write(tags::undefined) { throw invalid_key_type{}; }
+		auto write(bool x)
+		{
+			if (x) m_stream.write_buffer({ reinterpret_cast<const byte*>("\"true\""), 6 });
+			else   m_stream.write_buffer({ reinterpret_cast<const byte*>("\"false\""), 7 });
+			return m_stream.flush();
+		}
+		auto write(nullptr_t)
+		{
+			m_stream.write_buffer({ reinterpret_cast<const byte*>("\"null\""), 6 });
+			return m_stream.flush();
+		}
+		auto write(tags::undefined)
+		{
+			return write(nullptr);
+		}
 		auto write(uint64_t x)
 		{
 			stream::write(m_stream, '"');

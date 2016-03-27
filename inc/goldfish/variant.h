@@ -187,6 +187,7 @@ namespace goldfish
 			variant_copy_impl(variant_copy_impl&&) = default;
 			variant_copy_impl(const variant_copy_impl& rhs) noexcept(conjunction<std::is_nothrow_copy_constructible<types>...>::value)
 			{
+				__pragma(warning(suppress:4127))
 				if (conjunction<std::is_trivially_copy_constructible<types>...>::value)
 				{
 					m_data = rhs.m_data;
@@ -218,6 +219,9 @@ namespace goldfish
 			add_constructors() = default;
 			add_constructors(const head& data)
 			{
+				// Work around VC++ bug: the new operator would do a null check on &m_data
+				// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
+				__pragma(warning(suppress:4127))
 				if (std::is_trivially_copy_constructible<head>::value)
 					memcpy(&m_data, &data, sizeof(head));
 				else
@@ -226,7 +230,10 @@ namespace goldfish
 			}
 			add_constructors(head&& data)
 			{
-				if (std::is_trivially_copy_constructible<head>::value)
+				// Work around VC++ bug: the new operator would do a null check on &m_data
+				// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
+				__pragma(warning(suppress:4127))
+				if (std::is_trivially_move_constructible<head>::value)
 					memcpy(&m_data, &data, sizeof(head));
 				else
 					new (&m_data) head(std::move(data));
@@ -270,6 +277,7 @@ namespace goldfish
 		}
 		template <class U> std::enable_if_t<details::is_one_of<std::decay_t<U>, types...>::value, variant>& operator = (U&& u)
 		{
+			__pragma(warning(suppress:4127))
 			if (details::conjunction<std::is_trivially_destructible<types>...>::value && std::is_trivially_copyable<std::decay_t<U>>::value)
 			{
 				safe_destroy_construct<U>(std::forward<U>(u));

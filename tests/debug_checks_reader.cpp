@@ -49,7 +49,7 @@ namespace goldfish
 		auto document = json::read(stream::read_string("[[1, 2]]"), throw_on_error{}).as_array();
 
 		auto array = document.read()->as_array();
-		test(array.read()->as_uint() == 1);
+		test(array.read()->as_uint64() == 1);
 		expect_exception<library_misused>([&] { document.read(); });
 	}
 	TEST_CASE(reading_parent_at_exactly_end_of_array_throws)
@@ -57,8 +57,8 @@ namespace goldfish
 		auto document = json::read(stream::read_string("[[1, 2]]"), throw_on_error{}).as_array();
 
 		auto array = document.read()->as_array();
-		test(array.read()->as_uint() == 1);
-		test(array.read()->as_uint() == 2);
+		test(array.read()->as_uint64() == 1);
+		test(array.read()->as_uint64() == 2);
 		expect_exception<library_misused>([&] { document.read(); });
 	}
 	TEST_CASE(reading_parent_passed_end_of_array_ok)
@@ -66,8 +66,8 @@ namespace goldfish
 		auto document = json::read(stream::read_string("[[1, 2]]"), throw_on_error{}).as_array();
 
 		auto array = document.read()->as_array();
-		test(array.read()->as_uint() == 1);
-		test(array.read()->as_uint() == 2);
+		test(array.read()->as_uint64() == 1);
+		test(array.read()->as_uint64() == 2);
 		test(array.read() == nullopt);
 		test(document.read() == nullopt);
 	}
@@ -86,9 +86,9 @@ namespace goldfish
 
 		auto map = document.read()->as_map();
 		test(stream::read_all_as_string(map.read_key()->as_string()) == "a");
-		test(map.read_value().as_uint() == 1);
+		test(map.read_value().as_uint64() == 1);
 		test(stream::read_all_as_string(map.read_key()->as_string()) == "b");
-		test(map.read_value().as_uint() == 2);
+		test(map.read_value().as_uint64() == 2);
 		expect_exception<library_misused>([&] { document.read(); });
 	}
 	TEST_CASE(reading_parent_passed_end_of_map_ok)
@@ -97,9 +97,9 @@ namespace goldfish
 
 		auto map = document.read()->as_map();
 		test(stream::read_all_as_string(map.read_key()->as_string()) == "a");
-		test(map.read_value().as_uint() == 1);
+		test(map.read_value().as_uint64() == 1);
 		test(stream::read_all_as_string(map.read_key()->as_string()) == "b");
-		test(map.read_value().as_uint() == 2);
+		test(map.read_value().as_uint64() == 2);
 		test(map.read_key() == nullopt);
 
 		test(document.read() == nullopt);

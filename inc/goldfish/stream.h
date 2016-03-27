@@ -10,22 +10,27 @@ namespace goldfish { namespace stream
 {
 	struct unexpected_end_of_stream : ill_formatted {};
 
-	template <class T, class dummy = size_t> struct is_reader : std::false_type {};
-	template <class T> struct is_reader<T, decltype(std::declval<T>().read_buffer(buffer_ref{})) > : std::true_type {};
+	template <class T> static std::true_type test_is_reader(decltype(std::declval<T>().read_buffer(buffer_ref{}))*) { return{}; }
+	template <class T> static std::false_type test_is_reader(...) { return{}; }
+	template <class T> struct is_reader : decltype(test_is_reader<T>(nullptr)) {};
 	template <class T, class U> using enable_if_reader_t = std::enable_if_t<is_reader<std::decay_t<T>>::value, U>;
 
-	template <class T, class dummy = void> struct is_writer : std::false_type {};
-	template <class T> struct is_writer<T, decltype(std::declval<T>().write_buffer(const_buffer_ref{})) > : std::true_type {};
+	template <class T> static std::true_type test_is_writer(decltype(std::declval<T>().write_buffer(const_buffer_ref{}))*) { return{}; }
+	template <class T> static std::false_type test_is_writer(...) { return{}; }
+	template <class T> struct is_writer : decltype(test_is_writer<T>(nullptr)) {};
 	template <class T, class U> using enable_if_writer_t = std::enable_if_t<is_writer<std::decay_t<T>>::value, U>;
 
-	template <class T, class elem, class dummy = void> struct has_write : std::false_type {};
-	template <class T, class elem> struct has_write<T, elem, decltype(std::declval<T>().write(std::declval<elem>()))> : std::true_type {};
+	template <class T, class elem> static std::true_type test_has_write(decltype(std::declval<T>().write(std::declval<elem>()))*) { return{}; }
+	template <class T, class elem> static std::false_type test_has_write(...) { return{}; }
+	template <class T, class elem> struct has_write : decltype(test_has_write<T, elem>(nullptr)) {};
 
-	template <class T, class dummy = uint64_t> struct has_seek : std::false_type {};
-	template <class T> struct has_seek<T, decltype(std::declval<T>().seek(0ull))> : std::true_type {};
+	template <class T> static std::true_type test_has_seek(decltype(std::declval<T>().seek(0ull))*) { return{}; }
+	template <class T> static std::false_type test_has_seek(...) { return{}; }
+	template <class T> struct has_seek : decltype(test_has_seek<T>(nullptr)) {};
 
-	template <class T, class elem, class dummy = elem> struct has_read : std::false_type {};
-	template <class T, class elem> struct has_read<T, elem, decltype(std::declval<T>().read<elem>())> : std::true_type {};
+	template <class T, class elem> static std::true_type test_has_read(decltype(std::declval<T>().read<elem>())*) { return{}; }
+	template <class T, class elem> static std::false_type test_has_read(...) { return{}; }
+	template <class T, class elem> struct has_read : decltype(test_has_read<T, elem>(nullptr)) {};
 
 	template <class Stream> std::enable_if_t< has_seek<Stream>::value, uint64_t> seek(Stream& s, uint64_t x)
 	{
@@ -51,7 +56,7 @@ namespace goldfish { namespace stream
 		return s.read<T>();
 	}
 
-	template <class T, class Stream> enable_if_reader_t<Stream, std::enable_if_t<!has_read<Stream, T>::value, T>> read(Stream& s)
+	template <class T, class Stream> std::enable_if_t<is_reader<std::decay_t<Stream>>::value && !has_read<Stream, T>::value, T> read(Stream& s)
 	{
 		T t;
 		if (s.read_buffer({ reinterpret_cast<byte*>(&t), sizeof(t) }) != sizeof(t))
@@ -294,24 +299,28 @@ namespace goldfish { namespace stream
 
 	template <class stream> std::string read_all_as_string(stream&& s)
 	{
-		std::string result;
-		byte buffer[65536];
-		for (;;)
-		{
-			auto cb = s.read_buffer(buffer);
-			result.insert(result.end(), reinterpret_cast<const char*>(buffer), reinterpret_cast<const char*>(buffer + cb));
-			if (cb != sizeof(buffer))
-				return result;
-		}
+		string_writer writer;
+		copy_stream(s, writer);
+		return writer.flush();
 	}
 
 	template <class stream> enable_if_reader_t<stream, std::vector<byte>> read_all(stream&& s)
 	{
-		std::vector<byte> result;
+		vector_writer writer;
+		copy_stream(s, writer);
+		return writer.flush();
+	}
+
+	template <class Reader, class Writer> 
+	std::enable_if_t<is_reader<std::decay_t<Reader>>::value && is_writer<std::decay_t<Writer>>::value, void> copy_stream(Reader&& r, Writer&& w)
+	{
 		byte buffer[65536];
-		while (auto cb = s.read_buffer(buffer))
-			result.insert(result.end(), buffer, buffer + cb);
-		return result;
+		size_t cb;
+		do
+		{
+			cb = r.read_buffer(buffer);
+			w.write_buffer({ buffer, cb });
+		} while (cb == sizeof(buffer));			
 	}
 }}
 
