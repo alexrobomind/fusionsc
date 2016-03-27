@@ -11,7 +11,7 @@ namespace goldfish { namespace stream
 	}
 	std::string my_base64_decode(const std::string& data)
 	{
-		return read_all_as_string(decode_base64(read_string_non_owning(data.c_str())));
+		return read_all_as_string(decode_base64(read_string_ref(data.c_str())));
 	}
 
 	TEST_CASE(base64_encode_0)  { test(my_base64_encode("") == ""); }
@@ -40,7 +40,7 @@ namespace goldfish { namespace stream
 
 	TEST_CASE(decode_partial_buffer)
 	{
-		auto s = decode_base64(read_string_non_owning("YW55IGNhcm5hbCBwbGVhc3VyZS4"));
+		auto s = decode_base64(read_string("YW55IGNhcm5hbCBwbGVhc3VyZS4"));
 		
 		// read one at a time (this tests reading 0 and 1 bytes with left overs 0,1,2)
 		{

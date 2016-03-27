@@ -10,7 +10,7 @@ namespace goldfish
 	{
 		auto r = [](auto input)
 		{
-			return json::read(stream::read_string_non_owning(input)).as_double();
+			return json::read(stream::read_string_ref(input)).as_double();
 		};
 		test(r("1") == 1);
 		test(r("-1") == -1);
@@ -24,7 +24,7 @@ namespace goldfish
 	{
 		auto r = [](auto input)
 		{
-			return json::read(stream::read_string_non_owning(input)).as_int();
+			return json::read(stream::read_string_ref(input)).as_int();
 		};
 		test(r("1") == 1);
 		test(r("-1") == -1);
@@ -42,7 +42,7 @@ namespace goldfish
 	{
 		auto r = [](auto input)
 		{
-			return json::read(stream::read_string_non_owning(input)).as_uint();
+			return json::read(stream::read_string_ref(input)).as_uint();
 		};
 		test(r("1") == 1);
 		expect_exception<integer_overflow_while_casting>([&] { r("-1"); });
@@ -55,22 +55,22 @@ namespace goldfish
 	}
 	TEST_CASE(test_is_undefined)
 	{
-		test(json::read(stream::read_string_non_owning("null")).is_undefined());
-		test(!json::read(stream::read_string_non_owning("1")).is_undefined());
+		test(json::read(stream::read_string("null")).is_undefined());
+		test(!json::read(stream::read_string("1")).is_undefined());
 	}
 	TEST_CASE(test_conversion_to_binary)
 	{
 		auto r = [](auto input)
 		{
-			return stream::read_all_as_string(json::read(stream::read_string_non_owning(input)).as_binary());
+			return stream::read_all_as_string(json::read(stream::read_string_ref(input)).as_binary());
 		};
 		test(r("\"YW55IGNhcm5hbCBwbGVhc3VyZS4\"") == "any carnal pleasure.");
 		test(r("\"SGVsbG8=\"") == "Hello");
 
-		test(stream::read_all_as_string(json::read(stream::read_string_non_owning("\"8000\"")).as_string()) == "8000");
-		test(stream::read_all_as_string(json::read(stream::read_string_non_owning("\"8000\"")).as_binary()) == "óM4");
-		test(json::read(stream::read_string_non_owning("\"8000\"")).as_double() == 8000);
-		test(json::read(stream::read_string_non_owning("\"8000\"")).as_int() == 8000);
-		test(json::read(stream::read_string_non_owning("\"8000\"")).as_uint() == 8000);
+		test(stream::read_all_as_string(json::read(stream::read_string("\"8000\"")).as_string()) == "8000");
+		test(stream::read_all_as_string(json::read(stream::read_string("\"8000\"")).as_binary()) == "óM4");
+		test(json::read(stream::read_string("\"8000\"")).as_double() == 8000);
+		test(json::read(stream::read_string("\"8000\"")).as_int() == 8000);
+		test(json::read(stream::read_string("\"8000\"")).as_uint() == 8000);
 	}
 }	

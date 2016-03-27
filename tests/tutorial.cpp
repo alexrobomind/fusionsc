@@ -9,7 +9,7 @@ TEST_CASE(convert_json_to_cbor)
 
 	// Read the string literal as a stream and parse it as a JSON document
 	// This doesn't really do any work, the stream will be read as we parse the document
-	auto document = json::read(stream::read_string_non_owning("{\"A\":[1,2,3],\"B\":true}"));
+	auto document = json::read(stream::read_string("{\"A\":[1,2,3],\"B\":true}"));
 
 	// Generate a stream on a vector, a CBOR writer around that stream and write
 	// the JSON document to it
@@ -33,7 +33,7 @@ TEST_CASE(parse_simple)
 {
 	using namespace goldfish;
 
-	auto document = json::read(stream::read_string_non_owning("{\"a\":1,\"c\":3.0}")).as_map("a", "b", "c");
+	auto document = json::read(stream::read_string("{\"a\":1,\"c\":3.0}")).as_map("a", "b", "c");
 	assert(document.read_value("a").value().as_uint() == 1);
 	assert(document.read_value("b") == nullopt);
 	assert(document.read_value("c").value().as_double() == 3.0);
@@ -44,7 +44,7 @@ TEST_CASE(parse_complex)
 {
 	using namespace goldfish;
 
-	auto document = json::read(stream::read_string_non_owning(
+	auto document = json::read(stream::read_string(
 		R"([
 			{"name":"Alice","friends":["Bob","Charlie"]},
 			{"name":"Bob","friends":["Alice"]}
@@ -78,7 +78,7 @@ TEST_CASE(generate_json_document)
 	auto map = json::create_writer(stream::string_writer{}).start_map();
 	map.write("A", 1);
 	map.write("B", "text");
-	map.write("C", stream::read_string_non_owning("Hello world!"));
+	map.write("C", stream::read_string("Hello world!"));
 
 	// Streams are serialized as binary 64 data in JSON
 	test(map.flush() == "{\"A\":1,\"B\":\"text\",\"C\":\"SGVsbG8gd29ybGQh\"}");
@@ -93,7 +93,7 @@ TEST_CASE(generate_cbor_document)
 	auto map = cbor::create_writer(stream::vector_writer{}).start_map();
 	map.write("A", 1);
 	map.write("B", "text");
-	map.write("C", stream::read_string_non_owning("Hello world!"));
+	map.write("C", stream::read_string("Hello world!"));
 
 	test(map.flush() == std::vector<byte>{
 		0xbf,                               // start map marker
@@ -126,13 +126,13 @@ TEST_CASE(test_visit)
 {
 	using namespace goldfish;
 	my_handler sink;
-	test(json::read(stream::read_string_non_owning("true")).visit(sink) == "bool");
+	test(json::read(stream::read_string("true")).visit(sink) == "bool");
 }
 
 TEST_CASE(test_visit_with_best_match)
 {
 	using namespace goldfish;
-	test(json::read(stream::read_string_non_owning("true")).visit(best_match(
+	test(json::read(stream::read_string("true")).visit(best_match(
 		[](auto&&, tags::binary) { return "binary"; },
 		[](auto&&, tags::string) { return "string"; },
 		[](auto&&, tags::array) { return "array"; },
@@ -149,7 +149,7 @@ TEST_CASE(test_visit_with_best_match)
 TEST_CASE(test_visit_with_first_match)
 {
 	using namespace goldfish;
-	test(json::read(stream::read_string_non_owning("true")).visit(first_match(
+	test(json::read(stream::read_string("true")).visit(first_match(
 		[](bool, tags::boolean) { return "bool"; },
 		[](auto&&, auto) { return "not a bool"; }
 	)) == "bool");

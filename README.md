@@ -18,7 +18,7 @@ int main()
 
 	// Read the string literal as a stream and parse it as a JSON document
 	// This doesn't really do any work, the stream will be read as we parse the document
-	auto document = json::read(stream::read_string_non_owning("{\"A\":[1,2,3],\"B\":true}"));
+	auto document = json::read(stream::read_string("{\"A\":[1,2,3],\"B\":true}"));
 
 	// Generate a stream on a vector, a CBOR writer around that stream and write
 	// the JSON document to it
@@ -226,10 +226,13 @@ template <class T> void stream::write(writer_stream&, const T&);
 
 Here is the exhaustive list of readers provided by the library:
 * `stream::ref_reader<reader_stream>` (created using `stream::ref(reader_stream&)`): copyable stream that stores a non owning reference to an existing stream
-* `stream::const_buffer_ref_reader` (created using `stream::read_buffer_ref` or `stream::read_string_non_owning`): a stream that reads a buffer, without owning that buffer
+* `stream::const_buffer_ref_reader` (created using `stream::read_buffer_ref`, `stream::read_string_ref` or `stream::read_string` with a string literal): a stream that reads a buffer, without owning that buffer
+* `stream::vector_reader` (created using `stream::read_buffer`): a stream that reads an `std::vector<byte>`, owning that vector
+* `stream::string_reader` (created using `stream::read_string`): a stream that reads an `std::string`, owning that string
 * `stream::base64_reader<reader_stream>` (created using `stream::decode_base64(reader_stream)`): convert a base64 stream into a binary stream
 * `stream::buffered_reader<N, reader_stream>` (created using `stream::buffer<N>(reader_stream)`): add an N byte buffer to the reader_stream
 * `stream::file_reader`: a reader stream on a file
+* `stream::
 
 Note that those streams can be composed. For example, `stream::decode_base64(stream::buffer<8192>(stream::file_reader("foo.txt")))` opens the file "foo.txt", buffers that stream using an 8kB buffer and decodes the content of the file assuming it is base64 encoded.
 
@@ -296,7 +299,7 @@ struct my_handler
 int main()
 {
 	my_handler sink;
-	std::cout << json::read(stream::read_string_non_owning("true")).visit(sink);
+	std::cout << json::read(stream::read_string("true")).visit(sink);
 	// outputs bool, the result of calling sink(true, tags::boolean{})
 }
 ```
@@ -311,7 +314,7 @@ int main()
 {
 	using namespace goldfish;
 
-	std::cout << json::read(stream::read_string_non_owning("true")).visit(best_match(
+	std::cout << json::read(stream::read_string("true")).visit(best_match(
 		[](auto&&, tags::binary) { return "binary"; },
 		[](auto&&, tags::string) { return "string"; },
 		[](auto&&, tags::array) { return "array"; },
@@ -337,7 +340,7 @@ int main()
 {
 	using namespace goldfish;
 
-	std::cout << json::read(stream::read_string_non_owning("true")).visit(best_match(
+	std::cout << json::read(stream::read_string("true")).visit(best_match(
 		[](bool, tags::boolean) { return "bool"; },
 		[](auto&&, auto) { return "not bool"; }
 	));

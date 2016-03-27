@@ -7,7 +7,7 @@ namespace goldfish
 {
 	TEST_CASE(test_filtered_map_empty_map)
 	{
-		auto map = apply_schema(json::read(stream::read_string_non_owning("{}")).as_map(), make_schema("10", "20", "30"));
+		auto map = apply_schema(json::read(stream::read_string("{}")).as_map(), make_schema("10", "20", "30"));
 
 		test(map.read_value_by_index(0) == nullopt);
 
@@ -17,7 +17,7 @@ namespace goldfish
 	TEST_CASE(test_filtered_map)
 	{
 		auto map = apply_schema(json::read(
-			stream::read_string_non_owning("{\"10\":1,\"15\":2,\"a\":\"b\",\"40\":3,\"50\":4,\"60\":5,\"80\":6}")).as_map(),
+			stream::read_string("{\"10\":1,\"15\":2,\"a\":\"b\",\"40\":3,\"50\":4,\"60\":5,\"80\":6}")).as_map(),
 			make_schema("10", "20", "30", "40", "50", "60", "70", "80", "90"));
 
 		// Reading the very first key
@@ -46,7 +46,7 @@ namespace goldfish
 	TEST_CASE(filtered_map_skip_while_on_value)
 	{
 		auto map = apply_schema(
-			json::read(stream::read_string_non_owning("{\"20\":1}")).as_map(),
+			json::read(stream::read_string("{\"20\":1}")).as_map(),
 			make_schema("10", "20"));
 
 		test(map.read_value_by_index(0) == nullopt);
@@ -55,7 +55,7 @@ namespace goldfish
 
 	TEST_CASE(test_filtered_map_by_value)
 	{
-		auto map = apply_schema(json::read(stream::read_string_non_owning("{\"B\":1}")).as_map(), make_schema("A", "B"));
+		auto map = apply_schema(json::read(stream::read_string("{\"B\":1}")).as_map(), make_schema("A", "B"));
 		test(dom::load_in_memory(*map.read_value("B")) == 1ull);
 		seek_to_end(map);
 	}

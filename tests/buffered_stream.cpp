@@ -6,7 +6,7 @@ namespace goldfish { namespace stream
 {
 	TEST_CASE(test_buffered_reader_single_character_read)
 	{
-		auto s = buffer<3>(read_string_non_owning("abcd"));
+		auto s = buffer<3>(read_string("abcd"));
 		test(s.peek<char>() == 'a'); test(stream::read<char>(s) == 'a');
 		test(s.peek<char>() == 'b'); test(stream::read<char>(s) == 'b'); test(s.peek<std::array<char, 3>>() == nullopt);
 		test(s.peek<char>() == 'c'); test(stream::read<char>(s) == 'c'); test(s.peek<std::array<char, 3>>() == nullopt);
@@ -15,21 +15,21 @@ namespace goldfish { namespace stream
 	}
 	TEST_CASE(test_buffered_reader_two_character_peek_and_read)
 	{
-		auto s = buffer<3>(read_string_non_owning("abcdef"));
+		auto s = buffer<3>(read_string("abcdef"));
 		test(s.peek<std::array<char, 2>>() == std::array<char, 2>{ 'a', 'b' }); test(stream::read<std::array<char, 2>>(s) == std::array<char, 2>{ 'a', 'b' });
 		test(s.peek<std::array<char, 2>>() == std::array<char, 2>{ 'c', 'd' }); test(stream::read<std::array<char, 2>>(s) == std::array<char, 2>{ 'c', 'd' });
 		test(s.peek<std::array<char, 2>>() == std::array<char, 2>{ 'e', 'f' }); test(stream::read<std::array<char, 2>>(s) == std::array<char, 2>{ 'e', 'f' });
 	}
 	TEST_CASE(test_buffered_reader_two_character_read)
 	{
-		auto s = buffer<3>(read_string_non_owning("abcdef"));
+		auto s = buffer<3>(read_string("abcdef"));
 		test(stream::read<std::array<char, 2>>(s) == std::array<char, 2>{ 'a', 'b' });
 		test(stream::read<std::array<char, 2>>(s) == std::array<char, 2>{ 'c', 'd' });
 		test(stream::read<std::array<char, 2>>(s) == std::array<char, 2>{ 'e', 'f' });
 	}
 	TEST_CASE(test_buffered_reader_three_character_read)
 	{
-		auto s = buffer<3>(read_string_non_owning("abcdefghijk"));
+		auto s = buffer<3>(read_string("abcdefghijk"));
 		test(s.peek<std::array<char, 3>>() == std::array<char, 3>{ 'a', 'b', 'c' }); test(stream::read<std::array<char, 3>>(s) == std::array<char, 3>{ 'a', 'b', 'c' });
 		test(stream::read<char>(s) == 'd');
 		test(s.peek<std::array<char, 3>>() == std::array<char, 3>{ 'e', 'f', 'g' }); test(stream::read<std::array<char, 3>>(s) == std::array<char, 3>{ 'e', 'f', 'g' });
@@ -38,14 +38,14 @@ namespace goldfish { namespace stream
 	}
 	TEST_CASE(test_buffered_reader_four_character_read)
 	{
-		auto s = buffer<3>(read_string_non_owning("abcdefghijkl"));
+		auto s = buffer<3>(read_string("abcdefghijkl"));
 		test(stream::read<std::array<char, 4>>(s) == std::array<char, 4>{ 'a', 'b', 'c', 'd' });
 		test(stream::read<std::array<char, 4>>(s) == std::array<char, 4>{ 'e', 'f', 'g', 'h' });
 		test(stream::read<std::array<char, 4>>(s) == std::array<char, 4>{ 'i', 'j', 'k', 'l' });
 	}
 	TEST_CASE(test_buffered_reader_read_buffer)
 	{
-		auto s = buffer<3>(read_string_non_owning("abcdefghijkl"));
+		auto s = buffer<3>(read_string("abcdefghijkl"));
 		{
 			std::array<byte, 1> buffer;
 			test(s.read_buffer(buffer) == 1);
@@ -72,7 +72,7 @@ namespace goldfish { namespace stream
 	}
 	TEST_CASE(test_buffered_seek)
 	{
-		auto s = buffer<3>(read_string_non_owning("abcdef"));
+		auto s = buffer<3>(read_string("abcdef"));
 		test(stream::seek(s, 1) == 1);
 		test(s.peek<char>() == 'b');
 		test(stream::seek(s, 1) == 1);
@@ -82,7 +82,7 @@ namespace goldfish { namespace stream
 	}
 	TEST_CASE(test_move_buffered_reader)
 	{
-		auto s = buffer<3>(read_string_non_owning("abcdef"));
+		auto s = buffer<3>(read_string("abcdef"));
 		test(stream::read<char>(s) == 'a');
 		auto t = std::move(s);
 		test(stream::read<char>(t) == 'b');
