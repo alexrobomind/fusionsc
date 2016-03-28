@@ -22,7 +22,7 @@ int main()
 
 	// Generate a stream on a vector, a CBOR writer around that stream and write
 	// the JSON document to it
-	// Note that all the streams need to be flushed to ensure that there any potentially
+	// Note that all the streams need to be flushed to ensure that any potentially
 	// buffered data is serialized.
 	auto cbor_document = cbor::create_writer(stream::vector_writer{}).write(document);
 	assert(cbor_document == std::vector<byte>{
@@ -56,7 +56,7 @@ int main()
 }
 ```
 
-How about a more complicated example. Note again that this program doesn't allocate memory to parse the document and could run on very large documents backed by file (using `stream::file_reader`) or other type of stream even on resource constrained machines.
+How about a more complicated example. Note again that this program doesn't allocate memory to parse the document and could run on very large documents backed by file (using `stream::file_reader`) or other type of stream, even on resource constrained machines.
 
 ```cpp
 #include <goldfish/json_reader.h>
@@ -72,17 +72,16 @@ int main()
 			{"name":"Bob","friends":["Alice"]}
 		])")).as_array();
 
-	std::stringstream output;
 	while (auto entry_document = document.read())
 	{
 		auto entry = entry_document->as_map("name", "friends");
-		output << entry.read_value("name").value().as_string() << " has the following friends: ";
+		std::cout << entry.read_value("name").value().as_string() << " has the following friends: ";
 
 		auto friends = entry.read_value("friends").value().as_array();
 		while (auto friend_name = friends.read())
-			output << friend_name->as_string() << " ";
+			std::cout << friend_name->as_string() << " ";
 
-		output << "\n";
+		std::cout << "\n";
 		seek_to_end(entry);
 	}
 	
@@ -95,7 +94,7 @@ int main()
 ```
 
 ### Generating a JSON or CBOR document
-You can get a JSON or CBOR writer by calling json::create_writer or cbor::create_writer on an output stream.
+You can get a JSON or CBOR writer by calling `json::create_writer` or `cbor::create_writer` on an output stream.
 
 ```cpp
 #include <goldfish/json_writer.h>
@@ -107,15 +106,15 @@ int main()
 	auto map = json::create_writer(stream::string_writer{}).start_map();
 	map.write("A", 1);
 	map.write("B", "text");
+	// Streams are serialized as binary 64 data in JSON
 	map.write("C", stream::read_string("Hello world!"));
 
-	// Streams are serialized as binary 64 data in JSON
 	assert(map.flush() == "{\"A\":1,\"B\":\"text\",\"C\":\"SGVsbG8gd29ybGQh\"}");
 }
 ```
 
-Note how similar the code is to generate a CBOR document. The only change is the creation of the writer (cbor::create_writer instead of json::create_writer) and the type of output_stream (vector<byte> is better suited to storing the binary data than std::string).
-CBOR leads to some significant reduction in document size (the document above is 41 bytes in JSON but only 27 in CBOR format). Because CBOR supports binary data natively, there is also performance benefits (no need to encode the data in base64).
+Note how similar the code is to generate a CBOR document. The only change is the creation of the writer (`cbor::create_writer` instead of `json::create_writer`) and the type of output_stream (vector<byte> is better suited to storing the binary data than std::string).
+CBOR leads to some significant reduction in document size, in particular when binary data is involved. The JSON document is 41 bytes but the CBOR one is only 27.
 
 ```cpp
 #include <goldfish/cbor_writer.h>
@@ -145,7 +144,7 @@ int main()
 
 ## Comparison with other libraries
 ### Parsing performance
-The task is to compute the sum of all the integers in a large JSON document. The rapidjson implementation uses the SAX model of that library. For Casablanca, we had no choice but to load the document as a DOM.
+We measured the performance of a trivial task: compute the sum of all the integers in a large JSON document. The rapidjson implementation uses the SAX model of that library. For Casablanca, we had no choice but to load the document as a DOM.
 This test was compiled using Visual C++ 2015, ran on an Intel Core i7 CPU, both in 32 and 64 bits, on a 16MB JSON document.
 This chart shows the time it took to complete the task, normalized in MB of JSON per second (16MB/duration)
 
@@ -190,9 +189,9 @@ struct write_stream
 	void write_buffer(const_buffer_ref data);
 
 	// Finish writing to the stream
-	// This API must be called once the end of stream is reached
-	// It may return some data. For example, a vector_writer returns/
-	// the data written to the stream (in the form of an std::vector<byte>)
+	// This API must be called once the end of stream is reached.
+	// It may return some data. For example, a vector_writer returns
+	// the data written to the stream (in the form of an std::vector<byte>).
 	auto flush();
 }
 ```
@@ -223,6 +222,10 @@ template <class T> T stream::read(reader_stream&);
 // This API is implemented in terms of write_buffer, unless the writer_stream has a
 // write method on it (in which case that method is used)
 template <class T> void stream::write(writer_stream&, const T&);
+
+// Copy a reader stream to an output stream
+// Note that this API doesn't flush the output stream and returns the writer stream as a convenience
+template <class Reader, class Writer> Writer copy(Reader&&, Writer&&);
 ```
 
 Here is the exhaustive list of readers provided by the library:

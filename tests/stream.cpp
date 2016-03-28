@@ -74,4 +74,26 @@ TEST_CASE(test_skip)
 	t(chunk_size * 2 + 1, chunk_size * 2 + 2);
 }
 
+TEST_CASE(test_copy)
+{
+	test(copy(read_string("Hello"), string_writer{}).flush() == "Hello");
+
+	{
+		string_writer w;
+		test(&copy(read_string("Hello"), w) == &w);
+		test(w.flush() == "Hello");
+	}
+
+	auto test_string_of_size = [](auto size)
+	{
+		test(copy(read_string(std::string(size, 'a')), string_writer{}).flush() == std::string(size, 'a'));
+	};
+	test_string_of_size(65535);
+	test_string_of_size(65536);
+	test_string_of_size(65537);
+	test_string_of_size(65536 * 2 - 1);
+	test_string_of_size(65536 * 2);
+	test_string_of_size(65536 * 2 + 1);
+}
+
 }}

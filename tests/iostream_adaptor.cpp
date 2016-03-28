@@ -13,13 +13,13 @@ namespace goldfish
 	{
 		std::stringstream s;
 		stream::ostream_writer writer{ s };
-		stream::copy_stream(stream::read_string_non_owning("Hello"), writer);
+		stream::copy(stream::read_string("Hello"), writer);
 		writer.flush();
 		test(s.str() == "Hello");
 	}
 	TEST_CASE(test_create_istream)
 	{
-		auto s = stream::make_istream<4>(stream::read_string_non_owning("Hello world"));
+		auto s = stream::make_istream<4>(stream::read_string("Hello world"));
 
 		std::string word;
 		s >> word;

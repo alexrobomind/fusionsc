@@ -110,7 +110,7 @@ namespace goldfish { namespace dom
 	{
 		auto r = [](auto input)
 		{
-			auto stream = json::read(stream::read_string_non_owning(input)).as_string();
+			auto stream = json::read(stream::read_string_ref(input)).as_string();
 			std::string result;
 			byte buffer[1];
 			while (stream.read_buffer(buffer))

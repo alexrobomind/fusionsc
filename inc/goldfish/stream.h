@@ -210,7 +210,7 @@ namespace goldfish { namespace stream
 			m_buffer = std::move(rhs.m_buffer);
 			m_data = {
 				m_buffer.data() + index_from,
-				rhs.m_buffer.size()
+				rhs.m_data.size()
 			};
 		}
 		vector_reader& operator = (const vector_reader&) = delete;
@@ -233,7 +233,7 @@ namespace goldfish { namespace stream
 			m_buffer = std::move(rhs.m_buffer);
 			m_data = {
 				reinterpret_cast<const byte*>(m_buffer.data()) + index_from,
-				rhs.m_buffer.size()
+				rhs.m_data.size()
 			};
 		}
 		string_reader& operator = (const string_reader&) = delete;
@@ -299,20 +299,16 @@ namespace goldfish { namespace stream
 
 	template <class stream> std::string read_all_as_string(stream&& s)
 	{
-		string_writer writer;
-		copy_stream(s, writer);
-		return writer.flush();
+		return copy(s, string_writer{}).flush();
 	}
 
 	template <class stream> enable_if_reader_t<stream, std::vector<byte>> read_all(stream&& s)
 	{
-		vector_writer writer;
-		copy_stream(s, writer);
-		return writer.flush();
+		return copy(s, vector_writer{}).flush();
 	}
 
 	template <class Reader, class Writer> 
-	std::enable_if_t<is_reader<std::decay_t<Reader>>::value && is_writer<std::decay_t<Writer>>::value, void> copy_stream(Reader&& r, Writer&& w)
+	std::enable_if_t<is_reader<std::decay_t<Reader>>::value && is_writer<std::decay_t<Writer>>::value, Writer> copy(Reader&& r, Writer&& w)
 	{
 		byte buffer[65536];
 		size_t cb;
@@ -320,7 +316,8 @@ namespace goldfish { namespace stream
 		{
 			cb = r.read_buffer(buffer);
 			w.write_buffer({ buffer, cb });
-		} while (cb == sizeof(buffer));			
+		} while (cb == sizeof(buffer));
+		return std::forward<Writer>(w);
 	}
 }}
 
