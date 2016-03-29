@@ -58,7 +58,7 @@ namespace goldfish
 		std::aligned_storage_t<sizeof(T), alignof(T)> m_data;
 	};
 
-	template <class T, class dummy = void>
+	template <class T, class Enable = void>
 	class optional
 	{
 	public:

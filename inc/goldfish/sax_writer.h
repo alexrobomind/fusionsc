@@ -144,14 +144,14 @@ namespace goldfish { namespace sax
 
 		template <class T> auto write(T&& s, std::enable_if_t<stream::is_reader<std::decay_t<T>>::value>* = nullptr)
 		{
-			return copy_stream(s, [&](size_t cb) { return start_binary(cb); }, [&] { return start_binary(); });
+			return copy(s, [&](size_t cb) { return start_binary(cb); }, [&] { return start_binary(); });
 		}
 
 		template <class T> auto write(T&& document, std::enable_if_t<std::is_same<typename std::decay_t<T>::tag, tags::document>::value>* = nullptr)
 		{
 			return document.visit(best_match(
 				[&](auto&& x, tags::binary) { return write(x); },
-				[&](auto&& x, tags::string) { return copy_stream(x, [&](size_t cb) { return start_string(cb); }, [&] { return start_string(); }); },
+				[&](auto&& x, tags::string) { return copy(x, [&](size_t cb) { return start_string(cb); }, [&] { return start_string(); }); },
 				[&](auto&& x, tags::array)
 				{
 					auto array_writer = start_array();
@@ -184,7 +184,7 @@ namespace goldfish { namespace sax
 		}
 	private:
 		template <class Stream, class CreateWriterWithSize, class CreateWriterWithoutSize>
-		auto copy_stream(Stream& s, CreateWriterWithSize&& create_writer_with_size, CreateWriterWithoutSize&& create_writer_without_size)
+		auto copy(Stream& s, CreateWriterWithSize&& create_writer_with_size, CreateWriterWithoutSize&& create_writer_without_size)
 		{
 			byte buffer[8 * 1024];
 			auto cb = s.read_buffer(buffer);
@@ -200,7 +200,7 @@ namespace goldfish { namespace sax
 				// We read only a portion of the stream
 				auto output_stream = create_writer_without_size();
 				output_stream.write_buffer(buffer);
-				stream::copy_stream(s, output_stream);
+				stream::copy(s, output_stream);
 				return output_stream.flush();
 			}
 		};

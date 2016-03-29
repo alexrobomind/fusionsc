@@ -123,12 +123,14 @@ namespace goldfish { namespace json
 			while (!buffer.empty())
 			{
 				byte c;
+				auto it = buffer.begin();
 				while (lookup[c = stream::read<byte>(m_stream)] == S)
 				{
-					buffer.pop_front() = c;
-					if (buffer.empty())
-						return original - buffer.size();
+					*(it++) = c;
+					if (it == buffer.end())
+						return original;
 				}
+				buffer.remove_front(it - buffer.begin());
 
 				switch (lookup[c])
 				{

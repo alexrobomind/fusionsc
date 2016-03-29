@@ -191,9 +191,59 @@ namespace goldfish { namespace stream
 	};
 
 	inline const_buffer_ref_reader read_buffer_ref(const_buffer_ref x) { return{ x }; }
-	template <size_t N> const_buffer_ref_reader read_string_non_owning(const char(&s)[N]) { assert(s[N - 1] == 0); return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), N - 1 }; }
-	inline const_buffer_ref_reader read_string_non_owning(const char* s) { return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), strlen(s) }; }
-	inline const_buffer_ref_reader read_string_non_owning(const std::string& s) { return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s.data()), s.size() }; }
+	template <size_t N> const_buffer_ref_reader read_string_ref(const char(&s)[N]) { return string_literal_to_non_null_terminated_buffer(s); }
+	inline const_buffer_ref_reader read_string_ref(const char* s) { return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s), strlen(s) }; }
+	inline const_buffer_ref_reader read_string_ref(const std::string& s) { return const_buffer_ref{ reinterpret_cast<const uint8_t*>(s.data()), s.size() }; }
+
+	class vector_reader : public const_buffer_ref_reader
+	{
+	public:
+		vector_reader(std::vector<byte>&& buffer)
+			: m_buffer(std::move(buffer))
+		{
+			m_data = m_buffer;
+		}
+		vector_reader(const vector_reader&) = delete;
+		vector_reader(vector_reader&& rhs)
+		{
+			auto index_from = rhs.m_data.begin() - rhs.m_buffer.data();
+			m_buffer = std::move(rhs.m_buffer);
+			m_data = {
+				m_buffer.data() + index_from,
+				rhs.m_data.size()
+			};
+		}
+		vector_reader& operator = (const vector_reader&) = delete;
+		vector_reader& operator = (vector_reader&&) = delete;
+	private:
+		std::vector<byte> m_buffer;
+	};
+	class string_reader : public const_buffer_ref_reader
+	{
+	public:
+		string_reader(std::string&& buffer)
+			: m_buffer(std::move(buffer))
+		{
+			m_data = { reinterpret_cast<const byte*>(m_buffer.data()), m_buffer.size() };
+		}
+		string_reader(const string_reader&) = delete;
+		string_reader(string_reader&& rhs)
+		{
+			auto index_from = rhs.m_data.begin() - reinterpret_cast<const byte*>(rhs.m_buffer.data());
+			m_buffer = std::move(rhs.m_buffer);
+			m_data = {
+				reinterpret_cast<const byte*>(m_buffer.data()) + index_from,
+				rhs.m_data.size()
+			};
+		}
+		string_reader& operator = (const string_reader&) = delete;
+		string_reader& operator = (string_reader&&) = delete;
+	private:
+		std::string m_buffer;
+	};
+	inline vector_reader read_buffer(std::vector<byte> x) { return{ std::move(x) }; }
+	inline string_reader read_string(std::string x) { return{ std::move(x) }; }
+	template <size_t N> auto read_string(const char(&s)[N]) { return read_string_ref(s); }
 
 	class vector_writer
 	{
@@ -249,20 +299,16 @@ namespace goldfish { namespace stream
 
 	template <class stream> std::string read_all_as_string(stream&& s)
 	{
-		string_writer writer;
-		copy_stream(s, writer);
-		return writer.flush();
+		return copy(s, string_writer{}).flush();
 	}
 
 	template <class stream> enable_if_reader_t<stream, std::vector<byte>> read_all(stream&& s)
 	{
-		vector_writer writer;
-		copy_stream(s, writer);
-		return writer.flush();
+		return copy(s, vector_writer{}).flush();
 	}
 
 	template <class Reader, class Writer> 
-	std::enable_if_t<is_reader<std::decay_t<Reader>>::value && is_writer<std::decay_t<Writer>>::value, void> copy_stream(Reader&& r, Writer&& w)
+	std::enable_if_t<is_reader<std::decay_t<Reader>>::value && is_writer<std::decay_t<Writer>>::value, Writer> copy(Reader&& r, Writer&& w)
 	{
 		byte buffer[65536];
 		size_t cb;
@@ -270,7 +316,8 @@ namespace goldfish { namespace stream
 		{
 			cb = r.read_buffer(buffer);
 			w.write_buffer({ buffer, cb });
-		} while (cb == sizeof(buffer));			
+		} while (cb == sizeof(buffer));
+		return std::forward<Writer>(w);
 	}
 }}
 

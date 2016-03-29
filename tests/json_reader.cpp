@@ -91,26 +91,26 @@ namespace goldfish { namespace dom
 	TEST_CASE(json_parse_key)
 	{
 		// From uint
-		test(json::read(stream::read_string_non_owning("{\"1\":1}")).as_map().read_key()->as_int64() == 1);
-		test(json::read(stream::read_string_non_owning("{\"1\":1}")).as_map().read_key()->as_uint64() == 1);
-		test(json::read(stream::read_string_non_owning("{\"1\":1}")).as_map().read_key()->as_double() == 1);
+		test(json::read(stream::read_string("{\"1\":1}")).as_map().read_key()->as_int64() == 1);
+		test(json::read(stream::read_string("{\"1\":1}")).as_map().read_key()->as_uint64() == 1);
+		test(json::read(stream::read_string("{\"1\":1}")).as_map().read_key()->as_double() == 1);
 
 		// From int
-		test(json::read(stream::read_string_non_owning("{\"-1\":1}")).as_map().read_key()->as_int64() == -1);
-		test(json::read(stream::read_string_non_owning("{\"-1\":1}")).as_map().read_key()->as_double() == -1.0);
+		test(json::read(stream::read_string("{\"-1\":1}")).as_map().read_key()->as_int64() == -1);
+		test(json::read(stream::read_string("{\"-1\":1}")).as_map().read_key()->as_double() == -1.0);
 
 		// From double
-		test(json::read(stream::read_string_non_owning("{\"-1.5\":1}")).as_map().read_key()->as_double() == -1.5);
+		test(json::read(stream::read_string("{\"-1.5\":1}")).as_map().read_key()->as_double() == -1.5);
 
 		// As binary
-		test(stream::read_all_as_string(json::read(stream::read_string_non_owning("{\"TWFu\":1}")).as_map().read_key()->as_binary()) == "Man");
+		test(stream::read_all_as_string(json::read(stream::read_string("{\"TWFu\":1}")).as_map().read_key()->as_binary()) == "Man");
 	}
 
 	TEST_CASE(json_read_string_char_by_char)
 	{
 		auto r = [](auto input)
 		{
-			auto stream = json::read(stream::read_string_non_owning(input)).as_string();
+			auto stream = json::read(stream::read_string_ref(input)).as_string();
 			std::string result;
 			byte buffer[1];
 			while (stream.read_buffer(buffer))
@@ -126,7 +126,7 @@ namespace goldfish { namespace dom
 	{
 		auto run = [](auto exception, const char* text)
 		{
-			auto s = stream::read_string_non_owning(text);
+			auto s = stream::read_string(text);
 			expect_exception<decltype(exception)>([&]
 			{
 				dom::load_in_memory(json::read(stream::ref(s)));
@@ -171,7 +171,7 @@ namespace goldfish { namespace dom
 	{
 		auto run = [](const char* text)
 		{
-			auto s = stream::read_string_non_owning(text);
+			auto s = stream::read_string(text);
 			dom::load_in_memory(json::read(stream::ref(s)));
 			test(json::details::peek_non_space(s) == nullopt);
 		};

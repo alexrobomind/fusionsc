@@ -6,10 +6,10 @@
 
 namespace goldfish { namespace stream
 {
-	class istream_reader
+	class istream_reader_ref
 	{
 	public:
-		istream_reader(std::istream& stream)
+		istream_reader_ref(std::istream& stream)
 			: m_stream(stream)
 		{}
 		size_t read_buffer(buffer_ref buffer)
@@ -23,10 +23,10 @@ namespace goldfish { namespace stream
 	private:
 		std::istream& m_stream;
 	};
-	class ostream_writer
+	class ostream_writer_ref
 	{
 	public:
-		ostream_writer(std::ostream& stream)
+		ostream_writer_ref(std::ostream& stream)
 			: m_stream(stream)
 		{}
 		void write_buffer(const_buffer_ref buffer)

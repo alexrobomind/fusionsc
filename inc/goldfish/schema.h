@@ -11,9 +11,7 @@ namespace goldfish
 	{
 		template <size_t N> constexpr const_buffer_ref make_key(const char(&text)[N])
 		{
-			static_assert(N > 0, "expect null terminated strings");
-			assert(text[N - 1] == 0);
-			return{ reinterpret_cast<const byte*>(text), N - 1 };
+			return string_literal_to_non_null_terminated_buffer(text);
 		}
 		template <size_t N, size_t max_length> class schema
 		{

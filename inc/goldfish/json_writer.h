@@ -206,13 +206,13 @@ namespace goldfish { namespace json
 		{}
 		auto write(bool x)
 		{
-			if (x) m_stream.write_buffer({ reinterpret_cast<const byte*>("\"true\""), 6 });
-			else   m_stream.write_buffer({ reinterpret_cast<const byte*>("\"false\""), 7 });
+			if (x) m_stream.write_buffer(string_literal_to_non_null_terminated_buffer("\"true\""));
+			else   m_stream.write_buffer(string_literal_to_non_null_terminated_buffer("\"false\""));
 			return m_stream.flush();
 		}
 		auto write(nullptr_t)
 		{
-			m_stream.write_buffer({ reinterpret_cast<const byte*>("\"null\""), 6 });
+			m_stream.write_buffer(string_literal_to_non_null_terminated_buffer("\"null\""));
 			return m_stream.flush();
 		}
 		auto write(tags::undefined)

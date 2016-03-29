@@ -23,7 +23,7 @@ namespace goldfish { namespace stream
 				m_read_buffer_to_be_filled = data;
 				m_condition_variable.notify_one(); // Wake up the writer (now that m_read_buffer_to_be_filled is likely not empty)
 				m_condition_variable.wait(lock, [&] { return m_state != state::opened || m_read_buffer_to_be_filled.empty(); });
-				if (m_state == state::closed)
+				if (m_state == state::terminated)
 					throw reader_writer_stream_closed();
 				return data.size() - m_read_buffer_to_be_filled.size();
 			}
@@ -35,8 +35,8 @@ namespace goldfish { namespace stream
 
 				while (!data.empty())
 				{
-					m_condition_variable.wait(lock, [&] { return m_state == state::closed || !m_read_buffer_to_be_filled.empty(); });
-					if (m_state == state::closed)
+					m_condition_variable.wait(lock, [&] { return m_state == state::terminated || !m_read_buffer_to_be_filled.empty(); });
+					if (m_state == state::terminated)
 						throw reader_writer_stream_closed();
 
 					auto to_copy = std::min(m_read_buffer_to_be_filled.size(), data.size());
@@ -49,18 +49,18 @@ namespace goldfish { namespace stream
 			{
 				std::unique_lock<std::mutex> lock(m_mutex);
 				assert(m_state != state::flushed);
-				if (m_state == state::closed)
+				if (m_state == state::terminated)
 					throw reader_writer_stream_closed{};
 
 				m_state = state::flushed;
 				m_condition_variable.notify_one();
 			}
-			void close()
+			void terminate()
 			{
 				std::unique_lock<std::mutex> lock(m_mutex);
 				if (m_state == state::opened)
 				{
-					m_state = state::flushed;
+					m_state = state::terminated;
 					m_condition_variable.notify_one();
 				}
 			}
@@ -74,7 +74,7 @@ namespace goldfish { namespace stream
 			{
 				opened,
 				flushed,
-				closed,
+				terminated,
 			} m_state = state::opened;
 		};
 	}
@@ -96,7 +96,7 @@ namespace goldfish { namespace stream
 		~reader_on_reader_writer()
 		{
 			if (m_stream)
-				m_stream->close();
+				m_stream->terminate();
 		}
 		size_t read_buffer(buffer_ref data)
 		{
@@ -123,7 +123,7 @@ namespace goldfish { namespace stream
 		~writer_on_reader_writer()
 		{
 			if (m_stream)
-				m_stream->close();
+				m_stream->terminate();
 		}
 		void write_buffer(const_buffer_ref data)
 		{
@@ -138,7 +138,12 @@ namespace goldfish { namespace stream
 		std::shared_ptr<details::reader_writer_stream> m_stream;
 	};
 
-	inline std::pair<reader_on_reader_writer, writer_on_reader_writer> create_reader_writer_stream()
+	struct reader_writer_pair
+	{
+		reader_on_reader_writer reader;
+		writer_on_reader_writer writer;
+	};
+	inline reader_writer_pair create_reader_writer_stream()
 	{
 		auto inner = std::make_shared<details::reader_writer_stream>();
 		return{

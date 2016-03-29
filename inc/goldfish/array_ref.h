@@ -110,4 +110,11 @@ namespace goldfish
 
 	template <class T> const_buffer_ref constexpr to_buffer(const T& t) { return{ reinterpret_cast<const byte*>(&t), reinterpret_cast<const byte*>(&t + 1) }; }
 	template <class T> buffer_ref constexpr to_buffer(T& t) { return{ reinterpret_cast<byte*>(&t), reinterpret_cast<byte*>(&t + 1) }; }
+
+	template <size_t N> constexpr const_buffer_ref string_literal_to_non_null_terminated_buffer(const char(&text)[N])
+	{
+		static_assert(N > 0, "expect null terminated strings");
+		assert(text[N - 1] == 0);
+		return{ reinterpret_cast<const byte*>(text), N - 1 };
+	}
 }

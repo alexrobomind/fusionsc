@@ -74,8 +74,9 @@ namespace goldfish
 		// Floating point can be converted from an int
 		auto as_double()
 		{
+			assert(!m_moved_from);
 			auto result = visit(first_match(
-				[](auto&& x, tags::floating_point) { return x; },
+				[](double x, tags::floating_point) { return x; },
 				[](auto&& x, tags::unsigned_int) { return static_cast<double>(x); },
 				[](auto&& x, tags::signed_int) { return static_cast<double>(x); },
 				[](auto&& x, tags::string)
@@ -109,6 +110,7 @@ namespace goldfish
 		// Unsigned ints can be converted from signed ints
 		uint64_t as_uint64()
 		{
+			assert(!m_moved_from);
 			auto result = visit(first_match(
 				[](auto&& x, tags::unsigned_int) { return x; },
 				[](auto&& x, tags::signed_int) { return cast_signed_to_unsigned(x); },
@@ -168,6 +170,7 @@ namespace goldfish
 		// Signed ints can be converted from unsigned ints
 		int64_t as_int64()
 		{
+			assert(!m_moved_from);
 			auto result = visit(first_match(
 				[](auto&& x, tags::signed_int) { return x; },
 				[](auto&& x, tags::unsigned_int) { return cast_unsigned_to_signed(x); },
@@ -227,6 +230,7 @@ namespace goldfish
 
 		auto as_bool()
 		{
+			assert(!m_moved_from);
 			auto result = visit(first_match(
 				[](auto&& x, tags::boolean) { return x; },
 				[](auto&& x, tags::string)
