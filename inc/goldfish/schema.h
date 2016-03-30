@@ -128,6 +128,10 @@ namespace goldfish
 				}
 			}
 
+			// If m_map has debug checks, reading a nullptr would unlock the parent
+			// However, the user of our class has no way to know whether the nullopt that we return indicates that we reached the end
+			// of the map, or if it just means the key was not found. Relock the parent to ensure a call to seek_to_end is made
+			debug_checks::lock_parent(m_map);
 			return nullopt;
 		}
 		template <class Key> auto read(Key&& key)
@@ -146,6 +150,7 @@ namespace goldfish
 			}
 
 			goldfish::seek_to_end(m.m_map);
+			debug_checks::unlock_parent(m.m_map);
 		}
 	private:
 		Map m_map;

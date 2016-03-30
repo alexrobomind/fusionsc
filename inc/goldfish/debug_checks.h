@@ -47,6 +47,17 @@ namespace goldfish { namespace debug_checks
 		container_base& operator = (const container_base&) = delete;
 		container_base& operator = (container_base&&) = delete;
 
+		void lock_parent()
+		{
+			if (auto p = parent())
+				p->lock();
+		}
+		void unlock_parent()
+		{
+			assert(!is_locked());
+			if (auto p = parent())
+				p->unlock();
+		}
 	protected:
 		void set_flag() { m_parent_address_and_bits |= 2; }
 		void clear_flag() { m_parent_address_and_bits &= ~static_cast<uintptr_t>(2); }
@@ -64,23 +75,6 @@ namespace goldfish { namespace debug_checks
 		{
 			if (is_locked())
 				error_handler::on_error();
-		}
-		void unlock_parent()
-		{
-			assert(!is_locked());
-			#ifndef NDEBUG
-			bool had_flag = has_flag();
-			#endif
-
-			if (auto p = parent())
-			{
-				p->unlock();
-				m_parent_address_and_bits &= 3; // Keep only the locked and flag bits, erase the parent point
-			}
-
-			assert(parent() == nullptr);
-			assert(!is_locked());
-			assert(has_flag() == had_flag);
 		}
 		void unlock_parent_and_lock_self()
 		{
@@ -102,4 +96,18 @@ namespace goldfish { namespace debug_checks
 		void unlock() { m_parent_address_and_bits &= ~static_cast<uintptr_t>(1); }
 		uintptr_t m_parent_address_and_bits;
 	};
+
+	template <class T> static std::true_type test_has_lock_parent(decltype(std::declval<T>().lock_parent())*) { return{}; }
+	template <class T> static std::false_type test_has_lock_parent(...) { return{}; }
+	template <class T> struct has_lock_parent : decltype(test_has_lock_parent<T>(nullptr)) {};
+
+	template <class T> static std::true_type test_has_unlock_parent(decltype(std::declval<T>().unlock_parent())*) { return{}; }
+	template <class T> static std::false_type test_has_unlock_parent(...) { return{}; }
+	template <class T> struct has_unlock_parent : decltype(test_has_unlock_parent<T>(nullptr)) {};
+
+	template <class T> std::enable_if_t< has_lock_parent<T>::value, void> lock_parent(T& t) { t.lock_parent(); }
+	template <class T> std::enable_if_t<!has_lock_parent<T>::value, void> lock_parent(T& t) { }
+
+	template <class T> std::enable_if_t< has_unlock_parent<T>::value, void> unlock_parent(T& t) { t.unlock_parent(); }
+	template <class T> std::enable_if_t<!has_unlock_parent<T>::value, void> unlock_parent(T& t) { }
 }}

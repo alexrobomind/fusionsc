@@ -5,9 +5,15 @@
 
 namespace goldfish
 {
+	struct library_misused {};
+	struct throw_on_error
+	{
+		static void on_error() { throw library_misused{}; }
+	};
+
 	TEST_CASE(test_filtered_map_empty_map)
 	{
-		auto map = apply_schema(json::read(stream::read_string("{}")).as_map(), make_schema("10", "20", "30"));
+		auto map = json::read(stream::read_string("{}")).as_map("10", "20", "30");
 
 		test(map.read_by_schema_index(0) == nullopt);
 
@@ -16,9 +22,9 @@ namespace goldfish
 
 	TEST_CASE(test_filtered_map)
 	{
-		auto map = apply_schema(json::read(
-			stream::read_string("{\"10\":1,\"15\":2,\"a\":\"b\",\"40\":3,\"50\":4,\"60\":5,\"80\":6}")).as_map(),
-			make_schema("10", "20", "30", "40", "50", "60", "70", "80", "90"));
+		auto map = json::read(
+			stream::read_string("{\"10\":1,\"15\":2,\"a\":\"b\",\"40\":3,\"50\":4,\"60\":5,\"80\":6}")).
+			as_map("10", "20", "30", "40", "50", "60", "70", "80", "90");
 
 		// Reading the very first key
 		test(dom::load_in_memory(*map.read_by_schema_index(0)) == 1ull);
@@ -45,9 +51,7 @@ namespace goldfish
 
 	TEST_CASE(filtered_map_skip_while_on_value)
 	{
-		auto map = apply_schema(
-			json::read(stream::read_string("{\"20\":1}")).as_map(),
-			make_schema("10", "20"));
+		auto map = json::read(stream::read_string("{\"20\":1}")).as_map("10", "20");
 
 		test(map.read_by_schema_index(0) == nullopt);
 		seek_to_end(map);
@@ -55,8 +59,20 @@ namespace goldfish
 
 	TEST_CASE(test_filtered_map_by_value)
 	{
-		auto map = apply_schema(json::read(stream::read_string("{\"B\":1}")).as_map(), make_schema("A", "B"));
+		auto map = json::read(stream::read_string("{\"B\":1}")).as_map("A", "B");
 		test(dom::load_in_memory(*map.read("B")) == 1ull);
 		seek_to_end(map);
+	}
+
+	TEST_CASE(test_missing_seek_to_end_err)
+	{
+		auto a = json::read(stream::read_string("[{}]"), throw_on_error{}).as_array();
+		
+		auto map = a.read().value().as_map("A", "B");
+		test(map.read("A") == nullopt);
+
+		// Even though in this particular example, the map reached the end, it's still invalid to read from a
+		// because map.read("A") might have returned null because "A" wasn't found (and "B" might still be in the map)
+		expect_exception<library_misused>([&] { a.read(); });
 	}
 }

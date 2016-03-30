@@ -79,7 +79,8 @@ namespace goldfish { namespace debug_checks
 	};
 	template <class error_handler, class T> array<error_handler, std::decay_t<T>> make_array(container_base<error_handler>* parent, T&& inner) { return{ parent, std::forward<T>(inner) }; }
 
-	template <class error_handler, class T> class map : private container_base<error_handler>
+	// The inheritance is public so that schema.h can use it
+	template <class error_handler, class T> class map : public container_base<error_handler>
 	{
 	public:
 		using tag = tags::map;
