@@ -21,16 +21,10 @@ namespace goldfish { namespace cbor
 
 	template <class Stream> using document = document_impl<
 		false /*does_json_conversions*/,
-		bool,
-		nullptr_t,
-		uint64_t,
-		int64_t,
-		double,
 		byte_string<Stream>,
 		text_string<Stream>,
 		array<Stream>,
-		map<Stream>,
-		tags::undefined>;
+		map<Stream>>;
 
 	// Read one document from the stream, or return nullopt for the null terminator (byte 0xFF)
 	template <class Stream> optional<document<std::decay_t<Stream>>> read_no_debug_check(Stream&& s);

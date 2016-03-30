@@ -60,6 +60,7 @@ How about a more complicated example. Note again that this program doesn't alloc
 
 ```cpp
 #include <goldfish/json_reader.h>
+#include <goldfish/iostream_adaptor.h> // to be able to output streams to cout
 #include <iostream>
 
 int main()

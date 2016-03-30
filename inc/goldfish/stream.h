@@ -3,6 +3,7 @@
 #include <array>
 #include <vector>
 #include "array_ref.h"
+#include "common.h"
 #include "match.h"
 #include "optional.h"
 
@@ -39,7 +40,7 @@ namespace goldfish { namespace stream
 	template <class Stream> std::enable_if_t<!has_seek<Stream>::value, uint64_t> seek(Stream& s, uint64_t x)
 	{
 		auto original = x;
-		byte buffer[8 * 1024];
+		byte buffer[typical_buffer_length];
 		while (x >= sizeof(buffer))
 		{
 			auto cb = s.read_buffer(buffer);
@@ -51,12 +52,12 @@ namespace goldfish { namespace stream
 		return original - x;
 	}
 
-	template <class T, class Stream> std::enable_if_t< has_read<Stream, T>::value, T> read(Stream& s)
+	template <class T, class Stream> std::enable_if_t< has_read<Stream, T>::value && std::is_standard_layout<T>::value, T> read(Stream& s)
 	{
 		return s.read<T>();
 	}
 
-	template <class T, class Stream> std::enable_if_t<is_reader<std::decay_t<Stream>>::value && !has_read<Stream, T>::value, T> read(Stream& s)
+	template <class T, class Stream> std::enable_if_t<is_reader<std::decay_t<Stream>>::value && !has_read<Stream, T>::value && std::is_standard_layout<T>::value, T> read(Stream& s)
 	{
 		T t;
 		if (s.read_buffer({ reinterpret_cast<byte*>(&t), sizeof(t) }) != sizeof(t))
@@ -76,8 +77,7 @@ namespace goldfish { namespace stream
 	template <class T> struct is_ref<ref_reader<T>> : std::true_type {};
 	template <class T> struct is_ref<ref_writer<T>> : std::true_type {};
 
-	template <class inner>
-	class ref_reader
+	template <class inner> class ref_reader
 	{
 	public:
 		static_assert(!is_ref<inner>::value, "Don't nest ref");
@@ -129,7 +129,9 @@ namespace goldfish { namespace stream
 	public:
 		const_buffer_ref_reader() = default;
 		const_buffer_ref_reader(const_buffer_ref_reader&&) = default;
+		const_buffer_ref_reader(const const_buffer_ref_reader&) = delete;
 		const_buffer_ref_reader& operator = (const const_buffer_ref_reader&) = delete;
+		const_buffer_ref_reader& operator = (const_buffer_ref_reader&&) = delete;
 
 		const_buffer_ref_reader(const_buffer_ref data)
 			: m_data(data)
@@ -148,18 +150,18 @@ namespace goldfish { namespace stream
 
 		template <class T> std::enable_if_t<std::is_standard_layout<T>::value, T> read()
 		{
-			return read_helper<T>(std::integral_constant<size_t, sizeof(T)>());
+			return read_helper<T>(std::integral_constant<size_t, alignof(T)>());
 		}
 		template <class T> std::enable_if_t<std::is_standard_layout<T>::value, optional<T>> peek()
 		{
-			return peek_helper<T>(std::integral_constant<size_t, sizeof(T)>());
+			return peek_helper<T>(std::integral_constant<size_t, alignof(T)>());
 		}
 	private:
 		template <class T> optional<T> peek_helper(std::integral_constant<size_t, 1>)
 		{
-			if (m_data.empty())
+			if (m_data.size() < sizeof(T))
 				return nullopt;
-			return reinterpret_cast<const T&>(m_data.front());
+			return reinterpret_cast<const T&>(*m_data.data());
 		}
 		template <class T, size_t s> optional<T> peek_helper(std::integral_constant<size_t, s>)
 		{
@@ -171,9 +173,9 @@ namespace goldfish { namespace stream
 		}
 		template <class T> T read_helper(std::integral_constant<size_t, 1>)
 		{
-			if (m_data.empty())
+			if (m_data.size() < sizeof(T))
 				throw unexpected_end_of_stream();
-			return reinterpret_cast<const T&>(m_data.pop_front());
+			return reinterpret_cast<const T&>(*m_data.remove_front(sizeof(T)).data());
 		}
 		template <class T, size_t s> T read_helper(std::integral_constant<size_t, s>)
 		{
@@ -226,7 +228,6 @@ namespace goldfish { namespace stream
 		{
 			m_data = { reinterpret_cast<const byte*>(m_buffer.data()), m_buffer.size() };
 		}
-		string_reader(const string_reader&) = delete;
 		string_reader(string_reader&& rhs)
 		{
 			auto index_from = rhs.m_data.begin() - reinterpret_cast<const byte*>(rhs.m_buffer.data());
@@ -236,6 +237,7 @@ namespace goldfish { namespace stream
 				rhs.m_data.size()
 			};
 		}
+		string_reader(const string_reader&) = delete;
 		string_reader& operator = (const string_reader&) = delete;
 		string_reader& operator = (string_reader&&) = delete;
 	private:
@@ -250,18 +252,29 @@ namespace goldfish { namespace stream
 	public:
 		vector_writer() = default;
 		vector_writer(vector_writer&&) = default;
+		vector_writer(const vector_writer&) = delete;
 		vector_writer& operator=(vector_writer&&) = default;
+		vector_writer& operator=(const vector_writer&) = delete;
 
 		void write_buffer(const_buffer_ref d)
 		{
+			assert(!m_flushed);
+			if (m_data.capacity() - m_data.size() < d.size())
+				m_data.reserve(m_data.capacity() + m_data.capacity() / 2);
 			m_data.insert(m_data.end(), d.begin(), d.end());
 		}
 		auto flush()
 		{
+			assert(!m_flushed);
 			#ifndef NDEBUG
 			m_flushed = true;
 			#endif
 			return std::move(m_data);
+		}
+		template <class T> std::enable_if_t<std::is_standard_layout<T>::value && sizeof(T) == 1, void> write(const T& t)
+		{
+			assert(!m_flushed);
+			m_data.push_back(reinterpret_cast<const byte&>(t));
 		}
 		const auto& data()
 		{
@@ -279,52 +292,66 @@ namespace goldfish { namespace stream
 	public:
 		string_writer() = default;
 		string_writer(string_writer&&) = default;
+		string_writer(const string_writer&) = delete;
 		string_writer& operator=(string_writer&&) = default;
+		string_writer& operator=(const string_writer&) = delete;
 
 		void write_buffer(const_buffer_ref d)
 		{
-			if (data.capacity() - data.size() < d.size())
-				data.reserve(data.capacity() + data.capacity() / 2);
+			assert(!m_flushed);
+			if (m_data.capacity() - m_data.size() < d.size())
+				m_data.reserve(m_data.capacity() + m_data.capacity() / 2);
 
-			data.append(reinterpret_cast<const char*>(d.begin()), reinterpret_cast<const char*>(d.end()));
+			m_data.append(reinterpret_cast<const char*>(d.begin()), reinterpret_cast<const char*>(d.end()));
 		}
 		template <class T> std::enable_if_t<std::is_standard_layout<T>::value && sizeof(T) == 1, void> write(const T& t)
 		{
-			data.push_back(reinterpret_cast<const char&>(t));
+			assert(!m_flushed);
+			m_data.push_back(reinterpret_cast<const char&>(t));
 		}
-		auto flush() { return std::move(data); }
+		auto flush()
+		{
+			assert(!m_flushed);
+			#ifndef NDEBUG
+			m_flushed = true;
+			#endif
+			return std::move(m_data);
+		}
+		const auto& data()
+		{
+			assert(!m_flushed);
+			return m_data;
+		}
 	private:
-		std::string data;
+		#ifndef NDEBUG
+		bool m_flushed = false;
+		#endif
+		std::string m_data;
 	};
 
 	template <class stream> std::string read_all_as_string(stream&& s)
 	{
-		return copy(s, string_writer{}).flush();
+		string_writer output;
+		copy(s, output);
+		return output.flush();
 	}
 
 	template <class stream> enable_if_reader_t<stream, std::vector<byte>> read_all(stream&& s)
 	{
-		return copy(s, vector_writer{}).flush();
+		vector_writer output;
+		copy(s, output);
+		return output.flush();
 	}
 
 	template <class Reader, class Writer> 
-	std::enable_if_t<is_reader<std::decay_t<Reader>>::value && is_writer<std::decay_t<Writer>>::value, Writer> copy(Reader&& r, Writer&& w)
+	std::enable_if_t<is_reader<std::decay_t<Reader>>::value && is_writer<std::decay_t<Writer>>::value, void> copy(Reader&& r, Writer&& w)
 	{
-		byte buffer[65536];
+		byte buffer[typical_buffer_length];
 		size_t cb;
 		do
 		{
 			cb = r.read_buffer(buffer);
 			w.write_buffer({ buffer, cb });
 		} while (cb == sizeof(buffer));
-		return std::forward<Writer>(w);
 	}
 }}
-
-template <class Stream> goldfish::stream::enable_if_reader_t<Stream, std::ostream&> operator << (std::ostream& s, Stream&& reader)
-{
-	goldfish::byte buffer[65536];
-	while (auto cb = reader.read_buffer(buffer))
-		s.write(reinterpret_cast<const char*>(buffer), cb);
-	return s;
-}

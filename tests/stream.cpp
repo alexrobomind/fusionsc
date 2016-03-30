@@ -34,66 +34,66 @@ TEST_CASE(test_skip)
 		fake_stream s{ initial };
 		test(seek(s, to_skip) == std::min(initial, to_skip));
 		test(s.m_size == (initial > to_skip ? initial - to_skip : 0));
-		test(s.m_calls == std::min(initial, to_skip) / chunk_size + 1);
+		test(s.m_calls == std::min(initial, to_skip) / typical_buffer_length + 1);
 	};
 
 
 	t(0, 0);
 	t(0, 1);
-	t(0, chunk_size);
-	t(0, chunk_size + 1);
+	t(0, typical_buffer_length);
+	t(0, typical_buffer_length + 1);
 
 	t(1, 0);
 	t(1, 1);
 	t(1, 2);
-	t(1, chunk_size);
-	t(1, chunk_size + 1);
+	t(1, typical_buffer_length);
+	t(1, typical_buffer_length + 1);
 
-	t(chunk_size, 0);
-	t(chunk_size, 1);
-	t(chunk_size, chunk_size - 1);
-	t(chunk_size, chunk_size);
-	t(chunk_size, chunk_size + 1);
+	t(typical_buffer_length, 0);
+	t(typical_buffer_length, 1);
+	t(typical_buffer_length, typical_buffer_length - 1);
+	t(typical_buffer_length, typical_buffer_length);
+	t(typical_buffer_length, typical_buffer_length + 1);
 
-	t(chunk_size + 1, 0);
-	t(chunk_size + 1, 1);
-	t(chunk_size + 1, chunk_size);
-	t(chunk_size + 1, chunk_size + 1);
-	t(chunk_size + 1, chunk_size + 2);
+	t(typical_buffer_length + 1, 0);
+	t(typical_buffer_length + 1, 1);
+	t(typical_buffer_length + 1, typical_buffer_length);
+	t(typical_buffer_length + 1, typical_buffer_length + 1);
+	t(typical_buffer_length + 1, typical_buffer_length + 2);
 
-	t(chunk_size * 2, 0);
-	t(chunk_size * 2, 1);
-	t(chunk_size * 2, chunk_size * 2 - 1);
-	t(chunk_size * 2, chunk_size * 2);
-	t(chunk_size * 2, chunk_size * 2 + 1);
+	t(typical_buffer_length * 2, 0);
+	t(typical_buffer_length * 2, 1);
+	t(typical_buffer_length * 2, typical_buffer_length * 2 - 1);
+	t(typical_buffer_length * 2, typical_buffer_length * 2);
+	t(typical_buffer_length * 2, typical_buffer_length * 2 + 1);
 
-	t(chunk_size * 2 + 1, 0);
-	t(chunk_size * 2 + 1, 1);
-	t(chunk_size * 2 + 1, chunk_size * 2);
-	t(chunk_size * 2 + 1, chunk_size * 2 + 1);
-	t(chunk_size * 2 + 1, chunk_size * 2 + 2);
+	t(typical_buffer_length * 2 + 1, 0);
+	t(typical_buffer_length * 2 + 1, 1);
+	t(typical_buffer_length * 2 + 1, typical_buffer_length * 2);
+	t(typical_buffer_length * 2 + 1, typical_buffer_length * 2 + 1);
+	t(typical_buffer_length * 2 + 1, typical_buffer_length * 2 + 2);
 }
 
 TEST_CASE(test_copy)
 {
-	test(copy(read_string("Hello"), string_writer{}).flush() == "Hello");
-
 	{
 		string_writer w;
-		test(&copy(read_string("Hello"), w) == &w);
+		copy(read_string("Hello"), w);
 		test(w.flush() == "Hello");
 	}
 
 	auto test_string_of_size = [](auto size)
 	{
-		test(copy(read_string(std::string(size, 'a')), string_writer{}).flush() == std::string(size, 'a'));
+		string_writer w;
+		copy(read_string(std::string(size, 'a')), w);
+		test(w.flush() == std::string(size, 'a'));
 	};
-	test_string_of_size(65535);
-	test_string_of_size(65536);
-	test_string_of_size(65537);
-	test_string_of_size(65536 * 2 - 1);
-	test_string_of_size(65536 * 2);
-	test_string_of_size(65536 * 2 + 1);
+	test_string_of_size(typical_buffer_length - 1);
+	test_string_of_size(typical_buffer_length);
+	test_string_of_size(typical_buffer_length + 1);
+	test_string_of_size(typical_buffer_length * 2 - 1);
+	test_string_of_size(typical_buffer_length * 2);
+	test_string_of_size(typical_buffer_length * 2 + 1);
 }
 
 }}

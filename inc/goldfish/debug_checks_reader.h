@@ -14,12 +14,6 @@ namespace goldfish { namespace debug_checks
 
 	template <class error_handler, class Document> using document = document_impl<
 		Document::does_json_conversions,
-		bool,
-		nullptr_t,
-		int64_t,
-		uint64_t,
-		double,
-		tags::undefined,
 		string<error_handler, typename Document::template type_with_tag_t<tags::string>, tags::string>,
 		string<error_handler, typename Document::template type_with_tag_t<tags::binary>, tags::binary>,
 		array<error_handler, typename Document::template type_with_tag_t<tags::array>>,

@@ -43,4 +43,7 @@ namespace goldfish
 	template <size_t x> struct largest<x> { enum { value = x }; };
 	template <size_t x, size_t y> struct largest<x, y> { enum { value = x > y ? x : y }; };
 	template <size_t x, size_t y, size_t... z> struct largest<x, y, z...> { enum { value = largest<x, largest<y, z...>::value>::value }; };
+
+	// Used for all cases where we need to read from a stream in chunks (default implementation of seek, stream copy, etc...)
+	static const int typical_buffer_length = 8 * 1024;
 }

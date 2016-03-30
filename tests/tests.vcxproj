@@ -177,6 +177,7 @@
     <ClCompile Include="json_reader.cpp" />
     <ClCompile Include="json_writer.cpp" />
     <ClCompile Include="match.cpp" />
+    <ClCompile Include="optional.cpp" />
     <ClCompile Include="reader_writer_stream.cpp" />
     <ClCompile Include="sax_reader.cpp" />
     <ClCompile Include="schema.cpp" />

@@ -40,6 +40,8 @@ TEST_CASE(parse_simple)
 	seek_to_end(document);
 }
 
+#include <goldfish/iostream_adaptor.h> // to be able to output streams to cout
+
 TEST_CASE(parse_complex)
 {
 	using namespace goldfish;

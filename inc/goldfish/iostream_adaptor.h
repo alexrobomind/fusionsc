@@ -122,3 +122,9 @@ namespace goldfish { namespace stream
 		return make_istream_on_streambuf(make_streambuf<N>(std::forward<inner>(reader)));
 	}
 }}
+
+template <class Stream> goldfish::stream::enable_if_reader_t<Stream, std::ostream&> operator << (std::ostream& s, Stream&& reader)
+{
+	goldfish::stream::copy(reader, goldfish::stream::ostream_writer_ref{ s });
+	return s;
+}

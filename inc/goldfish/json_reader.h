@@ -19,12 +19,6 @@ namespace goldfish { namespace json
 	template <class Stream> class map;
 	template <class Stream> using document = document_impl<
 		true /*does_json_conversions*/,
-		bool,
-		nullptr_t,
-		int64_t,
-		uint64_t,
-		double,
-		tags::undefined,
 		text_string<Stream>,
 		byte_string,
 		array<Stream>,

@@ -186,7 +186,7 @@ namespace goldfish { namespace sax
 		template <class Stream, class CreateWriterWithSize, class CreateWriterWithoutSize>
 		auto copy(Stream& s, CreateWriterWithSize&& create_writer_with_size, CreateWriterWithoutSize&& create_writer_without_size)
 		{
-			byte buffer[8 * 1024];
+			byte buffer[typical_buffer_length];
 			auto cb = s.read_buffer(buffer);
 			if (cb < sizeof(buffer))
 			{
