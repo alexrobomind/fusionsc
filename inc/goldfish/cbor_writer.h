@@ -102,7 +102,7 @@ namespace goldfish { namespace cbor
 			stream::write(m_stream, to_big_endian(i));
 			return m_stream.flush();
 		}
-		auto write(tags::undefined) 
+		auto write(undefined) 
 		{
 			stream::write(m_stream, static_cast<byte>((7 << 5) | 23));
 			return m_stream.flush();

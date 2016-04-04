@@ -17,7 +17,7 @@ namespace goldfish { namespace dom
 	using document_variant = variant<
 		bool,
 		nullptr_t,
-		tags::undefined,
+		undefined,
 		uint64_t,
 		int64_t,
 		double,
@@ -54,7 +54,7 @@ namespace goldfish { namespace dom
 		return document.visit(best_match(
 			[&](bool x) { return writer.write(x); },
 			[&](nullptr_t x) { return writer.write(x); },
-			[&](tags::undefined x) { return writer.write(x); },
+			[&](undefined x) { return writer.write(x); },
 			[&](uint64_t x) { return writer.write(x); },
 			[&](int64_t x) { return writer.write(x); },
 			[&](double x) { return writer.write(x); },

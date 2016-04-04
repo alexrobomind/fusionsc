@@ -13,16 +13,6 @@ namespace goldfish
 
 	namespace details
 	{
-		template <class...> struct conjunction {};
-		template <> struct conjunction<> { enum { value = true }; };
-		template <class Head, class... Tail> struct conjunction<Head, Tail...> { enum { value = Head::value && conjunction<Tail...>::value }; };
-
-		template <class...> struct disjunction {};
-		template <> struct disjunction<> { enum { value = false }; };
-		template <class Head, class... Tail> struct disjunction<Head, Tail...> { enum { value = Head::value || disjunction<Tail...>::value }; };
-
-		template <class T> struct negate { enum { value = !T::value }; };
-
 		template <class T, class dummy = uint8_t> struct with_padding
 		{
 			T data;
@@ -273,7 +263,7 @@ namespace goldfish
 		template <class U> std::enable_if_t<details::is_one_of<std::decay_t<U>, types...>::value, variant>& operator = (U&& u)
 		{
 			__pragma(warning(suppress:4127))
-			if (details::conjunction<std::is_trivially_destructible<types>...>::value && std::is_trivially_copyable<std::decay_t<U>>::value)
+			if (conjunction<std::is_trivially_destructible<types>...>::value && std::is_trivially_copyable<std::decay_t<U>>::value)
 			{
 				safe_destroy_construct<U>(std::forward<U>(u));
 			}

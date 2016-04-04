@@ -1,26 +1,24 @@
 #pragma once
 
 #include <cstdint>
+#include "common.h"
 #include <type_traits>
 
 namespace goldfish { namespace tags
 {
 	template <class T> struct is_tag : std::false_type {};
-	struct binary {};            template <> struct is_tag<binary> : std::true_type {};
-	struct string {};		     template <> struct is_tag<string> : std::true_type {};
-	struct array {};			 template <> struct is_tag<array> : std::true_type {};
-	struct map {};				 template <> struct is_tag<map> : std::true_type {};
-	struct undefined {};		 template <> struct is_tag<undefined> : std::true_type {};
-	struct floating_point {};	 template <> struct is_tag<floating_point> : std::true_type {};
-	struct unsigned_int {};		 template <> struct is_tag<unsigned_int> : std::true_type {};
-	struct signed_int {};		 template <> struct is_tag<signed_int> : std::true_type {};
-	struct boolean {};			 template <> struct is_tag<boolean> : std::true_type {};
-	struct null {};				 template <> struct is_tag<null> : std::true_type {};
-	struct document {};          template <> struct is_tag<document> : std::true_type {};
+	struct binary {};         template <> struct is_tag<binary> : std::true_type {};
+	struct string {};         template <> struct is_tag<string> : std::true_type {};
+	struct array {};          template <> struct is_tag<array> : std::true_type {};
+	struct map {};            template <> struct is_tag<map> : std::true_type {};
+	using goldfish::undefined;template <> struct is_tag<undefined> : std::true_type {};
+	struct floating_point {}; template <> struct is_tag<floating_point> : std::true_type {};
+	struct unsigned_int {};   template <> struct is_tag<unsigned_int> : std::true_type {};
+	struct signed_int {};     template <> struct is_tag<signed_int> : std::true_type {};
+	struct boolean {};        template <> struct is_tag<boolean> : std::true_type {};
+	struct null {};           template <> struct is_tag<null> : std::true_type {};
+	struct document {};       template <> struct is_tag<document> : std::true_type {};
 	using object = map;
-
-	inline bool operator == (const undefined&, const undefined&) { return true; }
-	inline bool operator < (const undefined&, const undefined&) { return false; }
 
 	template <class T, class enable = void> struct tag { using type = typename T::tag; };
 	template <> struct tag<uint64_t> { using type = unsigned_int; };
@@ -34,17 +32,10 @@ namespace goldfish { namespace tags
 	template <class T> constexpr auto get_tag(T&&) { return tag_t<std::decay_t<T>>{}; }
 	template <class T, class Tag> using has_tag = std::is_same<tag_t<T>, Tag>;
 
-	template <class tag, class... T> struct contains_tag {};
-	template <class tag, bool head_has_tag, class... T> struct contains_tag_helper {};
-	template <class tag, class... T> struct contains_tag_helper<tag, true, T...> { enum { value = true }; };
-	template <class tag> struct contains_tag_helper<tag, false> { enum { value = false }; };
-	template <class tag, class Head, class... Tail> struct contains_tag_helper<tag, false, Head, Tail...> { enum { value = contains_tag<tag, Tail...>::value }; };
-	template <class tag> struct contains_tag<tag> { enum { value = false }; };
-	template <class tag, class Head, class... Tail> struct contains_tag<tag, Head, Tail...>
+	template <class tag, class... T> struct contains_tag
 	{
-		enum { value = contains_tag_helper<tag, has_tag<Head, tag>::value, Head, Tail...>::value };
+		enum { value = disjunction<has_tag<T, tag>...>::value };
 	};
-
 
 	template <class tag, class... T> struct type_with_tag {};
 	template <class tag, bool pick_head, class... T> struct type_with_tag_helper {};

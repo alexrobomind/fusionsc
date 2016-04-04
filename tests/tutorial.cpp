@@ -116,7 +116,7 @@ struct my_handler
 	template <class Stream> const char* operator()(Stream& s, goldfish::tags::string) { return "string"; }
 	template <class ArrayReader> const char* operator()(ArrayReader& s, goldfish::tags::array) { return "array"; }
 	template <class MapReader> const char* operator()(MapReader& s, goldfish::tags::map) { return "map"; }
-	const char* operator()(goldfish::tags::undefined, goldfish::tags::undefined) { return "undefined"; }
+	const char* operator()(goldfish::undefined, goldfish::tags::undefined) { return "undefined"; }
 	const char* operator()(double, goldfish::tags::floating_point) { return "floating point"; }
 	const char* operator()(uint64_t, goldfish::tags::unsigned_int) { return "uint"; }
 	const char* operator()(int64_t, goldfish::tags::signed_int) { return "int"; }
@@ -139,7 +139,7 @@ TEST_CASE(test_visit_with_best_match)
 		[](auto&&, tags::string) { return "string"; },
 		[](auto&&, tags::array) { return "array"; },
 		[](auto&&, tags::map) { return "map"; },
-		[](tags::undefined, tags::undefined) { return "undefined"; },
+		[](undefined, tags::undefined) { return "undefined"; },
 		[](double, tags::floating_point) { return "floating point"; },
 		[](uint64_t, tags::unsigned_int) { return "uint"; },
 		[](int64_t, tags::signed_int) { return "int"; },

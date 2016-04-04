@@ -71,7 +71,7 @@ namespace goldfish { namespace dom
 		test(w(false) == "f4");
 		test(w(true) == "f5");
 		test(w(nullptr) == "f6");
-		test(w(tags::undefined{}) == "f7");
+		test(w(undefined{}) == "f7");
 		
 		test(w(to_vector("")) == "40");
 		test(w(to_vector("01020304")) == "4401020304");

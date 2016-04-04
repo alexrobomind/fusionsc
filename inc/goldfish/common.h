@@ -33,6 +33,10 @@ namespace goldfish
 		int error_code;
 	};
 
+	// CBOR supports an "undefined" type, which is represented at runtime by the C++ type below
+	struct undefined {};
+	inline bool operator == (const undefined&, const undefined&) { return true; }
+	inline bool operator < (const undefined&, const undefined&) { return false; }
 
 	// VC++ has a make_unchecked_array_iterator API to allow using raw iterators in APIs like std::copy or std::equal
 	// We implement our own that forwards to VC++ implementation or is identity depending on the compiler
@@ -43,6 +47,16 @@ namespace goldfish
 	template <size_t x> struct largest<x> { enum { value = x }; };
 	template <size_t x, size_t y> struct largest<x, y> { enum { value = x > y ? x : y }; };
 	template <size_t x, size_t y, size_t... z> struct largest<x, y, z...> { enum { value = largest<x, largest<y, z...>::value>::value }; };
+
+	template <class...> struct conjunction {};
+	template <> struct conjunction<> { enum { value = true }; };
+	template <class Head, class... Tail> struct conjunction<Head, Tail...> { enum { value = Head::value && conjunction<Tail...>::value }; };
+
+	template <class...> struct disjunction {};
+	template <> struct disjunction<> { enum { value = false }; };
+	template <class Head, class... Tail> struct disjunction<Head, Tail...> { enum { value = Head::value || disjunction<Tail...>::value }; };
+
+	template <class T> struct negate { enum { value = !T::value }; };
 
 	// Used for all cases where we need to read from a stream in chunks (default implementation of seek, stream copy, etc...)
 	static const int typical_buffer_length = 8 * 1024;

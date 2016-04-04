@@ -19,12 +19,21 @@ namespace goldfish { namespace cbor
 	template <class Stream> class array;
 	template <class Stream> class map;
 
-	template <class Stream> using document = document_impl<
+	template <class Stream> struct document : document_impl<
 		false /*does_json_conversions*/,
+		bool,
+		nullptr_t,
+		uint64_t,
+		int64_t,
+		double,
+		undefined,
 		byte_string<Stream>,
 		text_string<Stream>,
 		array<Stream>,
-		map<Stream>>;
+		map<Stream>>
+	{
+		using document_impl::document_impl;
+	};
 
 	// Read one document from the stream, or return nullopt for the null terminator (byte 0xFF)
 	template <class Stream> optional<document<std::decay_t<Stream>>> read_no_debug_check(Stream&& s);
@@ -266,7 +275,7 @@ namespace goldfish { namespace cbor
 		static optional<document<Stream>> fn_false(Stream&&, byte) { return false; }
 		static optional<document<Stream>> fn_true(Stream&&, byte) { return true; }
 		static optional<document<Stream>> fn_null(Stream&&, byte) { return nullptr; }
-		static optional<document<Stream>> fn_undefined(Stream&&, byte) { return tags::undefined{}; }
+		static optional<document<Stream>> fn_undefined(Stream&&, byte) { return undefined{}; }
 		static optional<document<Stream>> fn_end_of_structure(Stream&&, byte) { return nullopt; }
 
 		static optional<document<Stream>> fn_float_16(Stream&& s, byte) { return read_half_point_float(s); }

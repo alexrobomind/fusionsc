@@ -20,11 +20,11 @@ namespace goldfish
 				: m_keys{ std::forward<Args>(args)... }
 			{}
 		
-			optional<size_t> search_key(const_buffer_ref key, size_t start_index) const
+			optional<size_t> search_key(const_buffer_ref key, size_t start_index_in_schema) const
 			{
-				return search_impl(key, start_index);
+				return search_impl(key, start_index_in_schema);
 			}
-			template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, optional<size_t>> search(Document& d, size_t start_index) const
+			template <class Document> std::enable_if_t<tags::has_tag<Document, tags::document>::value, optional<size_t>> search(Document& d, size_t start_index_in_schema) const
 			{
 				return d.visit(first_match(
 					[&](auto& text, tags::string) -> optional<size_t>
@@ -34,7 +34,7 @@ namespace goldfish
 						if (stream::seek(text, std::numeric_limits<uint64_t>::max()) != 0)
 							return nullopt;
 
-						return search_impl({ buffer, length }, start_index);
+						return search_impl({ buffer, length }, start_index_in_schema);
 					},
 					[&](auto&, auto) -> optional<size_t>
 					{
@@ -43,9 +43,9 @@ namespace goldfish
 					}));
 			}
 		private:
-			optional<size_t> search_impl(const_buffer_ref text, size_t start_index) const
+			optional<size_t> search_impl(const_buffer_ref text, size_t start_index_in_schema) const
 			{
-				auto it = std::find_if(m_keys.begin() + start_index, m_keys.end(), [&](auto&& key)
+				auto it = std::find_if(m_keys.begin() + start_index_in_schema, m_keys.end(), [&](auto&& key)
 				{
 					return key.size() == text.size() && std::equal(key.begin(), key.end(), make_unchecked_array_iterator(text.begin()));
 				});
@@ -62,7 +62,7 @@ namespace goldfish
 	{
 		return details::schema<
 			sizeof...(T), 
-			largest<sizeof(T)...>::value - 1
+			largest<sizeof(T)...>::value - 1 // remove the null terminator
 		>(details::make_key(std::forward<T>(keys))...);
 	}
 
@@ -96,7 +96,7 @@ namespace goldfish
 
 			while (auto key = m_map.read_key())
 			{
-				if (auto new_index = m_schema.search(*key, m_index /*start_index*/))
+				if (auto new_index = m_schema.search(*key, m_index /*start_index_in_schema*/))
 				{
 					m_index = *new_index;
 				}
@@ -136,7 +136,7 @@ namespace goldfish
 		}
 		template <class Key> auto read(Key&& key)
 		{
-			if (auto index = m_schema.search_key(details::make_key(std::forward<Key>(key)), 0 /*start_index*/))
+			if (auto index = m_schema.search_key(details::make_key(std::forward<Key>(key)), 0 /*start_index_in_schema*/))
 				return read_by_schema_index(*index);
 			else
 				std::terminate();			

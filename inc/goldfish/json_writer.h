@@ -215,7 +215,7 @@ namespace goldfish { namespace json
 			m_stream.write_buffer(string_literal_to_non_null_terminated_buffer("\"null\""));
 			return m_stream.flush();
 		}
-		auto write(tags::undefined)
+		auto write(undefined)
 		{
 			return write(nullptr);
 		}
@@ -272,7 +272,7 @@ namespace goldfish { namespace json
 			m_stream.write_buffer({ reinterpret_cast<const byte*>("null"), 4 });
 			return m_stream.flush();
 		}
-		auto write(tags::undefined)
+		auto write(undefined)
 		{
 			return write(nullptr);
 		}

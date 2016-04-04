@@ -17,14 +17,7 @@ namespace goldfish
 	{
 	public:
 		using tag = tags::document;
-		template <class tag> using type_with_tag_t = tags::type_with_tag_t<tag,
-			bool,
-			nullptr_t,
-			uint64_t,
-			int64_t,
-			double,
-			tags::undefined,
-			types...>;
+		template <class tag> using type_with_tag_t = tags::type_with_tag_t<tag, types...>;
 		enum { does_json_conversions = _does_json_conversions };
 
 		template <class... Args> document_impl(Args&&... args)
@@ -258,20 +251,13 @@ namespace goldfish
 			#endif
 			return result;
 		}
-		bool is_undefined_or_null() const { return m_data.is<tags::undefined>() || m_data.is<nullptr_t>(); }
+		bool is_undefined_or_null() const { return m_data.is<undefined>() || m_data.is<nullptr_t>(); }
 		bool is_null() const { return m_data.is<nullptr_t>(); }
 
 		template <class tag> bool is_exactly() { return m_data.is<type_with_tag_t<tag>>(); }
 
 		#ifdef NDEBUG
-		using invalid_state = typename variant<
-			bool,
-			nullptr_t,
-			uint64_t,
-			int64_t,
-			double,
-			tags::undefined,
-			types...>::invalid_state;
+		using invalid_state = typename variant<types...>::invalid_state;
 		#endif
 	private:
 		auto as_binary(std::true_type /*does_json_conversion*/) { return stream::decode_base64(as_string()); }
@@ -307,14 +293,7 @@ namespace goldfish
 		#ifndef NDEBUG
 		bool m_moved_from = false;
 		#endif
-		variant<
-			bool,
-			nullptr_t,
-			uint64_t,
-			int64_t,
-			double,
-			tags::undefined, 
-			types...> m_data;
+		variant<types...> m_data;
 	};
 
 	template <class Document> std::enable_if_t<tags::has_tag<std::decay_t<Document>, tags::document>::value, void> seek_to_end(Document&& d)

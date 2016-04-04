@@ -276,7 +276,7 @@ namespace goldfish { namespace stream
 			assert(!m_flushed);
 			m_data.push_back(reinterpret_cast<const byte&>(t));
 		}
-		const auto& data()
+		const auto& data() const
 		{
 			assert(!m_flushed);
 			return m_data;
@@ -317,7 +317,7 @@ namespace goldfish { namespace stream
 			#endif
 			return std::move(m_data);
 		}
-		const auto& data()
+		const auto& data() const
 		{
 			assert(!m_flushed);
 			return m_data;

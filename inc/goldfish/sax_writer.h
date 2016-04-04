@@ -101,20 +101,20 @@ namespace goldfish { namespace sax
 			: m_writer(std::move(writer))
 		{}
 
-		auto write(bool x)            { return m_writer.write(x); }
-		auto write(nullptr_t x)       { return m_writer.write(x); }
-		auto write(double x)          { return m_writer.write(x); }
-		auto write(tags::undefined x) { return m_writer.write(x); }
+		auto write(bool x)       { return m_writer.write(x); }
+		auto write(nullptr_t x)  { return m_writer.write(x); }
+		auto write(double x)     { return m_writer.write(x); }
+		auto write(undefined x)  { return m_writer.write(x); }
 
-		auto write(uint64_t x)        { return m_writer.write(x); }
-		auto write(uint32_t x)        { return m_writer.write(static_cast<uint64_t>(x)); }
-		auto write(uint16_t x)        { return m_writer.write(static_cast<uint64_t>(x)); }
-		auto write(uint8_t x)         { return m_writer.write(static_cast<uint64_t>(x)); }
+		auto write(uint64_t x)   { return m_writer.write(x); }
+		auto write(uint32_t x)   { return m_writer.write(static_cast<uint64_t>(x)); }
+		auto write(uint16_t x)   { return m_writer.write(static_cast<uint64_t>(x)); }
+		auto write(uint8_t x)    { return m_writer.write(static_cast<uint64_t>(x)); }
 
-		auto write(int64_t x)         { return m_writer.write(x); }
-		auto write(int32_t x)         { return m_writer.write(static_cast<int64_t>(x)); }
-		auto write(int16_t x)         { return m_writer.write(static_cast<int64_t>(x)); }
-		auto write(int8_t x)          { return m_writer.write(static_cast<int64_t>(x)); }
+		auto write(int64_t x)    { return m_writer.write(x); }
+		auto write(int32_t x)    { return m_writer.write(static_cast<int64_t>(x)); }
+		auto write(int16_t x)    { return m_writer.write(static_cast<int64_t>(x)); }
+		auto write(int8_t x)     { return m_writer.write(static_cast<int64_t>(x)); }
 
 		auto start_binary(uint64_t cb) { return m_writer.start_binary(cb); }
 		auto start_binary() { return m_writer.start_binary(); }

@@ -12,12 +12,21 @@ namespace goldfish { namespace debug_checks
 	template <class error_handler, class T> class array;
 	template <class error_handler, class T> class map;
 
-	template <class error_handler, class Document> using document = document_impl<
+	template <class error_handler, class Document> struct document : document_impl<
 		Document::does_json_conversions,
+		bool,
+		nullptr_t,
+		uint64_t,
+		int64_t,
+		double,
+		undefined,
 		string<error_handler, typename Document::template type_with_tag_t<tags::string>, tags::string>,
 		string<error_handler, typename Document::template type_with_tag_t<tags::binary>, tags::binary>,
 		array<error_handler, typename Document::template type_with_tag_t<tags::array>>,
-		map<error_handler, typename Document::template type_with_tag_t<tags::map>>>;
+		map<error_handler, typename Document::template type_with_tag_t<tags::map>>>
+	{
+		using document_impl::document_impl;
+	};
 
 	template <class error_handler, class Document> document<error_handler, std::decay_t<Document>> add_read_checks_impl(container_base<error_handler>* parent, Document&& t);
 
@@ -79,7 +88,7 @@ namespace goldfish { namespace debug_checks
 	};
 	template <class error_handler, class T> array<error_handler, std::decay_t<T>> make_array(container_base<error_handler>* parent, T&& inner) { return{ parent, std::forward<T>(inner) }; }
 
-	// The inheritance is public so that schema.h can use it
+	// The inheritance is public so that schema.h can use container_base to more aggressively lock the parent
 	template <class error_handler, class T> class map : public container_base<error_handler>
 	{
 	public:

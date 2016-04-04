@@ -16,7 +16,7 @@ namespace goldfish { namespace dom
 		test(w(true) == "true");
 		test(w(false) == "false");
 		test(w(nullptr) == "null");
-		test(w(tags::undefined{}) == "null");
+		test(w(undefined{}) == "null");
 		test(w(0ull) == "0");
 		test(w(1ull) == "1");
 		test(w(std::numeric_limits<uint64_t>::max()) == "18446744073709551615");

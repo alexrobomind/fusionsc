@@ -17,12 +17,21 @@ namespace goldfish { namespace json
 	template <class Stream> class text_string;
 	template <class Stream> class array;
 	template <class Stream> class map;
-	template <class Stream> using document = document_impl<
+	template <class Stream> struct document : document_impl<
 		true /*does_json_conversions*/,
+		bool,
+		nullptr_t,
+		uint64_t,
+		int64_t,
+		double,
+		undefined,
 		text_string<Stream>,
 		byte_string,
 		array<Stream>,
-		map<Stream>>;
+		map<Stream>>
+	{
+		using document_impl::document_impl;
+	};
 	template <class Stream> document<std::decay_t<Stream>> read_no_debug_check(Stream&& s);
 
 	namespace details

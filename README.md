@@ -293,7 +293,7 @@ struct my_handler
 	template <class Stream> const char* operator()(Stream& s, tags::string) { return "string"; }
 	template <class ArrayReader> const char* operator()(ArrayReader& s, tags::array) { return "array"; }
 	template <class MapReader> const char* operator()(MapReader& s, tags::map) { return "map"; }
-	const char* operator()(tags::undefined, tags::undefined) { return "undefined"; }
+	const char* operator()(undefined, tags::undefined) { return "undefined"; }
 	const char* operator()(double, tags::floating_point) { return "floating point"; }
 	const char* operator()(uint64_t, tags::unsigned_int) { return "uint"; }
 	const char* operator()(int64_t, tags::signed_int) { return "int"; }
@@ -323,7 +323,7 @@ int main()
 		[](auto&&, tags::string) { return "string"; },
 		[](auto&&, tags::array) { return "array"; },
 		[](auto&&, tags::map) { return "map"; },
-		[](tags::undefined, tags::undefined) { return "undefined"; },
+		[](undefined, tags::undefined) { return "undefined"; },
 		[](double, tags::floating_point) { return "floating point"; },
 		[](uint64_t, tags::unsigned_int) { return "uint"; },
 		[](int64_t, tags::signed_int) { return "int"; },
