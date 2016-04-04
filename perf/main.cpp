@@ -76,7 +76,8 @@ int main(int argc, char* argv[])
 
 		stream::vector_writer output_stream;
 		cbor::create_writer(stream::ref(output_stream)).write(document);
-		return output_stream.flush();
+		output_stream.flush();
+		return std::move(output_stream).data();
 	}();
 
 	cout << "\nSTREAMING MODE\n";

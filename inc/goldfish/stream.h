@@ -258,33 +258,19 @@ namespace goldfish { namespace stream
 
 		void write_buffer(const_buffer_ref d)
 		{
-			assert(!m_flushed);
 			if (m_data.capacity() - m_data.size() < d.size())
 				m_data.reserve(m_data.capacity() + m_data.capacity() / 2);
 			m_data.insert(m_data.end(), d.begin(), d.end());
 		}
-		auto flush()
-		{
-			assert(!m_flushed);
-			#ifndef NDEBUG
-			m_flushed = true;
-			#endif
-			return std::move(m_data);
-		}
+		void flush() { }
 		template <class T> std::enable_if_t<std::is_standard_layout<T>::value && sizeof(T) == 1, void> write(const T& t)
 		{
-			assert(!m_flushed);
 			m_data.push_back(reinterpret_cast<const byte&>(t));
 		}
-		const auto& data() const
-		{
-			assert(!m_flushed);
-			return m_data;
-		}
+		const auto& data() const & { return m_data; }
+		auto data() && { return std::move(m_data); }
+
 	private:
-		#ifndef NDEBUG
-		bool m_flushed = false;
-		#endif
 		std::vector<byte> m_data;
 	};
 	class string_writer
@@ -298,7 +284,6 @@ namespace goldfish { namespace stream
 
 		void write_buffer(const_buffer_ref d)
 		{
-			assert(!m_flushed);
 			if (m_data.capacity() - m_data.size() < d.size())
 				m_data.reserve(m_data.capacity() + m_data.capacity() / 2);
 
@@ -306,22 +291,11 @@ namespace goldfish { namespace stream
 		}
 		template <class T> std::enable_if_t<std::is_standard_layout<T>::value && sizeof(T) == 1, void> write(const T& t)
 		{
-			assert(!m_flushed);
 			m_data.push_back(reinterpret_cast<const char&>(t));
 		}
-		auto flush()
-		{
-			assert(!m_flushed);
-			#ifndef NDEBUG
-			m_flushed = true;
-			#endif
-			return std::move(m_data);
-		}
-		const auto& data() const
-		{
-			assert(!m_flushed);
-			return m_data;
-		}
+		void flush() { }
+		const auto& data() const & { return m_data; }
+		auto data() && { return std::move(m_data); }
 	private:
 		#ifndef NDEBUG
 		bool m_flushed = false;
@@ -333,14 +307,16 @@ namespace goldfish { namespace stream
 	{
 		string_writer output;
 		copy(s, output);
-		return output.flush();
+		output.flush();
+		return std::move(output).data();
 	}
 
 	template <class stream> enable_if_reader_t<stream, std::vector<byte>> read_all(stream&& s)
 	{
 		vector_writer output;
 		copy(s, output);
-		return output.flush();
+		output.flush();
+		return std::move(output).data();
 	}
 
 	template <class Reader, class Writer> 

@@ -49,30 +49,30 @@ namespace goldfish { namespace dom
 		}
 	};
 
-	template <class Writer> auto serialize_to_goldfish(Writer& writer, const dom::document& document)
+	template <class Writer> void serialize_to_goldfish(Writer& writer, const dom::document& document)
 	{
 		return document.visit(best_match(
-			[&](bool x) { return writer.write(x); },
-			[&](nullptr_t x) { return writer.write(x); },
-			[&](undefined x) { return writer.write(x); },
-			[&](uint64_t x) { return writer.write(x); },
-			[&](int64_t x) { return writer.write(x); },
-			[&](double x) { return writer.write(x); },
-			[&](const std::vector<byte>& x) { return writer.write(const_buffer_ref{ x }); },
-			[&](const std::string& x) { return writer.write(x); },
+			[&](bool x) { writer.write(x); },
+			[&](nullptr_t x) { writer.write(x); },
+			[&](undefined x) { writer.write(x); },
+			[&](uint64_t x) { writer.write(x); },
+			[&](int64_t x) { writer.write(x); },
+			[&](double x) { writer.write(x); },
+			[&](const std::vector<byte>& x) { writer.write(const_buffer_ref{ x }); },
+			[&](const std::string& x) { writer.write(x); },
 			[&](const dom::array& x)
 			{
 				auto array_writer = writer.start_array(x.size());
 				for (auto&& y : x)
 					array_writer.write(y);
-				return array_writer.flush();
+				array_writer.flush();
 			},
 			[&](const dom::map& x)
 			{
 				auto map_writer = writer.start_map(x.size());
 				for (auto&& y : x)
 					map_writer.write(y.first, y.second);
-				return map_writer.flush();
+				map_writer.flush();
 			}));
 	}
 

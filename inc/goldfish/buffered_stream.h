@@ -174,10 +174,10 @@ namespace goldfish { namespace stream
 			else
 				m_begin_free_space = std::copy(data.begin(), data.end(), m_begin_free_space);
 		}
-		auto flush()
+		void flush()
 		{
 			send_data();
-			return m_stream.flush();
+			m_stream.flush();
 		}
 	private:
 		size_t cb_free() const { return m_buffer_data.data() + N - m_begin_free_space; }

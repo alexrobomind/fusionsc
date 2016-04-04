@@ -5,9 +5,12 @@ namespace goldfish { namespace stream
 {
 	std::string my_base64_encode(const std::string& data)
 	{
-		auto s = encode_base64_to(string_writer{});
+		string_writer output;
+		auto s = encode_base64_to(ref(output));
 		s.write_buffer({ reinterpret_cast<const byte*>(data.data()), data.size() });
-		return s.flush();
+		s.flush();
+		output.flush();
+		return std::move(output).data();
 	}
 	std::string my_base64_decode(const std::string& data)
 	{
@@ -73,7 +76,8 @@ namespace goldfish { namespace stream
 
 	TEST_CASE(encode_partial_buffer)
 	{
-		auto s = encode_base64_to(string_writer{});
+		string_writer output;
+		auto s = encode_base64_to(ref(output));
 
 		// write one at a time (this tests writing 0 and 1 byte with left overs 0,1,2)
 		{
@@ -103,6 +107,8 @@ namespace goldfish { namespace stream
 			buffer[0] = 'r'; buffer[1] = 'e';  buffer[2] = '.'; s.write_buffer(buffer);
 		}
 
-		test(s.flush() == "YW55IGNhcm5hbCBwbGVhc3VyZS4=");
+		s.flush();
+		output.flush();
+		test(output.data() == "YW55IGNhcm5hbCBwbGVhc3VyZS4=");
 	}
 }}

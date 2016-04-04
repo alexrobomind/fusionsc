@@ -15,8 +15,10 @@ TEST_CASE(convert_json_to_cbor)
 	// the JSON document to it
 	// Note that all the streams need to be flushed to ensure that there any potentially
 	// buffered data is serialized.
-	auto cbor_document = cbor::create_writer(stream::vector_writer{}).write(document);
-	test(cbor_document == std::vector<byte>{
+	stream::vector_writer output;
+	cbor::create_writer(stream::ref(output)).write(document);
+	output.flush();
+	test(output.data() == std::vector<byte>{
 		0xbf,                    // start map
 		0x61,0x41,               // key: "A"
 		0x9f,0x01,0x02,0x03,0xff,// value : [1, 2, 3]
@@ -77,13 +79,16 @@ TEST_CASE(generate_json_document)
 {
 	using namespace goldfish;
 	
-	auto map = json::create_writer(stream::string_writer{}).start_map();
+	stream::string_writer output;
+	auto map = json::create_writer(stream::ref(output)).start_map();
 	map.write("A", 1);
 	map.write("B", "text");
 	map.write("C", stream::read_string("Hello world!"));
+	map.flush();
+	output.flush();
 
 	// Streams are serialized as binary 64 data in JSON
-	test(map.flush() == "{\"A\":1,\"B\":\"text\",\"C\":\"SGVsbG8gd29ybGQh\"}");
+	test(output.data() == "{\"A\":1,\"B\":\"text\",\"C\":\"SGVsbG8gd29ybGQh\"}");
 }
 
 #include <goldfish/cbor_writer.h>
@@ -92,12 +97,15 @@ TEST_CASE(generate_cbor_document)
 {
 	using namespace goldfish;
 
-	auto map = cbor::create_writer(stream::vector_writer{}).start_map();
+	stream::vector_writer output;
+	auto map = cbor::create_writer(stream::ref(output)).start_map();
 	map.write("A", 1);
 	map.write("B", "text");
 	map.write("C", stream::read_string("Hello world!"));
+	map.flush();
+	output.flush();
 
-	test(map.flush() == std::vector<byte>{
+	test(output.data() == std::vector<byte>{
 		0xbf,                               // start map marker
 		0x61,0x41,                          // key: "A"
 		0x01,                               // value : uint 1

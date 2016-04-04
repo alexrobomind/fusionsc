@@ -10,7 +10,10 @@ namespace goldfish { namespace dom
 	{
 		auto w = [&](const document& d)
 		{
-			return json::create_writer(stream::string_writer{}).write(d);
+			stream::string_writer output;
+			json::create_writer(stream::ref(output)).write(d);
+			output.flush();
+			return std::move(output).data();
 		};
 
 		test(w(true) == "true");
@@ -44,7 +47,10 @@ namespace goldfish { namespace dom
 	{
 		auto run = [](const char* data)
 		{
-			test(json::create_writer(stream::string_writer{}).write(json::read(stream::read_string_ref(data))) == data);
+			stream::string_writer output;
+			json::create_writer(stream::ref(output)).write(json::read(stream::read_string_ref(data)));
+			output.flush();
+			test(output.data() == data);
 		};
 
 		run("[null]");
@@ -70,14 +76,16 @@ namespace goldfish { namespace dom
 
 	TEST_CASE(non_string_key)
 	{
-		auto map = json::create_writer(stream::string_writer{}).start_map();
+		stream::string_writer output;
+		auto map = json::create_writer(stream::ref(output)).start_map();
 		map.write(1ull, 1);
 		map.write(-1ll, 2);
 		map.write(.5, 3);
 		map.write(stream::read_string("Key"), 4);
 		map.write("Key", 5);
-
-		test(map.flush() == R"({"1":1,"-1":2,"0.500000":3,"S2V5":4,"Key":5})");
+		map.flush();
+		output.flush();
+		test(output.data() == R"({"1":1,"-1":2,"0.500000":3,"S2V5":4,"Key":5})");
 	}
 
 	TEST_CASE(test_lossless_floating_point)
@@ -85,8 +93,12 @@ namespace goldfish { namespace dom
 		auto run = [](const char* data)
 		{
 			auto original_float = json::read(stream::read_string_ref(data)).as_double();
-			auto round_tripped = json::create_writer(stream::string_writer{}).write(original_float);
-			auto new_float = json::read(stream::read_string_ref(round_tripped.c_str())).as_double();
+			
+			stream::string_writer round_tripped;
+			json::create_writer(stream::ref(round_tripped)).write(original_float);
+			round_tripped.flush();
+
+			auto new_float = json::read(stream::read_string_ref(round_tripped.data().c_str())).as_double();
 			test(original_float == new_float);
 		};
 		run("0.0");
