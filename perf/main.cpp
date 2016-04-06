@@ -39,7 +39,7 @@ void measure(Lambda&& l, size_t document_size)
 template <class Document> int64_t sum_ints(Document&& t)
 {
 	return t.visit(first_match(
-		[](auto x, tags::unsigned_int) { return x; },
+		[](auto x, tags::unsigned_int) -> int64_t { return x; },
 		[](auto x, tags::signed_int) { return x; },
 		[](auto& x, tags::array)
 		{
@@ -58,7 +58,7 @@ template <class Document> int64_t sum_ints(Document&& t)
 			}
 			return sum;
 		},
-		[](auto& x, auto tag) { goldfish::seek_to_end(x); return 0ull; }));
+		[](auto& x, auto tag) { goldfish::seek_to_end(x); return 0ll; }));
 }
 
 int main(int argc, char* argv[])
