@@ -104,16 +104,13 @@ int main()
 {
 	using namespace goldfish;
 	
-	stream::string_writer output;
-	auto map = json::create_writer(stream::ref(output)).start_map();
+	auto map = json::create_writer(stream::string_writer{}).start_map();
 	map.write("A", 1);
 	map.write("B", "text");
 	// Streams are serialized as binary 64 data in JSON
 	map.write("C", stream::read_string("Hello world!"));
-	map.flush();
-	output.flush();
 
-	assert(output.data() == "{\"A\":1,\"B\":\"text\",\"C\":\"SGVsbG8gd29ybGQh\"}");
+	assert(map.flush() == "{\"A\":1,\"B\":\"text\",\"C\":\"SGVsbG8gd29ybGQh\"}");
 }
 ```
 
@@ -127,15 +124,12 @@ int main()
 {
 	using namespace goldfish;
 
-	stream::vector_writer output;
-	auto map = cbor::create_writer(stream::ref(output)).start_map();
+	auto map = cbor::create_writer(stream::vector_writer{}).start_map();
 	map.write("A", 1);
 	map.write("B", "text");
 	map.write("C", stream::read_string("Hello world!"));
-	map.flush();
-	output.flush();
 
-	assert(output.data() == std::vector<byte>{
+	assert(map.flush() == std::vector<byte>{
 		0xbf,                               // start map marker
 		0x61,0x41,                          // key: "A"
 		0x01,                               // value : uint 1
@@ -197,7 +191,9 @@ struct write_stream
 
 	// Finish writing to the stream
 	// This API must be called once the end of stream is reached.
-	void flush();
+	// It may return some data. For example, a vector_writer returns
+	// the data written to the stream (in the form of an std::vector<byte>).
+	auto flush();
 }
 ```
 

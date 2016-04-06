@@ -79,16 +79,14 @@ TEST_CASE(test_copy)
 	{
 		string_writer w;
 		copy(read_string("Hello"), w);
-		w.flush();
-		test(w.data() == "Hello");
+		test(w.flush() == "Hello");
 	}
 
 	auto test_string_of_size = [](auto size)
 	{
 		string_writer w;
 		copy(read_string(std::string(size, 'a')), w);
-		w.flush();
-		test(w.data() == std::string(size, 'a'));
+		test(w.flush() == std::string(size, 'a'));
 	};
 	test_string_of_size(typical_buffer_length - 1);
 	test_string_of_size(typical_buffer_length);

@@ -52,10 +52,10 @@ namespace goldfish { namespace cbor
 			details::write_integer<major>(m_stream, buffer.size());
 			m_stream.write_buffer(buffer);
 		}
-		void flush()
+		auto flush()
 		{
 			stream::write(m_stream, static_cast<byte>(0xFF));
-			m_stream.flush();
+			return m_stream.flush();
 		}
 	private:
 		Stream m_stream;
@@ -72,18 +72,18 @@ namespace goldfish { namespace cbor
 		document_writer(Stream&& s)
 			: m_stream(std::move(s))
 		{}
-		void write(bool x)
+		auto write(bool x)
 		{
 			if (x) stream::write(m_stream, static_cast<byte>((7 << 5) | 21));
 			else   stream::write(m_stream, static_cast<byte>((7 << 5) | 20));
-			m_stream.flush();
+			return m_stream.flush();
 		}
-		void write(nullptr_t)
+		auto write(nullptr_t)
 		{
 			stream::write(m_stream, static_cast<byte>((7 << 5) | 22));
-			m_stream.flush();
+			return m_stream.flush();
 		}
-		void write(double x)
+		auto write(double x)
 		{
 			if (static_cast<float>(x) == x)
 				return write(static_cast<float>(x));
@@ -92,37 +92,37 @@ namespace goldfish { namespace cbor
 			stream::write(m_stream, static_cast<byte>((7 << 5) | 27));
 			auto i = *reinterpret_cast<uint64_t*>(&x);
 			stream::write(m_stream, to_big_endian(i));
-			m_stream.flush();
+			return m_stream.flush();
 		}
-		void write(float x)
+		auto write(float x)
 		{
 			static_assert(sizeof(float) == sizeof(uint32_t), "Expect 32 bit floats");
 			stream::write(m_stream, static_cast<byte>((7 << 5) | 26));
 			auto i = *reinterpret_cast<uint32_t*>(&x);
 			stream::write(m_stream, to_big_endian(i));
-			m_stream.flush();
+			return m_stream.flush();
 		}
-		void write(undefined) 
+		auto write(undefined) 
 		{
 			stream::write(m_stream, static_cast<byte>((7 << 5) | 23));
-			m_stream.flush();
+			return m_stream.flush();
 		}
 
-		void write(uint64_t x)
+		auto write(uint64_t x)
 		{
 			details::write_integer<0>(m_stream, x);
-			m_stream.flush();
+			return m_stream.flush();
 		}
-		void write(int64_t x)
+		auto write(int64_t x)
 		{
 			if (x < 0)
 			{
 				details::write_integer<1>(m_stream, static_cast<uint64_t>(-1ll - x));
-				m_stream.flush();
+				return m_stream.flush();
 			}
 			else
 			{
-				write(static_cast<uint64_t>(x));
+				return write(static_cast<uint64_t>(x));
 			}
 		}
 
@@ -177,7 +177,7 @@ namespace goldfish { namespace cbor
 		{}
 
 		auto append() { return create_writer_no_debug_check(stream::ref(m_stream)); }
-		void flush() { m_stream.flush(); }
+		auto flush() { return m_stream.flush(); }
 	private:
 		Stream m_stream;
 	};
@@ -188,10 +188,10 @@ namespace goldfish { namespace cbor
 			: m_stream(std::move(s))
 		{}
 		auto append() { return create_writer_no_debug_check(stream::ref(m_stream)); }
-		void flush()
+		auto flush()
 		{
 			stream::write(m_stream, static_cast<byte>(0xFF));
-			m_stream.flush();
+			return m_stream.flush();
 		}
 	private:
 		Stream m_stream;
@@ -215,7 +215,7 @@ namespace goldfish { namespace cbor
 		{}
 		document_writer<stream::writer_ref_type_t<Stream>> append_key() { return{ stream::ref(m_stream) }; }
 		document_writer<stream::writer_ref_type_t<Stream>> append_value() { return{ stream::ref(m_stream) }; }
-		void flush() { m_stream.flush(); }
+		auto flush() { return m_stream.flush(); }
 	private:
 		Stream m_stream;
 	};
@@ -227,10 +227,10 @@ namespace goldfish { namespace cbor
 		{}
 		document_writer<stream::writer_ref_type_t<Stream>> append_key() { return{ stream::ref(m_stream) }; }
 		document_writer<stream::writer_ref_type_t<Stream>> append_value() { return{ stream::ref(m_stream) }; }
-		void flush()
+		auto flush()
 		{
 			stream::write(m_stream, static_cast<byte>(0xFF));
-			m_stream.flush();
+			return m_stream.flush();
 		}
 	private:
 		Stream m_stream;

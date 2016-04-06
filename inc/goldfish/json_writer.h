@@ -84,10 +84,10 @@ namespace goldfish { namespace json
 				++it;
 			}
 		}
-		void flush()
+		auto flush()
 		{
 			stream::write(m_stream, '"');
-			m_stream.flush();
+			return m_stream.flush();
 		}
 	private:
 		Stream m_stream;
@@ -105,11 +105,11 @@ namespace goldfish { namespace json
 		{
 			m_stream.write_buffer(buffer);
 		}
-		void flush()
+		auto flush()
 		{
 			m_stream.flush_no_inner_stream_flush();
 			stream::write(m_stream.inner_stream(), '"');
-			m_stream.inner_stream().flush();
+			return m_stream.inner_stream().flush();
 		}
 	private:
 		stream::base64_writer<Stream> m_stream;
@@ -125,10 +125,10 @@ namespace goldfish { namespace json
 		}
 
 		document_writer<stream::writer_ref_type_t<Stream>> append();
-		void flush()
+		auto flush()
 		{
 			stream::write(m_stream, ']');
-			m_stream.flush();
+			return m_stream.flush();
 		}
 	private:
 		Stream m_stream;
@@ -188,10 +188,10 @@ namespace goldfish { namespace json
 
 		key_writer<stream::writer_ref_type_t<Stream>> append_key();
 		document_writer<stream::writer_ref_type_t<Stream>> append_value();
-		void flush()
+		auto flush()
 		{
 			stream::write(m_stream, '}');
-			m_stream.flush();
+			return m_stream.flush();
 		}
 	private:
 		Stream m_stream;
@@ -204,41 +204,41 @@ namespace goldfish { namespace json
 		key_writer(Stream&& s)
 			: m_stream(std::move(s))
 		{}
-		void write(bool x)
+		auto write(bool x)
 		{
 			if (x) m_stream.write_buffer(string_literal_to_non_null_terminated_buffer("\"true\""));
 			else   m_stream.write_buffer(string_literal_to_non_null_terminated_buffer("\"false\""));
-			m_stream.flush();
+			return m_stream.flush();
 		}
-		void write(nullptr_t)
+		auto write(nullptr_t)
 		{
 			m_stream.write_buffer(string_literal_to_non_null_terminated_buffer("\"null\""));
-			m_stream.flush();
+			return m_stream.flush();
 		}
-		void write(undefined)
+		auto write(undefined)
 		{
-			write(nullptr);
+			return write(nullptr);
 		}
-		void write(uint64_t x)
-		{
-			stream::write(m_stream, '"');
-			details::serialize_number(m_stream, x);
-			stream::write(m_stream, '"');
-			m_stream.flush();
-		}
-		void write(int64_t x)
+		auto write(uint64_t x)
 		{
 			stream::write(m_stream, '"');
 			details::serialize_number(m_stream, x);
 			stream::write(m_stream, '"');
-			m_stream.flush();
+			return m_stream.flush();
 		}
-		void write(double x)
+		auto write(int64_t x)
 		{
 			stream::write(m_stream, '"');
 			details::serialize_number(m_stream, x);
 			stream::write(m_stream, '"');
-			m_stream.flush();
+			return m_stream.flush();
+		}
+		auto write(double x)
+		{
+			stream::write(m_stream, '"');
+			details::serialize_number(m_stream, x);
+			stream::write(m_stream, '"');
+			return m_stream.flush();
 		}
 
 		auto start_binary(uint64_t cb) { return start_binary(); }
@@ -261,35 +261,35 @@ namespace goldfish { namespace json
 		document_writer(Stream&& s)
 			: m_stream(std::move(s))
 		{}
-		void write(bool x)
+		auto write(bool x)
 		{
 			if (x) m_stream.write_buffer({ reinterpret_cast<const byte*>("true"), 4 });
 			else   m_stream.write_buffer({ reinterpret_cast<const byte*>("false"), 5 });
-			m_stream.flush();
+			return m_stream.flush();
 		}
-		void write(nullptr_t)
+		auto write(nullptr_t)
 		{
 			m_stream.write_buffer({ reinterpret_cast<const byte*>("null"), 4 });
-			m_stream.flush();
+			return m_stream.flush();
 		}
-		void write(undefined)
+		auto write(undefined)
 		{
-			write(nullptr);
+			return write(nullptr);
 		}
-		void write(uint64_t x)
-		{
-			details::serialize_number(m_stream, x);
-			m_stream.flush();
-		}
-		void write(int64_t x)
+		auto write(uint64_t x)
 		{
 			details::serialize_number(m_stream, x);
-			m_stream.flush();
+			return m_stream.flush();
 		}
-		void write(double x)
+		auto write(int64_t x)
 		{
 			details::serialize_number(m_stream, x);
-			m_stream.flush();
+			return m_stream.flush();
+		}
+		auto write(double x)
+		{
+			details::serialize_number(m_stream, x);
+			return m_stream.flush();
 		}
 
 		auto start_binary(uint64_t cb) { return start_binary(); }

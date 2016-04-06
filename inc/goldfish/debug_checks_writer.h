@@ -21,11 +21,11 @@ namespace goldfish { namespace debug_checks
 			err_if_locked();
 			m_writer.write_buffer(buffer);
 		}
-		void flush()
+		auto flush()
 		{
 			err_if_locked();
 			unlock_parent_and_lock_self();
-			m_writer.flush();
+			return m_writer.flush();
 		}
 	private:
 		inner m_writer;
@@ -47,12 +47,12 @@ namespace goldfish { namespace debug_checks
 			m_writer.write_buffer(buffer);
 			m_cb_left -= buffer.size();
 		}
-		void flush()
+		auto flush()
 		{
 			if (m_cb_left != 0)
 				error_handler::on_error();
 
-			m_writer.flush();
+			return m_writer.flush();
 		}
 	private:
 		inner m_writer;
@@ -73,11 +73,11 @@ namespace goldfish { namespace debug_checks
 			err_if_locked();
 			return add_write_checks_impl(this, m_writer.append());
 		}
-		void flush()
+		auto flush()
 		{
 			err_if_locked();
 			unlock_parent_and_lock_self();
-			m_writer.flush();
+			return m_writer.flush();
 		}
 	private:
 		inner m_writer;
@@ -99,11 +99,11 @@ namespace goldfish { namespace debug_checks
 			--m_count_left;
 			return m_writer.append();
 		}
-		void flush()
+		auto flush()
 		{
 			if (m_count_left != 0)
 				error_handler::on_error();
-			m_writer.flush();
+			return m_writer.flush();
 		}
 	private:
 		inner m_writer;
@@ -133,12 +133,12 @@ namespace goldfish { namespace debug_checks
 			clear_flag();
 			return add_write_checks_impl(this, m_writer.append_value());
 		}
-		void flush()
+		auto flush()
 		{
 			err_if_locked();
 			err_if_flag_set();
 			unlock_parent_and_lock_self();
-			m_writer.flush();
+			return m_writer.flush();
 		}
 	private:
 		inner m_writer;
@@ -164,11 +164,11 @@ namespace goldfish { namespace debug_checks
 		{
 			return m_writer.append_value();
 		}
-		void flush()
+		auto flush()
 		{
 			if (m_c_left != 0)
 				error_handler::on_error();
-			m_writer.flush();
+			return m_writer.flush();
 		}
 	private:
 		inner m_writer;

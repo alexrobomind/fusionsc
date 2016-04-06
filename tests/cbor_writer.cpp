@@ -37,10 +37,7 @@ namespace goldfish { namespace dom
 	{
 		auto w = [&](const document& d)
 		{
-			stream::vector_writer output;
-			cbor::create_writer(stream::ref(output)).write(d);
-			output.flush();
-			return to_hex_string(output.data());
+			return to_hex_string(cbor::create_writer(stream::vector_writer{}).write(d));
 		};
 		test(w(0ull) == "00");
 		test(w(1ull) == "01");
@@ -120,8 +117,7 @@ namespace goldfish { namespace dom
 			for (auto d : data)
 				array.write(d);
 			array.flush();
-			s.flush();
-			return to_hex_string(s.data());
+			return to_hex_string(s.flush());
 		};
 		test(w({}) == "9fff");
 
@@ -142,8 +138,7 @@ namespace goldfish { namespace dom
 				map.write(d.first, d.second);
 
 			map.flush();
-			s.flush();
-			return to_hex_string(s.data());
+			return to_hex_string(s.flush());
 		};
 
 		test(w({
@@ -161,8 +156,7 @@ namespace goldfish { namespace dom
 			for (auto s : data)
 				string.write_buffer({ reinterpret_cast<const byte*>(s.data()), s.size() });
 			string.flush();
-			s.flush();
-			return to_hex_string(s.data());
+			return to_hex_string(s.flush());
 		};
 
 		test(w({ "strea", "ming" }) == "7f657374726561646d696e67ff");
@@ -177,8 +171,7 @@ namespace goldfish { namespace dom
 			for (auto d : data)
 				binary.write_buffer(d);
 			binary.flush();
-			s.flush();
-			return to_hex_string(s.data());
+			return to_hex_string(s.flush());
 		};
 
 		test(w({ to_vector("0102"), to_vector("030405") }) == "5f42010243030405ff");

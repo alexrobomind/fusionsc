@@ -131,7 +131,7 @@ namespace goldfish { namespace stream
 		}
 		void flush()
 		{
-			m_stream->flush();
+			return m_stream->flush();
 		}
 
 	private:
