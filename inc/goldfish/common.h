@@ -56,8 +56,6 @@ namespace goldfish
 	template <> struct disjunction<> { enum { value = false }; };
 	template <class Head, class... Tail> struct disjunction<Head, Tail...> { enum { value = Head::value || disjunction<Tail...>::value }; };
 
-	template <class T> struct negate { enum { value = !T::value }; };
-
 	// Used for all cases where we need to read from a stream in chunks (default implementation of seek, stream copy, etc...)
 	static const int typical_buffer_length = 8 * 1024;
 }

@@ -215,7 +215,7 @@ namespace goldfish
 		template <class T, size_t index> class add_constructors<T, index> : public T
 		{
 		protected:
-			void assign() {}
+			void assign() {} // This is here just so the derived class can do "using base::assign" without failure
 		};
 		template <class T, size_t index, class head, class... types> struct add_constructors<T, index, head, types...> : add_constructors<T, index+1, types...>
 		{
@@ -356,28 +356,4 @@ namespace goldfish
 			}
 		};
 	};
-
-	namespace details
-	{
-		template <size_t N, class TLambda, class Variant>
-		static decltype(auto) eval(Variant&& v, TLambda&& l)
-		{
-			return std::forward<TLambda>(l)(std::forward<Variant>(v).as_unchecked<N>());
-		}
-
-		template <class TLambda, class Variant, std::size_t... Is> decltype(auto) visit_helper(TLambda&& l, Variant&& v, std::index_sequence<Is...>)
-		{
-			using Return = decltype(std::forward<TLambda>(l)(std::forward<Variant>(v).as_unchecked<0>()));
-			using Fn = Return(*)(Variant&&, TLambda&&);
-			static Fn fns[] = { eval<Is, TLambda, Variant>... };
-			return fns[v.which()](std::forward<Variant>(v), std::forward<TLambda>(l));
-		}
-		template <class... Types> std::index_sequence_for<Types...> index_sequence_for_variant(const variant_base<Types...>&) { return{}; }
-		template <class T> using index_sequence_for_variant_t = decltype(index_sequence_for_variant(std::declval<T>()));;
-	}
-
-	template <class TLambda, class Variant> decltype(auto) visit(TLambda&& l, Variant&& v)
-	{
-		return details::visit_helper(std::forward<TLambda>(l), std::forward<Variant>(v), details::index_sequence_for_variant_t<std::decay_t<Variant>>{});
-	}
 }
