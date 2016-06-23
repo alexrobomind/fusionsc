@@ -167,18 +167,17 @@ Those two libraries are again faster than Casablanca mostly because Casablanca d
 Goldfish parses documents from read streams and serializes documents to write streams.
 
 Goldfish comes with a few readers: a reader over an in memory buffer (see `stream::read_buffer_ref`) or over a file (see `stream::file_reader`). It also provides a buffering (see `stream::buffer`). You might find yourself in a position where you want to implement your own stream, for example, as a network stream on top of your favorite network library.
-Not to worry, the interface for a read stream is fairly straightforward, with a single read_buffer API:
+Not to worry, the interface for a read stream is fairly straightforward, with a single read_partial_buffer API:
 ```cpp
 struct read_stream
 {
 	// Copies some bytes from the stream to the "buffer"
-	// Returns the number of bytes copied.
-	// If the API returns something else than buffer.size(), the end of stream was reached.
-	// read_buffer can still be called after the end is reached, in that case it returns 0
+	// Returns the number of bytes copied, which might be less than buffer.size() if not all the data is immediately available
+	// Returns 0 if the buffer is empty or if the stream was at the end before the call was made.
 	//
 	// buffer_ref is an object that contains a pointer to the buffer (buffer.data() is the pointer)
 	// as well as the number of bytes in the buffer (buffer.size())
-	size_t read_buffer(buffer_ref buffer);
+	size_t read_partial_buffer(buffer_ref buffer);
 }
 ```
 
@@ -202,7 +201,7 @@ There are a few helper APIs that you can use to ease the consumption of streams:
 // Seek forward in the stream up to cb bytes
 // This API returns the number of bytes skipped from the stream, which can be less
 // than cb if the end of the stream is reached
-// It is implemented in terms of read_buffer, unless the reader_stream has a seek
+// It is implemented in terms of read_partial_buffer, unless the reader_stream has a seek
 //  method on it (in which case that method is used)
 uint64_t stream::seek(reader_stream&, uint64_t cb);
 
@@ -212,7 +211,7 @@ std::string stream::read_all_as_string(reader_stream&);
 
 // Read an object of type T from the stream
 // The object must be a POD
-// This API is implemented in terms of read_buffer, unless the reader_stream has a
+// This API is implemented in terms of read_partial_buffer, unless the reader_stream has a
 // read method on it (in which case that method is used)
 // If the end of stream is reached before sizeof(T) bytes could be read, this method
 // throws unexpected_end_of_stream

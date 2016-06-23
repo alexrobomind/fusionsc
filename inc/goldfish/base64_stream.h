@@ -15,7 +15,7 @@ namespace goldfish { namespace stream
 			: m_stream(std::move(stream))
 		{}
 
-		size_t read_buffer(buffer_ref data)
+		size_t read_partial_buffer(buffer_ref data)
 		{
 			auto original_size = data.size();
 			read_from_already_parsed(data);
@@ -29,7 +29,7 @@ namespace goldfish { namespace stream
 
 			if (!data.empty())
 			{
-				assert(m_cb_already_parsed == 0); // because there is left over in data, read_from_already_parsed emptied m_already_parsed 
+				assert(m_cb_already_parsed == 0); // because there is left over in data, read_from_already_parsed emptied m_already_parsed
 				m_cb_already_parsed = deserialize_up_to_3_bytes(m_already_parsed);
 				read_from_already_parsed(data);
 			}
@@ -49,14 +49,14 @@ namespace goldfish { namespace stream
 		uint8_t deserialize_up_to_3_bytes(buffer_ref output)
 		{
 			byte buffer[4];
-			auto c_read = m_stream.read_buffer(buffer);
+			auto c_read = read_full_buffer(m_stream, buffer);
 			if (c_read == 4 && buffer[3] == '=') // Presence of padding means the stream is made of blocks of 4 bytes
 			{
 				if (buffer[2] == '=')
 					c_read = 2;
 				else
 					c_read = 3;
-				
+
 				if (stream::seek(m_stream, 1) != 0) // Padding is only allowed at the end of the stream
 					throw ill_formatted_base64_data{};
 			}

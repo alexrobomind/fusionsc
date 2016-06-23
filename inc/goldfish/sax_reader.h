@@ -106,7 +106,7 @@ namespace goldfish
 			#endif
 			return result;
 		}
-		
+
 		// Unsigned ints can be converted from signed ints
 		uint64_t as_uint64()
 		{
@@ -166,7 +166,7 @@ namespace goldfish
 				throw integer_overflow_while_casting{};
 			return static_cast<uint8_t>(x);
 		}
-		
+
 		// Signed ints can be converted from unsigned ints
 		int64_t as_int64()
 		{
@@ -236,7 +236,7 @@ namespace goldfish
 				[](auto&& x, tags::string)
 				{
 					byte buffer[6];
-					auto cb = x.read_buffer(buffer);
+					auto cb = read_full_buffer(x, buffer);
 					if (cb == 4 && std::equal(buffer, buffer + 4, "true"))
 						return true;
 					else if (cb == 5 && std::equal(buffer, buffer + 5, "false"))

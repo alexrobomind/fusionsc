@@ -17,12 +17,10 @@ TEST_CASE(test_skip)
 		{}
 
 		size_t m_size;
-		size_t m_calls = 0;
 
-		size_t read_buffer(buffer_ref buffer)
+		size_t read_partial_buffer(buffer_ref buffer)
 		{
 			// pretend we filled buffer with data
-			++m_calls;
 			auto cb = std::min(buffer.size(), m_size);
 			m_size -= cb;
 			return cb;
@@ -31,12 +29,10 @@ TEST_CASE(test_skip)
 	static const size_t chunk_size = 8 * 1024;
 	auto t = [&](size_t initial, size_t to_skip)
 	{
-		fake_stream s{ initial };
+		fake_stream s { initial };
 		test(seek(s, to_skip) == std::min(initial, to_skip));
 		test(s.m_size == (initial > to_skip ? initial - to_skip : 0));
-		test(s.m_calls == std::min(initial, to_skip) / typical_buffer_length + 1);
 	};
-
 
 	t(0, 0);
 	t(0, 1);

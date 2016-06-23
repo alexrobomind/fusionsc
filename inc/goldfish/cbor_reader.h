@@ -56,17 +56,14 @@ namespace goldfish { namespace cbor
 				throw ill_formatted_cbor_data{};
 		}
 
-		size_t read_buffer(buffer_ref buffer)
+		size_t read_partial_buffer(buffer_ref buffer)
 		{
-			size_t cb_read = 0;
-			while (!buffer.empty() && ensure_block())
-			{
-				auto to_read = static_cast<size_t>(std::min<uint64_t>(buffer.size(), m_remaining_in_current_block));
-				if (m_stream.read_buffer(buffer.remove_front(to_read)) != to_read)
-					throw ill_formatted_cbor_data{};
-				m_remaining_in_current_block -= to_read;
-				cb_read += to_read;
-			}
+			if (!ensure_block())
+				return 0;
+
+			auto cb_to_read = static_cast<size_t>(std::min<uint64_t>(buffer.size(), m_remaining_in_current_block));
+			auto cb_read = m_stream.read_partial_buffer({ buffer.begin(), cb_to_read });
+			m_remaining_in_current_block -= cb_read;
 			return cb_read;
 		}
 
@@ -289,7 +286,7 @@ namespace goldfish { namespace cbor
 		static optional<document<Stream>> fn_32_binary(Stream&& s, byte) { return byte_string<Stream>{ std::move(s), from_big_endian(stream::read<uint32_t>(s)) }; };
 		static optional<document<Stream>> fn_64_binary(Stream&& s, byte) { return byte_string<Stream>{ std::move(s), from_big_endian(stream::read<uint64_t>(s)) }; };
 		static optional<document<Stream>> fn_null_terminated_binary(Stream&& s, byte) { return byte_string<Stream>{ std::move(s) }; };
-		
+
 		static optional<document<Stream>> fn_small_text(Stream&& s, byte first_byte) { return text_string<Stream>{ std::move(s), static_cast<uint8_t>(first_byte & 31) }; };
 		static optional<document<Stream>> fn_8_text(Stream&& s, byte) { return text_string<Stream>{ std::move(s), stream::read<uint8_t>(s) }; };
 		static optional<document<Stream>> fn_16_text(Stream&& s, byte) { return text_string<Stream>{ std::move(s), from_big_endian(stream::read<uint16_t>(s)) }; };

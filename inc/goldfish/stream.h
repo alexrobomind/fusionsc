@@ -7,11 +7,11 @@
 #include "match.h"
 #include "optional.h"
 
-namespace goldfish { namespace stream 
+namespace goldfish { namespace stream
 {
 	struct unexpected_end_of_stream : ill_formatted {};
 
-	template <class T> static std::true_type test_is_reader(decltype(std::declval<T>().read_buffer(buffer_ref{}))*) { return{}; }
+	template <class T> static std::true_type test_is_reader(decltype(std::declval<T>().read_partial_buffer(buffer_ref{}))*) { return{}; }
 	template <class T> static std::false_type test_is_reader(...) { return{}; }
 	template <class T> struct is_reader : decltype(test_is_reader<T>(nullptr)) {};
 	template <class T, class U> using enable_if_reader_t = std::enable_if_t<is_reader<std::decay_t<T>>::value, U>;
@@ -33,6 +33,19 @@ namespace goldfish { namespace stream
 	template <class T, class elem> static std::false_type test_has_read(...) { return{}; }
 	template <class T, class elem> struct has_read : decltype(test_has_read<T, elem>(nullptr)) {};
 
+	template <class Stream> enable_if_reader_t<Stream, size_t> read_full_buffer(Stream&& s, buffer_ref buffer)
+	{
+		auto cur = buffer.begin();
+		while (cur != buffer.end())
+		{
+			auto cb = s.read_partial_buffer({ cur, buffer.end() });
+			if (cb == 0)
+				break;
+			cur += cb;
+		}
+		return cur - buffer.begin();
+	}
+
 	template <class Stream> std::enable_if_t< has_seek<Stream>::value, uint64_t> seek(Stream& s, uint64_t x)
 	{
 		return s.seek(x);
@@ -41,14 +54,13 @@ namespace goldfish { namespace stream
 	{
 		auto original = x;
 		byte buffer[typical_buffer_length];
-		while (x >= sizeof(buffer))
+		while (x > 0)
 		{
-			auto cb = s.read_buffer(buffer);
+			auto cb = s.read_partial_buffer({ buffer, static_cast<size_t>(std::min<uint64_t>(sizeof(buffer), x)) });
+			if (cb == 0)
+				break;
 			x -= cb;
-			if (cb < sizeof(buffer))
-				return original - x;
 		}
-		x -= s.read_buffer({ buffer, buffer + x });
 		return original - x;
 	}
 
@@ -60,7 +72,7 @@ namespace goldfish { namespace stream
 	template <class T, class Stream> std::enable_if_t<is_reader<std::decay_t<Stream>>::value && !has_read<Stream, T>::value && std::is_standard_layout<T>::value, T> read(Stream& s)
 	{
 		T t;
-		if (s.read_buffer({ reinterpret_cast<byte*>(&t), sizeof(t) }) != sizeof(t))
+		if (read_full_buffer(s, { reinterpret_cast<byte*>(&t), sizeof(t) }) != sizeof(t))
 			throw unexpected_end_of_stream();
 		return t;
 	}
@@ -85,7 +97,7 @@ namespace goldfish { namespace stream
 		ref_reader(inner& stream)
 			: m_stream(stream)
 		{}
-		size_t read_buffer(buffer_ref data) { return m_stream.read_buffer(data); }
+		size_t read_partial_buffer(buffer_ref data) { return m_stream.read_partial_buffer(data); }
 		template <class T> auto read() { return stream::read<T>(m_stream); }
 		uint64_t seek(uint64_t x) { return stream::seek(m_stream, x); }
 		template <class T> auto peek() { return m_stream.peek<T>(); }
@@ -136,7 +148,7 @@ namespace goldfish { namespace stream
 		const_buffer_ref_reader(const_buffer_ref data)
 			: m_data(data)
 		{}
-		size_t read_buffer(buffer_ref data)
+		size_t read_partial_buffer(buffer_ref data)
 		{
 			auto to_copy = std::min(m_data.size(), data.size());
 			return copy(m_data.remove_front(to_copy), data.remove_front(to_copy));
@@ -343,15 +355,11 @@ namespace goldfish { namespace stream
 		return output.flush();
 	}
 
-	template <class Reader, class Writer> 
+	template <class Reader, class Writer>
 	std::enable_if_t<is_reader<std::decay_t<Reader>>::value && is_writer<std::decay_t<Writer>>::value, void> copy(Reader&& r, Writer&& w)
 	{
 		byte buffer[typical_buffer_length];
-		size_t cb;
-		do
-		{
-			cb = r.read_buffer(buffer);
+		while (auto cb = r.read_partial_buffer(buffer))
 			w.write_buffer({ buffer, cb });
-		} while (cb == sizeof(buffer));
 	}
 }}

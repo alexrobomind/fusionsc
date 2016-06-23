@@ -44,30 +44,30 @@ namespace goldfish { namespace stream
 		
 		// read one at a time (this tests reading 0 and 1 bytes with left overs 0,1,2)
 		{
-			test(s.read_buffer({}) == 0);
+			test(s.read_partial_buffer({}) == 0);
 			test(stream::read<char>(s) == 'a');
-			test(s.read_buffer({}) == 0);
+			test(s.read_partial_buffer({}) == 0);
 			test(stream::read<char>(s) == 'n');
-			test(s.read_buffer({}) == 0);
+			test(s.read_partial_buffer({}) == 0);
 			test(stream::read<char>(s) == 'y');
 		}
 
 		// read two at a time (this tests reading 2 bytes with left overs 0,2,1)
 		{
 			byte buffer[2];
-			test(s.read_buffer(buffer) == 2 && buffer[0] == ' ' && buffer[1] == 'c');
-			test(s.read_buffer(buffer) == 2 && buffer[0] == 'a' && buffer[1] == 'r');
-			test(s.read_buffer(buffer) == 2 && buffer[0] == 'n' && buffer[1] == 'a');
+			test(s.read_partial_buffer(buffer) == 2 && buffer[0] == ' ' && buffer[1] == 'c');
+			test(s.read_partial_buffer(buffer) == 2 && buffer[0] == 'a' && buffer[1] == 'r');
+			test(s.read_partial_buffer(buffer) == 2 && buffer[0] == 'n' && buffer[1] == 'a');
 		}
 		
 		// read three at a time (this tests reading 3 bytes with left overs 0,1,2)
 		{
 			byte buffer[3];
-			test(s.read_buffer(buffer) == 3 && buffer[0] == 'l' && buffer[1] == ' ' && buffer[2] == 'p');
+			test(s.read_partial_buffer(buffer) == 3 && buffer[0] == 'l' && buffer[1] == ' ' && buffer[2] == 'p');
 			test(stream::read<char>(s) == 'l');
-			test(s.read_buffer(buffer) == 3 && buffer[0] == 'e' && buffer[1] == 'a' && buffer[2] == 's');
+			test(s.read_partial_buffer(buffer) == 3 && buffer[0] == 'e' && buffer[1] == 'a' && buffer[2] == 's');
 			test(stream::read<char>(s) == 'u');
-			test(s.read_buffer(buffer) == 3 && buffer[0] == 'r' && buffer[1] == 'e' && buffer[2] == '.');
+			test(s.read_partial_buffer(buffer) == 3 && buffer[0] == 'r' && buffer[1] == 'e' && buffer[2] == '.');
 		}
 	}
 

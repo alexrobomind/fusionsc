@@ -16,16 +16,20 @@ namespace goldfish { namespace stream
 		class reader_writer_stream
 		{
 		public:
-			size_t read_buffer(buffer_ref data)
+			size_t read_partial_buffer(buffer_ref data)
 			{
+				auto original_size = data.size();
+				if (original_size == 0)
+					return 0;
+
 				std::unique_lock<std::mutex> lock(m_mutex);
-				assert(m_state != state::opened || m_read_buffer_to_be_filled.empty());
-				m_read_buffer_to_be_filled = data;
-				m_condition_variable.notify_one(); // Wake up the writer (now that m_read_buffer_to_be_filled is likely not empty)
-				m_condition_variable.wait(lock, [&] { return m_state != state::opened || m_read_buffer_to_be_filled.empty(); });
+				assert(m_state != state::opened || m_read_buffer == nullptr);
+				m_read_buffer = &data;
+				m_condition_variable.notify_one(); // Wake up the writer (now that m_read_buffer is set)
+				m_condition_variable.wait(lock, [&] { return m_state != state::opened || m_read_buffer == nullptr; });
 				if (m_state == state::terminated)
 					throw reader_writer_stream_closed();
-				return data.size() - m_read_buffer_to_be_filled.size();
+				return original_size - data.size();
 			}
 
 			void write_buffer(const_buffer_ref data)
@@ -35,14 +39,16 @@ namespace goldfish { namespace stream
 
 				while (!data.empty())
 				{
-					m_condition_variable.wait(lock, [&] { return m_state == state::terminated || !m_read_buffer_to_be_filled.empty(); });
+					m_condition_variable.wait(lock, [&] { return m_state == state::terminated || m_read_buffer != nullptr; });
 					if (m_state == state::terminated)
 						throw reader_writer_stream_closed();
 
-					auto to_copy = std::min(m_read_buffer_to_be_filled.size(), data.size());
-					copy(data.remove_front(to_copy), m_read_buffer_to_be_filled.remove_front(to_copy));
-					if (m_read_buffer_to_be_filled.empty())
-						m_condition_variable.notify_one();
+					auto to_copy = std::min(m_read_buffer->size(), data.size());
+					copy(data.remove_front(to_copy), m_read_buffer->remove_front(to_copy));
+					m_read_buffer = nullptr;
+
+					// Wake up the reader now that pending_read_request is null
+					m_condition_variable.notify_one();
 				}
 			}
 			void flush()
@@ -68,7 +74,7 @@ namespace goldfish { namespace stream
 		private:
 			std::mutex m_mutex;
 			std::condition_variable m_condition_variable;
-			buffer_ref m_read_buffer_to_be_filled;
+			buffer_ref* m_read_buffer;
 
 			enum class state
 			{
@@ -92,15 +98,20 @@ namespace goldfish { namespace stream
 			rhs.m_stream = nullptr;
 		}
 		reader_on_reader_writer& operator = (const reader_on_reader_writer&) = delete;
-		reader_on_reader_writer& operator = (reader_on_reader_writer&&) = delete;
+		reader_on_reader_writer& operator = (reader_on_reader_writer&& rhs)
+		{
+			std::swap(m_stream, rhs.m_stream);
+			return *this;
+		}
+
 		~reader_on_reader_writer()
 		{
 			if (m_stream)
 				m_stream->terminate();
 		}
-		size_t read_buffer(buffer_ref data)
+		size_t read_partial_buffer(buffer_ref data)
 		{
-			return m_stream->read_buffer(data);
+			return m_stream->read_partial_buffer(data);
 		}
 
 	private:
@@ -119,7 +130,11 @@ namespace goldfish { namespace stream
 			rhs.m_stream = nullptr;
 		}
 		writer_on_reader_writer& operator = (const writer_on_reader_writer&) = delete;
-		writer_on_reader_writer& operator = (writer_on_reader_writer&&) = delete;
+		writer_on_reader_writer& operator = (writer_on_reader_writer&& rhs)
+		{
+			std::swap(m_stream, rhs.m_stream);
+			return *this;
+		}
 		~writer_on_reader_writer()
 		{
 			if (m_stream)

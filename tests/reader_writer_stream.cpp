@@ -29,7 +29,7 @@ namespace goldfish
 		std::thread reader([&]
 		{
 			std::array<byte, 1> buffer;
-			test(rws.reader.read_buffer(buffer) == 0);
+			test(rws.reader.read_partial_buffer(buffer) == 0);
 		});
 		std::thread writer([&]
 		{
@@ -45,7 +45,7 @@ namespace goldfish
 
 		std::thread reader([&]
 		{
-			test(rws.reader.read_buffer({}) == 0);
+			test(rws.reader.read_partial_buffer({}) == 0);
 			test(stream::read<char>(rws.reader) == 'a');
 		});
 		std::thread writer([&]
@@ -104,7 +104,7 @@ namespace goldfish
 		std::thread reader([&]
 		{
 			std::array<byte, 5> buffer;
-			test(rws.reader.read_buffer(buffer) == 1);
+			test(rws.reader.read_partial_buffer(buffer) == 1);
 			test(buffer[0] == 'a');
 		});
 		std::thread writer([&]

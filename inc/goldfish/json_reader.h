@@ -70,7 +70,7 @@ namespace goldfish { namespace json
 	{
 	public:
 		using tag = tags::binary;
-		size_t read_buffer(buffer_ref) { std::terminate(); }
+		size_t read_partial_buffer(buffer_ref) { std::terminate(); }
 	};
 
 	/*
@@ -86,7 +86,7 @@ namespace goldfish { namespace json
 		{}
 		using tag = tags::string;
 
-		size_t read_buffer(buffer_ref buffer)
+		size_t read_partial_buffer(buffer_ref buffer)
 		{
 			if (m_converted.front() == end_of_stream)
 				return 0;

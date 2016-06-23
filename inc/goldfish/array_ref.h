@@ -59,6 +59,9 @@ namespace goldfish
 		T& pop_front() { assert(!empty()); return *(m_begin++); }
 		constexpr T& operator[](size_t i) const { assert(i < size()); return m_begin[i]; }
 
+		void set_end(T* new_end) { m_end = new_end; }
+		void resize(size_t new_size) { set_end(m_begin + new_size); }
+
 		void clear()
 		{
 			m_begin = m_end;

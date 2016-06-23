@@ -19,7 +19,7 @@ namespace goldfish
 			template <class... Args> schema(Args&&... args)
 				: m_keys{ std::forward<Args>(args)... }
 			{}
-		
+
 			optional<size_t> search_key(const_buffer_ref key, size_t start_index_in_schema) const
 			{
 				return search_impl(key, start_index_in_schema);
@@ -30,12 +30,12 @@ namespace goldfish
 					[&](auto& text, tags::string) -> optional<size_t>
 					{
 						byte buffer[max_length];
-						auto length = text.read_buffer(buffer);
+						auto length = read_full_buffer(text, buffer);
 						if (stream::seek(text, std::numeric_limits<uint64_t>::max()) != 0)
 							return nullopt;
 
 						return search_impl({ buffer, length }, start_index_in_schema);
-					},
+				},
 					[&](auto&, auto) -> optional<size_t>
 					{
 						seek_to_end(d);
@@ -61,7 +61,7 @@ namespace goldfish
 	template <class... T> constexpr auto make_schema(T&&... keys)
 	{
 		return details::schema<
-			sizeof...(T), 
+			sizeof...(T),
 			largest<sizeof(T)...>::value - 1 // remove the null terminator
 		>(details::make_key(std::forward<T>(keys))...);
 	}
@@ -139,7 +139,7 @@ namespace goldfish
 			if (auto index = m_schema.search_key(details::make_key(std::forward<Key>(key)), 0 /*start_index_in_schema*/))
 				return read_by_schema_index(*index);
 			else
-				std::terminate();			
+				std::terminate();
 		}
 		friend void seek_to_end(map_with_schema& m)
 		{

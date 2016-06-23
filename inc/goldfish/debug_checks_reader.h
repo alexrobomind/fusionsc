@@ -39,10 +39,13 @@ namespace goldfish { namespace debug_checks
 			, m_inner(std::move(inner))
 		{}
 
-		size_t read_buffer(buffer_ref buffer)
+		size_t read_partial_buffer(buffer_ref buffer)
 		{
-			auto result = m_inner.read_buffer(buffer);
-			if (result < buffer.size())
+			if (buffer.empty())
+				return 0;
+
+			auto result = m_inner.read_partial_buffer(buffer);
+			if (result == 0)
 				unlock_parent();
 			return result;
 		}

@@ -62,7 +62,7 @@ namespace goldfish { namespace stream
 		file_reader(const std::wstring& path)
 			: m_file(path, L"rb")
 		{}
-		size_t read_buffer(buffer_ref data)
+		size_t read_partial_buffer(buffer_ref data)
 		{
 			auto cb = fread(data.data(), 1 /*size*/, data.size() /*count*/, m_file.get());
 			if (cb != data.size())

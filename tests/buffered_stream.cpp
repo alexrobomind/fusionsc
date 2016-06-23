@@ -48,26 +48,26 @@ namespace goldfish { namespace stream
 		auto s = buffer<3>(read_string("abcdefghijkl"));
 		{
 			std::array<byte, 1> buffer;
-			test(s.read_buffer(buffer) == 1);
+			test(s.read_partial_buffer(buffer) == 1);
 			test(buffer == std::array<uint8_t, 1>{'a'});
 		}
 		{
 			std::array<byte, 2> buffer;
-			test(s.read_buffer(buffer) == 2);
+			test(s.read_partial_buffer(buffer) == 2);
 			test(buffer == std::array<byte, 2>{'b', 'c'});
 		}
 		{
 			std::array<byte, 3> buffer;
-			test(s.read_buffer(buffer) == 3);
+			test(s.read_partial_buffer(buffer) == 3);
 			test(buffer == std::array<byte, 3>{'d', 'e', 'f'});
 		}
 		{
-			std::array<byte, 4> buffer;
-			test(s.read_buffer(buffer) == 4);
-			test(buffer == std::array<byte, 4>{'g', 'h', 'i', 'j'});
+			std::array<byte, 4> buffer = { 'X', 'X', 'X', 'X' };
+			test(s.read_partial_buffer(buffer) == 3);
+			test(buffer == std::array<byte, 4>{'g', 'h', 'i', 'X' });
 
-			test(s.read_buffer(buffer) == 2);
-			test(buffer == std::array<byte, 4>{'k', 'l', 'i', 'j'});
+			test(s.read_partial_buffer(buffer) == 3);
+			test(buffer == std::array<byte, 4>{'j', 'k', 'l', 'X' });
 		}
 	}
 	TEST_CASE(test_buffered_seek)

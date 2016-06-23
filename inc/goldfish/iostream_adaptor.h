@@ -12,9 +12,15 @@ namespace goldfish { namespace stream
 		istream_reader_ref(std::istream& stream)
 			: m_stream(stream)
 		{}
-		size_t read_buffer(buffer_ref buffer)
+		size_t read_partial_buffer(buffer_ref buffer)
 		{
-			m_stream.read(reinterpret_cast<char*>(buffer.data()), buffer.size());
+			if (buffer.empty())
+				return 0;
+
+			if (auto cb = m_stream.readsome(reinterpret_cast<char*>(buffer.data()), buffer.size()))
+				return cb;
+
+			m_stream.read(reinterpret_cast<char*>(buffer.data()), 1);
 			if (m_stream.bad() || (m_stream.fail() && !m_stream.eof()))
 				throw io_exception{};
 
@@ -69,7 +75,7 @@ namespace goldfish { namespace stream
 			if (gptr() < egptr()) // buffer not exhausted
 				return traits_type::to_int_type(*gptr());
 
-			auto cb = m_stream.read_buffer({
+			auto cb = m_stream.read_partial_buffer({
 				reinterpret_cast<byte*>(m_buffer.data() + 1 /*putback space*/),
 				reinterpret_cast<byte*>(m_buffer.data() + m_buffer.size()) });
 			if (cb == 0)

@@ -4,13 +4,6 @@
 
 namespace goldfish { namespace stream
 {
-	template <class T, class U>
-	static size_t copy_and_pop(array_ref<T>& from, array_ref<U>& to)
-	{
-		auto to_copy = std::min(from.size(), to.size());
-		return copy(from.remove_front(to_copy), to.remove_front(to_copy));
-	}
-
 	template <size_t N, class inner> class buffered_reader
 	{
 	public:
@@ -34,22 +27,14 @@ namespace goldfish { namespace stream
 			return peek_helper<T>(std::integral_constant<size_t, alignof(T)>());
 		}
 
-		size_t read_buffer(buffer_ref data)
+		size_t read_partial_buffer(buffer_ref data)
 		{
-			auto read_already = copy_and_pop(m_buffered, data);
-			if (data.empty())
-			{
-				return read_already;
-			}
-			else if (data.size() < N)
-			{
+			if (m_buffered.empty())
 				fill_in_buffer();
-				return read_already + copy_and_pop(m_buffered, data);
-			}
-			else
-			{
-				return read_already + m_stream.read_buffer(data);
-			}
+
+			auto cb = std::min(m_buffered.size(), data.size());
+			copy(m_buffered.remove_front(cb), buffer_ref{ data.begin(), cb });
+			return cb;
 		}
 
 		uint64_t seek(uint64_t x)
@@ -70,7 +55,7 @@ namespace goldfish { namespace stream
 		template <class T, size_t alignment> T read_helper(std::integral_constant<size_t, alignment>, std::bool_constant<false>)
 		{
 			T t;
-			if (read_buffer({ reinterpret_cast<byte*>(&t), sizeof(t) }) != sizeof(t))
+			if (read_full_buffer(*this, { reinterpret_cast<byte*>(&t), sizeof(t) }) != sizeof(t))
 				throw unexpected_end_of_stream();
 			return t;
 		}
@@ -109,16 +94,23 @@ namespace goldfish { namespace stream
 		void fill_in_buffer()
 		{
 			assert(m_buffered.empty());
-			m_buffered = { m_buffer_data.data(), m_stream.read_buffer(m_buffer_data) };
+			m_buffered = { m_buffer_data.data(), m_stream.read_partial_buffer(m_buffer_data) };
 		}
 		bool try_fill_in_buffer_ensure_size(size_t s)
 		{
 			assert(s <= N);
 			memmove(m_buffer_data.data(), m_buffered.data(), m_buffered.size());
-			auto cb = m_stream.read_buffer({ m_buffer_data.data() + m_buffered.size(), m_buffer_data.data() + N });
-			m_buffered = { m_buffer_data.data(), m_buffered.size() + cb };
+			m_buffered = { m_buffer_data.data(), m_buffered.size() };
 
-			return m_buffered.size() >= s;
+			while (m_buffered.size() < s)
+			{
+				auto cb = m_stream.read_partial_buffer({ m_buffered.end(), m_buffer_data.data() + N });
+				if (cb == 0)
+					return false;
+				m_buffered.set_end(m_buffered.end() + cb);
+			}
+
+			return true;
 		}
 		void fill_in_buffer_ensure_size(size_t s)
 		{
