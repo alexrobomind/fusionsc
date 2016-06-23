@@ -107,7 +107,7 @@ namespace goldfish { namespace stream
 				auto cb = m_stream.read_partial_buffer({ m_buffered.end(), m_buffer_data.data() + N });
 				if (cb == 0)
 					return false;
-				m_buffered.set_end(m_buffered.end() + cb);
+				m_buffered = { m_buffered.begin(), m_buffered.end() + cb };
 			}
 
 			return true;
