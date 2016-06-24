@@ -47,7 +47,7 @@ namespace goldfish { namespace stream
 					copy(data.remove_front(to_copy), m_read_buffer->remove_front(to_copy));
 					m_read_buffer = nullptr;
 
-					// Wake up the reader now that pending_read_request is null
+					// Wake up the reader now that m_read_buffer is null
 					m_condition_variable.notify_one();
 				}
 			}

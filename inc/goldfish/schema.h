@@ -35,7 +35,7 @@ namespace goldfish
 							return nullopt;
 
 						return search_impl({ buffer, length }, start_index_in_schema);
-				},
+					},
 					[&](auto&, auto) -> optional<size_t>
 					{
 						seek_to_end(d);

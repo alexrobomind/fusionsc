@@ -29,6 +29,9 @@ namespace goldfish { namespace stream
 
 		size_t read_partial_buffer(buffer_ref data)
 		{
+			if (data.empty())
+				return 0;
+
 			if (m_buffered.empty())
 				fill_in_buffer();
 

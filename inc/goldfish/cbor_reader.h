@@ -58,7 +58,7 @@ namespace goldfish { namespace cbor
 
 		size_t read_partial_buffer(buffer_ref buffer)
 		{
-			if (!ensure_block())
+			if (buffer.empty() || !ensure_block())
 				return 0;
 
 			auto cb_to_read = static_cast<size_t>(std::min<uint64_t>(buffer.size(), m_remaining_in_current_block));

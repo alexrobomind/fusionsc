@@ -187,30 +187,23 @@ namespace goldfish { namespace sax
 		auto copy(Stream& s, CreateWriterWithSize&& create_writer_with_size, CreateWriterWithoutSize&& create_writer_without_size)
 		{
 			byte buffer[typical_buffer_length];
-			auto cb = s.read_partial_buffer(buffer);
-
+			auto cb = stream::read_full_buffer(s, buffer);
 			if (cb < sizeof(buffer))
 			{
-				auto cb_second = s.read_partial_buffer({ buffer + cb, buffer + sizeof(buffer) });
-				if (cb_second == 0)
-				{
-					// We read the entire stream
-					auto output_stream = create_writer_with_size(cb);
-					output_stream.write_buffer({ buffer, cb });
-					return output_stream.flush();
-				}
-				else
-				{
-					cb += cb_second;
-				}
+				// We read the entire stream
+				auto output_stream = create_writer_with_size(cb);
+				output_stream.write_buffer({ buffer, cb });
+				return output_stream.flush();
 			}
-
-			// We read only a portion of the stream
-			auto output_stream = create_writer_without_size();
-			output_stream.write_buffer(buffer);
-			stream::copy(s, output_stream);
-			return output_stream.flush();
-		};
+			else
+			{
+				// We read only a portion of the stream
+				auto output_stream = create_writer_without_size();
+				output_stream.write_buffer(buffer);
+				stream::copy(s, output_stream);
+				return output_stream.flush();
+			}
+		}
 
 		auto write(const char* text, size_t length)
 		{
