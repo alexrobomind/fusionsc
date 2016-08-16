@@ -10,7 +10,7 @@
 
 namespace goldfish
 {
-	struct integer_overflow_while_casting : exception {};
+	struct integer_overflow_while_casting : exception { integer_overflow_while_casting() : exception("Integer too large") {} };
 
 	template <bool _does_json_conversions, class... types>
 	class document_impl

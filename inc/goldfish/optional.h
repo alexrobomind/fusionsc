@@ -7,7 +7,7 @@ namespace goldfish
 	struct nullopt_t {};
 	constexpr nullopt_t nullopt{};
 
-	struct bad_optional_access : exception {};
+	struct bad_optional_access : exception { bad_optional_access() : exception("Dereference of nullopt") {} };
 
 	// Useful for SFINAE: enable_if_exists_t<T> is always void, but if the expression "T" isn't valid, SFINAE will
 	// discard the overload
@@ -121,7 +121,7 @@ namespace goldfish
 			else
 				return *this = nullopt;
 		}
-		
+
 		optional(nullopt_t) {}
 		optional(const T& t)
 		{

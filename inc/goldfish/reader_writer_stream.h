@@ -8,7 +8,7 @@
 
 namespace goldfish { namespace stream
 {
-	struct reader_writer_stream_closed : exception {};
+	struct reader_writer_stream_closed : exception { using exception::exception; };
 
 	namespace details
 	{
@@ -28,7 +28,7 @@ namespace goldfish { namespace stream
 				m_condition_variable.notify_one(); // Wake up the writer (now that m_read_buffer is set)
 				m_condition_variable.wait(lock, [&] { return m_state != state::opened || m_read_buffer == nullptr; });
 				if (m_state == state::terminated)
-					throw reader_writer_stream_closed();
+					throw reader_writer_stream_closed{ "Failed to read from the reader writer stream because the writer was closed" };
 				return original_size - data.size();
 			}
 
@@ -41,7 +41,8 @@ namespace goldfish { namespace stream
 				{
 					m_condition_variable.wait(lock, [&] { return m_state == state::terminated || m_read_buffer != nullptr; });
 					if (m_state == state::terminated)
-						throw reader_writer_stream_closed();
+						throw reader_writer_stream_closed{ "Failed to write to the reader writer stream because the reader was closed" };
+					assert(m_read_buffer != nullptr);
 
 					auto to_copy = std::min(m_read_buffer->size(), data.size());
 					copy(data.remove_front(to_copy), m_read_buffer->remove_front(to_copy));
@@ -56,7 +57,7 @@ namespace goldfish { namespace stream
 				std::unique_lock<std::mutex> lock(m_mutex);
 				assert(m_state != state::flushed);
 				if (m_state == state::terminated)
-					throw reader_writer_stream_closed{};
+					throw reader_writer_stream_closed{ "Failed to flush to the reader writer stream because the reader was closed" };
 
 				m_state = state::flushed;
 				m_condition_variable.notify_one();

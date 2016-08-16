@@ -10,8 +10,8 @@
 
 namespace goldfish { namespace json
 {
-	struct ill_formatted_json_data : ill_formatted {};
-	struct integer_overflow_in_json : ill_formatted_json_data {};
+	struct ill_formatted_json_data : ill_formatted { using ill_formatted::ill_formatted; };
+	struct integer_overflow_in_json : ill_formatted_json_data { using ill_formatted_json_data::ill_formatted_json_data; };
 
 	class byte_string;
 	template <class Stream> class text_string;
@@ -61,7 +61,7 @@ namespace goldfish { namespace json
 			for (auto c : string)
 			{
 				if (stream::read<char>(s) != c)
-					throw ill_formatted_json_data{};
+					throw ill_formatted_json_data{ "Unexpected JSON document value" };
 			}
 		}
 	}
@@ -98,7 +98,7 @@ namespace goldfish { namespace json
 			enum category : uint8_t
 			{
 				S, // simple (just needs to be forwarded to the inner stream)
-				E, // escape: \ character 
+				E, // escape: \ character
 				Q, // quote: " character
 				I, // character should have been escaped or is not a valid UTF8 character
 			};
@@ -122,7 +122,7 @@ namespace goldfish { namespace json
 				/*0xF0*/ S,S,S,S,S,S,S,S,I,I,I,I,I,I,I,I,
 			};
 			static_assert(sizeof(lookup) / sizeof(lookup[0]) == 256, "The lookup table should have 256 entries");
-			
+
 			while (!buffer.empty())
 			{
 				byte c;
@@ -156,7 +156,7 @@ namespace goldfish { namespace json
 						copy_from_converted(buffer);
 						break;
 					}
-					default: throw ill_formatted_json_data();
+					default: throw ill_formatted_json_data("Invalid escape sequence in JSON string");
 					}
 					break;
 
@@ -165,7 +165,7 @@ namespace goldfish { namespace json
 					return original - buffer.size();
 
 				default:
-					throw ill_formatted_json_data{};
+					throw ill_formatted_json_data{ "Invalid character in JSON string" };
 				}
 			}
 			return original - buffer.size();
@@ -190,7 +190,7 @@ namespace goldfish { namespace json
 			if ('0' <= c && c <= '9') return c - '0';
 			else if ('a' <= c && c <= 'f') return c - 'a' + 10;
 			else if ('A' <= c && c <= 'F') return c - 'A' + 10;
-			else throw ill_formatted_json_data();
+			else throw ill_formatted_json_data{ "Invalid hexadecimal digit" };
 		}
 		uint16_t read_utf16_character()
 		{
@@ -207,14 +207,14 @@ namespace goldfish { namespace json
 			if (0xD800 <= a && a <= 0xDFFF)
 			{
 				if (a > 0xDBFF)
-					throw ill_formatted_json_data{};
+					throw ill_formatted_json_data{ "Invalid UTF32 encoding" };
 
 				// We need a second character
-				if (stream::read<char>(m_stream) != '\\') throw ill_formatted_json_data{};
-				if (stream::read<char>(m_stream) != 'u') throw ill_formatted_json_data{};
+				if (stream::read<char>(m_stream) != '\\') throw ill_formatted_json_data{ "Invalid serialization of surrogate pair" };
+				if (stream::read<char>(m_stream) != 'u') throw ill_formatted_json_data{ "Invalid serialization of surrogate pair" };
 				uint32_t b = read_utf16_character();
 				if (b < 0xDC00 || b > 0xDFFF)
-					throw ill_formatted_json_data{};
+					throw ill_formatted_json_data{ "Invalid serialization of surrogate pair" };
 
 				a -= 0xD800;
 				b -= 0xDC00;
@@ -231,7 +231,7 @@ namespace goldfish { namespace json
 			{
 				return static_cast<byte>(0b10000000 | ((codepoint >> offset) & 0b111111));
 			};
-			
+
 			if (codepoint <= 0x7F)
 				return { static_cast<byte>(codepoint), invalid_char, invalid_char, invalid_char };
 			else if (codepoint <= 0x7FF)
@@ -241,7 +241,7 @@ namespace goldfish { namespace json
 			else if (codepoint <= 0x10FFFF)
 				return{ static_cast<byte>(0b11110000 | (codepoint >> 18)), get_6_bits(codepoint, 12), get_6_bits(codepoint, 6), get_6_bits(codepoint, 0) };
 			else
-				throw ill_formatted_json_data{};
+				throw ill_formatted_json_data{ "Invalid UTF32 encoding" };
 		}
 
 		Stream m_stream;
@@ -292,7 +292,7 @@ namespace goldfish { namespace json
 					{
 					case ',': return read_no_debug_check(stream::ref(m_stream));
 					case end_character: m_state = state::ended; return nullopt;
-					default: throw ill_formatted_json_data{};
+					default: throw ill_formatted_json_data{ "Invalid delimiter in JSON array or map" };
 					}
 				}
 
@@ -332,13 +332,13 @@ namespace goldfish { namespace json
 		{
 			auto key = read_comma_separated();
 			if (key && !key->is_exactly<tags::string>())
-				throw ill_formatted_json_data{};
+				throw ill_formatted_json_data{ "Only strings are supported for JSON keys" };
 			return key;
 		}
 		document<stream::reader_ref_type_t<Stream>> read_value()
 		{
 			if (details::read_non_space(m_stream) != ':')
-				throw ill_formatted_json_data{};
+				throw ill_formatted_json_data{ "':' expected between JSON key and value" };
 			return read_no_debug_check(stream::ref(m_stream));
 		}
 	};
@@ -348,7 +348,7 @@ namespace goldfish { namespace json
 		if (allow_leading_zeroes)
 		{
 			if (first < '0' || first > '9')
-				throw ill_formatted_json_data{};
+				throw ill_formatted_json_data{ "Invalid digit in JSON integer" };
 		}
 		else
 		{
@@ -356,7 +356,7 @@ namespace goldfish { namespace json
 				return 0u;
 
 			if (first < '1' || first > '9')
-				throw ill_formatted_json_data{};
+				throw ill_formatted_json_data{ "Invalid digit in JSON integer" };
 		}
 
 		uint64_t result = (first - '0');
@@ -367,7 +367,7 @@ namespace goldfish { namespace json
 				return result;
 
 			if (result > (std::numeric_limits<uint64_t>::max() - (*c - '0')) / 10)
-				throw integer_overflow_in_json{};
+				throw integer_overflow_in_json{ "JSON integer too large" };
 			result = (result * 10) + *c - '0';
 			stream::read<char>(s);
 		}
@@ -376,7 +376,7 @@ namespace goldfish { namespace json
 	{
 		auto first = s.peek<char>();
 		if (first == nullopt || *first < '0' || *first > '9')
-			throw ill_formatted_json_data{};
+			throw ill_formatted_json_data{ "Invalid digit in JSON integer" };
 
 		double result = 0;
 		double divider = 1;
@@ -410,7 +410,7 @@ namespace goldfish { namespace json
 				static_assert(std::numeric_limits<int64_t>::min() + 1 == -std::numeric_limits<int64_t>::max(),
 					"our overflow check relies on int64_t range to be [-2^63 .. 2^63-1]");
 				if (integer > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1)
-					throw integer_overflow_in_json{};
+					throw integer_overflow_in_json{ "JSON integer too large" };
 				return -static_cast<int64_t>(integer);
 			}
 			else
@@ -463,7 +463,7 @@ namespace goldfish { namespace json
 			case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
 				return read_number(s, c).visit([](auto&& x) -> document<Stream> { return x; });
 
-			default: throw ill_formatted_json_data();
+			default: throw ill_formatted_json_data{ "Invalid first character for JSON document" };
 		}
 	}
 

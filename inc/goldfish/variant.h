@@ -9,7 +9,7 @@
 
 namespace goldfish
 {
-	struct bad_variant_access : exception {};
+	struct bad_variant_access : exception { bad_variant_access() : exception("Bad variant access") {} };
 
 	namespace details
 	{
@@ -19,7 +19,7 @@ namespace goldfish
 			uint8_t padding_for_variant;
 		};
 		template <class T> struct with_padding<T, decltype(std::declval<T>().padding_for_variant)> { T data;  };
-		
+
 		template <class U, class... Args> struct index_of { };
 		template <class U, class... Tail> struct index_of<U, U, Tail...> { enum { value = 0 }; };
 		template <class U, class Head, class... Tail> struct index_of<U, Head, Tail...> { enum { value = 1 + index_of<U, Tail...>::value }; };
@@ -33,7 +33,7 @@ namespace goldfish
 
 		template <class... types> class variant_base
 		{
-		public:		
+		public:
 			uint8_t which() const { return *(reinterpret_cast<const uint8_t*>(&m_data) + sizeof(m_data) - 1); }
 			template <size_t N> auto& as() &
 			{
@@ -75,7 +75,7 @@ namespace goldfish
 			template <class T> auto& as_unchecked() & noexcept { return as_unchecked<index_of<T, types...>::value>(); }
 			template <class T> auto& as_unchecked() const & noexcept { return as_unchecked<index_of<T, types...>::value>(); }
 			template <class T> auto&& as_unchecked() && noexcept { return std::move(*this).as_unchecked<index_of<T, types...>::value>(); }
-		
+
 		private:
 			template <class Return, size_t N, class TLambda> static Return eval(variant_base<types...>& v, TLambda&& l) { return std::forward<TLambda>(l)(v.as_unchecked<N>()); }
 			template <class Return, size_t N, class TLambda> static Return const_eval(const variant_base<types...>& v, TLambda&& l) { return std::forward<TLambda>(l)(v.as_unchecked<N>()); }
@@ -343,7 +343,7 @@ namespace goldfish
 				return lhs.which() < rhs.which();
 			}
 		}
-		
+
 		struct invalid_state
 		{
 			static void set(std::aligned_storage_t<sizeof(base), alignof(base)>& data)

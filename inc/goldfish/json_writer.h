@@ -9,8 +9,7 @@
 
 namespace goldfish { namespace json
 {
-	struct ill_formatted_utf8 : exception {};
-	struct invalid_key_type : exception {};
+	struct invalid_key_type : exception { using exception::exception; };
 	template <class Stream> class document_writer;
 	template <class Stream> class key_writer;
 
@@ -26,14 +25,14 @@ namespace goldfish { namespace json
 		{
 			enum category : uint8_t
 			{
-				F, // forward to inner stream
-				B, // \b
-				N, // \n
-				R, // \r
-				T, // \t
-				Q, // \"
-				S, // \\ 
-				U, // \u00??
+				F, /* forward to inner stream */
+				B, /* \b */
+				N, /* \n */
+				R, /* \r */
+				T, /* \t */
+				Q, /* \" */
+				S, /* \\ */
+				U, /* \u00?? */
 			};
 			static const category lookup[] = {
 				/*       0 1 2 3 4 5 6 7 8 9 A B C D E F */
@@ -74,7 +73,7 @@ namespace goldfish { namespace json
 					case T: stream::write(m_stream, '\\'); stream::write(m_stream, 't'); break;
 					case Q: stream::write(m_stream, '\\'); stream::write(m_stream, '"'); break;
 					case S: stream::write(m_stream, '\\'); stream::write(m_stream, '\\'); break;
-					case U: 
+					case U:
 					{
 						char data[6] = { '\\', 'u', '0', '0', "0123456789ABCDEF"[*it / 16], "0123456789ABCDEF"[*it % 16] };
 						m_stream.write_buffer({ reinterpret_cast<const byte*>(data), 6 });
@@ -176,7 +175,7 @@ namespace goldfish { namespace json
 			s.write_buffer({ reinterpret_cast<const byte*>(string.data()), string.size() });
 		}
 	}
-	
+
 	template <class Stream> class map_writer
 	{
 	public:
@@ -246,10 +245,10 @@ namespace goldfish { namespace json
 		binary_writer<Stream> start_binary() { return{ std::move(m_stream) }; }
 		text_writer<Stream> start_string() { return{ std::move(m_stream) }; }
 
-		array_writer<Stream> start_array(uint64_t size) { throw invalid_key_type{}; }
-		array_writer<Stream> start_array() { throw invalid_key_type{}; }
-		map_writer<Stream> start_map(uint64_t size) { throw invalid_key_type{}; }
-		map_writer<Stream> start_map() { throw invalid_key_type{}; }
+		array_writer<Stream> start_array(uint64_t size) { throw invalid_key_type{ "An array cannot be a JSON key" }; }
+		array_writer<Stream> start_array() { throw invalid_key_type{ "An array cannot be a JSON key" }; }
+		map_writer<Stream> start_map(uint64_t size) { throw invalid_key_type{ "A map cannot be a JSON key" }; }
+		map_writer<Stream> start_map() { throw invalid_key_type{ "A map cannot be a JSON key" }; }
 
 	private:
 		Stream m_stream;
@@ -299,7 +298,7 @@ namespace goldfish { namespace json
 
 		auto start_array(uint64_t size) { return start_array(); }
 		array_writer<Stream> start_array() { return{ std::move(m_stream) }; }
-		
+
 		auto start_map(uint64_t size) { return start_map(); }
 		map_writer<Stream> start_map() { return{ std::move(m_stream) }; }
 

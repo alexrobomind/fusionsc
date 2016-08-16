@@ -122,49 +122,51 @@ namespace goldfish { namespace dom
 
 	struct data_partially_parsed {};
 
+	template <class Exception>
+	void run_failure(const char* text)
+	{
+		auto s = stream::read_string(text);
+		expect_exception<Exception>([&]
+		{
+			dom::load_in_memory(json::read(stream::ref(s)));
+			if (seek(s, 1) == 1)
+				throw data_partially_parsed {};
+		});
+	}
+
 	TEST_CASE(json_failures)
 	{
-		auto run = [](auto exception, const char* text)
-		{
-			auto s = stream::read_string(text);
-			expect_exception<decltype(exception)>([&]
-			{
-				dom::load_in_memory(json::read(stream::ref(s)));
-				if (seek(s, 1) == 1)
-					throw data_partially_parsed{};
-			});
-		};
-		run(stream::unexpected_end_of_stream{}, "[\"Unclosed array\"");
-		run(json::ill_formatted_json_data{}, "{unquoted_key: \"keys must be quoted\"}");
-		run(json::ill_formatted_json_data{}, "[\"extra comma\",]");
-		run(json::ill_formatted_json_data{}, "[\"double extra comma\",,]");
-		run(json::ill_formatted_json_data{}, "[   , \"<--missing value\"]");
-		run(data_partially_parsed{}, "[\"Comma after the close\"],");
-		run(data_partially_parsed{}, "[\"Extra close\"]]");
-		run(json::ill_formatted_json_data{}, "{\"Extra comma\": true, }");
-		run(data_partially_parsed{}, "{\"Extra value after close\": true} \"misplaced quoted value\"");
-		run(json::ill_formatted_json_data{}, "{\"Illegal expression\": 1 + 2}");
-		run(json::ill_formatted_json_data{}, "{\"Illegal invocation\": alert()}");
-		run(json::ill_formatted_json_data{}, "{\"Numbers cannot have leading zeroes\": 013}");
-		run(json::ill_formatted_json_data{}, "{\"Numbers cannot be hex\": 0x14}");
-		run(json::ill_formatted_json_data{}, "[\"Illegal backslash escape : \x15\"]");
-		run(json::ill_formatted_json_data{}, "[\naked]");
-		run(json::ill_formatted_json_data{}, "[\"Illegal backslash escape : \017\"]");
-		run(json::ill_formatted_json_data{}, "{\"Missing colon\" null}");
-		run(json::ill_formatted_json_data{}, "{\"Double colon\":: null}");
-		run(json::ill_formatted_json_data{}, "{\"Comma instead of colon\", null}");
-		run(json::ill_formatted_json_data{}, "[\"Colon instead of comma\": false]");
-		run(json::ill_formatted_json_data{}, "[\"Bad value\", truth]");
-		run(json::ill_formatted_json_data{}, "['single quote']");
-		run(json::ill_formatted_json_data{}, "[\"\ttab\tcharacter\tin\tstring\t\"]");
-		run(json::ill_formatted_json_data{}, "[\"tab\\   character\\   in\\  string\\  \"]");
-		run(json::ill_formatted_json_data{}, "[\"line\nbreak\"]");
-		run(json::ill_formatted_json_data{}, "[\"line\\\nbreak\"]");
-		run(json::ill_formatted_json_data{}, "[0e]");
-		run(json::ill_formatted_json_data{}, "[0e+]");
-		run(json::ill_formatted_json_data{}, "[0e+-1]");
-		run(stream::unexpected_end_of_stream{}, "{\"Comma instead if closing brace\": true,");
-		run(json::ill_formatted_json_data{}, "[\"mismatch\"}");
+		run_failure<stream::unexpected_end_of_stream>("[\"Unclosed array\"");
+		run_failure<json::ill_formatted_json_data>("{unquoted_key: \"keys must be quoted\"}");
+		run_failure<json::ill_formatted_json_data>("[\"extra comma\",]");
+		run_failure<json::ill_formatted_json_data>("[\"double extra comma\",,]");
+		run_failure<json::ill_formatted_json_data>("[   , \"<--missing value\"]");
+		run_failure<data_partially_parsed>("[\"Comma after the close\"],");
+		run_failure<data_partially_parsed>("[\"Extra close\"]]");
+		run_failure<json::ill_formatted_json_data>("{\"Extra comma\": true, }");
+		run_failure<data_partially_parsed>("{\"Extra value after close\": true} \"misplaced quoted value\"");
+		run_failure<json::ill_formatted_json_data>("{\"Illegal expression\": 1 + 2}");
+		run_failure<json::ill_formatted_json_data>("{\"Illegal invocation\": alert()}");
+		run_failure<json::ill_formatted_json_data>("{\"Numbers cannot have leading zeroes\": 013}");
+		run_failure<json::ill_formatted_json_data>("{\"Numbers cannot be hex\": 0x14}");
+		run_failure<json::ill_formatted_json_data>("[\"Illegal backslash escape : \x15\"]");
+		run_failure<json::ill_formatted_json_data>("[\naked]");
+		run_failure<json::ill_formatted_json_data>("[\"Illegal backslash escape : \017\"]");
+		run_failure<json::ill_formatted_json_data>("{\"Missing colon\" null}");
+		run_failure<json::ill_formatted_json_data>("{\"Double colon\":: null}");
+		run_failure<json::ill_formatted_json_data>("{\"Comma instead of colon\", null}");
+		run_failure<json::ill_formatted_json_data>("[\"Colon instead of comma\": false]");
+		run_failure<json::ill_formatted_json_data>("[\"Bad value\", truth]");
+		run_failure<json::ill_formatted_json_data>("['single quote']");
+		run_failure<json::ill_formatted_json_data>("[\"\ttab\tcharacter\tin\tstring\t\"]");
+		run_failure<json::ill_formatted_json_data>("[\"tab\\   character\\   in\\  string\\  \"]");
+		run_failure<json::ill_formatted_json_data>("[\"line\nbreak\"]");
+		run_failure<json::ill_formatted_json_data>("[\"line\\\nbreak\"]");
+		run_failure<json::ill_formatted_json_data>("[0e]");
+		run_failure<json::ill_formatted_json_data>("[0e+]");
+		run_failure<json::ill_formatted_json_data>("[0e+-1]");
+		run_failure<stream::unexpected_end_of_stream>("{\"Comma instead if closing brace\": true,");
+		run_failure<json::ill_formatted_json_data>("[\"mismatch\"}");
 	}
 
 	TEST_CASE(test_success)

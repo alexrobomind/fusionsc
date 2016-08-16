@@ -18,11 +18,11 @@ namespace goldfish { namespace stream
 				return 0;
 
 			if (auto cb = m_stream.readsome(reinterpret_cast<char*>(buffer.data()), buffer.size()))
-				return cb;
+				return static_cast<size_t>(cb); // static_cast is OK because cb <= buffer.size(), which is a size_t
 
 			m_stream.read(reinterpret_cast<char*>(buffer.data()), 1);
 			if (m_stream.bad() || (m_stream.fail() && !m_stream.eof()))
-				throw io_exception{};
+				throw io_exception{ "istream read failed" };
 
 			return static_cast<size_t>(m_stream.gcount());
 		}
@@ -39,13 +39,13 @@ namespace goldfish { namespace stream
 		{
 			m_stream.write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
 			if (m_stream.fail())
-				throw io_exception{};
+				throw io_exception{ "ostream write failed" };
 		}
 		void flush()
 		{
 			m_stream.flush();
 			if (m_stream.fail())
-				throw io_exception{};
+				throw io_exception{ "ostream flush failed" };
 		}
 	private:
 		std::ostream& m_stream;

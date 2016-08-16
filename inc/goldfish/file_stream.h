@@ -14,12 +14,12 @@ namespace goldfish { namespace stream
 			file_handle(const char* path, const char* mode)
 			{
 				if (auto error = fopen_s(&m_fp, path, mode))
-					throw io_exception_with_error_code{ error };
+					throw io_exception_with_error_code{ "Error during file open", error };
 			}
 			file_handle(const wchar_t* path, const wchar_t* wmode)
 			{
 				if (auto error = _wfopen_s(&m_fp, path, wmode))
-					throw io_exception_with_error_code{ error };
+					throw io_exception_with_error_code{ "Error during file open", error };
 			}
 			file_handle(const std::string& path, const char* mode)
 				: file_handle(path.c_str(), mode)
@@ -68,7 +68,7 @@ namespace goldfish { namespace stream
 			if (cb != data.size())
 			{
 				if (auto error = ferror(m_file.get()))
-					throw io_exception_with_error_code{ error };
+					throw io_exception_with_error_code{ "Error during file read", error };
 			}
 			return cb;
 		}
@@ -95,7 +95,7 @@ namespace goldfish { namespace stream
 		void write_buffer(const_buffer_ref data)
 		{
 			if (fwrite(data.data(), 1 /*size*/, data.size() /*count*/, m_file.get()) != data.size())
-				throw io_exception_with_error_code{ ferror(m_file.get()) };
+				throw io_exception_with_error_code{ "Error during file write", ferror(m_file.get()) };
 		}
 		void flush() { }
 	private:

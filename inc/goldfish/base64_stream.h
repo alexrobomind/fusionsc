@@ -5,7 +5,7 @@
 
 namespace goldfish { namespace stream
 {
-	struct ill_formatted_base64_data : ill_formatted {};
+	struct ill_formatted_base64_data : ill_formatted { using ill_formatted::ill_formatted; };
 
 	// Reads binary data assuming inner reads base64
 	template <class inner> class base64_reader
@@ -57,14 +57,14 @@ namespace goldfish { namespace stream
 				else
 					c_read = 3;
 
-				if (stream::seek(m_stream, 1) != 0) // Padding is only allowed at the end of the stream
-					throw ill_formatted_base64_data{};
+				if (stream::seek(m_stream, 1) != 0)
+					throw ill_formatted_base64_data{ "'=' is only allowed at the end of a base64 stream" };
 			}
 
 			if (c_read == 0)
 				return 0;
 			if (c_read == 1)
-				throw ill_formatted_base64_data{};
+				throw ill_formatted_base64_data{ "Unexpected number of characters in base64 stream" };
 
 			auto a = character_to_6bits(buffer[0]);
 			auto b = character_to_6bits(buffer[1]);
@@ -72,7 +72,7 @@ namespace goldfish { namespace stream
 			if (c_read == 2)
 			{
 				if (b & 0xF)
-					throw ill_formatted_base64_data{};
+					throw ill_formatted_base64_data{ "Invalid character at end of base64 stream" };
 				return 1;
 			}
 
@@ -81,7 +81,7 @@ namespace goldfish { namespace stream
 			if (c_read == 3)
 			{
 				if (c & 0x3)
-					throw ill_formatted_base64_data{};
+					throw ill_formatted_base64_data{ "Invalid character at end of base64 stream" };
 				return 2;
 			}
 
@@ -122,7 +122,7 @@ namespace goldfish { namespace stream
 			static_assert(sizeof(lookup_table) == 256, "");
 			auto result = lookup_table[c];
 			if (result >= 64)
-				throw ill_formatted_base64_data{};
+				throw ill_formatted_base64_data{ "Invalid character in base64 stream" };
 			return result;
 		}
 		inner m_stream;

@@ -17,17 +17,26 @@ namespace goldfish
 	inline uint64_t to_big_endian(uint64_t x) { return from_big_endian(x); }
 
 	// All goldfish exceptions subclass this exception
-	struct exception {};
+	class exception : public std::exception
+	{
+	public:
+		exception(const char* w)
+			: m_what(w)
+		{}
+		const char* what() const noexcept override { return m_what; }
+	private:
+		const char* m_what;
+	};
 
 	// Base class for all formatting errors that happen while parsing a document
-	struct ill_formatted : exception {};
+	struct ill_formatted : exception { using exception::exception; };
 
 	// Specifically for IO errors, thrown by file_reader/writer and istream_reader/writer
-	struct io_exception : exception {};
+	struct io_exception : exception { using exception::exception; };
 	struct io_exception_with_error_code : io_exception
 	{
-		io_exception_with_error_code(int _error_code)
-			: error_code(_error_code)
+		io_exception_with_error_code(const char* w, int _error_code)
+			: io_exception(w), error_code(_error_code)
 		{}
 
 		int error_code;
