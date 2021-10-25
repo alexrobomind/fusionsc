@@ -1,0 +1,110 @@
+cmake_minimum_required(VERSION 3.14)
+
+project(FSC LANGUAGES CXX)
+
+# Dependencies:
+# - capnproto (https://github.com/capnproto/capnproto)
+# - Botan (https://github.com/randombit/botan)
+# - Catch2 (https://github.com/catchorg/Catch2)
+
+set(FSC_FETCH_DEPENDENCIES On CACHE BOOL "Whether the build system is allowed to fetch external dependencies")
+set(FSC_ALWAYS_FETCH Off CACHE BOOL "Whether the build system is must fetch external dependencies")
+
+# Try to load dependencies directly
+
+if(NOT FSC_ALWAYS_FETCH)
+	find_package(CapnProto)
+
+	find_library(BOTAN_LIB botan2)
+	find_path   (BOTAN_INC "botan/version.h")
+
+	find_package(Catch2)
+	
+	if(BOTAN_LIB AND BOTAN_INC)
+		set(Botan-Botan_FOUND TRUE)
+	else()
+		set(BotanBotan_FOUNDFOUND FALSE)
+	endif()
+else()
+	set(CapnProto_FOUND FALSE)
+	set(Botan_FOUND FALSE)
+	set(Catch2_FOUND FALSE)
+endif()
+
+# Try to fetch some dependencies if possible
+
+include(FetchContent)
+
+FetchContent_Declare(
+  Catch2
+  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+  GIT_TAG        devel
+)
+
+FetchContent_Declare(
+  CapnProto
+  GIT_REPOSITORY https://github.com/capnproto/capnproto.git
+  GIT_TAG        v0.9.1
+)
+
+FetchContent_Declare(
+  Botan
+  GIT_REPOSITORY https://github.com/randombit/botan.git
+  GIT_TAG        2.18.2
+)
+
+macro(fetch_dependency DEPNAME)
+	if(NOT ${DEPNAME}_FOUND)
+		if(NOT FSC_FETCH_DEPENDENCIES)
+			message(FATAL_ERROR "${DEPNAME} could not be found, and dependencies fetching was disabled")
+		endif()
+		
+		message(STATUS "${DEPNAME} not found. Fetching from repository")
+		FetchContent_MakeAvailable(${DEPNAME})
+	endif()
+endmacro()
+
+# Standard fetching for Catch2 and capnproto
+fetch_dependency(Catch2)
+
+# We need to include the test scan macro manually if we downloaded it manually
+if(NOT Catch2_FOUND)
+	list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
+endif()
+
+fetch_dependency(CapnProto)
+
+# For Botan, we have to be fancier, as it does not use CMake
+if(Botan_FOUND)
+	add_library(botan INTERFACE)
+	target_include_directories(botan INTERFACE ${BOTAN_INC})
+	target_link_libraries(botan INTERFACE ${BOTAN_LIB})
+else()
+	if(NOT FSC_FETCH_DEPENDENCIES)
+		message(FATAL_ERROR "Botan could not be found, and dependency fetching was disabled")
+	endif()
+	
+	message(STATUS "Botan not found. Fetching and building from repository")
+	message(STATUS "  Step 1: Download")
+	FetchContent_MakeAvailable(Botan)
+	
+	message(STATUS "  Step2: Amalgamation build")
+	if(MSVC)
+		execute_process(COMMAND "python" "${botan_SOURCE_DIR}/configure.py" "--minimized-build" "--amalgamation" "--disable-shared" "--cc-bin" "${CMAKE_CXX_COMPILER}" "--cc" "msvc" WORKING_DIRECTORY ${botan_SOURCE_DIR})
+	else()
+		execute_process(COMMAND "python" "${botan_SOURCE_DIR}/configure.py" "--minimized-build" "--amalgamation" "--disable-shared" "--cc-bin" "${CMAKE_CXX_COMPILER}"               WORKING_DIRECTORY ${botan_SOURCE_DIR})
+	endif()
+	
+	add_library(botan "${botan_SOURCE_DIR}/botan_all.cpp")
+	target_include_directories(botan INTERFACE "${botan_SOURCE_DIR}/build/include")
+endif()
+
+
+add_library(deps INTERFACE)
+target_link_libraries(deps INTERFACE botan)
+
+# Set up testing subsystem
+include(CTest)
+include(Catch)
+
+add_subdirectory(src/c++)
