@@ -1,0 +1,95 @@
+stages:
+  - build
+  - test
+
+# Build stage
+
+.jtpl: &job
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - when: manual
+
+.build: &build
+  <<: *job
+  stage: build
+  artifacts:
+    paths:
+    - build/
+
+.buildl: &build-linux
+  <<: *build
+  script:
+    - mkdir build
+    - cd build
+    - cmake ..
+    - cmake --build . --target tests
+
+.buildw: &build-windows
+  <<: *build
+  script:
+    - mkdir build
+    - cd build
+    - cmake -A x64 ..
+    - cmake --build . --target tests
+
+.test: &test
+  <<: *job
+  stage: test
+  script:
+    - cd build
+    - ctest . --no-tests=error --output-junit test_result.xml
+  artifacts:
+    paths:
+      - build/test_result.xml
+    reports:
+      junit: build/test_result.xml
+
+
+.linux: &linux
+  before_script:
+    - apt-get update --yes
+    - apt-get install --yes cmake python3
+
+.msvc: &msvc
+  tags:
+    - msvc2017
+
+.gcc: &gcc
+  <<: *linux
+  image: gcc
+
+.clang: &clang
+  <<: *linux
+  image: silkeh/clang
+
+build:gcc:
+  <<: *build-linux
+  <<: *gcc
+
+build:clang:
+  <<: *build-linux
+  <<: *clang
+
+build:msvc:
+  <<: *build-windows
+  <<: *msvc
+
+# Test stage
+
+test:gcc: 
+  <<: *test
+  <<: *gcc
+  needs:
+    - build:gcc
+
+test:clang: 
+  <<: *test
+  <<: *clang
+  needs:
+    - build:clang
+
+test:msvc: 
+  <<: *test
+  <<: *msvc
+  needs:
+    - build:msvc
