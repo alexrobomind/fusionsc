@@ -83,17 +83,35 @@ else()
 	if(NOT FSC_FETCH_DEPENDENCIES)
 		message(FATAL_ERROR "Botan could not be found, and dependency fetching was disabled")
 	endif()
+
+	find_package(Python3 REQUIRED COMPONENTS Interpreter)
 	
 	message(STATUS "Botan not found. Fetching and building from repository")
 	message(STATUS "  Step 1: Download")
 	FetchContent_MakeAvailable(Botan)
 	
-	message(STATUS "  Step2: Amalgamation build")
+	message(STATUS "  Step 2: Amalgamation build")
 	if(MSVC)
-		execute_process(COMMAND "python" "${botan_SOURCE_DIR}/configure.py" "--minimized-build" "--amalgamation" "--disable-shared" "--cc-bin" "${CMAKE_CXX_COMPILER}" "--cc" "msvc" WORKING_DIRECTORY ${botan_SOURCE_DIR})
+		set(BOTAN_XARGS "--cc" "msvc")
+	elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+		set(BOTAN_XARGS "--cc" "gcc")
+	elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+		set(BOTAN_XARGS "--cc" "clang")
 	else()
-		execute_process(COMMAND "python" "${botan_SOURCE_DIR}/configure.py" "--minimized-build" "--amalgamation" "--disable-shared" "--cc-bin" "${CMAKE_CXX_COMPILER}"               WORKING_DIRECTORY ${botan_SOURCE_DIR})
+		set(BOTAN_XARGS "")
 	endif()
+
+	execute_process(
+		COMMAND ${Python3_EXECUTABLE}
+		"${botan_SOURCE_DIR}/configure.py"
+		"--minimized-build"
+		"--amalgamation"
+		"--disable-shared"
+		"--cc-bin" "${CMAKE_CXX_COMPILER}"
+		${BOTAN_XARGS}
+		WORKING_DIRECTORY ${botan_SOURCE_DIR}
+		COMMAND_ECHO STDOUT
+	)
 	
 	add_library(botan "${botan_SOURCE_DIR}/botan_all.cpp")
 	target_include_directories(botan INTERFACE "${botan_SOURCE_DIR}/build/include")
