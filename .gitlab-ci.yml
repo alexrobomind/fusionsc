@@ -8,6 +8,7 @@ stages:
 .jtpl: &job
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
     - when: manual
 
 .build: &build
@@ -58,6 +59,7 @@ stages:
   # Currently we only have windows builds available only for protected branches
   rules:
     - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_REF_PROTECTED == "true"'
       when: manual
     - when: never
@@ -106,11 +108,9 @@ test:msvc:
 # Documentation (stands separate from the compilation-related jobs)
 
 doc:
+  <<: *job
   stage: doc
   image: gcc
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-    - when: manual
 
   needs: []
 
