@@ -1,6 +1,7 @@
 stages:
   - build
   - test
+  - doc
 
 # Build stage
 
@@ -53,6 +54,13 @@ stages:
 .msvc: &msvc
   tags:
     - msvc2017
+  
+  # Currently we only have windows builds available only for protected branches
+  rules:
+    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_REF_PROTECTED == "true"'
+      when: manual
+    - when: never
 
 .gcc: &gcc
   <<: *linux
@@ -93,3 +101,26 @@ test:msvc:
   <<: *msvc
   needs:
     - build:msvc
+
+
+# Documentation (stands separate from the compilation-related jobs)
+
+doc:
+  stage: doc
+  image: gcc
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - when: manual
+
+  needs: []
+
+  script:
+    - apt-get update --yes
+    - apt-get install --yes doxygen graphviz
+    - mkdir doc
+    - cd doc
+    - doxygen ../Doxyfile
+  
+  artifacts:
+    paths:
+      - doc
