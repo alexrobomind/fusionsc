@@ -105,6 +105,7 @@ else()
 		COMMAND ${Python3_EXECUTABLE}
 		"${botan_SOURCE_DIR}/configure.py"
 		"--minimized-build"
+		"--enable-modules=auto_rng,sha2_32,sha2_64,system_rng"
 		"--amalgamation"
 		"--disable-shared"
 		"--cc-bin" "${CMAKE_CXX_COMPILER}"
@@ -119,7 +120,7 @@ endif()
 
 
 add_library(deps INTERFACE)
-target_link_libraries(deps INTERFACE botan)
+target_link_libraries(deps INTERFACE botan CapnProto::capnp-rpc)
 
 # Set up testing subsystem
 include(CTest)
