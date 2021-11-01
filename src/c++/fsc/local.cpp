@@ -4,7 +4,7 @@ namespace fsc {
 	
 // === class ThreadHandle ===
 
-ThreadHandle::ThreadHandle(const Library* l) :
+ThreadHandle::ThreadHandle(const LibraryHandle* l) :
 	_ioContext(kj::setupAsyncIo()),
 	_library(l -> addRef()),
 	_executor(kj::getCurrentThreadExecutor())

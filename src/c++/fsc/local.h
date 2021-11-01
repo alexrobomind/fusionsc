@@ -3,6 +3,7 @@
 #include <kj/memory.h>
 #include <kj/async-io.h>
 #include <kj/debug.h>
+#include <kj/refcount.h>
 
 #include <utility>
 
@@ -11,28 +12,38 @@
 #include "random.h"
 
 namespace fsc {
+	
+class LibraryHandle;
+using Library = Own<const LibraryHandle>;
+
+class ThreadHandle;
+using LibraryThread = Own<ThreadHandle>;
 
 /**
  *  "Global" libary handle. This class serves as the dependency injection context
  *  for objects that should be shared across all threads. Currently, this is only
  *  the local data store table.
  */
-class Library : public kj::AtomicRefcounted {
+class LibraryHandle : public kj::AtomicRefcounted {
 public:
 	// Mutex protected local data store
 	kj::MutexGuarded<LocalDataStore> store;
 	
 	// Creates an additional owning reference to this handle.
-	inline kj::Own<const Library> addRef() const { return kj::atomicAddRef(*this); }
+	inline kj::Own<const LibraryHandle> addRef() const { return kj::atomicAddRef(*this); }
 	
-	// Creates a refcounted instance of this class
-	static inline kj::Own<const Library> create() { return kj::atomicRefcounted<Library>(); }
+	inline LibraryThread newThread() const ;
 	
 private:
-	inline Library() {};
+	inline LibraryHandle() {};
 	
-	friend kj::Own<Library> kj::atomicRefcounted<Library>();
+	friend Own<LibraryHandle> kj::atomicRefcounted<LibraryHandle>();
 };
+
+
+inline Library newLibrary() {
+	return kj::atomicRefcounted<LibraryHandle>();
+}
 
 /**
  * Thread-local library handle. This holds local infrastructure components required by the
@@ -41,7 +52,7 @@ private:
 class ThreadHandle : public kj::Refcounted {
 public:
 	// Creates a new library handle from a library handle
-	ThreadHandle(const Library* l);
+	ThreadHandle(const LibraryHandle* l);
 	
 	// Accessors for local use only
 	
@@ -67,26 +78,23 @@ public:
 	// Accessors that may be used cross-thread
 	
 	// Convenience method to retrieve the local data store from the library
-	inline const kj::Own<const Library>&           library()  const { return _library; }
+	inline const Library&                          library()  const { return _library; }
 	inline const kj::MutexGuarded<LocalDataStore>& store()    const { return _library -> store; }
 	inline const kj::Executor&                     executor() const { return _executor; }
 	
 	// Obtain an additional reference. Requres this object to be acquired through create()
 	inline kj::Own<ThreadHandle> addRef() { return kj::addRef(*this); }
 	
-	// Creates a new thread handle on the current thread
-	static inline kj::Own<ThreadHandle> create(const Library* l) { return kj::refcounted<ThreadHandle>(l); }
-	
-	
 private:
 	kj::AsyncIoContext _ioContext;
 	CSPRNG _rng;
 	
 	// Back-reference to the library handle.
-	kj::Own<const Library> _library;
+	Library _library;
 	
 	const kj::Executor& _executor;
 };
+
 
 /**
  * Class that can be used to connect two different threads with each other.
@@ -112,7 +120,6 @@ class CrossThreadConnection {
 public:
 	CrossThreadConnection();
 	
-	// 
 	Promise<Own<kj::AsyncIoStream>> accept(ThreadHandle& h);
 	Promise<Own<kj::AsyncIoStream>> connect(ThreadHandle& h);
 	
@@ -143,6 +150,12 @@ kj::Maybe<kj::Promise<UnwrapIfPromise<UnwrapMaybe<ReturnType<Func>>>>> executeMa
 	} else {
 		return nullptr;
 	}
+}
+
+// Inline implementations
+
+LibraryThread LibraryHandle::newThread() const {
+	return kj::refcounted<ThreadHandle>(this);
 }
 
 } // namespace fsc
