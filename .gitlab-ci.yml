@@ -118,9 +118,7 @@ doc:
   script:
     - apt-get update --yes
     - apt-get install --yes doxygen graphviz
-    - mkdir doc
-    - cd doc
-    - doxygen ../Doxyfile
+    - doxygen Doxyfile
   
   artifacts:
     paths:
