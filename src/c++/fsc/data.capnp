@@ -3,17 +3,15 @@
 using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("fsc");
 
-struct DataRef @0x86c1e9dee7f46dbf (T) {
-	interface Getter {
-		get @0 () -> (value : T);
-		stream @1 (target : StreamReceiver) -> ();
-	}
-	interface StreamReceiver {
-		receive @0 (data : Data) -> stream;
-	}
+interface DataRef (T) {	
+	metadata @0 () -> (
+		id : Data,
+		typeId : UInt64,
+		capTableSize : UInt64
+	);
 	
-	id     @0 : Data;
-	getter @1 : Getter;
+	rawBytes @1 () -> (data : Data);
+	capTable @2 () -> (table : List(Capability));
 }
 
 interface DataStore @0xc6d48902ddb7e122 {

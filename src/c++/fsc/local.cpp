@@ -24,9 +24,10 @@ Promise<Own<kj::AsyncIoStream>> CrossThreadConnection::accept(ThreadHandle& h) {
 	KJ_REQUIRE(!_acceptCalled, "CrossThreadConnection::accept(...) may only be called once");
 	_acceptCalled = true;
 	
-	// Prepare a random security token
-	h.rng().randomize((ArrayPtr<byte>) sendToken);
-	
+	// Prepare a random security tokens
+	h.rng().randomize((ArrayPtr<byte>) sendToken1);
+	h.rng().randomize((ArrayPtr<byte>) sendToken2);
+		
 	// Restrict connections to local device
 	auto restrictedNetwork = h.network().restrictPeers({"local"});
 	auto parseAddrOp = restrictedNetwork -> parseAddress("127.0.0.1");
@@ -50,13 +51,19 @@ Promise<Own<kj::AsyncIoStream>> CrossThreadConnection::accept(ThreadHandle& h) {
 	.then([this](Own<kj::AsyncIoStream> stream) {
 		// After accepting the stream, read the security token posted by the other side
 		KJ_REQUIRE(stream.get() != nullptr);
-		auto readOp = stream -> read(recvToken.begin(), recvToken.size());
+		auto ops = stream -> read(recvToken1.begin(), recvToken1.size())
+		.then([this] () {
+			KJ_REQUIRE((ArrayPtr<byte>) recvToken1 == (ArrayPtr<byte>) sendToken1, "Security token mismatch");
+		})
+		.then([this, &stream = *stream] () {
+			return stream.write(sendToken2.begin(), sendToken2.size());
+		});
 		
-		// Check the token and return the stream
-		return readOp.then([this, stream2 = mv(stream)]() mutable {
-			KJ_REQUIRE((ArrayPtr<byte>) recvToken == (ArrayPtr<byte>) sendToken, "Security token mismatch");
+		return ops.then([stream2 = mv(stream)] () mutable {
 			return mv(stream2);
 		});
+		
+		//return readOp.then(mv(checkFun)).then(mv(writeFun)).then(mv(returnStream));
 	});
 }
 
@@ -81,10 +88,20 @@ Promise<Own<kj::AsyncIoStream>> CrossThreadConnection::connect(ThreadHandle& h) 
 		KJ_REQUIRE(stream.get() != nullptr);
 		
 		// After connecting, write the security token
-		auto writeOp = stream -> write(sendToken.begin(), sendToken.size());
+		auto ops = stream -> write(sendToken1.begin(), sendToken1.size())
 		
-		// After writing the token, return the stream
-		return writeOp.then([stream2 = mv(stream)]() mutable {
+		// Now read the response token
+		.then([this, &stream = *stream] () {
+			return stream.read(recvToken2.begin(), recvToken2.size());
+		})
+		
+		// Check that it is OK
+		.then([this] () {
+			KJ_REQUIRE((ArrayPtr<byte>) recvToken2 == (ArrayPtr<byte>) sendToken2, "Security token mismatch");
+		});
+		
+		// Finally, return the stream
+		return ops.then([stream2 = mv(stream)] () mutable {
 			return mv(stream2);
 		});
 	})

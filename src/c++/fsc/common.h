@@ -21,6 +21,7 @@ using kj::Tuple;
 
 using kj::mv;
 using kj::fwd;
+using kj::cp;
 
 using kj::ArrayPtr;
 using kj::Array;
