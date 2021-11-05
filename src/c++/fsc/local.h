@@ -133,8 +133,11 @@ private:
 	bool _acceptCalled;
 	bool _connectCalled;
 	
-	FixedArray<byte, tokenSize> sendToken;
-	FixedArray<byte, tokenSize> recvToken;
+	FixedArray<byte, tokenSize> sendToken1;
+	FixedArray<byte, tokenSize> recvToken1;
+	
+	FixedArray<byte, tokenSize> sendToken2;
+	FixedArray<byte, tokenSize> recvToken2;
 };
 
 template<typename Func>

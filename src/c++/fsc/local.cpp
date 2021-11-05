@@ -24,8 +24,11 @@ Promise<Own<kj::AsyncIoStream>> CrossThreadConnection::accept(ThreadHandle& h) {
 	KJ_REQUIRE(!_acceptCalled, "CrossThreadConnection::accept(...) may only be called once");
 	_acceptCalled = true;
 	
-	// Prepare a random security token
-	h.rng().randomize((ArrayPtr<byte>) sendToken);
+	// Prepare a random security tokens
+	h.rng().randomize((ArrayPtr<byte>) sendToken1);
+	h.rng().randomize((ArrayPtr<byte>) sendToken2);
+	
+	KJ_LOG(WARNING, "Randomized");
 	
 	// Restrict connections to local device
 	auto restrictedNetwork = h.network().restrictPeers({"local"});
@@ -50,13 +53,32 @@ Promise<Own<kj::AsyncIoStream>> CrossThreadConnection::accept(ThreadHandle& h) {
 	.then([this](Own<kj::AsyncIoStream> stream) {
 		// After accepting the stream, read the security token posted by the other side
 		KJ_REQUIRE(stream.get() != nullptr);
-		auto readOp = stream -> read(recvToken.begin(), recvToken.size());
+		KJ_LOG(WARNING, (ArrayPtr<byte>) sendToken1);
+		KJ_LOG(WARNING, (ArrayPtr<byte>) recvToken1);
+		auto readOp = stream -> read(recvToken1.begin(), recvToken1.size());
+		KJ_LOG(WARNING, "readOp1");
 		
-		// Check the token and return the stream
-		return readOp.then([this, stream2 = mv(stream)]() mutable {
-			KJ_REQUIRE((ArrayPtr<byte>) recvToken == (ArrayPtr<byte>) sendToken, "Security token mismatch");
+		auto checkFun = [this] () {
+			KJ_LOG(WARNING, "checkFun1");
+			KJ_LOG(WARNING, (ArrayPtr<byte>) sendToken1);
+			KJ_LOG(WARNING, (ArrayPtr<byte>) recvToken1);
+			KJ_REQUIRE((ArrayPtr<byte>) recvToken1 == (ArrayPtr<byte>) sendToken1, "Security token mismatch");
+			KJ_LOG(WARNING, "checkFun1 OK");
+		};
+		KJ_LOG(WARNING, "checkFun1 created");
+		checkFun();
+		
+		/*auto writeFun = [this, &stream = *stream] () {
+			KJ_LOG(WARNING, "writeFun1");
+			return stream.write(sendToken2.begin(), sendToken2.size());
+		};*/
+		
+		auto returnStream = [stream2 = mv(stream)] () mutable {
+			KJ_LOG(WARNING, "returnStream1");
 			return mv(stream2);
-		});
+		};
+		
+		return readOp.then(checkFun)/*.then(writeFun)*/.then(returnStream);
 	});
 }
 
@@ -81,12 +103,28 @@ Promise<Own<kj::AsyncIoStream>> CrossThreadConnection::connect(ThreadHandle& h) 
 		KJ_REQUIRE(stream.get() != nullptr);
 		
 		// After connecting, write the security token
-		auto writeOp = stream -> write(sendToken.begin(), sendToken.size());
+		KJ_LOG(WARNING, (ArrayPtr<byte>) sendToken1);
+		KJ_LOG(WARNING, (ArrayPtr<byte>) recvToken1);
+		auto writeOp = stream -> write(sendToken1.begin(), sendToken1.size());
+		KJ_LOG(WARNING, "writeOp2");
 		
-		// After writing the token, return the stream
-		return writeOp.then([stream2 = mv(stream)]() mutable {
+		/*auto readFun = [this, &stream = *stream] () {
+			KJ_LOG(WARNING, "readFun2");
+			return stream.read(recvToken2.begin(), recvToken2.size());
+		};
+		
+		auto checkFun = [this] () {
+			KJ_LOG(WARNING, "checkFun2");
+			KJ_REQUIRE((ArrayPtr<byte>) recvToken2 == (ArrayPtr<byte>) sendToken2, "Security token mismatch");
+			KJ_LOG(WARNING, "checkFun2 OK");
+		};*/
+		
+		auto returnStream = [stream2 = mv(stream)] () mutable {
+			KJ_LOG(WARNING, "returnStream2");
 			return mv(stream2);
-		});
+		};
+		
+		return writeOp/*.then(readFun).then(checkFun)*/.then(returnStream);
 	})
 	;
 }

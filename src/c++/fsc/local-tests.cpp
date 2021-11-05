@@ -51,6 +51,44 @@ TEST_CASE("threading") {
 		SUCCEED();
 	}
 	
+	SECTION("selfconnect", "Can self connect") {
+		CrossThreadConnection conn;
+		
+		SECTION("accept_then_connect") {
+			auto streamAcc = conn.accept(*h1);
+			auto streamConn = conn.connect(*h1);
+			
+			SECTION("wait_accept_first") {
+				streamAcc.wait(h1->waitScope());
+				streamConn.wait(h1->waitScope());
+				SUCCEED();
+			}
+			
+			SECTION("wait_connect_first") {
+				streamConn.wait(h1->waitScope());
+				streamAcc.wait(h1->waitScope());
+				SUCCEED();
+			}
+		}
+		
+		SECTION("connect_then_accept") {
+			auto streamConn = conn.connect(*h1);
+			auto streamAcc = conn.accept(*h1);
+			
+			SECTION("wait_accept_first") {
+				streamAcc.wait(h1->waitScope());
+				streamConn.wait(h1->waitScope());
+				SUCCEED();
+			}
+			
+			SECTION("wait_connect_first") {
+				streamConn.wait(h1->waitScope());
+				streamAcc.wait(h1->waitScope());
+				SUCCEED();
+			}
+		}
+	}
+	
 	SECTION("connect", "Can connect two threads (repeats multiple times)") {
 	for(size_t i = 0; i < 10; ++i) { DYNAMIC_SECTION("repeat" << i) {
 		CrossThreadConnection conn;
@@ -94,43 +132,5 @@ TEST_CASE("threading") {
 			REQUIRE((ArrayPtr<byte>) sendBuf == (ArrayPtr<byte>) recvBuf);
 		}
 	}}
-	}
-	
-	SECTION("selfconnect", "Can self connect") {
-		CrossThreadConnection conn;
-		
-		SECTION("accept_then_connect") {
-			auto streamAcc = conn.accept(*h1);
-			auto streamConn = conn.connect(*h1);
-			
-			SECTION("wait_accept_first") {
-				streamAcc.wait(h1->waitScope());
-				streamConn.wait(h1->waitScope());
-				SUCCEED();
-			}
-			
-			SECTION("wait_connect_first") {
-				streamConn.wait(h1->waitScope());
-				streamAcc.wait(h1->waitScope());
-				SUCCEED();
-			}
-		}
-		
-		SECTION("connect_then_accept") {
-			auto streamConn = conn.connect(*h1);
-			auto streamAcc = conn.accept(*h1);
-			
-			SECTION("wait_accept_first") {
-				streamAcc.wait(h1->waitScope());
-				streamConn.wait(h1->waitScope());
-				SUCCEED();
-			}
-			
-			SECTION("wait_connect_first") {
-				streamConn.wait(h1->waitScope());
-				streamAcc.wait(h1->waitScope());
-				SUCCEED();
-			}
-		}
 	}
 }
