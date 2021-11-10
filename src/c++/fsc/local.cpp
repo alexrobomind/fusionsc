@@ -1,6 +1,48 @@
+#include <list>
+
 #include "local.h"
 
 namespace fsc {
+
+// === class LibraryHandle ===
+
+void LibraryHandle::storeSteward(Own<const CTF2> ctf2) {
+	using std::list;
+	using LocalDataStore::Row;
+	
+	// Create and activate event loop
+	auto aioContext = kj::setupAsyncIo();
+	
+	// Create stopping mechanism
+	auto stopStewardPaf = kj::newPromiseAndCrossThreadFulfiller<void>();
+	ctf2 -> fulfill(mv(stopStewardPaf.fulfiller));
+		
+	auto cleanTable = [this]() {
+		list<kj::Array> orphans;
+		
+		{
+			auto lStore = store.lockExclusive();
+			
+			for(auto pRow = lStore.table.begin(); pRow != lStore.table.end(); ++pRow) {
+				if(*pRow -> isShared())
+					continue;
+				
+				orphans.push_back(mv(*pRow -> value));
+			}
+			
+			lStore.table.eraseAll([](const Row& row) { return !row -> isShared(); });
+		}
+	};
+	
+	auto scheduleClean = [&aio, &cleanTable, &scheduleClean]() {
+		aioContext.provider -> getTimer() -> afterDelay(10 * kj::SECONDS)
+		.then(cleanTable)
+		.then(scheduleClean)
+	}
+	
+	auto runOrStop = stopStewardPaf.promise.exclusiveJoin(scheduleClean());
+	runOrStop.wait(aioContext.waitScope);
+}
 	
 // === class ThreadHandle ===
 

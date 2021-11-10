@@ -35,9 +35,15 @@ public:
 	inline LibraryThread newThread() const ;
 	
 private:
+	using CTF  = kj::CrossThreadPromiseFulfiller<void>;
+	using CTF2 = kj::CrossThreadPromiseFulfiller<Own<CTF>>;
+
 	inline LibraryHandle() {};
 	
 	friend Own<LibraryHandle> kj::atomicRefcounted<LibraryHandle>();
+	
+	void storeSteward(Own<const CTF2>);
+	kj::CrossThreadPromiseFulfiller<void> stopSteward;
 };
 
 

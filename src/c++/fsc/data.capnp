@@ -7,7 +7,8 @@ interface DataRef (T) {
 	metadata @0 () -> (
 		id : Data,
 		typeId : UInt64,
-		capTableSize : UInt64
+		capTableSize : UInt64,
+		dataSize : UInt64
 	);
 	
 	rawBytes @1 () -> (data : Data);

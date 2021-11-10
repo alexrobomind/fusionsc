@@ -1,6 +1,12 @@
 #include "store.h"
 
 namespace fsc {
+	
+// class LocalDataStore
+
+kj::Own<const LocalDataStore::Entry> LocalDataStore::insertOrGet(const kj::ArrayPtr<const byte>& key, kj::Array<const byte>&& data) {
+	return table.findOrCreate(key, [&]() { return kj::atomicRefcounted<Entry>(key, kj::mv(data)); }) -> atomicAddRef();
+}
 
 inline int internal::compareDSKeys(const kj::ArrayPtr<const byte>& k1, const kj::ArrayPtr<const byte>& k2) {
 	if(k1.size() < k2.size())
@@ -9,10 +15,6 @@ inline int internal::compareDSKeys(const kj::ArrayPtr<const byte>& k1, const kj:
 		return 1;
 	
 	return memcmp(k1.begin(), k2.begin(), k1.size());
-}
-
-kj::Own<const LocalDataStore::Entry> LocalDataStore::insertOrGet(const kj::ArrayPtr<const byte>& key, kj::Array<const byte>&& data) {
-	return table.findOrCreate(key, [&]() { return kj::atomicRefcounted<Entry>(key, kj::mv(data)); }) -> atomicAddRef();
 }
 
 LocalDataStore::Entry::Entry(
