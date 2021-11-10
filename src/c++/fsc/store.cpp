@@ -7,7 +7,7 @@
 #include "store.h"
 
 namespace {
-	std::string STEWARD_STOPPED = "DataStore steward stopped";
+	kj::StringPtr STEWARD_STOPPED = "DataStore steward stopped"_kj;
 }
 
 namespace fsc {
