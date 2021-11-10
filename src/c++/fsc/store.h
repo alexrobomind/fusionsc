@@ -4,6 +4,7 @@
 #include <kj/refcount.h>
 #include <kj/array.h>
 #include <kj/async.h>
+#include <kj/thread.h>
 
 #include <capnp/serialize.h>
 
@@ -44,6 +45,8 @@ public:
 		inline bool matches  (const Row& r, Key k) const;
 	};
 	
+	class Steward;
+	
 	// Data stores are intended to hold data across threads, so we avoid unneccessarily moving data between nodes & worker threads.
 	// Even though access to the store itself is usually mutex guarded, references to the data can be copied and removed
 	// without any further notice. Therefore, the arrays need to be held in a container with shared refcounting.
@@ -55,8 +58,6 @@ public:
 	
 	using Index = kj::TreeIndex<TreeIndexCallbacks>;
 	using Table = kj::Table<Row, Index>;
-
-	Table table;
 	
 	/**
 	 * Looks up the key in the storage table and, if the row is not present,
@@ -64,6 +65,8 @@ public:
 	 * data array is discarded and the row is returned.
 	 */
 	kj::Own<const Entry> insertOrGet(const kj::ArrayPtr<const byte>& key, kj::Array<const byte>&& data);
+
+	Table table;
 };
 
 /**
@@ -75,11 +78,36 @@ public:
 	inline Entry(const kj::ArrayPtr<const byte>& key, kj::Array<const byte>&& data);
 	
 	// Obtains a new reference to this entry
-	inline kj::Own<      Entry> atomicAddRef()       { return kj::atomicAddRef(*this); }
-	inline kj::Own<const Entry> atomicAddRef() const { return kj::atomicAddRef(*this); }
+	inline kj::Own<      Entry> addRef()       { return kj::atomicAddRef(*this); }
+	inline kj::Own<const Entry> addRef() const { return kj::atomicAddRef(*this); }
 	
 	kj::Array<const byte> key;
 	kj::Array<const byte> value;
+};
+
+class LocalDataStore::Steward {
+public:
+	Steward(kj::MutexGuarded<LocalDataStore>& store);
+	~Steward();
+	
+	const kj::Executor& getExecutor();
+	
+	// Synchronously runs the GC and then returns
+	void syncGC();
+	
+	// Shift the next GC scheduled in the worker thread to "now"
+	void asyncGC();
+
+private:
+	kj::MutexGuarded<LocalDataStore>& _store;
+	kj::Canceler _canceler;
+	
+	kj::PromiseFulfillerPair<void> _gcRequest;
+	kj::Thread _thread;
+	
+	kj::MutexGuarded<Own<const kj::Executor>> _executor;
+	
+	void _run();
 };
 
 // NOTE: This class might get removed. A message reader that can be created directly from data store rows. 
@@ -89,10 +117,11 @@ public:
 	DataStoreMessageReader(kj::Own<const LocalDataStore::Entry>&& entry, const capnp::ReaderOptions& options = capnp::ReaderOptions());
 	
 	// Creates a new message reader on the same underlying data row (though with new state)
-	kj::Own<DataStoreMessageReader> copy();
+	kj::Own<DataStoreMessageReader> addRef() const;
 	
 private:
 	kj::Own<const LocalDataStore::Entry> entry;
+	capnp::ReaderOptions options;
 };
 
 
