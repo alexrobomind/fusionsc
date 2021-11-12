@@ -46,7 +46,7 @@ private:
 template<typename T>
 class LocalDataRef : public DataRef<T>::Client {
 public:
-	ArrayPtr<byte> getRaw();
+	ArrayPtr<const byte> getRaw();
 	
 	Own<typename T::Reader> get();
 	
@@ -97,8 +97,6 @@ public:
 	using typename DataRef<capnp::AnyPointer>::Server::CapTableContext;
 	
 	using Metadata = typename DataRef<capnp::AnyPointer>::Metadata;
-	
-	LocalDataRefImpl(LocalDataRefImpl&&) = default;
 	
 	Own<LocalDataRefImpl> addRef();
 	
@@ -151,27 +149,27 @@ Own<capnp::Data::Reader> getDataRefAs<capnp::Data>(LocalDataRefImpl& impl);
 
 template<typename T>
 Own<typename T::Reader> internal::getDataRefAs(internal::LocalDataRefImpl& impl) {
-	ArrayPtr<byte> bytePtr = *getDataRefAs<capnp::Data>(impl);
-	ArrayPtr<word> wordPtr = reinterpret_cast<ArrayPtr<word>>(bytePtr);
+	ArrayPtr<const byte> bytePtr = *getDataRefAs<capnp::Data>(impl);
+	ArrayPtr<const kj::word> wordPtr = reinterpret_cast<ArrayPtr<const kj::word>>(bytePtr);
 	
 	auto msgReader = kj::heap<capnp::FlatArrayMessageReader>(wordPtr);
 	
 	T2::Reader root = msgReader.getRoot<T2>();
 	root = impl.readerTable -> imbue(root);
 	
-	return kj::heap<T2::Reader>(root).attach(mv(msgReader)).attach(impl.addRef());
+	return kj::heap<typename T::Reader>(root).attach(mv(msgReader)).attach(impl.addRef());
 }
 
 // === class LocalDataRef ===
 
 template<typename T>
 LocalDataRef<T>::LocalDataRef(internal::LocalDataRefImpl& backend, capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>>& wrapper) :
-	Client(wrapper.add(backend.addRef())),
+	DataRef<T>::Client(wrapper.add(backend.addRef())),
 	backend(backend.addRef())
 {}
 
 template<typename T>
-ArrayPtr<byte> LocalDataRef<T>::getRaw() {
+ArrayPtr<const byte> LocalDataRef<T>::getRaw() {
 	return backend -> get<capnp::Data>();
 }
 
