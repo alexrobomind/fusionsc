@@ -132,7 +132,7 @@ public:
 
 private:
 	LocalDataRefImpl() {};
-	friend class LocalDataService::Impl;
+	friend Own<LocalDataRefImpl> kj::refcounted<LocalDataRefImpl>();
 };
 
 template<typename T>

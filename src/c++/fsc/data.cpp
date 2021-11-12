@@ -21,10 +21,14 @@ DataRef<capnp::AnyPointer>::Metadata::Reader internal::LocalDataRefImpl::localMe
 
 Promise<void> internal::LocalDataRefImpl::metadata(MetadataContext context) {
 	context.getResults().setMetadata(localMetadata());
+	
+	return kj::READY_NOW;
 }
 
 Promise<void> internal::LocalDataRefImpl::rawBytes(RawBytesContext context) {
 	context.getResults().setData(*get<capnp::Data>());
+	
+	return kj::READY_NOW;
 }
 
 Promise<void> internal::LocalDataRefImpl::capTable(CapTableContext context) {
@@ -36,6 +40,8 @@ Promise<void> internal::LocalDataRefImpl::capTable(CapTableContext context) {
 	for(unsigned int i = 0; i < capTableClients.size(); ++i) {
 		results.getTable().set(i, capTableClients[i]);
 	}
+	
+	return kj::READY_NOW;
 }
 
 template<>
@@ -81,34 +87,34 @@ LocalDataRef<capnp::AnyPointer> LocalDataService::Impl::publish(Array<byte> id, 
 	}
 	
 	// Prepare some clients
-	auto rawTable = kj::heapArray(capTable.getTable());
-	auto clients = kj::heapArrayBuilder<capnp::Capability::Client>(rawTable.size());
+	ArrayPtr<Maybe<Own<capnp::ClientHook>>> rawTable = capTable.getTable();
+	auto clients   = kj::heapArrayBuilder<capnp::Capability::Client>    (rawTable.size());
+	auto tableCopy = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(rawTable.size());
 	
 	for(size_t i = 0; i < rawTable.size(); ++i) {
 		KJ_IF_MAYBE(hook, rawTable[i]) {
 			clients.add((*hook) -> addRef());
+			tableCopy.add((*hook) -> addRef());
 		} else {
 			clients.add(nullptr);
+			tableCopy.add(nullptr); // note that this does not add a nullptr own inside the maybe, but an empty maybe
 		}
 	}
 	
 	// Prepare metadata
-	internal::LocalDataRefImpl backend;
-	backend.readerTable = kj::heap<capnp::ReaderCapabilityTable>(kj::heapArray(capTable.getTable()));
-	backend.capTableClients = clients.finish();
-	backend.entryRef = mv(entry);
+	auto backend = kj::refcounted<internal::LocalDataRefImpl>();
+	backend->readerTable = kj::heap<capnp::ReaderCapabilityTable>(tableCopy.finish());
+	backend->capTableClients = clients.finish();
+	backend->entryRef = mv(entry);
 	
-	auto metadata = backend._metadata.initRoot<DataRef<capnp::AnyPointer>::Metadata>();
+	auto metadata = backend->_metadata.initRoot<DataRef<capnp::AnyPointer>::Metadata>();
 	metadata.setId(id);
 	metadata.setTypeId(cpTypeId);
 	metadata.setCapTableSize(rawTable.size());
 	metadata.setDataSize(entry -> value.size());
 		
-	// And move it into a refcounted heap instance
-	Own<internal::LocalDataRefImpl> backendRef = kj::refcounted<internal::LocalDataRefImpl>(mv(backend));
-	
 	// Now construct a local data ref from the backend
-	return LocalDataRef<capnp::AnyPointer>(*backendRef, this -> serverSet);
+	return LocalDataRef<capnp::AnyPointer>(*backend, this -> serverSet);
 }
 
 Promise<LocalDataRef<capnp::AnyPointer>> LocalDataService::Impl::doDownload(DataRef<capnp::AnyPointer>::Client src) {
@@ -153,31 +159,29 @@ Promise<LocalDataRef<capnp::AnyPointer>> LocalDataService::Impl::doDownload(Data
 		auto capTable = capTablePromise.wait(ws).getTable();
 		
 		auto capHooks = kj::heapArray<Maybe<Own<capnp::ClientHook>>>(capTable.size());
-		for(size_t i = 0; i < capTable.size(); ++i) {
+		for(unsigned int i = 0; i < capTable.size(); ++i) {
 			Own<capnp::ClientHook> hookPtr = capnp::ClientHook::from(capTable[i]);
 			
 			if(hookPtr.get() != nullptr)
 				capHooks[i] = mv(hookPtr);
 		}
 		
-		auto capClients = kj::heapArray<capnp::Capability::Client>(capTable.size());
-		for(size_t i = 0; i < capTable.size(); ++i) {
-			capClients[i] = capTable[i];
+		//auto capClients = kj::heapArray<capnp::Capability::Client>(capTable.size());
+		auto capClients = kj::heapArrayBuilder<capnp::Capability::Client>(capTable.size());
+		for(unsigned int i = 0; i < capTable.size(); ++i) {
+			capClients.add(capTable[i]);
 		}
 		
 		// Initialize the backend struct with everything
-		internal::LocalDataRefImpl backend;
-		backend.readerTable = kj::heap<capnp::ReaderCapabilityTable>(mv(capHooks));
-		backend.capTableClients = mv(capClients);
-		backend.entryRef = mv(entry);
+		auto backend = kj::refcounted<internal::LocalDataRefImpl>();
+		backend->readerTable = kj::heap<capnp::ReaderCapabilityTable>(mv(capHooks));
+		backend->capTableClients = capClients.finish();
+		backend->entryRef = mv(entry);
 		
-		backend._metadata.setRoot(metadata);
-		
-		// And move it into a refcounted heap instance
-		Own<internal::LocalDataRefImpl> backendRef = kj::refcounted<internal::LocalDataRefImpl>(mv(backend));
-		
+		backend->_metadata.setRoot(metadata);
+				
 		// Now construct a local data ref from the backend
-		return LocalDataRef<capnp::AnyPointer>(*backendRef, this -> serverSet);
+		return LocalDataRef<capnp::AnyPointer>(*backend, this -> serverSet);
 	});
 }
 
