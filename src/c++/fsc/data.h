@@ -22,6 +22,7 @@ public:
 	Promise<LocalDataRef<T>> download(typename DataRef<T>::Client src);
 	
 	LocalDataRef<capnp::Data> publish(ArrayPtr<const byte> id, Array<const byte>&& data);
+	LocalDataRef<capnp::Data> publish(ArrayPtr<const byte> id, capnp::Data::Reader);
 	
 	template<typename T>
 	LocalDataRef<capnp::Data> publish(ArrayPtr<const byte> id, typename T::Reader data);
@@ -54,7 +55,7 @@ public:
 	class LocalDataRef<T2> as();
 	
 private:
-	LocalDataRef(internal::LocalDataRefImpl& backend, capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>>& wrapper);
+	LocalDataRef(Own<internal::LocalDataRefImpl> backend, capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>>& wrapper);
 
 	template<typename T2>	
 	LocalDataRef(LocalDataRef<T2>& other);	
@@ -78,7 +79,7 @@ public:
 	Own<Impl> addRef();
 	
 	Promise<LocalDataRef<capnp::AnyPointer>> download(DataRef<capnp::AnyPointer>::Client src);
-	LocalDataRef<capnp::AnyPointer> publish(ArrayPtr<const byte> id, Array<const byte>&& data, capnp::BuilderCapabilityTable&& capTable, uint64_t cpTypeId);
+	LocalDataRef<capnp::AnyPointer> publish(ArrayPtr<const byte> id, Array<const byte>&& data, capnp::BuilderCapabilityTable& capTable, uint64_t cpTypeId);
 	
 private:
 	Promise<LocalDataRef<capnp::AnyPointer>> doDownload(DataRef<capnp::AnyPointer>::Client src);
@@ -165,7 +166,7 @@ LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, typ
 	return impl->publish(
 		id,
 		capnp::messageToFlatArray(builder),
-		mv(capTable),
+		capTable,
 		internal::capnpTypeId<T>()
 	).template as<T>();
 }
@@ -202,9 +203,9 @@ Own<typename T::Reader> internal::getDataRefAs(internal::LocalDataRefImpl& impl)
 // === class LocalDataRef ===
 
 template<typename T>
-LocalDataRef<T>::LocalDataRef(internal::LocalDataRefImpl& backend, capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>>& wrapper) :
-	DataRef<T>::Client(wrapper.add(backend.addRef())),
-	backend(backend.addRef())
+LocalDataRef<T>::LocalDataRef(Own<internal::LocalDataRefImpl> nbackend, capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>>& wrapper) :
+	DataRef<T>::Client(wrapper.add(nbackend->addRef())),
+	backend(nbackend->addRef())
 {}
 
 template<typename T>
@@ -233,6 +234,7 @@ Own<typename T::Reader> LocalDataRef<T>::get() {
 template<typename T>
 template<typename T2>
 LocalDataRef<T2> LocalDataRef<T>::as() {
+	KJ_LOG(WARNING, "Calling type conversion");
 	return LocalDataRef<T2>(*this);
 }
 
