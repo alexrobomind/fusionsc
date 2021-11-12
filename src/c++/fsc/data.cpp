@@ -26,7 +26,7 @@ Promise<void> internal::LocalDataRefImpl::metadata(MetadataContext context) {
 }
 
 Promise<void> internal::LocalDataRefImpl::rawBytes(RawBytesContext context) {
-	context.getResults().setData(*getDataRefAs<capnp::Data>(*this));
+	context.getResults().setData(*get<capnp::Data>());
 	
 	return kj::READY_NOW;
 }

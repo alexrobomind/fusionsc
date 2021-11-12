@@ -100,14 +100,9 @@ public:
 	
 	Own<LocalDataRefImpl> addRef();
 	
-	/*// Decodes the underlying data as a capnproto message
+	// Decodes the underlying data as a capnproto message
 	template<typename T>
 	Own<typename T::Reader> get();
-	
-	// capnp::Data is encoded using raw bytes
-	// Therefore, the get() method has to be specialized for this type
-	template<>
-	Own<capnp::Data::Reader> get<capnp::Data>();*/
 	
 	// Returns a reader to the locally stored metadata
 	Metadata::Reader localMetadata();
@@ -146,6 +141,11 @@ Own<capnp::Data::Reader> getDataRefAs<capnp::Data>(LocalDataRefImpl& impl);
 // === class LocalDataService::Impl ===
 
 // === class LocalDataRefImpl ===
+
+template<typename T>
+Own<typename T::Reader> internal::LocalDataRefImpl::get() {
+	return internal::getDataRefAs<T>(*this);
+}
 
 template<typename T>
 Own<typename T::Reader> internal::getDataRefAs(internal::LocalDataRefImpl& impl) {
