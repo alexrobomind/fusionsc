@@ -1,4 +1,4 @@
-set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
+set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/fsc)
 CAPNP_GENERATE_CPP(
 	FSC_CP_SRC
 	FSC_CP_HEADERS
@@ -16,6 +16,8 @@ add_library(
 	local.cpp
 	store.h
 	store.cpp
+	data.h
+	data.cpp
 	${FSC_CP_HEADERS}
 	${FSC_CP_SRC}
 )

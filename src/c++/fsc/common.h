@@ -4,6 +4,8 @@
 #include <kj/common.h>
 #include <kj/tuple.h>
 
+#define FSC_MVCAP(obj) obj = ::kj::mv(obj)
+
 namespace kj {
 	template<typename T>
 	class Promise;
@@ -18,6 +20,7 @@ using byte = kj::byte;
 using kj::Promise;
 using kj::Own;
 using kj::Tuple;
+using kj::Maybe;
 
 using kj::mv;
 using kj::fwd;
