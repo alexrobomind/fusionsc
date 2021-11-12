@@ -5,14 +5,6 @@
 #include "data.h"
 
 namespace {
-	template<typename T>
-	uint64_t constexpr capnpTypeId() { return capnp::typeId<T>(); }
-	
-	template<>
-	uint64_t constexpr capnpTypeId<capnp::Data>() { return 0; }
-	
-	template<>
-	uint64_t constexpr capnpTypeId<capnp::AnyPointer>() { return 1; }
 }
 
 namespace fsc {
@@ -40,7 +32,7 @@ LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, Arr
 		id,
 		mv(data),
 		capnp::BuilderCapabilityTable(),
-		capnpTypeId<capnp::Data>()
+		internal::capnpTypeId<capnp::Data>()
 	).as<capnp::Data>();
 }
 

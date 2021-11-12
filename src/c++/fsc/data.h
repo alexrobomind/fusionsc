@@ -141,6 +141,15 @@ Own<typename T::Reader> getDataRefAs(LocalDataRefImpl& impl);
 template<>
 Own<capnp::Data::Reader> getDataRefAs<capnp::Data>(LocalDataRefImpl& impl);
 
+template<typename T>
+uint64_t constexpr capnpTypeId() { return capnp::typeId<T>(); }
+
+template<>
+inline uint64_t constexpr capnpTypeId<capnp::Data>() { return 0; }
+
+template<>
+inline uint64_t constexpr capnpTypeId<capnp::AnyPointer>() { return 1; }
+
 } // namespace fsc::internal
 
 // === class LocalDataService ===
@@ -157,7 +166,7 @@ LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, typ
 		id,
 		capnp::messageToFlatArray(builder),
 		mv(capTable),
-		capnpTypeId<T>()
+		internal::capnpTypeId<T>()
 	).template as<T>();
 }
 
