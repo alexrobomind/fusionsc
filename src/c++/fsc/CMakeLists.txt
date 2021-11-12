@@ -37,5 +37,6 @@ target_sources(
 	PUBLIC
 	local-tests.cpp
 	random-tests.cpp
+	data-tests.cpp
 )
 target_link_libraries(tests PUBLIC fsc)

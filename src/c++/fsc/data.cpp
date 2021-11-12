@@ -1,10 +1,30 @@
 #include <kj/array.h>
+#include <capnp/generated-header-support.h>
+#include <capnp/serialize.h>
 
 #include "data.h"
 
+namespace {
+	template<typename T>
+	uint64_t constexpr capnpTypeId() { return capnp::typeId<T>(); }
+	
+	template<>
+	uint64_t constexpr capnpTypeId<capnp::Data>() { return 0; }
+	
+	template<>
+	uint64_t constexpr capnpTypeId<capnp::AnyPointer>() { return 1; }
+}
+
 namespace fsc {
 	
-// class LocalDataService
+// === functions in internal ===
+
+template<>
+Own<capnp::Data::Reader> internal::getDataRefAs<capnp::Data>(internal::LocalDataRefImpl& impl) {
+	return kj::heap<capnp::Data::Reader>(impl.entryRef -> value.asPtr()).attach(impl.addRef());
+}
+	
+// === class LocalDataService ===
 
 LocalDataService::LocalDataService(Library& lib) :
 	LocalDataService(*kj::refcounted<Impl>(lib))
@@ -14,6 +34,37 @@ LocalDataService::LocalDataService(Impl& newImpl) :
 	Client(newImpl.addRef()),
 	impl(newImpl.addRef())
 {}
+
+LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, Array<const byte>&& data) {
+	return impl->publish(
+		id,
+		mv(data),
+		capnp::BuilderCapabilityTable(),
+		capnpTypeId<capnp::Data>()
+	).as<capnp::Data>();
+}
+
+template<typename T>
+LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, typename T::Reader data) {
+	capnp::MallocMessageBuilder builder;
+	capnp::BuilderCapabilityTable capTable;
+	
+	auto root = capTable.imbue(builder.getRoot<capnp::AnyPointer>());
+	root.setAs(data);
+	
+	return impl->publish(
+		id,
+		capnp::messageToFlatArray(builder),
+		mv(capTable),
+		capnpTypeId<T>()
+	).as<T>();
+}
+
+// === class internal::LocalDataRefImpl ===
+
+Own<internal::LocalDataRefImpl> internal::LocalDataRefImpl::addRef() {
+	return kj::addRef(*this);
+}
 
 DataRef<capnp::AnyPointer>::Metadata::Reader internal::LocalDataRefImpl::localMetadata() {
 	return _metadata.getRoot<Metadata>();
@@ -44,11 +95,6 @@ Promise<void> internal::LocalDataRefImpl::capTable(CapTableContext context) {
 	return kj::READY_NOW;
 }
 
-template<>
-Own<capnp::Data::Reader> internal::getDataRefAs<capnp::Data>(internal::LocalDataRefImpl& impl) {
-	return kj::heap<capnp::Data::Reader>(impl.entryRef -> value.asPtr()).attach(impl.addRef());
-}
-
 // === class LocalDataService::Impl ===
 
 LocalDataService::Impl::Impl(Library& lib) :
@@ -72,7 +118,7 @@ Promise<LocalDataRef<capnp::AnyPointer>> LocalDataService::Impl::download(DataRe
 	});
 }
 
-LocalDataRef<capnp::AnyPointer> LocalDataService::Impl::publish(Array<byte> id, Array<byte>&& data, capnp::BuilderCapabilityTable&& capTable, uint64_t cpTypeId) {
+LocalDataRef<capnp::AnyPointer> LocalDataService::Impl::publish(ArrayPtr<const byte> id, Array<const byte>&& data, capnp::BuilderCapabilityTable&& capTable, uint64_t cpTypeId) {
 	// Check if we have the id already, if not, 
 	Own<const LocalDataStore::Entry> entry;
 		

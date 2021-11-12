@@ -21,10 +21,10 @@ public:
 	template<typename T>
 	Promise<LocalDataRef<T>> download(typename DataRef<T>::Client src);
 	
-	LocalDataRef<void> publish(Array<byte> id, Array<byte>&& data);
+	LocalDataRef<capnp::Data> publish(ArrayPtr<const byte> id, Array<const byte>&& data);
 	
 	template<typename T>
-	LocalDataRef<capnp::Data> publish(Array<byte> id, typename T::Reader data);
+	LocalDataRef<capnp::Data> publish(ArrayPtr<const byte> id, typename T::Reader data);
 	
 	LocalDataService(Library& lib);
 	
@@ -54,10 +54,17 @@ public:
 	class LocalDataRef<T2> as();
 	
 private:
-	LocalDataRef(internal::LocalDataRefImpl& backend, capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>>& wrapper);	
+	LocalDataRef(internal::LocalDataRefImpl& backend, capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>>& wrapper);
+
+	template<typename T2>	
+	LocalDataRef(LocalDataRef<T2>& other);	
+	
 	Own<internal::LocalDataRefImpl> backend;
 	
 	friend class LocalDataService::Impl;
+	
+	template<typename T>
+	friend class LocalDataRef;
 };
 
 // Internal implementation
@@ -71,7 +78,7 @@ public:
 	Own<Impl> addRef();
 	
 	Promise<LocalDataRef<capnp::AnyPointer>> download(DataRef<capnp::AnyPointer>::Client src);
-	LocalDataRef<capnp::AnyPointer> publish(Array<byte> id, Array<byte>&& data, capnp::BuilderCapabilityTable&& capTable, uint64_t cpTypeId);
+	LocalDataRef<capnp::AnyPointer> publish(ArrayPtr<const byte> id, Array<const byte>&& data, capnp::BuilderCapabilityTable&& capTable, uint64_t cpTypeId);
 	
 private:
 	Promise<LocalDataRef<capnp::AnyPointer>> doDownload(DataRef<capnp::AnyPointer>::Client src);
@@ -178,13 +185,21 @@ LocalDataRef<T>::LocalDataRef(internal::LocalDataRefImpl& backend, capnp::Capabi
 {}
 
 template<typename T>
+template<typename T2>	
+LocalDataRef<T>::LocalDataRef(LocalDataRef<T2>& other) :
+	DataRef<T>::Client(other.castAs<DataRef<T>>()),
+	backend(other.backend -> addRef())
+{}
+	
+
+template<typename T>
 Array<const byte> LocalDataRef<T>::getRaw() {
 	Own<capnp::Data::Reader> reader = backend -> get<capnp::Data>();
 	
 	// The below operation converts the arrayptr view of the reader
 	// into a refcount owning array.
 	ArrayPtr<const byte> byteView = *reader;
-	return byteView.attach(reader);
+	return byteView.attach(mv(reader));
 }
 
 template<typename T>
@@ -195,7 +210,7 @@ Own<typename T::Reader> LocalDataRef<T>::get() {
 template<typename T>
 template<typename T2>
 LocalDataRef<T2> LocalDataRef<T>::as() {
-	return LocalDataRef<T2>(backend);
+	return LocalDataRef<T2>(*this);
 }
 
 }
