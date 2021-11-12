@@ -134,7 +134,7 @@ private:
 };
 
 template<typename T>
-typename Own<typename T::Reader> getDataRefAs(LocalDataRefImpl& impl);
+Own<typename T::Reader> getDataRefAs(LocalDataRefImpl& impl);
 
 template<>
 Own<capnp::Data::Reader> getDataRefAs<capnp::Data>(LocalDataRefImpl& impl);
@@ -149,14 +149,23 @@ Own<capnp::Data::Reader> getDataRefAs<capnp::Data>(LocalDataRefImpl& impl);
 
 template<typename T>
 Own<typename T::Reader> internal::getDataRefAs(internal::LocalDataRefImpl& impl) {
+	// Obtain data as a byte pointer (note that this drops all attached objects to keep alive0
 	ArrayPtr<const byte> bytePtr = *getDataRefAs<capnp::Data>(impl);
-	ArrayPtr<const capnp::word> wordPtr = reinterpret_cast<ArrayPtr<const capnp::word>>(bytePtr);
 	
+	// Cast the data to a word array (let's hope they are aligned properly)
+	ArrayPtr<const capnp::word> wordPtr = ArrayPtr<const capnp::word>(
+		reinterpret_cast<const capnp::word*>(bytePtr.begin()),
+		bytePtr.size() / sizeof(capnp::word)
+	);
+	
+	// Construct a message reader over the array
 	auto msgReader = kj::heap<capnp::FlatArrayMessageReader>(wordPtr);
 	
-	T::Reader root = msgReader.getRoot<T>();
+	// Return the reader's root at the requested type
+	T::Reader root = msgReader -> getRoot<T>();
 	root = impl.readerTable -> imbue(root);
 	
+	// Copy root onto the heap and attach objects needed to keep it running
 	return kj::heap<typename T::Reader>(root).attach(mv(msgReader)).attach(impl.addRef());
 }
 
