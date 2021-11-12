@@ -1,6 +1,17 @@
 #include "data.h"
 
 namespace fsc {
+	
+// class LocalDataService
+
+LocalDataService::LocalDataService(Library& lib) :
+	LocalDataService(*kj::refcounted<Impl>(lib))
+{}
+
+LocalDataService::LocalDataService(Impl& newImpl) :
+	Client(newImpl.addRef()),
+	impl(newImpl.addRef())
+{}
 
 DataRef<capnp::AnyPointer>::Metadata::Reader internal::LocalDataRefImpl::localMetadata() {
 	return _metadata.getRoot<Metadata>();
@@ -32,6 +43,14 @@ Own<capnp::Data::Reader> internal::LocalDataRefImpl::get<capnp::Data>() {
 
 // === class LocalDataService::Impl ===
 
+LocalDataService::Impl::Impl(Library& lib) :
+	library(lib -> addRef())
+{}
+
+Own<LocalDataService::Impl> LocalDataService::Impl::addRef() {
+	return kj::addRef(*this);
+}
+
 Promise<LocalDataRef<capnp::AnyPointer>> LocalDataService::Impl::download(DataRef<capnp::AnyPointer>::Client src) {
 	// Check if the capability is actually local
 	return serverSet.getLocalServer(src).then([src, this](Maybe<DataRef<capnp::AnyPointer>::Server> maybeServer) mutable -> Promise<LocalDataRef<capnp::AnyPointer>> {
@@ -51,7 +70,7 @@ LocalDataRef<capnp::AnyPointer> LocalDataService::Impl::publish(Array<byte> id, 
 		
 	// Prepare construction of the data
 	{
-		kj::Locked<LocalDataStore> lStore = backingStore.lockExclusive();
+		kj::Locked<LocalDataStore> lStore = library -> store.lockExclusive();
 		KJ_IF_MAYBE(ppRow, lStore -> table.find(id)) {
 			entry = (*ppRow) -> addRef();
 		} else {

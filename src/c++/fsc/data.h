@@ -26,9 +26,13 @@ public:
 	template<typename T>
 	LocalDataRef<capnp::Data> publish(Array<byte> id, typename T::Reader data);
 	
+	LocalDataService(Library& lib);
+	
 private:
 	class Impl;
 	Own<Impl> impl;
+	
+	LocalDataService(Impl& impl);
 	
 	template<typename T>
 	friend class LocalDataRef;
@@ -59,8 +63,11 @@ private:
 /**
  * Backend implementation of the local data service.
  */
-class LocalDataService::Impl : public DataService::Server {
+class LocalDataService::Impl : public kj::Refcounted, public DataService::Server {
 public:
+	Impl(Library& h);
+	Own<Impl> addRef();
+	
 	Promise<LocalDataRef<capnp::AnyPointer>> download(DataRef<capnp::AnyPointer>::Client src);
 	LocalDataRef<capnp::AnyPointer> publish(Array<byte> id, Array<byte>&& data, capnp::BuilderCapabilityTable&& capTable, uint64_t cpTypeId);
 	
@@ -68,6 +75,7 @@ private:
 	Promise<LocalDataRef<capnp::AnyPointer>> doDownload(DataRef<capnp::AnyPointer>::Client src);
 	
 	capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> serverSet;
+	Library library;
 };
 
 
