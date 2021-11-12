@@ -75,7 +75,7 @@ public:
  */ 
 class LocalDataStore::Entry : public kj::AtomicRefcounted {
 public:
-	inline Entry(const kj::ArrayPtr<const byte>& key, kj::Array<const byte>&& data);
+	Entry(const kj::ArrayPtr<const byte>& key, kj::Array<const byte>&& data);
 	
 	// Obtains a new reference to this entry
 	inline kj::Own<      Entry> addRef()       { return kj::atomicAddRef(*this); }
