@@ -14,7 +14,7 @@ namespace internal {
 
 template<typename T> class LocalDataRef;
 
-// API
+// ============================================ API =============================================
 
 class LocalDataService : public DataService::Client {
 public:
@@ -63,11 +63,11 @@ private:
 	
 	friend class LocalDataService::Impl;
 	
-	template<typename T>
+	template<typename T2>
 	friend class LocalDataRef;
 };
 
-// Internal implementation
+// ======================================== Internals ====================================
 
 /**
  * Backend implementation of the local data service.
@@ -143,9 +143,23 @@ Own<capnp::Data::Reader> getDataRefAs<capnp::Data>(LocalDataRefImpl& impl);
 
 } // namespace fsc::internal
 
-// Inline implementation
+// === class LocalDataService ===
 
-// === class LocalDataService::Impl ===
+template<typename T>
+LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, typename T::Reader data) {
+	capnp::MallocMessageBuilder builder;
+	capnp::BuilderCapabilityTable capTable;
+	
+	auto root = capTable.imbue(builder.getRoot<capnp::AnyPointer>());
+	root.setAs(data);
+	
+	return impl->publish(
+		id,
+		capnp::messageToFlatArray(builder),
+		mv(capTable),
+		capnpTypeId<T>()
+	).template as<T>();
+}
 
 // === class LocalDataRefImpl ===
 
@@ -187,7 +201,7 @@ LocalDataRef<T>::LocalDataRef(internal::LocalDataRefImpl& backend, capnp::Capabi
 template<typename T>
 template<typename T2>	
 LocalDataRef<T>::LocalDataRef(LocalDataRef<T2>& other) :
-	DataRef<T>::Client(other.castAs<DataRef<T>>()),
+	DataRef<T>::Client(other.template castAs<DataRef<T>>()),
 	backend(other.backend -> addRef())
 {}
 	

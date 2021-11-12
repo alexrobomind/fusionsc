@@ -44,22 +44,6 @@ LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, Arr
 	).as<capnp::Data>();
 }
 
-template<typename T>
-LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, typename T::Reader data) {
-	capnp::MallocMessageBuilder builder;
-	capnp::BuilderCapabilityTable capTable;
-	
-	auto root = capTable.imbue(builder.getRoot<capnp::AnyPointer>());
-	root.setAs(data);
-	
-	return impl->publish(
-		id,
-		capnp::messageToFlatArray(builder),
-		mv(capTable),
-		capnpTypeId<T>()
-	).as<T>();
-}
-
 // === class internal::LocalDataRefImpl ===
 
 Own<internal::LocalDataRefImpl> internal::LocalDataRefImpl::addRef() {
