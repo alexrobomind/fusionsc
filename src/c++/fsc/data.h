@@ -46,7 +46,7 @@ private:
 template<typename T>
 class LocalDataRef : public DataRef<T>::Client {
 public:
-	ArrayPtr<const byte> getRaw();
+	Array<const byte> getRaw();
 	
 	Own<typename T::Reader> get();
 	
@@ -150,11 +150,11 @@ Own<capnp::Data::Reader> getDataRefAs<capnp::Data>(LocalDataRefImpl& impl);
 template<typename T>
 Own<typename T::Reader> internal::getDataRefAs(internal::LocalDataRefImpl& impl) {
 	ArrayPtr<const byte> bytePtr = *getDataRefAs<capnp::Data>(impl);
-	ArrayPtr<const kj::word> wordPtr = reinterpret_cast<ArrayPtr<const kj::word>>(bytePtr);
+	ArrayPtr<const capnp::word> wordPtr = reinterpret_cast<ArrayPtr<const capnp::word>>(bytePtr);
 	
 	auto msgReader = kj::heap<capnp::FlatArrayMessageReader>(wordPtr);
 	
-	T2::Reader root = msgReader.getRoot<T2>();
+	T::Reader root = msgReader.getRoot<T>();
 	root = impl.readerTable -> imbue(root);
 	
 	return kj::heap<typename T::Reader>(root).attach(mv(msgReader)).attach(impl.addRef());
@@ -169,8 +169,13 @@ LocalDataRef<T>::LocalDataRef(internal::LocalDataRefImpl& backend, capnp::Capabi
 {}
 
 template<typename T>
-ArrayPtr<const byte> LocalDataRef<T>::getRaw() {
-	return backend -> get<capnp::Data>();
+Array<const byte> LocalDataRef<T>::getRaw() {
+	Own<capnp::Data::Reader> reader = backend -> get<capnp::Data>();
+	
+	// The below operation converts the arrayptr view of the reader
+	// into a refcount owning array.
+	ArrayPtr<const byte> byteView = *reader;
+	return byteView.attach(reader);
 }
 
 template<typename T>
