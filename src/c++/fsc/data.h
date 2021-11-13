@@ -180,7 +180,7 @@ LocalDataRef<T> LocalDataService::publish(ArrayPtr<const byte> id, typename T::R
 		mv(stableByteView),
 		capTable,
 		internal::capnpTypeId<T>()
-	).as<T>();
+	).template as<T>();
 }
 
 // === class LocalDataRefImpl ===
