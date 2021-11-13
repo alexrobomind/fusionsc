@@ -2,12 +2,15 @@
 
 #include <kj/thread.h>
 #include <kj/string.h>
+#include <kj/exception.h>
 
 #include "data.h"
 
 using namespace fsc;
 
 TEST_CASE("local_publish") {
+	kj::printStackTraceOnCrash();
+	
 	Library l = newLibrary();
 	
 	KJ_LOG(WARNING, "Starting data service");

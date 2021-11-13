@@ -124,7 +124,7 @@ LocalDataRef<capnp::AnyPointer> LocalDataService::Impl::publish(ArrayPtr<const b
 	}
 	
 	// Prepare some clients
-	/*KJ_LOG(WARNING, "  Copying cap table");
+	KJ_LOG(WARNING, "  Copying cap table");
 	ArrayPtr<Maybe<Own<capnp::ClientHook>>> rawTable = capTable.getTable();
 	auto clients   = kj::heapArrayBuilder<capnp::Capability::Client>    (rawTable.size());
 	auto tableCopy = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(rawTable.size());
@@ -137,16 +137,16 @@ LocalDataRef<capnp::AnyPointer> LocalDataService::Impl::publish(ArrayPtr<const b
 			clients.add(nullptr);
 			tableCopy.add(nullptr); // note that this does not add a nullptr own inside the maybe, but an empty maybe
 		}
-	}*/
+	}
 	
 	// Prepare metadata
 	KJ_LOG(WARNING, "  Preparing backend");
 	auto backend = kj::refcounted<internal::LocalDataRefImpl>();
-	/*backend->readerTable = kj::heap<capnp::ReaderCapabilityTable>(tableCopy.finish());
-	backend->capTableClients = clients.finish();*/
+	backend->readerTable = kj::heap<capnp::ReaderCapabilityTable>(tableCopy.finish());
+	backend->capTableClients = clients.finish();
 	backend->entryRef = mv(entry);
 	
-	/*KJ_LOG(WARNING, "  Preparing metadata");
+	KJ_LOG(WARNING, "  Preparing metadata");
 	auto metadata = backend->_metadata.initRoot<DataRef<capnp::AnyPointer>::Metadata>();
 	metadata.setId(id);
 	metadata.setTypeId(cpTypeId);
@@ -160,13 +160,13 @@ LocalDataRef<capnp::AnyPointer> LocalDataService::Impl::publish(ArrayPtr<const b
 	auto c1 = this -> serverSet.add(backend -> addRef());
 	DataRef<capnp::AnyPointer>::Client c2(c1);
 	
-	KJ_LOG(WARNING, "  Dereferencing serverSet");*/
-	
+	KJ_LOG(WARNING, "  Dereferencing serverSet 2");
+	DataRef<capnp::Data>::Client client(this -> serverSet.add(backend->addRef()).asGeneric<capnp::Data>());	
 		
 	// Now construct a local data ref from the backend
 	KJ_LOG(WARNING, "  Constructing local data ref");
-	// return LocalDataRef<capnp::AnyPointer>(backend->addRef(), this -> serverSet);
-	return LocalDataRef<capnp::AnyPointer>(Own<internal::LocalDataRefImpl>(), this -> serverSet);
+	return LocalDataRef<capnp::AnyPointer>(backend->addRef(), this -> serverSet);
+	// return LocalDataRef<capnp::AnyPointer>(Own<internal::LocalDataRefImpl>(), this -> serverSet);
 }
 
 Promise<LocalDataRef<capnp::AnyPointer>> LocalDataService::Impl::doDownload(DataRef<capnp::AnyPointer>::Client src) {
