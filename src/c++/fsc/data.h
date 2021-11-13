@@ -79,7 +79,7 @@ public:
 	Own<Impl> addRef();
 	
 	Promise<LocalDataRef<capnp::AnyPointer>> download(DataRef<capnp::AnyPointer>::Client src);
-	LocalDataRef<capnp::AnyPointer> publish(ArrayPtr<const byte> id, Array<const byte>&& data, capnp::BuilderCapabilityTable& capTable, uint64_t cpTypeId);
+	LocalDataRef<capnp::AnyPointer> publish(ArrayPtr<const byte> id, Array<const byte>&& data, capnp::BuilderCapabilityTable&& capTable, uint64_t cpTypeId);
 	
 private:
 	Promise<LocalDataRef<capnp::AnyPointer>> doDownload(DataRef<capnp::AnyPointer>::Client src);
@@ -178,7 +178,7 @@ LocalDataRef<T> LocalDataService::publish(ArrayPtr<const byte> id, typename T::R
 	return impl->publish(
 		id,
 		mv(stableByteView),
-		capTable,
+		mv(capTable),
 		internal::capnpTypeId<T>()
 	).template as<T>();
 }

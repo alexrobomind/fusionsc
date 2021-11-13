@@ -105,7 +105,7 @@ Promise<LocalDataRef<capnp::AnyPointer>> LocalDataService::Impl::download(DataRe
 	});
 }
 
-LocalDataRef<capnp::AnyPointer> LocalDataService::Impl::publish(ArrayPtr<const byte> id, Array<const byte>&& data, capnp::BuilderCapabilityTable& capTable, uint64_t cpTypeId) {
+LocalDataRef<capnp::AnyPointer> LocalDataService::Impl::publish(ArrayPtr<const byte> id, Array<const byte>&& data, capnp::BuilderCapabilityTable&& capTable, uint64_t cpTypeId) {
 	KJ_LOG(WARNING, "LocalDataService::Impl::publish started");
 	// Check if we have the id already, if not, 
 	Own<const LocalDataStore::Entry> entry;
