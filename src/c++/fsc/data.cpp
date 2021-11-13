@@ -152,21 +152,10 @@ LocalDataRef<capnp::AnyPointer> LocalDataService::Impl::publish(ArrayPtr<const b
 	metadata.setTypeId(cpTypeId);
 	metadata.setCapTableSize(rawTable.size());
 	metadata.setDataSize(backend -> entryRef -> value.size());
-	
-	KJ_LOG(WARNING, "  Trying addRef");
-	backend -> addRef();
-	
-	KJ_LOG(WARNING, "  Dereferencing serverSet");
-	auto c1 = this -> serverSet.add(backend -> addRef());
-	DataRef<capnp::AnyPointer>::Client c2(c1);
-	
-	KJ_LOG(WARNING, "  Dereferencing serverSet 2");
-	DataRef<capnp::Data>::Client client(this -> serverSet.add(backend->addRef()).asGeneric<capnp::Data>());	
 		
 	// Now construct a local data ref from the backend
 	KJ_LOG(WARNING, "  Constructing local data ref");
 	return LocalDataRef<capnp::AnyPointer>(backend->addRef(), this -> serverSet);
-	// return LocalDataRef<capnp::AnyPointer>(Own<internal::LocalDataRefImpl>(), this -> serverSet);
 }
 
 Promise<LocalDataRef<capnp::AnyPointer>> LocalDataService::Impl::doDownload(DataRef<capnp::AnyPointer>::Client src) {

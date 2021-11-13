@@ -204,14 +204,14 @@ Own<typename T::Reader> internal::getDataRefAs(internal::LocalDataRefImpl& impl)
 
 template<typename T>
 LocalDataRef<T>::LocalDataRef(Own<internal::LocalDataRefImpl> nbackend, capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>>& wrapper) :
-	DataRef<T>::Client(wrapper.add(nbackend->addRef()).template asGeneric<DataRef<T>>()),
+	capnp::Capability::Client(wrapper.add(nbackend->addRef())),
 	backend(nbackend->addRef())
 {}
 
 template<typename T>
 template<typename T2>	
 LocalDataRef<T>::LocalDataRef(LocalDataRef<T2>& other) :
-	DataRef<T>::Client(other.template castAs<DataRef<T>>()),
+	capnp::Capability::Client(other),
 	backend(other.backend -> addRef())
 {}
 	
