@@ -25,7 +25,7 @@ public:
 	LocalDataRef<capnp::Data> publish(ArrayPtr<const byte> id, capnp::Data::Reader);
 	
 	template<typename T>
-	LocalDataRef<capnp::Data> publish(ArrayPtr<const byte> id, typename T::Reader data);
+	LocalDataRef<T> publish(ArrayPtr<const byte> id, typename T::Reader data);
 	
 	LocalDataService(Library& lib);
 	
@@ -151,24 +151,36 @@ inline uint64_t constexpr capnpTypeId<capnp::Data>() { return 0; }
 template<>
 inline uint64_t constexpr capnpTypeId<capnp::AnyPointer>() { return 1; }
 
+template<>
+inline uint64_t constexpr capnpTypeId<capnp::AnyStruct>() { return 1; }
+
 } // namespace fsc::internal
 
 // === class LocalDataService ===
 
 template<typename T>
-LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, typename T::Reader data) {
+LocalDataRef<T> LocalDataService::publish(ArrayPtr<const byte> id, typename T::Reader data) {
 	capnp::MallocMessageBuilder builder;
 	capnp::BuilderCapabilityTable capTable;
 	
 	auto root = capTable.imbue(builder.getRoot<capnp::AnyPointer>());
-	root.setAs(data);
+	root.setAs<T>(data);
+	
+	kj::Array<const capnp::word> flatArray = capnp::messageToFlatArray(builder);
+	
+	// Since releaseAsBytes doesn't work, we need to force the 
+	kj::ArrayPtr<const byte> byteView(
+		reinterpret_cast<const byte*>(flatArray.begin()),
+		sizeof(capnp::word) * flatArray.size()
+	);
+	kj::Array<const byte> stableByteView = byteView.attach(kj::heap<kj::Array<const capnp::word>>(mv(flatArray)));
 	
 	return impl->publish(
 		id,
-		capnp::messageToFlatArray(builder),
+		mv(stableByteView),
 		capTable,
 		internal::capnpTypeId<T>()
-	).template as<T>();
+	).as<T>();
 }
 
 // === class LocalDataRefImpl ===
@@ -193,11 +205,11 @@ Own<typename T::Reader> internal::getDataRefAs(internal::LocalDataRefImpl& impl)
 	auto msgReader = kj::heap<capnp::FlatArrayMessageReader>(wordPtr);
 	
 	// Return the reader's root at the requested type
-	typename T::Reader root = msgReader -> getRoot<T>();
+	capnp::AnyPointer::Reader root = msgReader -> getRoot<capnp::AnyPointer>();
 	root = impl.readerTable -> imbue(root);
 	
 	// Copy root onto the heap and attach objects needed to keep it running
-	return kj::heap<typename T::Reader>(root).attach(mv(msgReader)).attach(impl.addRef());
+	return kj::heap<typename T::Reader>(root.getAs<T>()).attach(mv(msgReader)).attach(impl.addRef());
 }
 
 // === class LocalDataRef ===

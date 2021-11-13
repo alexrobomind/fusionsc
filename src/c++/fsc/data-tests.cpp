@@ -17,13 +17,30 @@ TEST_CASE("local_publish") {
 	LocalDataService ds(l);
 	
 	auto id   = kj::heapArray<const byte>({0x00, 0xFF});
-	auto data = kj::heapArray<const byte>({0, 1, 2, 3, 4});
 	
-	KJ_LOG(WARNING, "Publishing");
-	LocalDataRef<capnp::Data> ref = ds.publish(id, mv(data));
+	SECTION("raw") {
+		auto data = kj::heapArray<const byte>({0, 1, 2, 3, 4});
+		
+		KJ_LOG(WARNING, "Publishing");
+		LocalDataRef<capnp::Data> ref = ds.publish(id, kj::heapArray<const byte>(data));
+		
+		KJ_LOG(WARNING, "Getting");
+		Array<const byte> data2 = ref.getRaw();
+		
+		REQUIRE(data == data2);
+	}
 	
-	KJ_LOG(WARNING, "Getting");
-	Array<const byte> data2 = ref.getRaw();
-	
-	REQUIRE(data == data2);
+	SECTION("anyStruct") {
+		capnp::MallocMessageBuilder mb;
+		capnp::AnyStruct::Builder sb = mb.getRoot<capnp::AnyPointer>().initAsAnyStruct(10, 0);
+		
+		auto dataSection = sb.getDataSection();
+		for(unsigned int i = 0; i < dataSection.size(); ++i)
+			dataSection[i] = i;
+		
+		LocalDataRef<capnp::AnyStruct> ref = ds.publish<capnp::AnyStruct>(id, sb.asReader());
+		Own<capnp::AnyStruct::Reader> reader = ref.get();
+		
+		REQUIRE(reader->getDataSection() == sb.getDataSection());
+	}
 }
