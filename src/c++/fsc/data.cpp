@@ -49,7 +49,6 @@ LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, cap
 // === class internal::LocalDataRefImpl ===
 
 Own<internal::LocalDataRefImpl> internal::LocalDataRefImpl::addRef() {
-	KJ_LOG(WARNING, "internal::LocalDataRefImpl::addRef()");
 	return kj::addRef(*this);
 }
 
@@ -93,11 +92,17 @@ Own<LocalDataService::Impl> LocalDataService::Impl::addRef() {
 }
 
 Promise<LocalDataRef<capnp::AnyPointer>> LocalDataService::Impl::download(DataRef<capnp::AnyPointer>::Client src) {
+	KJ_LOG(WARNING, "LocalDataService::Impl::download started");
 	// Check if the capability is actually local
-	return serverSet.getLocalServer(src).then([src, this](Maybe<DataRef<capnp::AnyPointer>::Server> maybeServer) mutable -> Promise<LocalDataRef<capnp::AnyPointer>> {
+	return serverSet.getLocalServer(src).then([src, this](Maybe<DataRef<capnp::AnyPointer>::Server&> maybeServer) mutable -> Promise<LocalDataRef<capnp::AnyPointer>> {
 		KJ_IF_MAYBE(server, maybeServer) {
+			KJ_LOG(WARNING, "  ref is local, returning backend");
+
+			auto backend = dynamic_cast<internal::LocalDataRefImpl*>(server);
+			KJ_REQUIRE(backend != nullptr);
+
 			// If yes, extract the backend and return it
-			return LocalDataRef<capnp::AnyPointer>(static_cast<internal::LocalDataRefImpl*>(server)->addRef(), this -> serverSet);
+			return LocalDataRef<capnp::AnyPointer>(backend -> addRef(), this -> serverSet);
 		} else {
 			// If not, download for real
 			return doDownload(src);
@@ -222,7 +227,7 @@ Promise<LocalDataRef<capnp::AnyPointer>> LocalDataService::Impl::doDownload(Data
 		backend->_metadata.setRoot(metadata);
 				
 		// Now construct a local data ref from the backend
-		return LocalDataRef<capnp::AnyPointer>(mv(backend), this -> serverSet);
+		return LocalDataRef<capnp::AnyPointer>(backend->addRef(), this -> serverSet);
 	});
 }
 

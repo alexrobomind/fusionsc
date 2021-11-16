@@ -6,6 +6,7 @@ CAPNP_GENERATE_CPP(
 	FSC_CP_HEADERS
 	
 	data.capnp
+	data-test.capnp
 )
 unset(CAPNPC_OUTPUT_DIR)
 

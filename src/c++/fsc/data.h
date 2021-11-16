@@ -1,6 +1,8 @@
 #include <fsc/data.capnp.h>
 #include <capnp/any.h>
 
+#include <cxxabi.h>
+
 #include "common.h"
 #include "local.h"
 
@@ -52,13 +54,21 @@ public:
 	Own<typename T::Reader> get();
 	
 	template<typename T2 = capnp::AnyPointer>
-	class LocalDataRef<T2> as();
+	class LocalDataRef<T2> as();	
+
+	LocalDataRef(LocalDataRef<T>& other);
+	LocalDataRef(LocalDataRef<T>&& other);
+
+	LocalDataRef<T>& operator=(LocalDataRef<T>&  other);
+	LocalDataRef<T>& operator=(LocalDataRef<T>&& other);
+
+	LocalDataRef() = delete;
 	
 private:
 	LocalDataRef(Own<internal::LocalDataRefImpl> backend, capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>>& wrapper);
 
 	template<typename T2>	
-	LocalDataRef(LocalDataRef<T2>& other);	
+	LocalDataRef(LocalDataRef<T2>& other);
 	
 	Own<internal::LocalDataRefImpl> backend;
 	
@@ -98,7 +108,7 @@ namespace internal {
  * binary data store for the encoded binary data and a table of capabilities
  * referenced inside the binary data.
  */
-class LocalDataRefImpl : public kj::Refcounted, public DataRef<capnp::AnyPointer>::Server {
+class LocalDataRefImpl : public DataRef<capnp::AnyPointer>::Server, public kj::Refcounted {
 public:
 	using typename DataRef<capnp::AnyPointer>::Server::MetadataContext;
 	using typename DataRef<capnp::AnyPointer>::Server::RawBytesContext;
@@ -131,8 +141,11 @@ public:
 	// Serialized metadata
 	capnp::MallocMessageBuilder _metadata;
 
+	virtual ~LocalDataRefImpl() {};
+
 private:
 	LocalDataRefImpl() {};
+
 	friend Own<LocalDataRefImpl> kj::refcounted<LocalDataRefImpl>();
 };
 
@@ -168,7 +181,7 @@ LocalDataRef<T> LocalDataService::publish(ArrayPtr<const byte> id, typename T::R
 	
 	kj::Array<const capnp::word> flatArray = capnp::messageToFlatArray(builder);
 	
-	// Since releaseAsBytes doesn't work, we need to force the 
+	// Since releaseAsBytes doesn't work, we need to force the conversion
 	kj::ArrayPtr<const byte> byteView(
 		reinterpret_cast<const byte*>(flatArray.begin()),
 		sizeof(capnp::word) * flatArray.size()
@@ -181,6 +194,13 @@ LocalDataRef<T> LocalDataService::publish(ArrayPtr<const byte> id, typename T::R
 		mv(capTable),
 		internal::capnpTypeId<T>()
 	).template as<T>();
+}
+
+template<typename T>
+Promise<LocalDataRef<T>> LocalDataService::download(typename DataRef<T>::Client src) {
+	return impl -> download(src.asGeneric()).then(
+		[](LocalDataRef<capnp::AnyPointer> ref) -> LocalDataRef<T> { KJ_LOG(WARNING, "Got ref. Converting."); return ref.template as<T>(); }
+	);
 }
 
 // === class LocalDataRefImpl ===
@@ -223,10 +243,37 @@ LocalDataRef<T>::LocalDataRef(Own<internal::LocalDataRefImpl> nbackend, capnp::C
 template<typename T>
 template<typename T2>	
 LocalDataRef<T>::LocalDataRef(LocalDataRef<T2>& other) :
-	capnp::Capability::Client(other),
+	capnp::Capability::Client((capnp::Capability::Client&) other),
 	backend(other.backend -> addRef())
 {}
 	
+
+template<typename T>	
+LocalDataRef<T>::LocalDataRef(LocalDataRef<T>& other) :
+	capnp::Capability::Client((capnp::Capability::Client&) other),
+	backend(other.backend -> addRef())
+{}
+	
+
+template<typename T>	
+LocalDataRef<T>::LocalDataRef(LocalDataRef<T>&& other) :
+	capnp::Capability::Client((capnp::Capability::Client&) other),
+	backend(other.backend -> addRef())
+{}
+
+template<typename T>
+LocalDataRef<T>& LocalDataRef<T>::operator=(LocalDataRef<T>& other) {
+	::capnp::Capability::Client::operator=(other);
+	backend = other.backend -> addRef();
+	return *this;
+}
+
+template<typename T>
+LocalDataRef<T>& LocalDataRef<T>::operator=(LocalDataRef<T>&& other) {
+	::capnp::Capability::Client::operator=(other);
+	backend = other.backend -> addRef();
+	return *this;
+}
 
 template<typename T>
 Array<const byte> LocalDataRef<T>::getRaw() {
@@ -246,7 +293,6 @@ Own<typename T::Reader> LocalDataRef<T>::get() {
 template<typename T>
 template<typename T2>
 LocalDataRef<T2> LocalDataRef<T>::as() {
-	KJ_LOG(WARNING, "Calling type conversion");
 	return LocalDataRef<T2>(*this);
 }
 
