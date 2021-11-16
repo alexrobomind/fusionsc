@@ -12,8 +12,8 @@ namespace fsc {
 // === functions in internal ===
 
 template<>
-Own<capnp::Data::Reader> internal::getDataRefAs<capnp::Data>(internal::LocalDataRefImpl& impl) {
-	return kj::heap<capnp::Data::Reader>(impl.entryRef -> value.asPtr()).attach(impl.addRef());
+capnp::Data::Reader internal::getDataRefAs<capnp::Data>(internal::LocalDataRefImpl& impl) {
+	return impl.entryRef -> value.asPtr();
 }
 	
 // === class LocalDataService ===
@@ -28,20 +28,10 @@ LocalDataService::LocalDataService(Impl& newImpl) :
 {}
 
 LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, Array<const byte>&& data) {
-	KJ_LOG(WARNING, "Delegating to backend");
 	return impl->publish(
 		id,
 		mv(data),
-		capnp::BuilderCapabilityTable(),
-		internal::capnpTypeId<capnp::Data>()
-	).as<capnp::Data>();
-}
-
-LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, capnp::Data::Reader data) {
-	return impl->publish(
-		id,
-		kj::heapArray<const byte>(data),
-		capnp::BuilderCapabilityTable(),
+		kj::heapArray<Maybe<Own<capnp::ClientHook>>>(0),
 		internal::capnpTypeId<capnp::Data>()
 	).as<capnp::Data>();
 }
@@ -63,7 +53,7 @@ Promise<void> internal::LocalDataRefImpl::metadata(MetadataContext context) {
 }
 
 Promise<void> internal::LocalDataRefImpl::rawBytes(RawBytesContext context) {
-	context.getResults().setData(*get<capnp::Data>());
+	context.getResults().setData(get<capnp::Data>());
 	
 	return kj::READY_NOW;
 }
@@ -81,6 +71,23 @@ Promise<void> internal::LocalDataRefImpl::capTable(CapTableContext context) {
 	return kj::READY_NOW;
 }
 
+capnp::FlatArrayMessageReader& internal::LocalDataRefImpl::ensureReader() {
+	KJ_IF_MAYBE(reader, maybeReader) {
+		return *reader;
+	}
+	
+	// Obtain data as a byte pointer (note that this drops all attached objects to keep alive0
+	ArrayPtr<const byte> bytePtr = getDataRefAs<capnp::Data>(*this);
+	
+	// Cast the data to a word array (let's hope they are aligned properly)
+	ArrayPtr<const capnp::word> wordPtr = ArrayPtr<const capnp::word>(
+		reinterpret_cast<const capnp::word*>(bytePtr.begin()),
+		bytePtr.size() / sizeof(capnp::word)
+	);
+	
+	return maybeReader.emplace(wordPtr);
+}
+
 // === class LocalDataService::Impl ===
 
 LocalDataService::Impl::Impl(Library& lib) :
@@ -92,14 +99,15 @@ Own<LocalDataService::Impl> LocalDataService::Impl::addRef() {
 }
 
 Promise<LocalDataRef<capnp::AnyPointer>> LocalDataService::Impl::download(DataRef<capnp::AnyPointer>::Client src) {
-	KJ_LOG(WARNING, "LocalDataService::Impl::download started");
 	// Check if the capability is actually local
 	return serverSet.getLocalServer(src).then([src, this](Maybe<DataRef<capnp::AnyPointer>::Server&> maybeServer) mutable -> Promise<LocalDataRef<capnp::AnyPointer>> {
 		KJ_IF_MAYBE(server, maybeServer) {
-			KJ_LOG(WARNING, "  ref is local, returning backend");
-
-			auto backend = dynamic_cast<internal::LocalDataRefImpl*>(server);
-			KJ_REQUIRE(backend != nullptr);
+			#if KJ_NO_RTTI
+				auto backend = static_cast<internal::LocalDataRefImpl*>(server);
+			#else
+				auto backend = dynamic_cast<internal::LocalDataRefImpl*>(server);
+				KJ_REQUIRE(backend != nullptr);
+			#endif
 
 			// If yes, extract the backend and return it
 			return LocalDataRef<capnp::AnyPointer>(backend -> addRef(), this -> serverSet);
@@ -110,32 +118,27 @@ Promise<LocalDataRef<capnp::AnyPointer>> LocalDataService::Impl::download(DataRe
 	});
 }
 
-LocalDataRef<capnp::AnyPointer> LocalDataService::Impl::publish(ArrayPtr<const byte> id, Array<const byte>&& data, capnp::BuilderCapabilityTable&& capTable, uint64_t cpTypeId) {
-	KJ_LOG(WARNING, "LocalDataService::Impl::publish started");
+LocalDataRef<capnp::AnyPointer> LocalDataService::Impl::publish(ArrayPtr<const byte> id, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable, uint64_t cpTypeId) {
 	// Check if we have the id already, if not, 
 	Own<const LocalDataStore::Entry> entry;
 		
 	// Prepare construction of the data
-	KJ_LOG(WARNING, "  Looking up row");
 	{
 		kj::Locked<LocalDataStore> lStore = library -> store.lockExclusive();
 		KJ_IF_MAYBE(ppRow, lStore -> table.find(id)) {
 			entry = (*ppRow) -> addRef();
 		} else {
-			KJ_LOG(WARNING, "    Row not found, constructing new entry");
 			entry = kj::atomicRefcounted<LocalDataStore::Entry>(id, mv(data));
 			lStore -> table.insert(entry -> addRef());
 		}
 	}
 	
 	// Prepare some clients
-	KJ_LOG(WARNING, "  Copying cap table");
-	ArrayPtr<Maybe<Own<capnp::ClientHook>>> rawTable = capTable.getTable();
-	auto clients   = kj::heapArrayBuilder<capnp::Capability::Client>    (rawTable.size());
-	auto tableCopy = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(rawTable.size());
+	auto clients   = kj::heapArrayBuilder<capnp::Capability::Client>    (capTable.size());
+	auto tableCopy = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(capTable.size());
 	
-	for(size_t i = 0; i < rawTable.size(); ++i) {
-		KJ_IF_MAYBE(hook, rawTable[i]) {
+	for(size_t i = 0; i < capTable.size(); ++i) {
+		KJ_IF_MAYBE(hook, capTable[i]) {
 			clients.add((*hook) -> addRef());
 			tableCopy.add((*hook) -> addRef());
 		} else {
@@ -145,21 +148,18 @@ LocalDataRef<capnp::AnyPointer> LocalDataService::Impl::publish(ArrayPtr<const b
 	}
 	
 	// Prepare metadata
-	KJ_LOG(WARNING, "  Preparing backend");
 	auto backend = kj::refcounted<internal::LocalDataRefImpl>();
 	backend->readerTable = kj::heap<capnp::ReaderCapabilityTable>(tableCopy.finish());
 	backend->capTableClients = clients.finish();
 	backend->entryRef = mv(entry);
 	
-	KJ_LOG(WARNING, "  Preparing metadata");
 	auto metadata = backend->_metadata.initRoot<DataRef<capnp::AnyPointer>::Metadata>();
 	metadata.setId(id);
 	metadata.setTypeId(cpTypeId);
-	metadata.setCapTableSize(rawTable.size());
+	metadata.setCapTableSize(capTable.size());
 	metadata.setDataSize(backend -> entryRef -> value.size());
 		
 	// Now construct a local data ref from the backend
-	KJ_LOG(WARNING, "  Constructing local data ref");
 	return LocalDataRef<capnp::AnyPointer>(backend->addRef(), this -> serverSet);
 }
 
@@ -167,7 +167,7 @@ Promise<LocalDataRef<capnp::AnyPointer>> LocalDataService::Impl::doDownload(Data
 	// Use a fiber for downloading
 	
 	return kj::startFiber(65536, [this, src](kj::WaitScope& ws) mutable {
-		// Retrieve metadata
+		// Retrieve metadata and cap table
 		auto metadataPromise = src.metadataRequest().send();
 		auto capTablePromise = src.capTableRequest().send();
 		
@@ -216,7 +216,7 @@ Promise<LocalDataRef<capnp::AnyPointer>> LocalDataService::Impl::doDownload(Data
 		auto capClients = kj::heapArrayBuilder<capnp::Capability::Client>(capTable.size());
 		for(unsigned int i = 0; i < capTable.size(); ++i) {
 			capClients.add(capTable[i]);
-		}
+		}		
 		
 		// Initialize the backend struct with everything
 		auto backend = kj::refcounted<internal::LocalDataRefImpl>();

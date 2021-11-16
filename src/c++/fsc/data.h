@@ -1,8 +1,6 @@
 #include <fsc/data.capnp.h>
 #include <capnp/any.h>
 
-#include <cxxabi.h>
-
 #include "common.h"
 #include "local.h"
 
@@ -23,11 +21,21 @@ public:
 	template<typename T>
 	Promise<LocalDataRef<T>> download(typename DataRef<T>::Client src);
 	
-	LocalDataRef<capnp::Data> publish(ArrayPtr<const byte> id, Array<const byte>&& data);
+	template<typename T>
+	LocalDataRef<T> publish(ArrayPtr<const byte> id, Array<const byte>&& backingArray, Array<Maybe<capnp::Capability::Client>>&& capTable = kj::heapArray<Maybe<capnp::Capability::Client>>({}));
+	
+	template<>
+	LocalDataRef<capnp::Data> publish<capnp::Data>(ArrayPtr<const byte> id, Array<const byte>&& backingArray);
+	
+	template<typename T>
+	LocalDataRef<T> publish(ArrayPtr<const byte> id, typename T::Reader reader);
+	
+	
+	/*LocalDataRef<capnp::Data> publish(ArrayPtr<const byte> id, Array<const byte>&& data);
 	LocalDataRef<capnp::Data> publish(ArrayPtr<const byte> id, capnp::Data::Reader);
 	
 	template<typename T>
-	LocalDataRef<T> publish(ArrayPtr<const byte> id, typename T::Reader data);
+	LocalDataRef<T> publish(ArrayPtr<const byte> id, typename T::Reader data);*/
 	
 	LocalDataService(Library& lib);
 	
@@ -49,9 +57,9 @@ private:
 template<typename T>
 class LocalDataRef : public DataRef<T>::Client {
 public:
-	Array<const byte> getRaw();
+	ArrayPtr<const byte> getRaw();
 	
-	Own<typename T::Reader> get();
+	typename T::Reader get();
 	
 	template<typename T2 = capnp::AnyPointer>
 	class LocalDataRef<T2> as();	
@@ -89,7 +97,7 @@ public:
 	Own<Impl> addRef();
 	
 	Promise<LocalDataRef<capnp::AnyPointer>> download(DataRef<capnp::AnyPointer>::Client src);
-	LocalDataRef<capnp::AnyPointer> publish(ArrayPtr<const byte> id, Array<const byte>&& data, capnp::BuilderCapabilityTable&& capTable, uint64_t cpTypeId);
+	LocalDataRef<capnp::AnyPointer> publish(ArrayPtr<const byte> id, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable, uint64_t cpTypeId);
 	
 private:
 	Promise<LocalDataRef<capnp::AnyPointer>> doDownload(DataRef<capnp::AnyPointer>::Client src);
@@ -120,7 +128,7 @@ public:
 	
 	// Decodes the underlying data as a capnproto message
 	template<typename T>
-	Own<typename T::Reader> get();
+	typename T::Reader get();
 	
 	// Returns a reader to the locally stored metadata
 	Metadata::Reader localMetadata();
@@ -142,18 +150,42 @@ public:
 	capnp::MallocMessageBuilder _metadata;
 
 	virtual ~LocalDataRefImpl() {};
+	
+	capnp::FlatArrayMessageReader& ensureReader();
 
 private:
 	LocalDataRefImpl() {};
+	
+	Maybe<capnp::FlatArrayMessageReader> maybeReader;
 
 	friend Own<LocalDataRefImpl> kj::refcounted<LocalDataRefImpl>();
 };
 
+// Helper methods to handle the special representation for capnp::Data.
+
 template<typename T>
-Own<typename T::Reader> getDataRefAs(LocalDataRefImpl& impl);
+typename T::Reader getDataRefAs(LocalDataRefImpl& impl);
 
 template<>
-Own<capnp::Data::Reader> getDataRefAs<capnp::Data>(LocalDataRefImpl& impl);
+capnp::Data::Reader getDataRefAs<capnp::Data>(LocalDataRefImpl& impl);
+
+template<typename T>
+Array<const byte> buildData(typename T::Reader reader, capnp::BuilderCapabilityTable& builderTable);
+
+template<>
+Array<const byte> buildData<capnp::Data>(capnp::Data::Reader reader, capnp::BuilderCapabilityTable&) {
+	return kj::heapArray<const byte>(reader);
+}
+
+template<typename T>
+bool checkReader(typename T::Reader, const Array<const byte>&) {
+	return true;
+}
+
+template<>
+bool checkReader<capnp::Data>(capnp::Data::Reader reader, const Array<const byte>& array) {
+	return reader.begin() == array.begin();
+}
 
 template<typename T>
 uint64_t constexpr capnpTypeId() { return capnp::typeId<T>(); }
@@ -173,25 +205,37 @@ inline uint64_t constexpr capnpTypeId<capnp::AnyStruct>() { return 1; }
 
 template<typename T>
 LocalDataRef<T> LocalDataService::publish(ArrayPtr<const byte> id, typename T::Reader data) {
-	capnp::MallocMessageBuilder builder;
 	capnp::BuilderCapabilityTable capTable;
 	
-	auto root = capTable.imbue(builder.getRoot<capnp::AnyPointer>());
-	root.setAs<T>(data);
-	
-	kj::Array<const capnp::word> flatArray = capnp::messageToFlatArray(builder);
-	
-	// Since releaseAsBytes doesn't work, we need to force the conversion
-	kj::ArrayPtr<const byte> byteView(
-		reinterpret_cast<const byte*>(flatArray.begin()),
-		sizeof(capnp::word) * flatArray.size()
-	);
-	kj::Array<const byte> stableByteView = byteView.attach(kj::heap<kj::Array<const capnp::word>>(mv(flatArray)));
+	Array<const byte> byteData = buildData<T>(data, capTable);
+			
+	return impl->publish(
+		id,
+		mv(byteData),
+		capTable.getTable(),
+		internal::capnpTypeId<T>()
+	).template as<T>();
+}
+
+template<typename T>
+LocalDataRef<T> LocalDataService::publish(
+	ArrayPtr<const byte> id,
+	Array<const byte> backingArray,
+	ArrayPtr<Maybe<capnp::Capability::Client>> capTable
+) {
+	kj::ArrayBuilder<Maybe<Own<capnp::ClientHook>>> hooks(capTable.size());
+	for(auto& maybeClient : capTable) {
+		KF_IF_MAYBE(pClient, maybeClient) {
+			hooks.add(capnp::ClientHook::from(client));
+		} else {
+			hooks.add(nullptr);
+		}
+	}
 	
 	return impl->publish(
 		id,
-		mv(stableByteView),
-		mv(capTable),
+		backingArray,
+		hooks.finish(),
 		internal::capnpTypeId<T>()
 	).template as<T>();
 }
@@ -199,37 +243,15 @@ LocalDataRef<T> LocalDataService::publish(ArrayPtr<const byte> id, typename T::R
 template<typename T>
 Promise<LocalDataRef<T>> LocalDataService::download(typename DataRef<T>::Client src) {
 	return impl -> download(src.asGeneric()).then(
-		[](LocalDataRef<capnp::AnyPointer> ref) -> LocalDataRef<T> { KJ_LOG(WARNING, "Got ref. Converting."); return ref.template as<T>(); }
+		[](LocalDataRef<capnp::AnyPointer> ref) -> LocalDataRef<T> { return ref.template as<T>(); }
 	);
 }
 
 // === class LocalDataRefImpl ===
 
 template<typename T>
-Own<typename T::Reader> internal::LocalDataRefImpl::get() {
+typename T::Reader internal::LocalDataRefImpl::get() {
 	return internal::getDataRefAs<T>(*this);
-}
-
-template<typename T>
-Own<typename T::Reader> internal::getDataRefAs(internal::LocalDataRefImpl& impl) {
-	// Obtain data as a byte pointer (note that this drops all attached objects to keep alive0
-	ArrayPtr<const byte> bytePtr = *getDataRefAs<capnp::Data>(impl);
-	
-	// Cast the data to a word array (let's hope they are aligned properly)
-	ArrayPtr<const capnp::word> wordPtr = ArrayPtr<const capnp::word>(
-		reinterpret_cast<const capnp::word*>(bytePtr.begin()),
-		bytePtr.size() / sizeof(capnp::word)
-	);
-	
-	// Construct a message reader over the array
-	auto msgReader = kj::heap<capnp::FlatArrayMessageReader>(wordPtr);
-	
-	// Return the reader's root at the requested type
-	capnp::AnyPointer::Reader root = msgReader -> getRoot<capnp::AnyPointer>();
-	root = impl.readerTable -> imbue(root);
-	
-	// Copy root onto the heap and attach objects needed to keep it running
-	return kj::heap<typename T::Reader>(root.getAs<T>()).attach(mv(msgReader)).attach(impl.addRef());
 }
 
 // === class LocalDataRef ===
@@ -276,17 +298,12 @@ LocalDataRef<T>& LocalDataRef<T>::operator=(LocalDataRef<T>&& other) {
 }
 
 template<typename T>
-Array<const byte> LocalDataRef<T>::getRaw() {
-	Own<capnp::Data::Reader> reader = backend -> get<capnp::Data>();
-	
-	// The below operation converts the arrayptr view of the reader
-	// into a refcount owning array.
-	ArrayPtr<const byte> byteView = *reader;
-	return byteView.attach(mv(reader));
+ArrayPtr<const byte> LocalDataRef<T>::getRaw() {
+	return backend -> get<capnp::Data>();
 }
 
 template<typename T>
-Own<typename T::Reader> LocalDataRef<T>::get() {
+typename T::Reader LocalDataRef<T>::get() {
 	return backend -> get<T>();
 }
 
@@ -294,6 +311,38 @@ template<typename T>
 template<typename T2>
 LocalDataRef<T2> LocalDataRef<T>::as() {
 	return LocalDataRef<T2>(*this);
+}
+
+// === Helper methods ===
+
+template<typename T>
+Array<const byte> internal::buildData(typename T::Reader reader, capnp::BuilderCapabilityTable& builderTable) {
+	capnp::MallocMessageBuilder builder;
+	
+	auto root = builderTable.imbue(builder.getRoot<capnp::AnyPointer>());
+	root.setAs<T>(reader);
+	
+	kj::Array<const capnp::word> flatArray = capnp::messageToFlatArray(builder);
+	
+	// Since releaseAsBytes doesn't work, we need to force the conversion
+	kj::ArrayPtr<const byte> byteView(
+		reinterpret_cast<const byte*>(flatArray.begin()),
+		sizeof(capnp::word) * flatArray.size()
+	);
+	kj::Array<const byte> stableByteView = byteView.attach(kj::heap<kj::Array<const capnp::word>>(mv(flatArray)));
+	return stableByteView;
+}
+
+template<typename T>
+typename T::Reader internal::getDataRefAs(internal::LocalDataRefImpl& impl) {
+	auto& msgReader = impl.ensureReader();
+	
+	// Return the reader's root at the requested type
+	capnp::AnyPointer::Reader root = msgReader.getRoot<capnp::AnyPointer>();
+	root = impl.readerTable -> imbue(root);
+	
+	// Copy root onto the heap and attach objects needed to keep it running
+	return root.getAs<T>();
 }
 
 }
