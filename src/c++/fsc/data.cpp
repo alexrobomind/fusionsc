@@ -19,10 +19,10 @@ capnp::Data::Reader internal::getDataRefAs<capnp::Data>(internal::LocalDataRefIm
 // === class LocalDataService ===
 
 LocalDataService::LocalDataService(Library& lib) :
-	LocalDataService(*kj::refcounted<Impl>(lib))
+	LocalDataService(*kj::refcounted<internal::LocalDataServiceImpl>(lib))
 {}
 
-LocalDataService::LocalDataService(Impl& newImpl) :
+LocalDataService::LocalDataService(internal::LocalDataServiceImpl& newImpl) :
 	Client(newImpl.addRef()),
 	impl(newImpl.addRef())
 {}
@@ -88,17 +88,17 @@ capnp::FlatArrayMessageReader& internal::LocalDataRefImpl::ensureReader() {
 	return maybeReader.emplace(wordPtr);
 }
 
-// === class LocalDataService::Impl ===
+// === class internal::LocalDataServiceImpl ===
 
-LocalDataService::Impl::Impl(Library& lib) :
+internal::LocalDataServiceImpl::LocalDataServiceImpl(Library& lib) :
 	library(lib -> addRef())
 {}
 
-Own<LocalDataService::Impl> LocalDataService::Impl::addRef() {
+Own<internal::LocalDataServiceImpl> internal::LocalDataServiceImpl::addRef() {
 	return kj::addRef(*this);
 }
 
-Promise<LocalDataRef<capnp::AnyPointer>> LocalDataService::Impl::download(DataRef<capnp::AnyPointer>::Client src) {
+Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::download(DataRef<capnp::AnyPointer>::Client src) {
 	// Check if the capability is actually local
 	return serverSet.getLocalServer(src).then([src, this](Maybe<DataRef<capnp::AnyPointer>::Server&> maybeServer) mutable -> Promise<LocalDataRef<capnp::AnyPointer>> {
 		KJ_IF_MAYBE(server, maybeServer) {
@@ -118,7 +118,7 @@ Promise<LocalDataRef<capnp::AnyPointer>> LocalDataService::Impl::download(DataRe
 	});
 }
 
-LocalDataRef<capnp::AnyPointer> LocalDataService::Impl::publish(ArrayPtr<const byte> id, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable, uint64_t cpTypeId) {
+LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(ArrayPtr<const byte> id, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable, uint64_t cpTypeId) {
 	// Check if we have the id already, if not, 
 	Own<const LocalDataStore::Entry> entry;
 		
@@ -163,7 +163,7 @@ LocalDataRef<capnp::AnyPointer> LocalDataService::Impl::publish(ArrayPtr<const b
 	return LocalDataRef<capnp::AnyPointer>(backend->addRef(), this -> serverSet);
 }
 
-Promise<LocalDataRef<capnp::AnyPointer>> LocalDataService::Impl::doDownload(DataRef<capnp::AnyPointer>::Client src) {
+Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownload(DataRef<capnp::AnyPointer>::Client src) {
 	// Use a fiber for downloading
 	
 	return kj::startFiber(65536, [this, src](kj::WaitScope& ws) mutable {

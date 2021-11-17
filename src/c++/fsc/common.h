@@ -31,7 +31,7 @@ using kj::Array;
 using kj::FixedArray;
 
 
-namespace _ {
+namespace internal {
 	
 template<typename T>
 struct UnwrapMaybe_ {};
@@ -46,10 +46,10 @@ struct UnwrapIfPromise_<kj::Promise<T>> { using Type = T; };
 }
 
 template<typename T>
-using UnwrapIfPromise = typename _::UnwrapIfPromise_<T>::Type;
+using UnwrapIfPromise = typename internal::UnwrapIfPromise_<T>::Type;
 
 template<typename T>
-using UnwrapMaybe = typename _::UnwrapMaybe_<T>::Type;
+using UnwrapMaybe = typename internal::UnwrapMaybe_<T>::Type;
 
 template<typename T>
 using ReturnType = decltype(kj::instance<T>()());

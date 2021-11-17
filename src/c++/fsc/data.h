@@ -10,6 +10,7 @@ namespace fsc {
 
 namespace internal {
 	class LocalDataRefImpl;
+	class LocalDataServiceImpl;
 }
 
 // API forward declarations
@@ -17,6 +18,8 @@ namespace internal {
 template<typename T> class LocalDataRef;
 
 // Unwrapper for data ref type
+
+namespace internal {
 
 template<typename T>
 struct References_ { using Type = typename References_<capnp::FromClient<T>>::Type; };
@@ -27,16 +30,23 @@ struct References_<DataRef<T>> { using Type = T; };
 template<typename T>
 struct References_<LocalDataRef<T>> { using Type = T; };
 
+}
+
 /**
  * Use this to figure out what datatype a reference points to.
  */
 template<typename T>
-using References = typename References_<T>::Type;
+using References = typename internal::References_<T>::Type;
 
 
 
 // ============================================ API =============================================
 
+/**
+ * Main entry point for handling local and remote data references. Can be used to both create
+ * remotely-downloadable data references with its 'publish' methods and download (as in, create
+ * local copies of) remote references with its 'download' methods.
+ */
 class LocalDataService : public DataService::Client {
 public:
 	/**
@@ -82,10 +92,9 @@ public:
 	// TODO: Missing virtual base constructors for Capability::Client
 	
 private:
-	class Impl;
-	Own<Impl> impl;
+	Own<internal::LocalDataServiceImpl> impl;
 	
-	LocalDataService(Impl& impl);
+	LocalDataService(internal::LocalDataServiceImpl& impl);
 	
 	template<typename T>
 	friend class LocalDataRef;
@@ -94,22 +103,50 @@ private:
 };
 
 /**
- * DataRef backed by local storage.
+ * Data reference backed by local storage. In addition to the remote access functionality
+ * provided by the interface in capnp::DataRef<...>, this class provides direct access to
+ * locally stored data.
+ * This class uses non-atomic reference counting for performance, so it can not be
+ * shared across threads. To share this to other threads, pass the DataRef<...>::Client
+ * capability it inherits from via RPC and use that thread's DataService to download
+ * it into a local reference. If this ref and the other DataServce share the same
+ * data store, the underlying data will not be copied, but shared between the references.
  */
 template<typename T>
 class LocalDataRef : public DataRef<T>::Client {
 public:
+	/**
+	 * Provides direct access to the raw underlying byte array associated
+	 * with this data reference.
+	 */
 	ArrayPtr<const byte> getRaw();
 	
+	/**
+	 * Provides a structured view of the underlying data. If T is capnp::Data,
+	 * the returned reader will be identical to getRaw(). Otherwise, this will
+	 * interpret the backing array as a CapNProto message with the given type
+	 * at its root. Note that if T is not capnp::Data, and the backing array
+	 * can not be interpreted as a CapNProto message, this method will fail.
+	 */
 	typename T::Reader get();
 	
+	/**
+	 * Provides a new data reference sharing the underling buffer and
+	 * capabilities, but having a different interpretation data type.
+	 */
 	template<typename T2 = capnp::AnyPointer>
 	class LocalDataRef<T2> as();	
 
+	// Non-const copy constructor
 	LocalDataRef(LocalDataRef<T>& other);
+	
+	// Move constructor
 	LocalDataRef(LocalDataRef<T>&& other);
 
+	// Copy assignment operator
 	LocalDataRef<T>& operator=(LocalDataRef<T>&  other);
+	
+	// Move assignment operator
 	LocalDataRef<T>& operator=(LocalDataRef<T>&& other);
 
 	LocalDataRef() = delete;
@@ -122,7 +159,7 @@ private:
 	
 	Own<internal::LocalDataRefImpl> backend;
 	
-	friend class LocalDataService::Impl;
+	friend class internal::LocalDataServiceImpl;
 	
 	template<typename T2>
 	friend class LocalDataRef;
@@ -130,13 +167,16 @@ private:
 
 // ======================================== Internals ====================================
 
+
+namespace internal {
+
 /**
  * Backend implementation of the local data service.
  */
-class LocalDataService::Impl : public kj::Refcounted, public DataService::Server {
+class LocalDataServiceImpl : public kj::Refcounted, public DataService::Server {
 public:
-	Impl(Library& h);
-	Own<Impl> addRef();
+	LocalDataServiceImpl(Library& h);
+	Own<LocalDataServiceImpl> addRef();
 	
 	Promise<LocalDataRef<capnp::AnyPointer>> download(DataRef<capnp::AnyPointer>::Client src);
 	LocalDataRef<capnp::AnyPointer> publish(ArrayPtr<const byte> id, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable, uint64_t cpTypeId);
@@ -147,11 +187,8 @@ private:
 	capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> serverSet;
 	Library library;
 	
-	friend class internal::LocalDataRefImpl;
+	friend class LocalDataRefImpl;
 };
-
-
-namespace internal {
 
 /**
  * Backend implementation for locally stored data refs. Holds a reference to the
