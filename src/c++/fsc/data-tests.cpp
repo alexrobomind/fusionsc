@@ -41,7 +41,7 @@ TEST_CASE("local_publish") {
 		for(unsigned int i = 0; i < dataSection.size(); ++i)
 			dataSection[i] = i;
 		
-		LocalDataRef<capnp::AnyStruct> ref = ds.publish<capnp::AnyStruct>(id, sb.asReader());
+		LocalDataRef<capnp::AnyStruct> ref = ds.publish(id, sb);
 		capnp::AnyStruct::Reader reader = ref.get();
 		
 		REQUIRE(reader.getDataSection() == sb.getDataSection());
@@ -59,12 +59,12 @@ TEST_CASE("local_publish") {
 		capnp::MallocMessageBuilder mb1;
 		DataHolder::Builder inner = mb1.initRoot<DataHolder>();
 		inner.setData(data1);
-		LocalDataRef<DataHolder> ref1 = ds.publish<DataHolder>({0x00}, inner.asReader());
+		LocalDataRef<DataHolder> ref1 = ds.publish({0x00}, inner);
 
 		capnp::MallocMessageBuilder mb2;
 		DDH::Builder refHolder = mb2.initRoot<DDH>();
 		refHolder.setRef(ref1);
-		LocalDataRef<DDH> ref2 = ds.publish<DDH>({0x01}, refHolder.asReader());
+		LocalDataRef<DDH> ref2 = ds.publish({0x01}, refHolder);
 
 		DDH::Reader refHolder2 = ref2.get();
 		LocalDataRef<DataHolder> ref12 = ds.download(refHolder2.getRef()).wait(ws);
@@ -97,16 +97,16 @@ TEST_CASE("remote_publish") {
 		capnp::MallocMessageBuilder mb1;
 		DataHolder::Builder inner = mb1.initRoot<DataHolder>();
 		inner.setData(data1);
-		LocalDataRef<DataHolder> ref1 = ds1.publish<DataHolder>({0x0}, inner.asReader());
+		LocalDataRef<DataHolder> ref1 = ds1.publish({0x0}, inner);
 
 		capnp::MallocMessageBuilder mb2;
 		DDH::Builder refHolder = mb2.initRoot<DDH>();
 		refHolder.setRef(ref1);
-		LocalDataRef<DDH> ref2 = ds1.publish<DDH>({0x1}, refHolder.asReader());
+		LocalDataRef<DDH> ref2 = ds1.publish({0x1}, refHolder);
 
-		LocalDataRef<DDH> ref22 = ds2.download<DDH>(ref2).wait(ws);
+		LocalDataRef<DDH> ref22 = ds2.download(ref2).wait(ws);
 		DDH::Reader refHolder2 = ref22.get();
-		LocalDataRef<DataHolder> ref12 = ds2.download<DataHolder>(refHolder2.getRef()).wait(ws);
+		LocalDataRef<DataHolder> ref12 = ds2.download(refHolder2.getRef()).wait(ws);
 		DataHolder::Reader inner2 = ref12.get();
 
 		REQUIRE(inner.getData() == inner2.getData());

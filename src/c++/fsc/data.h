@@ -27,6 +27,9 @@ struct References_<DataRef<T>> { using Type = T; };
 template<typename T>
 struct References_<LocalDataRef<T>> { using Type = T; };
 
+/**
+ * Use this to figure out what datatype a reference points to.
+ */
 template<typename T>
 using References = typename References_<T>::Type;
 
@@ -36,23 +39,47 @@ using References = typename References_<T>::Type;
 
 class LocalDataService : public DataService::Client {
 public:
+	/**
+	 * Downloads the data contained in the remote reference into the local backing
+	 * store and links the remote capabilities into a local capability table.
+	 *
+	 * Returns a local data ref instance which extends the interface by DataRef
+	 * with direct access to the stored data.
+	 */
 	template<typename Reference, typename T = References<Reference>>
 	Promise<LocalDataRef<T>> download(Reference src);
 	
+	/**
+	 * Creates a local data reference directly from a backing array and a capability table.
+	 *
+	 * The interpretation of the backing array depends on the seleced data type. If the
+	 * data type is capnp::Data, the array is interpreted as the raw data intended to
+	 * be referenced. This is e.g. intended to be used for raw memory-mapped files.
+	 * Currently, any other type leads to the backing array being interpreted as containing
+	 * a CapNProto message (including its segment table) with a root of the specified data
+	 * type (can also be capnp::AnyPointer, capnp::AnyList or capnp::AnyStruct or similar).
+	 */
 	template<typename T = capnp::Data>
-	LocalDataRef<T> publish(ArrayPtr<const byte> id, Array<const byte> backingArray, ArrayPtr<Maybe<capnp::Capability::Client>> capTable = kj::heapArray<Maybe<capnp::Capability::Client>>({}));
+	LocalDataRef<T> publish(ArrayPtr<const byte> id, Array<const byte> backingArray, ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable = kj::heapArrayBuilder<Maybe<Own<capnp::Capability::Client>>>(0).finish());
 	
-	template<typename Reader, typename T = capnp::FromReader<Reader>>
+	/**
+	 * Creates a local data reference by copying the contents of a capnproto reader.
+	 * If the reader is of type capnp::Data, the byte array it points to will be copied
+	 * verbatim into the backing buffer.
+	 * Currently, for any other type this method will create a message containing a deepcopy
+	 * copy of the data referenced by this reader and store it into the backing array (including
+	 * the message's segment table).
+	 */
+	template<typename Reader, typename T = capnp::FromAny<Reader>>
 	LocalDataRef<T> publish(ArrayPtr<const byte> id, Reader reader);
 	
-	
-	/*LocalDataRef<capnp::Data> publish(ArrayPtr<const byte> id, Array<const byte>&& data);
-	LocalDataRef<capnp::Data> publish(ArrayPtr<const byte> id, capnp::Data::Reader);
-	
-	template<typename T>
-	LocalDataRef<T> publish(ArrayPtr<const byte> id, typename T::Reader data);*/
-	
+	/**
+	 * Constructs a new data service instance using the shared backing store contained in the given
+	 * library handle.
+	 */
 	LocalDataService(Library& lib);
+	
+	// TODO: Missing virtual base constructors for Capability::Client
 	
 private:
 	class Impl;
@@ -188,7 +215,7 @@ template<typename T>
 Array<const byte> buildData(typename T::Reader reader, capnp::BuilderCapabilityTable& builderTable);
 
 template<>
-Array<const byte> buildData<capnp::Data>(capnp::Data::Reader reader, capnp::BuilderCapabilityTable&) {
+inline Array<const byte> buildData<capnp::Data>(capnp::Data::Reader reader, capnp::BuilderCapabilityTable&) {
 	return kj::heapArray<const byte>(reader);
 }
 
@@ -198,7 +225,7 @@ bool checkReader(typename T::Reader, const Array<const byte>&) {
 }
 
 template<>
-bool checkReader<capnp::Data>(capnp::Data::Reader reader, const Array<const byte>& array) {
+inline bool checkReader<capnp::Data>(capnp::Data::Reader reader, const Array<const byte>& array) {
 	return reader.begin() == array.begin();
 }
 
@@ -236,12 +263,12 @@ template<typename T>
 LocalDataRef<T> LocalDataService::publish(
 	ArrayPtr<const byte> id,
 	Array<const byte> backingArray,
-	ArrayPtr<Maybe<capnp::Capability::Client>> capTable
+	ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable
 ) {
 	auto hooks = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(capTable.size());
 	for(auto& maybeClient : capTable) {
 		KJ_IF_MAYBE(pClient, maybeClient) {
-			hooks.add(capnp::ClientHook::from(*pClient));
+			hooks.add(capnp::ClientHook::from(**pClient));
 		} else {
 			hooks.add(nullptr);
 		}
@@ -249,7 +276,7 @@ LocalDataRef<T> LocalDataService::publish(
 	
 	return impl->publish(
 		id,
-		backingArray,
+		mv(backingArray),
 		hooks.finish(),
 		internal::capnpTypeId<T>()
 	).template as<T>();
