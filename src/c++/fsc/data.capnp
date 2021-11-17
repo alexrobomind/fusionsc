@@ -24,3 +24,20 @@ interface DataService @0xc6d48902ddb7e122 {
 	clone @1 [T] (source : DataRef(T)) -> (ref : DataRef(T));
 	cache @2 [T] (source : DataRef(T)) -> (ref : DataRef(T));
 }
+
+# Support data types
+
+struct Float64Tensor {
+	shape @0 : List(UInt64);
+	data  @1 : List(Float64);
+}
+
+struct Int64Tensor {
+	shape @0 : List(UInt64);
+	data  @1 : List(Int64);
+}
+
+struct UInt64Tensor {
+	shape @0 : List(UInt64);
+	data  @1 : List(UInt64);
+}

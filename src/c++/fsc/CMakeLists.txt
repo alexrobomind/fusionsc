@@ -7,6 +7,7 @@ CAPNP_GENERATE_CPP(
 	
 	data.capnp
 	data-test.capnp
+	magnetics.capnp
 )
 unset(CAPNPC_OUTPUT_DIR)
 

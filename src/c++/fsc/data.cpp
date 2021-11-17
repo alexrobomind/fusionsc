@@ -27,6 +27,32 @@ LocalDataService::LocalDataService(internal::LocalDataServiceImpl& newImpl) :
 	impl(newImpl.addRef())
 {}
 
+// Non-const copy constructor
+LocalDataService::LocalDataService(LocalDataService& other) : 
+	capnp::Capability::Client(other),
+	impl(other.impl -> addRef())
+{}
+
+// Move constructor
+LocalDataService::LocalDataService(LocalDataService&& other) : 
+	capnp::Capability::Client(other),
+	impl(other.impl -> addRef())
+{}
+
+// Copy assignment operator
+LocalDataService& LocalDataService::operator=(LocalDataService& other) {
+	capnp::Capability::Client::operator=(other);
+	impl = other.impl -> addRef();
+	return *this;
+}
+
+// Copy assignment operator
+LocalDataService& LocalDataService::operator=(LocalDataService&& other) {
+	capnp::Capability::Client::operator=(other);
+	impl = other.impl -> addRef();
+	return *this;
+}
+
 /*LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, Array<const byte>&& data) {
 	return impl->publish(
 		id,

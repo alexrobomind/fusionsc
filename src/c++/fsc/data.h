@@ -88,9 +88,21 @@ public:
 	 * library handle.
 	 */
 	LocalDataService(Library& lib);
+
+	// Non-const copy constructor
+	LocalDataService(LocalDataService& other);
 	
-	// TODO: Missing virtual base constructors for Capability::Client
+	// Move constructor
+	LocalDataService(LocalDataService&& other);
+
+	// Copy assignment operator
+	LocalDataService& operator=(LocalDataService& other);
+
+	// Copy assignment operator
+	LocalDataService& operator=(LocalDataService&& other);
 	
+	LocalDataService() = delete;
+		
 private:
 	Own<internal::LocalDataServiceImpl> impl;
 	
