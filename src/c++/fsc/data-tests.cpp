@@ -67,7 +67,7 @@ TEST_CASE("local_publish") {
 		LocalDataRef<DDH> ref2 = ds.publish<DDH>({0x01}, refHolder.asReader());
 
 		DDH::Reader refHolder2 = ref2.get();
-		LocalDataRef<DataHolder> ref12 = ds.download<DataHolder>(refHolder2.getRef()).wait(ws);
+		LocalDataRef<DataHolder> ref12 = ds.download(refHolder2.getRef()).wait(ws);
 		DataHolder::Reader inner2 = ref12.get();
 
 		REQUIRE(inner.getData() == inner2.getData());

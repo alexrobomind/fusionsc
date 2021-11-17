@@ -27,14 +27,14 @@ LocalDataService::LocalDataService(Impl& newImpl) :
 	impl(newImpl.addRef())
 {}
 
-LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, Array<const byte>&& data) {
+/*LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, Array<const byte>&& data) {
 	return impl->publish(
 		id,
 		mv(data),
 		kj::heapArray<Maybe<Own<capnp::ClientHook>>>(0),
 		internal::capnpTypeId<capnp::Data>()
 	).as<capnp::Data>();
-}
+}*/
 
 // === class internal::LocalDataRefImpl ===
 

@@ -12,23 +12,38 @@ namespace internal {
 	class LocalDataRefImpl;
 }
 
+// API forward declarations
+
 template<typename T> class LocalDataRef;
+
+// Unwrapper for data ref type
+
+template<typename T>
+struct References_ { using Type = typename References_<capnp::FromClient<T>>::Type; };
+
+template<typename T>
+struct References_<DataRef<T>> { using Type = T; };
+
+template<typename T>
+struct References_<LocalDataRef<T>> { using Type = T; };
+
+template<typename T>
+using References = typename References_<T>::Type;
+
+
 
 // ============================================ API =============================================
 
 class LocalDataService : public DataService::Client {
 public:
-	template<typename T>
-	Promise<LocalDataRef<T>> download(typename DataRef<T>::Client src);
+	template<typename Reference, typename T = References<Reference>>
+	Promise<LocalDataRef<T>> download(Reference src);
 	
-	template<typename T>
-	LocalDataRef<T> publish(ArrayPtr<const byte> id, Array<const byte>&& backingArray, Array<Maybe<capnp::Capability::Client>>&& capTable = kj::heapArray<Maybe<capnp::Capability::Client>>({}));
+	template<typename T = capnp::Data>
+	LocalDataRef<T> publish(ArrayPtr<const byte> id, Array<const byte> backingArray, ArrayPtr<Maybe<capnp::Capability::Client>> capTable = kj::heapArray<Maybe<capnp::Capability::Client>>({}));
 	
-	template<>
-	LocalDataRef<capnp::Data> publish<capnp::Data>(ArrayPtr<const byte> id, Array<const byte>&& backingArray);
-	
-	template<typename T>
-	LocalDataRef<T> publish(ArrayPtr<const byte> id, typename T::Reader reader);
+	template<typename Reader, typename T = capnp::FromReader<T>>
+	LocalDataRef<T> publish(ArrayPtr<const byte> id, Reader reader);
 	
 	
 	/*LocalDataRef<capnp::Data> publish(ArrayPtr<const byte> id, Array<const byte>&& data);
@@ -203,8 +218,8 @@ inline uint64_t constexpr capnpTypeId<capnp::AnyStruct>() { return 1; }
 
 // === class LocalDataService ===
 
-template<typename T>
-LocalDataRef<T> LocalDataService::publish(ArrayPtr<const byte> id, typename T::Reader data) {
+template<typename Reader, typename T>
+LocalDataRef<T> LocalDataService::publish(ArrayPtr<const byte> id, Reader data) {
 	capnp::BuilderCapabilityTable capTable;
 	
 	Array<const byte> byteData = buildData<T>(data, capTable);
@@ -240,8 +255,8 @@ LocalDataRef<T> LocalDataService::publish(
 	).template as<T>();
 }
 
-template<typename T>
-Promise<LocalDataRef<T>> LocalDataService::download(typename DataRef<T>::Client src) {
+template<typename Reference, typename T>
+Promise<LocalDataRef<T>> LocalDataService::download(Reference src) {
 	return impl -> download(src.asGeneric()).then(
 		[](LocalDataRef<capnp::AnyPointer> ref) -> LocalDataRef<T> { return ref.template as<T>(); }
 	);
