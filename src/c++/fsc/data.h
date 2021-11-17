@@ -222,7 +222,7 @@ template<typename Reader, typename T>
 LocalDataRef<T> LocalDataService::publish(ArrayPtr<const byte> id, Reader data) {
 	capnp::BuilderCapabilityTable capTable;
 	
-	Array<const byte> byteData = buildData<T>(data, capTable);
+	Array<const byte> byteData = internal::buildData<T>(data, capTable);
 			
 	return impl->publish(
 		id,
@@ -240,7 +240,7 @@ LocalDataRef<T> LocalDataService::publish(
 ) {
 	auto hooks = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(capTable.size());
 	for(auto& maybeClient : capTable) {
-		KF_IF_MAYBE(pClient, maybeClient) {
+		KJ_IF_MAYBE(pClient, maybeClient) {
 			hooks.add(capnp::ClientHook::from(*pClient));
 		} else {
 			hooks.add(nullptr);
