@@ -45,6 +45,18 @@ TEST_CASE("local_publish") {
 		capnp::AnyStruct::Reader reader = ref.get();
 		
 		REQUIRE(reader.getDataSection() == sb.getDataSection());
+	
+		/*SECTION("capability") {
+			capnp::MallocMessageBuilder mb2;
+			auto id2  = kj::heapArray<const byte>({0x01, 0xFF});
+			capnp::AnyStruct::Builder sb2 = mb.getRoot<capnp::AnyPointer>().initAsAnyStruct(0, 1);
+			sb2.getPointerSection().set(0, ref);
+			
+			LocalDataRef<capnp::AnyStruct> ref2 = ds.publish<capnp::AnyStruct>(id2, sb.asReader());
+			Own<capnp::AnyStruct::Reader> reader2 = ref.get();
+			
+			LocalDataRef<capnp::AnyStruct> ref3 = ds.download()
+		}*/
 	}
 
 	SECTION("testData") {
