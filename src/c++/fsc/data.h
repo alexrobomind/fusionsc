@@ -481,15 +481,15 @@ typename T::Reader internal::getDataRefAs(internal::LocalDataRefImpl& impl) {
 inline size_t internal::linearIndex(const capnp::List<uint64_t>::Reader& shape, const ArrayPtr<size_t> index) {
 	size_t linearIndex = 0;
 	size_t stride = 1;
-	for(int dim = index.size() - 1; dim >= 0; --dim) {
-		linearIndex += index * stride;
+	for(int dim = (int) index.size() - 1; dim >= 0; --dim) {
+		linearIndex += index[dim] * stride;
 		stride *= shape[dim];
 	}
 	
 	return linearIndex;
 }
 
-template<typename T, typename Val = typename capnp::ListElementType<capnp::FromAny<T>>>
+template<typename T, typename Val>
 T internal::tensorGetFast(const T& data, const capnp::List<uint64_t>::Reader& shape, const ArrayPtr<size_t> index) {
 	return data[linearIndex(shape, index)];
 }

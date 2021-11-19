@@ -81,7 +81,8 @@ public:
 	inline kj::Own<      Entry> addRef()       { return kj::atomicAddRef(*this); }
 	inline kj::Own<const Entry> addRef() const { return kj::atomicAddRef(*this); }
 	
-	kj::Array<const byte> key;
+	//kj::Array<const byte> key;
+	ID key;
 	kj::Array<const byte> value;
 };
 
@@ -130,8 +131,8 @@ namespace internal {
 int compareDSKeys(const kj::ArrayPtr<const byte>& k1, const kj::ArrayPtr<const byte>& k2);
 }
 
-inline LocalDataStore::Key LocalDataStore::TreeIndexCallbacks::keyForRow (const Row& r) const { return r ->key; }
-inline bool LocalDataStore::TreeIndexCallbacks::isBefore (const Row& r, Key k) const { return internal::compareDSKeys(r -> key, k) < 0; }
-inline bool LocalDataStore::TreeIndexCallbacks::matches  (const Row& r, Key k) const { return internal::compareDSKeys(r -> key, k) == 0; }
+inline LocalDataStore::Key LocalDataStore::TreeIndexCallbacks::keyForRow (const Row& r) const { return r -> key; }
+inline bool LocalDataStore::TreeIndexCallbacks::isBefore (const Row& r, Key k) const { return r -> key < k; }
+inline bool LocalDataStore::TreeIndexCallbacks::matches  (const Row& r, Key k) const { return r -> key == k; }
 
 } // namespace fsc

@@ -56,4 +56,47 @@ using UnwrapMaybe = typename internal::UnwrapMaybe_<T>::Type;
 template<typename T>
 using ReturnType = decltype(kj::instance<T>()());
 
+struct ID {
+	Array<const byte> data;
+	
+	inline ID() : data(nullptr) {};
+	inline ID(const ID& other) : data(kj::heapArray<const byte>(other.data)) {}
+	inline ID(ID&& other) : data(mv(other.data)) {}
+	
+	inline ID(Array<const byte>&& data) : data(mv(data)) {}
+	inline ID(const ArrayPtr<const byte>& data) : data(kj::heapArray<const byte>(data)) {}
+	
+	inline operator ArrayPtr<const byte>() const { return data.asPtr(); }
+	inline ArrayPtr<const byte> asPtr() const { return data.asPtr(); }
+	
+	inline int cmp(const ArrayPtr<const byte>& other) const;
+	inline int cmp(const ID& other) const { return cmp(other.data); }
+	
+	template<typename T>
+	inline bool operator <  (const T& other) const { return this->cmp(other) <  0; }
+	
+	template<typename T>
+	inline bool operator <= (const T& other) const { return this->cmp(other) <= 0; }
+	
+	template<typename T>
+	inline bool operator >  (const T& other) const { return this->cmp(other) >  0; }
+	
+	template<typename T>
+	inline bool operator >= (const T& other) const { return this->cmp(other) >= 0; }
+	
+	template<typename T>
+	inline bool operator == (const T& other) const { return this->cmp(other) == 0; }
+};
+
+// === Inline implementation ===
+
+inline int ID::cmp(const ArrayPtr<const byte>& other) const {
+		if(data.size() < other.size())
+			return -1;
+		else if(data.size() > other.size())
+			return 1;
+	
+		return memcmp(data.begin(), other.begin(), data.size());
+	}
+
 }
