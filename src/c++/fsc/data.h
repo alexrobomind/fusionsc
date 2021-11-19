@@ -177,6 +177,48 @@ private:
 	friend class LocalDataRef;
 };
 
+template<typename T>
+using TensorVal = decltype(instance<T>().getData().get(0));
+
+namespace internal {
+	template<typename T, typename Val = typename capnp::ListElementType<capnp::FromAny<T>>>
+	T tensorGetFast(const T& data, const capnp::List<uint64_t>::Reader& shape, const ArrayPtr<size_t> index);
+	
+	inline size_t linearIndex(const capnp::List<uint64_t>::Reader& shape, const ArrayPtr<size_t> index);
+}
+
+/**
+ * Reads a single element from an underlying tensor.
+ *
+ * WARNING: To enforce security on untrusted data, if the underlying class is a
+ * ?::Reader, then capnproto performs a bounds check on the shape and data sections.
+ * If you need to read repeatedly read from this tensor, use a TensorAccessor. This
+ * will move the bounds check to its creation.
+ *
+ * TODO: Potential conversion to Eigen3 tensors.
+ */
+ 
+template<typename T>
+TensorVal<T> tensorGet(const T& tensor, const ArrayPtr<size_t> index);
+
+template<typename T>
+struct TensorAccessor {
+	decltype(instance<T>().getData()) data;
+	decltype(instance<T>().getShape()) shape;
+	
+	TensorAccessor(const T& ref) :
+		data(ref.getData()),
+		shape(ref.getShape())
+	{}
+	
+	TensorVal<T> get(const ArrayPtr<size_t> index) {
+		return tensorGetFast(data, shape, index);
+	}
+};
+
+template<typename T>
+void tensorSet(const T& tensor, const ArrayPtr<size_t> index, TensorVal<T> value);
+
 // ======================================== Internals ====================================
 
 
@@ -434,6 +476,22 @@ typename T::Reader internal::getDataRefAs(internal::LocalDataRefImpl& impl) {
 	
 	// Copy root onto the heap and attach objects needed to keep it running
 	return root.getAs<T>();
+}
+
+inline size_t internal::linearIndex(const capnp::List<uint64_t>::Reader& shape, const ArrayPtr<size_t> index) {
+	size_t linearIndex = 0;
+	size_t stride = 1;
+	for(int dim = index.size() - 1; dim >= 0; --dim) {
+		linearIndex += index * stride;
+		stride *= shape[dim];
+	}
+	
+	return linearIndex;
+}
+
+template<typename T, typename Val = typename capnp::ListElementType<capnp::FromAny<T>>>
+T internal::tensorGetFast(const T& data, const capnp::List<uint64_t>::Reader& shape, const ArrayPtr<size_t> index) {
+	return data[linearIndex(shape, index)];
 }
 
 }

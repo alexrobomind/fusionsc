@@ -30,6 +30,8 @@ using kj::ArrayPtr;
 using kj::Array;
 using kj::FixedArray;
 
+using kj::instance;
+
 
 namespace internal {
 	
