@@ -56,6 +56,16 @@ using UnwrapMaybe = typename internal::UnwrapMaybe_<T>::Type;
 template<typename T>
 using ReturnType = decltype(kj::instance<T>()());
 
+inline Array<const byte> wordsToBytes(Array<const word> words) {
+	ArrayPtr bytesPtr = words.asBytes();
+	return bytesPtr.attach(mv(words));
+}
+
+inline Array<byte> wordsToBytes(Array<word> words) {
+	ArrayPtr bytesPtr = words.asBytes();
+	return bytesPtr.attach(mv(words));
+}
+
 struct ID {
 	Array<const byte> data;
 	
@@ -65,7 +75,7 @@ struct ID {
 	
 	inline ID(Array<const byte>&& data) : data(mv(data)) {}
 	inline ID(const ArrayPtr<const byte>& data) : data(kj::heapArray<const byte>(data)) {}
-	
+		
 	inline operator ArrayPtr<const byte>() const { return data.asPtr(); }
 	inline ArrayPtr<const byte> asPtr() const { return data.asPtr(); }
 	
@@ -86,6 +96,11 @@ struct ID {
 	
 	template<typename T>
 	inline bool operator == (const T& other) const { return this->cmp(other) == 0; }
+	
+	template<typename T>
+	ID fromReader(T) {
+		return ID(wordsToBytes(capnp::canonicalize(T)));
+	}
 };
 
 // === Inline implementation ===

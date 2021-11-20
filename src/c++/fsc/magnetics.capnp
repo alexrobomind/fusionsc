@@ -57,41 +57,33 @@ struct MagneticField {
 		# --- device-specific options, might require special infrastructure to resolve ---
 
 		w7xMagneticConfig : group {
-			# The W7-X config specification does not usually include a coil width
-			# Therefore, we have to add this information here
-			coilWidth @10 : Float32;
 			
 			union {
-				configurationDB @11 : UInt64;
+				configurationDB : group {
+					# The W7-X config specification does not usually include a coil width
+					# Therefore, we have to add this information here
+					coilWidth @10 : Float32;
+					configID  @11 : UInt64;
+				}
 				
 				coilsAndCurrents : group {
 					# Currents in the non-planar coils
-					np1 @12 : Float64 = 10000;
-					np2 @13 : Float64 = 10000;
-					np3 @14 : Float64 = 10000;
-					np4 @15 : Float64 = 10000;
-					np5 @16 : Float64 = 10000;
+					nonplanar @ 12 : List(Float64) = (10000, 10000, 10000, 10000, 10000);
 					
-					# Currents in the planar coils
-					pA @17 : Float64 = 0;
-					pB @18 : Float64 = 0;
+					# A list of planar coil currents
+					planar    @ 13 : List(Float64) = (0, 0);
 					
-					# Currents in the trim coils
-					trim1 @19 : Float64 = 0;
-					trim2 @20 : Float64 = 0;
-					trim3 @21 : Float64 = 0;
-					trim4 @22 : Float64 = 0;
-					trim5 @23 : Float64 = 0;
+					# A list of trim coil currents
+					trim      @ 14 : List(Float64) = (0, 0, 0, 0, 0);
 					
-					# A list of control coils of either
-					# - Length 0: No control coils
+					# A list of control coil currents of either
 					# - length 2: Upper and Lower coils
 					# - length 5: Coils in each module
 					# - length 10: All 10 control coils
-					controlCoils @24 : List(Float64);
+					control @15 : List(Float64) = (0, 0);
 					
 					# The coil set to use. Usually the default theory coils
-					coils @25 : W7XCoilSet;
+					coils @16 : W7XCoilSet;
 				}
 			}
 		}
@@ -110,7 +102,7 @@ struct Filament {
 # Interface for the resolution of device-specific information
 
 interface FieldResolver {
-	resolve @0 (field : MagneticField) -> (field : MagneticField);
+	resolve @0 (field : MagneticField, followRefs : Bool = false) -> (field : MagneticField);
 }
 
 # Interface for the computation of magnetic fields
@@ -125,18 +117,19 @@ interface FieldComputerFactory {
 
 struct W7XCoilSet {
 	invertMainCoils @0 : Bool = true;
+	width @1 : Float64;
 	
 	union {
 		coilsDBSet : group {
-			mainCoilOffset    @1 : UInt32 = 160;
-			trimCoilOffset    @2 : UInt32; # TODO: Missing default trim coils
-			controlCoilOffset @3 : UInt32; # TODO: Missing default control coils
+			mainCoilOffset    @2 : UInt32 = 160;
+			trimCoilIDs       @3 : List(UInt32);
+			controlCoilOffset @4 : UInt32;
 		}
 		
 		customCoilSet : group {
-			nonplanarCoils @4 : List(Filament);
-			planarCoils @5 : List(Filament);
-			controlCoils @6 : List(Filament);
+			mainCoils @5 : List(DataRef(Filament));
+			trimCoils @6 : List(DataRef(Filament));
+			controlCoils @7 : List(DataRef(Filament));
 		}
 	}
 }
