@@ -25,6 +25,24 @@ interface DataService @0xc6d48902ddb7e122 {
 	cache @2 [T] (source : DataRef(T)) -> (ref : DataRef(T));
 }
 
+# Archive types
+struct Archive {
+	struct CapabilityInfo {
+		dataRefInfo : union {
+			noDataRef @0 : Void;
+			refID @1 : Data;
+		}
+	}
+	struct Entry {
+		id @0 : Data;
+		data @1 : Data;
+		capabilities @2 : List(CapabilityInfo);
+		typeId @3 : UInt64;
+	}
+	root @0 : Entry;
+	extra @1 : List(Entry);
+}
+
 # Support data types
 
 struct Float64Tensor {

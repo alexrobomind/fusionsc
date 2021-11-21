@@ -8,7 +8,18 @@ using Data = import "data.capnp";
 using DataRef = Data.DataRef;
 using Float64Tensor = Data.Float64Tensor;
 
+# We want to support future evolution of the grid specification.
+# However, since added information might not be understood by some
+# subsystems, we divide the struct into specific versions. This way,
+# if future grids add additional information, (e.g. Stellarator symmetry),
+# they will be rejected by older code if those values are not set to default.
+
+# If you add flags to this struct, specify a version breakpoint and update
+# the GridVersion enum in magnetics.h and the gridVersion function in
+# magnetics.cpp
+
 struct ToroidalGrid {
+	# Version 1
 	rMin @0 : Float64;
 	rMax @1 : Float64;
 	zMin @2 : Float64;
@@ -19,7 +30,7 @@ struct ToroidalGrid {
 	nZ @6 : UInt64;
 	nPhi @7 : UInt64;
 	
-	stelSym @8 : Bool;
+	# New versions below
 }
 
 struct ComputedField {
@@ -27,9 +38,41 @@ struct ComputedField {
 	data @1 : DataRef(Float64Tensor);
 }
 
+# Interface for the resolution of device-specific information
+
+interface FieldResolver {
+	resolve @0 (field : MagneticField, followRefs : Bool = false) -> (field : MagneticField);
+}
+
+# Interface for the computation of magnetic fields
+
+interface FieldCalculator {
+	get @0 (grid : ToroidalGrid) -> (session : FieldCalculationSession);
+}
+
+interface FieldCalculationSession {
+	compute @0 (field : MagneticField) -> (computedField : ComputedField);
+}
+
+# The following structs describe instruction sets interpreted by the field calculator.
+# The nodes in this tree are subdivided into two categories:
+#
+# - General: These nodes can be interpreted by the field calculator. FieldResolver
+#   implementations should aim to only create nodes out of this category. They also
+#   don't have to handle these nodes, as they are implicitly handled by FieldResolverBase.
+#
+# - Device-specific: These nodes contain information specific to one or more devices.
+#   These nodes are not understood by the field calculator. The task of field resolvers
+#   is to transform these nodes into equivalent representations consisting only of
+#   general type nodes. Note that resolvers can fail to resolve nodes e.g. if the
+#   required data are not shipped with fscdue to data protection requirements of the
+#   individual facilities.
+
 struct MagneticField {
 	# Different ways to calculate the magnetic field
 	union {
+		# ============================= General =================================
+		
 		# Calculate the field by summing up contributions
 		sum @0 : List(MagneticField);
 		
@@ -54,10 +97,11 @@ struct MagneticField {
 		
 		invert @9 : MagneticField;
 		
-		# --- device-specific options, might require special infrastructure to resolve ---
+		# ========================= Device-specific ==========================
+		
+		# ------------------------------ W7-X --------------------------------
 
 		w7xMagneticConfig : group {
-			
 			union {
 				configurationDB : group {
 					# The W7-X config specification does not usually include a coil width
@@ -68,19 +112,19 @@ struct MagneticField {
 				
 				coilsAndCurrents : group {
 					# Currents in the non-planar coils
-					nonplanar @ 12 : List(Float64) = (10000, 10000, 10000, 10000, 10000);
+					nonplanar @ 12 : List(Float64) = [10000, 10000, 10000, 10000, 10000];
 					
 					# A list of planar coil currents
-					planar    @ 13 : List(Float64) = (0, 0);
+					planar    @ 13 : List(Float64) = [0, 0];
 					
 					# A list of trim coil currents
-					trim      @ 14 : List(Float64) = (0, 0, 0, 0, 0);
+					trim      @ 14 : List(Float64) = [0, 0, 0, 0, 0];
 					
 					# A list of control coil currents of either
 					# - length 2: Upper and Lower coils
 					# - length 5: Coils in each module
 					# - length 10: All 10 control coils
-					control @15 : List(Float64) = (0, 0);
+					control @15 : List(Float64) = [0, 0];
 					
 					# The coil set to use. Usually the default theory coils
 					coils @16 : W7XCoilSet;
@@ -92,28 +136,21 @@ struct MagneticField {
 
 struct Filament {
 	union {
+		# ============= General ============
 		inline @0 : Float64Tensor;
 		ref    @1 : DataRef(Filament);
+		
+		# ========= Device-specific ========
+		
+		# ------------- W7-X ---------------
 		
 		w7xCoilsDB @2 : UInt64;
 	}
 }
 
-# Interface for the resolution of device-specific information
+# =========================== Device-specifics =============================
 
-interface FieldResolver {
-	resolve @0 (field : MagneticField, followRefs : Bool = false) -> (field : MagneticField);
-}
-
-# Interface for the computation of magnetic fields
-
-interface FieldComputer {
-	compute @0 (field : MagneticField) -> (computedField : ComputedField);
-}
-
-interface FieldComputerFactory {
-	get @0 (grid : ToroidalGrid) -> (computer : FieldComputer);
-}
+# --------------------------------- W7-X -----------------------------------
 
 struct W7XCoilSet {
 	invertMainCoils @0 : Bool = true;

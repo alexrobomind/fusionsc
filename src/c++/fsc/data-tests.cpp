@@ -6,6 +6,8 @@
 
 #include <fsc/data-test.capnp.h>
 
+#include <capnp/serialize-text.h>
+
 #include "data.h"
 
 using namespace fsc;
@@ -16,7 +18,6 @@ TEST_CASE("local_publish") {
 	Library l = newLibrary();
 	LibraryThread th = l -> newThread();
 	
-	KJ_LOG(WARNING, "Starting data service");
 	LocalDataService ds(l);
 	
 	auto id   = kj::heapArray<const byte>({0x00, 0xFF});
@@ -24,10 +25,8 @@ TEST_CASE("local_publish") {
 	SECTION("raw") {
 		auto data = kj::heapArray<const byte>({0, 1, 2, 3, 4});
 		
-		KJ_LOG(WARNING, "Publishing");
 		LocalDataRef<capnp::Data> ref = ds.publish(id, kj::heapArray<const byte>(data));
 		
-		KJ_LOG(WARNING, "Getting");
 		ArrayPtr<const byte> data2 = ref.getRaw();
 		
 		REQUIRE(data == data2);
@@ -59,7 +58,7 @@ TEST_CASE("local_publish") {
 		}*/
 	}
 
-	SECTION("testData") {
+	SECTION("dataTransfer") {
 		using fsc::test::DataHolder;
 		using fsc::test::DataRefHolder;
 		
@@ -77,50 +76,52 @@ TEST_CASE("local_publish") {
 		DDH::Builder refHolder = mb2.initRoot<DDH>();
 		refHolder.setRef(ref1);
 		LocalDataRef<DDH> ref2 = ds.publish({0x01}, refHolder);
-
-		DDH::Reader refHolder2 = ref2.get();
-		LocalDataRef<DataHolder> ref12 = ds.download(refHolder2.getRef()).wait(ws);
-		DataHolder::Reader inner2 = ref12.get();
-
-		REQUIRE(inner.getData() == inner2.getData());
-	}
-}
-
-TEST_CASE("remote_publish") {
-	Library l = newLibrary();
-	LibraryThread th = l -> newThread();
-	
-	KJ_LOG(WARNING, "Starting data service");
-	LocalDataService ds1(l);
-	
-	Library l2 = newLibrary();
-	KJ_LOG(WARNING, "Starting second service");
-	LocalDataService ds2(l);
-	
-	SECTION("testData") {
-		using fsc::test::DataHolder;
-		using fsc::test::DataRefHolder;
 		
-		using DDH = DataRefHolder<DataHolder>;
-
-		auto& ws = th -> ioContext().waitScope;
-		auto data1 = kj::heapArray<const byte>({0x00, 0x01});
-
-		capnp::MallocMessageBuilder mb1;
-		DataHolder::Builder inner = mb1.initRoot<DataHolder>();
-		inner.setData(data1);
-		LocalDataRef<DataHolder> ref1 = ds1.publish({0x0}, inner);
-
-		capnp::MallocMessageBuilder mb2;
-		DDH::Builder refHolder = mb2.initRoot<DDH>();
-		refHolder.setRef(ref1);
-		LocalDataRef<DDH> ref2 = ds1.publish({0x1}, refHolder);
-
-		LocalDataRef<DDH> ref22 = ds2.download(ref2).wait(ws);
-		DDH::Reader refHolder2 = ref22.get();
-		LocalDataRef<DataHolder> ref12 = ds2.download(refHolder2.getRef()).wait(ws);
-		DataHolder::Reader inner2 = ref12.get();
-
-		REQUIRE(inner.getData() == inner2.getData());
+		SECTION("local") {
+			LocalDataRef<DataHolder> ref12 = ds.download(ref2.get().getRef()).wait(ws);
+			DataHolder::Reader inner2 = ref12.get();
+			REQUIRE(inner.getData() == inner2.getData());
+		}
+		
+		SECTION("local_bypass") {
+			LocalDataService ds2(l);
+			
+			LocalDataRef<DataHolder> ref12 = ds2.download(ref2.get().getRef()).wait(ws);
+			DataHolder::Reader inner2 = ref12.get();
+			REQUIRE(inner.getData() == inner2.getData());
+		}
+		
+		SECTION("remote") {
+			Library l2 = newLibrary();
+			LocalDataService ds2(l2);
+			
+			LocalDataRef<DataHolder> ref12 = ds2.download(
+				ds2.download(ref2).wait(ws).get().getRef()
+			).wait(ws);
+			DataHolder::Reader inner2 = ref12.get();
+			REQUIRE(inner.getData() == inner2.getData());
+		}
+		
+		SECTION("archive") {
+			capnp::MallocMessageBuilder tmp;
+			auto archive = tmp.initRoot<Archive>();
+			
+			ds.buildArchive(ref2, archive).wait(ws);
+			
+			Library l2 = newLibrary();
+			LocalDataService ds2(l2);
+			
+			LocalDataRef<DDH> ref22 = ds2.publishArchive<DDH>(archive);
+			LocalDataRef<DataHolder> ref12 = ds2.download(ref22.get().getRef()).wait(ws);
+			
+			DataHolder::Reader inner2 = ref12.get();
+			REQUIRE(inner.getData() == inner2.getData());
+		}
+		
+		/*capnp::MallocMessageBuilder tmp;
+		Archive::Builder archive = tmp.initRoot<Archive>();
+		ds.buildArchive<LocalDataRef<DDH>, DDH>(ref2, archive).wait(ws);
+		
+		KJ_LOG(WARNING, capnp::TextCodec().encode(archive));*/
 	}
 }
