@@ -70,6 +70,30 @@ inline Array<byte> wordsToBytes(Array<capnp::word> words) {
 	return bytesPtr.attach(mv(words));
 }
 
+inline Array<const capnp::word> bytesToWords(Array<const byte> bytes) {
+	ArrayPtr<const capnp::word> wordPtr = ArrayPtr<const capnp::word>(
+		reinterpret_cast<const capnp::word*>(bytes.begin()),
+		bytes.size() / sizeof(capnp::word)
+	);
+	return wordPtr.attach(mv(bytes));
+}
+
+inline ArrayPtr<const capnp::word> bytesToWords(ArrayPtr<const byte> bytes) {
+	ArrayPtr<const capnp::word> wordPtr = ArrayPtr<const capnp::word>(
+		reinterpret_cast<const capnp::word*>(bytes.begin()),
+		bytes.size() / sizeof(capnp::word)
+	);
+	return wordPtr;
+}
+
+inline Array<capnp::word> bytesToWords(Array<byte> bytes) {
+	ArrayPtr<capnp::word> wordPtr = ArrayPtr<capnp::word>(
+		reinterpret_cast<capnp::word*>(bytes.begin()),
+		bytes.size() / sizeof(capnp::word)
+	);
+	return wordPtr.attach(mv(bytes));
+}
+
 
 template<typename... T>
 using TupleFor = decltype(tuple(instance<T>()...));

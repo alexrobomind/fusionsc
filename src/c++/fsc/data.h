@@ -1,12 +1,14 @@
 #include <fsc/data.capnp.h>
 #include <capnp/any.h>
 #include <kj/async.h>
+//#include <kj/filesystem.h>
 
 #include "common.h"
 #include "local.h"
 
 namespace kj {
 	class File;
+	class ReadableFile;
 }
 
 namespace fsc {
@@ -81,8 +83,14 @@ public:
 	template<typename Ref, typename T = References<Ref>>
 	Promise<void> buildArchive(Ref reference, Archive::Builder out);
 	
+	template<typename Ref, typename T = References<Ref>>
+	Promise<void> writeArchive(Ref reference, const kj::File& out);	
+	
 	template<typename T>
 	LocalDataRef<T> publishArchive(Archive::Reader in);
+	
+	template<typename T>
+	LocalDataRef<T> publishArchive(const kj::ReadableFile& in);
 	
 	/**
 	 * Constructs a new data service instance using the shared backing store contained in the given

@@ -14,8 +14,9 @@ public:
 	LocalDataRef<capnp::AnyPointer> publish(ArrayPtr<const byte> id, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable, uint64_t cpTypeId);
 	
 	Promise<void> buildArchive(DataRef<capnp::AnyPointer>::Client ref, Archive::Builder out);
-	Promise<void> writeArchive(DataRef<capnp::AnyPointer>::Client ref, kj::File& out);
+	Promise<void> writeArchive(DataRef<capnp::AnyPointer>::Client ref, const kj::File& out);
 	LocalDataRef<capnp::AnyPointer> publishArchive(Archive::Reader archive);
+	LocalDataRef<capnp::AnyPointer> publishArchive(const kj::ReadableFile& f);
 	
 	kj::FiberPool downloadPool;
 	
@@ -189,8 +190,18 @@ Promise<void> LocalDataService::buildArchive(Ref ref, Archive::Builder out) {
 	return impl -> buildArchive(ref.asGeneric(), out);
 }
 
+template<typename Ref, typename T>
+Promise<void> LocalDataService::writeArchive(Ref ref, const kj::File& out) {
+	return impl -> writeArchive(ref.asGeneric(), out);
+}
+
 template<typename T>
 LocalDataRef<T> LocalDataService::publishArchive(Archive::Reader in) {
+	return impl -> publishArchive(in).as<T>();
+}
+
+template<typename T>
+LocalDataRef<T> LocalDataService::publishArchive(const kj::ReadableFile& in) {
 	return impl -> publishArchive(in).as<T>();
 }
 

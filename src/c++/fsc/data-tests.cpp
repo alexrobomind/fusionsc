@@ -3,6 +3,7 @@
 #include <kj/thread.h>
 #include <kj/string.h>
 #include <kj/exception.h>
+#include <kj/filesystem.h>
 
 #include <fsc/data-test.capnp.h>
 
@@ -112,6 +113,25 @@ TEST_CASE("local_publish") {
 			LocalDataService ds2(l2);
 			
 			LocalDataRef<DDH> ref22 = ds2.publishArchive<DDH>(archive);
+			LocalDataRef<DataHolder> ref12 = ds2.download(ref22.get().getRef()).wait(ws);
+			
+			DataHolder::Reader inner2 = ref12.get();
+			REQUIRE(inner.getData() == inner2.getData());
+		}
+		
+		SECTION("tmpfile-archive") {
+			INFO("opening");
+			Own<const kj::File> file = kj::newDiskFilesystem()->getCurrent().createTemporary();
+			INFO("checking");
+			*file;
+			INFO("writing");
+			ds.writeArchive(ref2, *file).wait(ws);
+			
+			Library l2 = newLibrary();
+			LocalDataService ds2(l2);
+			
+			INFO("reading");
+			LocalDataRef<DDH> ref22 = ds2.publishArchive<DDH>(*file);
 			LocalDataRef<DataHolder> ref12 = ds2.download(ref22.get().getRef()).wait(ws);
 			
 			DataHolder::Reader inner2 = ref12.get();

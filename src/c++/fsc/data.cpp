@@ -379,8 +379,8 @@ Promise<void> internal::LocalDataServiceImpl::buildArchive(DataRef<capnp::AnyPoi
 	}).attach(this -> addRef());
 }
 
-Promise<void> internal::LocalDataServiceImpl::writeArchive(DataRef<capnp::AnyPointer>::Client ref, kj::File& out) {
-	Own<capnp::MallocMessageBuilder> msg;
+Promise<void> internal::LocalDataServiceImpl::writeArchive(DataRef<capnp::AnyPointer>::Client ref, const kj::File& out) {
+	auto msg = kj::heap<capnp::MallocMessageBuilder>();
 	auto archive = msg -> initRoot<Archive>();
 	
 	return buildArchive(ref, archive)
@@ -434,6 +434,73 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(A
 		LocalRef local = publish(
 			entry.getId(),
 			kj::heapArray<const byte>(entry.getData()),
+			capTableBuilder.finish(),
+			entry.getTypeId()
+		);
+		
+		KJ_IF_MAYBE(target, fulfillers.find(entry.getId())) {
+			(*target) -> fulfill(cp(local));
+		} else {
+			KJ_FAIL_ASSERT();
+		}
+		
+		return local;
+	};
+	
+	prepareEntry(archive.getRoot());
+	for(auto e : archive.getExtra())
+		prepareEntry(e);
+	
+	for(auto e : archive.getExtra())
+		handleEntry(e);
+	
+	return handleEntry(archive.getRoot());
+}
+
+
+LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(const kj::ReadableFile & f) {
+	using RemoteRef = DataRef<capnp::AnyPointer>::Client;
+	using LocalRef  = LocalDataRef<capnp::AnyPointer>;
+	
+	// Open file globally to read the overview data
+	auto fileData = f.stat();
+	kj::Array<const capnp::word> data = bytesToWords(f.mmap(0, fileData.size));
+	capnp::FlatArrayMessageReader reader(data);
+	auto archive = reader.getRoot<Archive>();
+	
+	kj::TreeMap<ID, Own<kj::PromiseFulfiller<LocalRef>>> fulfillers;
+	kj::TreeMap<ID, RemoteRef> placeholderClients;
+	
+	kj::TreeMap<ID, Archive::Entry::Reader> entries;
+	
+	auto prepareEntry = [&](Archive::Entry::Reader entry) {
+		// Create promise-based clients for remote reference resolution
+		auto pfPair = kj::newPromiseAndFulfiller<LocalRef>();
+		fulfillers.insert(entry.getId(), mv(pfPair.fulfiller));
+		placeholderClients.insert(entry.getId(), mv(pfPair.promise));
+		
+		entries.insert(entry.getId(), entry);
+	};
+	
+	auto handleEntry = [&, this](Archive::Entry::Reader entry) {
+		auto capInfoTable = entry.getCapabilities();
+		auto capTableBuilder = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(capInfoTable.size());
+		
+		for(auto capInfo : capInfoTable) {
+			if(capInfo.getDataRefInfo().isRefID()) {
+				KJ_IF_MAYBE(client, placeholderClients.find(capInfo.getDataRefInfo().getRefID())) {
+					capTableBuilder.add(capnp::ClientHook::from(*client));
+				} else {
+					KJ_FAIL_REQUIRE("Referenced data ref missing in archive");
+				}
+			} else {
+				capTableBuilder.add(nullptr);
+			}
+		}
+		
+		LocalRef local = publish(
+			entry.getId(),
+			f.mmap(entry.getData().begin() - data.asBytes().begin(), entry.getData().size()),
 			capTableBuilder.finish(),
 			entry.getTypeId()
 		);
