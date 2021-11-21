@@ -1,8 +1,13 @@
-set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
+set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/fsc)
+file(MAKE_DIRECTORY ${CAPNPC_OUTPUT_DIR})
+
 CAPNP_GENERATE_CPP(
 	FSC_CP_SRC
 	FSC_CP_HEADERS
+	
 	data.capnp
+	data-test.capnp
+	magnetics.capnp
 )
 unset(CAPNPC_OUTPUT_DIR)
 
@@ -16,6 +21,8 @@ add_library(
 	local.cpp
 	store.h
 	store.cpp
+	data.h
+	data.cpp
 	${FSC_CP_HEADERS}
 	${FSC_CP_SRC}
 )
@@ -32,5 +39,6 @@ target_sources(
 	PUBLIC
 	local-tests.cpp
 	random-tests.cpp
+	data-tests.cpp
 )
 target_link_libraries(tests PUBLIC fsc)
