@@ -5,6 +5,8 @@
 #include <kj/filesystem.h>
 #include <kj/map.h>
 
+#include <functional>
+
 #include "data.h"
 
 namespace {
