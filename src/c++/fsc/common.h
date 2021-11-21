@@ -1,6 +1,7 @@
 #pragma once
 
 #include <capnp/common.h>
+#include <capnp/message.h>
 #include <kj/common.h>
 #include <kj/tuple.h>
 
@@ -140,8 +141,8 @@ struct ID {
 	inline bool operator == (const T& other) const { return this->cmp(other) == 0; }
 	
 	template<typename T>
-	ID fromReader(T) {
-		return ID(wordsToBytes(capnp::canonicalize(T)));
+	ID fromReader(T t) {
+		return ID(wordsToBytes(capnp::canonicalize(t)));
 	}
 };
 
