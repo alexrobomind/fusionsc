@@ -80,17 +80,33 @@ public:
 	template<typename Reader, typename T = capnp::FromAny<Reader>>
 	LocalDataRef<T> publish(ArrayPtr<const byte> id, Reader reader);
 	
+	/**
+	 * Downloads the target data and all its transitive dependencies and writes them
+	 * into an archive file. This file can then be shared with other customers to provide
+	 * them a deep copy of the stored data.
+	 */
 	template<typename Ref, typename T = References<Ref>>
-	Promise<void> buildArchive(Ref reference, Archive::Builder out);
+	Promise<void> writeArchive(Ref reference, const kj::File& out) KJ_WARN_UNUSED_RESULT;	
 	
-	template<typename Ref, typename T = References<Ref>>
-	Promise<void> writeArchive(Ref reference, const kj::File& out);	
-	
-	template<typename T>
-	LocalDataRef<T> publishArchive(Archive::Reader in);
-	
+	/**
+	 * Reads an archive file and publishes all data contained within. Returns a LocalDataRef
+	 * to the root used when writing the archive.
+	 */
 	template<typename T>
 	LocalDataRef<T> publishArchive(const kj::ReadableFile& in);
+	
+	/**
+	 * Like writeArchive, but instead of writing to a file, stores the data in memory in the
+	 * provided Archive::Builder.
+	 */
+	template<typename Ref, typename T = References<Ref>>
+	Promise<void> buildArchive(Ref reference, Archive::Builder out) KJ_WARN_UNUSED_RESULT;
+	
+	/**
+	 * Like publishArchive, but copies the data from the in-memory structure given
+	 */
+	template<typename T>
+	LocalDataRef<T> publishArchive(Archive::Reader in);
 	
 	/**
 	 * Constructs a new data service instance using the shared backing store contained in the given
