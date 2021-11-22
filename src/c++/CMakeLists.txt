@@ -1,6 +1,6 @@
 # Setup tests
 add_executable(tests tests_main.cpp)
-target_link_libraries(tests PUBLIC Catch2::Catch2WithMain deps capnpc)
+target_link_libraries(tests PUBLIC Catch2::Catch2WithMain deps)
 
 set(SFC_TEST_DIR "${CMAKE_BINARY_DIR}/tests")
 

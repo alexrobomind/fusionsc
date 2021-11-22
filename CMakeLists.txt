@@ -120,7 +120,7 @@ endif()
 
 
 add_library(deps INTERFACE)
-target_link_libraries(deps INTERFACE botan CapnProto::capnp-rpc)
+target_link_libraries(deps INTERFACE botan CapnProto::capnp-rpc CapnProto::capnp-json CapnProto::kj-http)
 
 # Set up testing subsystem
 include(CTest)

@@ -8,6 +8,7 @@ CAPNP_GENERATE_CPP(
 	data.capnp
 	data-test.capnp
 	magnetics.capnp
+	http.capnp
 )
 unset(CAPNPC_OUTPUT_DIR)
 
@@ -19,12 +20,18 @@ add_library(
 	
 	local.h
 	local.cpp
+	
 	store.h
 	store.cpp
+	
 	data.h
 	data.cpp
+	
 	magnetics.h
 	magnetics.cpp
+	
+	http.h
+	http.cpp
 	${FSC_CP_HEADERS}
 	${FSC_CP_SRC}
 )
@@ -42,5 +49,6 @@ target_sources(
 	local-tests.cpp
 	random-tests.cpp
 	data-tests.cpp
+	http-tests.cpp
 )
 target_link_libraries(tests PUBLIC fsc)

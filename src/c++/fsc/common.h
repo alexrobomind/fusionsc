@@ -94,6 +94,12 @@ inline Array<capnp::word> bytesToWords(Array<byte> bytes) {
 	return wordPtr.attach(mv(bytes));
 }
 
+template<typename T>
+Promise<T*> share(Own<T> own) {
+	Promise<T*> resultRef(own.get());
+	return resultRef.attach(mv(own));
+}
+
 
 template<typename... T>
 using TupleFor = decltype(tuple(instance<T>()...));
