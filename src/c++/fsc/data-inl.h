@@ -1,3 +1,5 @@
+#include <kj/map.h>
+
 namespace fsc {
 
 namespace internal {
@@ -22,6 +24,7 @@ public:
 	
 private:
 	Promise<LocalDataRef<capnp::AnyPointer>> doDownload(DataRef<capnp::AnyPointer>::Client src, bool recursive);
+	Promise<Archive::Entry::Builder> createArchiveEntry(DataRef<capnp::AnyPointer>::Client ref, kj::TreeMap<ID, capnp::Orphan<Archive::Entry>>& entries, capnp::Orphanage orphanage);
 	
 	capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> serverSet;
 	Library library;

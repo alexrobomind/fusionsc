@@ -196,17 +196,16 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(ArrayPtr
 }
 
 Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownload(DataRef<capnp::AnyPointer>::Client src, bool recursive) {
-	// Use a fiber for downloading
-	
-	return downloadPool.startFiber([this, recursive, src](kj::WaitScope& ws) mutable {
-		// Retrieve metadata and cap table
-		auto metadataPromise = src.metadataRequest().send();
-		auto capTablePromise = src.capTableRequest().send();
+	using RemoteRef = DataRef<capnp::AnyPointer>;
+	using capnp::Response;
+	using EntryPromise = Promise<Own<const LocalDataStore::Entry>>;
 		
-		// Process the capability table
-		// We do this first, because the cap table might contain links to other datarefs
-		// which we have to download as well
-		auto capTableResponse = capTablePromise.wait(ws); // This needs to be kept alive
+	// Allocate backend struct
+	auto backend = kj::refcounted<internal::LocalDataRefImpl>();
+	
+	// Sub-process 1: Download capabilities
+	auto downloadCaps = src.capTableRequest().send()
+	.then([backend = backend->addRef(), recursive, this](Response<RemoteRef::CapTableResults> capTableResponse) mutable {
 		auto capTable = capTableResponse.getTable();
 		
 		auto capHooks = kj::heapArray<Maybe<Own<capnp::ClientHook>>>(capTable.size());
@@ -239,34 +238,34 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownl
 		auto capClients = kj::heapArrayBuilder<capnp::Capability::Client>(capTable.size());
 		for(unsigned int i = 0; i < capTable.size(); ++i) {
 			capClients.add(capTable[i]);
-		}		
+		}
 		
-		// Now wait for the metadata to arrive.
-		// We use this to check whether we need to download any data at all (as we might)
-		// still have a copy of the data alive
-		auto metadataResponse = metadataPromise.wait(ws); // This needs to be kept alive
+		backend->readerTable = kj::heap<capnp::ReaderCapabilityTable>(mv(capHooks));
+		backend->capTableClients = capClients.finish();
+	});
+	
+	// Sub-process 2: Download metadata and (if neccessary) data
+	auto downloadData = src.metadataRequest().send()
+	.then([backend = backend->addRef(), src, this](Response<RemoteRef::MetadataResults> metadataResponse) mutable -> EntryPromise {
 		auto metadata = metadataResponse.getMetadata();
-		
-		Own<const LocalDataStore::Entry> entry;
-		
+		backend->_metadata.setRoot(metadata);
+				
 		// Check if we have the ID already
 		{
 			auto lStore = library -> store.lockShared();
 			KJ_IF_MAYBE(rowPtr, lStore -> table.find(metadata.getId())) {
-				entry = (*rowPtr) -> addRef();
+				return (*rowPtr) -> addRef();
 			}
 		}
 		
-		// If id not found, we need to download
-		if(entry.get() == nullptr) {
-			// Block this task (not the thread itself, we are in a fiber) until
-			// data have arrived.
-			auto rawBytes = src.rawBytesRequest().send().wait(ws);
-			
+		return src.rawBytesRequest().send()
+		.then([backend = mv(backend), this](Response<RemoteRef::RawBytesResults> rawBytesResponse) mutable {
 			// Copy the data into a heap buffer
-			entry = kj::atomicRefcounted<LocalDataStore::Entry>(
+			auto metadata = backend->_metadata.getRoot<RemoteRef::Metadata>();
+			
+			auto entry = kj::atomicRefcounted<const LocalDataStore::Entry>(
 				metadata.getId(),
-				kj::heapArray<const byte>(rawBytes.getData())
+				kj::heapArray<const byte>(rawBytesResponse.getData())
 			);
 			
 			// Lock the store again, check for concurrent download and remember row
@@ -282,101 +281,104 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownl
 					lStore -> table.insert(entry -> addRef());
 				}
 			}
+			
+			return entry;
+		});
+	})
+	.then([backend = backend->addRef()](Own<const LocalDataStore::Entry> entry) mutable {
+		backend->entryRef = mv(entry);
+	});
+	
+	auto allDoneBuilder = kj::heapArrayBuilder<Promise<void>>(2);
+	allDoneBuilder.add(mv(downloadCaps));
+	allDoneBuilder.add(mv(downloadData));
+	
+	auto allDone = kj::joinPromises(allDoneBuilder.finish());
+	
+	return allDone.then([this, backend = backend->addRef()]() mutable {
+		return LocalDataRef<capnp::AnyPointer>(backend->addRef(), this -> serverSet);
+	}).attach(this -> addRef(), backend -> addRef());
+}
+
+Promise<Archive::Entry::Builder> internal::LocalDataServiceImpl::createArchiveEntry(DataRef<capnp::AnyPointer>::Client ref, kj::TreeMap<ID, capnp::Orphan<Archive::Entry>>& entries, capnp::Orphanage orphanage) {
+	using RemoteRef = DataRef<capnp::AnyPointer>::Client;
+	using LocalRef  = LocalDataRef<capnp::AnyPointer>;
+	using capnp::Orphan;
+	
+	return download(ref, false).then([this, &entries, orphanage](LocalDataRef<capnp::AnyPointer> local) mutable -> Promise<Archive::Entry::Builder> {
+		auto id = local.getID();
+		
+		// The ref is already stored locally. Return the entry
+		KJ_IF_MAYBE(entry, entries.find(id)) {
+			return entry -> get();
 		}
 		
-		// Initialize the backend struct with everything
-		auto backend = kj::refcounted<internal::LocalDataRefImpl>();
-		backend->readerTable = kj::heap<capnp::ReaderCapabilityTable>(mv(capHooks));
-		backend->capTableClients = capClients.finish();
-		backend->entryRef = mv(entry);
+		auto capTable = local.getCapTable();
 		
-		backend->_metadata.setRoot(metadata);
+		// The ref is not yet stored. We need to create a new entry.
+		auto newOrphan = orphanage.newOrphan<Archive::Entry>();
+		auto newEntry = newOrphan.get();
+		
+		// Store entry for orphan in entry table
+		entries.insert(id, mv(newOrphan));
+		
+		newEntry.setId(id);
+		newEntry.setData(local.getRaw());
+		newEntry.setTypeId(local.getTypeID());
+		newEntry.initCapabilities((unsigned int) capTable.size());
+		
+		auto subDownloads = kj::heapArrayBuilder<Promise<void>>(capTable.size());
+		
+		// Try to inspect child references
+		for(unsigned int i = 0; i < capTable.size(); ++i) {
+			auto capRef = newEntry.getCapabilities()[i];
+			
+			subDownloads.add(
+				// Try to download sub references and reference them in table
+				createArchiveEntry(capTable[i].castAs<DataRef<capnp::AnyPointer>>(), entries, orphanage)
+				.then([capRef](Archive::Entry::Builder b) mutable -> void {
+					capRef.getDataRefInfo().setRefID(b.getId());
+				})
 				
-		// Now construct a local data ref from the backend
-		return LocalDataRef<capnp::AnyPointer>(backend->addRef(), this -> serverSet);
+				// If download fails due to UNIMPLEMENTED, remember that this 
+				// is no data ref.
+				.catch_([capRef](kj::Exception&& e) mutable -> void {
+					if(e.getType() != kj::Exception::Type::UNIMPLEMENTED)
+						throw e;
+					
+					capRef.getDataRefInfo().setNoDataRef();
+				})
+			);
+		}
+		
+		return kj::joinPromises(subDownloads.finish()).then([newEntry]() { return newEntry; });
 	});
 }
 
 Promise<void> internal::LocalDataServiceImpl::buildArchive(DataRef<capnp::AnyPointer>::Client root, Archive::Builder out) {
-	using RemoteRef = DataRef<capnp::AnyPointer>::Client;
-	using LocalRef  = LocalDataRef<capnp::AnyPointer>;
-	
 	using kj::TaskSet;
-	using capnp::Orphan;
 	
 	using AnyArchive = Archive;
 	
-	return downloadPool.startFiber([this, root, out](kj::WaitScope& ws) mutable {		
-		auto orphanage = capnp::Orphanage::getForMessageContaining(out);
-		kj::TreeMap<ID, Orphan<AnyArchive::Entry>> entries;
-				
-		std::function<Promise<AnyArchive::Entry::Builder>(RemoteRef)> createEntry;
-		createEntry = [&, this](RemoteRef ref) -> Promise<AnyArchive::Entry::Builder> {
-			return download(ref, false)
-			.then([&](LocalRef local) -> Promise<AnyArchive::Entry::Builder> {
-				auto id = local.getID();
-				
-				// The ref is already stored locally. Return the entry
-				KJ_IF_MAYBE(entry, entries.find(id)) {
-					return entry -> get();
-				}
-				
-				auto capTable = local.getCapTable();
-				
-				// The ref is not yet stored. We need to create a new entry.
-				auto newOrphan = orphanage.newOrphan<AnyArchive::Entry>();
-				auto newEntry = newOrphan.get();
-				
-				// Store entry for orphan in entry table
-				entries.insert(id, mv(newOrphan));
-				
-				newEntry.setId(id);
-				newEntry.setData(local.getRaw());
-				newEntry.setTypeId(local.getTypeID());
-				newEntry.initCapabilities((unsigned int) capTable.size());
-				
-				auto subDownloads = kj::heapArrayBuilder<Promise<void>>(capTable.size());
-				
-				// Try to inspect child references
-				for(unsigned int i = 0; i < capTable.size(); ++i) {
-					auto capRef = newEntry.getCapabilities()[i];
-					
-					subDownloads.add(
-						// Try to download sub references and reference them in table
-						createEntry(capTable[i].castAs<DataRef<capnp::AnyPointer>>())
-						.then([capRef](AnyArchive::Entry::Builder b) mutable -> void {
-							capRef.getDataRefInfo().setRefID(b.getId());
-						})
-						
-						// If download fails due to UNIMPLEMENTED, remember that this 
-						// is no data ref.
-						.catch_([capRef](kj::Exception&& e) mutable -> void {
-							if(e.getType() != kj::Exception::Type::UNIMPLEMENTED)
-								throw e;
-							
-							capRef.getDataRefInfo().setNoDataRef();
-						})
-					);
-				}
-				
-				return kj::joinPromises(subDownloads.finish()).then([newEntry]() { return newEntry; });
-			});
-		};
-		
-		AnyArchive::Entry::Builder rootEntry = createEntry(root).wait(ws);
-				
+	auto orphanage = capnp::Orphanage::getForMessageContaining(out);
+	auto entries = kj::heap<kj::TreeMap<ID, capnp::Orphan<AnyArchive::Entry>>>();
+	
+	auto task = createArchiveEntry(root, *entries, orphanage)
+	.then([out, &entries = *entries](Archive::Entry::Builder rootEntry) mutable {
 		unsigned int offset = 0;
 		out.initExtra((unsigned int) (entries.size() - 1));
 		
 		for(auto& mapEntry : entries) {
-			Orphan<AnyArchive::Entry>& orphan = mapEntry.value;
+			capnp::Orphan<Archive::Entry>& orphan = mapEntry.value;
 			
 			if(orphan.get().getId() == rootEntry.getId())
 				out.adoptRoot(mv(orphan));
 			else
 				out.getExtra().adoptWithCaveats(offset++, mv(orphan));
 		}
-	}).attach(this -> addRef());
+	});
+	
+	return task.attach(this -> addRef(), mv(entries));
 }
 
 Promise<void> internal::LocalDataServiceImpl::writeArchive(DataRef<capnp::AnyPointer>::Client ref, const kj::File& out) {

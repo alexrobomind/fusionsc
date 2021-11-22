@@ -1,6 +1,7 @@
 #include <list>
 
 #include "local.h"
+#include "data.h"
 
 namespace fsc {
 	
@@ -9,8 +10,13 @@ namespace fsc {
 ThreadHandle::ThreadHandle(const LibraryHandle* l) :
 	_ioContext(kj::setupAsyncIo()),
 	_library(l -> addRef()),
-	_executor(kj::getCurrentThreadExecutor())
+	_executor(kj::getCurrentThreadExecutor()),
+	_dataService(kj::heap<LocalDataService>(l -> addRef()))
 {}
+
+ThreadHandle::~ThreadHandle() {
+	//delete _dataService;
+}
 
 // === class CrossThreadConnection ===
 

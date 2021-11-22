@@ -12,6 +12,10 @@
 #include "random.h"
 
 namespace fsc {
+	class LocalDataService;
+}
+
+namespace fsc {
 	
 class LibraryHandle;
 using Library = Own<const LibraryHandle>;
@@ -57,6 +61,7 @@ class ThreadHandle : public kj::Refcounted {
 public:
 	// Creates a new library handle from a library handle
 	ThreadHandle(const LibraryHandle* l);
+	~ThreadHandle();
 	
 	// Accessors for local use only
 	
@@ -79,6 +84,14 @@ public:
 	 */
 	inline kj::Network&        network()   { return _ioContext.provider -> getNetwork(); }
 	
+	kj::Array<const byte> randomID() {
+		auto result = kj::heapArray<byte>(16);
+		rng().randomize(result);
+		return result;
+	}
+	
+	LocalDataService& dataService() { return *_dataService; }
+	
 	// Accessors that may be used cross-thread
 	
 	// Convenience method to retrieve the local data store from the library
@@ -97,6 +110,8 @@ private:
 	Library _library;
 	
 	const kj::Executor& _executor;
+	
+	Own<LocalDataService> _dataService;
 };
 
 

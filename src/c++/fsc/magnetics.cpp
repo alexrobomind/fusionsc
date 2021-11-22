@@ -1,7 +1,12 @@
+#include <capnp/message.h>
+
+#include "magnetics.h"
+#include "data.h"
+
 namespace fsc {
 	
-unsigned int toroidalGridVersion(ToroidalGrid::Reader grid) {
-	MallocMessageBuilder tmp;
+ToroidalGridVersion toroidalGridVersion(ToroidalGrid::Reader grid) {
+	capnp::MallocMessageBuilder tmp;
 	auto ref = tmp.initRoot<ToroidalGrid>();
 	
 	// Version 1
@@ -15,52 +20,53 @@ unsigned int toroidalGridVersion(ToroidalGrid::Reader grid) {
 	ref.setNZ(grid.getNZ());
 	ref.setNPhi(grid.getNPhi());
 	
-	if(capnp::canonicalize(ref) == capnp::canonicalize(grid))
-		return TGRID_V1;
+	if(capnp::canonicalize(ref.asReader()).asBytes() == capnp::canonicalize(grid).asBytes())
+		return ToroidalGridVersion::V1;
 	
-	return TGRID_V_UNKNOWN;
+	return ToroidalGridVersion::UNKNOWN;
 }
 
-virtual Promise<void> FieldResolverBase::resolve(ResolveContext context) override {
+Promise<void> FieldResolverBase::resolve(ResolveContext context) {
 	auto input = context.getParams().getField();
 	auto output = context.getResults().initField();
 	
-	return processField(input, output, context.getFollowRefs());
+	return processField(input, output, context);
 }
 
-Promise<void> FieldResolverBase::processField(MagneticField::Reader input, MagneticField::Builder output, ResolveContext& context) {
+Promise<void> FieldResolverBase::processField(MagneticField::Reader input, MagneticField::Builder output, ResolveContext context) {
 	switch(input.which()) {
-		case MagneticField::SUM:
+		case MagneticField::SUM: {
 			auto inSum = input.getSum();
 			auto outSum = output.initSum(inSum.size());
 			
-			TaskSet subTasks;
-			for(size_t i = 0; i < inSum.size(); ++i) {
-				subTasks.add(processField(input[i], output[i], context));
+			auto subTasks = kj::heapArrayBuilder<Promise<void>>(inSum.size());
+			for(unsigned int i = 0; i < inSum.size(); ++i) {
+				subTasks.add(processField(inSum[i], outSum[i], context));
 			}
 			
-			return subTasks.onEmpty();
-		
-		case MagneticField::REF:
-			if(!context.getFollowRefs()) {
+			return kj::joinPromises(subTasks.finish()).attach(thisCap());
+		}
+		case MagneticField::REF: {
+			if(!context.getParams().getFollowRefs()) {
 				output.setRef(input.getRef());
 				return kj::READY_NOW;
 			}
 			
-			auto tmpMessage = kj::heap<MallocMessageBuilder>();
+			auto tmpMessage = kj::heap<capnp::MallocMessageBuilder>();
 			MagneticField::Builder newOutput = tmpMessage -> initRoot<MagneticField>();
 			
-			return th.dataService().download(input.getRef()).then([newOutput, followRefs, &context] (LocalDataRef<MagneticField> ref) {
-				return processField(ref.get(), newOutput, context)
-			}).then([newOutput](){
-				return output.setRef(lt.dataService().publish(lt.randomID(), newOutput));
+			return lt->dataService().download(input.getRef())
+			.then([this, newOutput, context] (LocalDataRef<MagneticField> ref) mutable {
+				return processField(ref.get(), newOutput, context);
+			}).then([this, output, newOutput]() mutable {
+				return output.setRef(lt->dataService().publish(lt->randomID(), newOutput));
 			}).attach(mv(tmpMessage), thisCap());
-		
-		case MagneticField::COMPUTED_FIELD:
+		}
+		case MagneticField::COMPUTED_FIELD: {
 			output.setComputedField(input.getComputedField());
 			return kj::READY_NOW;
-		
-		case MagneticField::FILAMENT_FIELD:
+		}
+		case MagneticField::FILAMENT_FIELD: {
 			auto filIn  = input.getFilamentField();
 			auto filOut = output.initFilamentField();
 			
@@ -69,42 +75,43 @@ Promise<void> FieldResolverBase::processField(MagneticField::Reader input, Magne
 			filOut.setWindingNo(filIn.getWindingNo());
 			
 			return processFilament(filIn.getFilament(), filOut.initFilament(), context);
-		
-		case MagneticField::SCALE_BY:
-			output.setFactor(input.getFactor());
-			return processField(input.getField(), output.initField(), context);
-		
-		case MagneticField::INVERT:
+		}
+		case MagneticField::SCALE_BY: {
+			output.initScaleBy().setFactor(input.getScaleBy().getFactor());
+			return processField(input.getScaleBy().getField(), output.getScaleBy().initField(), context);
+		}
+		case MagneticField::INVERT: {
 			return processField(input.getInvert(), output.initInvert(), context);
-		
+		}
 		default:
 			return customField(input, output, context);			
 	}
 }
 
-Promise<void> FieldResolverBase::processFilament(Filament::Reader input, Filament::Builder output, ResolveContext& context) {
+Promise<void> FieldResolverBase::processFilament(Filament::Reader input, Filament::Builder output, ResolveContext context) {
 	switch(input.which()) {
-		case Filament::INLINE:
+		case Filament::INLINE: {
 			output.setInline(input.getInline());
 			return kj::READY_NOW;
-		
-		case Filament::REF:
-			if(!context.getFollowRefs()) {
+		}
+		case Filament::REF: {
+			if(!context.getParams().getFollowRefs()) {
 				output.setRef(input.getRef());
 				return kj::READY_NOW;
 			}
 			
-			auto tmpMessage = kj::heap<MallocMessageBuilder>();
-			MagneticField::Builder newOutput = tmpMessage -> initRoot<MagneticField>();
+			auto tmpMessage = kj::heap<capnp::MallocMessageBuilder>();
+			Filament::Builder newOutput = tmpMessage -> initRoot<Filament>();
 			
-			return th.dataService().download(input.getRef()).then([newOutput, followRefs] (LocalDataRef<MagneticField> ref) {
-				return processFilament(ref.get(), newOutput, followRefs)
-			}).then([newOutput](){
-				return output.setRef(lt.dataService().publish(lt.randomID(), newOutput));
+			return lt->dataService().download(input.getRef())
+			.then([this, newOutput, context] (LocalDataRef<Filament> ref) mutable {
+				return processFilament(ref.get(), newOutput, context);
+			}).then([this, output, newOutput]() mutable {
+				return output.setRef(lt->dataService().publish(lt->randomID(), newOutput));
 			}).attach(mv(tmpMessage), thisCap());
-		
+		}
 		default:
-			return customFilament(Filament::Reader input, Filament::Builder output, bool followRefs);
+			return customFilament(input, output, context);
 	}
 }
 

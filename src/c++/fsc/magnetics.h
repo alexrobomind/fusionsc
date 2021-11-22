@@ -1,6 +1,9 @@
 #include <fsc/magnetics.capnp.h>
 #include <kj/map.h>
 
+#include "common.h"
+#include "local.h"
+
 namespace fsc {
 
 /**
@@ -33,11 +36,11 @@ public:
 	
 	virtual Promise<void> resolve(ResolveContext context) override;
 	
-	Promise<void> processField(MagneticField::Reader input, MagneticField::Builder output, ResolveContext& context);
-	Promise<void> processFilament(Filament::Reader input, Filament::Builder output, ResolveContext& context);
+	Promise<void> processField(MagneticField::Reader input, MagneticField::Builder output, ResolveContext context);
+	Promise<void> processFilament(Filament::Reader input, Filament::Builder output, ResolveContext context);
 	
-	virtual Promise<void> customField   (MagneticField::Reader input, MagneticField::Builder output, ResolveContext& context) = 0;
-	virtual Promise<void> customFilament(Filament     ::Reader input, Filament     ::Builder output, ResolveContext& context) = 0;
+	virtual Promise<void> customField   (MagneticField::Reader input, MagneticField::Builder output, ResolveContext context) = 0;
+	virtual Promise<void> customFilament(Filament     ::Reader input, Filament     ::Builder output, ResolveContext context) = 0;
 };
 
 }

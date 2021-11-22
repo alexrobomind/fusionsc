@@ -23,6 +23,8 @@ add_library(
 	store.cpp
 	data.h
 	data.cpp
+	magnetics.h
+	magnetics.cpp
 	${FSC_CP_HEADERS}
 	${FSC_CP_SRC}
 )
