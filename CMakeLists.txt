@@ -39,18 +39,24 @@ FetchContent_Declare(
   Catch2
   GIT_REPOSITORY https://github.com/catchorg/Catch2.git
   GIT_TAG        devel
+  GIT_SHALLOW    On
+  GIT_PROGRESS   On
 )
 
 FetchContent_Declare(
   CapnProto
   GIT_REPOSITORY https://github.com/capnproto/capnproto.git
   GIT_TAG        v0.9.1
+  GIT_SHALLOW    On
+  GIT_PROGRESS   On
 )
 
 FetchContent_Declare(
   Botan
   GIT_REPOSITORY https://github.com/randombit/botan.git
   GIT_TAG        2.18.2
+  GIT_SHALLOW    On
+  GIT_PROGRESS   On
 )
 
 macro(fetch_dependency DEPNAME)
