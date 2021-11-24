@@ -4,6 +4,21 @@ namespace fsc {
 
 namespace internal {
 
+// Specializations for TensorFor
+
+#define FSC_DECLARE_TENSOR(Val, T) \
+	template<> \
+	struct TensorFor_<Val> { using Type = T; }
+
+FSC_DECLARE_TENSOR(uint32_t, UInt32Tensor);
+FSC_DECLARE_TENSOR( int32_t,  Int32Tensor);
+FSC_DECLARE_TENSOR(uint64_t, UInt64Tensor);
+FSC_DECLARE_TENSOR( int64_t,  Int32Tensor);
+FSC_DECLARE_TENSOR(float,  Float32Tensor);
+FSC_DECLARE_TENSOR(double,  Float64Tensor);
+
+#undef FSC_DECLARE_TENSOR
+
 /**
  * Backend implementation of the local data service.
  */

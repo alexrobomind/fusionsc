@@ -9,6 +9,10 @@ CAPNP_GENERATE_CPP(
 	data-test.capnp
 	magnetics.capnp
 	http.capnp
+	offline.capnp
+	
+	devices/w7x.capnp
+	devices/w7x-test.capnp
 )
 unset(CAPNPC_OUTPUT_DIR)
 
@@ -32,6 +36,10 @@ add_library(
 	
 	http.h
 	http.cpp
+	
+	devices/w7x.h
+	devices/w7x.cpp
+	
 	${FSC_CP_HEADERS}
 	${FSC_CP_SRC}
 )
@@ -40,6 +48,7 @@ target_include_directories(
 	fsc
 	PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
 	# TODO $<INSTALL_INTERFACE:???>
 )
 
@@ -50,5 +59,6 @@ target_sources(
 	random-tests.cpp
 	data-tests.cpp
 	http-tests.cpp
+	devices/w7x-test.cpp
 )
 target_link_libraries(tests PUBLIC fsc)

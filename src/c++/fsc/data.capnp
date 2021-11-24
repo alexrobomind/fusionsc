@@ -50,6 +50,11 @@ struct Float64Tensor {
 	data  @1 : List(Float64);
 }
 
+struct Float32Tensor {
+	shape @0 : List(UInt64);
+	data  @1 : List(Float32);
+}
+
 struct Int64Tensor {
 	shape @0 : List(UInt64);
 	data  @1 : List(Int64);
@@ -58,4 +63,14 @@ struct Int64Tensor {
 struct UInt64Tensor {
 	shape @0 : List(UInt64);
 	data  @1 : List(UInt64);
+}
+
+struct Int32Tensor {
+	shape @0 : List(UInt64);
+	data  @1 : List(Int32);
+}
+
+struct UInt32Tensor {
+	shape @0 : List(UInt64);
+	data  @1 : List(UInt32);
 }

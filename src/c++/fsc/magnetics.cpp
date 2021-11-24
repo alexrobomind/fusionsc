@@ -33,6 +33,8 @@ Promise<void> FieldResolverBase::resolve(ResolveContext context) {
 	return processField(input, output, context);
 }
 
+FieldResolverBase::FieldResolverBase(LibraryThread& lt) : lt(lt->addRef()) {}
+
 Promise<void> FieldResolverBase::processField(MagneticField::Reader input, MagneticField::Builder output, ResolveContext context) {
 	switch(input.which()) {
 		case MagneticField::SUM: {
@@ -84,7 +86,7 @@ Promise<void> FieldResolverBase::processField(MagneticField::Reader input, Magne
 			return processField(input.getInvert(), output.initInvert(), context);
 		}
 		default:
-			return customField(input, output, context);			
+			return kj::READY_NOW;	
 	}
 }
 
@@ -111,7 +113,7 @@ Promise<void> FieldResolverBase::processFilament(Filament::Reader input, Filamen
 			}).attach(mv(tmpMessage), thisCap());
 		}
 		default:
-			return customFilament(input, output, context);
+			return kj::READY_NOW;
 	}
 }
 

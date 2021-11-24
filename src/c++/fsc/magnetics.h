@@ -33,14 +33,12 @@ ToroidalGridVersion toroidalGridVersion(ToroidalGrid::Reader grid);
 class FieldResolverBase : public FieldResolver::Server {
 public:
 	LibraryThread lt;
+	FieldResolverBase(LibraryThread& lt);
 	
 	virtual Promise<void> resolve(ResolveContext context) override;
 	
-	Promise<void> processField(MagneticField::Reader input, MagneticField::Builder output, ResolveContext context);
-	Promise<void> processFilament(Filament::Reader input, Filament::Builder output, ResolveContext context);
-	
-	virtual Promise<void> customField   (MagneticField::Reader input, MagneticField::Builder output, ResolveContext context) = 0;
-	virtual Promise<void> customFilament(Filament     ::Reader input, Filament     ::Builder output, ResolveContext context) = 0;
+	virtual Promise<void> processField(MagneticField::Reader input, MagneticField::Builder output, ResolveContext context);
+	virtual Promise<void> processFilament(Filament::Reader input, Filament::Builder output, ResolveContext context);
 };
 
 }

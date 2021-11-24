@@ -3,16 +3,24 @@
 using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("fsc::devices::w7x");
 
+using Data = import "../data.capnp";
+using DataRef = Data.DataRef;
+
+using Magnetics = import "../magnetics.capnp";
+using MagneticField = Magnetics.MagneticField;
+using Filament = Magnetics.Filament;
+
 interface CoilsDB {
-	getCoil @0 (id : UInt64) -> (filament : DataRef<Filament>);
+	getCoil @0 (id : UInt64) -> (filament : Filament);
+	getConfig @1 (id : UInt64) -> (config : CoilsDBConfig);
 }
 
 # Structure that holds instructions on how to compute the field
 # for every main coil.
 struct CoilFields {
-	mainCoils : List(DataRef(MagneticField));
-	trimCoils : List(DataRef(MagneticField));
-	controlCoils : List(DataRef(MagneticField));
+	mainCoils @0 : List(DataRef(MagneticField));
+	trimCoils @1 : List(DataRef(MagneticField));
+	controlCoils @2 : List(DataRef(MagneticField));
 }
 
 # === Client-side JSON interface for CoilsDB ===
@@ -51,6 +59,6 @@ struct CoilsDBConfig {
 }
 
 interface CoilsDBClient {
-	getCoil @0 (id : UInt64) -> (coil : CoilsDBCoil, info : CoilsDBCoilsInfo);
+	getCoil @0 (id : UInt64) -> (coil : CoilsDBCoil, info : CoilsDBCoilInfo);
 	getConfig @1 (id : UInt64) -> (config : CoilsDBConfig);
 }

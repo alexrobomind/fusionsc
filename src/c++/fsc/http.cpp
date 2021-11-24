@@ -55,10 +55,9 @@ Promise<void> SimpleHttpServer::request(
 		
 		KJ_REQUIRE(e.isText());
 		auto d = e.getText();
-		
-		auto ostream = response.send(200, "OK", kj::HttpHeaders(*_headerTable), e.getText().size());
+		auto ostream = response.send(200, "OK", kj::HttpHeaders(*_headerTable), d.size());
 		auto result = ostream -> write(d.begin(), d.size());
-		return result.attach(mv(ostream)).then([](){KJ_LOG(WARNING, "Write finished");});
+		return result.attach(mv(ostream));
 	}
 	
 	return response.sendError(404, "Not found", kj::HttpHeaders(*_headerTable));	

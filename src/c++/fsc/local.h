@@ -75,6 +75,11 @@ public:
 	inline kj::AsyncIoContext& ioContext() { return _ioContext; }
 	
 	/**
+	 * System clock timer
+	 */
+	inline kj::Timer& timer() { return _ioContext.provider->getTimer(); }
+	
+	/**
 	 * This thread's random number generator.
 	 */
 	inline CSPRNG&             rng()       { return _rng; }

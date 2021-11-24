@@ -21,6 +21,10 @@ namespace internal {
 	
 	template<typename T>
 	struct References_;
+	
+	// Specialized in data-inl.h
+	template<typename T>
+	struct TensorFor_ {};
 }
 
 // API forward declarations
@@ -30,6 +34,13 @@ class LocalDataService;
 
 template<typename T>
 struct TensorReader;
+
+/**
+ * Use this to get the fsc capnp tensor type for
+ * a specific primitive.
+ */
+template<typename T>
+using TensorFor = typename internal::TensorFor_<T>::Type;
 
 /**
  * Use this to figure out what datatype a reference points to.
@@ -204,6 +215,16 @@ private:
 	
 	template<typename T2>
 	friend class LocalDataRef;
+};
+
+template<typename T>
+struct Temporary : public T::Builder {
+	Temporary() :
+		T::Builder(nullptr)
+	{
+		T::Builder::operator=(holder.initRoot<T>());
+	}
+	capnp::MallocMessageBuilder holder;
 };
 
 template<typename T>

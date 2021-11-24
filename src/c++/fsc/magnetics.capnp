@@ -164,9 +164,9 @@ struct W7XCoilSet {
 		}
 		
 		customCoilSet : group {
-			mainCoils @5 : List(DataRef(Filament));
-			trimCoils @6 : List(DataRef(Filament));
-			controlCoils @7 : List(DataRef(Filament));
+			mainCoils @5 : List(DataRef(Filament)); # Must have length 50
+			trimCoils @6 : List(DataRef(Filament)); # Must have length 5
+			controlCoils @7 : List(DataRef(Filament)); # Must have length 10
 		}
 	}
 }
