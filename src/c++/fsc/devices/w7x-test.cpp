@@ -28,7 +28,7 @@ TEST_CASE("coilsdb") {
 	SimpleHttpServer server(network.parseAddress("127.0.0.1"), t, testData.getHttpRoot() /* from w7x-test.capnp */);
 	unsigned int port = server.getPort().wait(ws);
 	
-	CoilsDB::Client cdb = newCoilsDBFromWebservice(network.parseAddress("127.0.0.1", port), t);
+	CoilsDB::Client cdb = newCoilsDBFromWebservice(kj::str("http://127.0.0.1:", port), t);
 	
 	for(auto e : testData.getEntries()) {
 		auto request = cdb.getCoilRequest();

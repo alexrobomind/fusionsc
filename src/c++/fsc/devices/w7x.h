@@ -50,7 +50,9 @@ class CoilsDBResolver : public FieldResolverBase {
 /**
  * Constructs a new client for the W7-X coils DB that connects to the webservice on the given address.
  */
-CoilsDB::Client newCoilsDBFromWebservice(Promise<Own<kj::NetworkAddress>> address, LibraryThread& lt);
+CoilsDB::Client newCoilsDBFromWebservice(kj::StringPtr addressPrefix, LibraryThread& lt);
+
+static constexpr kj::StringPtr DEFAULT_COILSDB = "http://esb.ipp-hgw.mpg.de:8280/services/CoilsDBRest"_kj;
 
 /**
  * Constructs a new client that uses an offline data source. Can take a fallback client that will be

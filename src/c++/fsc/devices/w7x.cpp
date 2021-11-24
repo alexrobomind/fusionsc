@@ -220,11 +220,13 @@ void CoilsDBResolver::buildCoilFields(W7XCoilSet::Reader reader, CoilFields::Bui
 // CoilsDB implementation that downloads the coil from a remote location
 // Does not perform any local caching.
 struct CoilsDBWebservice : public CoilsDB::Server {
-	Own<kj::NetworkAddress> target;
+	kj::String address;
 	LibraryThread lt;
+		
+	Own<kj::HttpHeaderTable> headerTbl = kj::heap<kj::HttpHeaderTable>();
 	
-	CoilsDBWebservice(Own<kj::NetworkAddress> target, LibraryThread& lt) :
-		target(mv(target)),
+	CoilsDBWebservice(kj::StringPtr address, LibraryThread& lt) :
+		address(kj::heapString(address)),
 		lt(lt -> addRef())
 	{}
 	
@@ -233,18 +235,17 @@ struct CoilsDBWebservice : public CoilsDB::Server {
 		using kj::HttpHeaders;
 		using capnp::JsonCodec;
 		
-		auto headerTbl = kj::heap<HttpHeaderTable>();
-		
 		auto client = kj::newHttpClient(
 			lt->timer(),
 			*headerTbl,
-			*target
+			lt -> network(),
+			nullptr
 		);
 		auto response = client->request(
 			kj::HttpMethod::GET,
-			kj::str("/data/", context.getParams().getId()),
+			kj::str(address, "/coil/", context.getParams().getId(), "/data"),
 			HttpHeaders(*headerTbl)
-		).response;;
+		).response;
 		
 		auto read = response.then([](auto response) { KJ_REQUIRE(response.statusCode == 200); return response.body->readAllText().attach(mv(response.body)); });
 		return read.then([context](kj::String rawJson) mutable {			
@@ -268,7 +269,7 @@ struct CoilsDBWebservice : public CoilsDB::Server {
 				data.set(3 * i + 1, x2[i]);
 				data.set(3 * i + 2, x3[i]);
 			}
-		}).attach(mv(headerTbl), mv(response), mv(client), thisCap());	
+		}).attach(mv(response), mv(client), thisCap());	
 	}
 	
 	Promise<void> getConfig(GetConfigContext context) {
@@ -276,16 +277,15 @@ struct CoilsDBWebservice : public CoilsDB::Server {
 		using kj::HttpHeaders;
 		using capnp::JsonCodec;
 		
-		auto headerTbl = kj::heap<HttpHeaderTable>();
-		
 		auto client = kj::newHttpClient(
 			lt->timer(),
 			*headerTbl,
-			*target
+			lt -> network(),
+			nullptr
 		);
 		auto response = client->request(
 			kj::HttpMethod::GET,
-			kj::str("/config/", context.getParams().getId(), "/data"),
+			kj::str(address, "/config/", context.getParams().getId(), "/data"),
 			HttpHeaders(*headerTbl)
 		).response;
 		
@@ -340,11 +340,8 @@ struct OfflineCoilsDB : public CoilsDB::Server {
 	}
 };
 
-CoilsDB::Client newCoilsDBFromWebservice(Promise<Own<kj::NetworkAddress>> address, LibraryThread& lt) {
-	auto clientPromise = address.then([lt = lt -> addRef()](Own<kj::NetworkAddress> address) mutable {
-		return CoilsDB::Client(kj::heap<CoilsDBWebservice>(mv(address), mv(lt)));
-	});
-	return CoilsDB::Client(mv(clientPromise));
+CoilsDB::Client newCoilsDBFromWebservice(kj::StringPtr address, LibraryThread& lt) {
+	return CoilsDB::Client(kj::heap<CoilsDBWebservice>(address, lt -> addRef()));
 }
 
 CoilsDB::Client newOfflineCoilsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt, CoilsDB::Client backend) {

@@ -28,11 +28,11 @@ struct CoilsDBTest {
 const cdbTest : CoilsDBTest = (
 	httpRoot = (entries = [
 		(
-			loc = "/data/0",
+			loc = "/coil/0/data",
 			text = "{ \"polylineFilament\" : { \"x1\" : [0.0, 3.0, 6.0], \"x2\" : [1.0, 4.0, 7.0], \"x3\" : [2.0, 5.0, 8.0] } }"
 		),
 		(
-			loc = "/data/123",
+			loc = "/coil/123/data",
 			text = "{ \"polylineFilament\" : { \"x1\" : [0.0, 3.0], \"x2\" : [1.0, 4.0], \"x3\" : [2.0, 5.0] } }"
 		)
 	]),
