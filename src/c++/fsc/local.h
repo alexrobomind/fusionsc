@@ -60,7 +60,7 @@ inline Library newLibrary() {
 class ThreadHandle : public kj::Refcounted {
 public:
 	// Creates a new library handle from a library handle
-	ThreadHandle(const LibraryHandle* l);
+	ThreadHandle(Library lh);
 	~ThreadHandle();
 	
 	// Accessors for local use only
@@ -182,7 +182,7 @@ kj::Maybe<kj::Promise<UnwrapIfPromise<UnwrapMaybe<ReturnType<Func>>>>> executeMa
 // Inline implementations
 
 LibraryThread LibraryHandle::newThread() const {
-	return kj::refcounted<ThreadHandle>(this);
+	return kj::refcounted<ThreadHandle>(addRef());
 }
 
 } // namespace fsc

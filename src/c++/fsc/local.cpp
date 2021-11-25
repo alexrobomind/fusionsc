@@ -7,11 +7,11 @@ namespace fsc {
 	
 // === class ThreadHandle ===
 
-ThreadHandle::ThreadHandle(const LibraryHandle* l) :
+ThreadHandle::ThreadHandle(Library l) :
 	_ioContext(kj::setupAsyncIo()),
 	_library(l -> addRef()),
 	_executor(kj::getCurrentThreadExecutor()),
-	_dataService(kj::heap<LocalDataService>(l -> addRef()))
+	_dataService(kj::heap<LocalDataService>(l))
 {}
 
 ThreadHandle::~ThreadHandle() {
