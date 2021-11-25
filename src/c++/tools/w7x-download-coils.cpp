@@ -15,7 +15,7 @@ using namespace fsc;
 using namespace fsc::devices::w7x;
 
 struct MainCls {
-	static constexpr auto DEFAULT_ADDRESS = "http://esb.ipp-hgw.mpg.de:8280/services/CoilsDBRest/coil/";
+	static constexpr auto DEFAULT_ADDRESS = "http://esb.ipp-hgw.mpg.de:8280/services/CoilsDBRest";
 	
 	// Fields initialized in the constructor
 	kj::ProcessContext& context;
@@ -39,7 +39,7 @@ struct MainCls {
 	}
 	
 	bool setAddress(kj::StringPtr str) {
-		address = lt -> network().parseAddress(str).wait(ws);
+		address = kj::heapString(str);
 		return true;
 	}
 	
@@ -61,7 +61,7 @@ struct MainCls {
 	
 	bool run() {
 		// Connect
-		auto coilsDB = newCoilsDBFromWebservice(mv(address), lt);
+		coilsDB = newCoilsDBFromWebservice(mv(address), lt);
 		
 		auto root = resultBuilder.initRoot<OfflineData>();
 		unsigned int n_coils = coils.size();
@@ -91,7 +91,6 @@ struct MainCls {
 	
 	auto getMain() {
 		return kj::MainBuilder(context, "Coils downloader", "Downloads W7-X coils into OfflineData database")
-			.addOptionWithArg({"--coilsdb"}, KJ_BIND_METHOD(*this, setAddress), "<address>", "Address of CoilsDB")
 			.addOptionWithArg({"--coilsdb"}, KJ_BIND_METHOD(*this, setAddress), "<address>", "Address of CoilsDB")
 			.addOptionWithArg({"-n"}, KJ_BIND_METHOD(*this, addRange), "<range>", "Extend previous range of coils to encompass additional <range>-1 coils.")
 			.expectOneOrMoreArgs("<coil>", KJ_BIND_METHOD(*this, addCoil))

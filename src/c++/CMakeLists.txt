@@ -14,3 +14,4 @@ catch_discover_tests(
 )
 
 add_subdirectory(fsc)
+add_subdirectory(tools)
