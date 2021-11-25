@@ -341,7 +341,7 @@ struct OfflineCoilsDB : public CoilsDB::Server {
 };
 
 CoilsDB::Client newCoilsDBFromWebservice(kj::StringPtr address, LibraryThread& lt) {
-	return CoilsDB::Client(kj::heap<CoilsDBWebservice>(address, lt -> addRef()));
+	return CoilsDB::Client(kj::heap<CoilsDBWebservice>(address, lt));
 }
 
 CoilsDB::Client newOfflineCoilsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt, CoilsDB::Client backend) {
