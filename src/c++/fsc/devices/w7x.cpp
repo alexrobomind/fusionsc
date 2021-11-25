@@ -8,6 +8,12 @@ namespace fsc {
 namespace devices { namespace w7x {
 
 // === class CoilsDBResolver ===
+
+constexpr unsigned int CoilsDBResolver::N_MAIN_COILS;
+constexpr unsigned int CoilsDBResolver::N_MODULES ;
+constexpr unsigned int CoilsDBResolver::N_TRIM_COILS;
+constexpr unsigned int CoilsDBResolver::N_CONTROL_COILS ;
+constexpr uint32_t CoilsDBResolver::MAIN_COIL_WINDINGS;
 	
 CoilsDBResolver::CoilsDBResolver(LibraryThread& lt, CoilsDB::Client backend) :
 	FieldResolverBase(lt),
