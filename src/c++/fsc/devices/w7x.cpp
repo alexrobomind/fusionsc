@@ -50,7 +50,7 @@ Promise<void> CoilsDBResolver::processField(MagneticField::Reader input, Magneti
 						for(unsigned int i = 0; i < n_coils; ++i) {
 							auto filField = sum[i].initFilamentField();
 							filField.setCurrent(scale * currents[i]);
-							filField.setWidth(cdbConfig.getCoilWidth());
+							filField.setBiotSavartSettings(cdbConfig.getBiotSavartSettings());
 							filField.initFilament().setRef(getCoil(coils[i]));
 						}
 					});
@@ -189,7 +189,7 @@ void CoilsDBResolver::buildCoilFields(W7XCoilSet::Reader reader, CoilFields::Bui
 	auto initField = [=](MagneticField::Builder out, DataRef<Filament>::Client coil) {
 		auto filField = out.initFilamentField();
 		filField.setCurrent(1);
-		filField.setWidth(reader.getWidth());
+		filField.setBiotSavartSettings(reader.getBiotSavartSettings());
 		filField.setWindingNo(MAIN_COIL_WINDINGS);
 		filField.initFilament().setRef(coil);
 	};

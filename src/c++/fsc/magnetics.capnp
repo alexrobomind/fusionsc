@@ -85,7 +85,7 @@ struct MagneticField {
 		# Magnetic field originating from a filament
 		filamentField : group {
 			current @3 : Float64;
-			width @4 : Float64;
+			biotSavartSettings @4 : BiotSavartSettings;
 			filament @5 : Filament;
 			windingNo @6 : UInt32 = 1;
 		}
@@ -106,7 +106,7 @@ struct MagneticField {
 				configurationDB : group {
 					# The W7-X config specification does not usually include a coil width
 					# Therefore, we have to add this information here
-					coilWidth @10 : Float32;
+					biotSavartSettings @10 : BiotSavartSettings;
 					configID  @11 : UInt64;
 				}
 				
@@ -148,13 +148,18 @@ struct Filament {
 	}
 }
 
+struct BiotSavartSettings {
+	width @0 : Float64;
+	stepSize @1 : Float64;
+}
+
 # =========================== Device-specifics =============================
 
 # --------------------------------- W7-X -----------------------------------
 
 struct W7XCoilSet {
 	invertMainCoils @0 : Bool = true;
-	width @1 : Float64;
+	biotSavartSettings @1 : BiotSavartSettings;
 	
 	union {
 		coilsDBSet : group {

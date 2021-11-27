@@ -9,6 +9,7 @@ using DataRef = Data.DataRef;
 using Magnetics = import "../magnetics.capnp";
 using MagneticField = Magnetics.MagneticField;
 using Filament = Magnetics.Filament;
+using BiotSavartSettings = Magnetics.BiotSavartSettings;
 
 interface CoilsDB {
 	getCoil @0 (id : UInt64) -> (filament : Filament);

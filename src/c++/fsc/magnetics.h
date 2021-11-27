@@ -41,4 +41,9 @@ public:
 	virtual Promise<void> processFilament(Filament::Reader input, Filament::Builder output, ResolveContext context);
 };
 
+/**
+ * Creates a new field calculator.
+ */
+FieldCalculator::Client newFieldCalculator(LibraryThread& lt);
+
 }

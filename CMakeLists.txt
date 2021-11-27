@@ -10,6 +10,9 @@ project(FSC LANGUAGES CXX)
 set(FSC_FETCH_DEPENDENCIES On CACHE BOOL "Whether the build system is allowed to fetch external dependencies")
 set(FSC_ALWAYS_FETCH Off CACHE BOOL "Whether the build system is must fetch external dependencies")
 
+# Prepare CTest
+include(CTest)
+
 # Try to load dependencies directly
 
 if(NOT FSC_ALWAYS_FETCH)
@@ -59,6 +62,17 @@ FetchContent_Declare(
   GIT_PROGRESS   On
 )
 
+FetchContent_Declare(
+  Eigen3
+  GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+  GIT_TAG        3.4.0
+  GIT_SHALLOW    On
+  GIT_PROGRESS   On
+)
+
+set(BUILD_TESTING_TMP ${BUILD_TESTING})
+set(BUILD_TESTING OFF CACHE BOOL "Temporarily disable testing" FORCE)
+
 macro(fetch_dependency DEPNAME)
 	if(NOT ${DEPNAME}_FOUND)
 		if(NOT FSC_FETCH_DEPENDENCIES)
@@ -70,7 +84,7 @@ macro(fetch_dependency DEPNAME)
 	endif()
 endmacro()
 
-# Standard fetching for Catch2 and capnproto
+# Standard fetching for Catch2, capnproto and eigen
 fetch_dependency(Catch2)
 
 # We need to include the test scan macro manually if we downloaded it manually
@@ -79,6 +93,7 @@ if(NOT Catch2_FOUND)
 endif()
 
 fetch_dependency(CapnProto)
+fetch_dependency(Eigen3)
 
 # For Botan, we have to be fancier, as it does not use CMake
 if(Botan_FOUND)
@@ -124,12 +139,27 @@ else()
 	target_include_directories(botan INTERFACE "${botan_SOURCE_DIR}/build/include")
 endif()
 
+set(BUILD_TESTING ${BUILD_TESTING_TMP} CACHE BOOL "" FORCE)
 
 add_library(deps INTERFACE)
-target_link_libraries(deps INTERFACE botan CapnProto::capnp-rpc CapnProto::capnp-json CapnProto::kj-http)
+target_link_libraries(
+	deps
+	INTERFACE
+	botan
+	CapnProto::capnp-rpc
+	CapnProto::capnp-json
+	CapnProto::kj-http
+	Eigen3::Eigen
+)
+
+# Try to enable OpenMP
+find_package(OpenMP 4.5)
+if(OpenMP_FOUND)
+	target_link_libraries(deps INTERFACE OpenMP::OpenMP_CXX)
+endif()
+
 
 # Set up testing subsystem
-include(CTest)
 include(Catch)
 
 add_subdirectory(src/c++)

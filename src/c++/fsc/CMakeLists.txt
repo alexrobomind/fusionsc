@@ -33,12 +33,15 @@ add_library(
 	
 	magnetics.h
 	magnetics.cpp
+	magnetics-fieldcalc.cpp
 	
 	http.h
 	http.cpp
 	
 	devices/w7x.h
 	devices/w7x.cpp
+	
+	tensor.h
 	
 	${FSC_CP_HEADERS}
 	${FSC_CP_SRC}

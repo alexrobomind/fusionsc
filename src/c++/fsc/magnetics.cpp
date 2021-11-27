@@ -73,7 +73,7 @@ Promise<void> FieldResolverBase::processField(MagneticField::Reader input, Magne
 			auto filOut = output.initFilamentField();
 			
 			filOut.setCurrent(filIn.getCurrent());
-			filOut.setWidth(filIn.getWidth());
+			filOut.setBiotSavartSettings(filIn.getBiotSavartSettings());
 			filOut.setWindingNo(filIn.getWindingNo());
 			
 			return processFilament(filIn.getFilament(), filOut.initFilament(), context);
