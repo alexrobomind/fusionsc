@@ -226,6 +226,18 @@ struct Temporary : public T::Builder {
 	{
 		T::Builder::operator=(holder.initRoot<T>());
 	}
+	
+	Temporary(typename T::Reader reader) :
+		T::Builder(nullptr)
+	{
+		holder.setRoot(cp(reader));
+		T::Builder::operator=(holder.getRoot<T>());
+	}
+	
+	Temporary<T>& operator=(typename T::Reader other) {
+		capnp::toAny(*this).setAs(other);
+	}
+	
 	capnp::MallocMessageBuilder holder;
 };
 

@@ -25,22 +25,28 @@ namespace fsc {
 	using Vec3 = TensorFixedSize<T, Sizes<3>>;
 	
 	template<typename T>
-	typename T::Scalar normSq(const T& t) { return t.square().sum(); }
+	typename T::Scalar normSq(const T& t) { TensorFixedSize<typename T::Scalar, Sizes<>> result = t.square().sum(); return result(); }
 	
 	template<typename T>
-	typename T::Scalar norm(const T& t) { return sqrt(norm(t)); }
+	typename T::Scalar norm(const T& t) { return sqrt(normSq(t)); }
 	
 	template<typename T1, typename T2>
 	Vec3<typename T1::Scalar> cross(const T1& t1, const T2& t2);
 	
-	template<typename T>
+	template<typename T, typename Device>
 	struct MappedTensor { static_assert(sizeof(T) == 0, "Mapper not implemented"); };
 
-	template<typename TVal, int rank, int options, typename Index>
-	struct MappedTensor<Tensor<TVal, rank, options, Index>>;
+	template<typename TVal, int rank, int options, typename Index, typename Device>
+	struct MappedTensor<Tensor<TVal, rank, options, Index>, Device>;
 
-	template<typename TVal, typename Dims, int options, typename Index>
-	struct MappedTensor<TensorFixedSize<TVal, Dims, options, Index>>;
+	template<typename TVal, typename Dims, int options, typename Index, typename Device>
+	struct MappedTensor<TensorFixedSize<TVal, Dims, options, Index>, Device>;
+	
+	template<typename T, typename Device>
+	struct MappedData { static_assert(sizeof(T) == 0, "Mapper not implemented"); };
+	
+	template<typename T>
+	struct MappedData<T, Eigen::ThreadPoolDevice>;
 	
 	// Number of threads to be used for evaluation
 	inline unsigned int numThreads() {
@@ -51,7 +57,7 @@ namespace fsc {
 		# endif
 	}
 	
-	class OffloadDevice {
+	/*class OffloadDevice {
 	public:
 		Eigen::ThreadPoolDevice& eigenDevice() { return _eigenDevice; }
 		
@@ -63,7 +69,7 @@ namespace fsc {
 	private:
 		Eigen::ThreadPool _tp;
 		Eigen::ThreadPoolDevice _eigenDevice;
-	};
+	};*/
 }
 
 // Implementation
@@ -85,35 +91,51 @@ Vec3<typename T1::Scalar> cross(const T1& t1, const T2& t2) {
 	return result;
 }
 
-template<typename TVal, int tRank, int tOpts, typename Index>
-struct MappedTensor<Tensor<TVal, tRank, tOpts, Index>> : public TensorMap<Tensor<TVal, tRank, tOpts, Index>> {
+template<typename T>
+struct MappedData<T, Eigen::ThreadPoolDevice> {
+	T* ptr;
+	
+	MappedData(Eigen::ThreadPoolDevice& device, T* ptr, size_t size) : ptr(ptr) {}
+	static T* deviceAlloc(Eigen::ThreadPoolDevice& device, T* ref, size_t size) { return ref; }
+	
+	T* devicePtr() { return ptr; }
+	void updateHost() {}
+	void updateDevice() {}
+};
+
+template<typename TVal, int tRank, int tOpts, typename Index, typename Device>
+struct MappedTensor<Tensor<TVal, tRank, tOpts, Index>, Device> : public TensorMap<Tensor<TVal, tRank, tOpts, Index>> {
 	using Maps = Tensor<TVal, tRank, tOpts, Index>;
 
-	Maps& target;
+	MappedData<TVal, Device> _data;
 
-	MappedTensor(Maps& target, OffloadDevice& device) :
-		TensorMap<Tensor<TVal, tRank, tOpts, Index>>(target.data(), target.dimensions()),
-		target(target) {};
-	~MappedTensor();
+	MappedTensor(Maps& target, Device& device) :
+		TensorMap<Tensor<TVal, tRank, tOpts, Index>>(
+			MappedData<TVal, Device>::deviceAlloc(device, target.data(), target.size()),
+			target.dimensions()
+		),
+		_data(device, target.data(), target.size())
+	{};
 
-	void updateHost() {}
-	void updateDevice() {}
+	void updateHost() { _data.updateHost(); }
+	void updateDevice() { _data.updateDevice(); }
 };
 
-template<typename TVal, typename Dims, int options, typename Index>
-struct MappedTensor<TensorFixedSize<TVal, Dims, options, Index>> : public TensorMap<TensorFixedSize<TVal, Dims, options, Index>> {
+template<typename TVal, typename Dims, int options, typename Index, typename Device>
+struct MappedTensor<TensorFixedSize<TVal, Dims, options, Index>, Device> : public TensorMap<TensorFixedSize<TVal, Dims, options, Index>> {
 	using Maps = TensorFixedSize<TVal, Dims, options, Index>;
-	Maps& target;
-
-	MappedTensor(Maps& target, OffloadDevice& device) :
-		TensorMap<TensorFixedSize<TVal, Dims, options, Index>> (target.data()),
-		target(target)
-	{}
 	
-	~MappedTensor();
+	MappedData<TVal, Device> _data;
 
-	void updateHost() {}
-	void updateDevice() {}
+	MappedTensor(Maps& target, Device& device) :
+		TensorMap<TensorFixedSize<TVal, Dims, options, Index>> (
+			MappedData<TVal, Device>::deviceAlloc(device, target.data(), target.size())
+		),
+		_data(target.data(), target.size())
+	{}
+
+	void updateHost() { _data.updateHost(); }
+	void updateDevice() { _data.updateDevice(); }
 };
-
+	
 }

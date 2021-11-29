@@ -4,9 +4,18 @@
 #include <cmath>
 
 #include <kj/map.h>
+#include <kj/refcount.h>
 
 
 namespace fsc { 
+
+using Vec3d = Vec3<double>;
+
+using Field = Eigen::Tensor<double, 4>;
+using FieldRef = Eigen::TensorMap<Field>;
+
+using MFilament = Eigen::Tensor<double, 2>;
+using FilamentRef = Eigen::TensorMap<MFilament>;
 	
 constexpr double pi = 3.14159265358979323846;
 	
@@ -46,13 +55,17 @@ struct GridData {
 		return result;
 	}
 	
+	double phi(int i_phi) {
+		return 2 * pi / nSym / nPhi;
+	}
+	
 	Vec3<double> phizr(int i_phi, int i_z, int i_r) {
 		double r = rMin + (rMax - rMin) / (nR - 1) * i_r;
 		double z = zMin + (zMax - zMin) / (nZ - 1) * i_z;
-		double phi = 2 * pi / nSym / nPhi;
+		double vphi = phi(i_phi);
 		
 		Vec3<double> result;
-		result(0) = phi;
+		result(0) = vphi;
 		result(1) = z;
 		result(2) = r;
 		
@@ -60,27 +73,90 @@ struct GridData {
 	}
 };
 
-struct FieldCalculation {
-	using Vec3d = Vec3<double>;
+// Computational kernels
 
-	using Field = Eigen::Tensor<Vec3d, 3>;
-	using FieldRef = Eigen::TensorMap<Field>;
+EIGEN_DEVICE_FUNC void biotSavartKernel(unsigned int idx, GridData grid, FilamentRef filament, double current, double coilWidth, double stepSize, FieldRef out) {
+	int midx[3];
 	
-	FieldCalculation(ToroidalGrid::Reader in, OffloadDevice& device) :
+	// Decode index using column major layout
+	// in which the first index has stride 1
+	for(int i = 0; i < 3; ++i) {
+		midx[i] = idx % out.dimension(i);
+		idx /= out.dimension(i);
+	}
+	
+	int i_phi = midx[0];
+	int i_z   = midx[1];
+	int i_r   = midx[2];
+
+	Vec3d x_grid = grid.xyz(i_phi, i_z, i_r);
+
+	Vec3d field_cartesian;
+	field_cartesian.setZero();
+	
+	auto n_points = filament.dimension(1);	
+	for(int i_fil = 0; i_fil < n_points - 1; ++i_fil) {
+		// Extract current filament
+		Vec3d x1 = filament.chip(i_fil, 1);
+		Vec3d x2 = filament.chip(i_fil + 1, 1);
+		
+		// Calculate step and no. of steps
+		auto dxtot = (x2 - x1).eval();
+		double dxnorm = norm(dxtot);
+		int n_steps = (int) (dxnorm / stepSize + 1);
+		Vec3d dx = dxtot * (1.0 / n_steps);
+		
+		for(int i_step = 0; i_step < n_steps; ++i_step) {
+			auto x = x1 + (x1 - x1) * ((double) i_step) * dx;
+			
+			auto dr = (x_grid - x).eval();
+			auto distance = dr.square().sum().sqrt();
+			auto useDistance = distance.cwiseMax(distance.constant(coilWidth)).eval();
+			TensorFixedSize<double, Eigen::Sizes<>> dPow3 = useDistance * useDistance * useDistance;
+			
+			constexpr double mu0over4pi = 1e-7;
+			field_cartesian += mu0over4pi * cross(dx, dr) / dPow3();
+		}
+	}
+	
+	double phi = grid.phi(i_phi);
+	double fieldR   = field_cartesian(0) * cos(phi) + field_cartesian(1) * sin(phi);
+	double fieldZ   = field_cartesian(2);
+	double fieldPhi = field_cartesian(1) * cos(phi) - field_cartesian(0) * sin(phi);
+	
+	double* outData = out.data();
+	outData[3 * idx + 0] += current * fieldPhi;
+	outData[3 * idx + 1] += current * fieldZ;
+	outData[3 * idx + 2] += current * fieldR;
+}
+
+// Kernel launcher
+
+void launchBiotSavart(Eigen::ThreadPoolDevice& device, GridData grid, FilamentRef filament, double current, double coilWidth, double stepSize, FieldRef out) {
+	# pragma omp parallel for
+	for(unsigned int i = 0; i < out.size() / 3; ++i) {
+		biotSavartKernel(i, grid, filament, current, coilWidth, stepSize, out);
+	}
+}
+
+template<typename Device>
+struct FieldCalculation {
+	Device& _device;
+	GridData grid;
+	Field field;
+	MappedTensor<Field, Device> mappedField;
+	
+	FieldCalculation(ToroidalGrid::Reader in, Device& device) :
 		_device(device),
 		grid(in),
-		field(grid.nPhi, grid.nZ, grid.nR),
+		field(3, grid.nPhi, grid.nZ, grid.nR),
 		mappedField(field, _device)
 	{
-		Vec3d defaultVal;
-		defaultVal.setZero();
-		field.setConstant(defaultVal);
+		field.setZero();
 		mappedField.updateDevice();
 	}
 	
 	~FieldCalculation() {}
-	
-	auto& eigenDevice() { return _device.eigenDevice(); }
 	
 	void add(double scale, Float64Tensor::Reader input) {
 		auto shape = input.getShape();
@@ -88,19 +164,20 @@ struct FieldCalculation {
 		KJ_REQUIRE(shape.size() == 4);
 		KJ_REQUIRE(shape[3] == 3);
 		
-		auto op = [&](int idx) {
-			auto offset = 3 * idx;
-			
-			Vec3d result;
-			auto data = input.getData();
-			for(int i = 0; i < 3; ++i)
-				result[i] = data[offset + i];
-			return result;
-		};
+		auto data = input.getData();
 		
-		Vec3d vScale;
-		vScale.setConstant(scale);
-		field.device(eigenDevice()) += field.nullaryExpr(op) * vScale;
+		// Write field into native format
+		Field newField(3, grid.nPhi, grid.nZ, grid.nR);
+		for(int i = 0; i < newField.size() / 3; ++i) {
+			newField.data()[i] = data[i];
+		}
+		
+		// Map field onto GPU
+		MappedTensor<Field, Device> mField(newField, _device);
+		mField.updateDevice();
+		
+		// Call addition
+		field.device(_device) += mField * scale;
 	}
 	
 	void biotSavart(double current, Float64Tensor::Reader input, BiotSavartSettings::Reader settings) {
@@ -111,86 +188,29 @@ struct FieldCalculation {
 		KJ_REQUIRE(shape[0] >= 2);
 		
 		int n_points = (int) shape[0];
-		Eigen::Tensor<double, 2> filament(n_points, 3);
+		MFilament filament(3, n_points);
 		
-		// Copy data into native buffer
+		// Copy filament into native buffer
 		auto data = input.getData();
 		for(int i = 0; i < n_points; ++i) {
-			filament(i, 0) = data[3 * i + 0];
-			filament(i, 1) = data[3 * i + 1];
-			filament(i, 2) = data[3 * i + 2];
+			filament(0, i) = data[3 * i + 0];
+			filament(1, i) = data[3 * i + 1];
+			filament(2, i) = data[3 * i + 2];
 		}
 		
 		double coilWidth = settings.getWidth();
 		double stepSize  = settings.getStepSize();
 		
+		KJ_REQUIRE(stepSize != 0, "Please specify a step size in the Biot-Savart settings");
+		
 		using i2 = Eigen::array<int, 2>;
 		using i1 = Eigen::array<int, 1>;
 		
 		// Map filament onto device
-		MappedTensor<decltype(filament)> mappedFilament(filament, _device);
+		MappedTensor<decltype(filament), Device> mappedFilament(filament, _device);
 		mappedFilament.updateDevice();
 		
-		/*# pragma omp teams distribute parallel for collapse(3)
-		for(int i_r   = 0; i_r   < grid.nR  ; ++i_r  ) {
-		for(int i_z   = 0; i_z   < grid.nZ  ; ++i_z  ) {
-		for(int i_phi = 0; i_phi < grid.nPhi; ++i_phi) {*/
-
-		auto op = [&](int idx) {
-			int midx[3];
-			// Decode index using column major layout
-			// in which the first index has stride 1
-			for(int i = 0; i < 3; ++i) {
-				midx[i] = idx % mappedField.dimension(i);
-				idx /= mappedField.dimension(i);
-			}
-			
-			int i_phi = midx[0];
-			int i_z   = midx[1];
-			int i_r   = midx[2];
-
-			Vec3d field_cartesian;
-			field_cartesian.setZero();
-
-			Vec3d x_grid = grid.xyz(i_phi, i_z, i_r);
-			
-			for(int i_fil = 0; i_fil < n_points - 1; ++i_fil) {
-				// Extract current filament
-				Vec3d x1 = mappedFilament.chip(i_fil, 0);
-				Vec3d x2 = mappedFilament.chip(i_fil + 1, 0);
-				
-				// Calculate step and no. of steps
-				auto dxtot = (x2 - (Vec3d) x1).eval();
-				double dxnorm = norm(dxtot);
-				int n_steps = (int) (dxnorm / stepSize + 1);
-				Vec3d dx = dxtot * (1.0 / n_steps);
-				
-				for(int i_step = 0; i_step < n_steps; ++i_step) {
-					auto x = x1 + (x2 - x1) * ((double) i_step) * dx;
-					
-					auto dr = (x_grid - x).eval();
-					auto distance = dr.square().sum().sqrt();
-					auto useDistance = distance.cwiseMax(distance.constant(coilWidth)).eval();
-					
-					constexpr double mu0over4pi = 1e-7;
-					field_cartesian += current * mu0over4pi * cross(dx, dr) / (useDistance * useDistance * useDistance);
-				}
-			}
-			
-			Vec3d phizr = grid.phizr(i_phi, i_z, i_r);
-			double phi = phizr(0);
-			double fieldR   = field_cartesian(0) * cos(phi) + field_cartesian(1) * sin(phi);
-			double fieldZ   = field_cartesian(2);
-			double fieldPhi = field_cartesian(1) * cos(phi) - field_cartesian(0) * sin(phi);
-			
-			Vec3d result;
-			result(0) = fieldPhi;
-			result(1) = fieldZ;
-			result(2) = fieldR;
-			return result;
-		};
-
-		mappedField.device(eigenDevice()) += field.nullaryExpr(op);
+		launchBiotSavart(_device, grid, mappedFilament, current, coilWidth, stepSize, mappedField);
 	}
 	
 	void finish(Float64Tensor::Builder out) {
@@ -207,27 +227,43 @@ struct FieldCalculation {
 		
 		for(int i = 0; i < field.size(); ++i) {
 			for(int j = 0; j < 3; ++j) {
-				data.set(3 * i + j, (fData + i)->operator()(j));
+				data.set(3 * i + j, fData[3 * i + j]);
 			}
 		}
 	}
-	
-	OffloadDevice& _device;
-	Field field;
-	MappedTensor<Field> mappedField;
-	GridData grid;
 };
 
 
 struct CalculationSession : public FieldCalculationSession::Server, kj::Refcounted {
-	OffloadDevice device;
+	using Device = Eigen::ThreadPoolDevice;
+	
+	// Device device;
+	Eigen::ThreadPool pool;
+	Eigen::ThreadPoolDevice device;
 	
 	Temporary<ToroidalGrid> grid;
 	LibraryThread lt;
 	kj::TreeMap<ID, kj::ForkedPromise<LocalDataRef<Float64Tensor>>> fieldCache;
 	
+	CalculationSession(ToroidalGrid::Reader newGrid, LibraryThread& lt) :
+		pool(numThreads()),
+		device(&pool, numThreads()),
+		grid(newGrid),
+		lt(lt->addRef())
+	{}
+	
+	Promise<void> compute(ComputeContext context) {
+		return processRoot(context.getParams().getField())
+		.then([this, context](LocalDataRef<Float64Tensor> tensorRef) mutable {
+			auto compField = context.getResults().initComputedField();
+			
+			compField.setGrid(grid);
+			compField.setData(tensorRef);
+		});
+	}
+	
 	Promise<LocalDataRef<Float64Tensor>> processRoot(MagneticField::Reader node) {
-		auto newCalculator = kj::heap<FieldCalculation>(grid, device);
+		auto newCalculator = kj::heap<FieldCalculation<Device>>(grid, device);
 		auto calcDone = processField(*newCalculator, node, 1);
 		
 		return calcDone.then([newCalculator = mv(newCalculator), this]() mutable {							
@@ -237,7 +273,7 @@ struct CalculationSession : public FieldCalculationSession::Server, kj::Refcount
 		});
 	}
 	
-	Promise<void> processFilament(FieldCalculation& calculator, Filament::Reader node, BiotSavartSettings::Reader settings, double scale) {
+	Promise<void> processFilament(FieldCalculation<Device>& calculator, Filament::Reader node, BiotSavartSettings::Reader settings, double scale) {
 		switch(node.which()) {
 			case Filament::INLINE:
 				calculator.biotSavart(scale, node.getInline(), settings);
@@ -251,7 +287,7 @@ struct CalculationSession : public FieldCalculationSession::Server, kj::Refcount
 		}
 	}
 	
-	Promise<void> processField(FieldCalculation& calculator, MagneticField::Reader node, double scale) {
+	Promise<void> processField(FieldCalculation<Device>& calculator, MagneticField::Reader node, double scale) {
 		switch(node.which()) {
 			case MagneticField::SUM: {
 				for(auto newNode : node.getSum()) {
@@ -319,7 +355,29 @@ struct CalculationSession : public FieldCalculationSession::Server, kj::Refcount
 	}
 };
 
-void dummyFieldcalc() {
+struct FieldCalculatorImpl : public FieldCalculator::Server {
+	LibraryThread lt;
+	
+	FieldCalculatorImpl(LibraryThread& lt) :
+		lt(lt -> addRef())
+	{}
+	
+	Promise<void> get(GetContext context) {
+		FieldCalculationSession::Client newClient(
+			kj::refcounted<CalculationSession>(
+				context.getParams().getGrid(),
+				lt
+			)
+		);
+		context.getResults().setSession(newClient);
+		return READY_NOW;
+	}
+};
+
+FieldCalculator::Client newFieldCalculator(LibraryThread& lt) {
+	return FieldCalculator::Client(
+		kj::heap<FieldCalculatorImpl>(lt)
+	);
 }
 
 }

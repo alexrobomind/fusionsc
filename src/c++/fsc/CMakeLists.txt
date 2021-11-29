@@ -7,7 +7,10 @@ CAPNP_GENERATE_CPP(
 	
 	data.capnp
 	data-test.capnp
+	
 	magnetics.capnp
+	magnetics-test.capnp
+	
 	http.capnp
 	offline.capnp
 	
@@ -64,6 +67,7 @@ target_sources(
 	local-tests.cpp
 	random-tests.cpp
 	data-tests.cpp
+	magnetics-tests.cpp
 	http-tests.cpp
 	devices/w7x-test.cpp
 )
