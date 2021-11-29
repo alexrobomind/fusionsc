@@ -1,3 +1,5 @@
+#pragma once
+
 #include <fsc/magnetics.capnp.h>
 #include <kj/map.h>
 
@@ -45,5 +47,10 @@ public:
  * Creates a new field calculator.
  */
 FieldCalculator::Client newFieldCalculator(LibraryThread& lt);
+
+/**
+ * Temporary function that calls the field calculator.
+ */
+void dummyFieldcalc();
 
 }

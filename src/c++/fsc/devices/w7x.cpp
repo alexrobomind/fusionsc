@@ -109,17 +109,24 @@ Promise<void> CoilsDBResolver::coilsAndCurrents(MagneticField::W7xMagneticConfig
 }
 
 LocalDataRef<CoilFields> CoilsDBResolver::getCoilFields(W7XCoilSet::Reader reader) {
-	ID id = ID::fromReader(reader);
+	ID id;
 	
-	KJ_IF_MAYBE(coilPack, coilPacks.find(id)) {
-		return *coilPack;
+	try {
+		ID id = ID::fromReader(reader);
+	
+		KJ_IF_MAYBE(coilPack, coilPacks.find(id)) {
+			return *coilPack;
+		}
+	} catch(kj::Exception& e) {
+		// Coil sets can (and, in the case of custom sets, usually do)
+		// contain datarefs, which are capabilities.
 	}
 	
 	capnp::MallocMessageBuilder tmp;
 	auto coilPack = tmp.initRoot<CoilFields>();
 	buildCoilFields(reader, coilPack);
 	
-	auto ref = lt->dataService().publish(id, coilPack);
+	auto ref = lt->dataService().publish(lt->randomID(), coilPack);
 	coilPacks.insert(id, ref);
 	return ref;
 }

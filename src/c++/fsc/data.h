@@ -1,3 +1,5 @@
+#pragma once
+
 #include <fsc/data.capnp.h>
 #include <capnp/any.h>
 #include <kj/async.h>
@@ -254,6 +256,26 @@ struct TensorReader {
 	decltype(instance<const T>().getData()) data;
 	decltype(instance<const T>().getShape()) shape;
 };
+
+
+
+Promise<void> removeDatarefs(capnp::AnyPointer::Reader in, capnp::AnyPointer::Builder out);
+	
+template<typename T>
+ID ID::fromReader(T t) {
+	return ID(wordsToBytes(capnp::canonicalize(t)));
+}
+
+template<typename T>
+Promise<ID> ID::fromReaderWithRefs(T t) {
+	Temporary<capnp::FromAny<T>> tmp;
+	auto stripped = removeDatarefs(toAny(t), toAny(tmp));
+	
+	return stripped.then([tmp = mv(tmp)]{
+		return ID::fromReader(tmp);
+	});
+}
+
 
 }
 

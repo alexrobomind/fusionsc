@@ -1,3 +1,5 @@
+#pragma once
+
 #include <kj/compat/http.h>
 
 #include <fsc/http.capnp.h>

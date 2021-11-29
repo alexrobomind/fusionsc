@@ -22,6 +22,9 @@ list(GET ${FSC_CP_HEADERS} 0 FSC_CP_HEADER1)
 add_library(
 	fsc
 	
+	common.h
+	common.cpp
+	
 	local.h
 	local.cpp
 	

@@ -36,6 +36,8 @@ using kj::FixedArray;
 
 using kj::instance;
 
+using kj::READY_NOW;
+
 
 namespace internal {
 	
@@ -153,6 +155,7 @@ struct ID {
 	
 	inline int cmp(const ArrayPtr<const byte>& other) const;
 	inline int cmp(const ID& other) const { return cmp(other.data); }
+	inline int cmp(decltype(nullptr)) const { return cmp(ID()); }
 	
 	template<typename T>
 	inline bool operator <  (const T& other) const { return this->cmp(other) <  0; }
@@ -170,9 +173,15 @@ struct ID {
 	inline bool operator == (const T& other) const { return this->cmp(other) == 0; }
 	
 	template<typename T>
-	static ID fromReader(T& t) {
-		return ID(wordsToBytes(capnp::canonicalize(t)));
-	}
+	inline bool operator != (const T& other) const { return this->cmp(other) != 0; }
+	
+	// Requires data.h
+	template<typename T>
+	static ID fromReader(T t);
+	
+	// Requires data.h
+	template<typename T>
+	static Promise<ID> fromReaderWithRefs(T t);
 };
 
 // === Inline implementation ===
@@ -182,6 +191,9 @@ inline int ID::cmp(const ArrayPtr<const byte>& other) const {
 			return -1;
 		else if(data.size() > other.size())
 			return 1;
+		
+		if(data.size() == 0)
+			return 0;
 	
 		return memcmp(data.begin(), other.begin(), data.size());
 	}
