@@ -526,4 +526,235 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(c
 	return handleEntry(archive.getRoot());
 }
 
+// === function hasMaximumOrdinal ===
+struct OrdinalChecker {
+	capnp::DynamicStruct::Reader in;
+	unsigned int maxOrdinal;
+	
+	Array<byte> mask;
+	Array<bool> ptrMask;
+	
+	using DynamicValue = capnp::DynamicValue;
+	using DynamicStruct = capnp::DynamicStruct;
+	using StructSchema = capnp::StructSchema;
+	using AnyStruct = capnp::AnyStruct;
+	using SType = capnp::schema::Type;
+	
+	OrdinalChecker(DynamicStruct::Reader in, unsigned int maxOrdinal) :
+		in(in),
+		maxOrdinal(maxOrdinal),
+		mask(kj::heapArray<byte>(((AnyStruct::Reader) in).getDataSection().size())),
+		ptrMask(kj::heapArray<bool>(((AnyStruct::Reader) in).getPointerSection().size()))
+	{
+		for(unsigned int i = 0; i < mask.size(); ++i)
+			mask[i] = 0;
+		
+		for(unsigned int i = 0; i < ptrMask.size(); ++i)
+			ptrMask[i] = false;
+	}
+	
+	void allowPointer(unsigned int offset) {
+		if(offset > ptrMask.size())
+			return;
+		
+		ptrMask[offset] = true;
+	}
+	
+	void allowBool(unsigned int offset) {
+		unsigned int byteOffset = offset / 8;
+		unsigned int offsetInByte = offset % 8;
+		
+		if(byteOffset > mask.size())
+			return;
+		
+		mask[byteOffset] |= ((byte) 1) << offsetInByte;
+	}
+	
+	void allowBytes(unsigned int size, unsigned int offsetInSizes) {
+		unsigned int byteStart = size * offsetInSizes;
+		unsigned int byteEnd   = size * (offsetInSizes + 1);
+		
+		for(unsigned int i = byteStart; i < byteEnd && i < mask.size(); ++i)
+			mask[i] = ~((byte) 0);
+	}
+	
+	bool checkField(DynamicStruct::Reader group, StructSchema::Field field, bool forbidden) {
+		// Check if field has ordinal and ordinal is too large
+		auto proto = field.getProto();
+		// KJ_LOG(WARNING, "Checking field ", proto.getName());
+		
+		auto ordinal = proto.getOrdinal();
+		capnp::DynamicValue::Reader value = group.get(field);
+		
+		if(ordinal.isExplicit() && ordinal.getExplicit() > maxOrdinal) {
+			// KJ_LOG(WARNING, "Ordinal out of range, switching to forbidden mode", ordinal, maxOrdinal);
+			forbidden = true;
+		}
+		
+		// Check if field is struct field
+		if(proto.isGroup()) {
+			KJ_ASSERT(value.getType() == DynamicValue::STRUCT);
+			return checkStruct(value.as<DynamicStruct>(), forbidden);			
+		}
+		
+		// If capnproto has new field types and they are used here
+		if(!proto.isSlot()) {
+			// KJ_LOG(WARNING, "Encountered unknown field type (not slot or group)");
+			return false;
+		}
+		
+		auto slot = proto.getSlot();
+		
+		unsigned int offset = slot.getOffset();
+		
+		if(slot.getType().isVoid() && forbidden)
+			return false;
+		
+		if(forbidden) {
+			// KJ_LOG(WARNING, "Ignored forbidden field", offset);
+			return true;
+		}
+		
+		// Check field typedClient
+		switch(slot.getType().which()) {
+			case SType::BOOL:
+				allowBool(offset);
+				break;
+			
+			case SType::VOID:				
+				break;
+			
+			case SType::TEXT:
+			case SType::DATA:
+			case SType::LIST:
+			case SType::STRUCT:
+			case SType::INTERFACE:
+			case SType::ANY_POINTER:
+				allowPointer(offset);
+				break;
+			
+			case SType::INT8:
+			case SType::UINT8:
+				allowBytes(1, offset);
+				break;
+			
+			case SType::INT16:
+			case SType::UINT16:
+			case SType::ENUM:
+				allowBytes(2, offset);
+				break;
+			
+			case SType::INT32:
+			case SType::UINT32:
+			case SType::FLOAT32:
+				allowBytes(4, offset);
+				break;
+			
+			case SType::INT64:
+			case SType::UINT64:
+			case SType::FLOAT64:
+				allowBytes(8, offset);
+				break;
+			
+			default:
+				// KJ_LOG(WARNING, "Encountered unknown primitive field type", slot.getType());
+				return false;
+		}
+		
+		// KJ_LOG(WARNING, mask);
+		return true;
+	}
+	
+	bool checkStruct(capnp::DynamicStruct::Reader in, bool forbidden) {
+		StructSchema schema = in.getSchema();
+		
+		KJ_IF_MAYBE(field, in.which()) {
+			// Check union field
+			if(!checkField(in, *field, forbidden))
+				return false;
+		} else {
+			// No union can be read, check if there should be union
+			auto numUnions = schema.getUnionFields().size();
+			KJ_ASSERT(numUnions != 1);
+			
+			if(numUnions > 0) {
+				// Discriminant is set to unknown value
+				// KJ_LOG(WARNING, "Encountered unknown discriminant value in struct ", schema.getProto().getDisplayName());
+				return false;
+			}	
+		}
+		
+		// Now check non-union fields
+		auto nonUnion = schema.getNonUnionFields();
+		for(auto field : nonUnion) {
+			if(!checkField(in, field, forbidden))
+				return false;
+		}
+		
+		// Also add discriminant to allowed fields
+		if(!forbidden) {
+			auto proto = schema.getProto();
+			KJ_ASSERT(proto.isStruct());
+			
+			auto group = proto.getStruct();
+			auto discCount = group.getDiscriminantCount();
+			KJ_ASSERT(discCount != 1);
+			if(discCount > 0) {
+				allowBytes(2, group.getDiscriminantOffset());
+				// KJ_LOG(WARNING, "Allowing discriminant at ", 2 * group.getDiscriminantOffset());
+				// KJ_LOG(WARNING, mask);
+			}
+		}
+		
+		return true;
+	}
+	
+	bool checkRoot() {
+		return checkStruct(in, false);
+	}
+	
+	bool checkMask() {		
+		AnyStruct::Reader anyStruct = in;
+		auto dataSection = anyStruct.getDataSection();
+		auto pointerSection = anyStruct.getPointerSection();
+		
+		KJ_ASSERT(mask.size() == dataSection.size());
+		KJ_ASSERT(ptrMask.size() == pointerSection.size());
+		
+		for(unsigned int i = 0; i < mask.size(); ++i) {
+			if((dataSection[i] | mask[i]) != mask[i]) {
+				// KJ_LOG(WARNING, "Encountered forbidden bits", i);
+				// KJ_LOG(WARNING, mask[i]);
+				// KJ_LOG(WARNING, dataSection[i]);
+				// KJ_LOG(WARNING, mask[i] | dataSection[i]);
+				return false;
+			}
+		}
+		
+		for(unsigned int i = 0; i < ptrMask.size(); ++i) {
+			if(!ptrMask[i] && !pointerSection[i].isNull()) {
+				// KJ_LOG(WARNING, "Encountered forbidden pointer", i);
+				return false;
+			}
+		}
+		
+		// KJ_LOG(WARNING, "Checks passed");
+		// KJ_LOG(WARNING, dataSection);
+		// KJ_LOG(WARNING, mask);
+		
+		return true;
+	}
+	
+	bool check() {
+		if(!checkRoot())
+			return false;
+		
+		return checkMask();
+	}
+};
+
+bool hasMaximumOrdinal(capnp::DynamicStruct::Reader in, unsigned int maxOrdinal) {
+	return OrdinalChecker(in, maxOrdinal).check();
+}
+
 } // namespace fsc

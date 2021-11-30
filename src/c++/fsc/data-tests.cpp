@@ -145,3 +145,30 @@ TEST_CASE("local_publish") {
 		KJ_LOG(WARNING, capnp::TextCodec().encode(archive));*/
 	}
 }
+
+TEST_CASE("check-ordinal") {
+	test::TestStruct::Reader tests[] = {
+		test::TEST0.get(),
+		test::TEST1.get(),
+		test::TEST2.get(),
+		test::TEST3.get(),
+		test::TEST4.get(),
+		test::TEST5.get(),
+		test::TEST6.get(),
+		test::TEST7.get(),
+		test::TEST8.get(),
+		test::TEST9.get(),
+		test::TEST10.get(),
+		test::TEST11.get()
+	};
+	const unsigned int nTests = 12;
+	
+	for(unsigned int i = 0; i < nTests; ++i) {
+		// KJ_LOG(WARNING, "Executing positive test ", i);
+		REQUIRE(hasMaximumOrdinal(tests[i], i));
+		
+		// KJ_LOG(WARNING, "Executing negative test ", i);
+		if(i > 1)
+			REQUIRE(!hasMaximumOrdinal(tests[i], i - 1));
+	}
+}

@@ -2,6 +2,7 @@
 
 #include <fsc/data.capnp.h>
 #include <capnp/any.h>
+#include <capnp/dynamic.h>
 #include <kj/async.h>
 //#include <kj/filesystem.h>
 
@@ -270,6 +271,12 @@ struct TensorReader {
 };
 
 
+bool hasMaximumOrdinal(capnp::DynamicStruct::Reader in, unsigned int maxOrdinal);
+
+template <typename T, typename = kj::EnableIf<capnp::kind<capnp::FromReader<T>>() == capnp::Kind::STRUCT>>
+bool hasMaximumOrdinal(T in, unsigned int maxOrdinal) {
+	return hasMaximumOrdinal(capnp::DynamicStruct::Reader(in), maxOrdinal);
+}
 
 Promise<void> removeDatarefs(capnp::AnyPointer::Reader in, capnp::AnyPointer::Builder out);
 	
