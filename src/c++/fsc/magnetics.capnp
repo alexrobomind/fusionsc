@@ -8,29 +8,17 @@ using Data = import "data.capnp";
 using DataRef = Data.DataRef;
 using Float64Tensor = Data.Float64Tensor;
 
-# We want to support future evolution of the grid specification.
-# However, since added information might not be understood by some
-# subsystems, we divide the struct into specific versions. This way,
-# if future grids add additional information, (e.g. Stellarator symmetry),
-# they will be rejected by older code if those values are not set to default.
-
-# If you add flags to this struct, specify a version breakpoint and update
-# the GridVersion enum in magnetics.h and the gridVersion function in
-# magnetics.cpp
-
 struct ToroidalGrid {
 	# Version 1
 	rMin @0 : Float64;
 	rMax @1 : Float64;
 	zMin @2 : Float64;
 	zMax @3 : Float64;
-	nSym @4 : UInt32;
+	nSym @4 : UInt32 = 1;
 	
 	nR @5 : UInt64;
 	nZ @6 : UInt64;
 	nPhi @7 : UInt64;
-	
-	# New versions below
 }
 
 struct ComputedField {

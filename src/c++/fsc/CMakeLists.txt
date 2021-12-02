@@ -38,6 +38,7 @@ add_library(
 	data.cpp
 	
 	magnetics.h
+	magnetics-inl.h
 	magnetics.cpp
 	magnetics-fieldcalc.cpp
 	

@@ -5,25 +5,34 @@
 
 namespace fsc {
 	
-ToroidalGridVersion toroidalGridVersion(ToroidalGrid::Reader grid) {
-	capnp::MallocMessageBuilder tmp;
-	auto ref = tmp.initRoot<ToroidalGrid>();
+// === class ToroidalGridStruct ===
+
+void ToroidalGridStruct::read(ToroidalGrid::Reader in, unsigned int maxOrdinal) {
+	KJ_REQUIRE(hasMaximumOrdinal(in, maxOrdinal));
 	
-	// Version 1
-	ref.setRMin(grid.getRMin());
-	ref.setRMax(grid.getRMax());
-	ref.setZMin(grid.getZMin());
-	ref.setZMax(grid.getZMax());
-	ref.setNSym(grid.getNSym());
+	rMin = in.getRMin();
+	rMax = in.getRMax();
+	zMin = in.getZMin();
+	zMax = in.getZMax();
+	nR = (int) in.getNR();
+	nZ = (int) in.getNZ();
+	nSym = (int) in.getNSym();
+	nPhi = (int) in.getNPhi();
 	
-	ref.setNR(grid.getNR());
-	ref.setNZ(grid.getNZ());
-	ref.setNPhi(grid.getNPhi());
+	KJ_REQUIRE(isValid());
+}
+
+void ToroidalGridStruct::write(ToroidalGrid::Builder out) {
+	KJ_REQUIRE(isValid());
 	
-	if(capnp::canonicalize(ref.asReader()).asBytes() == capnp::canonicalize(grid).asBytes())
-		return ToroidalGridVersion::V1;
-	
-	return ToroidalGridVersion::UNKNOWN;
+	out.setRMin(rMin);
+	out.setRMax(rMax);
+	out.setZMin(zMin);
+	out.setZMax(zMax);
+	out.setNR(nR);
+	out.setNZ(nZ);
+	out.setNSym(nSym);
+	out.setNPhi(nPhi);
 }
 
 Promise<void> FieldResolverBase::resolve(ResolveContext context) {

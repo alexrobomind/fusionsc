@@ -17,7 +17,7 @@ TEST_CASE("build-field") {
 	
 	Temporary<ToroidalGrid> grid;
 	
-	auto calc = newFieldCalculator(lt);
+	auto calc = newCPUFieldCalculator(lt);
 	
 	auto sessRequest = calc.getRequest();
 	sessRequest.setGrid(TEST_GRID.get());

@@ -156,6 +156,17 @@ target_link_libraries(
 find_package(OpenMP 4.5)
 if(OpenMP_FOUND)
 	target_link_libraries(deps INTERFACE OpenMP::OpenMP_CXX)
+endif()##
+
+# Try to enable CUDA
+option(FSC_WITH_CUDA "Whether to use CUDA compilation")
+if(FSC_WITH_CUDA)
+	enable_language(CUDA)
+	target_compile_definitions(
+		deps
+		INTERFACE
+		FSC_WITH_CUDA
+	)
 endif()
 
 

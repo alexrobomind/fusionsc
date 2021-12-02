@@ -5,32 +5,9 @@
 
 #include "common.h"
 #include "local.h"
+#include "tensor.h"
 
 namespace fsc {
-
-/**
- * Helper macro that allows you to specify the maximum version of a toroidal
- * grid which you understand. All code handling computed fields (both creating
- * and consuming) should use this macro to ensure it fully understands the
- * meaning of the grid definition. Note that fields set to default values
- * do not affect the version computation.
- */
-#define FSC_TGRID_VERSION(version, grid) \
-	KJ_REQUIRE( \
-		::fsc::toroidalGridVersion((grid)) <= ::fsc::ToroidalGridVersion::(version), \
-		"Grid too new for me to understand" \
-	)
-
-enum class ToroidalGridVersion {
-	V1 = 0,
-	UNKNOWN = 999 // Increase this if we ever hit version 999
-};
-
-/**
- * Computes the minimum toroidal grid version required to represent
- * this grid.
- */
-ToroidalGridVersion toroidalGridVersion(ToroidalGrid::Reader grid);
 
 class FieldResolverBase : public FieldResolver::Server {
 public:
@@ -43,14 +20,75 @@ public:
 	virtual Promise<void> processFilament(Filament::Reader input, Filament::Builder output, ResolveContext context);
 };
 
+struct ToroidalGridStruct {
+	double rMin; double rMax; unsigned int nR;
+	double zMin; double zMax; unsigned int nZ;
+	unsigned int nSym; unsigned int nPhi;
+	
+	ToroidalGridStruct() = default;
+	inline ToroidalGridStruct(ToroidalGrid::Reader in, unsigned int maxOrdinal) { read(in, maxOrdinal); }
+	
+	inline bool isValid() {
+		return (nR >=2) && (nZ >= 2) && (nPhi >= 1) && (nSym >= 1) && (rMax > rMin) && (zMax > zMin);
+	}
+	
+	void read(ToroidalGrid::Reader in, unsigned int maxOrdinal);
+	void write(ToroidalGrid::Builder out);
+	
+	inline EIGEN_DEVICE_FUNC double phi(int i_phi);
+	inline EIGEN_DEVICE_FUNC double r(int i_r);
+	inline EIGEN_DEVICE_FUNC double z(int i_z);
+	
+	inline EIGEN_DEVICE_FUNC Vec3<double> xyz(int i_phi, int i_z, int i_r);
+	inline EIGEN_DEVICE_FUNC Vec3<double> phizr(int i_phi, int i_z, int i_r);
+};
+
 /**
  * Creates a new field calculator.
  */
-FieldCalculator::Client newFieldCalculator(LibraryThread& lt);
+FieldCalculator::Client newCPUFieldCalculator(LibraryThread& lt);
 
-/**
- * Temporary function that calls the field calculator.
- */
-void dummyFieldcalc();
+// Inline Implementation
+
+inline EIGEN_DEVICE_FUNC double ToroidalGridStruct::phi(int i) {
+	return 2 * pi / nSym / nPhi * i;
+}
+
+inline EIGEN_DEVICE_FUNC double ToroidalGridStruct::r(int i) {
+	return rMin + (rMax - rMin) / (nR - 1) * i;
+}
+
+inline EIGEN_DEVICE_FUNC double ToroidalGridStruct::z(int i) {
+	return zMin + (zMax - zMin) / (nZ - 1) * i;
+}
+	
+inline EIGEN_DEVICE_FUNC Vec3<double> ToroidalGridStruct::xyz(int i_phi, int i_z, int i_r) {
+	double r = rMin + (rMax - rMin) / (nR - 1) * i_r;
+	double z = zMin + (zMax - zMin) / (nZ - 1) * i_z;
+	double phi = 2 * pi / nSym / nPhi;
+	
+	double x = r * cos(phi);
+	double y = r * sin(phi);
+	
+	Vec3<double> result;
+	result(0) = x;
+	result(1) = y;
+	result(2) = z;
+	
+	return result;
+}
+
+inline EIGEN_DEVICE_FUNC Vec3<double> ToroidalGridStruct::phizr(int i_phi, int i_z, int i_r) {
+	double r = rMin + (rMax - rMin) / (nR - 1) * i_r;
+	double z = zMin + (zMax - zMin) / (nZ - 1) * i_z;
+	double vphi = phi(i_phi);
+	
+	Vec3<double> result;
+	result(0) = vphi;
+	result(1) = z;
+	result(2) = r;
+	
+	return result;
+}
 
 }
