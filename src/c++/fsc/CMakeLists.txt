@@ -53,6 +53,15 @@ add_library(
 	${FSC_CP_HEADERS}
 	${FSC_CP_SRC}
 )
+
+if(FSC_WITH_CUDA)
+	target_sources(
+		fsc
+		PRIVATE
+		magnetics-fieldcalc-gpu.cu
+	)
+endif()
+
 target_link_libraries(fsc PUBLIC deps)
 target_include_directories(
 	fsc

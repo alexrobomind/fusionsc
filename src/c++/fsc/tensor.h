@@ -1,81 +1,18 @@
 #pragma once
 
-# define EIGEN_USE_THREADS 1
-
-# define EIGEN_PERMANENTLY_ENABLE_GPU_HIP_CUDA_DEFINES 1
-
-#ifdef CUDA
-	#define EIGEN_USE_GPU
-#endif
-
-#ifdef HIP
-	#define EIGEN_USE_GPU
-#endif
-
-# include <unsupported/Eigen/CXX11/Tensor>
-# include <unsupported/Eigen/CXX11/ThreadPool>
-# include <Eigen/Dense>
-# include <cmath>
 # include <thread>
+# include <kj/debug.h>
+# include <kj/async.h>
+# include <kj/memory.h>
 
 # ifdef _OPENMP
 	# include <omp.h>
 # endif
 
-#define FSC_OFFLOAD 0
+#include "common.h"
+#include "tensor-local.h"
 
 namespace fsc {
-	using Eigen::Tensor;
-	using Eigen::TensorFixedSize;
-	using Eigen::TensorRef;
-	using Eigen::TensorMap;
-	using Eigen::Sizes;
-	
-	constexpr double pi = 3.14159265358979323846; // "Defined" in magnetics.cpp
-	
-	template<typename T>
-	using Vec3 = TensorFixedSize<T, Sizes<3>>;
-
-	using Vec3d = Vec3<double>;
-	using Vec3f = Vec3<float>;
-
-	
-	template<typename T>
-	typename T::Scalar normSq(const T& t) { TensorFixedSize<typename T::Scalar, Sizes<>> result = t.square().sum(); return result(); }
-	
-	template<typename T>
-	typename T::Scalar norm(const T& t) { return sqrt(normSq(t)); }
-	
-	template<typename T1, typename T2>
-	Vec3<typename T1::Scalar> cross(const T1& t1, const T2& t2);
-	
-	/**
-	 * Helper struct that can be used to map data towards a specific device for calculation. Is constructed with a host pointer and a size,
-	 * and allocates a corresponding device pointer.
-	 */
-	template<typename T, typename Device>
-	struct MappedData;
-	
-	/**
-	 * Tensor constructed on a device sharing a host tensor. Subclasses Eigen::TensorRef<T>.
-	 */
-	template<typename T, typename Device>
-	struct MappedTensor { static_assert(sizeof(T) == 0, "Mapper not implemented"); };
-
-	template<typename TVal, int rank, int options, typename Index, typename Device>
-	struct MappedTensor<Tensor<TVal, rank, options, Index>, Device>;
-
-	template<typename TVal, typename Dims, int options, typename Index, typename Device>
-	struct MappedTensor<TensorFixedSize<TVal, Dims, options, Index>, Device>;
-	
-	// Number of threads to be used for evaluation
-	inline unsigned int numThreads() {
-		# ifdef _OPENMP
-			return omp_get_max_threads();
-		# else
-			return std::thread::hardware_concurrency();
-		# endif
-	}
 	
 	/**
 	 * Helper to launch an int-based kernel on a specific device. Currently supports thread-pool- and GPU devices.
@@ -105,6 +42,15 @@ namespace fsc {
 		return KernelLauncher<Device>::launch(device, mv(f), n, params...);
 	}
 	
+	template<typename T, int rank, int options, typename Index, typename T2>
+	void readTensor(T2 reader, Tensor<T, rank, options, Index>& out);
+	
+	template<typename T, typename T2>
+	T readTensor(T2 reader);
+
+	template<typename T, int rank, int options, typename Index, typename T2>
+	void writeTensor(const Tensor<T, rank, options, Index>& in, T2 builder);
+	
 	// === Specializations of kernel launcher ===
 	
 	template<>
@@ -123,21 +69,6 @@ namespace fsc {
 // Implementation
 
 namespace fsc {
-
-template<typename T1, typename T2>
-Vec3<typename T1::Scalar> cross(const T1& t1, const T2& t2) {
-	using Num = typename T1::Scalar;
-	
-	Vec3<Num> r1 = t1;
-	Vec3<Num> r2 = t2;
-	
-	Vec3<Num> result;
-	result(0) = r1(1) * r2(2) - r2(1) * r1(2);
-	result(1) = r1(2) * r2(0) - r2(2) * r1(0);
-	result(2) = r1(0) * r2(1) - r2(0) * r1(1);
-	
-	return result;
-}
 	
 template<typename T, typename Device>
 struct MappedData {
@@ -228,23 +159,35 @@ struct KernelLauncher<Eigen::DefaultDevice> {
 	}
 };
 
-
 template<>
 struct KernelLauncher<Eigen::ThreadPoolDevice> {
 	template<typename Func, typename... Params>
 	static Promise<void> launch(Eigen::ThreadPoolDevice& device, Func f, size_t n, Eigen::TensorOpCost& cost, Params... params) {
-		auto func = [f = mv(f), params...](size_t i) {
-			return f(i, params...);
+		auto func = [f = mv(f), params...](Eigen::Index start, Eigen::Index end) mutable {
+			for(Eigen::Index i = start; i < end; ++i)
+				f(i, params...);
 		};
 		
 		auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-		auto done = [fulfiller = mv(paf.fulfiller)]() {
+		auto done = [fulfiller = mv(paf.fulfiller)]() mutable {
 			fulfiller->fulfill();
 		};
 		
-		return kj::evalLater([func = mv(func), done = mv(done), cost, n, &device]() {
-			device.parallelForAsync(n, cost, func, done);
-		});
+		auto donePtr = kj::heap<decltype(done)>(mv(done));
+		auto funcPtr = kj::heap<decltype(func)>(mv(func));
+		
+		auto doneCopyable = [ptr = donePtr.get()]() {
+			(*ptr)();
+		};
+		
+		auto funcCopyable = [ptr = funcPtr.get()](Eigen::Index start, Eigen::Index end) {
+			(*ptr)(start, end);
+		};
+		
+		return kj::evalLater([funcCopyable, doneCopyable, cost, n, &device, promise = mv(paf.promise)]() mutable {
+			device.parallelForAsync(n, cost, funcCopyable, doneCopyable);
+			return mv(promise);
+		}).attach(mv(donePtr), mv(funcPtr));
 	}
 };
 
@@ -253,10 +196,10 @@ struct KernelLauncher<Eigen::ThreadPoolDevice> {
 namespace internal {
 	
 inline void gpuSynchCallback(gpuStream_t stream, gpuError_t status, void* userData) {
-	using Fulfiller = CrossThreadPromiseFulfiller<void>;
+	using Fulfiller = kj::CrossThreadPromiseFulfiller<void>;
 	
 	// Rescue the fulfiller into the stack a.s.a.p.
-	Own<Fulfiller>* typedUserData = userData;
+	Own<Fulfiller>* typedUserData = (Own<Fulfiller>*) userData;
 	Own<Fulfiller> fulfiller = mv(*typedUserData);
 	delete typedUserData; // new in synchronizeGpuDevice
 	
@@ -266,7 +209,7 @@ inline void gpuSynchCallback(gpuStream_t stream, gpuError_t status, void* userDa
 			return;
 		}
 		
-		fulfiller->reject(KJ_EXCEPTION("GPU computation failed", status));
+		fulfiller->reject(KJ_EXCEPTION(FAILED, "GPU computation failed", status));
 	}
 }
 
@@ -281,19 +224,20 @@ Promise<void> synchronizeGpuDevice(Eigen::GpuDevice& device) {
 	
 	// POTENTIALLY UNSAFE
 	// Note: We REALLY trust that the callback will always be called, otherwise this is a memory leak
-	auto fulfiller = new Own<CrossThreadPromiseFulfiller<void>>(nullptr); // delete in internal::gpuSynchCallback
+	auto fulfiller = new Own<kj::CrossThreadPromiseFulfiller<void>>(); // delete in internal::gpuSynchCallback
 	*fulfiller = mv(paf.fulfiller);
 	
-	try:
-	# ifdef CUDA
+	# ifdef __CUDACC__
 		auto result = cudaStreamAddCallback(device.stream(), internal::gpuSynchCallback, (void*) fulfiller, 0);
-	# elseif HIP
+	# elif HIP
 		auto result = hipStreamAddCallback (device.stream(), internal::gpuSynchCallback, (void*) fulfiller, 0);
 	# endif
 	
 	// If the operation failed, we can't trust the callback to be called
 	// Better just fail now
 	if(result != gpuSuccess) {
+		// We don't know for sure whether the function will be called or not
+		// Better eat a tiny memory leak than calling undefined behavior (so no delete)
 		*fulfiller = nullptr;
 		KJ_FAIL_REQUIRE("Callback scheduling returned error code", result);
 	}
@@ -304,20 +248,78 @@ Promise<void> synchronizeGpuDevice(Eigen::GpuDevice& device) {
 template<>
 struct KernelLauncher<Eigen::GpuDevice> {
 	template<typename Func, typename... Params>
-	static Promise<void> launch(ThreadPoolDevice& device, Func f, size_t n, Eigen::TensorOpCost& cost, Param... params) {
+	static Promise<void> launch(Eigen::GpuDevice& device, Func f, size_t n, Eigen::TensorOpCost& cost, Params... params) {
 		#ifndef EIGEN_GPUCC
 			static_assert(sizeof(Func) == 0, "KernelLauncher<Eigen::GpuDevice>::launch must be called from within a GPU compiler (e.g. HIP / Cuda)");
 		#else
-			#ifdef EIGEN_GPU_COMPILE_PHASE
-				static_assert(sizeof(Func) == 0, "KernelLauncher<Eigen::GpuDevice>::launch may not be called from device-side code");
-			#else
-				GPU_LAUNCH_KERNEL(f, n, 1, 0, device, params...);
+			//#ifdef EIGEN_GPU_COMPILE_PHASE
+			//	static_assert(sizeof(Func) == 0, "KernelLauncher<Eigen::GpuDevice>::launch may not be called from device-side code");
+			//#else
+				// LAUNCH_GPU_KERNEL(f, n, 1, 0, device, params...);
+				gpuLaunch(device, f, n, params...);
 				return synchronizeGpuDevice(device);
-			#endif
+			//#endif
 		#endif
 	}
 };
 
 #endif
+	
+template<typename T, int rank, int options, typename Index, typename T2>
+void readTensor(T2 reader, Tensor<T, rank, options, Index>& out) {
+	using TensorType = Tensor<T, rank, options, Index>;
+	
+	{
+		auto shape = reader.getShape();
+		KJ_REQUIRE(out.rank() == shape.size());
+	
+		typename TensorType::Dimensions dims;
+		for(size_t i = 0; i < rank; ++i) {
+			if(options & Eigen::RowMajor) {
+				dims[i] = shape[i];
+			} else {
+				dims[i] = shape[rank - i - 1];
+			}
+		}
+	
+		out.resize(dims);
+	}
+	
+	auto data = reader.getData();
+	KJ_REQUIRE(out.size() == data.size());
+	auto dataOut = out.data();
+	for(size_t i = 0; i < out.size(); ++i)
+		dataOut[i] = (T) data[i];
+}
+
+template<typename T, typename T2>
+T readTensor(T2 reader) {
+	T result;
+	readTensor(reader, result);
+	return mv(result);
+}
+	
+template<typename T, int rank, int options, typename Index, typename T2>
+void writeTensor(const Tensor<T, rank, options, Index>& in, T2 builder) {
+	using TensorType = Tensor<T, rank, options, Index>;
+	
+	{
+		auto shape = builder.initShape(rank);
+	
+		auto dims = in.dimensions();
+		for(size_t i = 0; i < rank; ++i) {
+			if(options & Eigen::RowMajor) {
+				shape.set(i, dims[i]);
+			} else {
+				shape.set(rank - i - 1, dims[i]);
+			}
+		}
+	}
+	
+	auto dataOut = builder.initData(in.size());
+	auto data = in.data();
+	for(size_t i = 0; i < in.size(); ++i)
+		dataOut.set(i, data[i]);
+}
 
 }

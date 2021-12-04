@@ -21,7 +21,7 @@ const wireField : MagneticField = (
 	filamentField = (
 		current = 1.0,
 		biotSavartSettings = (
-			stepSize = 0.01
+			stepSize = 0.001
 		),
 		windingNo = 1,
 		filament = (

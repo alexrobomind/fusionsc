@@ -1,38 +1,39 @@
 #include <capnp/message.h>
 
-#include "magnetics.h"
+#include "magnetics-inl.h"
 #include "data.h"
 
 namespace fsc {
 	
-// === class ToroidalGridStruct ===
-
-void ToroidalGridStruct::read(ToroidalGrid::Reader in, unsigned int maxOrdinal) {
+ToroidalGridStruct readGrid(ToroidalGrid::Reader in, unsigned int maxOrdinal) {
 	KJ_REQUIRE(hasMaximumOrdinal(in, maxOrdinal));
 	
-	rMin = in.getRMin();
-	rMax = in.getRMax();
-	zMin = in.getZMin();
-	zMax = in.getZMax();
-	nR = (int) in.getNR();
-	nZ = (int) in.getNZ();
-	nSym = (int) in.getNSym();
-	nPhi = (int) in.getNPhi();
+	ToroidalGridStruct out;
 	
-	KJ_REQUIRE(isValid());
+	out.rMin = in.getRMin();
+	out.rMax = in.getRMax();
+	out.zMin = in.getZMin();
+	out.zMax = in.getZMax();
+	out.nR = (int) in.getNR();
+	out.nZ = (int) in.getNZ();
+	out.nSym = (int) in.getNSym();
+	out.nPhi = (int) in.getNPhi();
+	
+	KJ_REQUIRE(out.isValid());
+	return out;
 }
 
-void ToroidalGridStruct::write(ToroidalGrid::Builder out) {
-	KJ_REQUIRE(isValid());
+void writeGrid(const ToroidalGridStruct& in, ToroidalGrid::Builder out) {
+	KJ_REQUIRE(in.isValid());
 	
-	out.setRMin(rMin);
-	out.setRMax(rMax);
-	out.setZMin(zMin);
-	out.setZMax(zMax);
-	out.setNR(nR);
-	out.setNZ(nZ);
-	out.setNSym(nSym);
-	out.setNPhi(nPhi);
+	out.setRMin(in.rMin);
+	out.setRMax(in.rMax);
+	out.setZMin(in.zMin);
+	out.setZMax(in.zMax);
+	out.setNR(in.nR);
+	out.setNZ(in.nZ);
+	out.setNSym(in.nSym);
+	out.setNPhi(in.nPhi);
 }
 
 Promise<void> FieldResolverBase::resolve(ResolveContext context) {
@@ -128,3 +129,4 @@ Promise<void> FieldResolverBase::processFilament(Filament::Reader input, Filamen
 
 
 }
+

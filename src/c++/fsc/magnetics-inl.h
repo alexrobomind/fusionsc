@@ -1,68 +1,10 @@
 # pragma once
 
+#include "magnetics.h"
+#include "magnetics-kernels.h"
+
 namespace fsc { namespace internal {
-
-using Field = Eigen::Tensor<double, 4>;
-using FieldRef = Eigen::TensorMap<Field>;
-
-using MFilament = Eigen::Tensor<double, 2>;
-using FilamentRef = Eigen::TensorMap<MFilament>;
 	
-EIGEN_DEVICE_FUNC inline void biotSavartKernel(unsigned int idx, ToroidalGridStruct grid, FilamentRef filament, double current, double coilWidth, double stepSize, FieldRef out) {
-	int midx[3];
-	
-	// Decode index using column major layout
-	// in which the first index has stride 1
-	for(int i = 0; i < 3; ++i) {
-		midx[i] = idx % out.dimension(i);
-		idx /= out.dimension(i);
-	}
-	
-	int i_phi = midx[0];
-	int i_z   = midx[1];
-	int i_r   = midx[2];
-
-	Vec3d x_grid = grid.xyz(i_phi, i_z, i_r);
-
-	Vec3d field_cartesian;
-	field_cartesian.setZero();
-	
-	auto n_points = filament.dimension(1);	
-	for(int i_fil = 0; i_fil < n_points - 1; ++i_fil) {
-		// Extract current filament
-		Vec3d x1 = filament.chip(i_fil, 1);
-		Vec3d x2 = filament.chip(i_fil + 1, 1);
-		
-		// Calculate step and no. of steps
-		auto dxtot = (x2 - x1).eval();
-		double dxnorm = norm(dxtot);
-		int n_steps = (int) (dxnorm / stepSize + 1);
-		Vec3d dx = dxtot * (1.0 / n_steps);
-		
-		for(int i_step = 0; i_step < n_steps; ++i_step) {
-			auto x = x1 + (x1 - x1) * ((double) i_step) * dx;
-			
-			auto dr = (x_grid - x).eval();
-			auto distance = dr.square().sum().sqrt();
-			auto useDistance = distance.cwiseMax(distance.constant(coilWidth)).eval();
-			TensorFixedSize<double, Eigen::Sizes<>> dPow3 = useDistance * useDistance * useDistance;
-			
-			constexpr double mu0over4pi = 1e-7;
-			field_cartesian += mu0over4pi * cross(dx, dr) / dPow3();
-		}
-	}
-	
-	double phi = grid.phi(i_phi);
-	double fieldR   = field_cartesian(0) * cos(phi) + field_cartesian(1) * sin(phi);
-	double fieldZ   = field_cartesian(2);
-	double fieldPhi = field_cartesian(1) * cos(phi) - field_cartesian(0) * sin(phi);
-	
-	double* outData = out.data();
-	outData[3 * idx + 0] += current * fieldPhi;
-	outData[3 * idx + 1] += current * fieldZ;
-	outData[3 * idx + 2] += current * fieldR;
-}
-
 template<typename Device>
 struct FieldCalculation {
 	Device& _device;
@@ -148,21 +90,7 @@ struct FieldCalculation {
 	
 	void finish(Float64Tensor::Builder out) {
 		mappedField.updateHost();
-		
-		auto shape = out.initShape(4);
-		shape.set(0, grid.nPhi);
-		shape.set(1, grid.nZ);
-		shape.set(2, grid.nR);
-		shape.set(3, 3);
-		
-		auto data = out.initData(3 * field.size());
-		auto fData = field.data();
-		
-		for(int i = 0; i < field.size(); ++i) {
-			for(int j = 0; j < 3; ++j) {
-				data.set(3 * i + j, fData[3 * i + j]);
-			}
-		}
+		writeTensor(field, out);
 	}
 };
 
@@ -179,7 +107,7 @@ struct CalculationSession : public FieldCalculationSession::Server {
 	
 	CalculationSession(Device& device, ToroidalGrid::Reader newGrid, LibraryThread& lt) :
 		device(device),
-		grid(newGrid, GRID_VERSION),
+		grid(readGrid(newGrid, GRID_VERSION)),
 		lt(lt->addRef())
 	{}
 	
@@ -188,7 +116,7 @@ struct CalculationSession : public FieldCalculationSession::Server {
 		.then([this, context](LocalDataRef<Float64Tensor> tensorRef) mutable {
 			auto compField = context.getResults().initComputedField();
 			
-			grid.write(compField.initGrid());
+			writeGrid(grid, compField.initGrid());
 			compField.setData(tensorRef);
 		}).attach(thisCap());
 	}
@@ -260,7 +188,7 @@ struct CalculationSession : public FieldCalculationSession::Server {
 				auto grid = cField.getGrid();
 				
 				Temporary<ToroidalGrid> myGrid;
-				this->grid.write(myGrid);
+				writeGrid(this->grid, myGrid);
 				KJ_REQUIRE(ID::fromReader(grid) == ID::fromReader(myGrid.asReader()));
 				
 				// Then download data				
@@ -284,6 +212,29 @@ struct CalculationSession : public FieldCalculationSession::Server {
 			default:
 				KJ_FAIL_REQUIRE("Unknown magnetic field node encountered. This either indicates that a device-specific node was not resolved, or a generic node from a future library version was presented");
 		}
+	}
+};
+
+template<typename Device>
+struct FieldCalculatorImpl : public FieldCalculator::Server {
+	LibraryThread lt;
+	Own<Device> device;
+	
+	FieldCalculatorImpl(LibraryThread& lt, Own<Device> device) :
+		lt(lt -> addRef()),
+		device(mv(device))
+	{}
+	
+	Promise<void> get(GetContext context) {		
+		FieldCalculationSession::Client newClient(
+			kj::heap<internal::CalculationSession<Device>>(
+				*device,
+				context.getParams().getGrid(),
+				lt
+			).attach(thisCap())
+		);
+		context.getResults().setSession(newClient);
+		return READY_NOW;
 	}
 };
 	
