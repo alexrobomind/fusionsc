@@ -222,8 +222,9 @@ void CoilsDBResolver::buildCoilFields(W7XCoilSet::Reader reader, CoilFields::Bui
 }
 
 // === class ComponentsDBResolver ===
-constexpr kj::StringPtr CDB_ID_TAG;
-constexpr kj::StringPtr CDB_ASID_TAG;
+
+constexpr kj::StringPtr ComponentsDBResolver::CDB_ID_TAG;
+constexpr kj::StringPtr ComponentsDBResolver::CDB_ASID_TAG;
 
 ComponentsDBResolver::ComponentsDBResolver(LibraryThread& lt, ComponentsDB::Client backend) :
 	GeometryResolverBase(lt),
@@ -240,9 +241,10 @@ Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geom
 				auto nodes = output.initCombined(ids.size());
 				
 				for(decltype(n) i = 0; i < n; ++i) {
-					nodes[i].setMesh(getComponent(ids[i]));
+					auto node = nodes[i];
+					node.setMesh(getComponent(ids[i]));
 					
-					auto tags = output.initTags(1);
+					auto tags = node.initTags(1);
 					tags[0].setName(CDB_ID_TAG);
 					tags[0].initValue().setUInt64(ids[i]);
 				}
@@ -258,6 +260,10 @@ Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geom
 				for(decltype(n) i = 0; i < n; ++i) {
 					auto node = nodes[i];
 					
+					auto tags = node.initTags(1);
+					tags[0].setName(CDB_ASID_TAG);
+					tags[0].initValue().setUInt64(ids[i]);
+					
 					subTasks.add(
 						getAssembly(ids[i])
 						.then([=, this](kj::Array<uint64_t> cids) mutable {
@@ -266,7 +272,7 @@ Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geom
 							for(unsigned int i = 0; i < cids.size(); ++i)
 								tmpIds.set(i, cids[i]);
 							
-							return processGeometry(intermediate, output, context).attach(mv(intermediate));
+							return processGeometry(intermediate, node, context).attach(mv(intermediate));
 						})
 					);
 				}
