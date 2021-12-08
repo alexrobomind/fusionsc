@@ -4,10 +4,10 @@
 
 namespace fsc {
 	
-struct GeometryResolverBase : public GeometryResolverBase::Server {
+struct GeometryResolverBase : public GeometryResolver::Server {
 public:
 	LibraryThread lt;
-	FieldResolverBase(LibraryThread& lt);
+	GeometryResolverBase(LibraryThread& lt);
 	
 	virtual Promise<void> resolve(ResolveContext context) override;
 	

@@ -67,13 +67,13 @@ Promise<void> CoilsDBResolver::processField(MagneticField::Reader input, Magneti
 Promise<void> CoilsDBResolver::coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAndCurrents::Reader reader, MagneticField::Builder output, ResolveContext context) {
 	output.initSum(N_MAIN_COILS + N_TRIM_COILS + N_CONTROL_COILS);
 	
-	return getCoilFields(reader.getCoils()).then([this, =](LocalDataRef<CoilFields> coilFields) {
+	return getCoilFields(reader.getCoils()).then([=, this](LocalDataRef<CoilFields> coilFields) mutable {
 		CoilFields::Reader fieldsReader = coilFields.get();
 		
 		using FieldRef = DataRef<MagneticField>::Client;
 		unsigned int offset = 0;
 		
-		auto addOutput = [&](FieldRef field, double current) {
+		auto addOutput = [&](FieldRef field, double current) mutable {
 			auto subField = output.getSum()[offset++];
 			auto scaleBy = subField.initScaleBy();
 			scaleBy.setFactor(current);
@@ -230,9 +230,9 @@ ComponentsDBResolver::ComponentsDBResolver(LibraryThread& lt, ComponentsDB::Clie
 
 Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveContext context) {
 	GeometryResolverBase::processGeometry(input, output, context)
-	.then([=, this]() -> Promise<void> {
+	.then([=, this]() mutable -> Promise<void> {
 		switch(input.which()) {
-			case Geometry::ComponentsDBMeshes: {
+			case Geometry::COMPONENTS_D_B_MESHES: {
 				auto ids = input.getComponentsDBMeshes();
 				auto n = ids.size();
 				auto nodes = output.initCombined(ids.size());
@@ -247,12 +247,12 @@ Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geom
 				return READY_NOW;
 			}
 			
-			case Geometry::ComponentsDBAssemblies: {
+			case Geometry::COMPONENTS_D_B_ASSEMBLIES: {
 				auto ids = input.getComponentsDBAssemblies();
 				auto n = ids.size();
 				auto nodes = output.initCombined(ids.size());
 				
-				kj::ArrayBuilder<Promise<void>> subTasks(n);
+				auto subTasks = kj::heapArrayBuilder<Promise<void>>(n);
 				for(decltype(n) i = 0; i < n; ++i) {
 					auto node = nodes[i];
 					
@@ -260,13 +260,13 @@ Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geom
 						getAssembly(ids[i])
 						.then([=, this](kj::Array<uint64_t> cids) mutable {
 							Temporary<Geometry> intermediate;
-							auto tmpIds = intermediate.initComponentsDBMeshes(cids.size));
+							auto tmpIds = intermediate.initComponentsDBMeshes(cids.size());
 							for(unsigned int i = 0; i < cids.size(); ++i)
-								tmpIds[i] = cids[i];
+								tmpIds.set(i, cids[i]);
 							
-							return processGeometry(intermediate, output, context).attach(mv(intermediate))
+							return processGeometry(intermediate, output, context).attach(mv(intermediate));
 						})
-					)
+					);
 				}
 				return kj::joinPromises(subTasks.finish());
 			}
@@ -277,12 +277,12 @@ Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geom
 	});
 }
 
-DataRef<Mesh>::Client ComponentsDBResolver::getCoil(uint64_t id) {
+DataRef<Mesh>::Client ComponentsDBResolver::getComponent(uint64_t id) {
 	KJ_IF_MAYBE(pMesh, meshes.find(id)) {
 		return *pMesh;
 	}
 	
-	ComponentsDB::GetMeshRequest request;
+	auto request = backend.getMeshRequest();
 	request.setId(id);
 	
 	return request.send()
@@ -318,13 +318,13 @@ DataRef<Mesh>::Client ComponentsDBResolver::getCoil(uint64_t id) {
 		for(unsigned int i = 0; i < inPoly.size(); ++i) {
 			KJ_REQUIRE(inPoly[i] > 0, "Assumption violated that ComponentsDB uses 1-based indices", id, i);
 			
-			outPoly[i] = inPoly[i] - 1;
+			outPoly.set(i, inPoly[i] - 1);
 		}
 		
 		// Step 3: Translate polygon sizes
 		auto nVert = inMesh.getNumVertices();
 		if(nVert.size() == 0) {
-			mesh.initPolyMesh(0):
+			mesh.initPolyMesh(0);
 		} else {
 			auto firstNVert = nVert[0];
 			bool allSame = true;
@@ -339,9 +339,9 @@ DataRef<Mesh>::Client ComponentsDBResolver::getCoil(uint64_t id) {
 			if(firstNVert == 3 && allSame && nVert.size() == 3 * inPoly.size()) {
 				// We have a triangle mesh
 				// Let's save ourselves the polygon buffer
-				inMesh.initTriMesh();
+				mesh.setTriMesh();
 			} else {
-				auto polyMesh = inMesh.initPolyMesh(nVert.size() + 1);
+				auto polyMesh = mesh.initPolyMesh(nVert.size() + 1);
 				
 				uint32_t offset = 0;
 				
@@ -351,14 +351,14 @@ DataRef<Mesh>::Client ComponentsDBResolver::getCoil(uint64_t id) {
 					if(polySize != firstNVert)
 						allSame = false;
 					
-					polyMesh[i] = counter;
-					counter += polySize;
+					polyMesh.set(i, offset);
+					offset += polySize;
 				}
-				polyMesh[nVert.size()] = counter;
+				polyMesh.set(nVert.size(), offset);
 			}
 		}
 		
-		DataRef<Mesh>::Client published = lt->dataService.publish(lt->randomID(), mesh);
+		DataRef<Mesh>::Client published = lt->dataService().publish(lt->randomID(), mesh.asReader());
 		meshes.insert(id, published);
 		return published;
 	});

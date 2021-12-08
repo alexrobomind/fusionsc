@@ -6,6 +6,7 @@
 
 #include "../common.h"
 #include "../magnetics.h"
+#include "../geometry.h"
 #include "../data.h"
 
 
@@ -40,7 +41,7 @@ class CoilsDBResolver : public FieldResolverBase {
 	
 	// Returns a set of magnetic fields required for processing a configuration node.
 	// Caches the field set
-	LocalDataRef<CoilFields> getCoilFields(W7XCoilSet::Reader reader);
+	Promise<LocalDataRef<CoilFields>> getCoilFields(W7XCoilSet::Reader reader);
 	void buildCoilFields(W7XCoilSet::Reader reader, CoilFields::Builder coilPack);
 	
 	// Loads the coils from the backend coilsDB. Caches the result
@@ -48,8 +49,8 @@ class CoilsDBResolver : public FieldResolverBase {
 };
 
 class ComponentsDBResolver : public GeometryResolverBase {
-	constexpr static kj::String CDB_ID_TAG = "w7x-component-id"_kj;
-	constexpr static kj::String CDB_ASID_TAG = "w7x-assembly-id"_kj;
+	constexpr static kj::StringPtr CDB_ID_TAG = "w7x-component-id"_kj;
+	constexpr static kj::StringPtr CDB_ASID_TAG = "w7x-assembly-id"_kj;
 	
 	ComponentsDBResolver(LibraryThread& lt, ComponentsDB::Client backend);
 	
@@ -57,7 +58,7 @@ class ComponentsDBResolver : public GeometryResolverBase {
 	
 	ComponentsDB::Client backend;
 	
-	Promise<void> processGeometry(Geometry::Reader input, Geometry::Reader output, ResolveContext context) override;
+	Promise<void> processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveContext context) override;
 	
 	// Loads a component from the components db (caches result)
 	DataRef<Mesh>::Client getComponent(uint64_t cdbID);

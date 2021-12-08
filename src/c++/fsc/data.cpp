@@ -836,6 +836,10 @@ Promise<void> removeDatarefs(capnp::AnyPointer::Reader in, capnp::AnyPointer::Bu
 	return READY_NOW;
 }
 
+Promise<void> removeDatarefs(capnp::AnyStruct::Reader in, capnp::AnyStruct::Builder out) {
+	return removeDatarefsInStruct(in, out);
+}
+
 Promise<void> removeDatarefsInStruct(capnp::AnyStruct::Reader in, capnp::AnyStruct::Builder out) {
 	// Copy over data section
 	KJ_ASSERT(out.getDataSection().size() == in.getDataSection().size());

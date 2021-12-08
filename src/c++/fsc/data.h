@@ -235,6 +235,8 @@ struct Temporary : public T::Builder {
 		T::Builder::operator=(holder.getRoot<T>());
 	}
 	
+	Temporary(Temporary<T>&&) = default;
+	
 	Temporary<T>& operator=(typename T::Reader other) {
 		capnp::toAny(*this).setAs(other);
 	}
@@ -279,6 +281,7 @@ bool hasMaximumOrdinal(T in, unsigned int maxOrdinal) {
 }
 
 Promise<void> removeDatarefs(capnp::AnyPointer::Reader in, capnp::AnyPointer::Builder out);
+Promise<void> removeDatarefs(capnp::AnyStruct::Reader in, capnp::AnyStruct::Builder out);
 	
 template<typename T>
 ID ID::fromReader(T t) {
@@ -288,10 +291,10 @@ ID ID::fromReader(T t) {
 template<typename T>
 Promise<ID> ID::fromReaderWithRefs(T t) {
 	Temporary<capnp::FromAny<T>> tmp;
-	auto stripped = removeDatarefs(toAny(t), toAny(tmp));
+	auto stripped = removeDatarefs(capnp::toAny(t), capnp::toAny(tmp));
 	
-	return stripped.then([tmp = mv(tmp)]{
-		return ID::fromReader(tmp);
+	return stripped.then([tmp = mv(tmp)]() mutable {
+		return ID::fromReader(tmp.asReader());
 	});
 }
 

@@ -42,6 +42,8 @@ namespace internal {
 	extern template void ::fsc::internal::gpuLaunch<decltype(&func), &func, __VA_ARGS__>(Eigen::GpuDevice&, size_t, __VA_ARGS__);
 
 #else
+	
+#define REFERENCE_KERNEL(func, ...)
 
 #pragma message("Ignoring GPUCC launch infrastructure templates")
 
