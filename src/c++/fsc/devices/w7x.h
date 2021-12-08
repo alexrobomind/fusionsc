@@ -79,10 +79,22 @@ static constexpr kj::StringPtr DEFAULT_COILSDB = "http://esb.ipp-hgw.mpg.de:8280
  * used when the requested data are not available.
  */
 CoilsDB::Client newCoilsDBFromOfflineData(
-	LocalDataRef<OfflineData> offlineData,
+	ArrayPtr<LocalDataRef<OfflineData>> offlineData,
 	LibraryThread& lt,
 	CoilsDB::Client passthrough
 		= capnp::Capability::Client(KJ_EXCEPTION(FAILED, "Data not available and no passthrough specified")).castAs<CoilsDB>()
+);
+
+
+ComponentsDB::Client newComponentsDBFromWebservice(kj::StringPtr address, LibraryThread& lt);
+
+static constexpr kj::StringPtr DEFAULT_COMPONENTSDB = "http://esb.ipp-hgw.mpg.de:8280/services/ComponentsDbRest"_kj;
+
+ComponentsDB::Client newOfflineComponentsDB(
+	ArrayPtr<LocalDataRef<OfflineData>> offlineData,
+	LibraryThread& lt,
+	ComponentsDB::Client backend
+		= capnp::Capability::Client(KJ_EXCEPTION(FAILED, "Data not available and no passthrough specified")).castAs<ComponentsDB>()
 );
 
 /*

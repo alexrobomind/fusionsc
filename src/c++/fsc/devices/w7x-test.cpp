@@ -45,6 +45,37 @@ TEST_CASE("coilsdb") {
 		}
 	}
 }
+ 
+TEST_CASE("compdb") {
+	Library l = newLibrary();
+	LibraryThread t = l -> newThread();
+	
+	auto& ws = t -> waitScope();
+	
+	auto& network = t -> ioContext().provider -> getNetwork();
+	
+	auto testData = COMPDB_TEST.get();
+	
+	SimpleHttpServer server(network.parseAddress("127.0.0.1"), t, testData.getHttpRoot() /* from w7x-test.capnp */);
+	unsigned int port = server.getPort().wait(ws);
+	
+	ComponentsDB::Client cdb = newComponentsDBFromWebservice(kj::str("http://127.0.0.1:", port), t);
+	
+	for(auto e : testData.getEntries()) {
+		auto request = cdb.getMeshRequest();
+		request.setId(e.getId());
+		
+		if(e.isResult()) {
+			auto result = request.send().wait(ws);
+			Mesh::Reader mesh = result;
+			Mesh::Reader ref  = e.getResult();
+			
+			KJ_REQUIRE(ID::fromReader(mesh) == ID::fromReader(ref), mesh, ref);
+		} else {
+			REQUIRE_THROWS(request.send().wait(ws));
+		}
+	}
+}
 
 }}
 

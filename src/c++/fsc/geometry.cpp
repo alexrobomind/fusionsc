@@ -1,6 +1,9 @@
 #include "geometry.h"
+#include "data.h"
 
 namespace fsc {
+	
+GeometryResolverBase::GeometryResolverBase(LibraryThread& lt) : lt(lt->addRef()) {}
 
 Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveContext context) {
 	output.setTags(input.getTags());
@@ -11,7 +14,7 @@ Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geom
 			auto n = combinedIn.size();
 			auto combinedOut = output.initCombined(n);
 			
-			kj::ArrayBuilder<Promise<void>> subTasks(n);
+			auto subTasks = kj::heapArrayBuilder<Promise<void>>(n);
 			for(decltype(n) i = 0; i < n; ++i) {
 				subTasks.add(processGeometry(combinedIn[i], combinedOut[i], context));
 			}
@@ -31,12 +34,12 @@ Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geom
 			}
 						
 			Temporary<Geometry> tmp;
-			return lt->dataServce().download(input.getRef())
-			.then([tmp, context, this](LocalDataRef<Geometry> local) mutable {
+			return lt->dataService().download(input.getRef())
+			.then([tmp = Geometry::Builder(tmp), context, this](LocalDataRef<Geometry> local) mutable {
 				return processGeometry(local.get(), tmp, context);
-			}.then([tmp, output, this]() mutable {
+			}).then([tmp = tmp.asReader(), output, this]() mutable {
 				output.setRef(lt->dataService().publish(lt->randomID(), tmp));
-			}.attach(mv(tmp), thisCap());
+			}).attach(mv(tmp), thisCap());
 		}
 		case Geometry::MESH: {
 			output.setMesh(input.getMesh());
@@ -47,7 +50,7 @@ Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geom
 	}
 }
 
-Promise<void> GeometryResolverBase::processTransform(Transformed<Geometry>::Reader input, Transformed<Geometry>::Reader output, ResolveContext context) {
+Promise<void> GeometryResolverBase::processTransform(Transformed<Geometry>::Reader input, Transformed<Geometry>::Builder output, ResolveContext context) {
 	switch(input.which()) {
 		case Transformed<Geometry>::LEAF: {
 			return processGeometry(input.getLeaf(), output.initLeaf(), context);
@@ -56,7 +59,7 @@ Promise<void> GeometryResolverBase::processTransform(Transformed<Geometry>::Read
 			auto shiftIn = input.getShifted();
 			auto shiftOut = output.initShifted();
 			
-			shiftIn.setShift(shiftOut.getShift());
+			shiftOut.setShift(shiftIn.getShift());
 			return processTransform(shiftIn.getNode(), shiftOut.initNode(), context);
 		}
 		case Transformed<Geometry>::TURNED: {
@@ -69,13 +72,13 @@ Promise<void> GeometryResolverBase::processTransform(Transformed<Geometry>::Read
 			return processTransform(turnedIn.getNode(), turnedOut.initNode(), context);
 		}
 		default:
-			return KJ_FAIL_REQUIRE("Unknown transform node encountered", input.which());
+			KJ_FAIL_REQUIRE("Unknown transform node encountered", input.which());
 	}
 }
 
 Promise<void> GeometryResolverBase::resolve(ResolveContext context) {
 	auto input = context.getParams().getGeometry();
-	auto output = context.getResults().initGeometry();
+	auto output = context.initResults();
 	
 	return processGeometry(input, output, context);
 }

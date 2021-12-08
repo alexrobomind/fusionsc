@@ -11,13 +11,17 @@ using MagneticField = Magnetics.MagneticField;
 using Filament = Magnetics.Filament;
 using BiotSavartSettings = Magnetics.BiotSavartSettings;
 
+using Geometry = import "../geometry.capnp";
+using Mesh = Geometry.Mesh;
+
 interface CoilsDB {
 	getCoil @0 (id : UInt64) -> (filament : Filament);
 	getConfig @1 (id : UInt64) -> (config : CoilsDBConfig);
 }
 
 interface ComponentsDB {
-	getMesh @0 (id : UInt64) -> ComponentsDBMesh;
+	getMesh @0 (id : UInt64) -> Mesh;
+	getAssembly @1 (id : UInt64) -> (components : List(UInt64));
 }
 
 # Structure that holds instructions on how to compute the field
@@ -40,6 +44,10 @@ struct ComponentsDBMesh {
 		polygons @3 : List(UInt32);
 		numVertices @4 : List(UInt32);
 	}
+}
+
+struct ComponentsDBAssembly {
+	components @0 : List(UInt64);
 }
 
 # === Client-side JSON interface for CoilsDB ===

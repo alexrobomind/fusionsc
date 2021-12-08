@@ -229,7 +229,7 @@ ComponentsDBResolver::ComponentsDBResolver(LibraryThread& lt, ComponentsDB::Clie
 {}
 
 Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveContext context) {
-	GeometryResolverBase::processGeometry(input, output, context)
+	return GeometryResolverBase::processGeometry(input, output, context)
 	.then([=, this]() mutable -> Promise<void> {
 		switch(input.which()) {
 			case Geometry::COMPONENTS_D_B_MESHES: {
@@ -277,6 +277,23 @@ Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geom
 	});
 }
 
+Promise<kj::Array<uint64_t>> ComponentsDBResolver::getAssembly(uint64_t id) {
+	auto request = backend.getAssemblyRequest();
+	request.setId(id);
+	
+	return request.send()
+	.then([](auto response) {
+		auto components = response.getComponents();
+		unsigned int n = components.size();
+		
+		auto result = kj::heapArray<uint64_t>(n);
+		for(unsigned int i = 0; i < n; ++i)
+			result[i] = components[i];
+
+		return mv(result);
+	});
+}
+
 DataRef<Mesh>::Client ComponentsDBResolver::getComponent(uint64_t id) {
 	KJ_IF_MAYBE(pMesh, meshes.find(id)) {
 		return *pMesh;
@@ -286,79 +303,12 @@ DataRef<Mesh>::Client ComponentsDBResolver::getComponent(uint64_t id) {
 	request.setId(id);
 	
 	return request.send()
-	.then([id, this](capnp::Response<ComponentsDBMesh> response) -> DataRef<Mesh>::Client {
+	.then([id, this](capnp::Response<Mesh> response) -> DataRef<Mesh>::Client {
 		KJ_IF_MAYBE(pMesh, meshes.find(id)) {
 			return *pMesh;
 		}
 		
-		auto inMesh = response.getSurfaceMesh();
-		
-		auto nPoints = inMesh.getNodes().getX1().size();
-		KJ_REQUIRE(inMesh.getNodes().getX2().size() == nPoints);
-		KJ_REQUIRE(inMesh.getNodes().getX3().size() == nPoints);
-		
-		// Translate components DB response to native format
-		Temporary<Mesh> mesh;
-		
-		// Step 1: Translate vertices
-		auto verts = mesh.initVertices();
-		verts.setShape({nPoints, 3});
-		auto data = verts.initData(3 * nPoints);
-		for(unsigned int i = 0; i < nPoints; ++i) {
-			data.set(3 * i + 0, inMesh.getNodes().getX1()[i]);
-			data.set(3 * i + 1, inMesh.getNodes().getX2()[i]);
-			data.set(3 * i + 2, inMesh.getNodes().getX3()[i]);
-		}
-		
-		// Step 2: Translate indices
-		// TODO: I think components db uses 1 based indices? not sure
-		
-		auto inPoly = inMesh.getPolygons();
-		auto outPoly = mesh.initIndices(inPoly.size());
-		for(unsigned int i = 0; i < inPoly.size(); ++i) {
-			KJ_REQUIRE(inPoly[i] > 0, "Assumption violated that ComponentsDB uses 1-based indices", id, i);
-			
-			outPoly.set(i, inPoly[i] - 1);
-		}
-		
-		// Step 3: Translate polygon sizes
-		auto nVert = inMesh.getNumVertices();
-		if(nVert.size() == 0) {
-			mesh.initPolyMesh(0);
-		} else {
-			auto firstNVert = nVert[0];
-			bool allSame = true;
-			
-			for(unsigned int i = 0; i < nVert.size(); ++i) {
-				auto polySize = nVert[i];
-				
-				if(polySize != firstNVert)
-					allSame = false;
-			}
-			
-			if(firstNVert == 3 && allSame && nVert.size() == 3 * inPoly.size()) {
-				// We have a triangle mesh
-				// Let's save ourselves the polygon buffer
-				mesh.setTriMesh();
-			} else {
-				auto polyMesh = mesh.initPolyMesh(nVert.size() + 1);
-				
-				uint32_t offset = 0;
-				
-				for(unsigned int i = 0; i < nVert.size(); ++i) {
-					auto polySize = nVert[i];
-					
-					if(polySize != firstNVert)
-						allSame = false;
-					
-					polyMesh.set(i, offset);
-					offset += polySize;
-				}
-				polyMesh.set(nVert.size(), offset);
-			}
-		}
-		
-		DataRef<Mesh>::Client published = lt->dataService().publish(lt->randomID(), mesh.asReader());
+		DataRef<Mesh>::Client published = lt->dataService().publish(lt->randomID(), (Mesh::Reader&) response);
 		meshes.insert(id, published);
 		return published;
 	});
@@ -377,7 +327,7 @@ struct CoilsDBWebservice : public CoilsDB::Server {
 		lt(lt -> addRef())
 	{}
 	
-	Promise<void> getCoil(GetCoilContext context)  {
+	Promise<void> getCoil(GetCoilContext context) override {
 		using kj::HttpHeaderTable;
 		using kj::HttpHeaders;
 		using capnp::JsonCodec;
@@ -419,7 +369,7 @@ struct CoilsDBWebservice : public CoilsDB::Server {
 		}).attach(mv(response), mv(client), thisCap());	
 	}
 	
-	Promise<void> getConfig(GetConfigContext context) {
+	Promise<void> getConfig(GetConfigContext context) override {
 		using kj::HttpHeaderTable;
 		using kj::HttpHeaders;
 		using capnp::JsonCodec;
@@ -456,7 +406,7 @@ struct OfflineCoilsDB : public CoilsDB::Server {
 		backend(backend)
 	{}
 	
-	Promise<void> getCoil(GetCoilContext context) {
+	Promise<void> getCoil(GetCoilContext context) override {
 		for(auto& entry : offlineData) {
 			for(auto coilEntry : entry.get().getW7xCoils()) {
 				if(coilEntry.getId() == context.getParams().getId()) {
@@ -471,7 +421,7 @@ struct OfflineCoilsDB : public CoilsDB::Server {
 		return context.tailCall(mv(tail));
 	}
 	
-	Promise<void> getConfig(GetConfigContext context) {
+	Promise<void> getConfig(GetConfigContext context) override {
 		for(auto& entry : offlineData) {
 			for(auto configEntry : entry.get().getW7xConfigs()) {
 				if(configEntry.getId() == context.getParams().getId()) {
@@ -487,12 +437,191 @@ struct OfflineCoilsDB : public CoilsDB::Server {
 	}
 };
 
+struct ComponentsDBWebservice : public ComponentsDB::Server {
+	kj::String address;
+	LibraryThread lt;
+		
+	Own<kj::HttpHeaderTable> headerTbl = kj::heap<kj::HttpHeaderTable>();
+	
+	ComponentsDBWebservice(kj::StringPtr address, LibraryThread& lt) :
+		address(kj::heapString(address)),
+		lt(lt -> addRef())
+	{}
+	
+	Promise<void> getMesh(GetMeshContext context) override  {
+		using kj::HttpHeaderTable;
+		using kj::HttpHeaders;
+		using capnp::JsonCodec;
+		
+		auto client = kj::newHttpClient(
+			lt->timer(),
+			*headerTbl,
+			lt -> network(),
+			nullptr
+		);
+		auto response = client->request(
+			kj::HttpMethod::GET,
+			kj::str(address, "/component/", context.getParams().getId(), "/data"),
+			HttpHeaders(*headerTbl)
+		).response;
+		
+		auto read = response.then([](auto response) { KJ_REQUIRE(response.statusCode == 200); return response.body->readAllText().attach(mv(response.body)); });
+		return read.then([context](kj::String rawJson) mutable {			
+			Temporary<ComponentsDBMesh> tmp;
+			JsonCodec().decode(rawJson, tmp);
+		
+			auto inMesh = tmp.getSurfaceMesh();
+			
+			auto nPoints = inMesh.getNodes().getX1().size();
+			KJ_REQUIRE(inMesh.getNodes().getX2().size() == nPoints);
+			KJ_REQUIRE(inMesh.getNodes().getX3().size() == nPoints);
+			
+			// Translate components DB response to native format
+			Temporary<Mesh> mesh;
+			
+			// Step 1: Translate vertices
+			auto verts = mesh.initVertices();
+			verts.setShape({nPoints, 3});
+			auto data = verts.initData(3 * nPoints);
+			for(unsigned int i = 0; i < nPoints; ++i) {
+				data.set(3 * i + 0, inMesh.getNodes().getX1()[i]);
+				data.set(3 * i + 1, inMesh.getNodes().getX2()[i]);
+				data.set(3 * i + 2, inMesh.getNodes().getX3()[i]);
+			}
+			
+			// Step 2: Translate indices
+			// TODO: I think components db uses 1 based indices? not sure
+			
+			auto inPoly = inMesh.getPolygons();
+			auto outPoly = mesh.initIndices(inPoly.size());
+			for(unsigned int i = 0; i < inPoly.size(); ++i) {
+				KJ_REQUIRE(inPoly[i] > 0, "Assumption violated that ComponentsDB uses 1-based indices", context.getParams().getId(), i);
+				
+				outPoly.set(i, inPoly[i] - 1);
+			}
+			
+			// Step 3: Translate polygon sizes
+			auto nVert = inMesh.getNumVertices();
+			if(nVert.size() == 0) {
+				mesh.initPolyMesh(0);
+			} else {
+				auto firstNVert = nVert[0];
+				bool allSame = true;
+				
+				for(unsigned int i = 0; i < nVert.size(); ++i) {
+					auto polySize = nVert[i];
+					
+					if(polySize != firstNVert)
+						allSame = false;
+				}
+				
+				if(firstNVert == 3 && allSame && 3 * nVert.size() == inPoly.size()) {
+					// We have a triangle mesh
+					// Let's save ourselves the polygon buffer
+					mesh.setTriMesh();
+				} else {
+					auto polyMesh = mesh.initPolyMesh(nVert.size() + 1);
+					
+					uint32_t offset = 0;
+					
+					for(unsigned int i = 0; i < nVert.size(); ++i) {
+						auto polySize = nVert[i];
+						
+						polyMesh.set(i, offset);
+						offset += polySize;
+					}
+					polyMesh.set(nVert.size(), offset);
+				}
+			}
+			
+			context.setResults(mesh.asReader());
+		}).attach(mv(response), mv(client), thisCap());	
+	}
+	
+	Promise<void> getAssembly(GetAssemblyContext context) override {
+		using kj::HttpHeaderTable;
+		using kj::HttpHeaders;
+		using capnp::JsonCodec;
+		
+		auto client = kj::newHttpClient(
+			lt->timer(),
+			*headerTbl,
+			lt -> network(),
+			nullptr
+		);
+		auto response = client->request(
+			kj::HttpMethod::GET,
+			kj::str(address, "/component/", context.getParams().getId(), "/data"),
+			HttpHeaders(*headerTbl)
+		).response;
+		
+		auto read = response.then([](auto response) { KJ_REQUIRE(response.statusCode == 200); return response.body->readAllText().attach(mv(response.body)); });
+		return read.then([context](kj::String rawJson) mutable {			
+			Temporary<ComponentsDBAssembly> tmp;
+			JsonCodec().decode(rawJson, tmp);
+			
+			context.initResults().setComponents(tmp.getComponents());
+		}).attach(mv(response), mv(client), thisCap());	
+	}
+};
+
+struct OfflineComponentsDB : public ComponentsDB::Server {
+	LibraryThread lt;
+	Array<LocalDataRef<OfflineData>> offlineData;
+	
+	ComponentsDB::Client backend;
+	
+	OfflineComponentsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt, ComponentsDB::Client backend) :
+		lt(lt->addRef()),
+		offlineData(kj::heapArray(offlineData)),
+		backend(backend)
+	{}
+	
+	Promise<void> getMesh(GetMeshContext context) override {
+		for(auto& entry : offlineData) {
+			for(auto componentEntry : entry.get().getW7xComponents()) {
+				if(componentEntry.getId() == context.getParams().getId()) {
+					context.setResults(componentEntry.getComponent());
+					return kj::READY_NOW;
+				}
+			}
+		}
+		
+		auto tail = backend.getMeshRequest();
+		tail.setId(context.getParams().getId());
+		return context.tailCall(mv(tail));
+	}
+	
+	Promise<void> getAssembly(GetAssemblyContext context) override {
+		for(auto& entry : offlineData) {
+			for(auto assemblyEntry : entry.get().getW7xAssemblies()) {
+				if(assemblyEntry.getId() == context.getParams().getId()) {
+					context.initResults().setComponents(assemblyEntry.getAssembly());
+					return kj::READY_NOW;
+				}
+			}
+		}
+		
+		auto tail = backend.getAssemblyRequest();
+		tail.setId(context.getParams().getId());
+		return context.tailCall(mv(tail));
+	}
+};
+
 CoilsDB::Client newCoilsDBFromWebservice(kj::StringPtr address, LibraryThread& lt) {
 	return CoilsDB::Client(kj::heap<CoilsDBWebservice>(address, lt));
 }
 
 CoilsDB::Client newOfflineCoilsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt, CoilsDB::Client backend) {
 	return CoilsDB::Client(kj::heap<OfflineCoilsDB>(offlineData, lt, backend));
+}
+
+ComponentsDB::Client newComponentsDBFromWebservice(kj::StringPtr address, LibraryThread& lt) {
+	return ComponentsDB::Client(kj::heap<ComponentsDBWebservice>(address, lt));
+}
+
+ComponentsDB::Client newOfflineComponentsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt, ComponentsDB::Client backend) {
+	return ComponentsDB::Client(kj::heap<OfflineComponentsDB>(offlineData, lt, backend));
 }
 	
 }}

@@ -74,6 +74,9 @@ add_library(
 	data.h
 	data.cpp
 	
+	geometry.h
+	geometry.cpp
+	
 	magnetics.h
 	magnetics-inl.h
 	magnetics.cpp

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "local.h"
 #include <fsc/geometry.capnp.h>
 
 namespace fsc {

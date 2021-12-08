@@ -223,16 +223,18 @@ private:
 template<typename T>
 struct Temporary : public T::Builder {
 	Temporary() :
-		T::Builder(nullptr)
+		T::Builder(nullptr),
+		holder(kj::heap<capnp::MallocMessageBuilder>())
 	{
-		T::Builder::operator=(holder.initRoot<T>());
+		T::Builder::operator=(holder->initRoot<T>());
 	}
 	
 	Temporary(typename T::Reader reader) :
-		T::Builder(nullptr)
+		T::Builder(nullptr),
+		holder(kj::heap<capnp::MallocMessageBuilder>())
 	{
-		holder.setRoot(cp(reader));
-		T::Builder::operator=(holder.getRoot<T>());
+		holder->setRoot(cp(reader));
+		T::Builder::operator=(holder->getRoot<T>());
 	}
 	
 	Temporary(Temporary<T>&&) = default;
@@ -241,7 +243,7 @@ struct Temporary : public T::Builder {
 		capnp::toAny(*this).setAs(other);
 	}
 	
-	capnp::MallocMessageBuilder holder;
+	Own<capnp::MallocMessageBuilder> holder;
 };
 
 template<typename T>
