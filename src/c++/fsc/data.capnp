@@ -74,3 +74,8 @@ struct UInt32Tensor {
 	shape @0 : List(UInt64);
 	data  @1 : List(UInt32);
 }
+
+struct ShapedList(ListType) {
+	shape @0 : List(UInt64);
+	data  @1 : ListType;
+}

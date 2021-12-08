@@ -16,12 +16,30 @@ interface CoilsDB {
 	getConfig @1 (id : UInt64) -> (config : CoilsDBConfig);
 }
 
+interface ComponentsDB {
+	getMesh @0 (id : UInt64) -> ComponentsDBMesh;
+}
+
 # Structure that holds instructions on how to compute the field
 # for every main coil.
 struct CoilFields {
-	mainCoils @0 : List(DataRef(MagneticField));
-	trimCoils @1 : List(DataRef(MagneticField));
-	controlCoils @2 : List(DataRef(MagneticField));
+	mainCoils @0 : List(DataRef(MagneticField)); # Length 7
+	trimCoils @1 : List(DataRef(MagneticField)); # Length 5
+	controlCoils @2 : List(DataRef(MagneticField)); # Length 10
+}
+
+# === client-side JSON interface for ComponentsDB ===
+
+struct ComponentsDBMesh {
+	surfaceMesh : group {
+		nodes : group {
+			x1 @0 : List(Float64);
+			x2 @1 : List(Float64);
+			x3 @2 : List(Float64);
+		}
+		polygons @3 : List(UInt32);
+		numVertices @4 : List(UInt32);
+	}
 }
 
 # === Client-side JSON interface for CoilsDB ===
@@ -42,6 +60,7 @@ struct CoilsDBCoilInfo {
 		method @2 : Text;
 		comment @3 : Text;
 	}
+	
 	name @0 : Text;
 	machine @1 : Text;
 	state @2 : Text;

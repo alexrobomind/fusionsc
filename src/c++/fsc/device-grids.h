@@ -1,6 +1,6 @@
 #pragma once
 
-#include "tensor-local.h"
+#include "device-vector.h"
 
 namespace fsc {
 

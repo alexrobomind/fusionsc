@@ -67,71 +67,62 @@ Promise<void> CoilsDBResolver::processField(MagneticField::Reader input, Magneti
 Promise<void> CoilsDBResolver::coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAndCurrents::Reader reader, MagneticField::Builder output, ResolveContext context) {
 	output.initSum(N_MAIN_COILS + N_TRIM_COILS + N_CONTROL_COILS);
 	
-	// Note: The following two statements must not be inlined into one
-	// The LocalDataRef must be kept alive in the method
-	// so that the underlying data are not deleted.
-	LocalDataRef<CoilFields> coilFields = getCoilFields(reader.getCoils());
-	CoilFields::Reader fieldsReader = coilFields.get();
-	
-	using FieldRef = DataRef<MagneticField>::Client;
-	unsigned int offset = 0;
-	
-	auto addOutput = [&](FieldRef field, double current) {
-		auto subField = output.getSum()[offset++];
-		auto scaleBy = subField.initScaleBy();
-		scaleBy.setFactor(current);
-		scaleBy.initField().setRef(field);				
-	};
-	
-	for(unsigned int i = 0; i < 5; ++i) {
-		addOutput(fieldsReader.getMainCoils()[i], reader.getNonplanar()[i]);
-	}
-	
-	for(unsigned int i = 0; i < 2; ++i) {
-		addOutput(fieldsReader.getMainCoils()[i + 5], reader.getPlanar()[i]);
-	}
-	
-	KJ_ASSERT(offset == N_MAIN_COILS);
-	
-	for(unsigned int i = 0; i < N_TRIM_COILS; ++i) {
-		addOutput(fieldsReader.getTrimCoils()[i], reader.getTrim()[i]);
-	}
-	
-	//TODO: Extend to the 2 and 5 cases
-	KJ_REQUIRE(reader.getControl().size() == 10);
-	
-	for(unsigned int i = 0; i < N_CONTROL_COILS; ++i) {
-		addOutput(fieldsReader.getControlCoils()[i], reader.getControl()[i]);
-	}
-	
-	KJ_ASSERT(offset == output.getSum().size());
-	return kj::READY_NOW;
+	return getCoilFields(reader.getCoils()).then([this, =](LocalDataRef<CoilFields> coilFields) {
+		CoilFields::Reader fieldsReader = coilFields.get();
+		
+		using FieldRef = DataRef<MagneticField>::Client;
+		unsigned int offset = 0;
+		
+		auto addOutput = [&](FieldRef field, double current) {
+			auto subField = output.getSum()[offset++];
+			auto scaleBy = subField.initScaleBy();
+			scaleBy.setFactor(current);
+			scaleBy.initField().setRef(field);				
+		};
+		
+		for(unsigned int i = 0; i < 5; ++i) {
+			addOutput(fieldsReader.getMainCoils()[i], reader.getNonplanar()[i]);
+		}
+		
+		for(unsigned int i = 0; i < 2; ++i) {
+			addOutput(fieldsReader.getMainCoils()[i + 5], reader.getPlanar()[i]);
+		}
+		
+		KJ_ASSERT(offset == N_MAIN_COILS);
+		
+		for(unsigned int i = 0; i < N_TRIM_COILS; ++i) {
+			addOutput(fieldsReader.getTrimCoils()[i], reader.getTrim()[i]);
+		}
+		
+		//TODO: Extend to the 2 and 5 cases
+		KJ_REQUIRE(reader.getControl().size() == 10);
+		
+		for(unsigned int i = 0; i < N_CONTROL_COILS; ++i) {
+			addOutput(fieldsReader.getControlCoils()[i], reader.getControl()[i]);
+		}
+		
+		KJ_ASSERT(offset == output.getSum().size());
+	});
 }
 
-LocalDataRef<CoilFields> CoilsDBResolver::getCoilFields(W7XCoilSet::Reader reader) {
-	ID id;
-	
-	try {
-		ID id = ID::fromReader(reader);
-	
+Promise<LocalDataRef<CoilFields>> CoilsDBResolver::getCoilFields(W7XCoilSet::Reader reader) {	
+	return ID::fromReaderWithRefs(reader)
+	.then([this, reader](ID id) {
 		KJ_IF_MAYBE(coilPack, coilPacks.find(id)) {
 			return *coilPack;
 		}
-	} catch(kj::Exception& e) {
-		// Coil sets can (and, in the case of custom sets, usually do)
-		// contain datarefs, which are capabilities.
-	}
-	
-	capnp::MallocMessageBuilder tmp;
-	auto coilPack = tmp.initRoot<CoilFields>();
-	buildCoilFields(reader, coilPack);
-	
-	auto ref = lt->dataService().publish(lt->randomID(), coilPack);
-	coilPacks.insert(id, ref);
-	return ref;
+		
+		capnp::MallocMessageBuilder tmp;
+		auto coilPack = tmp.initRoot<CoilFields>();
+		buildCoilFields(reader, coilPack);
+		
+		auto ref = lt->dataService().publish(lt->randomID(), coilPack);
+		coilPacks.insert(id, ref);
+		return ref;
+	});
 }
 
-Promise<void> CoilsDBResolver::processFilament(Filament     ::Reader input, Filament     ::Builder output, ResolveContext context) {
+Promise<void> CoilsDBResolver::processFilament(Filament::Reader input, Filament::Builder output, ResolveContext context) {
 	switch(input.which()) {
 		case Filament::W7X_COILS_D_B:
 			output.setRef(getCoil(input.getW7xCoilsDB()));
@@ -228,6 +219,149 @@ void CoilsDBResolver::buildCoilFields(W7XCoilSet::Reader reader, CoilFields::Bui
 		initField(output, getControlCoil(i_coil));
 		controlCoils[i_coil] = publish(output);
 	}		
+}
+
+// === class ComponentsDBResolver ===
+
+ComponentsDBResolver::ComponentsDBResolver(LibraryThread& lt, ComponentsDB::Client backend) :
+	GeometryResolverBase(lt),
+	backend(backend)
+{}
+
+Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveContext context) {
+	GeometryResolverBase::processGeometry(input, output, context)
+	.then([=, this]() -> Promise<void> {
+		switch(input.which()) {
+			case Geometry::ComponentsDBMeshes: {
+				auto ids = input.getComponentsDBMeshes();
+				auto n = ids.size();
+				auto nodes = output.initCombined(ids.size());
+				
+				for(decltype(n) i = 0; i < n; ++i) {
+					nodes[i].setMesh(getComponent(ids[i]));
+					
+					auto tags = output.initTags(1);
+					tags[0].setName(CDB_ID_TAG);
+					tags[0].initValue().setUInt64(ids[i]);
+				}
+				return READY_NOW;
+			}
+			
+			case Geometry::ComponentsDBAssemblies: {
+				auto ids = input.getComponentsDBAssemblies();
+				auto n = ids.size();
+				auto nodes = output.initCombined(ids.size());
+				
+				kj::ArrayBuilder<Promise<void>> subTasks(n);
+				for(decltype(n) i = 0; i < n; ++i) {
+					auto node = nodes[i];
+					
+					subTasks.add(
+						getAssembly(ids[i])
+						.then([=, this](kj::Array<uint64_t> cids) mutable {
+							Temporary<Geometry> intermediate;
+							auto tmpIds = intermediate.initComponentsDBMeshes(cids.size));
+							for(unsigned int i = 0; i < cids.size(); ++i)
+								tmpIds[i] = cids[i];
+							
+							return processGeometry(intermediate, output, context).attach(mv(intermediate))
+						})
+					)
+				}
+				return kj::joinPromises(subTasks.finish());
+			}
+			
+			default:
+				return READY_NOW;
+		}
+	});
+}
+
+DataRef<Mesh>::Client ComponentsDBResolver::getCoil(uint64_t id) {
+	KJ_IF_MAYBE(pMesh, meshes.find(id)) {
+		return *pMesh;
+	}
+	
+	ComponentsDB::GetMeshRequest request;
+	request.setId(id);
+	
+	return request.send()
+	.then([id, this](capnp::Response<ComponentsDBMesh> response) -> DataRef<Mesh>::Client {
+		KJ_IF_MAYBE(pMesh, meshes.find(id)) {
+			return *pMesh;
+		}
+		
+		auto inMesh = response.getSurfaceMesh();
+		
+		auto nPoints = inMesh.getNodes().getX1().size();
+		KJ_REQUIRE(inMesh.getNodes().getX2().size() == nPoints);
+		KJ_REQUIRE(inMesh.getNodes().getX3().size() == nPoints);
+		
+		// Translate components DB response to native format
+		Temporary<Mesh> mesh;
+		
+		// Step 1: Translate vertices
+		auto verts = mesh.initVertices();
+		verts.setShape({nPoints, 3});
+		auto data = verts.initData(3 * nPoints);
+		for(unsigned int i = 0; i < nPoints; ++i) {
+			data.set(3 * i + 0, inMesh.getNodes().getX1()[i]);
+			data.set(3 * i + 1, inMesh.getNodes().getX2()[i]);
+			data.set(3 * i + 2, inMesh.getNodes().getX3()[i]);
+		}
+		
+		// Step 2: Translate indices
+		// TODO: I think components db uses 1 based indices? not sure
+		
+		auto inPoly = inMesh.getPolygons();
+		auto outPoly = mesh.initIndices(inPoly.size());
+		for(unsigned int i = 0; i < inPoly.size(); ++i) {
+			KJ_REQUIRE(inPoly[i] > 0, "Assumption violated that ComponentsDB uses 1-based indices", id, i);
+			
+			outPoly[i] = inPoly[i] - 1;
+		}
+		
+		// Step 3: Translate polygon sizes
+		auto nVert = inMesh.getNumVertices();
+		if(nVert.size() == 0) {
+			mesh.initPolyMesh(0):
+		} else {
+			auto firstNVert = nVert[0];
+			bool allSame = true;
+			
+			for(unsigned int i = 0; i < nVert.size(); ++i) {
+				auto polySize = nVert[i];
+				
+				if(polySize != firstNVert)
+					allSame = false;
+			}
+			
+			if(firstNVert == 3 && allSame && nVert.size() == 3 * inPoly.size()) {
+				// We have a triangle mesh
+				// Let's save ourselves the polygon buffer
+				inMesh.initTriMesh();
+			} else {
+				auto polyMesh = inMesh.initPolyMesh(nVert.size() + 1);
+				
+				uint32_t offset = 0;
+				
+				for(unsigned int i = 0; i < nVert.size(); ++i) {
+					auto polySize = nVert[i];
+					
+					if(polySize != firstNVert)
+						allSame = false;
+					
+					polyMesh[i] = counter;
+					counter += polySize;
+				}
+				polyMesh[nVert.size()] = counter;
+			}
+		}
+		
+		DataRef<Mesh>::Client published = lt->dataService.publish(lt->randomID(), mesh);
+		meshes.insert(id, published);
+		return published;
+	});
 }
 
 // CoilsDB implementation that downloads the coil from a remote location

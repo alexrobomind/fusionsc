@@ -1,6 +1,8 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.17)
 
 project(FSC LANGUAGES CXX)
+
+set(CMAKE_CXX_EXTENSIONS On)
 
 # Dependencies:
 # - capnproto (https://github.com/capnproto/capnproto)
@@ -9,6 +11,13 @@ project(FSC LANGUAGES CXX)
 
 set(FSC_FETCH_DEPENDENCIES On CACHE BOOL "Whether the build system is allowed to fetch external dependencies")
 set(FSC_ALWAYS_FETCH Off CACHE BOOL "Whether the build system is must fetch external dependencies")
+
+# Try to enable CUDA
+option(FSC_WITH_CUDA "Whether to use CUDA compilation")
+if(FSC_WITH_CUDA)
+	enable_language(CUDA)
+	find_package(CUDAToolkit)
+endif()
 
 # Prepare CTest
 include(CTest)
@@ -64,8 +73,10 @@ FetchContent_Declare(
 
 FetchContent_Declare(
   Eigen3
-  GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-  GIT_TAG        3.4.0
+  #GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+  #GIT_TAG        3.4.0
+  GIT_REPOSITORY https://github.com/alexrobomind/eigen.git
+  GIT_TAG        cudafix
   GIT_SHALLOW    On
   GIT_PROGRESS   On
 )
@@ -149,25 +160,33 @@ target_link_libraries(
 	CapnProto::capnp-rpc
 	CapnProto::capnp-json
 	CapnProto::kj-http
+)
+
+add_library(device_deps INTERFACE)
+target_link_libraries(
+	device_deps
+	INTERFACE
 	Eigen3::Eigen
 )
 
-# Try to enable OpenMP
-find_package(OpenMP 4.5)
-if(OpenMP_FOUND)
-	target_link_libraries(deps INTERFACE OpenMP::OpenMP_CXX)
-endif()##
-
-# Try to enable CUDA
-option(FSC_WITH_CUDA "Whether to use CUDA compilation")
 if(FSC_WITH_CUDA)
-	enable_language(CUDA)
 	target_compile_definitions(
-		deps
+		device_deps
 		INTERFACE
 		FSC_WITH_CUDA
 	)
+	target_link_libraries(
+		device_deps
+		INTERFACE
+		CUDA::cudart
+	)
 endif()
+
+# Try to enable OpenMP
+#find_package(OpenMP 4.5)
+#if(OpenMP_FOUND)
+#	target_link_libraries(deps INTERFACE OpenMP::OpenMP_CXX)
+#endif()##
 
 
 # Set up testing subsystem

@@ -1,9 +1,13 @@
 # pragma once
 
 #include "magnetics.h"
-#include "magnetics-kernels.h"
+#include "kernels.h"
+#include "device-kernels-biotsavart.h"
+#include "device-gpulaunch.h"
 
 namespace fsc { namespace internal {
+	
+REFERENCE_KERNEL(biotSavartKernel, ToroidalGridStruct, FilamentRef, double, double, double, FieldRef);
 	
 template<typename Device>
 struct FieldCalculation {
@@ -48,7 +52,8 @@ struct FieldCalculation {
 			fulfiller -> fulfill();
 		};
 		
-		field.device(_device, mv(callback)) = field + mField * scale;
+		// field.device(_device, mv(callback)) = field + mField * scale;
+		addFields<Device>(_device, field, mField, scale, Callback<>(mv(callback)));
 		return mv(paf.promise);
 	}
 	
@@ -83,14 +88,22 @@ struct FieldCalculation {
 		mappedFilament->updateDevice();
 		
 		// Launch calculation
-		Eigen::TensorOpCost costEstimate(mappedFilament->size() * sizeof(double) + field.size() * sizeof(double), field.size() * sizeof(double), 1000 * mappedFilament->size() * field.size() / 3);
-		Promise<void> calculation = KernelLauncher<Device>::launch(_device, biotSavartKernel, field.size() / 3, costEstimate, grid, mappedFilament->asRef(), current, coilWidth, stepSize, mappedField.asRef());
+		// Eigen::TensorOpCost costEstimate(mappedFilament->size() * sizeof(double) + field.size() * sizeof(double), field.size() * sizeof(double), 1000 * mappedFilament->size() * field.size() / 3);
+		Eigen::TensorOpCost costEstimate(0, 0, 0);
+		Promise<void> calculation = KernelLauncher<Device>
+			::template launch<decltype(&biotSavartKernel), &biotSavartKernel>(
+				_device, field.size() / 3, costEstimate,
+				grid, mappedFilament->asRef(), current, coilWidth, stepSize, mappedField.asRef()
+			);
 		return calculation.attach(mv(mappedFilament));
 	}
 	
-	void finish(Float64Tensor::Builder out) {
+	Promise<void> finish(Float64Tensor::Builder out) {
 		mappedField.updateHost();
-		writeTensor(field, out);
+		
+		return hostMemSynchronize(_device).then([this, out]() {
+			writeTensor(field, out);
+		});
 	}
 };
 
@@ -125,10 +138,13 @@ struct CalculationSession : public FieldCalculationSession::Server {
 		auto newCalculator = kj::heap<FieldCalculation<Device>>(grid, device);
 		auto calcDone = processField(*newCalculator, node, 1);
 		
-		return calcDone.then([newCalculator = mv(newCalculator), this]() mutable {							
-			Temporary<Float64Tensor> result;
-			newCalculator->finish(result);
-			return lt->dataService().publish(lt->randomID(), result.asReader());
+		return calcDone.then([newCalculator = mv(newCalculator), this]() mutable {		
+			auto result = kj::heap<Temporary<Float64Tensor>>();					
+			auto readout = newCalculator->finish(*result);
+			auto publish = readout.then([result=result.get(), this]() {
+				return lt->dataService().publish(lt->randomID(), result->asReader());
+			});
+			return publish.attach(mv(result), thisCap(), mv(newCalculator));
 		});
 	}
 	
@@ -193,7 +209,7 @@ struct CalculationSession : public FieldCalculationSession::Server {
 				
 				// Then download data				
 				return lt->dataService().download(cField.getData()).then([&calculator, scale](LocalDataRef<Float64Tensor> field) {
-					calculator.add(scale, field.get());
+					return calculator.add(scale, field.get());
 				});
 			}
 			case MagneticField::FILAMENT_FIELD: {

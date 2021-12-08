@@ -1,5 +1,6 @@
 #include <capnp/message.h>
 
+#include "magnetics.h"
 #include "magnetics-inl.h"
 #include "data.h"
 
@@ -127,6 +128,53 @@ Promise<void> FieldResolverBase::processFilament(Filament::Reader input, Filamen
 	}
 }
 
+FieldCalculator::Client newCPUFieldCalculator(LibraryThread& lt) {
+	using D = Eigen::ThreadPoolDevice;
+	
+	auto pool = kj::heap<Eigen::ThreadPool>(numThreads());
+	auto dev  = kj::heap<Eigen::ThreadPoolDevice>(pool.get(), numThreads());
+	dev = dev.attach(mv(pool));
+	
+	return FieldCalculator::Client(
+		kj::heap<internal::FieldCalculatorImpl<D>>(lt, mv(dev))
+	);
+	/*return FieldCalculator::Client(
+		kj::heap<FieldCalculatorImpl<Eigen::DefaultDevice>>(lt, kj::heap<Eigen::DefaultDevice>())
+	);*/
+}
+
+#ifdef FSC_WITH_CUDA
+
+#include <cuda_runtime_api.h>
+
+FieldCalculator::Client newGPUFieldCalculator(LibraryThread& lt) {
+	using D = Eigen::GpuDevice;
+	
+	auto stream = kj::heap<Eigen::GpuStreamDevice>();
+	
+	cudaError_t streamStatus = cudaStreamQuery(stream->stream());
+	KJ_REQUIRE(streamStatus == cudaSuccess, "CUDA stream could not be initialized", streamStatus);
+	
+	auto dev    = kj::heap<Eigen::GpuDevice>(stream);
+	
+	streamStatus = cudaStreamQuery(stream->stream());
+	KJ_REQUIRE(streamStatus == cudaSuccess, "CUDA device could not be initialized", streamStatus);
+	
+	dev = dev.attach(mv(stream));
+	
+	return FieldCalculator::Client(
+		kj::heap<internal::FieldCalculatorImpl<D>>(lt, mv(dev))
+	);
+}
+
+#else
+	
+
+FieldCalculator::Client newGPUFieldCalculator(LibraryThread& lt) {
+	KJ_UNIMPLEMENTED( "FSC was not compiled with GPU support");
+}
+
+#endif
 
 }
 

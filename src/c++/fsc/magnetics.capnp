@@ -9,7 +9,6 @@ using DataRef = Data.DataRef;
 using Float64Tensor = Data.Float64Tensor;
 
 struct ToroidalGrid {
-	# Version 1
 	rMin @0 : Float64;
 	rMax @1 : Float64;
 	zMin @2 : Float64;

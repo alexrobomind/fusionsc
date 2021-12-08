@@ -47,6 +47,25 @@ class CoilsDBResolver : public FieldResolverBase {
 	DataRef<Filament>::Client getCoil(uint64_t cdbID);	
 };
 
+class ComponentsDBResolver : public GeometryResolverBase {
+	constexpr static kj::String CDB_ID_TAG = "w7x-component-id"_kj;
+	constexpr static kj::String CDB_ASID_TAG = "w7x-assembly-id"_kj;
+	
+	ComponentsDBResolver(LibraryThread& lt, ComponentsDB::Client backend);
+	
+	kj::TreeMap<uint64_t, DataRef<Mesh>::Client> meshes;
+	
+	ComponentsDB::Client backend;
+	
+	Promise<void> processGeometry(Geometry::Reader input, Geometry::Reader output, ResolveContext context) override;
+	
+	// Loads a component from the components db (caches result)
+	DataRef<Mesh>::Client getComponent(uint64_t cdbID);
+	
+	// Loads an assembly from the components db
+	Promise<Array<uint64_t>> getAssembly(uint64_t cdbID);
+};
+
 /**
  * Constructs a new client for the W7-X coils DB that connects to the webservice on the given address.
  */

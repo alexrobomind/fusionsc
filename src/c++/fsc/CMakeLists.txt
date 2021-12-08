@@ -11,6 +11,8 @@ CAPNP_GENERATE_CPP(
 	magnetics.capnp
 	magnetics-test.capnp
 	
+	geometry.capnp
+	
 	http.capnp
 	offline.capnp
 	
@@ -21,6 +23,41 @@ unset(CAPNPC_OUTPUT_DIR)
 
 list(GET ${FSC_CP_HEADERS} 0 FSC_CP_HEADER1)
 
+add_library(
+	fsc_device
+	
+	device-gpulaunch.h
+	device-grids.h
+	device-kernels-biotsavart.h
+	device-tensor.h
+	
+	device-dummy.cpp
+)
+
+if(FSC_WITH_CUDA)
+	target_sources(
+		fsc_device
+		PRIVATE
+		device-kernels.cu
+	)
+	set_target_properties(fsc_device PROPERTIES CUDA_ARCHITECTURES "60")
+	set_target_properties(fsc_device PROPERTIES LINKER_LANGUAGE CUDA)
+	set_target_properties(fsc_device PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+	target_compile_options(fsc_device
+		PRIVATE
+		$<$<COMPILE_LANGUAGE:CUDA>:
+			-G
+		>
+	)
+	target_link_options(fsc_device
+		PRIVATE
+		$<$<LINK_LANGUAGE:CUDA>:
+			-G
+		>
+	)
+endif()
+
+target_link_libraries(fsc_device PUBLIC device_deps)
 
 add_library(
 	fsc
@@ -40,7 +77,6 @@ add_library(
 	magnetics.h
 	magnetics-inl.h
 	magnetics.cpp
-	magnetics-fieldcalc.cpp
 	
 	http.h
 	http.cpp
@@ -54,15 +90,7 @@ add_library(
 	${FSC_CP_SRC}
 )
 
-if(FSC_WITH_CUDA)
-	target_sources(
-		fsc
-		PRIVATE
-		magnetics-fieldcalc-gpu.cu
-	)
-endif()
-
-target_link_libraries(fsc PUBLIC deps)
+target_link_libraries(fsc PUBLIC deps fsc_device)
 target_include_directories(
 	fsc
 	PUBLIC
@@ -82,3 +110,9 @@ target_sources(
 	devices/w7x-test.cpp
 )
 target_link_libraries(tests PUBLIC fsc)
+
+if(FSC_WITH_CUDA)
+	set_target_properties(fsc PROPERTIES LINKER_LANGUAGE CUDA)
+	#set_target_properties(fsc_device PROPERTIES LINKER_LANGUAGE CUDA)
+	set_target_properties(tests PROPERTIES LINKER_LANGUAGE CUDA)
+endif()
