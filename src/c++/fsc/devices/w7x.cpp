@@ -222,6 +222,8 @@ void CoilsDBResolver::buildCoilFields(W7XCoilSet::Reader reader, CoilFields::Bui
 }
 
 // === class ComponentsDBResolver ===
+constexpr kj::StringPtr CDB_ID_TAG;
+constexpr kj::StringPtr CDB_ASID_TAG;
 
 ComponentsDBResolver::ComponentsDBResolver(LibraryThread& lt, ComponentsDB::Client backend) :
 	GeometryResolverBase(lt),
