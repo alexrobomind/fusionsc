@@ -13,7 +13,12 @@ constexpr unsigned int CoilsDBResolver::N_MAIN_COILS;
 constexpr unsigned int CoilsDBResolver::N_MODULES ;
 constexpr unsigned int CoilsDBResolver::N_TRIM_COILS;
 constexpr unsigned int CoilsDBResolver::N_CONTROL_COILS ;
-constexpr uint32_t CoilsDBResolver::MAIN_COIL_WINDINGS;
+	
+constexpr static uint32_t CoilsDBResolver::NP_COIL_WINDINGS;
+constexpr static uint32_t CoilsDBResolver::P_COIL_WINDINGS;
+constexpr static uint32_t CoilsDBResolver::TRIM_COIL_WINDINGS_1345;
+constexpr static uint32_t CoilsDBResolver::TRIM_COIL_WINDINGS_2;
+constexpr static uint32_t CoilsDBResolver::CONTROL_COIL_WINDINGS;
 	
 CoilsDBResolver::CoilsDBResolver(LibraryThread& lt, CoilsDB::Client backend) :
 	FieldResolverBase(lt),
@@ -184,11 +189,11 @@ void CoilsDBResolver::buildCoilFields(W7XCoilSet::Reader reader, CoilFields::Bui
 		}
 	};
 	
-	auto initField = [=](MagneticField::Builder out, DataRef<Filament>::Client coil) {
+	auto initField = [=](MagneticField::Builder out, DataRef<Filament>::Client coil, unsigned int windingNo) {
 		auto filField = out.initFilamentField();
 		filField.setCurrent(1);
 		filField.setBiotSavartSettings(reader.getBiotSavartSettings());
-		filField.setWindingNo(MAIN_COIL_WINDINGS);
+		filField.setWindingNo(windingNo);
 		filField.initFilament().setRef(coil);
 	};
 	
@@ -201,7 +206,7 @@ void CoilsDBResolver::buildCoilFields(W7XCoilSet::Reader reader, CoilFields::Bui
 		Temporary<MagneticField> output;
 		auto sum = output.initSum(N_MODULES);
 		for(unsigned int i_mod = 0; i_mod < N_MODULES; ++i_mod) {
-			initField(sum[i_mod], getMainCoil(i_mod, i_coil));
+			initField(sum[i_mod], getMainCoil(i_mod, i_coil), i_coil < 5 ? NP_COIL_WINDINGS : P_COIL_WINDINGS)0;
 		}
 		mainCoils[i_coil] = publish(output);
 	}
@@ -209,14 +214,14 @@ void CoilsDBResolver::buildCoilFields(W7XCoilSet::Reader reader, CoilFields::Bui
 	auto trimCoils = coilPack.initTrimCoils(N_TRIM_COILS);
 	for(unsigned int i_coil = 0; i_coil < N_TRIM_COILS; ++i_coil) {
 		Temporary<MagneticField> output;
-		initField(output, getTrimCoil(i_coil));
+		initField(output, getTrimCoil(i_coil), i_coil != 1 ? TRIM_COIL_WINDINGS_1345 : TRIM_COIL_WINDINGS_2);
 		trimCoils[i_coil] = publish(output);
 	}
 	
 	auto controlCoils = coilPack.initControlCoils(N_CONTROL_COILS);
 	for(unsigned int i_coil = 0; i_coil < N_CONTROL_COILS; ++i_coil) {
 		Temporary<MagneticField> output;
-		initField(output, getControlCoil(i_coil));
+		initField(output, getControlCoil(i_coil), CONTROL_COIL_WINDINGS);
 		controlCoils[i_coil] = publish(output);
 	}		
 }

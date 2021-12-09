@@ -151,12 +151,12 @@ struct W7XCoilSet {
 	union {
 		coilsDBSet : group {
 			mainCoilOffset    @2 : UInt32 = 160;
-			trimCoilIDs       @3 : List(UInt32);
-			controlCoilOffset @4 : UInt32;
+			trimCoilIDs       @3 : List(UInt32) = [350, 241, 351, 352, 353];
+			controlCoilOffset @4 : UInt32 = 230;
 		}
 		
 		customCoilSet : group {
-			mainCoils @5 : List(DataRef(Filament)); # Must have length 50
+			mainCoils @5 : List(DataRef(Filament)); # Must have length 70
 			trimCoils @6 : List(DataRef(Filament)); # Must have length 5
 			controlCoils @7 : List(DataRef(Filament)); # Must have length 10
 		}

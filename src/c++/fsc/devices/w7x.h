@@ -24,7 +24,11 @@ class CoilsDBResolver : public FieldResolverBase {
 	constexpr static unsigned int N_TRIM_COILS = 5;
 	constexpr static unsigned int N_CONTROL_COILS = 10;
 	
-	constexpr static uint32_t MAIN_COIL_WINDINGS = 108;
+	constexpr static uint32_t NP_COIL_WINDINGS = 108;
+	constexpr static uint32_t P_COIL_WINDINGS = 36;
+	constexpr static uint32_t TRIM_COIL_WINDINGS_1345 = 48;
+	constexpr static uint32_t TRIM_COIL_WINDINGS_2 = 72;
+	constexpr static uint32_t CONTROL_COIL_WINDINGS = 8;
 	
 	CoilsDBResolver(LibraryThread& lt, CoilsDB::Client backend);
 	
