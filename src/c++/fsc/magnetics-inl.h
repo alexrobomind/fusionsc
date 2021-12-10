@@ -220,6 +220,10 @@ struct CalculationSession : public FieldCalculationSession::Server {
 			}
 			case MagneticField::SCALE_BY: {
 				auto scaleBy = node.getScaleBy();
+				
+				if(scaleBy == 0)
+					return READY_NOW;
+				
 				return processField(calculator, scaleBy.getField(), scale * scaleBy.getFactor());
 			}
 			case MagneticField::INVERT: {

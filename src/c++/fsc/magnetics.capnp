@@ -148,6 +148,25 @@ struct W7XCoilSet {
 	invertMainCoils @0 : Bool = true;
 	biotSavartSettings @1 : BiotSavartSettings;
 	
+	enum ControlCoilInversion {
+		leaveAsIs @0;
+		invertAll @1;
+		invertUpper @2;
+		invertLower @3;
+	};
+	
+	nWindMain @8 : List(UInt32) = [108, 108, 108, 108, 108, 36, 36];
+	nWindTrim @9 : List(UInt32) = [48, 72, 48, 48, 48];
+	nWindControl @10 : List(UInt32) = [8, 8, 8, 8, 8, 8, 8, 8, 8, 8];
+	
+	invertControlCoils @11 : List(Bool) = [
+		false, true,
+		false, true,
+		false, true,
+		false, true,
+		false, true
+	];
+	
 	union {
 		coilsDBSet : group {
 			mainCoilOffset    @2 : UInt32 = 160;
