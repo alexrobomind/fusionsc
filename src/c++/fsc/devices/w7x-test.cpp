@@ -36,10 +36,9 @@ TEST_CASE("coilsdb") {
 		
 		if(e.isResult()) {
 			auto result = request.send().wait(ws);
-			auto coil = result.getFilament();
 			auto ref  = e.getResult();
 			
-			REQUIRE(ID::fromReader(coil) == ID::fromReader(ref));
+			REQUIRE(ID::fromReader(Filament::Reader(result)) == ID::fromReader(ref));
 		} else {
 			REQUIRE_THROWS(request.send().wait(ws));
 		}

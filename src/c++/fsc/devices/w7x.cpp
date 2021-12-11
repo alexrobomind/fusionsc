@@ -34,9 +34,7 @@ Promise<void> CoilsDBResolver::processField(MagneticField::Reader input, Magneti
 					request.setId(cdbConfig.getConfigID());
 					auto coilsDBResponse = request.send();
 					
-					return coilsDBResponse.then([this, output, cdbConfig](auto response) mutable {
-						auto config = response.getConfig();
-						
+					return coilsDBResponse.then([this, output, cdbConfig](auto config) mutable {						
 						auto coils = config.getCoils();
 						auto currents = config.getCurrents();
 						
@@ -158,9 +156,9 @@ DataRef<Filament>::Client CoilsDBResolver::getCoil(uint64_t cdbID) {
 	auto coilRequest = backend.getCoilRequest();
 	coilRequest.setId(cdbID);
 	
-	DataRef<Filament>::Client newCoil = coilRequest.send().then([cdbID, this](auto response) {
-		auto filament = response.getFilament();
-		auto ref = lt -> dataService().publish(lt -> randomID(), filament);
+	DataRef<Filament>::Client newCoil = coilRequest.send().then([cdbID, this](auto filament) {
+		// auto filament = response.getFilament();
+		auto ref = lt -> dataService().publish(lt -> randomID(), Filament::Reader(filament));
 		
 		return ref;
 	});
@@ -385,7 +383,7 @@ struct CoilsDBWebservice : public CoilsDB::Server {
 			KJ_REQUIRE(x1.size() == x2.size());
 			KJ_REQUIRE(x1.size() == x3.size());
 			
-			auto output = context.getResults().initFilament().initInline();
+			auto output = context.initResults().initInline();
 			output.setShape({x1.size(), 3});
 			auto data = output.initData(3 * x1.size());
 			
@@ -417,7 +415,7 @@ struct CoilsDBWebservice : public CoilsDB::Server {
 		auto read = response.then([](auto response) { KJ_REQUIRE(response.statusCode == 200); return response.body->readAllText().attach(mv(response.body)); });
 		return read.then([context](kj::String rawJson) mutable {			
 			Temporary<CoilsDBConfig> tmp;
-			JsonCodec().decode(rawJson, context.getResults().initConfig());
+			JsonCodec().decode(rawJson, context.initResults());
 		}).attach(mv(headerTbl), mv(response), mv(client), thisCap());	
 	}
 };
@@ -438,7 +436,7 @@ struct OfflineCoilsDB : public CoilsDB::Server {
 		for(auto& entry : offlineData) {
 			for(auto coilEntry : entry.get().getW7xCoils()) {
 				if(coilEntry.getId() == context.getParams().getId()) {
-					context.getResults().setFilament(coilEntry.getFilament());
+					context.setResults(coilEntry.getFilament());
 					return kj::READY_NOW;
 				}
 			}
@@ -453,7 +451,7 @@ struct OfflineCoilsDB : public CoilsDB::Server {
 		for(auto& entry : offlineData) {
 			for(auto configEntry : entry.get().getW7xConfigs()) {
 				if(configEntry.getId() == context.getParams().getId()) {
-					context.getResults().setConfig(configEntry.getConfig());
+					context.setResults(configEntry.getConfig());
 					return kj::READY_NOW;
 				}
 			}

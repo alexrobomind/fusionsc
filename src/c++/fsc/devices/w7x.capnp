@@ -15,8 +15,8 @@ using Geometry = import "../geometry.capnp";
 using Mesh = Geometry.Mesh;
 
 interface CoilsDB {
-	getCoil @0 (id : UInt64) -> (filament : Filament);
-	getConfig @1 (id : UInt64) -> (config : CoilsDBConfig);
+	getCoil @0 (id : UInt64) -> Filament;
+	getConfig @1 (id : UInt64) -> CoilsDBConfig;
 }
 
 interface ComponentsDB {

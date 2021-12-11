@@ -4,6 +4,7 @@
 #include <kj/async-io.h>
 #include <kj/debug.h>
 #include <kj/refcount.h>
+#include <kj/filesystem.h>
 
 #include <utility>
 
@@ -97,6 +98,8 @@ public:
 	
 	LocalDataService& dataService() { return *_dataService; }
 	
+	kj::Filesystem& filesystem() { return *_filesystem; }
+	
 	// Accessors that may be used cross-thread
 	
 	// Convenience method to retrieve the local data store from the library
@@ -117,6 +120,7 @@ private:
 	const kj::Executor& _executor;
 	
 	Own<LocalDataService> _dataService;
+	Own<kj::Filesystem> _filesystem;
 };
 
 

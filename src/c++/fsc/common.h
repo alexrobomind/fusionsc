@@ -37,6 +37,10 @@ using kj::FixedArray;
 using kj::instance;
 
 using kj::READY_NOW;
+using kj::NEVER_DONE;
+
+using kj::PromiseFulfiller;
+using kj::CrossThreadPromiseFulfiller;
 
 
 namespace internal {

@@ -11,7 +11,8 @@ ThreadHandle::ThreadHandle(Library l) :
 	_ioContext(kj::setupAsyncIo()),
 	_library(l -> addRef()),
 	_executor(kj::getCurrentThreadExecutor()),
-	_dataService(kj::heap<LocalDataService>(l))
+	_dataService(kj::heap<LocalDataService>(l)),
+	_filesystem(kj::newDiskFilesystem())
 {}
 
 ThreadHandle::~ThreadHandle() {

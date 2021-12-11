@@ -243,6 +243,8 @@ struct Temporary : public T::Builder {
 		capnp::toAny(*this).setAs(other);
 	}
 	
+	typename T::Builder asBuilder() { return *this; }
+	
 	Own<capnp::MallocMessageBuilder> holder;
 };
 
