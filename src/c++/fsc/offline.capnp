@@ -1,5 +1,8 @@
 @0xc1343b1f84ad9cce;
 
+using Cxx = import "/capnp/c++.capnp";
+$Cxx.namespace("fsc");
+
 using Magnetics = import "magnetics.capnp";
 using Geometry = import "geometry.capnp";
 using W7X = import "devices/w7x.capnp";

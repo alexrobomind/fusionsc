@@ -162,11 +162,18 @@ target_link_libraries(
 	CapnProto::kj-http
 )
 
+if(TARGET capnpc)
+	target_link_libraries(deps INTERFACE capnpc)
+else()
+	target_link_libraries(deps INTERFACE CapnProto::capnpc)
+endif()
+
 add_library(device_deps INTERFACE)
 target_link_libraries(
 	device_deps
 	INTERFACE
 	Eigen3::Eigen
+	deps
 )
 
 if(FSC_WITH_CUDA)

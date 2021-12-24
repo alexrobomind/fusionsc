@@ -13,5 +13,8 @@ catch_discover_tests(
 	OUTPUT_SUFFIX ".xml"
 )
 
+# First build the cupnp library / compiler
+add_subdirectory(cupnp)
+
 add_subdirectory(fsc)
 add_subdirectory(tools)
