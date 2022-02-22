@@ -3,7 +3,11 @@
 #include <capnp/serialize-text.h>
 #include <capnp/any.h>
 
+#include <kj/exception.h>
 #include <kj/filesystem.h>
+#include <kj/miniposix.h>
+
+#include <kj/main.h>
 
 using capnp::schema::Node;
 using capnp::schema::Field;
@@ -572,46 +576,47 @@ void generateRequested(CodeGeneratorRequest::Reader request) {
 		StringTree result = generateNode(request, fileNode.getId());
 		
 		auto inputFilename = fileNode.getFilename();
-		KJ_LOG(WARNING, inputFilename);
 		kj::Path inputFile = kj::Path::parse(inputFilename);
-		
-		KJ_LOG(WARNING, inputFile);
 		
 		/*if(baseName.size() < 6 || baseName.slice(baseName.size() - 6) != ".capnp") {
 			KJ_LOG(WARNING, "Skipped file because its name does not end with '.capnp'", baseName);
 			continue;
 		}*/
 		
-		kj::Vector<char> baseNameVec;
-		baseNameVec.addAll(inputFile.basename()[0]);
-		baseNameVec.resize(baseNameVec.size() - 6);
-		baseNameVec.add('\0');
+		//kj::Vector<char> baseNameVec;
+		//baseNameVec.addAll(inputFile.basename()[0]);
+		//baseNameVec.resize(baseNameVec.size() - 6);
+		//baseNameVec.add('\0');
 		
-		kj::String baseName(baseNameVec.releaseAsArray());
-		KJ_LOG(WARNING, baseName);
+		//kj::String baseName(baseNameVec.releaseAsArray());
+		//KJ_LOG(WARNING, baseName);
 		
-		kj::String headerName = str(baseName, ".cupnp.h");
-		KJ_LOG(WARNING, headerName);
+		kj::String headerName = str(inputFilename, ".cu.h"); // str(baseName, ".cupnp.h");
+		KJ_LOG(WARNING, inputFile, headerName);
 		
-		auto outFile = cwd.openFile(kj::Path(headerName), kj::WriteMode::CREATE | kj::WriteMode::MODIFY);
+		auto outFile = cwd.openFile(kj::Path::parse(headerName), kj::WriteMode::CREATE | kj::WriteMode::MODIFY);
 		outFile -> writeAll(str(result));
 	}
 	
 	// return mv(result);
 }
 
-int main() {
+void mainFunc(kj::StringPtr programName, kj::ArrayPtr<const kj::StringPtr> args) {
+	//KJ_LOG(WARNING, "Initiating compilation");
     capnp::ReaderOptions options;
-    options.traversalLimitInWords = 1 << 30;
+    options.traversalLimitInWords = 1 << 30;	
 	
-	// Create access to stdin
-    capnp::StreamFdMessageReader input(0, options);
+	capnp::StreamFdMessageReader input(0, options);
 	auto root = input.getRoot<CodeGeneratorRequest>();
 	
 	// Format input
+	/*KJ_LOG(WARNING, "Formatting input");
 	capnp::TextCodec outputCodec;
 	outputCodec.setPrettyPrint(true);
 	kj::String result = outputCodec.encode(root);
+	KJ_LOG(WARNING, result);*/
+	
+	generateRequested(root);
 	
 	// Open file
 	/*auto fs = kj::newDiskFilesystem();
@@ -624,7 +629,11 @@ int main() {
 	
 	auto file2 = cwd.openFile(kj::Path("output2.txt"), kj::WriteMode::CREATE | kj::WriteMode::MODIFY);
 	file2 -> writeAll(str(generateRequested(root)));*/
-	generateRequested(root);
-	
-	return 0;
+}
+
+int main(int argc, char** argv) {
+	// Note: This roundabout is neccessary, as KJs runMainAndExit reconfigures the std input and output to binary if not run on console
+	// This is neccessary to properly communicate with the capnp compiler that hands us compilation requests
+	kj::TopLevelProcessContext ctx("cupnpc");
+	kj::runMainAndExit(ctx, mainFunc, argc, argv);
 }

@@ -13,8 +13,23 @@ namespace cupnp {
 		const SegmentTable* segments;
 		
 		template<typename T>
-		T read() {
-			return reinterpret_cast<capnp::_::WireValue<uint64_t>*>(ptr + offset * sizeof(T))->get();
+		T read() const {
+			// Assume CUDA is little-endian
+			# ifdef __CUDACC__
+				return *(reinterpret_cast<T*>(ptr));
+			# else
+				return reinterpret_cast<capnp::_::WireValue<T>*>(ptr)->get();
+			# endif
+		}
+		
+		template<typename T>
+		void write(T newVal) {
+			// Assume CUDA is little-endian
+			# ifdef __CUDACC__
+				*(reinterpret_cast<T*>(ptr)) = newVal;
+			# else
+				reinterpret_cast<capnp::_::WireValue<T>*>(ptr)->set(newVal);
+			# endif
 		}
 		
 		Location operator+(int32_t shift) {

@@ -1,14 +1,11 @@
-set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/fsc)
+# Set up capnpc options
+set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/fsc) # Set output dir
+
+# Create output for .capnp files
 file(MAKE_DIRECTORY ${CAPNPC_OUTPUT_DIR})
 
 set(
-	CAPNPC_FLAGS
-	-o $<TARGET_FILE:cupnpc>:${CMAKE_CURRENT_BINARY_DIR}/fsc
-)
-
-CAPNP_GENERATE_CPP(
-	FSC_CP_SRC
-	FSC_CP_HEADERS
+	FSC_CAPNP_SOURCES
 	
 	data.capnp
 	data-test.capnp
@@ -24,6 +21,22 @@ CAPNP_GENERATE_CPP(
 	devices/w7x.capnp
 	devices/w7x-test.capnp
 )
+	
+
+CAPNP_GENERATE_CPP(
+	FSC_CP_SRC
+	FSC_CP_HEADERS
+	
+	${FSC_CAPNP_SOURCES}
+)
+
+CUPNP_GEN(
+	FSC_CP_CUHEADERS
+	
+	${FSC_CAPNP_SOURCES}
+)
+
+# Unset capnpc options
 unset(CAPNPC_OUTPUT_DIR)
 unset(CAPNPC_FLAGS)
 
@@ -97,6 +110,7 @@ add_library(
 	
 	${FSC_CP_HEADERS}
 	${FSC_CP_SRC}
+	${FSC_CP_CUHEADERS}
 )
 
 target_link_libraries(fsc PUBLIC deps fsc_device)
