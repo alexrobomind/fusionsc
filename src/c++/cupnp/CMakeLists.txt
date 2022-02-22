@@ -2,6 +2,14 @@ add_executable(cupnpc cupnpc.cpp)
 
 target_link_libraries(cupnpc deps)
 
+add_library(cupnp INTERFACE)
+target_include_directories(
+	cupnp
+	INTERFACE
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+	# TOD: INSTALL_INTERFACE
+)
+
 function(CUPNP_GEN HEADERS)
   if(NOT ARGN)
     message(SEND_ERROR "CUPNP_GEN() called without any source files.")

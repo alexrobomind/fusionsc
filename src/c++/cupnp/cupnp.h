@@ -1,5 +1,7 @@
 #include <capnp/common.h>
 
+#pragma once
+
 namespace cupnp {
 	struct SegmentTable {
 		unsigned int nSegments;

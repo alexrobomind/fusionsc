@@ -575,6 +575,13 @@ void generateRequested(CodeGeneratorRequest::Reader request) {
 	for(auto fileNode : request.getRequestedFiles()) {
 		StringTree result = generateNode(request, fileNode.getId());
 		
+		result = strTree(
+			"#pragma once \n",
+			"\n",
+			"#include <cupnp/cupnp.h>",
+			mv(result)
+		);
+		
 		auto inputFilename = fileNode.getFilename();
 		kj::Path inputFile = kj::Path::parse(inputFilename);
 		

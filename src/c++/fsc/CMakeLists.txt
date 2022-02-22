@@ -113,7 +113,7 @@ add_library(
 	${FSC_CP_CUHEADERS}
 )
 
-target_link_libraries(fsc PUBLIC deps fsc_device)
+target_link_libraries(fsc PUBLIC deps fsc_device cupnp)
 target_include_directories(
 	fsc
 	PUBLIC
