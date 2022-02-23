@@ -10,6 +10,8 @@ target_include_directories(
 	# TOD: INSTALL_INTERFACE
 )
 
+target_compile_features(cupnp INTERFACE cxx_std_17)
+
 function(CUPNP_GEN HEADERS)
   if(NOT ARGN)
     message(SEND_ERROR "CUPNP_GEN() called without any source files.")
@@ -92,7 +94,7 @@ function(CUPNP_GEN HEADERS)
           ${include_path}
           ${CAPNPC_FLAGS}
           ${file_path}
-      DEPENDS "${schema_file}" ${tool_depends}
+      DEPENDS "${schema_file}" ${tool_depends} cupnpc
       COMMENT "Compiling Cap'n Proto schema ${schema_file} (CuPnP)"
       VERBATIM
     )

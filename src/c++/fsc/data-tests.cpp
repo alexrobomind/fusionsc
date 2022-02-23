@@ -6,6 +6,7 @@
 #include <kj/filesystem.h>
 
 #include <fsc/data-test.capnp.h>
+#include <fsc/data-test.capnp.cu.h>
 
 #include <capnp/serialize-text.h>
 

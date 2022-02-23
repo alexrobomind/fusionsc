@@ -1,12 +1,33 @@
 #include <capnp/common.h>
+#include <capnp/list.h>
 
 #pragma once
 
+# ifdef __CUDACC__
+	# define CUPNP_REQUIRE(...) (void)0
+	# define CUPNP_FAIL_REQUIRE(...) (void)0
+# else
+	# include <kj/debug.h>
+
+	# define CUPNP_REQUIRE(...) KJ_REQUIRE((__VA_ARGS__))
+	# define CUPNP_FAIL_REQUIRE(...) KJ_FAIL_REQUIRE((__VA_ARGS__))
+# endif
+
 namespace cupnp {
+	template<typename T>
+	struct CupnpVal { static_assert(sizeof(T) == 0, "Unimplemented"); };
+	
+	/**
+	 * Helper class that performs type deduction and constructor delegation
+	 * for the creation of list entries.
+	 */
+	template<typename T, capnp::Kind Kind = CAPNP_KIND(T)>
+	struct ListHelper { static_assert(sizeof(T) == 0, "Unimplemented"); };
+	
 	struct SegmentTable {
 		unsigned int nSegments;
-		capnp::word* segments; // Size is 2 * nSegments
-	}
+		capnp::word** segments; // Size is 2 * nSegments
+	};
 	
 	struct Location {
 		unsigned int segmentId;
@@ -50,18 +71,18 @@ namespace cupnp {
 			if(segments == nullptr)
 				return true;
 			
-			if(segmentId >= segments.nSegments)
+			if(segmentId >= segments->nSegments)
 				return false;
 			
-			auto start = reinterpret_cast<unsigned char*>(segments.segments[2 * segmentId]);
-			auto end   = reinterpret_cast<unsigned char*>(segments.segments[2 * segmentId + 1]);
+			auto start = reinterpret_cast<unsigned char*>(segments->segments[2 * segmentId]);
+			auto end   = reinterpret_cast<unsigned char*>(segments->segments[2 * segmentId + 1]);
 			
 			if(ptr < start)
 				return false;
 			
 			return ptr + size <= end;
 		}
-	}
+	};
 
 	/**
 	 * Returns the pointer tag, which is stored in its
@@ -77,7 +98,7 @@ namespace cupnp {
 	 * Given a location pointing to an intra-segment pointer,
 	 * returns the location pointed at by the pointer.
 	 */
-	Location decodeNearPtr(Location in) {
+	inline Location decodeNearPtr(Location in) {
 		/*
 		lsb                      near pointer                       msb
 		+-+-----------------------------+-------------------------------+
@@ -92,7 +113,7 @@ namespace cupnp {
 		*/
 		uint64_t nativeVal = in.read<uint64_t>();
 		
-		uint64_t offsetMask = (1u << 32) - 1;
+		uint64_t offsetMask = (1ull << 32) - 1;
 		uint64_t ptrTag = nativeVal & 3u;
 		
 		CUPNP_REQUIRE(ptrTag <= 1);
@@ -102,7 +123,7 @@ namespace cupnp {
 		// Sign-extend offset to 32bit number
 		// See below link for source:
 		// http://graphics.stanford.edu/~seander/bithacks.html#VariableSignExtend
-		uint32_t offsetSignMask = (1u << 29); // Places a 1 at the 30th bit, which is the sign bit
+		uint32_t offsetSignMask = (1ul << 29); // Places a 1 at the 30th bit, which is the sign bit
 		int32_t offset = (unsignedOffset ^ offsetSignMask) - offsetSignMask;
 		
 		return in + (offset + 1) * sizeof(capnp::word);
@@ -155,12 +176,12 @@ namespace cupnp {
 		uint32_t segmentId;
 		
 		landingPadType = (nativeVal >> 2) & 1; // B
-		landingPadOffset = (nativeVal & (1u << 32 - 1)) >> 3; // C
+		landingPadOffset = (nativeVal & ((1ull << 32) - 1)) >> 3; // C
 		segmentId = nativeVal >> 32; // D
 		
 		CUPNP_REQUIRE(segmentId < segmentTable->nSegments);
-		out.ptr = reinterpret_cast<unsigned char*>(segments[2 * segmentId] + landingPadOffset); // Offset calculation is in 8-byte words
-		CUPNP_REQUIRE(out.ptr < segments[2 * segmentId + 1]);
+		out.ptr = reinterpret_cast<unsigned char*>(segmentTable->segments[2 * segmentId] + landingPadOffset); // Offset calculation is in 8-byte words
+		CUPNP_REQUIRE(out.ptr < reinterpret_cast<unsigned char*>(segmentTable->segments[2 * segmentId + 1]));
 		
 		out.segmentId = segmentId;
 		out.segments = segmentTable;
@@ -173,10 +194,11 @@ namespace cupnp {
 	 * The memory contents pointed to by data must be a single near-pointer (can be list or structure pointer),
 	 * which points to the contents of the default value data.
 	 */
+	template<typename T>
 	const CupnpVal<T> getDefaultValue(const capnp::word* data) {
 		// Default value
-		Location strutureLoc;
-		structureLoc.ptr = const_cast<capnp::word*>(data);
+		Location structureLoc;
+		structureLoc.ptr = reinterpret_cast<unsigned char*>(const_cast<capnp::word*>(data));
 		structureLoc.segments = nullptr;
 		structureLoc.segmentId = -1;
 		
@@ -209,13 +231,13 @@ namespace cupnp {
 	}
 	
 	template<typename T, unsigned int size = sizeof(T)> struct EncodedType_ {};
-	template<typename T> struct EncodedType_<T, 1> { using Type = uint8_t; }
-	template<typename T> struct EncodedType_<T, 2> { using Type = uint16_t; }
-	template<typename T> struct EncodedType_<T, 4> { using Type = uint32_t; }
-	template<typename T> struct EncodedType_<T, 8> { using Type = uint64_t; }
+	template<typename T> struct EncodedType_<T, 1> { using Type = uint8_t; };
+	template<typename T> struct EncodedType_<T, 2> { using Type = uint16_t; };
+	template<typename T> struct EncodedType_<T, 4> { using Type = uint32_t; };
+	template<typename T> struct EncodedType_<T, 8> { using Type = uint64_t; };
 	
 	template<typename T>
-	using EncodedType = typename EncodedType<T>_::Type;
+	using EncodedType = typename EncodedType_<T>::Type;
 	
 	template<typename T>
 	EncodedType<T> encodePrimitive(T value) {
@@ -251,7 +273,32 @@ namespace cupnp {
 		wireData ^= encodedDefault;
 
 		// Perform a bitcast
-		return decodePrimitive(wireData);
+		return decodePrimitive<T>(wireData);
+	}
+	
+	template<typename T, uint32_t offset, T defaultValue>
+	void setPrimitiveField(uint64_t structure, Location data, T value) {
+		uint16_t dataSectionSizeInWords = structure >> 32;
+		
+		CUPNP_REQUIRE(sizeof(T) * (offset + 1) <= sizeof(capnp::word) * dataSectionSizeInWords);
+		
+		EncodedType<T> wireData       = encodePrimitive(value);
+		
+		// XOR the bitwise representation with the default value
+		EncodedType<T> encodedDefault = encodePrimitive(defaultValue);
+		wireData ^= encodedDefault;
+		
+		(data + offset * sizeof(T)).write(wireData);
+	}
+	
+	template<uint32_t offset>
+	const uint16_t getDiscriminant(uint64_t structure, Location data) {
+		return getPrimitiveField<uint16_t, offset, 0>(structure, data);
+	}
+	
+	template<uint32_t offset>
+	const void setDiscriminant(uint64_t structure, Location data, uint16_t newVal) {
+		setPrimitiveField<uint16_t, offset, 0>(structure, data, newVal);
 	}
 
 	/**
@@ -270,7 +317,7 @@ namespace cupnp {
 		bool isDefault = ptrLoc.read<uint64_t>() == 0;
 		
 		CUPNP_REQUIRE(!isDefault);
-		return getPointer(ptrLoc);
+		return getPointer<T>(ptrLoc);
 	}
 	
 	template<uint32_t offset>
@@ -293,14 +340,16 @@ namespace cupnp {
 	 *
 	 * Note: Currently only accepts structure pointers.
 	 */
-	uint32_t computeContentSize(uint64_t structure, Location data) {
+	inline uint32_t computeContentSize(uint64_t structure, Location data) {
 		uint8_t tag = structure && 3u;
 		if(tag == 0) {
 			uint16_t dataSectionSizeInWords = structure >> 32;
 			uint16_t pointerSectionSize = structure >> 48;
 			return dataSectionSizeInWords + pointerSectionSize;
 		} else {
-			CUPNP_REQUIRE(false, "Implement missing nested list size");
+			CUPNP_FAIL_REQUIRE("Implement missing nested list size");
+			
+			KJ_UNREACHABLE
 		}
 	}
 
@@ -330,7 +379,7 @@ namespace cupnp {
 		// location associated. We therefore just use the location of
 		// the pointer itself.
 		if(ptrTagVal == 3)
-			return CupnpVal<T>(structure, base);
+			return CupnpVal<T>(base.read<uint64_t>(), base);
 				
 		if(ptrTagVal == 2) {
 			// Far pointer
@@ -355,32 +404,110 @@ namespace cupnp {
 			dataLoc = decodeNearPtr(structureLoc);
 		}
 		
-		return CupnpVal(structureLoc.read<uint64_t>(), dataLoc);
+		return CupnpVal<T>(structureLoc.read<uint64_t>(), dataLoc);
 	}
 	
 	// Ensures that the location presented can hold enough data to support
 	// the data and pointer section size specified in "structure".
-	void validateStructPointer(uint64_t structure, Location data) {
+	inline void validateStructPointer(uint64_t structure, Location data) {
 		uint8_t tag = structure & 3u;
 		CUPNP_REQUIRE(tag == 0);
 		
 		uint16_t dataSectionSizeInWords = structure >> 32;
 		uint16_t pointerSectionSize = structure >> 48;
 		
-		CUPNP_REQUIRE(data.isValid((dataSectionSizeInWords + pointerSectionSize) * sizeof(capnp::word));
+		CUPNP_REQUIRE(data.isValid((dataSectionSizeInWords + pointerSectionSize) * sizeof(capnp::word)));
 	}
 	
-	void validateInterfacePointer(uint64_t structure, Location data) {
+	inline void validateInterfacePointer(uint64_t structure, Location data) {
 		uint8_t tag = structure & 3u;
 		CUPNP_REQUIRE(tag == 3);
 	}
-	
-	/**
-	 * Helper class that performs type deduction and constructor delegation
-	 * for the creation of list entries.
-	 */
-	template<typename T, typename Kind>
-	struct ListHelper { static_assert(sizeof(T) == 0, "Unimplemented"); };
+
+	template<typename T, capnp::Kind CPKind>
+	struct CupnpVal<capnp::List<T, CPKind>> {
+		uint32_t listSize;
+		uint32_t elementSize;
+		
+		capnp::ElementSize sizeEnum;
+		
+		uint64_t contentTag;
+		
+		uint64_t structure;
+		cupnp::Location listStart;
+		
+		constexpr inline static uint64_t SINGLE_POINTER_TAG = ((uint64_t) 1) >> 48;
+		constexpr inline static uint64_t SINGLE_BYTE_TAG = ((uint64_t) 1) >> 32;
+		
+		CupnpVal(uint64_t structure, cupnp::Location data) :
+			structure(structure)
+		{
+			uint8_t ptrTag = structure & 3u;
+			CUPNP_REQUIRE(ptrTag == 1 || structure == 0);
+			
+			sizeEnum = static_cast<capnp::ElementSize>((structure >> 32) & 7u);
+			listSize = (structure >> 35);
+			
+			if(sizeEnum == capnp::ElementSize::INLINE_COMPOSITE) {
+				CUPNP_REQUIRE(data.isValid(sizeof(capnp::word)));
+				contentTag = data.read<uint64_t>();
+				
+				elementSize = computeContentSize(contentTag, data + sizeof(capnp::word));
+				listSize /= elementSize;
+				elementSize *= sizeof(capnp::word);
+				listStart = data + sizeof(capnp::word);
+			} else {
+				contentTag = makeContentTag(sizeEnum);
+				listStart = data;
+				elementSize = getElementSize(sizeEnum);
+			}
+			
+			CUPNP_REQUIRE(listStart.isValid(listSize * elementSize));
+		}
+			
+		uint8_t getElementSize(capnp::ElementSize listEnum) {
+			using capnp::ElementSize;
+			
+			switch(listEnum) {
+				case ElementSize::VOID: return 0;
+				case ElementSize::BIT: return 1; // Bools
+				case ElementSize::BYTE: return 1;
+				case ElementSize::TWO_BYTES: return 2;
+				case ElementSize::FOUR_BYTES: return 4;
+				case ElementSize::EIGHT_BYTES: return 8;
+				case ElementSize::POINTER: return 8;
+				
+				default: CUPNP_FAIL_REQUIRE("Inline composite is not associated with an element size");
+			}
+		}
+		
+		uint64_t makeContentTag(capnp::ElementSize listEnum) {
+			CUPNP_REQUIRE(listEnum < capnp::ElementSize::POINTER);
+			
+			if(listEnum == capnp::ElementSize::POINTER) {
+				return SINGLE_POINTER_TAG;
+			}
+			
+			return ((uint64_t) getElementSize(listEnum)) >> 32;
+		}
+		
+		auto operator[] (unsigned int i) {
+			return cupnp::ListHelper<T, CPKind>::get(this, i);
+		}
+		
+		const auto operator[] (unsigned int i) const {
+			return cupnp::ListHelper<T, CPKind>::get(this, i);
+		}
+		
+		template<typename T2>
+		void set(unsigned int i, T2 newVal) {
+			return cupnp::ListHelper<T, CPKind>::set(this, i, newVal);
+		}
+		
+		uint32_t size() {
+			return listSize;
+		}
+	}; 
 	
 	// Structs are stored in-line in the list, and use a structure tag placed
 	// at the beginning (for in-line composite lists) or derived from the element
@@ -399,6 +526,38 @@ namespace cupnp {
 		// Primitive lists may be interpreted as struct lists, with the special exception of boolean lists
 		// (which have tag 1)
 		bool validList(CupnpVal<capnp::List<T>>*) { return list->sizeEnum != 1; }
+	};
+	
+	// Blob type values are stored as pointers without shared structure information.
+	// These pointers are just decoded like pointer fields.
+	template<typename T>
+	struct ListHelper<T, capnp::Kind::BLOB> {
+		T get(CupnpVal<capnp::List<T>>* list, uint32_t element) {
+			return getPointer<T>(list->listStart + list->elementSize * element);
+		}
+		
+		template<typename T2>
+		T set(CupnpVal<capnp::List<T>>* list, uint32_t element, T2 value) {
+			static_assert(sizeof(T) == 0, "CupnpVal<List<T>>::set is only supported for primitive T");
+		}
+		
+		bool validList(CupnpVal<capnp::List<T>>*) { return list->sizeEnum == 7 || list->sizeEnum == 6; }
+	};
+	
+	// Similarly to Blob types, lists are stored as pointers as well (the term similar is misleading,
+	// as the specification explicitly mentions that blob types are a special case of list encoding).
+	template<typename T>
+	struct ListHelper<T, capnp::Kind::LIST> {
+		T get(CupnpVal<capnp::List<T>>* list, uint32_t element) {
+			return getPointer<T>(list->listStart + list->elementSize * element);
+		}
+		
+		template<typename T2>
+		T set(CupnpVal<capnp::List<T>>* list, uint32_t element, T2 value) {
+			static_assert(sizeof(T) == 0, "CupnpVal<List<T>>::set is only supported for primitive T");
+		}
+		
+		bool validList(CupnpVal<capnp::List<T>>*) { return list->sizeEnum == 7 || list->sizeEnum == 6; }
 	};
 	
 	// Primitives, like structs, are stored in-line in the list, and must be accessed
@@ -436,14 +595,14 @@ namespace cupnp {
 	// Bool values need some special handling, as they are not aligned on byte boundaries.
 	template<>
 	struct ListHelper<bool, capnp::Kind::PRIMITIVE> {
-		bool get(CupnpVal<capnp::List<T>>* list, uint32_t element) {
+		bool get(CupnpVal<capnp::List<bool>>* list, uint32_t element) {
 			auto loc = list->listStart + element / 8;
 			uint8_t byteVal = loc.read<uint8_t>();
 			
 			return (byteVal >> (element % 8)) & 1;
 		}
 		
-		bool set(CupnpVal<capnp::List<T>>* list, uint32_t element, bool val) {
+		bool set(CupnpVal<capnp::List<bool>>* list, uint32_t element, bool val) {
 			auto loc = list->listStart + element / 8;
 			uint8_t byteVal = loc.read<uint8_t>();
 			
@@ -456,165 +615,45 @@ namespace cupnp {
 			loc.write(byteVal);
 		}
 		
-		bool validList(CupnpVal<capnp::List<bool>>*) { return list->sizeEnum == 1; }
+		bool validList(CupnpVal<capnp::List<bool>>* list) { return list->sizeEnum == capnp::ElementSize::BIT; }
 	};
 	
-	// Blob type values are stored as pointers without shared structure information.
-	// These pointers are just decoded like pointer fields.
-	template<typename T>
-	struct ListHelper<T, capnp::Kind::BLOB> {
-		T get(CupnpVal<capnp::List<T>>* list, uint32_t element) {
-			return getPointer<T>(list->listStart + list->elementSize * element);
+	template<>
+	struct CupnpVal<capnp::Data> {
+		CupnpVal<capnp::List<uint8_t>> backend;
+		
+		CupnpVal(uint64_t structure, cupnp::Location data) : backend(structure, data) {
+			CUPNP_REQUIRE(backend.contentTag == CupnpVal<capnp::List<uint8_t>>::SINGLE_BYTE_TAG);
+		}
+
+		unsigned char* data() {
+			return backend.listStart.ptr;
 		}
 		
-		template<typename T2>
-		T set(CupnpVal<capnp::List<T>>* list, uint32_t element, T2 value) {
-			static_assert(sizeof(T) == 0, "CupnpVal<List<T>>::set is only supported for primitive T");
+		const unsigned char* data() const {
+			return backend.listStart.ptr;
 		}
 		
-		bool validList(CupnpVal<capnp::List<T>>*) { return list->sizeEnum == 7 || list->sizeEnum == 6; }
+		uint32_t size() { return backend.size(); }
 	};
-	
-	// Similarly to Blob types, lists are stored as pointers as well (the term similar is misleading,
-	// as the specification explicitly mentions that blob types are a special case of list encoding).
-	template<typename T>
-	struct ListHelper<T, capnp::Kind::LIST> {
-		T get(CupnpVal<capnp::List<T>>* list, uint32_t element) {
-			return getPointer<T>(list->listStart + list->elementSize * element);
+
+	template<>
+	struct CupnpVal<capnp::Text> {
+		CupnpVal<capnp::List<uint8_t>> backend;
+		
+		CupnpVal(uint64_t structure, cupnp::Location data) : backend(structure, data) {
+			CUPNP_REQUIRE(backend.contentTag == CupnpVal<capnp::List<uint8_t>>::SINGLE_BYTE_TAG);
+		}
+
+		unsigned char* data() {
+			return backend.listStart.ptr;
 		}
 		
-		template<typename T2>
-		T set(CupnpVal<capnp::List<T>>* list, uint32_t element, T2 value) {
-			static_assert(sizeof(T) == 0, "CupnpVal<List<T>>::set is only supported for primitive T");
+		const unsigned char* data() const {
+			return backend.listStart.ptr;
 		}
 		
-		bool validList(CupnpVal<capnp::List<T>>*) { return list->sizeEnum == 7 || list->sizeEnum == 6; }
+		uint32_t size() { return backend.size(); }
 	};
 }
 
-
-template<typename T>
-struct CupnpVal { static_assert(sizeof(T) == 0, "Unimplemented"); };
-
-template<>
-struct CupnpVal<capnp::Data> {
-	CupnpVal<List<uint8_t>> backend;
-	
-	CupnpVal(uint64_t structure, cupnp::Location data) : backend(structure, data) {
-		CUPNP_REQUIRE(backend.contentTag == CupnpVal<capnp::List<uint8_t>>::SINGLE_BYTE_TAG);
-	}
-
-	unsigned char* data() {
-		return backend.listStart.ptr;
-	}
-	
-	const unsigned char* data() const {
-		return backend.listStart.ptr;
-	}
-	
-	uint32_t size() { return backend.size(); }
-}
-
-template<>
-struct CupnpVal<capnp::Text> {
-	CupnpVal<List<uint8_t>> backend;
-	
-	CupnpVal(uint64_t structure, cupnp::Location data) : backend(structure, data) {
-		CUPNP_REQUIRE(backend.contentTag == CupnpVal<capnp::List<uint8_t>>::SINGLE_BYTE_TAG);
-	}
-
-	unsigned char* data() {
-		return backend.listStart.ptr;
-	}
-	
-	const unsigned char* data() const {
-		return backend.listStart.ptr;
-	}
-	
-	uint32_t size() { return backend.size(); }
-}
-
-template<typename T, typename CPKind>
-struct CupnpVal<capnp::List<T, CPKind>> {
-	uint32_t listSize;
-	uint32_t elementSize
-	
-	capnp::ElementSize sizeEnum;
-	
-	uint64_t contentTag;
-	
-	uint64_t structure;
-	cupnp::Location listStart;
-	
-	constexpr inline static uint64_t SINGLE_POINTER_TAG = ((uint64_t) 1) >> 48;
-	constexpr inline static uint64_t SINGLE_BYTE_TAG = ((uint64_t) 1) >> 32;
-	
-	CupnpVal(uint64_t structure, cupnp::Location data) :
-		structure(structure)
-	{
-		uint8_t ptrTag = structure & 3u;
-		CUPNP_REQUIRE(ptrTag == 1 || structure == 0);
-		
-		sizeEnum = (structure >> 32) & 7u;
-		listSize = (structure >> 35);
-		
-		if(sizeEnum == ElementSize::INLINE_COMPOSITE) {
-			CUPNP_REQUIRE(data.isValid(sizeof(capnp::word)));
-			contentTag = data.read<uint64_t>();
-			
-			elementSize = computeContentSize(contentTag, data + sizeof(capnp::word));
-			listSize /= elementSize;
-			elementSize *= sizeof(capnp::word);
-			listStart = data + sizeof(capnp::word);
-		} else {
-			contentTag = makeContentTag(sizeEnum);
-			listStart = data;
-			elementSize = getElementSize(sizeEnum);
-		}
-		
-		CUPNP_REQUIRE(listStart.isValid(listSize * elementSize));
-	}
-		
-	uint8_t getElementSize(capnp::ElementSize listEnum) {
-		using capnp::ElementSize;
-		
-		switch(listEnum) {
-			case ElementSize::VOID: return 0;
-			case ElementSize::BIT: return 1; // Bools
-			case ElementSize::BYTE: return 1;
-			case ElementSize::TWO_BYTES: return 2;
-			case ElementSize::FOUR_BYTES: return 4;
-			case ElementSize::EIGHT_BYTES: return 8;
-			case ElementSize::POINTER: return 8;
-			
-			default: CUPNP_FAIL_REQUIRE("Inline composite is not associated with an element size");
-		}
-	}
-	
-	uint64_t makeContentTag(capnp::ElementSize listEnum) {
-		CUPNP_REQUIRE(listEnum < ElementSize::POINTER);
-		
-		if(listEnum == ElementSize::POINTER) {
-			return SINGLE_POINTER_TAG;
-		}
-		
-		return ((uint64_t) getElementSize(listEnum)) >> 32;
-	}
-	
-	auto operator[] (unsigned int i) {
-		return cupnp::ListHelper<T, CPKind>::get(this, i);
-	}
-	
-	const auto operator[] (unsigned int i) const {
-		return cupnp::ListHelper<T, CPKind>::get(this, i);
-	}
-	
-	template<typename T2>
-	void set(unsigned int i, T2 newVal) {
-		return cupnp::ListHelper<T, CPKind>::set(this, i, newVal);
-	}
-	
-	uint32_t size() {
-		return listSize;
-	}
-}; 

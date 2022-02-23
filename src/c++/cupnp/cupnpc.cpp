@@ -279,8 +279,23 @@ kj::StringTree cppNodeTypeName(uint64_t nodeId, Brand::Reader nodeBrand, uint64_
 				nodeName = strTree(annot.getValue().getText());
 			}
 		}
+		if(parent.isStruct()) {
+			auto structParent = parent.getStruct();
+			
+			for(auto field : structParent.getFields()) {
+				if(!field.isGroup())
+					continue;
+				
+				auto groupField = field.getGroup();
+				
+				if(groupField.getTypeId() == node.getId())
+					nodeName = camelCase(field.getName(), true);
+			}
+		}
 		
 		result = strTree(mv(result), "::", mv(nodeName));
+		
+		KJ_LOG(WARNING, result);
 		
 		// If the node has no template parameter, we are done here
 		if(node.getParameters().size() == 0) {
@@ -384,10 +399,10 @@ StringTree generateInterface(CodeGeneratorRequest::Reader request, uint64_t node
 		"	uint64_t ptrData;\n",
 		"	\n",
 		"	CupnpVal(uint64_t structure, cupnp::Location data) : ptrData(structure) {\n",
-		"		cupnp::validateInterfacePointer(ptrData);\n",
+		"		cupnp::validateInterfacePointer(structure, data);\n",
 		"	}\n",
 		"	\n",
-		"	bool isDefault() { return ref == nullptr; }\n",
+		"	bool isDefault() { return ptrData == 0; }\n",
 		"	\n",
 		"};\n\n"
 	);
@@ -462,6 +477,18 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId)
 				auto typeId = field.getGroup().getTypeId();
 				auto typeName = cppNodeTypeName(typeId, capnp::defaultValue<Brand>(), nodeId, capnp::defaultValue<Brand>(), request);
 				
+				if(field.getDiscriminantValue() != 0xffff) {
+					KJ_REQUIRE(asStruct.getDiscriminantCount() > 0);
+					
+					result = strTree(
+						mv(result),
+						"	inline bool is", camelCase(field.getName(), true), "() const {\n",
+						"		return cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">() == ", field.getDiscriminantValue(), ";\n",
+						"	}\n",
+						"	\n"
+					);
+				}
+				
 				result = strTree(
 					mv(result),
 					"	inline CupnpVal<", typeName.flatten(), "> get", camelCase(field.getName(), true), "() const {\n"
@@ -483,7 +510,6 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId)
 				};
 				
 				switch(type.which()) {
-					case Type::VOID:
 					case Type::BOOL:
 					case Type::INT8:
 					case Type::INT16:
@@ -496,16 +522,52 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId)
 					case Type::FLOAT32:
 					case Type::FLOAT64:
 					case Type::ENUM: {
-						result = strTree(
-							mv(result),
-							"	inline CupnpVal<", typeName.flatten(), "> get", subName.asPtr(), "() const {\n"
-							"		return cupnp::getPrimitiveField<", typeName.flatten(), ", ", slot.getOffset(), ", ", cppDefaultValue(slot.getDefaultValue()), ">(structure, data);\n",
-							"	}\n\n",
+						
+						if(field.getDiscriminantValue() != 0xffff) {
+							// Getters and setters for unionized primitive fields
+							result = strTree(
+								mv(result),
+								"	inline ", typeName.flatten(), " get", subName.asPtr(), "() const {\n",
+								"		if(cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data) != ", field.getDiscriminantValue(), ")\n",
+								"			return ", cppDefaultValue(slot.getDefaultValue()), ";\n",
+								"		\n",
+								"		return cupnp::getPrimitiveField<", typeName.flatten(), ", ", slot.getOffset(), ", ", cppDefaultValue(slot.getDefaultValue()), ">(structure, data);\n",
+								"	}\n\n",
+								"	inline void set", subName.asPtr(), "(", typeName.flatten(), " newVal) {\n",
+								"		cupnp::setPrimitiveField<", typeName.flatten(), ", ", slot.getOffset(), ", ", cppDefaultValue(slot.getDefaultValue()), ">(structure, data, newVal);\n",
+								"		cupnp::setDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data, ", field.getDiscriminantValue(),");\n",
+								"	}\n\n"
+							);
+						} else {
+							// Getters and setters for non-unionized primitive fields
+							result = strTree(
+								mv(result),
+								"	inline ", typeName.flatten(), " get", subName.asPtr(), "() const {\n",
+								"		return cupnp::getPrimitiveField<", typeName.flatten(), ", ", slot.getOffset(), ", ", cppDefaultValue(slot.getDefaultValue()), ">(structure, data);\n",
+								"	}\n\n",
+								"	inline void set", subName.asPtr(), "(", typeName.flatten(), " newVal) {\n",
+								"		cupnp::setPrimitiveField<", typeName.flatten(), ", ", slot.getOffset(), ", ", cppDefaultValue(slot.getDefaultValue()), ">(structure, data, newVal);\n",
+								"	}\n\n"
+							);
+						}
+						
+						// NO BREAK HERE
+					
+					case Type::VOID:
+						
+						// Presence check for unionized fields
+						if(field.getDiscriminantValue() != 0xffff) {
+							KJ_REQUIRE(asStruct.getDiscriminantCount() > 0);
 							
-							"	inline void set", subName.asPtr(), "(", typeName.flatten(), " newVal) {\n",
-							"		cupnp::setPrimitiveField<", typeName.flatten(), ", ", slot.getOffset(), ", ", cppDefaultValue(slot.getDefaultValue()), ">(structure, data, newVal);\n",
-							"	}\n\n"
-						);
+							result = strTree(
+								mv(result),
+								"	inline bool has", camelCase(field.getName(), true), "() const {\n",
+								"		return cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data) == ", field.getDiscriminantValue(), ";\n",
+								"	}\n",
+								"	\n"
+							);
+						}
+						
 						break;
 					}
 					
@@ -520,19 +582,41 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId)
 						
 						result = strTree(
 							mv(result),
-							// TODO: These need to be defined in a separate .cu / .cpp file
-							"	inline static const unsigned char ", enumName.asPtr(), "_DEFAULT_VALUE = ", generateValueAsBytes(slot.getDefaultValue()), ";\n",
+							"	inline static const unsigned char ", enumName.asPtr(), "_DEFAULT_VALUE [] = ", generateValueAsBytes(slot.getDefaultValue()), ";\n",
 							
-							"	inline const CupnpVal<", typeName.flatten(), "> get", subName.asPtr(), "() const {\n",
-							"		return cupnp::getPointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data, ", enumName.asPtr(), "_DEFAULT_VALUE);\n",
-							"	}\n\n",
 							"	inline CupnpVal<", typeName.flatten(), "> mutate", subName.asPtr(), "() {\n",
 							"		return cupnp::mutatePointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data);\n",
-							"	}\n\n",
-							"	inline bool has", subName.asPtr(), "() const {\n",
-							"		return cupnp::hasPointerField<", slot.getOffset(), ">(structure, data);\n",
 							"	}\n\n"
 						);
+						
+						
+						if(field.getDiscriminantValue() != 0xffff) {
+							KJ_REQUIRE(asStruct.getDiscriminantCount() > 0);
+							
+							result = strTree(
+								mv(result),
+								"	inline const CupnpVal<", typeName.flatten(), "> get", subName.asPtr(), "() const {\n",
+								"		if(cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data) != ", field.getDiscriminantValue(), ")\n",
+								"			return cupnp::getPointer<", typeName.flatten(), ">(reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n",
+								"		\n",
+								"		return cupnp::getPointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data, reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n",
+								"	}\n\n",
+								"	inline bool has", camelCase(field.getName(), true), "() const {\n",
+								"		return cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data) == ", field.getDiscriminantValue(), " && cupnp::hasPointerField<", slot.getOffset(), ">(structure, data);\n",
+								"	}\n",
+								"	\n"
+							);
+						} else {
+							result = strTree(
+								mv(result),
+								"	inline const CupnpVal<", typeName.flatten(), "> get", subName.asPtr(), "() const {\n",
+								"		return cupnp::getPointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data, reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n",
+								"	}\n\n",
+								"	inline bool has", subName.asPtr(), "() const {\n",
+								"		return cupnp::hasPointerField<", slot.getOffset(), ">(structure, data);\n",
+								"	}\n\n"
+							);
+						}
 						break;
 					}
 				}
@@ -553,15 +637,29 @@ StringTree generateNode(CodeGeneratorRequest::Reader request, uint64_t nodeId) {
 	StringTree result;
 	
 	auto node = getNode(request, nodeId);
-	for(auto child : node.getNestedNodes()) {
-		auto childNode = getNode(request, child.getId());
-		if(childNode.isStruct()) {
-			result = strTree(mv(result), generateStruct(request, child.getId()));
-		}
-		if(childNode.isInterface()) {
-			result = strTree(mv(result), generateInterface(request, child.getId()));
+	
+	if(node.isInterface()){
+		result = strTree(mv(result), generateInterface(request, node.getId()));
+	}
+	
+	if(node.isStruct()) {
+		auto structNode = node.getStruct();
+		
+		for(auto field : structNode.getFields()) {
+			if(!field.isGroup())
+				continue;
+			
+			auto groupField = field.getGroup();
+			result = strTree(mv(result), generateNode(request, groupField.getTypeId()));
 		}
 		
+		result = strTree(mv(result), generateStruct(request, node.getId()));
+	}
+	
+	for(auto child : node.getNestedNodes()) {
+		//auto childNode = getNode(request, child.getId());
+		//if(childNode.isStruct()) {
+		//}		
 		result = strTree(mv(result), generateNode(request, child.getId()));
 	}
 	
@@ -578,8 +676,13 @@ void generateRequested(CodeGeneratorRequest::Reader request) {
 		result = strTree(
 			"#pragma once \n",
 			"\n",
-			"#include <cupnp/cupnp.h>",
-			mv(result)
+			"#include <cupnp/cupnp.h>\n",
+			"\n",
+			"namespace cupnp {\n",
+			"\n",
+			mv(result),
+			"\n",
+			"}\n // namespace cupnp"			
 		);
 		
 		auto inputFilename = fileNode.getFilename();

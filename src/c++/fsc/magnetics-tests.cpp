@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <fsc/magnetics-test.capnp.h>
+#include <fsc/magnetics-test.capnp.cu.h>
 
 #include "magnetics.h"
 #include "local.h"

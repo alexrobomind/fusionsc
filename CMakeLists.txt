@@ -160,6 +160,7 @@ target_link_libraries(
 	CapnProto::capnp-rpc
 	CapnProto::capnp-json
 	CapnProto::kj-http
+	CapnProto::kj
 )
 
 if(TARGET capnpc)

@@ -64,7 +64,7 @@ Promise<void> CoilsDBResolver::processField(MagneticField::Reader input, Magneti
 Promise<void> CoilsDBResolver::coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAndCurrents::Reader reader, MagneticField::Builder output, ResolveContext context) {
 	output.initSum(N_MAIN_COILS + N_TRIM_COILS + N_CONTROL_COILS);
 	
-	return getCoilFields(reader.getCoils()).then([=, this](LocalDataRef<CoilFields> coilFields) mutable {
+	return getCoilFields(reader.getCoils()).then([reader, output, context, this](LocalDataRef<CoilFields> coilFields) mutable {
 		CoilFields::Reader fieldsReader = coilFields.get();
 		
 		using FieldRef = DataRef<MagneticField>::Client;
@@ -251,7 +251,7 @@ ComponentsDBResolver::ComponentsDBResolver(LibraryThread& lt, ComponentsDB::Clie
 
 Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveContext context) {
 	return GeometryResolverBase::processGeometry(input, output, context)
-	.then([=, this]() mutable -> Promise<void> {
+	.then([input, output, context, this]() mutable -> Promise<void> {
 		switch(input.which()) {
 			case Geometry::COMPONENTS_D_B_MESHES: {
 				auto ids = input.getComponentsDBMeshes();
