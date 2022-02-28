@@ -1,9 +1,12 @@
 #include <capnp/common.h>
 #include <capnp/list.h>
 
+#include "gpu_defs.h"
+
 #pragma once
 
-# ifdef __CUDACC__
+# ifdef CUPNP_GPUCC
+	//TODO: Better error handling for device code?
 	# define CUPNP_REQUIRE(...) (void)0
 	# define CUPNP_FAIL_REQUIRE(...) (void)0
 # else
@@ -17,61 +20,7 @@ namespace cupnp {
 	// Value struct
 	template<typename T>
 	struct CupnpVal { static_assert(sizeof(T) == 0, "Unimplemented"); };
-	
-	// GPU memory handling
-	
-	# ifdef __CUDACC__
-		namespace internal {
-		// Implementation of kj::Array for GPU devices
-			struct DeviceArrayDisposer : public kj::ArrayDisposer {
-				const static inline DeviceArrayDisposer instance;
-				
-				inline void disposeImpl(
-					void* firstElement, size_t elementSize, size_t elementCount,
-					size_t capacity, void (*destroyElement)(void*)
-				) const override {
-					auto err = cudaFree(firstElement);
-					
-					if(err != 0) {
-						KJ_LOG(WARNING, "Error when freeing device array", err);
-					}
-				}
-			};
-		}
-		
-		template<typename T>
-		kj::Array<T> deviceArray(size_t size) {
-			void* ptr = nullptr;
-			auto err = cudaMalloc(&ptr, size * sizeof(T));
-			KJ_REQUIRE(err == 0, "Device allocation failure");
 			
-			return kj::Array<T>(ptr, size, internal::DeviceArrayDisposer::instance);
-		}
-		
-		inline void memcpyToDevice(void* dst, const void* src, size_t size) {
-			auto err = cudaMemcpy(dst, src, size, cudaMemcpyHostToDevice);
-			KJ_REQUIRE(err == 0, "cudaMemcpy failure (host -> device)");
-		}
-		
-		inline void memcpyToHost(void* dst, const void* src, size_t size) {
-			auto err = cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost);
-			KJ_REQUIRE(err == 0, "cudaMemcpy failure (device -> host)");
-		}
-	# else
-		template<typename T>
-		kj::Array<T> deviceArray(size_t size) {
-			return kj::heapArray<T>(size);
-		}
-		
-		inline void memcpyToDevice(void* dst, const void* src, size_t size) {
-			memcpy(dst, src, size);
-		}
-		
-		inline void memcpyToHost(void* dst, const void* src, size_t size) {
-			memcpy(dst, src, size);
-		}
-	# endif
-		
 	
 	/**
 	 * Helper class that performs type deduction and constructor delegation
@@ -93,8 +42,8 @@ namespace cupnp {
 		
 		template<typename T>
 		T read() const {
-			// Assume CUDA is little-endian
-			# ifdef __CUDACC__
+			// Assume GPU is little-endian
+			# ifdef CUPNP_GPUCC
 				return *(reinterpret_cast<T*>(ptr));
 			# else
 				return reinterpret_cast<capnp::_::WireValue<T>*>(ptr)->get();
@@ -103,8 +52,8 @@ namespace cupnp {
 		
 		template<typename T>
 		void write(T newVal) {
-			// Assume CUDA is little-endian
-			# ifdef __CUDACC__
+			// Assume GPU is little-endian
+			# ifdef CUPNP_GPUCC
 				*(reinterpret_cast<T*>(ptr)) = newVal;
 			# else
 				reinterpret_cast<capnp::_::WireValue<T>*>(ptr)->set(newVal);
@@ -203,82 +152,84 @@ namespace cupnp {
 		}
 	};
 	
-	/**
-	 * Message allocated on the device. Owns a device-located Message struct and
-	 * all allocated memory segments. Only moveable, not copyable.
-	 */
-	struct DeviceMessage {
-		// GPU segments
-		kj::Array<kj::Array<capnp::word>> segments;
-		
-		// GPU located array of pointers to segment start and end points
-		kj::Array<capnp::word*> deviceSegmentArray;
-		
-		// Message struct that can be passed directly to GPU
-		Message deviceSegments;
-		
-		inline DeviceMessage(kj::ArrayPtr<size_t> sizes) {
-			// Allocate host segments
-			auto segmentsBuilder = kj::heapArrayBuilder<kj::Array<capnp::word>>(sizes.size());
-			for(size_t size : sizes) {
-				segmentsBuilder.add(deviceArray<capnp::word>(size));
+	#ifdef CUPNP_GPUCC
+		/**
+		 * Message allocated on the device. Owns a device-located Message struct and
+		 * all allocated memory segments. Only moveable, not copyable.
+		 */
+		struct DeviceMessage {
+			// GPU segments
+			kj::Array<kj::Array<capnp::word>> segments;
+			
+			// GPU located array of pointers to segment start and end points
+			kj::Array<capnp::word*> deviceSegmentArray;
+			
+			// Message struct that can be passed directly to GPU
+			Message deviceSegments;
+			
+			inline DeviceMessage(kj::ArrayPtr<size_t> sizes) {
+				// Allocate host segments
+				auto segmentsBuilder = kj::heapArrayBuilder<kj::Array<capnp::word>>(sizes.size());
+				for(size_t size : sizes) {
+					segmentsBuilder.add(deviceArray<capnp::word>(size));
+				}
+				segments = segmentsBuilder.finish();
+				
+				auto hostSegmentArray = kj::heapArray<capnp::word*>(2 * sizes.size());
+				for(size_t i = 0; i < sizes.size(); ++i) {
+					hostSegmentArray[2 * i    ] = reinterpret_cast<capnp::word*>(segments[i].begin());
+					hostSegmentArray[2 * i + 1] = reinterpret_cast<capnp::word*>(segments[i].end());
+				}
+				
+				deviceSegmentArray = deviceArray<capnp::word*>(2 * sizes.size());
+				memcpyToDevice(
+					deviceSegmentArray.begin(),
+					hostSegmentArray.begin(),
+					hostSegmentArray.size() * sizeof(capnp::word*)
+				);
+				
+				deviceSegments.segments = deviceSegmentArray.begin();
+				deviceSegments.nSegments = segments.size();
 			}
-			segments = segmentsBuilder.finish();
 			
-			auto hostSegmentArray = kj::heapArray<capnp::word*>(2 * sizes.size());
-			for(size_t i = 0; i < sizes.size(); ++i) {
-				hostSegmentArray[2 * i    ] = reinterpret_cast<capnp::word*>(segments[i].begin());
-				hostSegmentArray[2 * i + 1] = reinterpret_cast<capnp::word*>(segments[i].end());
+			inline DeviceMessage(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> hostSegments) :
+				DeviceMessage(calculateSizes(hostSegments))
+			{			
+				copyToDevice(hostSegments);
 			}
 			
-			deviceSegmentArray = deviceArray<capnp::word*>(2 * sizes.size());
-			memcpyToDevice(
-				deviceSegmentArray.begin(),
-				hostSegmentArray.begin(),
-				hostSegmentArray.size() * sizeof(capnp::word*)
-			);
-			
-			deviceSegments.segments = deviceSegmentArray.begin();
-			deviceSegments.nSegments = segments.size();
-		}
-		
-		inline DeviceMessage(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> hostSegments) :
-			DeviceMessage(calculateSizes(hostSegments))
-		{			
-			copyToDevice(hostSegments);
-		}
-		
-		inline DeviceMessage copyToDevice(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> hostSegments) {
-			KJ_REQUIRE(hostSegments.size() == segments.size());
-			
-			for(size_t i = 0; i < hostSegments.size(); ++i) {
-				KJ_REQUIRE(segments[i].size() >= hostSegments[i].size());
+			inline DeviceMessage copyToDevice(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> hostSegments) {
+				KJ_REQUIRE(hostSegments.size() == segments.size());
+				
+				for(size_t i = 0; i < hostSegments.size(); ++i) {
+					KJ_REQUIRE(segments[i].size() >= hostSegments[i].size());
 
-				memcpyToDevice(segments[i].begin(), hostSegments[i].begin(), hostSegments[i].size() * sizeof(capnp::word));
-			}
-		}
-		
-		inline void copyToHost(kj::ArrayPtr<kj::ArrayPtr<capnp::word>> output) {
-			KJ_REQUIRE(output.size() == segments.size());
-			
-			for(size_t i = 0; i < segments.size(); ++i) {
-				KJ_REQUIRE(output[i].size() >= segments[i].size());
-				memcpyToHost(output[i].begin(), segments[i].begin(), segments[i].size() * sizeof(capnp::word));
-			}
-		}
-		
-		inline kj::Array<kj::Array<capnp::word>> copyToHost() {
-			auto output = kj::heapArrayBuilder<kj::Array<capnp::word>>(segments.size());
-			
-			for(size_t i = 0; i < segments.size(); ++i) {
-				auto segment = kj::heapArray<capnp::word>(segments[i].size());
-				memcpyToHost(segment.begin(), segments[i].begin(), segment.size() * sizeof(capnp::word));
-				output.add(kj::mv(segment));
+					memcpyToDevice(segments[i].begin(), hostSegments[i].begin(), hostSegments[i].size() * sizeof(capnp::word));
+				}
 			}
 			
-			return output.finish();
-		}
-	};
+			inline void copyToHost(kj::ArrayPtr<kj::ArrayPtr<capnp::word>> output) {
+				KJ_REQUIRE(output.size() == segments.size());
+				
+				for(size_t i = 0; i < segments.size(); ++i) {
+					KJ_REQUIRE(output[i].size() >= segments[i].size());
+					memcpyToHost(output[i].begin(), segments[i].begin(), segments[i].size() * sizeof(capnp::word));
+				}
+			}
+			
+			inline kj::Array<kj::Array<capnp::word>> copyToHost() {
+				auto output = kj::heapArrayBuilder<kj::Array<capnp::word>>(segments.size());
+				
+				for(size_t i = 0; i < segments.size(); ++i) {
+					auto segment = kj::heapArray<capnp::word>(segments[i].size());
+					memcpyToHost(segment.begin(), segments[i].begin(), segment.size() * sizeof(capnp::word));
+					output.add(kj::mv(segment));
+				}
+				
+				return output.finish();
+			}
+		};
+	#endif
 
 	/**
 	 * Returns the pointer tag, which is stored in its

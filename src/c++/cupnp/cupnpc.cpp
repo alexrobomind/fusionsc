@@ -586,6 +586,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId)
 							"	inline static const unsigned char ", enumName.asPtr(), "_DEFAULT_VALUE [] = ", generateValueAsBytes(slot.getDefaultValue()), ";\n",
 							
 							"	inline CupnpVal<", typeName.flatten(), "> mutate", subName.asPtr(), "() {\n",
+							"		CUPNP_REQUIRE(nonDefault", subName.asPtr(), "());\n",
 							"		return cupnp::mutatePointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data);\n",
 							"	}\n\n"
 						);
@@ -602,8 +603,11 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId)
 								"		\n",
 								"		return cupnp::getPointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data, reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n",
 								"	}\n\n",
-								"	inline bool has", camelCase(field.getName(), true), "() const {\n",
+								"	inline bool nonDefault", camelCase(field.getName(), true), "() const {\n",
 								"		return cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data) == ", field.getDiscriminantValue(), " && cupnp::hasPointerField<", slot.getOffset(), ">(structure, data);\n",
+								"	}\n",
+								"	inline bool has", camelCase(field.getName(), true), "() const {\n",
+								"		return cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data) == ", field.getDiscriminantValue(), ";\n",
 								"	}\n",
 								"	\n"
 							);
@@ -613,7 +617,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId)
 								"	inline const CupnpVal<", typeName.flatten(), "> get", subName.asPtr(), "() const {\n",
 								"		return cupnp::getPointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data, reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n",
 								"	}\n\n",
-								"	inline bool has", subName.asPtr(), "() const {\n",
+								"	inline bool nonDefault", subName.asPtr(), "() const {\n",
 								"		return cupnp::hasPointerField<", slot.getOffset(), ">(structure, data);\n",
 								"	}\n\n"
 							);
