@@ -1,6 +1,8 @@
 #include <capnp/common.h>
 #include <capnp/list.h>
 
+#include <kj/common.h>
+
 #include "gpu_defs.h"
 
 #pragma once
@@ -29,16 +31,17 @@ namespace cupnp {
 	template<typename T, capnp::Kind Kind = CAPNP_KIND(T)>
 	struct ListHelper { static_assert(sizeof(T) == 0, "Unimplemented"); };
 	
-	struct Message {
-		unsigned int nSegments;
-		capnp::word** segments; // Size is 2 * nSegments
-	};
+	// struct Message {
+	//	/*unsigned int nSegments;
+	//	capnp::word** segments; // Size is 2 * nSegments*/
+	//	kj::ArrayPtr<kj::ArrayPtr<capnp::word>> segments;
+	//};
 	
 	struct Location {
 		unsigned int segmentId;
 		unsigned char* ptr;
 		
-		const Message* segments;
+		kj::ArrayPtr<kj::ArrayPtr<capnp::word>> segments;
 		
 		template<typename T>
 		T read() const {
@@ -79,8 +82,8 @@ namespace cupnp {
 			if(segmentId >= segments->nSegments)
 				return false;
 			
-			auto start = reinterpret_cast<unsigned char*>(segments->segments[2 * segmentId]);
-			auto end   = reinterpret_cast<unsigned char*>(segments->segments[2 * segmentId + 1]);
+			auto start = reinterpret_cast<unsigned char*>(/*segments->segments[2 * segmentId]*/segments[segmentId].begin());
+			auto end   = reinterpret_cast<unsigned char*>(/*segments->segments[2 * segmentId + 1]*/segments[segmentId].end());
 			
 			if(ptr < start)
 				return false;
@@ -90,16 +93,16 @@ namespace cupnp {
 	};
 	
 	template<typename T>
-	inline CupnpVal<T> messageRoot(const Message& table) {
+	inline CupnpVal<T> messageRoot(kj::ArrayPtr<kj::ArrayPtr<capnp::word>> segments) {
 		Location root;
 		root.segmentId = 0;
-		root.ptr = reinterpret_cast<unsigned char*>(table.segments[0]);
-		root.segments = &table;
+		root.ptr = reinterpret_cast<unsigned char*>(segments[0].begin());
+		root.segments = segments;
 		
 		return getPointer<T>(root);
 	}
 	
-	kj::Array<size_t> calculateSizes(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> segments) {
+	inline kj::Array<size_t> calculateSizes(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> segments) {
 		auto sizes = kj::heapArrayBuilder<size_t>(segments.size());
 		for(auto segment : segments)
 			sizes.add(segment.size());
@@ -107,130 +110,88 @@ namespace cupnp {
 		return sizes.finish();
 	}
 	
-	/**
-	 * Message allocated on the host. Owns a host-located Message struct and
-	 * all allocated memory segments. Only moveable, not copyable.
-	 */
-	struct HostMessage {
+	inline auto deviceMemcpy(void* dst, const void* src, size_t nBytes) {
+		# ifdef CUPNP_WITH_HIP
+			return hipMemcpy(dst.begin(), src.begin(), nBytes, cudaMemcpyDefault);
+		# else
+			# ifdef CUPNP_WITH_CUDA
+				return cudaMemcpy(dst.begin(), src.begin(), nBytes, hipMemcpyDefault);
+			# else
+				memcpy(dst.begin(), src.begin(), nBytes);
+				return (int) 0;
+			# endif
+		# endif
+	}
+	
+	inline auto deviceMemcpy(kj::ArrayPtr<capnp::word> dst, const kj::ArrayPtr<const capnp::word> src) {
+		CUPNP_REQUIRE(dst.size() >= src.size());
+		const auto nBytes = src.size() * sizeof(capnp::word);
+		
+		return deviceMemcpy(dst.begin(), src.begin(), nBytes);
+	}
+	
+	inline auto deviceMemcpy(kj::ArrayPtr<capnp::word> dst, const kj::ArrayPtr<capnp::word> src) {
+		return deviceMemcpy(dst, src.asConst());
+	}
+	
+	template<typename T1, typename T2>
+	inline auto deviceMemcpyAll(T1 dst, const T2 src) {
+		CUPNP_REQUIRE(dst.size() == src.size()); 
+		
+		for(size_t i = 0; i < dst.size(); ++i) { 
+			auto err = deviceMemcpy(dst[i], src[i]); 
+			
+			if(err != 0) 
+				return err; 
+		} 
+	}
+	
+	struct Message {
+		// Host-located array of segments (which can individually be device-located)
 		kj::Array<kj::Array<capnp::word>> segments;
 		
-		kj::Array<capnp::word*> segmentArray;
+		// Device-located array of segments
+		kj::Array<kj::ArrayPtr<capnp::word>> segmentRefs;
 		
-		Message message;
-		
-		inline HostMessage(kj::ArrayPtr<size_t> sizes) {
+		template<typename Allocator>
+		Message(kj::ArrayPtr<size_t> sizes, bool onDevice) {
 			auto segmentsBuilder = kj::heapArrayBuilder<kj::Array<capnp::word>>(sizes.size());
 			for(size_t size : sizes) {
-				segmentsBuilder.add(kj::heapArray<capnp::word>(size));
+				if(onDevice)
+					segmentsBuilder.add(deviceArray<capnp::word>(size));
+				else
+					segmentsBuilder.add(kj::heapArray<capnp::word>(size));
 			}
 			segments = segmentsBuilder.finish();
 			
-			segmentArray = kj::heapArray<capnp::word*>(2 * sizes.size());
+			auto hostSegmentRefs = kj::heapArray<kj::ArrayPtr<capnp::word>>(sizes.size());			
 			for(size_t i = 0; i < sizes.size(); ++i) {
-				segmentArray[2 * i    ] = reinterpret_cast<capnp::word*>(segments[i].begin());
-				segmentArray[2 * i + 1] = reinterpret_cast<capnp::word*>(segments[i].end());
+				hostSegmentRefs[i] = segments[i].asPtr();
 			}
 			
-			message.nSegments = sizes.size();
-			message.segments = segmentArray.begin();
+			segmentRefs = onDevice ?
+				deviceArray  <kj::ArrayPtr<capnp::word>>(sizes.size()) :
+				kj::heapArray<kj::ArrayPtr<capnp::word>>(sizes.size())
+			;
+			deviceMemcpy(segmentRefs, hostSegmentRefs);
 		}
-		
-		inline HostMessage(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> hostSegments) :
-			HostMessage(calculateSizes(hostSegments))
-		{
-			copyFrom(hostSegments);
-		}
-		
-		inline void copyFrom(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> hostSegments) {
-			KJ_REQUIRE(hostSegments.size() == segments.size());
 			
-			for(size_t i = 0; i < hostSegments.size(); ++i) {
-				KJ_REQUIRE(segments[i].size() >= hostSegments[i].size());
-
-				memcpy(segments[i].begin(), hostSegments[i].begin(), hostSegments[i].size() * sizeof(capnp::word));
-			}
+		template<typename Allocator>
+		Message(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> hostSegments, Allocator allocator) :
+			Message(calculateSizes(hostSegments), allocator)
+		{			
+			deviceMemcpyAll(segments, hostSegments);
+		}
+		
+		kj::Array<size_t> sizes() {
+			return computeSizes(segments);
 		}
 	};
 	
-	#ifdef CUPNP_GPUCC
-		/**
-		 * Message allocated on the device. Owns a device-located Message struct and
-		 * all allocated memory segments. Only moveable, not copyable.
-		 */
-		struct DeviceMessage {
-			// GPU segments
-			kj::Array<kj::Array<capnp::word>> segments;
-			
-			// GPU located array of pointers to segment start and end points
-			kj::Array<capnp::word*> deviceSegmentArray;
-			
-			// Message struct that can be passed directly to GPU
-			Message deviceSegments;
-			
-			inline DeviceMessage(kj::ArrayPtr<size_t> sizes) {
-				// Allocate host segments
-				auto segmentsBuilder = kj::heapArrayBuilder<kj::Array<capnp::word>>(sizes.size());
-				for(size_t size : sizes) {
-					segmentsBuilder.add(deviceArray<capnp::word>(size));
-				}
-				segments = segmentsBuilder.finish();
-				
-				auto hostSegmentArray = kj::heapArray<capnp::word*>(2 * sizes.size());
-				for(size_t i = 0; i < sizes.size(); ++i) {
-					hostSegmentArray[2 * i    ] = reinterpret_cast<capnp::word*>(segments[i].begin());
-					hostSegmentArray[2 * i + 1] = reinterpret_cast<capnp::word*>(segments[i].end());
-				}
-				
-				deviceSegmentArray = deviceArray<capnp::word*>(2 * sizes.size());
-				memcpyToDevice(
-					deviceSegmentArray.begin(),
-					hostSegmentArray.begin(),
-					hostSegmentArray.size() * sizeof(capnp::word*)
-				);
-				
-				deviceSegments.segments = deviceSegmentArray.begin();
-				deviceSegments.nSegments = segments.size();
-			}
-			
-			inline DeviceMessage(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> hostSegments) :
-				DeviceMessage(calculateSizes(hostSegments))
-			{			
-				copyToDevice(hostSegments);
-			}
-			
-			inline DeviceMessage copyToDevice(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> hostSegments) {
-				KJ_REQUIRE(hostSegments.size() == segments.size());
-				
-				for(size_t i = 0; i < hostSegments.size(); ++i) {
-					KJ_REQUIRE(segments[i].size() >= hostSegments[i].size());
-
-					memcpyToDevice(segments[i].begin(), hostSegments[i].begin(), hostSegments[i].size() * sizeof(capnp::word));
-				}
-			}
-			
-			inline void copyToHost(kj::ArrayPtr<kj::ArrayPtr<capnp::word>> output) {
-				KJ_REQUIRE(output.size() == segments.size());
-				
-				for(size_t i = 0; i < segments.size(); ++i) {
-					KJ_REQUIRE(output[i].size() >= segments[i].size());
-					memcpyToHost(output[i].begin(), segments[i].begin(), segments[i].size() * sizeof(capnp::word));
-				}
-			}
-			
-			inline kj::Array<kj::Array<capnp::word>> copyToHost() {
-				auto output = kj::heapArrayBuilder<kj::Array<capnp::word>>(segments.size());
-				
-				for(size_t i = 0; i < segments.size(); ++i) {
-					auto segment = kj::heapArray<capnp::word>(segments[i].size());
-					memcpyToHost(segment.begin(), segments[i].begin(), segment.size() * sizeof(capnp::word));
-					output.add(kj::mv(segment));
-				}
-				
-				return output.finish();
-			}
-		};
-	#endif
-
+	inline auto deviceMemcpy(Message dst, const Message src) {
+		return deviceMemcpyAll(dst.segments, src.segments);
+	}
+	
 	/**
 	 * Returns the pointer tag, which is stored in its
 	 * 2 least significant bits.

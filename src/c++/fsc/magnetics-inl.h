@@ -1,7 +1,7 @@
 # pragma once
 
 #include "magnetics.h"
-#include "kernels.h"
+#include "kernels.h
 #include "kernels-biotsavart.h"
 
 namespace fsc { namespace internal {

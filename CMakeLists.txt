@@ -161,6 +161,7 @@ target_link_libraries(
 	CapnProto::capnp-json
 	CapnProto::kj-http
 	CapnProto::kj
+	Eigen3::Eigen
 )
 
 if(TARGET capnpc)
@@ -169,22 +170,14 @@ else()
 	target_link_libraries(deps INTERFACE CapnProto::capnpc)
 endif()
 
-add_library(device_deps INTERFACE)
-target_link_libraries(
-	device_deps
-	INTERFACE
-	Eigen3::Eigen
-	deps
-)
-
 if(FSC_WITH_CUDA)
 	target_compile_definitions(
-		device_deps
+		deps
 		INTERFACE
 		FSC_WITH_CUDA
 	)
 	target_link_libraries(
-		device_deps
+		deps
 		INTERFACE
 		CUDA::cudart
 	)

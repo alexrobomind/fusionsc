@@ -108,7 +108,7 @@ namespace internal {
 template<typename Device>
 void potentiallySynchronize(Device& d) {}
 
-#ifdef EIGEN_USE_GPU
+#ifdef FSC_WITH_CUDA
 
 template<>
 inline void potentiallySynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& d) {
