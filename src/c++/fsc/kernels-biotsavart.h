@@ -1,7 +1,7 @@
 #pragma once
 
-#include "device-vector.h"
-#include "device-grids.h"
+#include "vector.h"
+#include "grids.h"
 
 #include <utility>
 

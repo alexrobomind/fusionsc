@@ -1,6 +1,6 @@
 #pragma once
 
-#include "device-vector.h"
+#include "vector.h"
 
 namespace fsc {
 

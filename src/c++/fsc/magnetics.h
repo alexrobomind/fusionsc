@@ -8,7 +8,7 @@
 #include "data.h"
 #include "tensor.h"
 
-#include "device-grids.h"
+#include "grids.h"
 
 namespace fsc {
 

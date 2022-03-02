@@ -3,7 +3,6 @@
 #include "magnetics.h"
 #include "kernels.h"
 #include "kernels-biotsavart.h"
-#include "gpulaunch.h"
 
 namespace fsc { namespace internal {
 	

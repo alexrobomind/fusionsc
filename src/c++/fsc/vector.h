@@ -1,6 +1,6 @@
 #pragma once
 
-#include "device-tensor.h"
+#include "tensor.h"
 #include <cmath>
 
 namespace fsc {

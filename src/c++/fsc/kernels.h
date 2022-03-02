@@ -142,8 +142,7 @@ namespace internal {
 	
 #endif // EIGEN_GPUCC
 #endif // FSC_WITH_CUDA
-	
-}
+
 
 template<>
 struct KernelLauncher<Eigen::DefaultDevice> {
