@@ -2,8 +2,8 @@
 
 #include "magnetics.h"
 #include "kernels.h"
-#include "device-kernels-biotsavart.h"
-#include "device-gpulaunch.h"
+#include "kernels-biotsavart.h"
+#include "gpulaunch.h"
 
 namespace fsc { namespace internal {
 	

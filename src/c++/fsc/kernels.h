@@ -6,8 +6,26 @@
 	#include <omp.h>
 #endif
 
-#include "device-tensor.h"
-#include "device-gpulaunch.h"
+#include "tensor.h"
+	
+#ifdef FSC_WITH_CUDA
+	#ifdef EIGEN_GPUCC
+
+		// Macro to explicitly instantiate kernel
+		#define INSTANTIATE_KERNEL(func, ...) \
+			template void ::fsc::internal::gpuLaunch<decltype(&func), &func, __VA_ARGS__>(Eigen::GpuDevice&, size_t, __VA_ARGS__);
+		
+	#endif // EIGEN_GPUCC
+
+	// Macro to disable implicit instantiation of kernel (which is required to prevent
+	#define REFERENCE_KERNEL(func, ...) \
+		extern template void ::fsc::internal::gpuLaunch<decltype(&func), &func, __VA_ARGS__>(Eigen::GpuDevice&, size_t, __VA_ARGS__);
+
+	#else
+		
+	#define REFERENCE_KERNEL(func, ...)
+
+#endif // FSC_WITH_CUDA
 
 namespace fsc {
 
@@ -63,7 +81,7 @@ namespace fsc {
 	template<>
 	struct KernelLauncher<Eigen::ThreadPoolDevice>;
 	
-	#ifdef EIGEN_USE_GPU
+	#ifdef FSC_WITH_CUDA
 	template<>
 	struct KernelLauncher<Eigen::GpuDevice>;
 	#endif
@@ -80,7 +98,7 @@ namespace fsc {
 	template<>
 	Promise<void> hostMemSynchronize<Eigen::ThreadPoolDevice>(Eigen::ThreadPoolDevice& dev) { return READY_NOW; }
 	
-	#ifdef EIGEN_USE_GPU
+	#ifdef FSC_WITH_CUDA
 	
 	Promise<void> synchronizeGpuDevice(Eigen::GpuDevice& device);
 	
@@ -97,6 +115,35 @@ namespace fsc {
 // Inline Implementation
 
 namespace fsc {
+	
+#ifdef FSC_WITH_CUDA
+#ifdef EIGEN_GPUCC
+
+namespace internal {
+	template<typename Kernel, Kernel f, typename... Params>
+	void __global__ wrappedKernel(Params... params) {
+		f(blockIdx.x, params...);
+	}
+
+	template<typename Kernel, Kernel f, typename... Params>
+	void gpuLaunch(Eigen::GpuDevice& device, size_t n, Params... params) {
+		internal::wrappedKernel<Kernel, f, Params...> <<< n, 1, 64, device.stream() >>> (params...);
+	}
+}
+
+#else // EIGEN_GPUCC
+
+namespace internal {
+	template<typename Kernel, Kernel f, typename... Params>
+	void gpuLaunch(Eigen::GpuDevice& device, size_t n, Params... params) {
+		static_assert(sizeof(Kernel) == 0, "Please disable instantiation of this template outside GPU code with REFERENCE_KERNEL");
+	}
+}
+	
+#endif // EIGEN_GPUCC
+#endif // FSC_WITH_CUDA
+	
+}
 
 template<>
 struct KernelLauncher<Eigen::DefaultDevice> {
@@ -141,10 +188,13 @@ struct KernelLauncher<Eigen::ThreadPoolDevice> {
 	}
 };
 
-#ifdef EIGEN_USE_GPU
+#ifdef FSC_WITH_CUDA
 
 namespace internal {
-	
+
+/**
+ * Internal callback to be passed to a synchronization barrier that fulfilles the given promise.
+ */
 inline void gpuSynchCallback(gpuStream_t stream, gpuError_t status, void* userData) {
 	using Fulfiller = kj::CrossThreadPromiseFulfiller<void>;
 	
@@ -175,7 +225,7 @@ inline void gpuSynchCallback(gpuStream_t stream, gpuError_t status, void* userDa
 }
 
 /**
- * Schedules a promise to be fulfilled on the GPU device.
+ * Schedules a promise to be fulfilled when all previous calls on the GPU device's command stream are finished.
  */
 Promise<void> synchronizeGpuDevice(Eigen::GpuDevice& device) {
 	// Schedule synchronization
@@ -186,14 +236,12 @@ Promise<void> synchronizeGpuDevice(Eigen::GpuDevice& device) {
 	auto fulfiller = new Own<kj::CrossThreadPromiseFulfiller<void>>(); // delete in internal::gpuSynchCallback
 	*fulfiller = mv(paf.fulfiller);
 	
-	# ifdef FSC_WITH_CUDA
-		auto result = cudaStreamAddCallback(device.stream(), internal::gpuSynchCallback, (void*) fulfiller, 0);
+	# ifdef FSC_WITH_HIP
+	auto result = hipStreamAddCallback (device.stream(), internal::gpuSynchCallback, (void*) fulfiller, 0);
 	# else
-		# ifdef FSC_WITH_IP
-		auto result = hipStreamAddCallback (device.stream(), internal::gpuSynchCallback, (void*) fulfiller, 0);
-		# endif
+	auto result = cudaStreamAddCallback(device.stream(), internal::gpuSynchCallback, (void*) fulfiller, 0);
 	# endif
-	
+
 	// If the operation failed, we can't trust the callback to be called
 	// Better just fail now
 	if(result != gpuSuccess) {
@@ -227,7 +275,7 @@ struct KernelLauncher<Eigen::GpuDevice> {
 }
 };
 
-#endif
+#endif // FSC_WITH_CUDA
 
 
 
