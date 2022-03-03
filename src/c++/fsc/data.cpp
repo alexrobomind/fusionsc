@@ -865,7 +865,13 @@ Promise<void> removeCapability(capnp::Capability::Client client, capnp::AnyPoint
 	.then([out](auto response) mutable {
 		out.setAs<capnp::Data>(response.getMetadata().getId());
 	})
-	.catch_([out](kj::Exception e) mutable { out.clear(); });
+	.catch_([out](kj::Exception e) mutable {
+		out.clear();
+		
+		// UNIMPLEMENTED exceptions are normal here, as we want to ignore non-dataref capabilities
+		if(e.getType() != kj::Exception::Type::UNIMPLEMENTED)
+			kj::throwRecoverableException(e);
+	});
 }
 
 } // namespace fsc
