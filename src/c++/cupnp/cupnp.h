@@ -79,7 +79,7 @@ namespace cupnp {
 			if(segments == nullptr)
 				return true;
 			
-			if(segmentId >= segments->nSegments)
+			if(segmentId >= segments.size())
 				return false;
 			
 			auto start = reinterpret_cast<unsigned char*>(/*segments->segments[2 * segmentId]*/segments[segmentId].begin());
@@ -102,9 +102,10 @@ namespace cupnp {
 		return getPointer<T>(root);
 	}
 	
-	inline kj::Array<size_t> calculateSizes(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> segments) {
+	template<typename T>
+	inline kj::Array<size_t> calculateSizes(const kj::ArrayPtr<T>& segments) {
 		auto sizes = kj::heapArrayBuilder<size_t>(segments.size());
-		for(auto segment : segments)
+		for(const auto& segment : segments)
 			sizes.add(segment.size());
 		
 		return sizes.finish();
@@ -112,12 +113,12 @@ namespace cupnp {
 	
 	inline auto deviceMemcpy(void* dst, const void* src, size_t nBytes) {
 		# ifdef CUPNP_WITH_HIP
-			return hipMemcpy(dst.begin(), src.begin(), nBytes, cudaMemcpyDefault);
+			return hipMemcpy(dst, src, nBytes, cudaMemcpyDefault);
 		# else
 			# ifdef CUPNP_WITH_CUDA
-				return cudaMemcpy(dst.begin(), src.begin(), nBytes, hipMemcpyDefault);
+				return cudaMemcpy(dst, src, nBytes, hipMemcpyDefault);
 			# else
-				memcpy(dst.begin(), src.begin(), nBytes);
+				memcpy(dst, src, nBytes);
 				return (int) 0;
 			# endif
 		# endif
@@ -135,7 +136,7 @@ namespace cupnp {
 	}
 	
 	template<typename T1, typename T2>
-	inline auto deviceMemcpyAll(T1 dst, const T2 src) {
+	inline auto deviceMemcpyAll(T1& dst, const T2& src) {
 		CUPNP_REQUIRE(dst.size() == src.size()); 
 		
 		for(size_t i = 0; i < dst.size(); ++i) { 
@@ -184,11 +185,11 @@ namespace cupnp {
 		}
 		
 		kj::Array<size_t> sizes() {
-			return computeSizes(segments);
+			return calculateSizes(segments.asPtr().asConst());
 		}
 	};
 	
-	inline auto deviceMemcpy(Message dst, const Message src) {
+	inline auto deviceMemcpy(Message& dst, const Message& src) {
 		return deviceMemcpyAll(dst.segments, src.segments);
 	}
 	
@@ -287,9 +288,9 @@ namespace cupnp {
 		landingPadOffset = (nativeVal & ((1ull << 32) - 1)) >> 3; // C
 		segmentId = nativeVal >> 32; // D
 		
-		CUPNP_REQUIRE(segmentId < message->nSegments);
-		out.ptr = reinterpret_cast<unsigned char*>(message->segments[2 * segmentId] + landingPadOffset); // Offset calculation is in 8-byte words
-		CUPNP_REQUIRE(out.ptr < reinterpret_cast<unsigned char*>(message->segments[2 * segmentId + 1]));
+		CUPNP_REQUIRE(segmentId < message.size());
+		out.ptr = reinterpret_cast<unsigned char*>(message[segmentId].begin() + landingPadOffset); // Offset calculation is in 8-byte words
+		CUPNP_REQUIRE(out.ptr < reinterpret_cast<unsigned char*>(message[segmentId].end()));
 		
 		out.segmentId = segmentId;
 		out.segments = message;
