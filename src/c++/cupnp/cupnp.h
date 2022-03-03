@@ -111,30 +111,6 @@ namespace cupnp {
 		return sizes.finish();
 	}
 	
-	inline auto deviceMemcpy(void* dst, const void* src, size_t nBytes) {
-		# ifdef CUPNP_WITH_HIP
-			return hipMemcpy(dst, src, nBytes, cudaMemcpyDefault);
-		# else
-			# ifdef CUPNP_WITH_CUDA
-				return cudaMemcpy(dst, src, nBytes, hipMemcpyDefault);
-			# else
-				memcpy(dst, src, nBytes);
-				return (int) 0;
-			# endif
-		# endif
-	}
-	
-	inline auto deviceMemcpy(kj::ArrayPtr<capnp::word> dst, const kj::ArrayPtr<const capnp::word> src) {
-		CUPNP_REQUIRE(dst.size() >= src.size());
-		const auto nBytes = src.size() * sizeof(capnp::word);
-		
-		return deviceMemcpy(dst.begin(), src.begin(), nBytes);
-	}
-	
-	inline auto deviceMemcpy(kj::ArrayPtr<capnp::word> dst, const kj::ArrayPtr<capnp::word> src) {
-		return deviceMemcpy(dst, src.asConst());
-	}
-	
 	template<typename T1, typename T2>
 	inline auto deviceMemcpyAll(T1& dst, const T2& src) {
 		CUPNP_REQUIRE(dst.size() == src.size()); 
