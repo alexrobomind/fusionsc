@@ -94,6 +94,9 @@ public:
 	template<typename Reader, typename T = capnp::FromAny<Reader>>
 	LocalDataRef<T> publish(ArrayPtr<const byte> id, Reader reader);
 	
+	template<typename Reader, typename T = capnp::FromAny<Reader>>
+	Promise<LocalDataRef<T>> publish(Reader reader);
+	
 	/**
 	 * Downloads the target data and all its transitive dependencies and writes them
 	 * into an archive file. This file can then be shared with other customers to provide

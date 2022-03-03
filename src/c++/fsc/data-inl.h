@@ -28,6 +28,7 @@ public:
 	Own<LocalDataServiceImpl> addRef();
 	
 	Promise<LocalDataRef<capnp::AnyPointer>> download(DataRef<capnp::AnyPointer>::Client src, bool recursive);
+	
 	LocalDataRef<capnp::AnyPointer> publish(ArrayPtr<const byte> id, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable, uint64_t cpTypeId);
 	
 	Promise<void> buildArchive(DataRef<capnp::AnyPointer>::Client ref, Archive::Builder out);
@@ -171,6 +172,21 @@ LocalDataRef<T> LocalDataService::publish(ArrayPtr<const byte> id, Reader data) 
 		capTable.getTable(),
 		internal::capnpTypeId<T>()
 	).template as<T>();
+}
+
+template<typename Reader, typename T>
+Promise<LocalDataRef<T>> LocalDataService::publish(Reader data, kj::StringPtr hashFunction = "SHA-256"_kj) {
+	Promise<ID> id = ID::fromReaderWithRefs(data);
+	
+	return id.then([this, data, hashFunction = kj::heapString(hashFunction)](ID id) {
+		auto hash = Botan::HashFunction::create(hashFunction);
+		hash.update(id.data.begin(), id.data.size());
+		
+		auto newId = kj::heapArray<byte>(hash.output_length());
+		hash.final(newId.begin());
+		
+		return publish(newId, data);
+	});
 }
 
 template<typename T>
