@@ -284,7 +284,7 @@ Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geom
 					
 					subTasks.add(
 						getAssembly(ids[i])
-						.then([=, this](kj::Array<uint64_t> cids) mutable {
+						.then([=](kj::Array<uint64_t> cids) mutable {
 							Temporary<Geometry> intermediate;
 							auto tmpIds = intermediate.initComponentsDBMeshes(cids.size());
 							for(unsigned int i = 0; i < cids.size(); ++i)

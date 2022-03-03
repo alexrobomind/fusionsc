@@ -6,7 +6,6 @@
 namespace fsc {
 	
 struct GeometryResolverBase : public GeometryResolver::Server {
-public:
 	LibraryThread lt;
 	GeometryResolverBase(LibraryThread& lt);
 	
@@ -14,6 +13,11 @@ public:
 	
 	virtual Promise<void> processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveContext context);
 	        Promise<void> processTransform(Transformed<Geometry>::Reader input, Transformed<Geometry>::Builder output, ResolveContext context);
+};
+
+struct GeometryLibImpl : public GeometryLib::Server {
+	Promise<void> merge(MergeContext context) override;
+	Promise<void> index(IndexContext context) override;
 };
 
 }

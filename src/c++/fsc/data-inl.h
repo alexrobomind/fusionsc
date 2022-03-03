@@ -1,5 +1,7 @@
 #include <kj/map.h>
 
+#include <botan/hash.h>
+
 namespace fsc {
 
 namespace internal {
@@ -175,15 +177,15 @@ LocalDataRef<T> LocalDataService::publish(ArrayPtr<const byte> id, Reader data) 
 }
 
 template<typename Reader, typename T>
-Promise<LocalDataRef<T>> LocalDataService::publish(Reader data, kj::StringPtr hashFunction = "SHA-256"_kj) {
+Promise<LocalDataRef<T>> LocalDataService::publish(Reader data, kj::StringPtr hashFunction) {
 	Promise<ID> id = ID::fromReaderWithRefs(data);
 	
 	return id.then([this, data, hashFunction = kj::heapString(hashFunction)](ID id) {
-		auto hash = Botan::HashFunction::create(hashFunction);
-		hash.update(id.data.begin(), id.data.size());
+		auto hash = Botan::HashFunction::create(hashFunction.cStr());
+		hash->update(id.data.begin(), id.data.size());
 		
-		auto newId = kj::heapArray<byte>(hash.output_length());
-		hash.final(newId.begin());
+		auto newId = kj::heapArray<byte>(hash->output_length());
+		hash->final(newId.begin());
 		
 		return publish(newId, data);
 	});

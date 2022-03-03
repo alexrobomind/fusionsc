@@ -95,7 +95,7 @@ public:
 	LocalDataRef<T> publish(ArrayPtr<const byte> id, Reader reader);
 	
 	template<typename Reader, typename T = capnp::FromAny<Reader>>
-	Promise<LocalDataRef<T>> publish(Reader reader);
+	Promise<LocalDataRef<T>> publish(Reader data, kj::StringPtr hashFunction = "SHA-256"_kj);
 	
 	/**
 	 * Downloads the target data and all its transitive dependencies and writes them

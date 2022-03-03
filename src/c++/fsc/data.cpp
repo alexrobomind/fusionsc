@@ -870,7 +870,7 @@ Promise<void> removeCapability(capnp::Capability::Client client, capnp::AnyPoint
 		
 		// UNIMPLEMENTED exceptions are normal here, as we want to ignore non-dataref capabilities
 		if(e.getType() != kj::Exception::Type::UNIMPLEMENTED)
-			kj::throwRecoverableException(e);
+			kj::throwRecoverableException(mv(e));
 	});
 }
 
