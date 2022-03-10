@@ -88,6 +88,6 @@ namespace cupnp {
 		auto err = deviceMalloc(&ptr, size * sizeof(T));
 		KJ_REQUIRE(err == 0, "Device allocation failure");
 		
-		return kj::Array<T>(ptr, size, internal::DeviceArrayDisposer::instance);
+		return kj::Array<T>(reinterpret_cast<T*>(ptr), size, internal::DeviceArrayDisposer::instance);
 	}
 }

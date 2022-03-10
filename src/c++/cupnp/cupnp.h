@@ -95,8 +95,13 @@ namespace cupnp {
 			
 			if(err != 0) 
 				return err; 
-		} 
+		}
+		
+		return 0;
 	}
+	
+	template<typename T>
+	inline CupnpVal<T> messageRoot(kj::ArrayPtr<kj::ArrayPtr<capnp::word>> segments);
 	
 	struct Message {
 		// Host-located array of segments (which can individually be device-located)
@@ -105,7 +110,6 @@ namespace cupnp {
 		// Device-located array of segments
 		kj::Array<kj::ArrayPtr<capnp::word>> segmentRefs;
 		
-		template<typename Allocator>
 		Message(kj::ArrayPtr<size_t> sizes, bool onDevice) {
 			auto segmentsBuilder = kj::heapArrayBuilder<kj::Array<capnp::word>>(sizes.size());
 			for(size_t size : sizes) {
@@ -128,9 +132,8 @@ namespace cupnp {
 			deviceMemcpy(segmentRefs.asPtr(), hostSegmentRefs.asPtr());
 		}
 			
-		template<typename Allocator>
-		Message(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> hostSegments, Allocator allocator) :
-			Message(calculateSizes(hostSegments), allocator)
+		Message(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> hostSegments, bool onDevice) :
+			Message(calculateSizes(hostSegments), onDevice)
 		{			
 			deviceMemcpyAll(segments, hostSegments);
 		}
@@ -138,8 +141,13 @@ namespace cupnp {
 		kj::Array<size_t> sizes() {
 			return calculateSizes(segments.asPtr().asConst());
 		}
+		
+		template<typename T>
+		CupnpVal<T> root() {
+			return messageRoot<T>(segmentRefs);
+		}
 	};
-	
+		
 	inline auto deviceMemcpy(Message& dst, const Message& src) {
 		return deviceMemcpyAll(dst.segments, src.segments);
 	}
@@ -427,7 +435,7 @@ namespace cupnp {
 	 * Note: Currently only accepts structure pointers.
 	 */
 	inline uint32_t computeContentSize(uint64_t structure, Location data) {
-		uint8_t tag = structure && 3u;
+		uint8_t tag = structure & 3u;
 		if(tag == 0) {
 			uint16_t dataSectionSizeInWords = structure >> 32;
 			uint16_t pointerSectionSize = structure >> 48;

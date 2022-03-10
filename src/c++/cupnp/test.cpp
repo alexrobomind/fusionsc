@@ -22,10 +22,11 @@ TEST_CASE("Exporting to GPU") {
 	root.initLb(7);
 	for(size_t i = 0; i < root.getLb().size(); ++i) root.getLb().set(i, i % 3 == 0);
 	
-	cupnp::HostMessage hostMsg(msg.getSegmentsForOutput());
-	cupnp::Message cupnpMsg = hostMsg.message;
+	// cupnp::HostMessage hostMsg(msg.getSegmentsForOutput());
+	// cupnp::Message cupnpMsg = hostMsg.message;
+	cupnp::Message cupnpMsg(msg.getSegmentsForOutput(), false);
 	
-	cupnp::CupnpVal<TestStruct> cupnpRoot = cupnp::messageRoot<TestStruct>(cupnpMsg);
+	cupnp::CupnpVal<TestStruct> cupnpRoot = cupnpMsg.root<TestStruct>(); // cupnp::messageRoot<TestStruct>(cupnpMsg);
 	auto union1 = cupnpRoot.getUnion1();
 	
 	REQUIRE(root.getU32() == cupnpRoot.getU32());

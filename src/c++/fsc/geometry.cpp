@@ -88,6 +88,53 @@ Promise<void> GeometryResolverBase::resolve(ResolveContext context) {
 // Class GeometryLibImpl
 
 namespace {
+	
+	/**
+	  * Calculates a rotation matrix around an axis and angle
+	*/
+	Mat4d rotationAxisAngle(Vec3d center, Vec3d axis, double angle) {
+		double x = axis[0];
+		double y = axis[1];
+		double z = axis[2];
+		double c = std::cos(angle);
+		double s = std::sin(angle);
+		
+		// http://en.wikipedia.org/wiki/Rotation_matrix#Rotation_matrix_from_axis_and_angle
+		Mat4d turn {
+			{ c + x * x * (1 - c)    ,    x * y * (1 - c) + z * s,    x * z * (1 - c) + y * s, 0},
+			{ x * y * (1 - c) + z * s,    c + y * y * (1 - c)    ,    y * z * (1 - c) + x * s, 0},
+			{ x * z * (1 - c) - y * s,    y * z * (1 - c) - x * s,    c + z * z * (1 - c)    , 0},
+			{            0           ,                0          ,                0          , 1}
+		};
+		
+		Mat4d shift1 {
+			{ 1, 0, 0, -center(0) },
+			{ 0, 1, 0, -center(1) },
+			{ 0, 0, 1, -center(2) },
+			{ 0, 0, 0, 1 }
+		};
+		
+		Mat4d shift2 {
+			{ 1, 0, 0, center(0) },
+			{ 0, 1, 0, center(1) },
+			{ 0, 0, 1, center(2) },
+			{ 0, 0, 0, 1 }
+		};
+		
+		return shift2 * turn * shift1;
+	}
+	
+	struct GeometryAccumulator {
+		kj::Vector<Temporary<MergedGeometry::Entry>> entries;
+		
+		inline void finish(MergedGeometry::Builder output) {
+			auto outEntries = output.initEntries(entries.size());
+			for(size_t i = 0; i < entries.size(); ++i) {
+				entries.set(i, outEntries[i]);
+			}
+		}
+	};
+	
 	Promise<void> collectTagNames(Geometry::Reader input, kj::HashSet<kj::String>& output);
 	Promise<void> collectTagNames(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& output);
 	
@@ -136,7 +183,7 @@ namespace {
 	
 	using Mat4d = Eigen::Matrix<double, 4, 4>;
 	
-	Promise<void> mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const Temporary<capnp::List<TagValue>>& tagScope, Mat4d transform, MergedGeometry::Builder output);
+	Promise<void> mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const Temporary<capnp::List<TagValue>>& tagScope, Mat4d transform, MergedGeometry::Builder output, kj::Vector<Temporary<);
 	Promise<void> mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const Temporary<capnp::List<TagValue>>& tagScope, Mat4d transform, MergedGeometry::Builder output);
 	
 	Promise<void> mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const Temporary<capnp::List<TagValue>>& tagScope, Mat4d transform, MergedGeometry::Builder output) {
@@ -170,6 +217,40 @@ namespace {
 				});
 				
 			case Geometry::MESH:
+				return lt->dataServes().download(input.getMesh())
+				.then([input, &tagTable, tagValues, transform, output](LocalDataRef<Mesh> inputMesh) {
+					auto vertexShape = inputMesh.getVertices().getShape();
+					KJ_REQUIRE(vertexShape.size() == 2);
+					KJ_REQUIRE(vertexShape[1] == 3);
+					
+					Temporary<MergedGeometry::Entry> newEntry;
+					
+					newEntry.setTags(tagValues);
+					
+					// Copy mesh and make in-place adjustments
+					auto mesh = newEntry.setMesh(inputMesh);
+					auto vertexData = inputMesh.getVertices().getData();
+					KJ_REQUIRE(vertexData.size() == vertexShape[0] * vertexShape[1]);
+					
+					for(size_t i_vert = 0; i_vert < vertexShape[0], ++i_vert) {
+						Vec4f vertex { 
+							vertexData[i_vert * 3 + 0],
+							vertexData[i_vert * 3 + 1],
+							vertexData[i_vert * 3 + 2],
+							1
+						};
+						
+						Vec4f newVertex = transform * vertex;
+						
+						for(size_t i = 0; i < 3; ++i)
+							vertexData[i_vert * 3 + i] = newVertex[i];
+					}
+					
+					output.entries.pushBack(mv(newEntry));
+				});
+				auto mesh = geometry.get
+				
+				newEntry.initTags(
 				KJ_UNIMPLEMENTED("Missing mesh merger");
 			default:
 				KJ_FAIL_REQUIRE("Unknown geometry node type encountered during merge operation. Likely an unresolved node", input.which());
@@ -190,9 +271,20 @@ namespace {
 				
 				return mergeGeometries(input.getShifted().getNode(), tagTable, tagScope, transform, output);
 			case Transformed<Geometry>::TURNED:
-				KJ_UNIMPLEMENTED("Missing rotation matrix application");
+				auto turned = input.getTurned();
+				auto inAxis = turned.getAxis();
+				auto inCenter = turned.getCenter();
+				double angle = turned.getAngle();
 				
-				return mergeGeometries(input.getShifted().getNode(), tagTable, tagScope, transform, output);
+				KJ_REQUIRE(inAxis.size() == 3);
+				KJ_REQUIRE(inCenter.size() == 3);
+				
+				Vec3d axis   { inAxis[0], inAxis[1], inAxis[2] };
+				Vec3d center { inCenter[0], inCenter[1], inCenter[2] };
+				
+				auto rotation = rotationAxisAngle(center, axis, angle);
+				
+				return mergeGeometries(input.getShifted().getNode(), tagTable, tagScope, transform * rotation, output);
 			default:
 				KJ_FAIL_REQUIRE("Unknown transform type", input.which());
 		}
