@@ -1,6 +1,6 @@
 #pragma once
 
-#include "vector.h"
+#include "tensor.h"
 
 namespace fsc {
 
@@ -17,8 +17,8 @@ struct ToroidalGridStruct {
 	inline EIGEN_DEVICE_FUNC double r(int i_r) const;
 	inline EIGEN_DEVICE_FUNC double z(int i_z) const;
 	
-	inline EIGEN_DEVICE_FUNC Vec3<double> xyz(int i_phi, int i_z, int i_r) const;
-	inline EIGEN_DEVICE_FUNC Vec3<double> phizr(int i_phi, int i_z, int i_r) const;
+	inline EIGEN_DEVICE_FUNC Vec3d xyz(int i_phi, int i_z, int i_r) const;
+	inline EIGEN_DEVICE_FUNC Vec3d phizr(int i_phi, int i_z, int i_r) const;
 };
 
 inline EIGEN_DEVICE_FUNC double ToroidalGridStruct::phi(int i) const {
@@ -33,28 +33,28 @@ inline EIGEN_DEVICE_FUNC double ToroidalGridStruct::z(int i) const {
 	return zMin + (zMax - zMin) / (nZ - 1) * i;
 }
 	
-inline EIGEN_DEVICE_FUNC Vec3<double> ToroidalGridStruct::xyz(int i_phi, int i_z, int i_r) const {
+inline EIGEN_DEVICE_FUNC Vec3d ToroidalGridStruct::xyz(int i_phi, int i_z, int i_r) const {
 	double rv = r(i_r);
 	double phiv = phi(i_phi);
 	
 	double x = rv * cos(phiv);
 	double y = rv * sin(phiv);
 	
-	Vec3<double> result;
+	/*Vec3<double> result;
 	result(0) = x;
 	result(1) = y;
-	result(2) = z(i_z);
+	result(2) = z(i_z);*/
 	
-	return result;
+	return {x, y, z(i_z) };
 }
 
-inline EIGEN_DEVICE_FUNC Vec3<double> ToroidalGridStruct::phizr(int i_phi, int i_z, int i_r) const {
-	Vec3<double> result;
+inline EIGEN_DEVICE_FUNC Vec3d ToroidalGridStruct::phizr(int i_phi, int i_z, int i_r) const {
+	/*Vec3<double> result;
 	result(0) = phi(i_phi);
 	result(1) = z(i_z);
-	result(2) = r(i_r);
+	result(2) = r(i_r);*/
 	
-	return result;
+	return { phi(i_phi), z(i_z), r(i_r) };
 }
 
 }

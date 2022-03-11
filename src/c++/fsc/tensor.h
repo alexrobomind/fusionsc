@@ -31,12 +31,31 @@ using Eigen::Sizes;
 constexpr double pi = 3.14159265358979323846; // "Defined" in magnetics.cpp
 
 template<typename T, unsigned int n>
-using EVec = Eigen::TensorFixedSize<T, Eigen::Sizes<n>>;
+using TVec = Eigen::TensorFixedSize<T, Eigen::Sizes<n>>;
 
 template<typename T>
-using EVec3 = EVec<T, 3>;
+using TVec3 = TVec<T, 3>;
 
-using EVec3d = EVec3<double>;
+template<typename T>
+using TVec4 = TVec<T, 4>;
+
+using TVec3d = TVec3<double>;
+using TVec4d = TVec4<double>;
+
+template<typename T, unsigned int n>
+using Vec = Eigen::Vector<T, n>;
+
+using Vec3d = Vec<double, 3>;
+using Vec4d = Vec<double, 4>;
+
+template<typename T>
+using Mat4 = Eigen::Matrix<T, 4, 4>;
+
+template<typename T>
+using Mat3 = Eigen::Matrix<T, 3, 3>;
+
+using Mat4d = Mat4<double>;
+using Mat3d = Mat3<double>;
 
 /**
  * Helper struct that can be used to map data towards a specific device for calculation. Is constructed with a host pointer and a size,

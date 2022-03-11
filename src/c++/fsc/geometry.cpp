@@ -1,7 +1,6 @@
 #include "geometry.h"
-#include "data.h"
 
-#include "tensor.h"
+#include <kj/map.h>
 
 namespace fsc {
 	
@@ -124,182 +123,210 @@ namespace {
 		return shift2 * turn * shift1;
 	}
 	
-	struct GeometryAccumulator {
-		kj::Vector<Temporary<MergedGeometry::Entry>> entries;
+}
+
+GeometryLibImpl::GeometryLibImpl(LibraryThread& lt) : lt(lt->addRef()) {}
+
+Promise<void> GeometryLibImpl::collectTagNames(Geometry::Reader input, kj::HashSet<kj::String>& output) {
+	for(auto tag : input.getTags()) {
+		const kj::StringPtr tagName = tag.getName();
 		
-		inline void finish(MergedGeometry::Builder output) {
-			auto outEntries = output.initEntries(entries.size());
-			for(size_t i = 0; i < entries.size(); ++i) {
-				entries.set(i, outEntries[i]);
-			}
-		}
-	};
+		if(!output.contains(tagName))
+			output.insert(kj::heapString(tagName));
+	}
 	
-	Promise<void> collectTagNames(Geometry::Reader input, kj::HashSet<kj::String>& output);
-	Promise<void> collectTagNames(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& output);
-	
-	Promise<void> collectTagNames(Geometry::Reader input, kj::HashSet<kj::String>& output) {
-		for(auto tag : input.getTags()) {
-			const kj::StringPtr tagName = tag.getName();
+	switch(input.which()) {
+		case Geometry::COMBINED: {
+			auto promises = kj::heapArrayBuilder<Promise<void>>(input.getCombined().size());
 			
-			if(!output.contains(tagName))
-				output.insert(kj::heapString(tagName));
-		}
-		
-		switch(input.which()) {
-			case Geometry::COMBINED:
-				auto promises = kj::heapArrayBuilder<Promise<void>>(input.getCombined().size());
-				
-				for(auto child : input.getCombined()) {
-					promises.add(collectTagNames(child, output));
-					
-				return joinPromises(promises.finish());
-			case Geometry::TRANSFORMED:
-				return collectTagNames(input.getTransformed(), output);
-			case Geometry::REF:
-				return lt->dataService().download(input.getRef())
-				.then([input, &output](LocalDataRef<Geometry> geo) {
-					return collectTagNames(geo.get(), output);
-				});
-			case Geometry::MESH:
-				return READY_NOW;
-			default:
-				KJ_FAIL_REQUIRE("Unknown geometry node type encountered during merge operation. Likely an unresolved node", input.which());
-		}
-	}
-	
-	Promise<void> collectTagNames(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& output) {
-		switch(input.which()) {
-			case Transformed<Geometry>::LEAF:
-				return collectTagNames(input.getLeaf(), output);
-			case Transformed<Geometry>::SHIFTED:
-				return collectTagNames(input.getShifted().getNode(), output);
-			case Transformed<Geometry>::TURNED:
-				return collectTagNames(input.getTurned().getNode(), output);
-			default:
-				KJ_FAIL_REQUIRE("Unknown transform type", input.which());
-		}
-	}
-	
-	using Mat4d = Eigen::Matrix<double, 4, 4>;
-	
-	Promise<void> mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const Temporary<capnp::List<TagValue>>& tagScope, Mat4d transform, MergedGeometry::Builder output, kj::Vector<Temporary<);
-	Promise<void> mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const Temporary<capnp::List<TagValue>>& tagScope, Mat4d transform, MergedGeometry::Builder output);
-	
-	Promise<void> mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const Temporary<capnp::List<TagValue>>& tagScope, Mat4d transform, MergedGeometry::Builder output) {
-		Temporary<capnp::List<TagValue>> tagValues(tagScope);
-		
-		for(auto tag : input.getTags()) {
-			const kj::StringPtr tagName = tag.getName();
-			
-			KJ_IF_MAYBE(rowPtr, tagTable.find(tag.getName())) {
-				size_t tagIdx = rowPtr - tagTable.begin();
-				tagValues.set(tagIdx, tag.getValue());
-			} else {
-				KJ_FAIL_REQUIRE("Internal error, tag not found in tag table", tag.getName());
+			for(auto child : input.getCombined()) {
+				promises.add(collectTagNames(child, output));
 			}
+				
+			return joinPromises(promises.finish());
 		}
-		
-		switch(input.which()) {
-			case Geometry::COMBINED:
-				auto promises = kj::heapArrayBuilder<Promise<void>>(input.getCombined().size());
-				
-				for(auto child : input.getCombined()) {
-					promises.add(mergeGeometries(input, tagTable, tagValues, transform, output));
-					
-				return joinPromises(promises.finish());
-			case Geometry::TRANSFORMED:
-				return mergeGeometries(input.getTransformed(), tagTable, tagValues, transform, output);
-			case Geometry::REF:
-				return lt->dataService().download(input.getRef())
-				.then([input, &tagTable, tagValues, transform, output](LocalDataRef<Geometry> geo) {
-					return mergeGeometries(geo.get(), tagTable, tagValues, transform, output);
-				});
-				
-			case Geometry::MESH:
-				return lt->dataServes().download(input.getMesh())
-				.then([input, &tagTable, tagValues, transform, output](LocalDataRef<Mesh> inputMesh) {
-					auto vertexShape = inputMesh.getVertices().getShape();
-					KJ_REQUIRE(vertexShape.size() == 2);
-					KJ_REQUIRE(vertexShape[1] == 3);
-					
-					Temporary<MergedGeometry::Entry> newEntry;
-					
-					newEntry.setTags(tagValues);
-					
-					// Copy mesh and make in-place adjustments
-					auto mesh = newEntry.setMesh(inputMesh);
-					auto vertexData = inputMesh.getVertices().getData();
-					KJ_REQUIRE(vertexData.size() == vertexShape[0] * vertexShape[1]);
-					
-					for(size_t i_vert = 0; i_vert < vertexShape[0], ++i_vert) {
-						Vec4f vertex { 
-							vertexData[i_vert * 3 + 0],
-							vertexData[i_vert * 3 + 1],
-							vertexData[i_vert * 3 + 2],
-							1
-						};
-						
-						Vec4f newVertex = transform * vertex;
-						
-						for(size_t i = 0; i < 3; ++i)
-							vertexData[i_vert * 3 + i] = newVertex[i];
-					}
-					
-					output.entries.pushBack(mv(newEntry));
-				});
-				auto mesh = geometry.get
-				
-				newEntry.initTags(
-				KJ_UNIMPLEMENTED("Missing mesh merger");
-			default:
-				KJ_FAIL_REQUIRE("Unknown geometry node type encountered during merge operation. Likely an unresolved node", input.which());
-		}
-	}
-	
-	Promise<void> mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const Temporary<capnp::List<TagValue>>& tagScope, Mat4d transform, MergedGeometry::Builder output) {
-		switch(input.which()) {
-			case Transformed<Geometry>::LEAF:
-				return mergeGeometries(input.getLeaf(), tagTable, tagScope, transform, output);
-			case Transformed<Geometry>::SHIFTED:
-				auto shift = input.getShifted().getShift();
-				KJ_REQUIRE(shift.size() == 3);
-				
-				for(int i = 0; i < 3; ++i) {
-					transform(i, 3) += shift[i];
-				}
-				
-				return mergeGeometries(input.getShifted().getNode(), tagTable, tagScope, transform, output);
-			case Transformed<Geometry>::TURNED:
-				auto turned = input.getTurned();
-				auto inAxis = turned.getAxis();
-				auto inCenter = turned.getCenter();
-				double angle = turned.getAngle();
-				
-				KJ_REQUIRE(inAxis.size() == 3);
-				KJ_REQUIRE(inCenter.size() == 3);
-				
-				Vec3d axis   { inAxis[0], inAxis[1], inAxis[2] };
-				Vec3d center { inCenter[0], inCenter[1], inCenter[2] };
-				
-				auto rotation = rotationAxisAngle(center, axis, angle);
-				
-				return mergeGeometries(input.getShifted().getNode(), tagTable, tagScope, transform * rotation, output);
-			default:
-				KJ_FAIL_REQUIRE("Unknown transform type", input.which());
-		}
-		
+		case Geometry::TRANSFORMED:
+			return collectTagNames(input.getTransformed(), output);
+		case Geometry::REF:
+			return lt->dataService().download(input.getRef())
+			.then([input, &output, this](LocalDataRef<Geometry> geo) {
+				return collectTagNames(geo.get(), output);
+			});
+		case Geometry::MESH:
+			return READY_NOW;
+		default:
+			KJ_FAIL_REQUIRE("Unknown geometry node type encountered during merge operation. Likely an unresolved node", input.which());
 	}
 }
 
+Promise<void> GeometryLibImpl::collectTagNames(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& output) {
+	switch(input.which()) {
+		case Transformed<Geometry>::LEAF:
+			return collectTagNames(input.getLeaf(), output);
+		case Transformed<Geometry>::SHIFTED:
+			return collectTagNames(input.getShifted().getNode(), output);
+		case Transformed<Geometry>::TURNED:
+			return collectTagNames(input.getTurned().getNode(), output);
+		default:
+			KJ_FAIL_REQUIRE("Unknown transform type", input.which());
+	}
+}
+
+using Mat4d = Eigen::Matrix<double, 4, 4>;
+
+Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Mat4d transform, GeometryAccumulator& output) {
+	Temporary<capnp::List<TagValue>> tagValues(tagScope);
+	
+	for(auto tag : input.getTags()) {
+		const kj::StringPtr tagName = tag.getName();
+		
+		KJ_IF_MAYBE(rowPtr, tagTable.find(tag.getName())) {
+			size_t tagIdx = rowPtr - tagTable.begin();
+			tagValues.setWithCaveats(tagIdx, tag.getValue());
+		} else {
+			KJ_FAIL_REQUIRE("Internal error, tag not found in tag table", tag.getName());
+		}
+	}
+	
+	switch(input.which()) {
+		case Geometry::COMBINED: {
+			auto promises = kj::heapArrayBuilder<Promise<void>>(input.getCombined().size());
+			
+			for(auto child : input.getCombined()) {
+				promises.add(mergeGeometries(input, tagTable, tagValues, transform, output));
+			}
+				
+			return joinPromises(promises.finish());
+		}
+		case Geometry::TRANSFORMED:
+			return mergeGeometries(input.getTransformed(), tagTable, tagValues, transform, output);
+		case Geometry::REF:
+			return lt->dataService().download(input.getRef())
+			.then([input, &tagTable, tagValues = mv(tagValues), transform, &output, this](LocalDataRef<Geometry> geo) {
+				return mergeGeometries(geo.get(), tagTable, tagValues, transform, output);
+			});
+			
+		case Geometry::MESH:
+			return lt->dataService().download(input.getMesh())
+			.then([input, &tagTable, tagValues = mv(tagValues), transform, &output](LocalDataRef<Mesh> inputMeshRef) {
+				auto inputMesh = inputMeshRef.get();
+				auto vertexShape = inputMesh.getVertices().getShape();
+				KJ_REQUIRE(vertexShape.size() == 2);
+				KJ_REQUIRE(vertexShape[1] == 3);
+				
+				Temporary<MergedGeometry::Entry> newEntry;
+				
+				newEntry.setTags(tagValues);
+				
+				// Copy mesh and make in-place adjustments
+				newEntry.setMesh(inputMesh);
+				auto mesh = newEntry.getMesh();
+				auto vertexData = inputMesh.getVertices().getData();
+				KJ_REQUIRE(vertexData.size() == vertexShape[0] * vertexShape[1]);
+				
+				auto outVertices = mesh.getVertices();
+				auto outVertexData = outVertices.initData(vertexData.size());
+				
+				outVertices.setShape(inputMesh.getVertices().getShape());
+				
+				for(size_t i_vert = 0; i_vert < vertexShape[0]; ++i_vert) {
+					Vec4d vertex { 
+						vertexData[i_vert * 3 + 0],
+						vertexData[i_vert * 3 + 1],
+						vertexData[i_vert * 3 + 2],
+						1
+					};
+					
+					Vec4d newVertex = transform * vertex;
+					
+					for(size_t i = 0; i < 3; ++i)
+						outVertexData.set(i_vert * 3 + i, newVertex[i]);
+				}
+				
+				output.entries.add(mv(newEntry));
+			});
+			// auto mesh = geometry.get
+			
+			// newEntry.initTags(
+			KJ_UNIMPLEMENTED("Missing mesh merger");
+		default:
+			KJ_FAIL_REQUIRE("Unknown geometry node type encountered during merge operation. Likely an unresolved node", input.which());
+	}
+}
+
+Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Mat4d transform, GeometryAccumulator& output) {
+	switch(input.which()) {
+		case Transformed<Geometry>::LEAF:
+			return mergeGeometries(input.getLeaf(), tagTable, tagScope, transform, output);
+		case Transformed<Geometry>::SHIFTED: {
+			auto shift = input.getShifted().getShift();
+			KJ_REQUIRE(shift.size() == 3);
+			
+			for(int i = 0; i < 3; ++i) {
+				transform(i, 3) += shift[i];
+			}
+			
+			return mergeGeometries(input.getShifted().getNode(), tagTable, tagScope, transform, output);
+		}
+		case Transformed<Geometry>::TURNED: {
+			auto turned = input.getTurned();
+			auto inAxis = turned.getAxis();
+			auto inCenter = turned.getCenter();
+			double angle = turned.getAngle();
+			
+			KJ_REQUIRE(inAxis.size() == 3);
+			KJ_REQUIRE(inCenter.size() == 3);
+			
+			Vec3d axis   { inAxis[0], inAxis[1], inAxis[2] };
+			Vec3d center { inCenter[0], inCenter[1], inCenter[2] };
+			
+			auto rotation = rotationAxisAngle(center, axis, angle);
+			
+			return mergeGeometries(input.getShifted().getNode(), tagTable, tagScope, transform * rotation, output);
+		}
+		default:
+			KJ_FAIL_REQUIRE("Unknown transform type", input.which());
+	}
+	
+}
+
+Promise<void> GeometryLibImpl::index(IndexContext context) {
+	KJ_UNIMPLEMENTED("Index routine missing");
+}
+
 Promise<void> GeometryLibImpl::merge(MergeContext context) {
-	auto tagNameTable = kj::heap<kj::hashSet<kj::String>>();
+	auto tagNameTable = kj::heap<kj::HashSet<kj::String>>();
+	auto geomAccum = kj::heap<GeometryAccumulator>();
 	
-	auto promise = collectTagNames(context.getParams(), *tagNameTable);
+	auto promise = collectTagNames(context.getParams(), *tagNameTable)
+	.then([context, &geomAccum = *geomAccum, &tagNameTable = *tagNameTable, this]() mutable {
+		Temporary<capnp::List<TagValue>> tagScope(
+			capnp::List<TagValue>::Builder(nullptr)
+		);
+		
+		Mat4d idTransform {
+			{1, 0, 0, 0},
+			{0, 1, 0, 0},
+			{0, 0, 1, 0},
+			{0, 0, 0, 1}
+		};
+		
+		return mergeGeometries(context.getParams(), tagNameTable, tagScope, idTransform, geomAccum);
+	})
+	.then([context, &geomAccum = *geomAccum, &tagNameTable = *tagNameTable, this]() mutable {
+		Temporary<MergedGeometry> output;
+		geomAccum.finish(output);
+		
+		auto outTagNames = output.initTagNames(tagNameTable.size());
+		for(size_t i = 0; i < tagNameTable.size(); ++i)
+			outTagNames.set(i, *(tagNameTable.begin() + i));
+		
+		context.getResults().setRef(
+			lt->dataService().publish(output.asReader())
+		);
+	});
 	
-	KJ_UNIMPLEMENTED("Merge routine missing");
-	
-	return promise.attach(mv(tagNameTable));
+	return promise.attach(mv(tagNameTable), mv(geomAccum));
 }
 
 }

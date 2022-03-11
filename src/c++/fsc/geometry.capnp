@@ -117,6 +117,7 @@ struct Mesh {
 
 struct MergedGeometry {
 	tagNames @0 : List(Text);
+	entries  @1 : List(Entry);
 	
 	struct Entry {
 		tags @0 : List(TagValue);
