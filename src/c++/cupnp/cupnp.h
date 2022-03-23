@@ -207,6 +207,11 @@ namespace cupnp {
 			return messageRoot<T>(segments.asPtr(), segmentRefs);
 		}
 		
+		template<typename T>
+		CuFor<T> rootFor() {
+			return root<CuFor<T>>();
+		}
+		
 		inline capnp::SegmentArrayMessageReader asCapnp(capnp::ReaderOptions options = capnp::ReaderOptions()) {
 			return capnp::SegmentArrayMessageReader(constSegmentRefs.asPtr(), options);
 		}

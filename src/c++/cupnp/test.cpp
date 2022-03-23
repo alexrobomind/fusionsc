@@ -27,7 +27,7 @@ TEST_CASE("Exporting to GPU") {
 	// cupnp::Message cupnpMsg = hostMsg.message;
 	cupnp::Message cupnpMsg(msg, false);
 	
-	CuTestStruct cupnpRoot = cupnpMsg.root<CuTestStruct>(); // cupnp::messageRoot<TestStruct>(cupnpMsg);
+	CuTestStruct cupnpRoot = cupnpMsg.rootFor<TestStruct>(); // cupnp::messageRoot<TestStruct>(cupnpMsg);
 	auto union1 = cupnpRoot.getUnion1();
 	
 	REQUIRE(root.getU32() == cupnpRoot.getU32());
