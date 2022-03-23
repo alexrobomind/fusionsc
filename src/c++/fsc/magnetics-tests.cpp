@@ -84,7 +84,7 @@ TEST_CASE("build-field-gpu") {
 	// col major axes 3, nPhi, nZ, R
 	auto zPlane = fieldOut.chip(grid.getNZ() / 2, 2);
 	
-	EVec3d ref;
+	TVec3d ref;
 	ref(0) = 1;
 	ref(1) = 0;
 	ref(2) = 0;
@@ -93,7 +93,7 @@ TEST_CASE("build-field-gpu") {
 	for(size_t iR = 0; iR < grid.getNR(); ++iR) {
 		double r = grid.getRMin() + (grid.getRMax() - grid.getRMin()) / (grid.getNR() - 1) * iR;
 		double reference = 2e-7 / r * sin(atan2(1, r));
-		EVec3d upscaled = zPlane.chip(iR, 2).chip(iPhi, 1) / reference;
+		TVec3d upscaled = zPlane.chip(iR, 2).chip(iPhi, 1) / reference;
 		TensorFixedSize<double, Eigen::Sizes<>> dist = (upscaled - ref).square().sum().sqrt();
 		
 		KJ_REQUIRE(dist() < 0.01);

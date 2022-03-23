@@ -183,7 +183,7 @@ Promise<LocalDataRef<T>> LocalDataService::publish(IDReader dataForID, Reader da
 	return id.then([this, data, hashFunction = kj::heapString(hashFunction)](ID id) {
 		auto hash = Botan::HashFunction::create(hashFunction.cStr());
 		
-		hash->update(internal::capnpTypeId<capnp::FromAny<IDReader>>());
+		hash->update_le(internal::capnpTypeId<capnp::FromAny<IDReader>>());
 		hash->update(id.data.begin(), id.data.size());
 		
 		auto newId = kj::heapArray<byte>(hash->output_length());

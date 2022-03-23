@@ -90,23 +90,23 @@ namespace fsc {
 	 * CPU devices dont need host memory synchronization, as all memcpy() calls are executed in-line on the main thread.
 	 */
 	template<>
-	Promise<void> hostMemSynchronize<Eigen::DefaultDevice>(Eigen::DefaultDevice& dev) { return READY_NOW; }
+	inline Promise<void> hostMemSynchronize<Eigen::DefaultDevice>(Eigen::DefaultDevice& dev) { return READY_NOW; }
 	
 	/**
 	 * CPU devices dont need host memory synchronization, as all memcpy() calls are executed in-line on the main thread.
 	 */
 	template<>
-	Promise<void> hostMemSynchronize<Eigen::ThreadPoolDevice>(Eigen::ThreadPoolDevice& dev) { return READY_NOW; }
+	inline Promise<void> hostMemSynchronize<Eigen::ThreadPoolDevice>(Eigen::ThreadPoolDevice& dev) { return READY_NOW; }
 	
 	#ifdef FSC_WITH_CUDA
 	
-	Promise<void> synchronizeGpuDevice(Eigen::GpuDevice& device);
+	inline Promise<void> synchronizeGpuDevice(Eigen::GpuDevice& device);
 	
 	/**
 	 * GPU devices schedule an asynch memcpy onto their stream. We therefore need to wait until the stream has advanced past it.
 	 */
 	template<>
-	Promise<void> hostMemSynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& device) { return synchronizeGpuDevice(device); }
+	inline Promise<void> hostMemSynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& device) { return synchronizeGpuDevice(device); }
 	
 	#endif
 }

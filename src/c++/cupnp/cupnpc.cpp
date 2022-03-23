@@ -536,7 +536,9 @@ StringTree generateValueAsBytes(Value::Reader value) {
 
 StringTree generateMethod(CodeGeneratorRequest::Reader request, uint64_t nodeId, StringTree& methodDefinitions, StringTree returnType, StringTree name, StringTree contents) {
 	auto nodeBrand = capnp::defaultValue<Brand>();
-	auto fullTypeName = cppNodeTypeName(nodeId, nodeBrand, nodeId, nodeBrand, request);
+	kj::String fullTypeName = cppNodeTypeName(nodeId, nodeBrand, nodeId, nodeBrand, request).flatten();
+	
+	kj::StringPtr typeNameRef = fullTypeName.startsWith("typename ") ? fullTypeName.slice(9) : fullTypeName;
 	
 	StringTree methodDeclaration = strTree(
 		"	inline ", returnType.flatten(), " ", name.flatten(), ";\n"
@@ -544,7 +546,7 @@ StringTree generateMethod(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 	
 	StringTree methodDefinition = strTree(
 		generateAllTemplateHeaders(request, nodeId),
-		returnType.flatten(), " ", mv(fullTypeName), "::", name.flatten(), " { \n",
+		returnType.flatten(), " ", typeNameRef, "::", name.flatten(), " { \n",
 		mv(contents),
 		"} \n\n"
 	);
@@ -632,7 +634,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 							request, nodeId, methodDefinitions,
 							strTree("bool"), strTree("is", camelCase(field.getName(), true), "() const"),
 							strTree(
-							"	return cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">() == ", field.getDiscriminantValue(), ";\n"
+							"	return cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data) == ", field.getDiscriminantValue(), ";\n"
 							)
 						),
 						"	\n"
@@ -694,7 +696,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 								),
 								generateMethod(
 									request, nodeId, methodDefinitions,
-									typeName.flatten(), strTree("set", subName.asPtr(), "(", typeName.flatten(), " newVal)"),
+									strTree("void"), strTree("set", subName.asPtr(), "(", typeName.flatten(), " newVal)"),
 									strTree(
 										"	cupnp::setPrimitiveField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ", newVal);\n",
 										"	cupnp::setDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data, ", field.getDiscriminantValue(), ");\n"
@@ -715,7 +717,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 								),
 								generateMethod(
 									request, nodeId, methodDefinitions,
-									typeName.flatten(), strTree("set", subName.asPtr(), "(", typeName.flatten(), " newVal)"),
+									strTree("void"), strTree("set", subName.asPtr(), "(", typeName.flatten(), " newVal)"),
 									strTree(
 										"	cupnp::setPrimitiveField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ", newVal);\n"
 									)

@@ -1,5 +1,5 @@
 #include "kernels-biotsavart.h"
-#include "gpulaunch.h"
+#include "kernels.h"
 
 namespace fsc {
 	namespace internal {
