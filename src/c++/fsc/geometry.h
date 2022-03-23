@@ -4,7 +4,10 @@
 #include "data.h"
 #include "tensor.h"
 
+#include <cupnp/cupnp.h>
+
 #include <fsc/geometry.capnp.h>
+#include <fsc/geometry.capnp.cu.h>
 
 namespace fsc {
 	
@@ -43,5 +46,31 @@ private:
 	Promise<void> collectTagNames(Geometry::Reader input, kj::HashSet<kj::String>& output);
 	Promise<void> collectTagNames(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& output);
 };
+
+inline Vec3u locationInGrid(Vec3d point, Vec3d min, Vec3d max, Vec3u size) {
+	auto fraction = (point - min) / (max - min);
+	auto perCell = fraction * size;
+	Vec3i result = perCell;
+	
+	for(size_t i = 0; i < 3; ++i) {
+		if(result[i] < 0)
+			result[i] = 0;
+		
+		if(result[i] >= size[i])
+			result[i] = size[i] - 1;
+	}
+	
+	return result;
+}
+
+inline Vec3u locationInGrid(Vec3d point, const CupnpVal<GartesianGrid> grid) {
+	Vec3d min { grid.getXMin(), grid.getYMin(), grid.getZMin() };
+	Vec3d max { grid.getXMax(), grid.getYMax(), grid.getZMax() };
+	Vec3u size { grid.getNX(), grid.getNY(), grid.getNZ() };
+	
+	return locationInGrid(point, min, max, size);
+}
+
+Vec3u locationInGrid(Vec3d point, GartesianGrid::Reader reader);
 
 }

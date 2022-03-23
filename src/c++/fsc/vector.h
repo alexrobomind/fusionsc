@@ -5,7 +5,7 @@
 
 namespace fsc {
 
-template<typename T, unsigned int n>
+/*template<typename T, unsigned int n>
 struct Vec {
 	T data[n];
 	
@@ -174,7 +174,7 @@ using Vec4i = Vec4<int>;
 
 using Vec2u = Vec2<unsigned int>;
 using Vec3u = Vec3<unsigned int>;
-using Vec4u = Vec4<unsigned int>;
+using Vec4u = Vec4<unsigned int>;*/
 
 template<typename T>
 Vec3<T> EIGEN_DEVICE_FUNC cross(const Vec3<T>& t1, const Vec3<T>& t2) {	

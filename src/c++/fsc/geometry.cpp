@@ -245,10 +245,6 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 				
 				output.entries.add(mv(newEntry));
 			});
-			// auto mesh = geometry.get
-			
-			// newEntry.initTags(
-			KJ_UNIMPLEMENTED("Missing mesh merger");
 		default:
 			KJ_FAIL_REQUIRE("Unknown geometry node type encountered during merge operation. Likely an unresolved node", input.which());
 	}
@@ -291,14 +287,134 @@ Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader inp
 }
 
 Promise<void> GeometryLibImpl::index(IndexContext context) {
-	KJ_UNIMPLEMENTED("Index routine missing");
+	// First we need to download the geometry we want to index
+	lt->dataService().download(context.getParams().getInput())
+	.then([this, context](LocalDataRef<MergedGeometry> inputRef) {
+		// Create output temporary and read information about input
+		Temporary<IndexedGeometry> output;
+		MergedGeometry::Reader input = inputRef.get();
+			
+		auto grid = context.getParams().getGrid();
+		auto gridSize = grid.getSize();
+		
+		size_t totalSize = gridSize[0] * gridSize[1] * gridSize[2];
+		
+		// Allocate temporary un-aligned storage for grid refs
+		kj::Vector<kj::Vector<Temporary<IndexedGeometry::ElementRef>>> tmpRefs(totalSize);
+		
+		// Iterate through all components of geometry
+		for(size_t iEntry = 0; iEntry < input.getEntries().size(); ++iEntry) {
+			// Retrieve mesh
+			auto entry = input.getEntrise()[iEntry];
+			auto mesh = entry.getMesh();
+			auto pointData = mesh.getVertices().getData();
+			
+			// Iterate over all polygons in mesh to assign them to grid boxes
+			// ... Step 1: Count
+			size_t nPolygons;
+			switch(mesh.which()) {
+				case Mesh::POLY_MESH:
+					nPolygons = mesh.getPolyMesh().size() - 1;
+					break;
+				case Mesh::TRI_MESH:
+					nPolygons = mesh.getIndices().size() / 3;
+					break;
+				default:
+					KJ_FAIL_REQUIRE("Unknown mesh type", mesh.which());
+			}
+			
+			// ... Step 2: Iterate
+			for(size_t iPoly = 0; iPoly < nPolygons; ++iPoly) {
+				// Locate polygon in index buffer
+				size_t iStart; size_t iEnd;
+				
+				switch(mesh.which()) {
+					case Mesh::POLY_MESH:
+						auto pm = mesh.getPolyMesh();
+						iStart = pm[iPoly];
+						iEnd   = pm[iPoly + 1];
+						break;
+					case Mesh::TRI_MESH:
+						iStart = 3 * iPoly;
+						iEnd   = 3 * (iPoly + 1);
+						break;
+					default:
+						KJ_FAIL_REQUIRE("Unknown mesh type", mesh.which());
+				}
+			
+				// Find bounding box for polygon
+				double inf = std::numeric_limits<double>::infinity;
+				
+				Vec3d max { -inf, -inf, -inf };
+				Vec3d min { inf, inf, inf };
+				
+				for(size_t iPoint = iStart; iPoint < iEnd; ++iPoint) {
+					Vec3d point;
+					for(size_t i = 0; i < 3; ++i)
+						point[i] = pointData[3 * iPoint + i];
+					
+					max = max.cwiseMax(point);
+					min = min.cwiseMin(point);
+				}
+			
+				// Locate bounding box points in grid
+				Vec3u minCell = locationInGrid(min, grid);
+				Vec3u maxCell = locationInGrid(max, grid);
+				
+				// For all points in-between ...
+				for(size_t iX = minCell[0]; iX <= maxCell[0]; ++iX) {
+				for(size_t iY = minCell[1]; iY <= maxCell[1]; ++iY) {
+				for(size_t iZ = minCell[2]; iZ <= maxCell[2]; ++iZ) {
+					// ... add a new ref in the corresponding cell
+					size_t globalIdx = (iX * gridSize[1] + iY) * gridSize[2] + iZ;
+					
+					Temporary<IndexedGeometry::ElementRef>& newRef = tmpRefs[globalIdx].add();
+					newRef.setMeshIndex(iEntry);
+					newRef.setElementIndex(iPoly);
+				}}}
+			}
+		}
+		
+		// Set up output data. This creates a packed representation of the index
+		
+		// Set up output (including shape)
+		auto shapedRefs = output.initData();
+		auto shapedRefsShape = shapedRefs.initShape(3);
+		for(size_t i = 0; i < 3; ++i)
+			shapedRefsShape.set(i, gridSize[i]);
+		
+		auto refs = shapedRefs.initData(totalSize);
+		
+		// Copy data into output
+		for(size_t i = 0; i < totalSize; ++i) {
+			auto& in = tmpRefs[i];
+			auto out = refs.init(i, in.size());
+			
+			for(size_t iInner = 0; iInner < in.size(); ++iInner)
+				out.set(iInner, in[iInner]);			
+		}
+		
+		// Set up back-references
+		output.setGrid(grid);
+		output.setBase(context.getParams().getInput());
+		
+		// Publish output into data store and return reference
+		// Derive the ID from the parameters struct
+		auto outputRef = lt->dataService().publish(context.getParams(), output);
+		context.getResults().setRef(outputRef);
+	});
 }
 
 Promise<void> GeometryLibImpl::merge(MergeContext context) {
+	// Prepare scratch pad structures that will hold intermediate data
 	auto tagNameTable = kj::heap<kj::HashSet<kj::String>>();
 	auto geomAccum = kj::heap<GeometryAccumulator>();
 	
+	// First collect all possible tag names into a table
 	auto promise = collectTagNames(context.getParams(), *tagNameTable)
+	
+	// Then call "mergeGeometries" on the root node with an identity transform and empty tag scope
+	//   This will collect temporary built meshes in geomAccum
 	.then([context, &geomAccum = *geomAccum, &tagNameTable = *tagNameTable, this]() mutable {
 		Temporary<capnp::List<TagValue>> tagScope(
 			capnp::List<TagValue>::Builder(nullptr)
@@ -313,20 +429,36 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 		
 		return mergeGeometries(context.getParams(), tagNameTable, tagScope, idTransform, geomAccum);
 	})
+	
+	// Finally, copy the data from the accumulator into the output
 	.then([context, &geomAccum = *geomAccum, &tagNameTable = *tagNameTable, this]() mutable {
+		// Copy data over
 		Temporary<MergedGeometry> output;
 		geomAccum.finish(output);
 		
+		// Copy tag names from the tag table
 		auto outTagNames = output.initTagNames(tagNameTable.size());
 		for(size_t i = 0; i < tagNameTable.size(); ++i)
 			outTagNames.set(i, *(tagNameTable.begin() + i));
 		
+		// Publish the merged geometry into the data store
+		// Derive the ID from parameters
 		context.getResults().setRef(
-			lt->dataService().publish(output.asReader())
+			lt->dataService().publish(context.getParams(), output.asReader())
 		);
 	});
 	
 	return promise.attach(mv(tagNameTable), mv(geomAccum));
+}
+
+// Grid location methods
+
+Vec3u locationInGrid(Vec3d point, GartesianGrid::Reader grid) {
+	Vec3d min { grid.getXMin(), grid.getYMin(), grid.getZMin() };
+	Vec3d max { grid.getXMax(), grid.getYMax(), grid.getZMax() };
+	Vec3u size { grid.getNX(), grid.getNY(), grid.getNZ() };
+	
+	return locationInGrid(point, min, max, size);
 }
 
 }

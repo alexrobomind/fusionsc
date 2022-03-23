@@ -18,16 +18,16 @@ interface GeometryLib {
 	index @1 (geoRef : DataRef(MergedGeometry), grid : CartesianGrid) -> (ref : DataRef(IndexedGeometry));
 }
 
-struct Tag {
-	name @0 : Text;
-	value @1 : TagValue;
-}
-
 struct TagValue {
 	union {
 		notSet @0 : Void;
 		uInt64 @1 : UInt64;
 	}
+}
+
+struct Tag {
+	name @0 : Text;
+	value @1 : TagValue;
 }
 
 struct CartesianGrid {
@@ -128,7 +128,7 @@ struct MergedGeometry {
 struct IndexedGeometry {
 	struct ElementRef {
 		meshIndex @0 : UInt64;
-		triIndex @1 : UInt64;
+		elementIndex @1 : UInt64;
 	}
 	
 	struct GridEntry {

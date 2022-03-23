@@ -45,8 +45,20 @@ using TVec4d = TVec4<double>;
 template<typename T, unsigned int n>
 using Vec = Eigen::Vector<T, n>;
 
+template<typename T>
+using Vec3 = Vec<T, 3>;
+
+template<typename T>
+using Vec4 = Vec<T, 4>;
+
 using Vec3d = Vec<double, 3>;
 using Vec4d = Vec<double, 4>;
+
+using Vec3u = Vec<unsigned int, 3>;
+using Vec4u = Vec<unsigned int, 4>;
+
+using Vec3i = Vec<int, 3>;
+using Vec4i = Vec<int, 4>;
 
 template<typename T>
 using Mat4 = Eigen::Matrix<T, 4, 4>;

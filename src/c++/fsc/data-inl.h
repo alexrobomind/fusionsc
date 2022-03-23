@@ -176,12 +176,14 @@ LocalDataRef<T> LocalDataService::publish(ArrayPtr<const byte> id, Reader data) 
 	).template as<T>();
 }
 
-template<typename Reader, typename T>
-Promise<LocalDataRef<T>> LocalDataService::publish(Reader data, kj::StringPtr hashFunction) {
-	Promise<ID> id = ID::fromReaderWithRefs(data);
+template<typename Reader, typename IDReader, typename T, typename T2>
+Promise<LocalDataRef<T>> LocalDataService::publish(IDReader dataForID, Reader data, kj::StringPtr hashFunction) {
+	Promise<ID> id = ID::fromReaderWithRefs(dataForID);
 	
 	return id.then([this, data, hashFunction = kj::heapString(hashFunction)](ID id) {
 		auto hash = Botan::HashFunction::create(hashFunction.cStr());
+		
+		hash->update(internal::capnpTypeId<capnp::FromAny<IDReader>>());
 		hash->update(id.data.begin(), id.data.size());
 		
 		auto newId = kj::heapArray<byte>(hash->output_length());

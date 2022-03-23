@@ -94,8 +94,13 @@ public:
 	template<typename Reader, typename T = capnp::FromAny<Reader>>
 	LocalDataRef<T> publish(ArrayPtr<const byte> id, Reader reader);
 	
+	template<typename Reader, typename IDReader, typename T = capnp::FromAny<Reader>, typename T2 = capnp::FromAny<IDReader>>
+	Promise<LocalDataRef<T>> publish(IDReader dataForID, Reader data, kj::StringPtr hashFunction = "SHA-256"_kj);
+	
 	template<typename Reader, typename T = capnp::FromAny<Reader>>
-	Promise<LocalDataRef<T>> publish(Reader data, kj::StringPtr hashFunction = "SHA-256"_kj);
+	Promise<LocalDataRef<T>> publish(Reader data, kj::StringPtr hashFunction = "SHA-256"_kj) {
+		return publish(data, data, hashFunction);
+	}
 	
 	/**
 	 * Downloads the target data and all its transitive dependencies and writes them
@@ -225,11 +230,12 @@ private:
 
 template<typename T>
 struct Temporary : public T::Builder {
-	Temporary() :
+	template<typename... Params>
+	Temporary(Params... params) :
 		T::Builder(nullptr),
 		holder(kj::heap<capnp::MallocMessageBuilder>())
 	{
-		T::Builder::operator=(holder->initRoot<T>());
+		T::Builder::operator=(holder->initRoot<T>(params...));
 	}
 	
 	Temporary(typename T::Reader reader) :
