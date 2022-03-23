@@ -163,10 +163,10 @@ kj::StringPtr getNodeName(Node::Reader parent, Node::Reader child) {
 	KJ_FAIL_REQUIRE("Nested node not found");
 }
 
-kj::StringTree cppTypeName(Type::Reader type, uint64_t scopeId, Brand::Reader scopeBrand, CodeGeneratorRequest::Reader request);
+kj::StringTree cppTypeName(Type::Reader type, uint64_t scopeId, Brand::Reader scopeBrand, CodeGeneratorRequest::Reader request, bool capnpType = false);
 kj::StringTree cppNodeTypeName(uint64_t nodeId, Brand::Reader nodeBrand, uint64_t scopeId, Brand::Reader scopeBrand, CodeGeneratorRequest::Reader request, bool capnpType = false);
 
-kj::StringTree cppTypeName(Type::Reader type, uint64_t scopeId, Brand::Reader scopeBrand, CodeGeneratorRequest::Reader request) {
+kj::StringTree cppTypeName(Type::Reader type, uint64_t scopeId, Brand::Reader scopeBrand, CodeGeneratorRequest::Reader request, bool capnpType) {
 	switch(type.which()) {
 		// Primitive types
 		case Type::VOID: return strTree("nullptr_t");
@@ -181,8 +181,8 @@ kj::StringTree cppTypeName(Type::Reader type, uint64_t scopeId, Brand::Reader sc
 		case Type::UINT64: return strTree("uint64_t");
 		case Type::FLOAT32: return strTree("float");
 		case Type::FLOAT64: return strTree("double");
-		case Type::TEXT: return strTree("capnp::Text");
-		case Type::DATA: return strTree("capnp::Data");
+		case Type::TEXT: return strTree(capnpType ? "capnp::Text" : "cupnp::Text");
+		case Type::DATA: return strTree(capnpType ? "capnp::Data" : "cupnp::Data");
 		
 		case Type::LIST: {
 			auto listType = type.getList();
@@ -949,16 +949,53 @@ void generateRequested(CodeGeneratorRequest::Reader request) {
 		StringTree methodDefinitions;
 		StringTree declarations = generateNested(request, fileNode.getId(), methodDefinitions);
 		
+		kj::String flatNsName = namespaceName.flatten();
+		auto openNS = strTree();
+		auto closeNS = strTree();
+		
+		{
+			kj::StringPtr nsSubName = flatNsName;
+		
+			while(true) {
+				KJ_IF_MAYBE(idx, nsSubName.findFirst(':')) {
+					KJ_REQUIRE(nsSubName[*idx+1] == ':');
+					
+					openNS = strTree(mv(openNS), "namespace ", nsSubName.slice(0, *idx), "{\n");
+					closeNS = strTree(mv(closeNS), "}");
+					
+					nsSubName = nsSubName.slice(*idx + 2);
+				} else {
+					openNS = strTree(mv(openNS), "namespace ", nsSubName, "{\n");
+					closeNS = strTree(mv(closeNS), "}");
+					break;
+				}
+			}
+		}
+		
 		StringTree result = strTree(
 			"#pragma once \n",
 			"\n",
 			"#include <cupnp/cupnp.h>\n",
+			KJ_MAP(importNode, fileNode.getImports()) {				
+				auto path = importNode.getName();
+								
+				// We provide capnp classes ourselves
+				if(path.startsWith("/capnp/"))
+					return strTree();
+				
+				if(path.startsWith("/"))
+					return strTree("#include<", path.slice(1), ".cu.h>\n");
+				else
+					return strTree("#include \"", path, ".cu.h\"\n");
+			},
 			"\n",
-			"namespace ", namespaceName.flatten(), " {\n",
+			//"namespace ", namespaceName.flatten(), " {\n",
+			mv(openNS),
 			"\n",
 			mv(declarations),
 			"\n",
-			"} // namespace "	, namespaceName.flatten(), "\n",
+			//"} // namespace "	, namespaceName.flatten(), "\n",
+			mv(closeNS),
 			"\n",
 			mv(methodDefinitions)
 		);

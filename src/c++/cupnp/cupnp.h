@@ -28,6 +28,8 @@ namespace cupnp {
 		DECLARE_KIND(uint64_t, PRIMITIVE);
 		DECLARE_KIND(int64_t, PRIMITIVE);
 		DECLARE_KIND(bool, PRIMITIVE);
+		DECLARE_KIND(float, PRIMITIVE);
+		DECLARE_KIND(double, PRIMITIVE);
 		
 		#undef DECLARE_KIND
 	}
@@ -53,6 +55,13 @@ namespace cupnp {
 		unsigned char* ptr;
 		
 		kj::ArrayPtr<kj::ArrayPtr<capnp::word>> segments;
+		
+		inline Location() = default;
+		inline Location(const capnp::word* message) :
+			segmentId(0),
+			ptr(reinterpret_cast<unsigned char*>(const_cast<capnp::word*>(message))),
+			segments(nullptr)
+		{}
 		
 		template<typename T>
 		T read() const {
