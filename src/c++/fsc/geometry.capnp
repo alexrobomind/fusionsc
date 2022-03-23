@@ -40,9 +40,9 @@ struct CartesianGrid {
 	zMin @4 : Float64;
 	zMax @5 : Float64;
 	
-	nX @6 : UInt64;
-	nY @7 : UInt64;
-	nZ @8 : UInt64;
+	nX @6 : UInt32;
+	nY @7 : UInt32;
+	nZ @8 : UInt32;
 }
 
 struct Transformed(T) {
@@ -58,6 +58,23 @@ struct Transformed(T) {
 			axis  @5 : List(Float64);
 			node  @6 : Transformed(T);
 		}
+	}
+}
+
+struct Mesh {
+	vertices @0 : Float64Tensor;
+	# 2D buffer of vertices. First dimension is vertex count, second is dimension.
+	
+	indices @1 : List(UInt32);
+	# Consecutive list of indices into the vertex buffer making up the polygons
+	
+	# Description on how to interpret the index buffer
+	union {
+		polyMesh @2 : List(UInt32);
+		# A buffer of length n_polys+1, where the i-th polygon spans the range [ polyMesh[i], polyMesh[i+1] [ of the index buffer.
+		
+		triMesh @3 : Void;
+		# Equivalent to polyMesh = [0, 3, 6, 9, ..., indices.size()]. Only valid if indices has a length which is multiple of 3
 	}
 }
 
@@ -97,23 +114,6 @@ const w7xOp12Pfcs : Geometry = (
 		.w7xOp12PumpSlits, .w7xSteelPanels, .w7xPlasmaVessel
 	]
 );
-
-struct Mesh {
-	vertices @0 : Float64Tensor;
-	# 2D buffer of vertices. First dimension is vertex count, second is dimension.
-	
-	indices @1 : List(UInt32);
-	# Consecutive list of indices into the vertex buffer making up the polygons
-	
-	# Description on how to interpret the index buffer
-	union {
-		polyMesh @2 : List(UInt32);
-		# A buffer of length n_polys+1, where the i-th polygon spans the range [ polyMesh[i], polyMesh[i+1] [ of the index buffer.
-		
-		triMesh @3 : Void;
-		# Equivalent to polyMesh = [0, 3, 6, 9, ..., indices.size()]. Only valid if indices has a length which is multiple of 3
-	}
-}
 
 struct MergedGeometry {
 	tagNames @0 : List(Text);

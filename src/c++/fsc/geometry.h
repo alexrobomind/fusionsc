@@ -48,9 +48,9 @@ private:
 };
 
 inline Vec3u locationInGrid(Vec3d point, Vec3d min, Vec3d max, Vec3u size) {
-	auto fraction = (point - min) / (max - min);
-	auto perCell = fraction * size;
-	Vec3i result = perCell;
+	auto fraction = (point - min).array() / (max - min).array();
+	auto perCell = fraction * size.array().cast<double>();
+	Vec3i result = perCell.cast<int>();
 	
 	for(size_t i = 0; i < 3; ++i) {
 		if(result[i] < 0)
@@ -60,10 +60,10 @@ inline Vec3u locationInGrid(Vec3d point, Vec3d min, Vec3d max, Vec3u size) {
 			result[i] = size[i] - 1;
 	}
 	
-	return result;
+	return result.cast<unsigned int>();
 }
 
-inline Vec3u locationInGrid(Vec3d point, const CupnpVal<GartesianGrid> grid) {
+inline Vec3u locationInGrid(Vec3d point, const cu::CartesianGrid grid) {
 	Vec3d min { grid.getXMin(), grid.getYMin(), grid.getZMin() };
 	Vec3d max { grid.getXMax(), grid.getYMax(), grid.getZMax() };
 	Vec3u size { grid.getNX(), grid.getNY(), grid.getNZ() };
@@ -71,6 +71,6 @@ inline Vec3u locationInGrid(Vec3d point, const CupnpVal<GartesianGrid> grid) {
 	return locationInGrid(point, min, max, size);
 }
 
-Vec3u locationInGrid(Vec3d point, GartesianGrid::Reader reader);
+Vec3u locationInGrid(Vec3d point, CartesianGrid::Reader reader);
 
 }

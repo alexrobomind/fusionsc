@@ -288,14 +288,15 @@ Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader inp
 
 Promise<void> GeometryLibImpl::index(IndexContext context) {
 	// First we need to download the geometry we want to index
-	lt->dataService().download(context.getParams().getInput())
-	.then([this, context](LocalDataRef<MergedGeometry> inputRef) {
+	return lt->dataService().download(context.getParams().getGeoRef())
+	.then([this, context](LocalDataRef<MergedGeometry> inputRef) mutable {
 		// Create output temporary and read information about input
 		Temporary<IndexedGeometry> output;
 		MergedGeometry::Reader input = inputRef.get();
 			
 		auto grid = context.getParams().getGrid();
-		auto gridSize = grid.getSize();
+		// auto gridSize = grid.getSize();
+		Vec3u gridSize { grid.getNX(), grid.getNY(), grid.getNZ() };
 		
 		size_t totalSize = gridSize[0] * gridSize[1] * gridSize[2];
 		
@@ -305,7 +306,7 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 		// Iterate through all components of geometry
 		for(size_t iEntry = 0; iEntry < input.getEntries().size(); ++iEntry) {
 			// Retrieve mesh
-			auto entry = input.getEntrise()[iEntry];
+			auto entry = input.getEntries()[iEntry];
 			auto mesh = entry.getMesh();
 			auto pointData = mesh.getVertices().getData();
 			
@@ -329,11 +330,12 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 				size_t iStart; size_t iEnd;
 				
 				switch(mesh.which()) {
-					case Mesh::POLY_MESH:
+					case Mesh::POLY_MESH: {
 						auto pm = mesh.getPolyMesh();
 						iStart = pm[iPoly];
 						iEnd   = pm[iPoly + 1];
 						break;
+					}
 					case Mesh::TRI_MESH:
 						iStart = 3 * iPoly;
 						iEnd   = 3 * (iPoly + 1);
@@ -343,7 +345,7 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 				}
 			
 				// Find bounding box for polygon
-				double inf = std::numeric_limits<double>::infinity;
+				double inf = std::numeric_limits<double>::infinity();
 				
 				Vec3d max { -inf, -inf, -inf };
 				Vec3d min { inf, inf, inf };
@@ -391,16 +393,16 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 			auto out = refs.init(i, in.size());
 			
 			for(size_t iInner = 0; iInner < in.size(); ++iInner)
-				out.set(iInner, in[iInner]);			
+				out.setWithCaveats(iInner, in[iInner]);			
 		}
 		
 		// Set up back-references
 		output.setGrid(grid);
-		output.setBase(context.getParams().getInput());
+		output.setBase(context.getParams().getGeoRef());
 		
 		// Publish output into data store and return reference
 		// Derive the ID from the parameters struct
-		auto outputRef = lt->dataService().publish(context.getParams(), output);
+		DataRef<IndexedGeometry>::Client outputRef = lt->dataService().publish(context.getParams(), output.asReader());
 		context.getResults().setRef(outputRef);
 	});
 }
@@ -453,7 +455,7 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 
 // Grid location methods
 
-Vec3u locationInGrid(Vec3d point, GartesianGrid::Reader grid) {
+Vec3u locationInGrid(Vec3d point, CartesianGrid::Reader grid) {
 	Vec3d min { grid.getXMin(), grid.getYMin(), grid.getZMin() };
 	Vec3d max { grid.getXMax(), grid.getYMax(), grid.getZMax() };
 	Vec3u size { grid.getNX(), grid.getNY(), grid.getNZ() };

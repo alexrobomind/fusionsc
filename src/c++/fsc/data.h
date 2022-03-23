@@ -246,6 +246,10 @@ struct Temporary : public T::Builder {
 		T::Builder::operator=(holder->getRoot<T>());
 	}
 	
+	Temporary(typename T::Builder builder) :
+		Temporary(builder.asReader())
+	{}
+	
 	Temporary(Temporary<T>&&) = default;
 	
 	Temporary<T>& operator=(typename T::Reader other) {
@@ -253,6 +257,8 @@ struct Temporary : public T::Builder {
 	}
 	
 	typename T::Builder asBuilder() { return *this; }
+	
+	operator capnp::MessageBuilder&() { return *holder; }
 	
 	Own<capnp::MallocMessageBuilder> holder;
 };
