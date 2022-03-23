@@ -1,5 +1,6 @@
 #include <capnp/common.h>
 #include <capnp/list.h>
+#include <capnp/message.h>
 
 #include <kj/common.h>
 
@@ -7,10 +8,38 @@
 
 #pragma once
 
-namespace cupnp {
-	// Value struct
+namespace cupnp {	
+	using capnp::Kind;
+	
+	namespace internal {
+		template<typename T>
+		struct KindFor_ { static inline constexpr Kind kind = T::kind; };
+		
+		#define DECLARE_KIND(TYPE, VALUE) \
+			template<> \
+			struct KindFor_<TYPE> { static inline constexpr Kind kind = Kind::VALUE; }
+		
+		DECLARE_KIND(uint8_t, PRIMITIVE);
+		DECLARE_KIND(int8_t, PRIMITIVE);
+		DECLARE_KIND(uint16_t, PRIMITIVE);
+		DECLARE_KIND(int16_t, PRIMITIVE);
+		DECLARE_KIND(uint32_t, PRIMITIVE);
+		DECLARE_KIND(int32_t, PRIMITIVE);
+		DECLARE_KIND(uint64_t, PRIMITIVE);
+		DECLARE_KIND(int64_t, PRIMITIVE);
+		DECLARE_KIND(bool, PRIMITIVE);
+		
+		#undef DECLARE_KIND
+	}
+	
 	template<typename T>
-	struct CupnpVal { static_assert(sizeof(T) == 0, "Unimplemented"); };			
+	constexpr Kind kindFor = internal::KindFor_<T>::kind;
+		
+	template<typename T>
+	struct CuFor_ { using Type = T; };
+	
+	template<typename T>
+	using CuFor = typename CuFor_<T>::Type;
 	
 	/**
 	 * Helper class that performs type deduction and constructor delegation
@@ -75,7 +104,7 @@ namespace cupnp {
 	};
 	
 	template<typename T>
-	CupnpVal<T> getPointer(Location base);
+	T getPointer(Location base);
 	
 	template<typename T>
 	inline kj::Array<size_t> calculateSizes(const kj::ArrayPtr<T>& segments) {
@@ -101,7 +130,7 @@ namespace cupnp {
 	}
 	
 	template<typename T>
-	inline CupnpVal<T> messageRoot(kj::ArrayPtr<kj::ArrayPtr<capnp::word>> segments);
+	inline T messageRoot(kj::ArrayPtr<kj::Array<capnp::word>> segments, kj::ArrayPtr<kj::ArrayPtr<capnp::word>> segmentRefs);
 	
 	struct Message {
 		// Host-located array of segments (which can individually be device-located)
@@ -110,7 +139,14 @@ namespace cupnp {
 		// Device-located array of segments
 		kj::Array<kj::ArrayPtr<capnp::word>> segmentRefs;
 		
-		Message(kj::ArrayPtr<size_t> sizes, bool onDevice) {
+		// Device-located array of segments with const values (because strict aliasing principally forbids to cast the above to that)
+		kj::Array<kj::ArrayPtr<const capnp::word>> constSegmentRefs;
+		
+		bool onDevice;
+		
+		inline Message(kj::ArrayPtr<size_t> sizes, bool onDevice) :
+			onDevice(onDevice)
+		{
 			auto segmentsBuilder = kj::heapArrayBuilder<kj::Array<capnp::word>>(sizes.size());
 			for(size_t size : sizes) {
 				if(onDevice)
@@ -120,9 +156,11 @@ namespace cupnp {
 			}
 			segments = segmentsBuilder.finish();
 			
-			auto hostSegmentRefs = kj::heapArray<kj::ArrayPtr<capnp::word>>(sizes.size());			
+			auto hostSegmentRefs = kj::heapArray<kj::ArrayPtr<capnp::word>>(sizes.size());		
+			auto constHostSegmentRefs = kj::heapArray<kj::ArrayPtr<const capnp::word>>(sizes.size());			
 			for(size_t i = 0; i < sizes.size(); ++i) {
 				hostSegmentRefs[i] = segments[i].asPtr();
+				constHostSegmentRefs[i] = segments[i].asPtr().asConst();
 			}
 			
 			segmentRefs = onDevice ?
@@ -130,22 +168,56 @@ namespace cupnp {
 				kj::heapArray<kj::ArrayPtr<capnp::word>>(sizes.size())
 			;
 			deviceMemcpy(segmentRefs.asPtr(), hostSegmentRefs.asPtr());
+			
+			constSegmentRefs = onDevice ?
+				deviceArray  <kj::ArrayPtr<const capnp::word>>(sizes.size()) :
+				kj::heapArray<kj::ArrayPtr<const capnp::word>>(sizes.size())
+			;
+			deviceMemcpy(constSegmentRefs.asPtr(), constHostSegmentRefs.asPtr());
 		}
 			
-		Message(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> hostSegments, bool onDevice) :
+		inline Message(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> hostSegments, bool onDevice) :
 			Message(calculateSizes(hostSegments), onDevice)
 		{			
 			deviceMemcpyAll(segments, hostSegments);
 		}
 		
-		kj::Array<size_t> sizes() {
+		inline Message(const Message& other, bool onDevice) :
+			Message(calculateSizes(other.segments.asPtr()), onDevice)
+		{
+			copyFrom(other);
+		}
+		
+		inline Message(capnp::MessageBuilder& ref, bool onDevice) :
+			Message(ref.getSegmentsForOutput(), onDevice)
+		{}
+		
+		inline void copyFrom(const Message& other) {
+			KJ_REQUIRE(sizes() == other.sizes(), "Can only copy messages of identical segment sizes", sizes(), other.sizes());
+			
+			deviceMemcpyAll(segments, other.segments);
+		}
+		
+		inline kj::Array<size_t> sizes() const {
 			return calculateSizes(segments.asPtr().asConst());
 		}
 		
 		template<typename T>
-		CupnpVal<T> root() {
-			return messageRoot<T>(segmentRefs);
+		T root() {
+			return messageRoot<T>(segments.asPtr(), segmentRefs);
 		}
+		
+		inline capnp::SegmentArrayMessageReader asCapnp(capnp::ReaderOptions options = capnp::ReaderOptions()) {
+			return capnp::SegmentArrayMessageReader(constSegmentRefs.asPtr(), options);
+		}
+	};
+	
+	template<typename T>
+	struct InMessage : public Message, public T {
+		InMessage(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> hostSegments, bool onDevice) :
+			Message(hostSegments, onDevice),
+			T(Message::root<T>())
+		{}
 	};
 		
 	inline auto deviceMemcpy(Message& dst, const Message& src) {
@@ -263,7 +335,7 @@ namespace cupnp {
 	 * which points to the contents of the default value data.
 	 */
 	template<typename T>
-	const CupnpVal<T> getDefaultValue(const capnp::word* data) {
+	const T getDefaultValue(const capnp::word* data) {
 		// Default value
 		Location structureLoc;
 		structureLoc.ptr = reinterpret_cast<unsigned char*>(const_cast<capnp::word*>(data));
@@ -272,7 +344,7 @@ namespace cupnp {
 		
 		Location dataLoc = decodeNearPtr(structureLoc);
 		
-		return CupnpVal<T>(structureLoc.read<uint64_t>(), dataLoc);
+		return T(structureLoc.read<uint64_t>(), dataLoc);
 	}
 
 	/**
@@ -280,7 +352,7 @@ namespace cupnp {
 	 * (or out of bounds of the structure), the default value will be returned instread.
 	 */
 	template<typename T, uint32_t offset>
-	const CupnpVal<T> getPointerField(uint64_t structure, Location data, const capnp::word* defaultValue) {
+	const T getPointerField(uint64_t structure, Location data, const capnp::word* defaultValue) {
 		uint16_t dataSectionSizeInWords = structure >> 32;
 		uint16_t pointerSectionSize = structure >> 48;
 		
@@ -401,7 +473,7 @@ namespace cupnp {
 	 * is not mutable.
 	 */
 	template<typename T, uint32_t offset>
-	CupnpVal<T> mutatePointerField(uint64_t structure, Location data) {
+	T mutatePointerField(uint64_t structure, Location data) {
 		uint16_t dataSectionSizeInWords = structure >> 32;
 		uint16_t pointerSectionSize = structure >> 48;
 		
@@ -455,7 +527,7 @@ namespace cupnp {
 	 * Warning: Assumes base to be already validated.
 	 */
 	template<typename T>
-	CupnpVal<T> getPointer(Location base) {		
+	T getPointer(Location base) {		
 		uint64_t ptrTagVal = ptrTag(base);
 		
 		Location dataLoc;
@@ -473,7 +545,7 @@ namespace cupnp {
 		// location associated. We therefore just use the location of
 		// the pointer itself.
 		if(ptrTagVal == 3)
-			return CupnpVal<T>(base.read<uint64_t>(), base);
+			return T(base.read<uint64_t>(), base);
 				
 		if(ptrTagVal == 2) {
 			// Far pointer
@@ -498,15 +570,15 @@ namespace cupnp {
 			dataLoc = decodeNearPtr(structureLoc);
 		}
 		
-		return CupnpVal<T>(structureLoc.read<uint64_t>(), dataLoc);
+		return T(structureLoc.read<uint64_t>(), dataLoc);
 	}
 	
 	template<typename T>
-	inline CupnpVal<T> messageRoot(kj::ArrayPtr<kj::ArrayPtr<capnp::word>> segments) {
+	inline T messageRoot(kj::ArrayPtr<kj::Array<capnp::word>> segments, kj::ArrayPtr<kj::ArrayPtr<capnp::word>> segmentRefs) {
 		Location root;
 		root.segmentId = 0;
 		root.ptr = reinterpret_cast<unsigned char*>(segments[0].begin());
-		root.segments = segments;
+		root.segments = segmentRefs;
 		
 		return getPointer<T>(root);
 	}
@@ -528,8 +600,10 @@ namespace cupnp {
 		CUPNP_REQUIRE(tag == 3);
 	}
 
-	template<typename T, capnp::Kind CPKind>
-	struct CupnpVal<capnp::List<T, CPKind>> {
+	template<typename T, Kind CPKind = kindFor<T>>
+	struct List {
+		static constexpr Kind kind = Kind::LIST;
+		
 		uint32_t listSize;
 		uint32_t elementSize;
 		
@@ -543,7 +617,7 @@ namespace cupnp {
 		constexpr inline static uint64_t SINGLE_POINTER_TAG = ((uint64_t) 1) >> 48;
 		constexpr inline static uint64_t SINGLE_BYTE_TAG = ((uint64_t) 1) >> 32;
 		
-		CupnpVal(uint64_t structure, cupnp::Location data) :
+		List(uint64_t structure, cupnp::Location data) :
 			structure(structure)
 		{
 			uint8_t ptrTag = structure & 3u;
@@ -618,79 +692,79 @@ namespace cupnp {
 	// size in the list pointer.
 	template<typename T>
 	struct ListHelper<T, capnp::Kind::STRUCT> {
-		static CupnpVal<T> get(CupnpVal<capnp::List<T>>* list, uint32_t element) {
-			return CupnpVal<T>(list->contentTag, list->listStart + list->elementSize * element);
+		static T get(List<T>* list, uint32_t element) {
+			return T(list->contentTag, list->listStart + list->elementSize * element);
 		}
 		
-		static const CupnpVal<T> get(const CupnpVal<capnp::List<T>>* list, uint32_t element) {
-			return CupnpVal<T>(list->contentTag, list->listStart + list->elementSize * element);
+		static const T get(const List<T>* list, uint32_t element) {
+			return T(list->contentTag, list->listStart + list->elementSize * element);
 		}
 		
 		template<typename T2>
-		static void set(CupnpVal<capnp::List<T>>* list, uint32_t element, T2 value) {
+		static void set(List<T>* list, uint32_t element, T2 value) {
 			static_assert(sizeof(T) == 0, "CupnpVal<List<T>>::set is only supported for primitive T");
 		}
 		
 		// Primitive lists may be interpreted as struct lists, with the special exception of boolean lists
 		// (which have tag 1)
-		static bool validList(CupnpVal<capnp::List<T>>* list) { return list->sizeEnum != 1; }
+		static bool validList(List<T>* list) { return list->sizeEnum != 1; }
 	};
 	
 	// Blob type values are stored as pointers without shared structure information.
 	// These pointers are just decoded like pointer fields.
 	template<typename T>
 	struct ListHelper<T, capnp::Kind::BLOB> {
-		static CupnpVal<T> get(CupnpVal<capnp::List<T>>* list, uint32_t element) {
+		static T get(List<T>* list, uint32_t element) {
 			return getPointer<T>(list->listStart + list->elementSize * element);
 		}
 		
-		static const CupnpVal<T> get(const CupnpVal<capnp::List<T>>* list, uint32_t element) {
+		static const T get(const List<T>* list, uint32_t element) {
 			return getPointer<T>(list->listStart + list->elementSize * element);
 		}
 		
 		template<typename T2>
-		static T set(CupnpVal<capnp::List<T>>* list, uint32_t element, T2 value) {
-			static_assert(sizeof(T) == 0, "CupnpVal<List<T>>::set is only supported for primitive T");
+		static T set(List<T>* list, uint32_t element, T2 value) {
+			static_assert(sizeof(T) == 0, "cupnp::List<T>::set is only supported for primitive T");
 		}
 		
-		static bool validList(CupnpVal<capnp::List<T>>* list) { return list->sizeEnum == 7 || list->sizeEnum == 6; }
+		static bool validList(List<T>* list) { return list->sizeEnum == 7 || list->sizeEnum == 6; }
 	};
 	
 	// Similarly to Blob types, lists are stored as pointers as well (the term similar is misleading,
 	// as the specification explicitly mentions that blob types are a special case of list encoding).
 	template<typename T>
 	struct ListHelper<T, capnp::Kind::LIST> {
-		static CupnpVal<T> get(CupnpVal<capnp::List<T>>* list, uint32_t element) {
+		static T get(List<T>* list, uint32_t element) {
 			return getPointer<T>(list->listStart + list->elementSize * element);
 		}
 		
-		static const CupnpVal<T> get(const CupnpVal<capnp::List<T>>* list, uint32_t element) {
+		static const T get(const List<T>* list, uint32_t element) {
 			return getPointer<T>(list->listStart + list->elementSize * element);
 		}
 		
 		template<typename T2>
-		static T set(CupnpVal<capnp::List<T>>* list, uint32_t element, T2 value) {
+		static T set(List<T>* list, uint32_t element, T2 value) {
 			static_assert(sizeof(T) == 0, "CupnpVal<List<T>>::set is only supported for primitive T");
 		}
 		
-		static bool validList(CupnpVal<capnp::List<T>>* list) { return list->sizeEnum == 7 || list->sizeEnum == 6; }
+		static bool validList(List<T>* list) { return list->sizeEnum == 7 || list->sizeEnum == 6; }
 	};
 	
 	// Primitives, like structs, are stored in-line in the list, and must be accessed
 	// directly. Contrary to all other value types, we support setting these as well.
 	template<typename T>
 	struct ListHelper<T, capnp::Kind::PRIMITIVE> {
-		static T get(const CupnpVal<capnp::List<T>>* list, uint32_t element) {
+		static T get(const List<T>* list, uint32_t element) {
 			return (list->listStart + list->elementSize * element).template read<T>();
 		}
 		
-		static void set(CupnpVal<capnp::List<T>>* list, uint32_t element, T value) {
+		static void set(List<T>* list, uint32_t element, T value) {
 			(list->listStart + list->elementSize * element).template write<T>(value);
 		}
 		
 		// Primitive lists can be inline composite lists (tag 7) or any non-pointer list (tag 6)
 		// For inline composite lists, the element size 
-		static bool validList(CupnpVal<capnp::List<T>>*list ) {
+		static bool validList(List<T>*list ) {
 			// Boolean and non-boolean interpretations are incompatible
 			if(list->sizeEnum == 1)
 				return false;
@@ -711,14 +785,14 @@ namespace cupnp {
 	// Bool values need some special handling, as they are not aligned on byte boundaries.
 	template<>
 	struct ListHelper<bool, capnp::Kind::PRIMITIVE> {
-		static bool get(const CupnpVal<capnp::List<bool>>* list, uint32_t element) {
+		static bool get(const List<bool>* list, uint32_t element) {
 			auto loc = list->listStart + element / 8;
 			uint8_t byteVal = loc.read<uint8_t>();
 			
 			return (byteVal >> (element % 8)) & 1;
 		}
 		
-		static void set(CupnpVal<capnp::List<bool>>* list, uint32_t element, bool val) {
+		static void set(List<bool>* list, uint32_t element, bool val) {
 			auto loc = list->listStart + element / 8;
 			uint8_t byteVal = loc.read<uint8_t>();
 			
@@ -731,15 +805,16 @@ namespace cupnp {
 			loc.write(byteVal);
 		}
 		
-		static bool validList(CupnpVal<capnp::List<bool>>* list) { return list->sizeEnum == capnp::ElementSize::BIT; }
+		static bool validList(List<bool>* list) { return list->sizeEnum == capnp::ElementSize::BIT; }
 	};
 	
-	template<>
-	struct CupnpVal<capnp::Data> {
-		CupnpVal<capnp::List<uint8_t>> backend;
+	struct Data {
+		static constexpr Kind kind = Kind::BLOB;
 		
-		CupnpVal(uint64_t structure, cupnp::Location data) : backend(structure, data) {
-			CUPNP_REQUIRE(backend.contentTag == CupnpVal<capnp::List<uint8_t>>::SINGLE_BYTE_TAG);
+		List<uint8_t> backend;
+		
+		Data(uint64_t structure, cupnp::Location data) : backend(structure, data) {
+			CUPNP_REQUIRE(backend.contentTag == List<uint8_t>::SINGLE_BYTE_TAG);
 		}
 
 		unsigned char* data() {
@@ -753,12 +828,13 @@ namespace cupnp {
 		uint32_t size() { return backend.size(); }
 	};
 
-	template<>
-	struct CupnpVal<capnp::Text> {
-		CupnpVal<capnp::List<uint8_t>> backend;
+	struct Text {
+		static constexpr Kind kind = Kind::BLOB;
 		
-		CupnpVal(uint64_t structure, cupnp::Location data) : backend(structure, data) {
-			CUPNP_REQUIRE(backend.contentTag == CupnpVal<capnp::List<uint8_t>>::SINGLE_BYTE_TAG);
+		List<uint8_t> backend;
+		
+		Text(uint64_t structure, cupnp::Location data) : backend(structure, data) {
+			CUPNP_REQUIRE(backend.contentTag == List<uint8_t>::SINGLE_BYTE_TAG);
 		}
 
 		unsigned char* data() {

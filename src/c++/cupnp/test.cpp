@@ -5,7 +5,8 @@
 
 #include <capnp/message.h>
 
-using cupnp::test::TestStruct;
+using TestStruct   = cupnp::test::    TestStruct;
+using CuTestStruct = cupnp::test::cu::TestStruct;
 
 TEST_CASE("Exporting to GPU") {
 	capnp::MallocMessageBuilder msg;
@@ -24,9 +25,9 @@ TEST_CASE("Exporting to GPU") {
 	
 	// cupnp::HostMessage hostMsg(msg.getSegmentsForOutput());
 	// cupnp::Message cupnpMsg = hostMsg.message;
-	cupnp::Message cupnpMsg(msg.getSegmentsForOutput(), false);
+	cupnp::Message cupnpMsg(msg, false);
 	
-	cupnp::CupnpVal<TestStruct> cupnpRoot = cupnpMsg.root<TestStruct>(); // cupnp::messageRoot<TestStruct>(cupnpMsg);
+	CuTestStruct cupnpRoot = cupnpMsg.root<CuTestStruct>(); // cupnp::messageRoot<TestStruct>(cupnpMsg);
 	auto union1 = cupnpRoot.getUnion1();
 	
 	REQUIRE(root.getU32() == cupnpRoot.getU32());

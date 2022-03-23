@@ -164,7 +164,7 @@ kj::StringPtr getNodeName(Node::Reader parent, Node::Reader child) {
 }
 
 kj::StringTree cppTypeName(Type::Reader type, uint64_t scopeId, Brand::Reader scopeBrand, CodeGeneratorRequest::Reader request);
-kj::StringTree cppNodeTypeName(uint64_t nodeId, Brand::Reader nodeBrand, uint64_t scopeId, Brand::Reader scopeBrand, CodeGeneratorRequest::Reader request);
+kj::StringTree cppNodeTypeName(uint64_t nodeId, Brand::Reader nodeBrand, uint64_t scopeId, Brand::Reader scopeBrand, CodeGeneratorRequest::Reader request, bool capnpType = false);
 
 kj::StringTree cppTypeName(Type::Reader type, uint64_t scopeId, Brand::Reader scopeBrand, CodeGeneratorRequest::Reader request) {
 	switch(type.which()) {
@@ -272,7 +272,7 @@ kj::StringTree nodeName(uint64_t nodeId, CodeGeneratorRequest::Reader request) {
 	return nodeName;
 }
 
-kj::StringTree cppNodeTypeName(uint64_t nodeId, Brand::Reader nodeBrand, uint64_t scopeId, Brand::Reader scopeBrand, CodeGeneratorRequest::Reader request) {
+kj::StringTree cppNodeTypeName(uint64_t nodeId, Brand::Reader nodeBrand, uint64_t scopeId, Brand::Reader scopeBrand, CodeGeneratorRequest::Reader request, bool capnpType) {
 	kj::Array<Node::Reader> scopeNodes = fullScope(request, scopeId);
 	kj::Array<Node::Reader> nodes = fullScope(request, nodeId);
 	
@@ -292,7 +292,8 @@ kj::StringTree cppNodeTypeName(uint64_t nodeId, Brand::Reader nodeBrand, uint64_
 		}
 	}
 	
-	result = strTree(mv(result), "::cu");
+	if(!capnpType)
+		result = strTree(mv(result), "::cu");
 	
 	for(unsigned int i = 0; i < nodes.size(); ++i) {
 		auto node = nodes[i];
@@ -450,6 +451,21 @@ StringTree generateTemplateHeader(CodeGeneratorRequest::Reader request, uint64_t
 	return mv(result);
 }
 
+/* Checks whether we can specialize a template over this type. This is not possible if it is a child struct of a template */
+bool canSpecializeOn(CodeGeneratorRequest::Reader request, uint64_t nodeId) {
+	kj::Array<Node::Reader> nodes = fullScope(request, nodeId);
+	
+	for(size_t i = 0; i < nodes.size(); ++i) {
+		auto node = nodes[i];
+		auto nParams = node.getParameters().size();
+		
+		if(i < nodes.size() - 1 && nParams != 0)
+			return false;
+	}
+	
+	return true;
+}
+
 StringTree generateInterface(CodeGeneratorRequest::Reader request, uint64_t nodeId, StringTree& methodDefinitions) {
 	auto nodeBrand = capnp::defaultValue<Brand>();
 	auto node = getNode(request, nodeId);
@@ -463,6 +479,8 @@ StringTree generateInterface(CodeGeneratorRequest::Reader request, uint64_t node
 		generateTemplateHeader(request, nodeId),
 		// "struct CupnpVal<", cppNodeTypeName(nodeId, nodeBrand, nodeId, nodeBrand, request), "> {\n",
 		"struct ", name.flatten(), "{\n",
+		"	static constexpr cupnp::Kind kind = cupnp::Kind::INTERFACE;\n",
+		"	\n",
 		"	// Interface pointer that holds the capability table offset\n",
 		"	uint64_t ptrData;\n",
 		"	\n",
@@ -553,6 +571,8 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 		generateTemplateHeader(request, nodeId),
 		// "struct CupnpVal<", cppNodeTypeName(nodeId, nodeBrand, nodeId, nodeBrand, request), "> {\n",
 		"struct ", name.flatten(), "{\n",
+		"	static constexpr cupnp::Kind kind = cupnp::Kind::STRUCT;\n",
+		"	\n",
 		"	uint64_t structure;\n",
 		"	cupnp::Location data;\n",
 		"	\n",
@@ -577,6 +597,25 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 		"// ===== struct ", fullName.flatten(), " =====\n",
 		"\n"
 	);
+	
+	if(canSpecializeOn(request, nodeId)) {
+		auto specializationTemplateHeader = generateAllTemplateHeaders(request, nodeId);
+		
+		if(specializationTemplateHeader.size() == 0)
+			specializationTemplateHeader = strTree("template<>\n");
+		
+		auto capnpName = cppNodeTypeName(nodeId, capnp::defaultValue<Brand>(), nodeId, capnp::defaultValue<Brand>(), request, true);
+		
+		methodDefinitions = strTree(
+			mv(methodDefinitions),
+			"// CuFor specializaation\n",
+			"namespace cupnp {\n",
+			mv(specializationTemplateHeader),
+			"struct CuFor_<", capnpName.flatten(), "> { using Type = ", fullName.flatten(), "; }; \n",
+			"} // namespace ::cupnp\n",
+			"\n"
+		);
+	}
 	
 	for(auto field : asStruct.getFields()) {
 		switch(field.which()) {
@@ -606,7 +645,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 						request, nodeId, methodDefinitions,
 						typeName.flatten(), strTree("get", camelCase(field.getName(), true), "() const"),
 						strTree(
-						"	return CupnpVal<", typeName.flatten(), ">(structure, data);\n"
+						"	return ", typeName.flatten(), "(structure, data);\n"
 						)
 					),
 					"\n"
@@ -778,7 +817,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 								),
 								generateMethod(
 									request, nodeId, methodDefinitions,
-									strTree("bool"), strTree("has", subName.asPtr(), "() const"),
+									strTree("bool"), strTree("nonDefault", subName.asPtr(), "() const"),
 									strTree(
 										"	return cupnp::hasPointerField<", slot.getOffset(), ">(structure, data);\n"
 									)
