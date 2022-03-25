@@ -18,6 +18,7 @@
 # include <unsupported/Eigen/CXX11/Tensor>
 # include <unsupported/Eigen/CXX11/ThreadPool>
 # include <Eigen/Dense>
+# include <Eigen/Core>
 # include <cmath>
 
 namespace fsc {
