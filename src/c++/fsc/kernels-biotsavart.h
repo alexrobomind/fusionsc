@@ -144,7 +144,7 @@ EIGEN_DEVICE_FUNC inline void biotSavartKernel(const unsigned int idx, ToroidalG
 	int i_r   = midx[2];
 
 	Vec3d x_grid = grid.xyz(i_phi, i_z, i_r);
-	Vec3d field_cartesian(0);
+	Vec3d field_cartesian { 0, 0, 0 };
 		
 	auto n_points = filament.dimension(1);
 	for(int i_fil = 0; i_fil < n_points - 1; ++i_fil) {

@@ -84,7 +84,19 @@ Promise<void> internal::LocalDataRefImpl::metadata(MetadataContext context) {
 }
 
 Promise<void> internal::LocalDataRefImpl::rawBytes(RawBytesContext context) {
-	context.getResults().setData(get<capnp::Data>());
+	uint64_t start = context.getParams().getStart();
+	uint64_t end   = context.getParams().getEnd();
+	
+	auto ptr = get<capnp::Data>();
+	
+	KJ_REQUIRE(end >= start);
+	KJ_REQUIRE(start < ptr.size());
+	KJ_REQUIRE(end <= ptr.size());
+	
+	if(end == start)
+		return kj::READY_NOW;
+	
+	context.getResults().setData(ptr.slice(start, end));
 	
 	return kj::READY_NOW;
 }
@@ -258,14 +270,39 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownl
 			}
 		}
 		
-		return src.rawBytesRequest().send()
-		.then([backend = mv(backend), this](Response<RemoteRef::RawBytesResults> rawBytesResponse) mutable {
+		kj::Vector<Promise<void>> processPromises;
+		auto dataSize = metadata.getDataSize();
+		auto buffer = kj::heapArray<kj::byte>(dataSize);
+		
+		constexpr size_t CHUNK_SIZE = 1024 * 1024;
+		for(size_t start = 0; start < dataSize; start += CHUNK_SIZE) {
+			size_t end = start + CHUNK_SIZE;
+			if(end > dataSize)
+				end = dataSize;
+			
+			auto request = src.rawBytesRequest();
+			request.setStart(start);
+			request.setEnd(end);
+			
+			auto processPromise = request.send().then([out = buffer.slice(start, end)](Response<RemoteRef::RawBytesResults> rawBytesResponse) mutable {
+				auto data = rawBytesResponse.getData();
+				
+				KJ_REQUIRE(data.size() == out.size());
+				memcpy(out.begin(), data.begin(), out.size());				
+			});
+			
+			processPromises.add(mv(processPromise));
+		}
+		
+		return kj::joinPromises(processPromises.releaseAsArray())
+		.then([backend = mv(backend), buffer = mv(buffer), this]() mutable {
 			// Copy the data into a heap buffer
 			auto metadata = backend->_metadata.getRoot<RemoteRef::Metadata>();
 			
 			auto entry = kj::atomicRefcounted<const LocalDataStore::Entry>(
 				metadata.getId(),
-				kj::heapArray<const byte>(rawBytesResponse.getData())
+				// kj::heapArray<const byte>(rawBytesResponse.getData())
+				mv(buffer)
 			);
 			
 			// Lock the store again, check for concurrent download and remember row
@@ -323,7 +360,27 @@ Promise<Archive::Entry::Builder> internal::LocalDataServiceImpl::createArchiveEn
 		entries.insert(id, mv(newOrphan));
 		
 		newEntry.setId(id);
-		newEntry.setData(local.getRaw());
+		
+		auto raw = local.getRaw();
+		auto rawSize = raw.size();
+		
+		constexpr size_t CHUNK_SIZE = 1024 * 1024 * 256;
+		const size_t nChunks = rawSize < CHUNK_SIZE ? 1 : rawSize / CHUNK_SIZE + 1;
+		auto outData = newEntry.initData(nChunks);
+		
+		for(size_t iChunk = 0; iChunk < nChunks; ++iChunk) {
+			size_t start = CHUNK_SIZE * iChunk;
+			size_t end   = CHUNK_SIZE * (iChunk + 1);
+			
+			if(start >= rawSize)
+				continue;
+			
+			if(end >= rawSize)
+				end = rawSize;
+			
+			outData.set(iChunk, raw.slice(start, end));
+		}
+		
 		newEntry.setTypeId(local.getTypeID());
 		newEntry.initCapabilities((unsigned int) capTable.size());
 		
@@ -433,9 +490,26 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(A
 			}
 		}
 		
+		kj::Array<kj::byte> data;
+		auto inData = entry.getData();
+		
+		size_t totalSize = 0;
+		for(auto chunk : inData)
+			totalSize += chunk.size();
+		
+		data = kj::heapArray<kj::byte>(totalSize);
+		
+		size_t start = 0;
+		for(auto chunk : inData) {
+			size_t end = start + chunk.size();
+			auto out = data.slice(start, end);
+			memcpy(out.begin(), chunk.begin(), chunk.size());
+			end = start;
+		}
+		
 		LocalRef local = publish(
 			entry.getId(),
-			kj::heapArray<const byte>(entry.getData()),
+			mv(data),
 			capTableBuilder.finish(),
 			entry.getTypeId()
 		);
@@ -500,9 +574,38 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(c
 			}
 		}
 		
+		kj::Array<const kj::byte> outData;
+		
+		auto inData = entry.getData();
+		
+		if(inData.size() == 1) {
+			// Single-chunk data can be loaded by mmapping the file (allows on-demand loading)
+			auto onlyChunk = inData[0];
+			// KJ_LOG(WARNING, onlyChunk.begin() - data.asBytes().begin(), onlyChunk.size(), f.stat().size);
+			outData = f.mmap(onlyChunk.begin() - data.asBytes().begin(), onlyChunk.size());
+			// KJ_LOG(WARNING, "Mmap OK");
+		} else {
+			// Multi-chunk files have to be copied into memory directly
+			size_t totalSize = 0;
+			for(auto chunk : inData)
+				totalSize += chunk.size();
+			
+			auto mutableData = kj::heapArray<kj::byte>(totalSize);
+			
+			size_t start = 0;
+			for(auto chunk : inData) {
+				size_t end = start + chunk.size();
+				auto out = mutableData.slice(start, end);
+				memcpy(out.begin(), chunk.begin(), chunk.size());
+				end = start;
+			}
+			outData = mv(mutableData);
+		}
+		
+		// KJ_LOG(WARNING, "Publishing");
 		LocalRef local = publish(
 			entry.getId(),
-			f.mmap(entry.getData().begin() - data.asBytes().begin(), entry.getData().size()),
+			mv(outData),
 			capTableBuilder.finish(),
 			entry.getTypeId()
 		);

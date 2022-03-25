@@ -15,7 +15,7 @@ interface DataRef (T) {
 		metadata : Metadata
 	);
 	
-	rawBytes @1 () -> (data : Data);
+	rawBytes @1 (start : UInt64, end : UInt64) -> (data : Data);
 	capTable @2 () -> (table : List(Capability));
 }
 
@@ -35,7 +35,7 @@ struct Archive {
 	}
 	struct Entry {
 		id @0 : Data;
-		data @1 : Data;
+		data @1 : List(Data);
 		capabilities @2 : List(CapabilityInfo);
 		typeId @3 : UInt64;
 	}
