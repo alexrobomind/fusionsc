@@ -25,7 +25,7 @@ endif()
 include(CTest)
 
 # Pre-load python to make sure we have compatible dev environment and interpreter
-find_package(python COMPONENTS interpreter development)
+find_package(Python COMPONENTS Interpreter Development)
 
 # Try to load dependencies directly
 
