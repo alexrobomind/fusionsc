@@ -37,7 +37,7 @@ private:
 			for(size_t i = 0; i < entries.size(); ++i) {
 				outEntries.setWithCaveats(i, entries[i]);
 			}
-		}
+		}			
 	};
 	
 	Promise<void> mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Mat4d transform, GeometryAccumulator& output);

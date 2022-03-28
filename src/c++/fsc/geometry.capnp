@@ -54,7 +54,7 @@ struct Transformed(T) {
 		}
 		turned : group {
 			angle @3 : Float64;
-			center @4 : List(Float64);
+			center @4 : List(Float64) = [0, 0, 0];
 			axis  @5 : List(Float64);
 			node  @6 : Transformed(T);
 		}

@@ -14,6 +14,7 @@ set(
 	magnetics-test.capnp
 	
 	geometry.capnp
+	geometry-test.capnp
 	
 	http.capnp
 	offline.capnp
@@ -99,6 +100,7 @@ target_sources(
 	local-tests.cpp
 	random-tests.cpp
 	data-tests.cpp
+	geometry-tests.cpp
 	magnetics-tests.cpp
 	http-tests.cpp
 	devices/w7x-test.cpp

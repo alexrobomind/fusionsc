@@ -215,9 +215,13 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownl
 	// Allocate backend struct
 	auto backend = kj::refcounted<internal::LocalDataRefImpl>();
 	
+	KJ_LOG(WARNING, "Initiating download");
+	KJ_LOG(WARNING, "Requesting cap table");
+	
 	// Sub-process 1: Download capabilities
 	auto downloadCaps = src.capTableRequest().send()
 	.then([backend = backend->addRef(), recursive, this](Response<RemoteRef::CapTableResults> capTableResponse) mutable {
+		KJ_LOG(WARNING, "Processing cap table");
 		auto capTable = capTableResponse.getTable();
 		
 		auto capHooks = kj::heapArray<Maybe<Own<capnp::ClientHook>>>(capTable.size());
@@ -259,6 +263,7 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownl
 	// Sub-process 2: Download metadata and (if neccessary) data
 	auto downloadData = src.metadataRequest().send()
 	.then([backend = backend->addRef(), src, this](Response<RemoteRef::MetadataResults> metadataResponse) mutable -> EntryPromise {
+		KJ_LOG(WARNING, "Processing metadata");
 		auto metadata = metadataResponse.getMetadata();
 		backend->_metadata.setRoot(metadata);
 				
@@ -872,6 +877,7 @@ Promise<void> removeDatarefs(capnp::AnyPointer::Reader in, capnp::AnyPointer::Bu
 	switch(in.getPointerType()) {
 		case PointerType::NULL_: {
 			out.clear();
+			return READY_NOW;
 		}
 		case PointerType::LIST: {
 			using capnp::AnyList;
@@ -922,6 +928,7 @@ Promise<void> removeDatarefs(capnp::AnyPointer::Reader in, capnp::AnyPointer::Bu
 				default:
 					out.set(in);
 			}
+			return READY_NOW;
 		}
 		case PointerType::STRUCT: {
 			using capnp::AnyStruct;

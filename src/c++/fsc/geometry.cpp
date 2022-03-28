@@ -278,7 +278,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader inp
 			
 			auto rotation = rotationAxisAngle(center, axis, angle);
 			
-			return mergeGeometries(input.getShifted().getNode(), tagTable, tagScope, transform * rotation, output);
+			return mergeGeometries(turned.getNode(), tagTable, tagScope, transform * rotation, output);
 		}
 		default:
 			KJ_FAIL_REQUIRE("Unknown transform type", input.which());
@@ -418,9 +418,7 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 	// Then call "mergeGeometries" on the root node with an identity transform and empty tag scope
 	//   This will collect temporary built meshes in geomAccum
 	.then([context, &geomAccum = *geomAccum, &tagNameTable = *tagNameTable, this]() mutable {
-		Temporary<capnp::List<TagValue>> tagScope(
-			capnp::List<TagValue>::Builder(nullptr)
-		);
+		Temporary<capnp::List<TagValue>> tagScope(tagNameTable.size());
 		
 		Mat4d idTransform {
 			{1, 0, 0, 0},
@@ -429,13 +427,16 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 			{0, 0, 0, 1}
 		};
 		
+		KJ_LOG(WARNING, "Beginning merge operation");
 		return mergeGeometries(context.getParams(), tagNameTable, tagScope, idTransform, geomAccum);
 	})
 	
 	// Finally, copy the data from the accumulator into the output
 	.then([context, &geomAccum = *geomAccum, &tagNameTable = *tagNameTable, this]() mutable {
 		// Copy data over
+		KJ_LOG(WARNING, "Allocating output");
 		Temporary<MergedGeometry> output;
+		KJ_LOG(WARNING, "Copying geometry");
 		geomAccum.finish(output);
 		
 		// Copy tag names from the tag table
@@ -445,9 +446,11 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 		
 		// Publish the merged geometry into the data store
 		// Derive the ID from parameters
+		KJ_LOG(WARNING, "Publishing output");
 		context.getResults().setRef(
-			lt->dataService().publish(context.getParams(), output.asReader())
+			lt->dataService().publish(context.getParams(), output.asReader()).attach(mv(output))
 		);
+		KJ_LOG(WARNING, "Finished");
 	});
 	
 	return promise.attach(mv(tagNameTable), mv(geomAccum));

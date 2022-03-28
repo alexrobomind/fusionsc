@@ -94,11 +94,21 @@ public:
 	template<typename Reader, typename T = capnp::FromAny<Reader>>
 	LocalDataRef<T> publish(ArrayPtr<const byte> id, Reader reader);
 	
+	/**
+	 * Creates a local data reference by copying the contents of the second argument.
+	 * The ID of the reference is derived from the first argument.
+	 * WARNING: The second argument must be a valid until the returned promise resolves.
+	 */
 	template<typename Reader, typename IDReader, typename T = capnp::FromAny<Reader>, typename T2 = capnp::FromAny<IDReader>>
-	Promise<LocalDataRef<T>> publish(IDReader dataForID, Reader data, kj::StringPtr hashFunction = "SHA-256"_kj);
+	Promise<LocalDataRef<T>> publish(IDReader dataForID, Reader data, kj::StringPtr hashFunction = "SHA-256"_kj) KJ_WARN_UNUSED_RESULT;
 	
+	
+	/**
+	 * Creates a local data reference with an ID derived from the contents.
+	 * WARNING: The first argument must be kept alive until the returned promise resolves.
+	 */
 	template<typename Reader, typename T = capnp::FromAny<Reader>>
-	Promise<LocalDataRef<T>> publish(Reader data, kj::StringPtr hashFunction = "SHA-256"_kj) {
+	KJ_WARN_UNUSED_RESULT Promise<LocalDataRef<T>> publish(Reader data, kj::StringPtr hashFunction = "SHA-256"_kj) {
 		return publish(data, data, hashFunction);
 	}
 	
