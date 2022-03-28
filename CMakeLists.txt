@@ -8,6 +8,8 @@ set(CMAKE_CXX_EXTENSIONS On)
 # - capnproto (https://github.com/capnproto/capnproto)
 # - Botan (https://github.com/randombit/botan)
 # - Catch2 (https://github.com/catchorg/Catch2)
+# - Eigen3 (https://gitlab.com/libeigen/eigen.git)
+# - pybind11 (https://github.com/pybind/pybind11.git)
 
 set(FSC_FETCH_DEPENDENCIES On CACHE BOOL "Whether the build system is allowed to fetch external dependencies")
 set(FSC_ALWAYS_FETCH Off CACHE BOOL "Whether the build system is must fetch external dependencies")
@@ -22,6 +24,9 @@ endif()
 # Prepare CTest
 include(CTest)
 
+# Pre-load python to make sure we have compatible dev environment and interpreter
+find_package(python COMPONENTS interpreter development)
+
 # Try to load dependencies directly
 
 if(NOT FSC_ALWAYS_FETCH)
@@ -31,6 +36,8 @@ if(NOT FSC_ALWAYS_FETCH)
 	find_path   (BOTAN_INC "botan/version.h")
 
 	find_package(Catch2)
+	find_package(Eigen3)
+	find_package(pybind11)
 	
 	if(BOTAN_LIB AND BOTAN_INC)
 		set(Botan-Botan_FOUND TRUE)
@@ -41,6 +48,8 @@ else()
 	set(CapnProto_FOUND FALSE)
 	set(Botan_FOUND FALSE)
 	set(Catch2_FOUND FALSE)
+	set(Eigen3_FOUND FALSE)
+	set(pybind11_FOUND FALSE)
 endif()
 
 # Try to fetch some dependencies if possible
@@ -81,6 +90,14 @@ FetchContent_Declare(
   GIT_PROGRESS   On
 )
 
+FetchContent_Declare(
+	pybind11
+	GIT_REPOSITORY https://github.com/pybind/pybind11.git
+	GIT_TAG        v2.9.1
+	GIT_SHALLOW    On
+	GIT_PROGRESS   On
+)
+
 set(BUILD_TESTING_TMP ${BUILD_TESTING})
 set(BUILD_TESTING OFF CACHE BOOL "Temporarily disable testing" FORCE)
 
@@ -105,6 +122,10 @@ endif()
 
 fetch_dependency(CapnProto)
 fetch_dependency(Eigen3)
+
+if(Python_Development_FOUND)
+	fetch_dependency(pybind11)
+endif()
 
 # For Botan, we have to be fancier, as it does not use CMake
 if(Botan_FOUND)
@@ -180,6 +201,21 @@ if(FSC_WITH_CUDA)
 		deps
 		INTERFACE
 		CUDA::cudart
+	)
+endif()
+
+set(FSC_WITH_PYTHON ${Python_Development_FOUND})
+
+if(FSC_WITH_PYTHON)
+	target_compile_definitions(
+		deps
+		INTERFACE
+		FSC_WITH_PYTHON
+	)
+	target_link_libraries(
+		deps
+		INTERFACE
+		pybind11::pybind11
 	)
 endif()
 

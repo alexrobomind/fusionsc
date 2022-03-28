@@ -16,5 +16,9 @@ catch_discover_tests(
 # First build the cupnp library / compiler
 add_subdirectory(cupnp)
 
+# Then build the fsc library
 add_subdirectory(fsc)
+
+# Now we can build tools / bindings
 add_subdirectory(tools)
+add_subdirectory(python)
