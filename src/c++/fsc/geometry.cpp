@@ -86,6 +86,32 @@ Promise<void> GeometryResolverBase::resolve(ResolveContext context) {
 
 // Class GeometryLibImpl
 
+struct GeometryLibImpl : public GeometryLib::Server {
+	LibraryThread lt;
+	GeometryLibImpl(LibraryThread& lt);
+	
+	Promise<void> merge(MergeContext context) override;
+	Promise<void> index(IndexContext context) override;
+	
+private:
+	struct GeometryAccumulator {
+		kj::Vector<Temporary<MergedGeometry::Entry>> entries;
+		
+		inline void finish(MergedGeometry::Builder output) {
+			auto outEntries = output.initEntries(entries.size());
+			for(size_t i = 0; i < entries.size(); ++i) {
+				outEntries.setWithCaveats(i, entries[i]);
+			}
+		}			
+	};
+	
+	Promise<void> mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Mat4d transform, GeometryAccumulator& output);
+	Promise<void> mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Mat4d transform, GeometryAccumulator& output);
+	
+	Promise<void> collectTagNames(Geometry::Reader input, kj::HashSet<kj::String>& output);
+	Promise<void> collectTagNames(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& output);
+};
+
 namespace {
 	
 	/**
@@ -455,6 +481,10 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 	
 	return promise.attach(mv(tagNameTable), mv(geomAccum));
 }
+
+GeometryLib::Client createGeometryLib(LibraryThread& lt) {
+	return GeometryLib::Client(kj::heap<GeometryLibImpl>(lt));
+};
 
 // Grid location methods
 

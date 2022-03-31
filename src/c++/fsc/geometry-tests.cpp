@@ -31,7 +31,7 @@ TEST_CASE("transform-cube") {
 	
 	turned.initNode().initLeaf().setMesh(cube);
 	
-	GeometryLib::Client geoLib ( kj::heap<GeometryLibImpl>(lt) );
+	GeometryLib::Client geoLib = createGeometryLib(lt);
 	
 	KJ_LOG(WARNING, "Preparing merge request");
 	auto mergeRequest = geoLib.mergeRequest();

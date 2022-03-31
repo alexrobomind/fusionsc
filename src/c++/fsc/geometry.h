@@ -21,31 +21,7 @@ struct GeometryResolverBase : public GeometryResolver::Server {
 	        Promise<void> processTransform(Transformed<Geometry>::Reader input, Transformed<Geometry>::Builder output, ResolveContext context);
 };
 
-struct GeometryLibImpl : public GeometryLib::Server {
-	LibraryThread lt;
-	GeometryLibImpl(LibraryThread& lt);
-	
-	Promise<void> merge(MergeContext context) override;
-	Promise<void> index(IndexContext context) override;
-	
-private:
-	struct GeometryAccumulator {
-		kj::Vector<Temporary<MergedGeometry::Entry>> entries;
-		
-		inline void finish(MergedGeometry::Builder output) {
-			auto outEntries = output.initEntries(entries.size());
-			for(size_t i = 0; i < entries.size(); ++i) {
-				outEntries.setWithCaveats(i, entries[i]);
-			}
-		}			
-	};
-	
-	Promise<void> mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Mat4d transform, GeometryAccumulator& output);
-	Promise<void> mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Mat4d transform, GeometryAccumulator& output);
-	
-	Promise<void> collectTagNames(Geometry::Reader input, kj::HashSet<kj::String>& output);
-	Promise<void> collectTagNames(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& output);
-};
+GeometryLib::Client createGeometryLib(LibraryThread& lt);
 
 inline Vec3u locationInGrid(Vec3d point, Vec3d min, Vec3d max, Vec3u size) {
 	auto fraction = (point - min).array() / (max - min).array();
