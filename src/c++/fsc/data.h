@@ -60,6 +60,8 @@ using References = typename internal::References_<T>::Type;
  */
 class LocalDataService : public DataService::Client {
 public:
+	using Nursery = kj::Vector<kj::Own<void>>;
+	
 	/**
 	 * Downloads the data contained in the remote reference into the local backing
 	 * store and links the remote capabilities into a local capability table.
@@ -132,7 +134,7 @@ public:
 	 * provided Archive::Builder.
 	 */
 	template<typename Ref, typename T = References<Ref>>
-	Promise<void> buildArchive(Ref reference, Archive::Builder out) KJ_WARN_UNUSED_RESULT;
+	Promise<void> buildArchive(Ref reference, Archive::Builder out, Maybe<Nursery&> nursery = Maybe<Nursery&>()) KJ_WARN_UNUSED_RESULT;
 	
 	/**
 	 * Like publishArchive, but copies the data from the in-memory structure given

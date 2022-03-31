@@ -26,6 +26,8 @@ FSC_DECLARE_TENSOR(double,  Float64Tensor);
  */
 class LocalDataServiceImpl : public kj::Refcounted, public DataService::Server {
 public:
+	using Nursery = LocalDataService::Nursery;
+	
 	LocalDataServiceImpl(Library& h);
 	Own<LocalDataServiceImpl> addRef();
 	
@@ -33,7 +35,7 @@ public:
 	
 	LocalDataRef<capnp::AnyPointer> publish(ArrayPtr<const byte> id, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable, uint64_t cpTypeId);
 	
-	Promise<void> buildArchive(DataRef<capnp::AnyPointer>::Client ref, Archive::Builder out);
+	Promise<void> buildArchive(DataRef<capnp::AnyPointer>::Client ref, Archive::Builder out, Maybe<Nursery&> nursery);
 	Promise<void> writeArchive(DataRef<capnp::AnyPointer>::Client ref, const kj::File& out);
 	LocalDataRef<capnp::AnyPointer> publishArchive(Archive::Reader archive);
 	LocalDataRef<capnp::AnyPointer> publishArchive(const kj::ReadableFile& f);
@@ -42,7 +44,7 @@ public:
 	
 private:
 	Promise<LocalDataRef<capnp::AnyPointer>> doDownload(DataRef<capnp::AnyPointer>::Client src, bool recursive);
-	Promise<Archive::Entry::Builder> createArchiveEntry(DataRef<capnp::AnyPointer>::Client ref, kj::TreeMap<ID, capnp::Orphan<Archive::Entry>>& entries, capnp::Orphanage orphanage);
+	Promise<Archive::Entry::Builder> createArchiveEntry(DataRef<capnp::AnyPointer>::Client ref, kj::TreeMap<ID, capnp::Orphan<Archive::Entry>>& entries, capnp::Orphanage orphanage, Maybe<Nursery&> nursery);
 	
 	capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> serverSet;
 	Library library;
@@ -224,8 +226,8 @@ Promise<LocalDataRef<T>> LocalDataService::download(Reference src, bool recursiv
 }
 
 template<typename Ref, typename T>
-Promise<void> LocalDataService::buildArchive(Ref ref, Archive::Builder out) {
-	return impl -> buildArchive(ref.asGeneric(), out);
+Promise<void> LocalDataService::buildArchive(Ref ref, Archive::Builder out, Maybe<Nursery&> nursery) {
+	return impl -> buildArchive(ref.asGeneric(), out, nursery);
 }
 
 template<typename Ref, typename T>

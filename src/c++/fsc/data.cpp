@@ -342,12 +342,12 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownl
 	}).attach(this -> addRef(), backend -> addRef());
 }
 
-Promise<Archive::Entry::Builder> internal::LocalDataServiceImpl::createArchiveEntry(DataRef<capnp::AnyPointer>::Client ref, kj::TreeMap<ID, capnp::Orphan<Archive::Entry>>& entries, capnp::Orphanage orphanage) {
+Promise<Archive::Entry::Builder> internal::LocalDataServiceImpl::createArchiveEntry(DataRef<capnp::AnyPointer>::Client ref, kj::TreeMap<ID, capnp::Orphan<Archive::Entry>>& entries, capnp::Orphanage orphanage, Maybe<Nursery&> nursery) {
 	using RemoteRef = DataRef<capnp::AnyPointer>::Client;
 	using LocalRef  = LocalDataRef<capnp::AnyPointer>;
 	using capnp::Orphan;
 	
-	return download(ref, false).then([this, &entries, orphanage](LocalDataRef<capnp::AnyPointer> local) mutable -> Promise<Archive::Entry::Builder> {
+	return download(ref, false).then([this, &entries, orphanage, nursery = Maybe<Nursery&>(nursery)](LocalDataRef<capnp::AnyPointer> local) mutable -> Promise<Archive::Entry::Builder> {
 		auto id = local.getID();
 		
 		// The ref is already stored locally. Return the entry
@@ -371,20 +371,58 @@ Promise<Archive::Entry::Builder> internal::LocalDataServiceImpl::createArchiveEn
 		
 		constexpr size_t CHUNK_SIZE = 1024 * 1024 * 256;
 		const size_t nChunks = rawSize < CHUNK_SIZE ? 1 : rawSize / CHUNK_SIZE + 1;
-		auto outData = newEntry.initData(nChunks);
 		
-		for(size_t iChunk = 0; iChunk < nChunks; ++iChunk) {
-			size_t start = CHUNK_SIZE * iChunk;
-			size_t end   = CHUNK_SIZE * (iChunk + 1);
-			
-			if(start >= rawSize)
-				continue;
-			
-			if(end >= rawSize)
-				end = rawSize;
-			
-			outData.set(iChunk, raw.slice(start, end));
+		auto chunkData = kj::heapArray<capnp::Orphan<capnp::Data>>(nChunks);
+		
+		KJ_IF_MAYBE(pNursery, nursery) {
+			pNursery -> add(kj::heap(local));
 		}
+		
+		if(nChunks == 1) {
+			// Don't add extra segments for data that fit inside a single chunk
+			chunkData[0] = orphanage.newOrphanCopy<capnp::Data::Reader>(raw);
+		} else {
+			for(size_t iChunk = 0; iChunk < nChunks; ++iChunk) {
+				size_t start = CHUNK_SIZE * iChunk;
+				size_t end   = CHUNK_SIZE * (iChunk + 1);
+				
+				if(start >= rawSize)
+					continue;
+				
+				if(end >= rawSize)
+					end = rawSize;
+				
+				auto inputData = raw.slice(start, end);
+				
+				KJ_IF_MAYBE(pNursery, nursery) {
+					// We need to make an intermediate copy of the data if they are not word-aligned
+					// in length (not going to happen with capnp messages) to add the missing bytes.
+					
+					if(inputData.size() % sizeof(capnp::word) != 0) {
+						size_t bufSize = inputData.size() / 8;
+						bufSize += 1;
+						bufSize *= 8;
+						
+						auto heapBuffer = kj::heapArray<kj::byte>(bufSize);
+						
+						memset(heapBuffer.begin(), heapBuffer.size(), 0);
+						memcpy(heapBuffer.begin(), inputData.begin(), inputData.size());
+						
+						inputData = kj::ArrayPtr<const kj::byte>(heapBuffer.begin(), inputData.size());
+						
+						pNursery -> add(kj::heap(mv(heapBuffer)));
+					}
+					
+					chunkData[iChunk] = orphanage.referenceExternalData(inputData);
+				} else {
+					chunkData[iChunk] = orphanage.newOrphanCopy<capnp::Data::Reader>(inputData);
+				}
+			}
+		}
+		
+		auto outData = newEntry.initData(nChunks);
+		for(size_t iChunk = 0; iChunk < nChunks; ++iChunk)
+			outData.adopt(iChunk, mv(chunkData[iChunk]));
 		
 		newEntry.setTypeId(local.getTypeID());
 		newEntry.initCapabilities((unsigned int) capTable.size());
@@ -397,7 +435,7 @@ Promise<Archive::Entry::Builder> internal::LocalDataServiceImpl::createArchiveEn
 			
 			subDownloads.add(
 				// Try to download sub references and reference them in table
-				createArchiveEntry(capTable[i].castAs<DataRef<capnp::AnyPointer>>(), entries, orphanage)
+				createArchiveEntry(capTable[i].castAs<DataRef<capnp::AnyPointer>>(), entries, orphanage, nursery)
 				.then([capRef](Archive::Entry::Builder b) mutable -> void {
 					capRef.getDataRefInfo().setRefID(b.getId());
 				})
@@ -417,7 +455,7 @@ Promise<Archive::Entry::Builder> internal::LocalDataServiceImpl::createArchiveEn
 	});
 }
 
-Promise<void> internal::LocalDataServiceImpl::buildArchive(DataRef<capnp::AnyPointer>::Client root, Archive::Builder out) {
+Promise<void> internal::LocalDataServiceImpl::buildArchive(DataRef<capnp::AnyPointer>::Client root, Archive::Builder out, Maybe<Nursery&> nursery) {
 	using kj::TaskSet;
 	
 	using AnyArchive = Archive;
@@ -425,7 +463,7 @@ Promise<void> internal::LocalDataServiceImpl::buildArchive(DataRef<capnp::AnyPoi
 	auto orphanage = capnp::Orphanage::getForMessageContaining(out);
 	auto entries = kj::heap<kj::TreeMap<ID, capnp::Orphan<AnyArchive::Entry>>>();
 	
-	auto task = createArchiveEntry(root, *entries, orphanage)
+	auto task = createArchiveEntry(root, *entries, orphanage, nursery)
 	.then([out, &entries = *entries](Archive::Entry::Builder rootEntry) mutable {
 		unsigned int offset = 0;
 		out.initExtra((unsigned int) (entries.size() - 1));
@@ -447,7 +485,9 @@ Promise<void> internal::LocalDataServiceImpl::writeArchive(DataRef<capnp::AnyPoi
 	auto msg = kj::heap<capnp::MallocMessageBuilder>();
 	auto archive = msg -> initRoot<Archive>();
 	
-	return buildArchive(ref, archive)
+	auto nursery = kj::heap<Nursery>();
+	
+	return buildArchive(ref, archive, *nursery)
 	.then([&out, msg = mv(msg)]() mutable {
 		// If the file has a file descriptor, we can directly write to it
 		KJ_IF_MAYBE(fd, out.getFd()) {
@@ -458,7 +498,7 @@ Promise<void> internal::LocalDataServiceImpl::writeArchive(DataRef<capnp::AnyPoi
 		// If not, we will have to allocate a local copy and memcpy it over. Blergh.
 		kj::Array<const byte> data = wordsToBytes(capnp::messageToFlatArray(*msg));
 		out.writeAll(data);
-	});
+	}).attach(mv(nursery));
 }
 
 LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(Archive::Reader archive) {
@@ -538,15 +578,26 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(A
 	return handleEntry(archive.getRoot());
 }
 
+namespace {
+	struct SharedArrayHolder : public kj::AtomicRefcounted {
+		kj::Array<const capnp::word> data;
+	};
+}
 
 LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(const kj::ReadableFile & f) {
 	using RemoteRef = DataRef<capnp::AnyPointer>::Client;
 	using LocalRef  = LocalDataRef<capnp::AnyPointer>;
 	
+	auto arrayHolder = kj::atomicRefcounted<SharedArrayHolder>();
+	
 	// Open file globally to read the overview data
 	auto fileData = f.stat();
-	kj::Array<const capnp::word> data = bytesToWords(f.mmap(0, fileData.size));
-	capnp::FlatArrayMessageReader reader(data);
+	{
+		kj::Array<const capnp::word> data = bytesToWords(f.mmap(0, fileData.size));
+		arrayHolder->data = mv(data);
+	}
+	
+	capnp::FlatArrayMessageReader reader(arrayHolder->data);
 	auto archive = reader.getRoot<Archive>();
 	
 	kj::TreeMap<ID, Own<kj::PromiseFulfiller<LocalRef>>> fulfillers;
@@ -583,18 +634,38 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(c
 		
 		auto inData = entry.getData();
 		
-		if(inData.size() == 1) {
-			// Single-chunk data can be loaded by mmapping the file (allows on-demand loading)
-			auto onlyChunk = inData[0];
-			// KJ_LOG(WARNING, onlyChunk.begin() - data.asBytes().begin(), onlyChunk.size(), f.stat().size);
-			outData = f.mmap(onlyChunk.begin() - data.asBytes().begin(), onlyChunk.size());
-			// KJ_LOG(WARNING, "Mmap OK");
-		} else {
-			// Multi-chunk files have to be copied into memory directly
-			size_t totalSize = 0;
-			for(auto chunk : inData)
-				totalSize += chunk.size();
+		// Data can be mmapped if they are only one chunk
+		// or if the chunks are aligned consecutively in
+		// the file.
+		bool canMMap = true;
+		for(size_t iChunk = 1; iChunk < inData.size(); ++iChunk) {
+			auto thisChunk = inData[iChunk];
+			auto prevChunk = inData[iChunk - 1];
 			
+			if(thisChunk.begin() != prevChunk.end())
+				canMMap = false;
+		}
+		
+		size_t totalSize = 0;
+		for(auto chunk : inData)
+			totalSize += chunk.size();
+		
+		//if(inData.size() == 1) {
+		if(canMMap) {
+			// Single-chunk data can be loaded by mmapping the file (allows on-demand loading)
+			// auto onlyChunk = inData[0];
+			// KJ_LOG(WARNING, onlyChunk.begin() - data.asBytes().begin(), onlyChunk.size(), f.stat().size);
+			// outData = f.mmap(onlyChunk.begin() - data.asBytes().begin(), onlyChunk.size());
+			// KJ_LOG(WARNING, "Mmap OK");			
+			if(totalSize == 0)
+				outData = kj::heapArray<const kj::byte>(0);
+			else
+				outData = kj::ArrayPtr<const kj::byte>(inData[0].begin(), totalSize).attach(kj::atomicAddRef(*arrayHolder));
+			
+		} else {
+			KJ_LOG(WARNING, "Archive has non-memory-mappable chunk structure");
+			
+			// Non-aligned chunks have to be copied into memory manually
 			auto mutableData = kj::heapArray<kj::byte>(totalSize);
 			
 			size_t start = 0;
