@@ -11,7 +11,9 @@
 #include <fsc/local.h>
 #include <fsc/common.h>
 
+#include "fscpy.h"
 #include "dynamic_value.h"
+#include "async.h"
 
 using capnp::DynamicValue;
 using capnp::DynamicList;
@@ -22,74 +24,9 @@ using capnp::AnyPointer;
 
 namespace py = pybind11;
 
-namespace fsc {
+// Definitions local to translation unit
 
-struct PyContext {
-	static Library library() {
-		{
-			auto locked = _library.lockShared();
-			
-			if(locked->get() != nullptr)
-				return locked->get()->addRef();
-		}
-		
-		auto locked = _library.lockExclusive();
-		*locked = newLibrary();
-		
-		return locked->get()->addRef();
-	}
-	
-	static LibraryThread libraryThread() {
-		ensureLT();
-		return _libraryThread->addRef();
-	}
-	
-	static kj::WaitScope& waitScope() {
-		ensureLT();
-		return _libraryThread -> waitScope();
-	}
-	
-private:
-	static kj::MutexGuarded<Library> _library;
-	static thread_local LibraryThread _libraryThread;
-	
-	static void ensureLT() {
-		if(_libraryThread.get() == nullptr) {
-			_libraryThread = library() -> newThread();
-		}
-	}
-};
-
-struct PyPromise {
-	PyPromise(Promise<py::object> input) :
-		holder(input.fork())
-	{}
-	
-	PyPromise(PyPromise& other) :
-		holder(other.holder.addBranch().fork())
-	{}
-	
-	Promise<py::object> get() {
-		return holder.addBranch();
-	}
-	
-	operator Promise<py::object>() {
-		return get();
-	}
-	
-	py::object wait() {
-		py::gil_scoped_release release_gil;
-		return holder.addBranch().wait(PyContext::waitScope());
-	}
-	
-	bool poll() {
-		py::gil_scoped_release release_gil;
-		return holder.addBranch().poll(PyContext::waitScope());
-	}
-	
-private:
-	kj::ForkedPromise<py::object> holder;
-};
+namespace fscpy { namespace {
 
 void blobClasses(py::module_ m) {
 	using TR = capnp::Text::Reader;
@@ -99,6 +36,8 @@ void blobClasses(py::module_ m) {
 	using AP = kj::ArrayPtr<kj::byte>;
 	using CAP = kj::ArrayPtr<const kj::byte>;
 	
+	py::class_<kj::StringPtr>(m, "KJStringPtr");
+	
 	py::class_<TR, kj::StringPtr>(m, "TextReader");
 	py::class_<TB>(m, "TextBuilder");
 	py::class_<TP>(m, "TextPipeline");
@@ -107,9 +46,9 @@ void blobClasses(py::module_ m) {
 	using DB = capnp::Data::Builder;
 	using DP = capnp::Data::Pipeline;
 	
-	py::class_<DR, CAP>(m, "TextReader");
-	py::class_<DB, AP>(m, "TextBuilder");
-	py::class_<DP>(m, "TextPipeline");
+	py::class_<DR, CAP>(m, "DataReader");
+	py::class_<DB, AP>(m, "DataBuilder");
+	py::class_<DP>(m, "DataPipeline");
 }
 
 template<typename T>
@@ -147,7 +86,7 @@ void defHas(py::class_<T>& c) {
 	c.def("has", [](T& ds, kj::StringPtr name) { return ds.has(name); });
 }
 
-void dynamicStructClasses(py::module_ m) {
+void structClasses(py::module_ m) {
 	using DSB = DynamicStruct::Builder;
 	using DSR = DynamicStruct::Reader;
 	using DSP = DynamicStruct::Pipeline;
@@ -159,12 +98,22 @@ void dynamicStructClasses(py::module_ m) {
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Reader& val) { dsb.set(name, val); });
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Builder& val) { dsb.set(name, val.asReader()); });
 	
-	py::class_<DSR> cDSR(m, "DynamicStructBuilder");
+	py::class_<DSR> cDSR(m, "DynamicStructReader");
 	defGet(cDSR);
 	defHas(cDSR);
 	
 	py::class_<DSP> cDSP(m, "DynamicStructPipeline");
 	defGet(cDSP);
+}
+
+}}
+
+namespace fscpy {
+
+void defCapnpClasses(py::module_ m) {
+	listClasses(m);
+	blobClasses(m);
+	structClasses(m);
 }
 
 }

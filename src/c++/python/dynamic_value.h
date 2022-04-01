@@ -51,6 +51,14 @@ namespace pybind11 { namespace detail {
 				return true;
 			}
 			
+			type_caster_base<DynamicValue::Builder> base;
+			auto baseLoadResult = base.load(src, convert);
+			
+			if(baseLoadResult) {
+				value = base.value;
+				return true;
+			}
+			
 			return false;
 		}
 		
