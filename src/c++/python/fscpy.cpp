@@ -45,8 +45,17 @@ void defArray(kj::StringPtr name, py::module_ m) {
 }
 
 PYBIND11_MODULE(fscpy, m) {
+	globalClasses = kj::heap<py::dict>();
+	
+	// KJ_LOG(WARNING, "Defining array classes");
 	defArray<kj::byte>("ByteArray", m);
 	defArray<const kj::byte>("ConstByteArray", m);
 	
+	py::class_<kj::StringPtr>(m, "StringPtr");
+	
+	// KJ_LOG(WARNING, "Defining capnproto classes");
 	defCapnpClasses(m);
+	
+	// KJ_LOG(WARNING, "Defining field descriptor classes");
+	dynamicValueBindings(m);
 }

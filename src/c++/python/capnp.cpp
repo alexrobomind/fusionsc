@@ -36,8 +36,6 @@ void blobClasses(py::module_ m) {
 	using AP = kj::ArrayPtr<kj::byte>;
 	using CAP = kj::ArrayPtr<const kj::byte>;
 	
-	py::class_<kj::StringPtr>(m, "KJStringPtr");
-	
 	py::class_<TR, kj::StringPtr>(m, "TextReader");
 	py::class_<TB>(m, "TextBuilder");
 	py::class_<TP>(m, "TextPipeline");

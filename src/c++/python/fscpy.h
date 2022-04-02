@@ -9,8 +9,17 @@ namespace py = pybind11;
 namespace fscpy {
 	using namespace fsc;
 	
-	void defCapnpClasses(py::module_ m);	
+	void defCapnpClasses(py::module_ m);
+	void dynamicValueBindings(py::module_& m);	
 }
+
+// Conversion of capnp::DynamicValue to python objects
+/*extern kj::Own<py::dict> globalBuilderClasses;
+extern kj::Own<py::dict> globalReaderClasses;
+extern kj::Own<py::dict> globalPipelineClasses;
+extern kj::Own<py::dict> globalClientClasses;
+extern kj::Own<py::dict> globalServerClasses;*/
+extern kj::Own<py::dict> globalClasses;
 
 // Array pointer conversion
 
@@ -18,7 +27,7 @@ namespace pybind11 { namespace detail {
 	
 template<>
 struct type_caster<kj::StringPtr> {
-	PYBIND11_TYPE_CASTER(kj::StringPtr, const_name("StringPtr"));
+	PYBIND11_TYPE_CASTER(kj::StringPtr, const_name("str"));
 	
 	type_caster<char> strCaster;	
 	
@@ -39,18 +48,38 @@ struct type_caster<kj::StringPtr> {
 			return true;
 		}
 		
+		type_caster_base<kj::StringPtr> base;
+		if(base.load(src, convert)) {
+			value = (kj::StringPtr) base;
+			return true;
+		}
+		
 		return false;
 	}
 	
 	static handle cast(kj::StringPtr src, return_value_policy policy, handle parent) {
-		kj::String result = kj::heapString(src);
-		return py::cast(kj::mv(result));
+		/*kj::String result = kj::heapString(src);
+		return py::cast(kj::mv(result));*/
+		const char* pStr = src.begin();
+		return py::cast(pStr);
 	}
 };
 
 template<typename T>
 struct type_caster<kj::ArrayPtr<T>> {
-	PYBIND11_TYPE_CASTER(kj::ArrayPtr<T>, const_name("ArrayPtr"));
+	template<typename T>
+	struct NameFor_ { static constexpr auto name = const_name("Mutable array of ") + const_name<T>(); };
+
+	template<typename T>
+	struct NameFor_<const T> { static constexpr auto name = const_name("Array of ") + const_name<T>(); };
+
+	template<>
+	struct NameFor_<unsigned char> { static inline constexpr auto name = const_name("Mutable Bytes"); };
+
+	template<>
+	struct NameFor_<const unsigned char> { static constexpr auto name = const_name("Bytes"); };
+	
+	PYBIND11_TYPE_CASTER(kj::ArrayPtr<T>, NameFor_<T>::name);
 	
 	bool load(handle src, bool convert) {
 		try {
@@ -65,6 +94,12 @@ struct type_caster<kj::ArrayPtr<T>> {
 			value = ref.asPtr();
 			return true;
 		} catch(cast_error& e) {
+		}
+		
+		type_caster_base<kj::ArrayPtr<T>> base;
+		if(base.load(src, convert)) {
+			value = (kj::ArrayPtr<T>) base;
+			return true;
 		}
 		
 		return false;
