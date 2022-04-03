@@ -4,8 +4,9 @@
 #include <pybind11/eval.h>
 #include <fsc/common.h>
 
-// Custom bindings
-#include "dynamic_value.h"
+// Custom type casters
+#include "typecast_kj.h"
+#include "typecast_capnp.h"
 
 namespace py = pybind11;
 

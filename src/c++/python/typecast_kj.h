@@ -1,5 +1,8 @@
 #pragma once
 
+#include <pybind11/cast.h>
+#include <pybind11/eval.h>
+
 #include <kj/array.h>
 #include <kj/string.h>
 
@@ -8,7 +11,6 @@
 //   kj::StringPtr
 //   template<typename T> kj::ArrayPtr<T>
 
-// Array pointer conversion
 namespace pybind11 { namespace detail {
 	
 template<>
