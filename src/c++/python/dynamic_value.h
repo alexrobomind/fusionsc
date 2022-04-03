@@ -1,11 +1,16 @@
 #pragma once
 
-#include "fscpy.h"
-
 #include <pybind11/cast.h>
 #include <pybind11/eval.h>
 #include <capnp/dynamic.h>
 #include <capnp/any.h>
+
+// This file contains the following type caster specializations:
+//
+//   capnp::DynamicValue::Builder
+//   capnp::DynamicValue::Reader
+//   capnp::DynamicValue::Pipeline
+//   capnp::DynamicCapability::Client
 
 namespace pybind11 { namespace detail {
 	

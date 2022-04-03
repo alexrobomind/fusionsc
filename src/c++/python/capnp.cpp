@@ -28,7 +28,7 @@ namespace py = pybind11;
 
 namespace fscpy { namespace {
 
-void blobClasses(py::module_ m) {
+void blobClasses(py::module_& m) {
 	using TR = capnp::Text::Reader;
 	using TB = capnp::Text::Builder;
 	using TP = capnp::Text::Pipeline;
@@ -62,7 +62,7 @@ void defSetItem(py::class_<T>& c) {
 	});
 }
 
-void listClasses(py::module_ m) {
+void listClasses(py::module_& m) {
 	using DLB = DynamicList::Builder;
 	using DLR = DynamicList::Reader;
 	
@@ -84,7 +84,7 @@ void defHas(py::class_<T>& c) {
 	c.def("has", [](T& ds, kj::StringPtr name) { return ds.has(name); });
 }
 
-void structClasses(py::module_ m) {
+void structClasses(py::module_& m) {
 	using DSB = DynamicStruct::Builder;
 	using DSR = DynamicStruct::Reader;
 	using DSP = DynamicStruct::Pipeline;
