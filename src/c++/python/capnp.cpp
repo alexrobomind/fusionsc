@@ -12,8 +12,6 @@
 #include <fsc/common.h>
 
 #include "fscpy.h"
-#include "dynamic_value.h"
-#include "async.h"
 
 using capnp::DynamicValue;
 using capnp::DynamicList;
@@ -28,7 +26,7 @@ namespace py = pybind11;
 
 namespace fscpy { namespace {
 
-void blobClasses(py::module_& m) {
+void bindBlobClasses(py::module_& m) {
 	using TR = capnp::Text::Reader;
 	using TB = capnp::Text::Builder;
 	using TP = capnp::Text::Pipeline;
@@ -62,14 +60,18 @@ void defSetItem(py::class_<T>& c) {
 	});
 }
 
-void listClasses(py::module_& m) {
+void bindListClasses(py::module_& m) {
 	using DLB = DynamicList::Builder;
 	using DLR = DynamicList::Reader;
 	
+	KJ_LOG(WARNING, "Binding list builder");
 	py::class_<DLB> cDLB(m, "DynamicListBuilder");
+	KJ_LOG(WARNING, "Binding setitem");
 	defGetItem(cDLB);
+	KJ_LOG(WARNING, "Binding getitem");
 	defSetItem(cDLB);
 	
+	KJ_LOG(WARNING, "Binding list reader");
 	py::class_<DLR> cDLR(m, "DynamicListReader");
 	defGetItem(cDLR);
 }
@@ -84,7 +86,7 @@ void defHas(py::class_<T>& c) {
 	c.def("has", [](T& ds, kj::StringPtr name) { return ds.has(name); });
 }
 
-void structClasses(py::module_& m) {
+void bindStructClasses(py::module_& m) {
 	using DSB = DynamicStruct::Builder;
 	using DSR = DynamicStruct::Reader;
 	using DSP = DynamicStruct::Pipeline;
@@ -104,14 +106,35 @@ void structClasses(py::module_& m) {
 	defGet(cDSP);
 }
 
+void bindFieldDescriptors(py::module_& m) {
+	py::class_<capnp::StructSchema::Field>(m, "Field")
+		.def("__get__", [](capnp::StructSchema::Field& field, DynamicStruct::Pipeline& self, py::object type) { return self.get(field); },
+			py::arg("obj"), py::arg("type") = py::none()
+		)
+		.def("__get__", [](capnp::StructSchema::Field& field, DynamicStruct::Reader& self, py::object type) { return self.get(field); },
+			py::arg("obj"), py::arg("type") = py::none()
+		)
+		.def("__get__", [](capnp::StructSchema::Field& field, DynamicStruct::Builder& self, py::object type) { return self.get(field); },
+			py::arg("obj"), py::arg("type") = py::none()
+		)
+		.def("__set__", [](capnp::StructSchema::Field& field, DynamicStruct::Builder& self, DynamicValue::Reader value) { self.set(field, value); })
+		.def("__delete__", [](capnp::StructSchema::Field& field, DynamicStruct::Builder& self) { self.clear(field); })
+	;
+}
+
 }}
 
 namespace fscpy {
 
-void defCapnpClasses(py::module_ m) {
-	listClasses(m);
-	blobClasses(m);
-	structClasses(m);
+void bindCapnpClasses(py::module_& m) {
+	KJ_LOG(WARNING, "Binding list classes");
+	bindListClasses(m);
+	KJ_LOG(WARNING, "Binding blob classes");
+	bindBlobClasses(m);
+	KJ_LOG(WARNING, "Binding struct classes");
+	bindStructClasses(m);
+	KJ_LOG(WARNING, "Binding field classes");
+	bindFieldDescriptors(m);
 }
 
 }

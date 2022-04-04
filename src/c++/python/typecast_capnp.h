@@ -23,7 +23,11 @@ namespace pybind11 { namespace detail {
 		using DynamicCapability = capnp::DynamicCapability;
 		using AnyPointer = capnp::AnyPointer;
 		
-		PYBIND11_TYPE_CASTER(DynamicValue::Builder, const_name("{Dynamic builder or primitive value}"));
+		PYBIND11_TYPE_CASTER(DynamicValue::Builder, const_name("DynamicValue.Builder"));
+		
+		// We need this so libstdc++ can declare tuples involving this class
+		type_caster() = default;
+		type_caster(const type_caster<capnp::DynamicValue::Builder>& other) { KJ_UNIMPLEMENTED(); };
 		
 		bool load(handle src, bool convert) {			
 			#define FSCPY_TRY_CAST(Type) \
@@ -45,7 +49,7 @@ namespace pybind11 { namespace detail {
 			auto baseLoadResult = base.load(src, convert);
 			
 			if(baseLoadResult) {
-				value = (DynamicValue::Builder) base;
+				value = (DynamicValue::Builder&) base;
 				return true;
 			}
 			
@@ -56,8 +60,8 @@ namespace pybind11 { namespace detail {
 			switch(src.getType()) {
 				case DynamicValue::VOID: return none();
 				case DynamicValue::BOOL: return py::cast(src.as<bool>());
-				case DynamicValue::INT: return py::cast(src.as<signed long long>());
-				case DynamicValue::UINT: return py::cast(src.as<unsigned long long>());
+				case DynamicValue::INT: return py::cast(src.as<int64_t>());
+				case DynamicValue::UINT: return py::cast(src.as<uint64_t>());
 				case DynamicValue::FLOAT: return py::cast(src.as<double>());
 				case DynamicValue::TEXT: return py::cast(src.as<capnp::Text>());
 				case DynamicValue::DATA: return py::cast(src.as<capnp::Data>());
@@ -65,9 +69,10 @@ namespace pybind11 { namespace detail {
 				case DynamicValue::ENUM: return py::cast(src.as<capnp::DynamicEnum>());
 				case DynamicValue::CAPABILITY: return py::cast(src.as<capnp::DynamicCapability>());
 				case DynamicValue::ANY_POINTER: return py::cast(src.as<capnp::AnyPointer>());
+				default: {}
 			}
 			
-			KJ_REQUIRE(src.getType() == DynamicValue::STRUCT);
+			KJ_REQUIRE(src.getType() == DynamicValue::STRUCT, "Unknown input type");
 			
 			DynamicStruct::Builder dynamicStruct = src.as<DynamicStruct>();
 			auto typeId = dynamicStruct.getSchema().getProto().getId();
@@ -100,7 +105,11 @@ namespace pybind11 { namespace detail {
 		using DynamicCapability = capnp::DynamicCapability;
 		using AnyPointer = capnp::AnyPointer;
 		
-		PYBIND11_TYPE_CASTER(DynamicValue::Reader, const_name("{Dynamic reader, builder or primitive value}"));
+		PYBIND11_TYPE_CASTER(DynamicValue::Reader, const_name("DynamicValue.Reader"));
+		
+		// We need this so libstdc++ can declare tuples involving this class
+		type_caster() = default;
+		type_caster(const type_caster<capnp::DynamicValue::Reader>& other) { KJ_UNIMPLEMENTED(); };
 		
 		// If we get a string, we need to store it temporarily
 		type_caster<char> strCaster;		
@@ -108,12 +117,12 @@ namespace pybind11 { namespace detail {
 		bool load(handle src, bool convert) {
 			object pyType = eval("type")(src);
 			
-			if(pyType == eval("real")) {
+			if(pyType.equal(eval("real"))) {
 				value = src.cast<double>();
 				return true;
 			}
 			
-			if(pyType == eval("int")) {
+			if(pyType.equal(eval("int"))) {
 				if(src >= eval("0")) {
 					value = src.cast<unsigned long long>();
 				} else {
@@ -122,7 +131,7 @@ namespace pybind11 { namespace detail {
 				return true;
 			}
 			
-			if(pyType == eval("str")) {
+			if(pyType.equal(eval("str"))) {
 				strCaster.load(src, false);
 				value = capnp::Text::Reader((char*) strCaster);
 				return true;
@@ -152,7 +161,7 @@ namespace pybind11 { namespace detail {
 			auto baseLoadResult = base.load(src, convert);
 			
 			if(baseLoadResult) {
-				value = (DynamicValue::Reader) base;
+				value = (DynamicValue::Reader&) base;
 				return true;
 			}
 			
@@ -164,8 +173,8 @@ namespace pybind11 { namespace detail {
 			switch(src.getType()) {
 				case DynamicValue::VOID: return none();
 				case DynamicValue::BOOL: return py::cast(src.as<bool>());
-				case DynamicValue::INT: return py::cast(src.as<signed long long>());
-				case DynamicValue::UINT: return py::cast(src.as<unsigned long long>());
+				case DynamicValue::INT: return py::cast(src.as<int64_t>());
+				case DynamicValue::UINT: return py::cast(src.as<uint64_t>());
 				case DynamicValue::FLOAT: return py::cast(src.as<double>());
 				case DynamicValue::TEXT: return py::cast(src.as<capnp::Text>());
 				case DynamicValue::DATA: return py::cast(src.as<capnp::Data>());
@@ -174,9 +183,10 @@ namespace pybind11 { namespace detail {
 				// case DynamicValue::STRUCT: return py::cast(src.as<capnp::DynamicStruct>());
 				case DynamicValue::ANY_POINTER: return py::cast(src.as<capnp::AnyPointer>());
 				case DynamicValue::CAPABILITY: return py::cast(src.as<capnp::DynamicCapability>());
+				default: {}
 			}
 			
-			KJ_REQUIRE(src.getType() == DynamicValue::STRUCT);
+			KJ_REQUIRE(src.getType() == DynamicValue::STRUCT, "Unknown input type");
 			
 			DynamicStruct::Reader dynamicStruct = src.as<DynamicStruct>();
 			auto typeId = dynamicStruct.getSchema().getProto().getId();
@@ -209,7 +219,11 @@ namespace pybind11 { namespace detail {
 		using DynamicCapability = capnp::DynamicCapability;
 		using AnyPointer = capnp::AnyPointer;
 		
-		PYBIND11_TYPE_CASTER(DynamicValue::Pipeline, const_name("{Dynamic pipeline}"));
+		PYBIND11_TYPE_CASTER(DynamicValue::Pipeline, const_name("DynamicValue.Pipeline"));
+		
+		// We need this so libstdc++ can declare tuples involving this class
+		type_caster() = default;
+		type_caster(const type_caster<capnp::DynamicValue::Pipeline>& other) { KJ_UNIMPLEMENTED(); };
 		
 		bool load(handle src, bool convert) {
 			return false;
@@ -219,6 +233,7 @@ namespace pybind11 { namespace detail {
 			switch(src.getType()) {
 				case DynamicValue::CAPABILITY: return py::cast(src.releaseAs<capnp::DynamicCapability>());
 				// case DynamicValue::ANY_POINTER: return py::cast(src.releaseAs<capnp::AnyPointer>());
+				default: {}
 			}
 			
 			KJ_REQUIRE(src.getType() == DynamicValue::STRUCT);
@@ -250,6 +265,10 @@ namespace pybind11 { namespace detail {
 		using DynamicCapability = capnp::DynamicCapability;
 		
 		PYBIND11_TYPE_CASTER(capnp::DynamicCapability::Client, const_name("DynamicCapability.Client"));
+		
+		// We need this so libstdc++ can declare tuples involving this class
+		type_caster() = default;
+		type_caster(const type_caster<capnp::DynamicCapability::Client>& other) { KJ_UNIMPLEMENTED(); };
 		
 		bool load(handle src, bool convert) {
 			type_caster_base<DynamicCapability::Client> base;

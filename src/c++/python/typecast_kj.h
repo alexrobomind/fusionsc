@@ -54,20 +54,21 @@ struct type_caster<kj::StringPtr> {
 };
 
 template<typename T>
+struct NameForArray { static constexpr auto name = const_name("Mutable array of ") + const_name<T>(); };
+
+template<typename T>
+struct NameForArray<const T> { static constexpr auto name = const_name("Array of ") + const_name<T>(); };
+
+template<>
+struct NameForArray<unsigned char> { static inline constexpr auto name = const_name("Mutable Bytes"); };
+
+template<>
+struct NameForArray<const unsigned char> { static inline constexpr auto name = const_name("Bytes"); };
+
+template<typename T>
 struct type_caster<kj::ArrayPtr<T>> {
-	template<typename T>
-	struct NameFor_ { static constexpr auto name = const_name("Mutable array of ") + const_name<T>(); };
-
-	template<typename T>
-	struct NameFor_<const T> { static constexpr auto name = const_name("Array of ") + const_name<T>(); };
-
-	template<>
-	struct NameFor_<unsigned char> { static inline constexpr auto name = const_name("Mutable Bytes"); };
-
-	template<>
-	struct NameFor_<const unsigned char> { static constexpr auto name = const_name("Bytes"); };
 	
-	PYBIND11_TYPE_CASTER(kj::ArrayPtr<T>, NameFor_<T>::name);
+	PYBIND11_TYPE_CASTER(kj::ArrayPtr<T>, NameForArray<T>::name);
 	
 	bool load(handle src, bool convert) {
 		try {

@@ -3,8 +3,9 @@ if(FSC_WITH_PYTHON)
 		fscpy
 		
 		capnp.cpp
-		dynamic_value.cpp
+		kj.cpp
 		fscpy.cpp
+		load_schema.cpp
 	)
 
 	target_link_libraries(
