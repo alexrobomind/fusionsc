@@ -405,7 +405,7 @@ Promise<Archive::Entry::Builder> internal::LocalDataServiceImpl::createArchiveEn
 						
 						auto heapBuffer = kj::heapArray<kj::byte>(bufSize);
 						
-						memset(heapBuffer.begin(), heapBuffer.size(), 0);
+						memset(heapBuffer.begin(), 0, heapBuffer.size());
 						memcpy(heapBuffer.begin(), inputData.begin(), inputData.size());
 						
 						inputData = kj::ArrayPtr<const kj::byte>(heapBuffer.begin(), inputData.size());
