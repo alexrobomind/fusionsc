@@ -51,6 +51,9 @@ namespace fscpy {
 		defArray<kj::byte>("ByteArray", m);
 		defArray<const kj::byte>("ConstByteArray", m);
 		
-		py::class_<kj::StringPtr>(m, "StringPtr");
+		py::class_<kj::StringPtr>(m, "StringPtr")
+			.def("__str__", [](kj::StringPtr ptr) { return ptr.cStr(); })
+			.def("__repr__", [](kj::StringPtr ptr) { return ptr.cStr(); })
+		;
 	}
 }

@@ -27,7 +27,8 @@ namespace pybind11 { namespace detail {
 		
 		// We need this so libstdc++ can declare tuples involving this class
 		type_caster() = default;
-		type_caster(const type_caster<capnp::DynamicValue::Builder>& other) { KJ_UNIMPLEMENTED(); };
+		type_caster(const type_caster<capnp::DynamicValue::Builder>& other) = delete;
+		type_caster(type_caster<capnp::DynamicValue::Builder>&& other) = default;
 		
 		bool load(handle src, bool convert) {			
 			#define FSCPY_TRY_CAST(Type) \
@@ -109,7 +110,8 @@ namespace pybind11 { namespace detail {
 		
 		// We need this so libstdc++ can declare tuples involving this class
 		type_caster() = default;
-		type_caster(const type_caster<capnp::DynamicValue::Reader>& other) { KJ_UNIMPLEMENTED(); };
+		type_caster(const type_caster<capnp::DynamicValue::Reader>& other) = delete;
+		type_caster(type_caster<capnp::DynamicValue::Reader>&& other) = default;
 		
 		// If we get a string, we need to store it temporarily
 		type_caster<char> strCaster;		
@@ -223,7 +225,8 @@ namespace pybind11 { namespace detail {
 		
 		// We need this so libstdc++ can declare tuples involving this class
 		type_caster() = default;
-		type_caster(const type_caster<capnp::DynamicValue::Pipeline>& other) { KJ_UNIMPLEMENTED(); };
+		type_caster(const type_caster<capnp::DynamicValue::Pipeline>& other) = delete;
+		type_caster(type_caster<capnp::DynamicValue::Pipeline>&& other) = default;
 		
 		bool load(handle src, bool convert) {
 			return false;
@@ -268,7 +271,8 @@ namespace pybind11 { namespace detail {
 		
 		// We need this so libstdc++ can declare tuples involving this class
 		type_caster() = default;
-		type_caster(const type_caster<capnp::DynamicCapability::Client>& other) { KJ_UNIMPLEMENTED(); };
+		type_caster(const type_caster<capnp::DynamicCapability::Client>& other) = delete;
+		type_caster(type_caster<capnp::DynamicCapability::Client>&& other) = default;
 		
 		bool load(handle src, bool convert) {
 			type_caster_base<DynamicCapability::Client> base;

@@ -24,9 +24,25 @@ enum class FSCPyClassType {
 	BUILDER, READER, PIPELINE
 };
 
-py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchema schema) {
+kj::String qualName(py::object scope, kj::StringPtr name) {
+	if(py::hasattr(scope, "__qualname__"))
+		return kj::str(scope.attr("__qualname__").cast<kj::String>(), ".", name);
+	else
+		return kj::heapString(name);
+}
+
+py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchema schema, py::object scope) {
 	KJ_LOG(WARNING, "Interpreting struct schema");
-	py::object output = (*baseMetaType)(schema.getUnqualifiedName().cStr(), py::make_tuple(), py::dict());
+	
+	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
+	
+	py::dict attrs;
+	attrs["__qualname__"] = qualName(scope, schema.getUnqualifiedName());
+	attrs["__module__"] = moduleName;
+	py::print(attrs);
+	py::object output = (*baseMetaType)(schema.getUnqualifiedName(), py::make_tuple(), attrs);
+	
+	py::print(output.attr("__qualname__"));
 	
 	for(int i = 0; i < 3; ++i) {
 		FSCPyClassType classType = (FSCPyClassType) i;
@@ -76,6 +92,11 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 			case FSCPyClassType::READER :  suffix = kj::str("Reader");   break;
 			case FSCPyClassType::PIPELINE: suffix = kj::str("Pipeline"); break; 
 		}
+		
+		KJ_LOG(WARNING, qualName(output, suffix));
+		attributes["__qualname__"] = qualName(output, suffix);
+		attributes["__module__"] = moduleName;
+		py::print(attributes);
 			
 		py::object newCls = metaClass(kj::str(schema.getUnqualifiedName(), ".", suffix).cStr(), py::make_tuple(baseClass), attributes);
 		output.attr(suffix.cStr()) = newCls;
@@ -91,7 +112,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 			case Field::GROUP: {
 				KJ_LOG(WARNING, "Building group", name);
 				capnp::StructSchema subType = field.getType().asStruct();
-				output.attr(name.cStr()) = interpretStructSchema(loader, subType);
+				output.attr(name.cStr()) = interpretStructSchema(loader, subType, output);
 				break;
 			}
 			
@@ -163,7 +184,8 @@ kj::StringTree typeName(capnp::Type type) {
 	}
 }
 
-py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::InterfaceSchema schema) {	
+py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::InterfaceSchema schema, py::object scope) {	
+	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
 	auto methods = schema.getMethods();
 	
 	auto collections = py::module_::import("Collections");
@@ -270,21 +292,33 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		attributes[name.cStr()] = pyFunction;
 	}
 	
+	py::module_ module_ = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope;
+	
 	// We need dynamic resolution to get our base capability client
 	// Static resolution fails as we have overridden the type caster
 	py::object baseObject = py::cast(DynamicCapability::Client());
 	py::object baseClass = py::type::of(baseObject);
 	
+	auto outerName = qualName(scope, schema.getUnqualifiedName());
+	attributes["__qualname__"] = outerName;
+	attributes["__module__"] = moduleName;
+	
 	py::type metaClass = py::type::of(baseClass);	
 	py::object newCls = metaClass(schema.getUnqualifiedName(), py::tuple(baseClass), attributes);
 	
-	py::object output = (*baseMetaType)(schema.getUnqualifiedName().cStr(), py::make_tuple(), py::dict());
+	auto innerName = qualName(newCls, "Client");
+	
+	py::dict clientAttrs;
+	clientAttrs["__qualname__"] = innerName;
+	clientAttrs["__module__"] = moduleName;
+	
+	py::object output = (*baseMetaType)(schema.getUnqualifiedName().cStr(), py::make_tuple(), clientAttrs);
 	output.attr("Client") = newCls;
 	
 	return output;
 }
 
-py::object interpretSchema(capnp::SchemaLoader& loader, uint64_t id) {	
+py::object interpretSchema(capnp::SchemaLoader& loader, uint64_t id, py::object scope) {	
 	if(globalClasses->contains(id))
 		return (*globalClasses)[py::cast(id)];
 	
@@ -293,30 +327,36 @@ py::object interpretSchema(capnp::SchemaLoader& loader, uint64_t id) {
 		return py::none();
 	}
 	
+	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
+	
 	Schema schema = loader.get(id);
 	
 	py::object output = py::none();
 	
 	switch(schema.getProto().which()) {
 		case capnp::schema::Node::STRUCT:
-			output = interpretStructSchema(loader, schema.asStruct());
+			output = interpretStructSchema(loader, schema.asStruct(), scope);
 			break;
 		case capnp::schema::Node::INTERFACE:
-			output = interpretInterfaceSchema(loader, schema.asInterface());
+			output = interpretInterfaceSchema(loader, schema.asInterface(), scope);
 			break;
 		
 		default:
-			output = (*baseMetaType)(schema.getUnqualifiedName().cStr(), py::make_tuple(), py::dict());
+			py::dict attrs;
+			attrs["__qualname__"] = qualName(scope, schema.getUnqualifiedName()).asPtr();
+			attrs["__module__"] = moduleName;
+			
+			output = (*baseMetaType)(schema.getUnqualifiedName().cStr(), py::make_tuple(), attrs);
 			break;
 	}	
 	
 	// Interpret child objects
 	for(auto nestedNode : schema.getProto().getNestedNodes()) {
-		py::object subObject = interpretSchema(loader, nestedNode.getId());
+		py::object subObject = interpretSchema(loader, nestedNode.getId(), output);
 		
 		if(subObject.is_none())
 			continue;
-		
+			
 		output.attr(nestedNode.getName().cStr()) = subObject;
 	}
 	
@@ -336,7 +376,7 @@ void loadDefaultSchema(py::module_& m) {
 	
 	defaultLoader.loadCompiledTypeAndDependencies<capnp::schema::Node>();
 	
-	auto m2 = m.def_submodule("gen");
+	auto m2 = m.def_submodule("api");
 	m2.attr("__all__") = py::list();
 	
 	py::list m2all = m2.attr("__all__");
@@ -349,7 +389,7 @@ void loadDefaultSchema(py::module_& m) {
 			auto name = schema.getUnqualifiedName();
 			KJ_LOG(WARNING, "Interpreting root node", name);
 			
-			auto obj = interpretSchema(defaultLoader, schema.getProto().getId());
+			auto obj = interpretSchema(defaultLoader, schema.getProto().getId(), m2);
 			
 			if(obj.is_none())
 				continue;

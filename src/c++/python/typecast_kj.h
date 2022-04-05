@@ -15,6 +15,7 @@ namespace pybind11 { namespace detail {
 	
 template<>
 struct type_caster<kj::StringPtr> {
+	
 	PYBIND11_TYPE_CASTER(kj::StringPtr, const_name("str"));
 	
 	type_caster<char> strCaster;	
@@ -26,16 +27,12 @@ struct type_caster<kj::StringPtr> {
 			if(strCaster.load(src, convert)) {
 				auto asCharPtr = (char*) strCaster;
 				auto len = strlen(asCharPtr);
+				
 				value = kj::StringPtr(asCharPtr, len);
 				return true;
 			}
 		}
-		
-		if(isInstance(src, type::of<kj::String>())) {
-			value = src.cast<kj::String&>().asPtr();
-			return true;
-		}
-		
+				
 		type_caster_base<kj::StringPtr> base;
 		if(base.load(src, convert)) {
 			value = (kj::StringPtr) base;
@@ -46,10 +43,52 @@ struct type_caster<kj::StringPtr> {
 	}
 	
 	static handle cast(kj::StringPtr src, return_value_policy policy, handle parent) {
-		/*kj::String result = kj::heapString(src);
-		return py::cast(kj::mv(result));*/
-		const char* pStr = src.begin();
-		return py::cast(pStr);
+		const char* pStr = src.cStr();		
+		return type_caster<char>::cast(pStr, policy, parent);
+	}
+};
+	
+template<>
+struct type_caster<kj::String> {
+	
+	PYBIND11_TYPE_CASTER(kj::String, const_name("str"));
+	
+	type_caster() = default;
+	type_caster(const type_caster<kj::String>& other) = delete;
+	type_caster(type_caster<kj::String>&& other) = default;
+	
+	bool load(handle src, bool convert) {			
+		object isInstance = eval("isinstance");
+		
+		if(isInstance(src, eval("str"))) {
+			type_caster<char> strCaster;	
+			
+			if(strCaster.load(src, convert)) {
+				auto asCharPtr = (char*) strCaster;
+				auto len = strlen(asCharPtr);
+				value = kj::heapString(kj::StringPtr(asCharPtr, len));
+				return true;
+			}
+		}
+		
+		type_caster_base<kj::StringPtr> ptrCaster;
+		if(ptrCaster.load(src, convert)) {
+			value = kj::heapString((kj::StringPtr) ptrCaster);
+			return true;
+		}
+		
+		type_caster_base<kj::String> base;
+		if(base.load(src, convert)) {
+			value = kj::heapString((kj::String&) base);
+			return true;
+		}
+		
+		return false;
+	}
+	
+	static handle cast(const kj::String& src, return_value_policy policy, handle parent) {
+		const char* pStr = src.cStr();		
+		return type_caster<char>::cast(pStr, policy, parent);
 	}
 };
 
@@ -96,7 +135,7 @@ struct type_caster<kj::ArrayPtr<T>> {
 	
 	static handle cast(kj::ArrayPtr<T> src, return_value_policy policy, handle parent) {
 		kj::Array<T> result = kj::heapArray(src);
-		return py::cast(kj::mv(result));
+		return type_caster<kj::Array<T>>::cast(kj::mv(result), policy, parent);
 	}
 };
 
