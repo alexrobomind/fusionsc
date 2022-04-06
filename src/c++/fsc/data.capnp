@@ -11,12 +11,16 @@ interface DataRef (T) {
 		dataSize @3 : UInt64;
 	}
 	
-	metadata @0 () -> (
-		metadata : Metadata
-	);
+	interface Receiver {
+		begin @0 (numBytes : UInt64) -> ();
+		receive @1 (data : Data) -> stream;
+		done @2 () -> ();
+	}
 	
+	metadata @0 () -> (metadata : Metadata);
 	rawBytes @1 (start : UInt64, end : UInt64) -> (data : Data);
 	capTable @2 () -> (table : List(Capability));
+	transmit @3 (start : UInt64, end : UInt64, receiver : Receiver);
 }
 
 interface DataService @0xc6d48902ddb7e122 {

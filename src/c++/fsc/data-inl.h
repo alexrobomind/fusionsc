@@ -77,6 +77,7 @@ public:
 	Promise<void> metadata(MetadataContext) override ;
 	Promise<void> rawBytes(RawBytesContext) override ;
 	Promise<void> capTable(CapTableContext) override ;
+	Promise<void> transmit(TransmitContext) override ;
 	
 	// Reference to the local data store entry holding our data
 	Own<const LocalDataStore::Entry> entryRef;

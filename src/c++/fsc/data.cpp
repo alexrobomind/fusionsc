@@ -114,6 +114,72 @@ Promise<void> internal::LocalDataRefImpl::capTable(CapTableContext context) {
 	return kj::READY_NOW;
 }
 
+namespace {
+	struct TransmissionProcess {
+		constexpr static inline size_t CHUNK_SIZE = 1024 * 1024;
+		
+		DataRef<capnp::AnyPointer>::Receiver::Client receiver;
+		size_t end;
+		
+		Array<const byte> data;
+		
+		TransmissionProcess() :
+			receiver(nullptr)
+		{}
+		
+		Promise<void> run(size_t start) {
+			KJ_REQUIRE(end >= start);
+			
+			auto request = receiver.beginRequest();
+			request.setNumBytes(end - start);
+			return request.send().ignoreResult().then([this, start]() { return transmit(start); });
+		}
+		
+		Promise<void> transmit(size_t start) {
+			size_t chunkEnd = start + CHUNK_SIZE;
+			
+			if(chunkEnd > end)
+				chunkEnd = end;
+			
+			// Check if we are done transmitting
+			if(chunkEnd == start)
+				return receiver.doneRequest().send().ignoreResult();
+			
+			auto slice = data.slice(start, end);
+			
+			// Do a transmission
+			auto request = receiver.receiveRequest();
+			
+			if(slice.size() % 8 == 0) {
+				// Note: This is safe because we keep this object alive until the transmission
+				// succeeds or fails
+				auto orphanage = capnp::Orphanage::getForMessageContaining((DataRef<capnp::AnyPointer>::Receiver::ReceiveParams::Builder) request);
+				auto externalData = orphanage.referenceExternalData(slice);
+				request.adoptData(mv(externalData));
+			} else {
+				request.setData(slice);
+			}
+			
+			return request.send().then([this, chunkEnd]() { return transmit(chunkEnd); });
+		}
+	};
+}
+
+Promise<void> internal::LocalDataRefImpl::transmit(TransmitContext context) {
+	auto params = context.getParams();
+	
+	auto process = kj::heap<TransmissionProcess>();
+	
+	// Prepare a pointer to the data that will also keep the data alive
+	process -> data = getDataRefAs<capnp::Data>(*this).attach(addRef());
+	process -> end = params.getEnd();
+	process -> receiver = params.getReceiver();
+	
+	auto result = process -> run(params.getStart());
+	
+	return result.attach(mv(process));
+}	
+
 capnp::FlatArrayMessageReader& internal::LocalDataRefImpl::ensureReader() {
 	KJ_IF_MAYBE(reader, maybeReader) {
 		return *reader;
@@ -207,6 +273,41 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(ArrayPtr
 	return LocalDataRef<capnp::AnyPointer>(backend->addRef(), this -> serverSet);
 }
 
+namespace {
+	struct TransmissionReceiver : public DataRef<capnp::AnyPointer>::Receiver::Server {
+		kj::ArrayPtr<kj::byte> target;
+		size_t offset;
+		
+		TransmissionReceiver(kj::ArrayPtr<kj::byte> target) :
+			target(target), offset(0)
+		{}
+		
+		Promise<void> begin(BeginContext context) override {
+			KJ_REQUIRE(offset == 0);
+			KJ_REQUIRE(context.getParams().getNumBytes() == target.size());
+			
+			return READY_NOW;
+		}
+		
+		Promise<void> receive(ReceiveContext context) override {
+			auto data = context.getParams().getData();
+			
+			KJ_REQUIRE(offset + data.size() <= target.size());
+			memcpy(target.begin() + offset, data.begin(), data.size());
+			
+			offset += data.size();
+			
+			return READY_NOW;
+		}
+		
+		Promise<void> done(DoneContext context) override {
+			KJ_REQUIRE(offset == target.size());
+			
+			return READY_NOW;
+		}
+	};
+}
+
 Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownload(DataRef<capnp::AnyPointer>::Client src, bool recursive) {
 	using RemoteRef = DataRef<capnp::AnyPointer>;
 	using capnp::Response;
@@ -279,7 +380,7 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownl
 		auto dataSize = metadata.getDataSize();
 		auto buffer = kj::heapArray<kj::byte>(dataSize);
 		
-		constexpr size_t CHUNK_SIZE = 1024 * 1024;
+		/*constexpr size_t CHUNK_SIZE = 1024 * 1024;
 		for(size_t start = 0; start < dataSize; start += CHUNK_SIZE) {
 			size_t end = start + CHUNK_SIZE;
 			if(end > dataSize)
@@ -299,7 +400,15 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownl
 			processPromises.add(mv(processPromise));
 		}
 		
-		return kj::joinPromises(processPromises.releaseAsArray())
+		return kj::joinPromises(processPromises.releaseAsArray())*/
+		DataRef<capnp::AnyPointer>::Receiver::Client receiver = kj::heap<TransmissionReceiver>(buffer);
+		
+		auto transmitRequest = src.transmitRequest();
+		transmitRequest.setStart(0);
+		transmitRequest.setEnd(dataSize);
+		transmitRequest.setReceiver(receiver);
+		
+		return transmitRequest.send().ignoreResult()		
 		.then([backend = mv(backend), buffer = mv(buffer), this]() mutable {
 			// Copy the data into a heap buffer
 			auto metadata = backend->_metadata.getRoot<RemoteRef::Metadata>();
