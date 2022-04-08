@@ -83,6 +83,12 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 			case FSCPyClassType::PIPELINE: baseClass = py::type::of<DynamicStruct::Pipeline>(); break; 
 		}
 		
+		attributes["__init__"] = py::cpp_function(
+			[baseClass](py::object self, py::args args, py::kwargs kwargs) {
+				baseClass.attr("__init__")(self, *args, **kwargs);
+			}
+		);
+		
 		py::type metaClass = py::type::of(baseClass);
 		
 		kj::String suffix;

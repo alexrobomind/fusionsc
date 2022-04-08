@@ -86,6 +86,24 @@ void defHas(py::class_<T>& c) {
 	c.def("has", [](T& ds, kj::StringPtr name) { return ds.has(name); });
 }
 
+template<typename T>
+void defWhich(py::class_<T>& c) {
+	c.def("which", [](T& ds) {
+		auto maybeField = ds.which();
+		
+		KJ_IF_MAYBE(pField, maybeFiels) {
+			return pField->getProto().getName();
+		}
+		
+		return py::none();
+	}
+}
+
+template<typename T>
+void defInit(py::class_<T>& c) {
+	c.def(py::init([](T&& other) { return kj::mv(other); }))
+}
+
 void bindStructClasses(py::module_& m) {
 	using DSB = DynamicStruct::Builder;
 	using DSR = DynamicStruct::Reader;
@@ -94,6 +112,7 @@ void bindStructClasses(py::module_& m) {
 	py::class_<DSB> cDSB(m, "DynamicStructBuilder");
 	defGet(cDSB);
 	defHas(cDSB);
+	defWhich(cDSB);
 	
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Reader& val) { dsb.set(name, val); });
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Builder& val) { dsb.set(name, val.asReader()); });
@@ -101,6 +120,7 @@ void bindStructClasses(py::module_& m) {
 	py::class_<DSR> cDSR(m, "DynamicStructReader");
 	defGet(cDSR);
 	defHas(cDSR);
+	defWhich(cDSR);
 	
 	py::class_<DSP> cDSP(m, "DynamicStructPipeline");
 	defGet(cDSP);

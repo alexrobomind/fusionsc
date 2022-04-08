@@ -249,7 +249,7 @@ namespace pybind11 { namespace detail {
 				auto targetClass = (*globalClasses)[py::cast(typeId)].attr("Pipeline");
 				
 				// Construct instance of registered class by calling the class
-				// The target class inherits from DynamicStruct::Reader, which has a
+				// The target class inherits from DynamicStruct::Pipeline, which has a
 				// copy initializer. The target object will be forwarded to it
 				auto result = targetClass(dynamicStruct);
 				return result;
@@ -262,6 +262,45 @@ namespace pybind11 { namespace detail {
 			return type_caster_base<DynamicStruct::Pipeline>::cast(dynamicStruct, policy, parent);
 		}
 	};
+	
+	/*template<>
+	struct type_caster<capnp::RemotePromise<capnp::DynamicStruct>> {
+		using DynamicValue = capnp::DynamicValue;
+		using DynamicList = capnp::DynamicList;
+		using DynamicStruct = capnp::DynamicStruct;
+		using DynamicEnum = capnp::DynamicEnum;
+		using DynamicCapability = capnp::DynamicCapability;
+		using AnyPointer = capnp::AnyPointer;
+		
+		template<typename T>
+		using RemotePromise = capnp::RemotePromise<T>;
+		
+		template<typename T>
+		using Promise = kj::Promise<T>;
+		
+		PYBIND11_TYPE_CASTER(capnp::RemotePromise<capnp::DynamicStruct>, const_name("DynamicStruct.Remote"));
+		
+		type_caster() = default;
+		type_caster(const type_caster<capnp::RemotePromise<capnp::DynamicStruct>>& other) = delete;
+		type_caster(type_caster<capnp::RemotePromise<capnp::DynamicStruct>>&& other) = default;
+		
+		bool load(handle src, bool convert) {
+			return false;
+		}
+		
+		static handle cast(RemotePromise<DynamicStruct> src, return_value_policy policy, handle parent) {
+			Promise<DynamicStruct> promisePart(kj::mv(in));
+			DynamicStruct::Pipeline pipelinePart(kj::mv(in));
+			
+			
+		}
+		
+		template<typename T>
+		RemotePromise<T> castPromise(RemotePromise<DynamicStruct> in) {
+			
+			
+		}
+	};*/
 	
 	template<>
 	struct type_caster<capnp::DynamicCapability::Client> {
