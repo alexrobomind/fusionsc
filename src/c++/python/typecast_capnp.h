@@ -78,6 +78,8 @@ namespace pybind11 { namespace detail {
 			DynamicStruct::Builder dynamicStruct = src.as<DynamicStruct>();
 			auto typeId = dynamicStruct.getSchema().getProto().getId();
 			
+			KJ_LOG(WARNING, "Looked up type", typeId);
+			
 			if(globalClasses->contains(py::cast(typeId))) {
 				// Retrieve target class to use
 				auto targetClass = (*globalClasses)[py::cast(typeId)].attr("Builder");
@@ -85,8 +87,8 @@ namespace pybind11 { namespace detail {
 				// Construct instance of registered class by calling the class
 				// The target class inherits from DynamicStruct::Reader, which has a
 				// copy initializer. The target object will be forwarded to it
-				auto result = targetClass(dynamicStruct);
-				return result;
+				object result = targetClass(dynamicStruct);
+				return result.inc_ref();
 			}
 			
 			KJ_FAIL_REQUIRE("Unknown class type");
@@ -200,8 +202,8 @@ namespace pybind11 { namespace detail {
 				// Construct instance of registered class by calling the class
 				// The target class inherits from DynamicStruct::Reader, which has a
 				// copy initializer. The target object will be forwarded to it
-				auto result = targetClass(dynamicStruct);
-				return result;
+				object result = targetClass(dynamicStruct);
+				return result.inc_ref();
 			}
 			
 			KJ_FAIL_REQUIRE("Unknown class type");
@@ -251,8 +253,8 @@ namespace pybind11 { namespace detail {
 				// Construct instance of registered class by calling the class
 				// The target class inherits from DynamicStruct::Pipeline, which has a
 				// copy initializer. The target object will be forwarded to it
-				auto result = targetClass(dynamicStruct);
-				return result;
+				object result = targetClass(dynamicStruct, ::fscpy::INTERNAL_ACCESS_KEY);
+				return result.inc_ref();
 			}
 			
 			KJ_FAIL_REQUIRE("Unknown class type");
@@ -329,8 +331,8 @@ namespace pybind11 { namespace detail {
 			if(globalClasses->contains(typeId)) {
 				auto targetClass = (*globalClasses)[py::cast(typeId)].attr("Client");
 				
-				auto result = targetClass(src);
-				return result;
+				object result = targetClass(src);
+				return result.inc_ref();
 			}
 			
 			return type_caster_base<DynamicCapability::Client>::cast(src, policy, parent);

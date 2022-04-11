@@ -6,10 +6,12 @@
 #include <kj/mutex.h>
 
 #include <capnp/dynamic.h>
+#include <capnp/message.h>
 #include <capnp/blob.h>
 
 #include <fsc/local.h>
 #include <fsc/common.h>
+#include <fsc/data.h>
 
 #include "fscpy.h"
 
@@ -64,52 +66,46 @@ void bindListClasses(py::module_& m) {
 	using DLB = DynamicList::Builder;
 	using DLR = DynamicList::Reader;
 	
-	KJ_LOG(WARNING, "Binding list builder");
 	py::class_<DLB> cDLB(m, "DynamicListBuilder");
-	KJ_LOG(WARNING, "Binding setitem");
 	defGetItem(cDLB);
-	KJ_LOG(WARNING, "Binding getitem");
 	defSetItem(cDLB);
 	
-	KJ_LOG(WARNING, "Binding list reader");
 	py::class_<DLR> cDLR(m, "DynamicListReader");
 	defGetItem(cDLR);
 }
 
-template<typename T>
-void defGet(py::class_<T>& c) {
+template<typename T, typename... Extra>
+void defGet(py::class_<T, Extra...>& c) {
 	c.def("get", [](T& ds, kj::StringPtr name) { return ds.get(name); }, py::keep_alive<0, 1>());
 }
 
-template<typename T>
-void defHas(py::class_<T>& c) {
+template<typename T, typename... Extra>
+void defHas(py::class_<T, Extra...>& c) {
 	c.def("has", [](T& ds, kj::StringPtr name) { return ds.has(name); });
 }
 
-template<typename T>
-void defWhich(py::class_<T>& c) {
-	c.def("which", [](T& ds) {
+template<typename T, typename... Extra>
+void defWhich(py::class_<T, Extra...>& c) {
+	c.def("which", [](T& ds) -> py::object {
 		auto maybeField = ds.which();
 		
-		KJ_IF_MAYBE(pField, maybeFiels) {
-			return pField->getProto().getName();
+		KJ_IF_MAYBE(pField, maybeField) {
+			return py::cast(pField->getProto().getName());
 		}
 		
 		return py::none();
-	}
-}
-
-template<typename T>
-void defInit(py::class_<T>& c) {
-	c.def(py::init([](T&& other) { return kj::mv(other); }))
+	});
 }
 
 void bindStructClasses(py::module_& m) {
 	using DSB = DynamicStruct::Builder;
 	using DSR = DynamicStruct::Reader;
 	using DSP = DynamicStruct::Pipeline;
+	using DST = fsc::Temporary<DynamicStruct>;
 	
-	py::class_<DSB> cDSB(m, "DynamicStructBuilder");
+	py::class_<DSB> cDSB(m, "DynamicStructBuilder", py::dynamic_attr());
+	cDSB.def(py::init([](DynamicStruct::Builder b) { return b; }));
+	
 	defGet(cDSB);
 	defHas(cDSB);
 	defWhich(cDSB);
@@ -117,13 +113,24 @@ void bindStructClasses(py::module_& m) {
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Reader& val) { dsb.set(name, val); });
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Builder& val) { dsb.set(name, val.asReader()); });
 	
+	py::class_<DST, DSB> cDST(m, "DynamicMessage");
+	
 	py::class_<DSR> cDSR(m, "DynamicStructReader");
+	cDSR.def(py::init([](DynamicStruct::Reader r) { return r; }));
+	
 	defGet(cDSR);
 	defHas(cDSR);
 	defWhich(cDSR);
 	
 	py::class_<DSP> cDSP(m, "DynamicStructPipeline");
 	defGet(cDSP);
+	
+	// TODO: This is a little bit hacky, but currently the only way we can allow the construction of derived instances
+	cDSP.def(py::init([](DynamicStruct::Pipeline& p, kj::StringPtr key) {
+		KJ_REQUIRE((key == INTERNAL_ACCESS_KEY), "The pipeline constructor is reserved for internal use");
+
+		return kj::mv(p);
+	}));
 }
 
 void bindFieldDescriptors(py::module_& m) {
@@ -142,19 +149,21 @@ void bindFieldDescriptors(py::module_& m) {
 	;
 }
 
+void bindMessageBuilders(py::module_& m) {
+	py::class_<capnp::MessageBuilder>(m, "MessageBuilder");
+	py::class_<capnp::MallocMessageBuilder>(m, "MallocMessageBuilder");
+}
+
 }}
 
 namespace fscpy {
 
 void bindCapnpClasses(py::module_& m) {
-	KJ_LOG(WARNING, "Binding list classes");
 	bindListClasses(m);
-	KJ_LOG(WARNING, "Binding blob classes");
 	bindBlobClasses(m);
-	KJ_LOG(WARNING, "Binding struct classes");
 	bindStructClasses(m);
-	KJ_LOG(WARNING, "Binding field classes");
 	bindFieldDescriptors(m);
+	bindMessageBuilders(m);
 }
 
 }

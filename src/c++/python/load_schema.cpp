@@ -1,6 +1,7 @@
 #include "fscpy.h"
 
 #include <capnp/dynamic.h>
+#include <capnp/message.h>
 #include <capnp/schema.h>
 #include <capnp/schema-loader.h>
 
@@ -31,34 +32,26 @@ kj::String qualName(py::object scope, kj::StringPtr name) {
 		return kj::heapString(name);
 }
 
-py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchema schema, py::object scope) {
-	KJ_LOG(WARNING, "Interpreting struct schema");
-	
+py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchema schema, py::object scope) {	
 	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
 	
 	py::dict attrs;
 	attrs["__qualname__"] = qualName(scope, schema.getUnqualifiedName());
 	attrs["__module__"] = moduleName;
-	py::print(attrs);
-	py::object output = (*baseMetaType)(schema.getUnqualifiedName(), py::make_tuple(), attrs);
 	
-	py::print(output.attr("__qualname__"));
+	py::object output = (*baseMetaType)(schema.getUnqualifiedName(), py::make_tuple(), attrs);
 	
 	for(int i = 0; i < 3; ++i) {
 		FSCPyClassType classType = (FSCPyClassType) i;
-		KJ_LOG(WARNING, "Building subclass", i);
 		
 		py::dict attributes;
 		for(StructSchema::Field field : schema.getFields()) {
 			kj::StringPtr name = field.getProto().getName();
-			KJ_LOG(WARNING, "Processing field", name);
 			
 			using Field = capnp::schema::Field;
 			
 			switch(field.getProto().which()) {
-				case Field::SLOT: {
-					KJ_LOG(WARNING, "Is slot");
-					
+				case Field::SLOT: {					
 					auto slot = field.getProto().getSlot();
 					auto type = field.getType();
 					
@@ -83,32 +76,44 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 			case FSCPyClassType::PIPELINE: baseClass = py::type::of<DynamicStruct::Pipeline>(); break; 
 		}
 		
-		attributes["__init__"] = py::cpp_function(
+		attributes["__init__"] = fscpy::methodDescriptor(py::cpp_function(
 			[baseClass](py::object self, py::args args, py::kwargs kwargs) {
 				baseClass.attr("__init__")(self, *args, **kwargs);
 			}
-		);
+		));
 		
 		py::type metaClass = py::type::of(baseClass);
 		
 		kj::String suffix;
-		
 		switch(classType) {
 			case FSCPyClassType::BUILDER:  suffix = kj::str("Builder");  break;
 			case FSCPyClassType::READER :  suffix = kj::str("Reader");   break;
 			case FSCPyClassType::PIPELINE: suffix = kj::str("Pipeline"); break; 
 		}
 		
-		KJ_LOG(WARNING, qualName(output, suffix));
 		attributes["__qualname__"] = qualName(output, suffix);
 		attributes["__module__"] = moduleName;
-		py::print(attributes);
 			
 		py::object newCls = metaClass(kj::str(schema.getUnqualifiedName(), ".", suffix).cStr(), py::make_tuple(baseClass), attributes);
 		output.attr(suffix.cStr()) = newCls;
 	}
+		
+	output.attr("newMessage") = py::cpp_function(
+		[schema]() mutable {
+			auto msg = new capnp::MallocMessageBuilder();
+			
+			// We use DynamicValue instead of DynamicStruct to engage our type-dependent dispatch
+			capnp::DynamicValue::Builder builder = msg->initRoot<capnp::DynamicStruct>(schema);			
+			py::object result = py::cast(builder);
+			
+			result.attr("_msg") = py::cast(msg, py::return_value_policy::take_ownership);
+			
+			return result;
+		},
+		py::name("newMessage"),
+		py::scope(output)
+	);
 	
-	KJ_LOG(WARNING, "Building groups");
 	for(StructSchema::Field field : schema.getFields()) {
 		kj::StringPtr name = field.getProto().getName();
 		
@@ -116,7 +121,6 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		
 		switch(field.getProto().which()) {
 			case Field::GROUP: {
-				KJ_LOG(WARNING, "Building group", name);
 				capnp::StructSchema subType = field.getType().asStruct();
 				output.attr(name.cStr()) = interpretStructSchema(loader, subType, output);
 				break;
@@ -393,7 +397,6 @@ void loadDefaultSchema(py::module_& m) {
 		KJ_IF_MAYBE(dontCare, defaultLoader.tryGet(parentId)) {
 		} else {
 			auto name = schema.getUnqualifiedName();
-			KJ_LOG(WARNING, "Interpreting root node", name);
 			
 			auto obj = interpretSchema(defaultLoader, schema.getProto().getId(), m2);
 			
