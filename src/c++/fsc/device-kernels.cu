@@ -3,10 +3,7 @@
 
 namespace fsc {
 	namespace internal {
-
-		INSTANTIATE_KERNEL(biotSavartKernel, ToroidalGridStruct, FilamentRef, double, double, double, FieldRef);
-
-		template void addFields<Eigen::GpuDevice>(Eigen::GpuDevice&, FieldRef, FieldRef, double, Callback<>&&);
-
+		INSTANTIATE_KERNEL(kernels::biotSavartKernel, ToroidalGridStruct, FilamentRef, double, double, double, FieldRef);
+		INSTANTIATE_KERNEL(kernels::addFieldKernel, FieldRef, FieldRef, double);
 	}
 }

@@ -8,7 +8,7 @@
 #include <utility>
 #include <kj/function.h>
 
-namespace fsc { namespace internal {
+namespace fsc { namespace kernels {
 
 using Field = Eigen::Tensor<double, 4>;
 using FieldRef = Eigen::TensorMap<Field>;
@@ -16,20 +16,19 @@ using FieldRef = Eigen::TensorMap<Field>;
 using MFilament = Eigen::Tensor<double, 2>;
 using FilamentRef = Eigen::TensorMap<MFilament>;
 
-template<typename Device>
-void addFields(Device& device, FieldRef field1, FieldRef field2, double scale, kj::Function<void()>&& done) {
-	field1.device(device, mv(done)) = field1 + field2 * scale;
-	// potentiallySynchronize(device);
+/*template<typename Device>
+Promise<void> addFields(Device& device, FieldRef field1, FieldRef field2, double scale, Promise<void> prereq) {
+	return (onDevice(field1, device, prereq) = field1 + field2 * scale);
 }
 
 #ifdef FSC_WITH_CUDA
 #ifndef EIGEN_GPUCC
 
 // addFields for GPU device must be instantiated in CUDA compiler
-extern template void addFields<Eigen::GpuDevice>(Eigen::GpuDevice&, FieldRef, FieldRef, double, kj::Function<void()>&&);
+extern template Promise<void> addFields<Eigen::GpuDevice>(Eigen::GpuDevice&, FieldRef, FieldRef, double, kj::Function<void()>&&);
 
 #endif
-#endif
+#endif*/
 /*
 template<typename T1, typename T2>
 auto cross(T1 exp1, T2 exp2, unsigned int axis) {
@@ -126,7 +125,10 @@ inline void biotSavart(Device& device, Callback<> done, ToroidalGridStruct grid,
 	auto bsfield = cross(dxg, drg, 0) * mu0over4pi / dpow3;
 	out.device(device, done) += bsfield.sum(1);
 }*/
-	
+
+EIGEN_DEVICE_FUNC inline void addFieldKernel(const unsigned int idx, FieldRef out, FieldRef in, double scale) {
+	out.data(idx) += in.data(idx) * scale;
+}
 	
 EIGEN_DEVICE_FUNC inline void biotSavartKernel(const unsigned int idx, ToroidalGridStruct grid, FilamentRef filament, double current, double coilWidth, double stepSize, FieldRef out) {
 	int midx[3];
@@ -190,5 +192,8 @@ EIGEN_DEVICE_FUNC inline void biotSavartKernel(const unsigned int idx, ToroidalG
 	outData[3 * idx + 1] += current * fieldZ;
 	outData[3 * idx + 2] += current * fieldR;
 }
+
+REFERENCE_KERNEL(addFieldKernel, FieldRef, FieldRef, double);
+REFERENCE_KERNEL(biotSavartKernel, ToroidalGridStruct, FilamentRef, double, double, double, FieldRef);
 
 }}

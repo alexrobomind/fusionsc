@@ -6,8 +6,6 @@
 
 namespace fsc { namespace internal {
 	
-REFERENCE_KERNEL(biotSavartKernel, ToroidalGridStruct, FilamentRef, double, double, double, FieldRef);
-	
 template<typename Device>
 struct FieldCalculation {
 	Device& _device;
@@ -31,7 +29,7 @@ struct FieldCalculation {
 	
 	~FieldCalculation() {}
 	
-	Promise<void> add(double scale, Float64Tensor::Reader input) {
+	void add(double scale, Float64Tensor::Reader input) {
 		auto shape = input.getShape();
 		
 		KJ_REQUIRE(shape.size() == 4);
@@ -45,20 +43,14 @@ struct FieldCalculation {
 			newField.data()[i] = data[i];
 		}
 		
-		auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-		auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
-			fulfiller -> fulfill();
-		};
-		
-		// Map field onto GPU
-		auto mappedNewField = kj::heap(mapToDevice(newField, _device));
-		mappedNewField->updateDevice();
-		
-		addFields<Device>(_device, mappedField.get(), mappedNewField->get(), scale, mv(callback));
-		return paf.promise.attach(mv(mappedNewField));
+		calculation = FSC_LAUNCH_KERNEL(kernels::addFieldKernel,
+			mv(calculation),
+			_device, field.size(), costEstimate,
+			FSC_KARG(mappedField, NOCOPY), FSC_KARG(newField, IN), scale
+		);
 	}
 	
-	Promise<void> biotSavart(double current, Float64Tensor::Reader input, BiotSavartSettings::Reader settings) {
+	void biotSavart(double current, Float64Tensor::Reader input, BiotSavartSettings::Reader settings) {
 		auto shape = input.getShape();
 		
 		KJ_REQUIRE(shape.size() == 2);
@@ -81,35 +73,26 @@ struct FieldCalculation {
 		
 		KJ_REQUIRE(stepSize != 0, "Please specify a step size in the Biot-Savart settings");
 		
-		using i2 = Eigen::array<int, 2>;
-		using i1 = Eigen::array<int, 1>;
-				
-		// Map filament onto device
-		/*auto mappedFilament = kj::heap<MappedTensor<MFilament, Device>>(*filament, _device).attach(mv(filament));
-		mappedFilament->updateDevice();*/
-		
 		// Launch calculation
-		// Eigen::TensorOpCost costEstimate(mappedFilament->size() * sizeof(double) + field.size() * sizeof(double), field.size() * sizeof(double), 1000 * mappedFilament->size() * field.size() / 3);
-		Eigen::TensorOpCost costEstimate(0, 0, 0);
-		/*Promise<void> calculation = KernelLauncher<Device>
-			::template launch<decltype(&biotSavartKernel), &biotSavartKernel>(
-				_device, field.size() / 3, costEstimate,
-				grid, mappedFilament->asRef(), current, coilWidth, stepSize, mappedField.asRef()
-			);*/
-			
-		Promise<void> calculation = launchKernel<decltype(&biotSavartKernel), &biotSavartKernel>(
+		calculation = FSC_LAUNCH_KERNEL(kernels::biotSavartKernel,
+			mv(calculation),
 			_device, field.size() / 3, costEstimate,
-			grid, *filament, current, coilWidth, stepSize, mappedField
+			grid, FSC_KARG(*filament, IN), current, coilWidth, stepSize, FSC_KARG(mappedField, NOCOPY)
 		);
-		return calculation.attach(mv(filament));
+		calculation = calculation.attach(mv(filament));
 	}
 	
 	Promise<void> finish(Float64Tensor::Builder out) {
-		mappedField.updateHost();
-		
-		return hostMemSynchronize(_device).then([this, out]() {
+		calculation = calculation
+		.then([this]() {
+			mappedField.updateHost();
+			return hostMemSynchronize(_device);
+		})
+		.then([this, out]() {
 			writeTensor(field, out);
 		});
+		
+		return mv(calculation);
 	}
 };
 
@@ -157,7 +140,10 @@ struct CalculationSession : public FieldCalculationSession::Server {
 	Promise<void> processFilament(FieldCalculation<Device>& calculator, Filament::Reader node, BiotSavartSettings::Reader settings, double scale) {
 		switch(node.which()) {
 			case Filament::INLINE:
-				return calculator.biotSavart(scale, node.getInline(), settings);
+				// The biot savart operation is chained by the calculator
+				calculator.biotSavart(scale, node.getInline(), settings);
+				return READY_NOW;
+				
 			case Filament::REF:
 				return lt->dataService().download(node.getRef()).then([&calculator, settings, scale, this](LocalDataRef<Filament> local) mutable {
 					return processFilament(calculator, local.get(), settings, scale).attach(cp(local));
@@ -170,10 +156,13 @@ struct CalculationSession : public FieldCalculationSession::Server {
 	Promise<void> processField(FieldCalculation<Device>& calculator, MagneticField::Reader node, double scale) {
 		switch(node.which()) {
 			case MagneticField::SUM: {
+				auto builder = kj::heapArrayBuilder<Promise<void>>(node.getSum().size());
+				
 				for(auto newNode : node.getSum()) {
-					processField(calculator, newNode, scale);
+					builder.add(processField(calculator, newNode, scale));
 				}
-				return READY_NOW;
+				
+				return kj::joinPromises(builder.releaseAsArray());
 			}
 			case MagneticField::REF: {
 				// First download the ref

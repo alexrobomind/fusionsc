@@ -21,7 +21,7 @@
 	#define REFERENCE_KERNEL(func, ...) \
 		extern template void ::fsc::internal::gpuLaunch<decltype(&func), &func, __VA_ARGS__>(Eigen::GpuDevice&, size_t, __VA_ARGS__);
 
-	#else
+#else
 		
 	#define REFERENCE_KERNEL(func, ...)
 
@@ -101,6 +101,70 @@ namespace fsc {
 		
 		static T* deviceAlloc(Device& device, T* hostPtr, size_t size);
 	};
+	
+	namespace internal {
+		template<typename LHS>
+		struct OnDeviceAssignment {
+			LHS lhs;
+			Device& device;
+			Promise<void> prereq;
+			
+			bool consumed = false;
+			
+			OnDeviceAssignment(LHS lhs, Device& device, Promise<void> prereq) :
+				lhs(lhs),
+				device(device),
+				prereq(prereq)
+			{}
+			
+			template<typename RHS>
+			Promise<void> operator=(const RHS& rhs) {
+				KJ_REQUIRE(!consumed);
+				consumed = true;
+				
+				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+				auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
+					fulfiller -> fulfill();
+				};
+				
+				lhs.device(device, mv(callback)) = rhs;
+				return paf.promise.attach(mv(mappedNewField));
+			}
+			
+			template<typename RHS>
+			Promise<void> operator+=(const RHS& rhs) {
+				KJ_REQUIRE(!consumed);
+				consumed = true;
+				
+				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+				auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
+					fulfiller -> fulfill();
+				};
+				
+				lhs.device(device, mv(callback)) += rhs;
+				return paf.promise.attach(mv(mappedNewField));
+			}
+			
+			template<typename RHS>
+			Promise<void> operator-=(const RHS& rhs) {
+				KJ_REQUIRE(!consumed);
+				consumed = true;
+				
+				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+				auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
+					fulfiller -> fulfill();
+				};
+				
+				lhs.device(device, mv(callback)) += rhs;
+				return paf.promise.attach(mv(mappedNewField));
+			}
+		}
+	}
+	
+	template<typename LHS>
+	Promise<void> onDevice(LHS lhs, Device& device, Promise<void> prereq = READY_NOW) {
+		return internal::OnDeviceAssignment(lhs, device, prereq);
+	}
 
 	/** std::function is copy-constructableand therefore can only
 	 *  be used on copy-constructable lambdas. This is a move-only
@@ -269,19 +333,61 @@ namespace fsc {
 			// Call kernel
 			auto result = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params, Device>...>(device, n, cost, mv(prerequisite), std::get<i>(*mappers).get()...);
 			
-			// After calling kernel, call post processing
+			// After calling kernel, update host memory where requested (might be async)
 			return result.then([mappers = mv(mappers), &device]() mutable {
 				givemeatype { 0, (std::get<i>(*mappers).updateHost(), 0)... };
-				
-				return hostMemSynchronize(device);
 			});
 		}
 	}
 	
+	/**
+	 * Launches the specified kernel on the given device.
+	 *
+	 * Note that you have to call fsc::hostMemSynchronize on the device and wait on its
+	 * result before using output parameters.
+	 *
+	 * It is recommended to use FSC_LAUNCH_KERNEL(f, ...), which eliminates the need to
+	 * specify the type of the target function.
+	 *
+	 * Template parameters:
+	 *  Kernel - Type of the kernel function (usually a decltype expression)
+	 *  f      - Static reference to kernel function
+	 *
+	 * Method parameters:
+	 *  prerequisite - Promise that has to be fulfilled before this kernel will be
+	 *                 added to the target device's execution queue.
+	 *  device       - Eigen Device on which this kernel should be launched.
+	 *                 Supported types are:
+	 *                   - DefaultDevice
+	 *                   - ThreadPoolDevice
+	 *                   - GpuDevice (if enabled)
+	 *  n            - Parameter range for the index (first argument for kernel)
+	 *  cost         - Cost estimate for the operation. Used by ThreadPoolDevice
+	 *                 to determine block size.
+	 *  params       - Parameters to be mapped to device (if neccessary)
+	 *                 and passed to the kernel as additional parameters.
+	 *
+	 * Returns:
+	 *  A Promise<void> which indicates when additional operations may be submitted
+	 *  to the underlying device without interfering with the launched kernel execution.
+	 *
+	 *  The exact meaning of this depends on the device in question. For CPU devices,
+	 *  the fulfillment indicates completion (which is neccessary as memcpy operations
+	 *  on this device are immediate). For GPU devices, it only indicates that the
+	 *  operation was inserted into the device's compute stream (which is safe as
+	 *  memcpy requests are also inserted into the same compute stream).
+	 */
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Promise<void> launchKernel(Device& device, size_t n, Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params&... params) {
+	Promise<void> launchKernel(Promise<void> prerequisite, Device& device, size_t n, Eigen::TensorOpCost& cost, Params&... params) {
 		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, cost, mv(prerequisite), std::make_index_sequence<sizeof...(params)>(), params...);
 	}
+	
+	template<typename Kernel, Kernel f, typename Device, typename... Params>
+	Promise<void> launchKernel(Device& device, size_t n, Eigen::TensorOpCost& cost, Params&... params) {
+		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, cost, READY_NOW, std::make_index_sequence<sizeof...(params)>(), params...);
+	}
+	
+	#define FSC_LAUNCH_KERNEL(x, ...) ::fsc::launchKernel<decltype(&x), &x>(__VA_ARGS__)
 	
 	// === Specializations of kernel launcher ===
 	
@@ -506,7 +612,8 @@ struct KernelLauncher<Eigen::GpuDevice> {
 			auto streamStatus = cudaStreamQuery(device.stream());
 			KJ_REQUIRE(streamStatus == cudaSuccess || streamStatus == cudaErrorNotReady, "CUDA launch failed", streamStatus, cudaGetErrorName(streamStatus), cudaGetErrorString(streamStatus));
 			
-			return synchronizeGpuDevice(device);
+			//return synchronizeGpuDevice(device);
+			return READY_NOW;
 		});
 	}
 };
