@@ -73,6 +73,51 @@ namespace fsc {
 		return KernelLauncher<Device>::template launch<Kernel, f, Params...>(device, mv(f), n, expensive, params...);
 	}
 	
+	/** Helper class template that maps a value to a target device.
+	 *
+	 *  Specialize this template to override how a specified parameter gets converted
+	 *  into a device-located parameter.
+	*/
+	template<typename T, typename Device, typename SFINAE = void>
+	struct MapToDevice {
+		using DeviceType = T;
+		
+		inline MapToDevice(const T in, Device& device) :
+			value(in)
+		{}
+		
+		T get() { return value; }
+		void post() {}
+		
+	private:
+		T value;
+	};
+	
+	namespace internal {
+		template<typename Kernel, Kernel f, typename Device, typename... Params>
+		
+		template<typename Kernel, Kernel f, typename Device, typename... Params, size_t... i>
+		Promise<void> auxKernelLaunch(Device& device, size_t n, Eigen::TensorOpCost& cost, std::index_sequence<i...> indices, Params&... params, ) {
+			// Create mappers for input
+			auto mappers = kj::heap<std::tuple<MapToDevice<Params>>>(
+				MapToDevice<Params>(params, device)...
+			);
+			
+			// Call kernel
+			auto result = KernelLauncher<Device>::launch<Kernel, f, MapToDevice<Params>::DeviceType...>(device, n, cost, std::get<i>(mappers).get()...);
+			
+			// After calling kernel, call post processing
+			return result.then([mappers = mv(mappers)]() mutable {
+				std::get<i>(mappers).post()...;
+			});
+		}
+	}
+	
+	template<typename Kernel, Kernel f, typename Device, typename... Params>
+	Promise<void> launchKernel(Device& device, size_t n, Eigen::TensorOpCost& cost, Params&... params) {
+		internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, cost, std::make_index_sequence(sizeof...(params)), params...);
+	}
+	
 	// === Specializations of kernel launcher ===
 	
 	template<>
@@ -109,6 +154,25 @@ namespace fsc {
 	inline Promise<void> hostMemSynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& device) { return synchronizeGpuDevice(device); }
 	
 	#endif
+	
+	// === Specializations of mappers
+	
+	template<typename T, typename Device>
+	struct MapToDevice<T, Device, std::enable_if_t<std::is_same<MappedTensor<T>::Maps, MappedTensor<T>::Maps>>> {
+		using DeviceType = TensorMap<T>;
+		
+		inline MapToDevice(T& in, Device& device) :
+			holder(in, device)
+		{
+			holder.updateDevice();
+		}
+		
+		DeviceType get() { return holder.asRef(); }
+		post() { holder.updateHost(); }
+		
+	private:
+		MappedTensor<T> holder;
+	};
 }
 
 
