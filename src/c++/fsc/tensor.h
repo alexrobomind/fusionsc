@@ -4,30 +4,10 @@
 # include <kj/debug.h>
 # include <kj/memory.h>
 
-#include "common.h"
-
-#pragma once
-
-# define EIGEN_USE_THREADS 1
-# define EIGEN_PERMANENTLY_ENABLE_GPU_HIP_CUDA_DEFINES 1
-
-#ifdef FSC_WITH_CUDA
-	#define EIGEN_USE_GPU
-#endif
-
-# include <unsupported/Eigen/CXX11/Tensor>
-# include <unsupported/Eigen/CXX11/ThreadPool>
-# include <Eigen/Dense>
-# include <Eigen/Core>
-# include <cmath>
+#include "eigen.h"
+#include "kernels.h"
 
 namespace fsc {
-	
-using Eigen::Tensor;
-using Eigen::TensorFixedSize;
-using Eigen::TensorRef;
-using Eigen::TensorMap;
-using Eigen::Sizes;
 
 constexpr double pi = 3.14159265358979323846; // "Defined" in magnetics.cpp
 
@@ -71,145 +51,32 @@ using Mat4d = Mat4<double>;
 using Mat3d = Mat3<double>;
 
 /**
- * Helper struct that can be used to map data towards a specific device for calculation. Is constructed with a host pointer and a size,
- * and allocates a corresponding device pointer.
+ * Tensor constructed on a device sharing a host tensor. Subclasses Eigen::TensorRef<Tensor...>.
  */
-template<typename T, typename Device>
-struct MappedData;
-
-/**
- * Tensor constructed on a device sharing a host tensor. Subclasses Eigen::TensorRef<T>.
- */
-template<typename T, typename Device>
-struct MappedTensor { static_assert(sizeof(T) == 0, "Mapper not implemented"); };
-
 template<typename TVal, int rank, int options, typename Index, typename Device>
-struct MappedTensor<Tensor<TVal, rank, options, Index>, Device>;
+struct MapToDevice<Tensor<TVal, rank, options, Index>, Device>;
 
 template<typename TVal, typename Dims, int options, typename Index, typename Device>
-struct MappedTensor<TensorFixedSize<TVal, Dims, options, Index>, Device>;
+struct MapToDevice<TensorFixedSize<TVal, Dims, options, Index>, Device>;
+	
+template<typename T, int rank, int options, typename Index, typename T2>
+void readTensor(T2 reader, Tensor<T, rank, options, Index>& out);
 
-template<typename... Args>
-struct Callback {
-	struct BaseHolder {
-		virtual void call(Args... args) = 0;
-		virtual ~BaseHolder() {}
-	};
-	
-	template<typename T>
-	struct Holder : BaseHolder {
-		T t;
-		Holder(T t) : t(mv(t)) {}
-		void call(Args... args) override { t(mv(args)...); }
-		~Holder() noexcept {};
-	};
-	
-	BaseHolder* holder;
-	
-	// Disable copy
-	Callback(const Callback<Args...>& other) = delete;
-	Callback<Args...>& operator=(const Callback<Args...>& other) = delete;
-	Callback(Callback<Args...>&& other) {
-		holder = other.holder;
-		other.holder = nullptr;
-	}
-	
-	
-	template<typename T>
-	Callback(T t) :
-		holder(new Holder<T>(mv(t)))
-	{}
-	
-	~Callback() { if(holder != nullptr) delete holder; }
-	
-	void operator()(Args... args) {
-		holder->call(args...);
-	}
-};
+template<typename T, typename T2>
+T readTensor(T2 reader);
 
-}
+template<typename T, int rank, int options, typename Index, typename T2>
+void writeTensor(const Tensor<T, rank, options, Index>& in, T2 builder);
 
-// Inline implementation
-
-namespace fsc {
-
-namespace internal {
-
-// Inline functions required to instantiate kernel launches
-
-template<typename Device>
-void potentiallySynchronize(Device& d) {}
-
-#ifdef FSC_WITH_CUDA
-
-template<>
-inline void potentiallySynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& d) {
-	d.synchronize();
-}
-
-#endif
-
-}
-
-template<typename T, typename Device>
-struct MappedData {
-	Device& device;
-	T* hostPtr;
-	T* devicePtr;
-	size_t size;
-	
-	MappedData(Device& device, T* hostPtr, T* devicePtr, size_t size) :
-		device(device),
-		hostPtr(hostPtr),
-		devicePtr(devicePtr),
-		size(size)
-	{
-	}
-	
-	MappedData(Device& device, T* hostPtr, size_t size) :
-		device(device),
-		hostPtr(hostPtr),
-		devicePtr(deviceAlloc(device, hostPtr, size)),
-		size(size)
-	{
-	}
-	
-	MappedData(const MappedData& other) = delete;
-	MappedData(MappedData&& other) :
-		device(other.device),
-		hostPtr(other.hostPtr),
-		devicePtr(other.devicePtr),
-		size(other.size)
-	{
-		other.devicePtr = nullptr;
-	}
-	
-	~MappedData() {
-		if(devicePtr != nullptr) {
-			device.deallocate(devicePtr);
-		}
-	}
-	
-	void updateHost() {
-		device.memcpyDeviceToHost(hostPtr, devicePtr, size * sizeof(T));
-	}
-	
-	void updateDevice() {
-		device.memcpyHostToDevice(devicePtr, hostPtr, size * sizeof(T));
-	}
-	
-	static T* deviceAlloc(Device& device, T* hostPtr, size_t size) {
-		return (T*) device.allocate(size * sizeof(T));
-	}
-};
+// Implementation
 
 template<typename TVal, int tRank, int tOpts, typename Index, typename Device>
-struct MappedTensor<Tensor<TVal, tRank, tOpts, Index>, Device> : public TensorMap<Tensor<TVal, tRank, tOpts, Index>> {
+struct MapToDevice<Tensor<TVal, tRank, tOpts, Index>, Device> : public TensorMap<Tensor<TVal, tRank, tOpts, Index>> {
 	using Maps = Tensor<TVal, tRank, tOpts, Index>;
 
 	MappedData<TVal, Device> _data;
 
-	MappedTensor(Maps& target, Device& device) :
+	MapToDevice(Maps& target, Device& device) :
 		TensorMap<Tensor<TVal, tRank, tOpts, Index>>(
 			MappedData<TVal, Device>::deviceAlloc(device, target.data(), target.size()),
 			target.dimensions()
@@ -220,16 +87,16 @@ struct MappedTensor<Tensor<TVal, tRank, tOpts, Index>, Device> : public TensorMa
 	void updateHost() { _data.updateHost(); }
 	void updateDevice() { _data.updateDevice(); }
 	
-	TensorMap<Maps> asRef() { return TensorMap<Maps>(*this); }
+	TensorMap<Maps> get() { return TensorMap<Maps>(*this); }
 };
 
 template<typename TVal, typename Dims, int options, typename Index, typename Device>
-struct MappedTensor<TensorFixedSize<TVal, Dims, options, Index>, Device> : public TensorMap<TensorFixedSize<TVal, Dims, options, Index>> {
+struct MapToDevice<TensorFixedSize<TVal, Dims, options, Index>, Device> : public TensorMap<TensorFixedSize<TVal, Dims, options, Index>> {
 	using Maps = TensorFixedSize<TVal, Dims, options, Index>;
 	
 	MappedData<TVal, Device> _data;
 
-	MappedTensor(Maps& target, Device& device) :
+	MapToDevice(Maps& target, Device& device) :
 		TensorMap<TensorFixedSize<TVal, Dims, options, Index>> (
 			MappedData<TVal, Device>::deviceAlloc(device, target.data(), target.size())
 		),
@@ -239,28 +106,9 @@ struct MappedTensor<TensorFixedSize<TVal, Dims, options, Index>, Device> : publi
 	void updateHost() { _data.updateHost(); }
 	void updateDevice() { _data.updateDevice(); }
 	
-	TensorRef<Maps> asRef() { return TensorRef<Maps>(*this); }
+	TensorRef<Maps> get() { return TensorRef<Maps>(*this); }
 };
 
-} // namespace fsc
-
-namespace fsc {
-	
-	template<typename T, int rank, int options, typename Index, typename T2>
-	void readTensor(T2 reader, Tensor<T, rank, options, Index>& out);
-	
-	template<typename T, typename T2>
-	T readTensor(T2 reader);
-
-	template<typename T, int rank, int options, typename Index, typename T2>
-	void writeTensor(const Tensor<T, rank, options, Index>& in, T2 builder);
-	
-}
-
-// Implementation
-
-namespace fsc {
-	
 template<typename T, int rank, int options, typename Index, typename T2>
 void readTensor(T2 reader, Tensor<T, rank, options, Index>& out) {
 	using TensorType = Tensor<T, rank, options, Index>;

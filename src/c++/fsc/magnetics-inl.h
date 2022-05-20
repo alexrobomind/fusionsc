@@ -13,7 +13,7 @@ struct FieldCalculation {
 	Device& _device;
 	ToroidalGridStruct grid;
 	Field field;
-	MappedTensor<Field, Device> mappedField;
+	MapToDevice<Field, Device> mappedField;
 	
 	FieldCalculation(ToroidalGridStruct in, Device& device) :
 		_device(device),
@@ -41,19 +41,17 @@ struct FieldCalculation {
 			newField.data()[i] = data[i];
 		}
 		
-		// Map field onto GPU
-		MappedTensor<Field, Device> mField(newField, _device);
-		mField.updateDevice();
-		
 		auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-		
 		auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
 			fulfiller -> fulfill();
 		};
 		
-		// field.device(_device, mv(callback)) = field + mField * scale;
-		addFields<Device>(_device, field, mField, scale, Callback<>(mv(callback)));
-		return mv(paf.promise);
+		// Map field onto GPU
+		auto mappedNewField = kj::heap(mapToDevice(newField, _device));
+		mappedNewField->updateDevice();
+		
+		addFields<Device>(_device, mappedField.get(), mappedNewField->get(), scale, mv(callback));
+		return paf.promise.attach(mv(mappedNewField));
 	}
 	
 	Promise<void> biotSavart(double current, Float64Tensor::Reader input, BiotSavartSettings::Reader settings) {
@@ -83,18 +81,23 @@ struct FieldCalculation {
 		using i1 = Eigen::array<int, 1>;
 				
 		// Map filament onto device
-		auto mappedFilament = kj::heap<MappedTensor<MFilament, Device>>(*filament, _device).attach(mv(filament));
-		mappedFilament->updateDevice();
+		/*auto mappedFilament = kj::heap<MappedTensor<MFilament, Device>>(*filament, _device).attach(mv(filament));
+		mappedFilament->updateDevice();*/
 		
 		// Launch calculation
 		// Eigen::TensorOpCost costEstimate(mappedFilament->size() * sizeof(double) + field.size() * sizeof(double), field.size() * sizeof(double), 1000 * mappedFilament->size() * field.size() / 3);
 		Eigen::TensorOpCost costEstimate(0, 0, 0);
-		Promise<void> calculation = KernelLauncher<Device>
+		/*Promise<void> calculation = KernelLauncher<Device>
 			::template launch<decltype(&biotSavartKernel), &biotSavartKernel>(
 				_device, field.size() / 3, costEstimate,
 				grid, mappedFilament->asRef(), current, coilWidth, stepSize, mappedField.asRef()
-			);
-		return calculation.attach(mv(mappedFilament));
+			);*/
+			
+		Promise<void> calculation = launchKernel<decltype(&biotSavartKernel), &biotSavartKernel>(
+			_device, field.size() / 3, costEstimate,
+			grid, *filament, current, coilWidth, stepSize, mappedField
+		);
+		return calculation.attach(mv(filament));
 	}
 	
 	Promise<void> finish(Float64Tensor::Builder out) {

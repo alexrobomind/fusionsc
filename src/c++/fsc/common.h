@@ -119,6 +119,12 @@ template<>           struct VoidToMeaningless_<void> { using Type = Meaningless;
 
 template<typename T> using VoidToMeaningless = typename VoidToMeaningless_<T>::Type;
 
+template<typename T>
+struct TVoid_ { using Type = void; };
+
+template<typename T>
+using TVoid = typename TVoid_<T>::Type;
+
 // Join promises into a tuple
 
 template<typename T1, typename... T>

@@ -19,6 +19,8 @@
 	# define CUPNP_FAIL_REQUIRE(...) KJ_FAIL_REQUIRE((__VA_ARGS__))
 # endif
 
+#include <cstdlib>
+
 namespace cupnp {
 	# ifdef CUPNP_WITH_HIP
 		inline auto deviceMalloc(void** target, size_t size) { return hipMalloc(target, size); }

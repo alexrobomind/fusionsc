@@ -1,13 +1,14 @@
 #pragma once
 
+#include <fsc/geometry.capnp.h>
+#include <fsc/geometry.capnp.cu.h>
+
 #include "local.h"
 #include "data.h"
 #include "tensor.h"
 
 #include <cupnp/cupnp.h>
 
-#include <fsc/geometry.capnp.h>
-#include <fsc/geometry.capnp.cu.h>
 
 namespace fsc {
 	

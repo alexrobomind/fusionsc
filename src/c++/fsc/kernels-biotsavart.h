@@ -3,8 +3,10 @@
 #include "vector.h"
 #include "tensor.h"
 #include "grids.h"
+#include "kernels.h"
 
 #include <utility>
+#include <kj/function.h>
 
 namespace fsc { namespace internal {
 
@@ -15,8 +17,8 @@ using MFilament = Eigen::Tensor<double, 2>;
 using FilamentRef = Eigen::TensorMap<MFilament>;
 
 template<typename Device>
-void addFields(Device& device, FieldRef field1, FieldRef field2, double scale, Callback<>&& done) {
-	field1.device(device, std::move(done)) = field1 + field2 * scale;
+void addFields(Device& device, FieldRef field1, FieldRef field2, double scale, kj::Function<void()>&& done) {
+	field1.device(device, mv(done)) = field1 + field2 * scale;
 	potentiallySynchronize(device);
 }
 
@@ -24,7 +26,7 @@ void addFields(Device& device, FieldRef field1, FieldRef field2, double scale, C
 #ifndef EIGEN_GPUCC
 
 // addFields for GPU device must be instantiated in CUDA compiler
-extern template void addFields<Eigen::GpuDevice>(Eigen::GpuDevice&, FieldRef, FieldRef, double, Callback<>&&);
+extern template void addFields<Eigen::GpuDevice>(Eigen::GpuDevice&, FieldRef, FieldRef, double, kj::Function<void()>&&);
 
 #endif
 #endif

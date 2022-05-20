@@ -139,7 +139,7 @@ namespace cupnp {
 	}
 	
 	template<typename T>
-	inline T messageRoot(kj::ArrayPtr<kj::Array<capnp::word>> segments, kj::ArrayPtr<kj::ArrayPtr<capnp::word>> segmentRefs);
+	inline T messageRoot(kj::ArrayPtr<capnp::word> firstSegment, kj::ArrayPtr<kj::ArrayPtr<capnp::word>> segmentRefs);
 	
 	struct Message {
 		// Host-located array of segments (which can individually be device-located)
@@ -213,7 +213,7 @@ namespace cupnp {
 		
 		template<typename T>
 		T root() {
-			return messageRoot<T>(segments.asPtr(), segmentRefs);
+			return messageRoot<T>(segments.asPtr()[0], segmentRefs);
 		}
 		
 		template<typename T>
@@ -588,10 +588,10 @@ namespace cupnp {
 	}
 	
 	template<typename T>
-	inline T messageRoot(kj::ArrayPtr<kj::Array<capnp::word>> segments, kj::ArrayPtr<kj::ArrayPtr<capnp::word>> segmentRefs) {
+	inline T messageRoot(kj::ArrayPtr<capnp::word> firstSegment, kj::ArrayPtr<kj::ArrayPtr<capnp::word>> segmentRefs) {
 		Location root;
 		root.segmentId = 0;
-		root.ptr = reinterpret_cast<unsigned char*>(segments[0].begin());
+		root.ptr = reinterpret_cast<unsigned char*>(firstSegment.begin());
 		root.segments = segmentRefs;
 		
 		return getPointer<T>(root);
