@@ -19,7 +19,7 @@ using FilamentRef = Eigen::TensorMap<MFilament>;
 template<typename Device>
 void addFields(Device& device, FieldRef field1, FieldRef field2, double scale, kj::Function<void()>&& done) {
 	field1.device(device, mv(done)) = field1 + field2 * scale;
-	potentiallySynchronize(device);
+	// potentiallySynchronize(device);
 }
 
 #ifdef FSC_WITH_CUDA

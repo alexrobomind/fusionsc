@@ -15,6 +15,10 @@ struct FieldCalculation {
 	Field field;
 	MapToDevice<Field, Device> mappedField;
 	
+	// This promise makes sure we only schedule a
+	// calculation once the previous is finished
+	Promise<void> calculation = READY_NOW;
+	
 	FieldCalculation(ToroidalGridStruct in, Device& device) :
 		_device(device),
 		grid(in),

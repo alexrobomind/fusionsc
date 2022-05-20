@@ -51,7 +51,7 @@ namespace fsc {
 		 *  The kernel will run asynchronously. It is guaranteed that it will not start before this function has returned.
 		 */
 		template<typename Kernel, Kernel f, typename... Params>
-		static Promise<void> launch(Device& device, size_t n, Eigen::TensorOpCost& cost, Params... params) {
+		static Promise<void> launch(Device& device, size_t n, Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
 			static_assert(sizeof(Device) == 0, "Kernel launcher not implemented / enabled for this device.");
 			return READY_NOW;
 		}
@@ -253,7 +253,7 @@ namespace fsc {
 		 * over the parameter.
 		 */
 		template<typename Kernel, Kernel f, typename Device, typename... Params, size_t... i>
-		Promise<void> auxKernelLaunch(Device& device, size_t n, Eigen::TensorOpCost& cost, std::index_sequence<i...> indices, Params&... params) {
+		Promise<void> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost& cost, std::index_sequence<i...> indices, Params&... params) {
 			// Create mappers for input
 			auto mappers = kj::heap<std::tuple<MapToDevice<Params, Device>...>>(
 				MapToDevice<Params, Device>(params, device)...
@@ -267,7 +267,7 @@ namespace fsc {
 			givemeatype { 0, (std::get<i>(*mappers).updateDevice(), 0)... };
 			
 			// Call kernel
-			auto result = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params, Device>...>(device, n, cost, std::get<i>(*mappers).get()...);
+			auto result = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params, Device>...>(device, n, cost, mv(prerequisite), std::get<i>(*mappers).get()...);
 			
 			// After calling kernel, call post processing
 			return result.then([mappers = mv(mappers), &device]() mutable {
@@ -279,8 +279,8 @@ namespace fsc {
 	}
 	
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Promise<void> launchKernel(Device& device, size_t n, Eigen::TensorOpCost& cost, Params&... params) {
-		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, cost, std::make_index_sequence<sizeof...(params)>(), params...);
+	Promise<void> launchKernel(Device& device, size_t n, Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params&... params) {
+		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, cost, mv(prerequisite), std::make_index_sequence<sizeof...(params)>(), params...);
 	}
 	
 	// === Specializations of kernel launcher ===
@@ -395,7 +395,7 @@ struct KernelLauncher<Eigen::DefaultDevice> {
 template<>
 struct KernelLauncher<Eigen::ThreadPoolDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
-	static Promise<void> launch(Eigen::ThreadPoolDevice& device, size_t n, Eigen::TensorOpCost& cost, Params... params) {
+	static Promise<void> launch(Eigen::ThreadPoolDevice& device, size_t n, Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
 		auto func = [params...](Eigen::Index start, Eigen::Index end) mutable {
 			for(Eigen::Index i = start; i < end; ++i)
 				f(i, params...);
@@ -417,7 +417,7 @@ struct KernelLauncher<Eigen::ThreadPoolDevice> {
 			(*ptr)(start, end);
 		};
 		
-		return kj::evalLater([funcCopyable, doneCopyable, cost, n, &device, promise = mv(paf.promise)]() mutable {
+		return prerequisite.then([funcCopyable, doneCopyable, cost, n, &device, promise = mv(paf.promise)]() mutable {
 			device.parallelForAsync(n, cost, funcCopyable, doneCopyable);
 			return mv(promise);
 		}).attach(mv(donePtr), mv(funcPtr));
@@ -498,8 +498,8 @@ Promise<void> synchronizeGpuDevice(Eigen::GpuDevice& device) {
 template<>
 struct KernelLauncher<Eigen::GpuDevice> {
 	template<typename Kernel, Kernel func, typename... Params>
-	static Promise<void> launch(Eigen::GpuDevice& device, size_t n, Eigen::TensorOpCost& cost, Params... params) {
-		return kj::evalNow([&device, n, cost, params...]() {
+	static Promise<void> launch(Eigen::GpuDevice& device, size_t n, Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
+		return prerequisite.then([&device, n, cost, params...]() {
 			KJ_LOG(WARNING, "Launching GPU kernel");
 			internal::gpuLaunch<Kernel, func, Params...>(device, n, params...);
 			

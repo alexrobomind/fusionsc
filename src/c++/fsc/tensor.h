@@ -68,6 +68,16 @@ T readTensor(T2 reader);
 template<typename T, int rank, int options, typename Index, typename T2>
 void writeTensor(const Tensor<T, rank, options, Index>& in, T2 builder);
 
+template<typename LHD, typename RHS, typename Device>
+Promise<void> assignOnDevice(Device& device, Promise<void> prerequisite, LHS& lhs, RHS& rhs) {
+	auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+	auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
+		fulfiller -> fulfill();
+	};
+	
+	
+}
+
 // Implementation
 
 template<typename TVal, int tRank, int tOpts, typename Index, typename Device>
