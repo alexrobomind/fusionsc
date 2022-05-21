@@ -38,16 +38,19 @@ struct FieldCalculation {
 		auto data = input.getData();
 		
 		// Write field into native format
-		Field newField(3, grid.nPhi, grid.nZ, grid.nR);
-		for(int i = 0; i < newField.size() / 3; ++i) {
-			newField.data()[i] = data[i];
+		auto newField = kj::heap<Field>(3, grid.nPhi, grid.nZ, grid.nR);
+		for(int i = 0; i < newField->size(); ++i) {
+			newField->data()[i] = data[i];
 		}
 		
-		calculation = FSC_LAUNCH_KERNEL(kernels::addFieldKernel,
+		TensorOpCost costEstimate(1e12, 1e12, 1e12);
+		calculation = FSC_LAUNCH_KERNEL(
+			kernels::addFieldKernel,
 			mv(calculation),
 			_device, field.size(), costEstimate,
-			FSC_KARG(mappedField, NOCOPY), FSC_KARG(newField, IN), scale
+			FSC_KARG(mappedField, NOCOPY), FSC_KARG(*newField, IN), scale
 		);
+		calculation = calculation.attach(mv(newField));
 	}
 	
 	void biotSavart(double current, Float64Tensor::Reader input, BiotSavartSettings::Reader settings) {
@@ -74,7 +77,9 @@ struct FieldCalculation {
 		KJ_REQUIRE(stepSize != 0, "Please specify a step size in the Biot-Savart settings");
 		
 		// Launch calculation
-		calculation = FSC_LAUNCH_KERNEL(kernels::biotSavartKernel,
+		TensorOpCost costEstimate(1e12, 1e12, 1e12);
+		calculation = FSC_LAUNCH_KERNEL(
+			kernels::biotSavartKernel,
 			mv(calculation),
 			_device, field.size() / 3, costEstimate,
 			grid, FSC_KARG(*filament, IN), current, coilWidth, stepSize, FSC_KARG(mappedField, NOCOPY)

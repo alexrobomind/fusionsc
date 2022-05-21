@@ -21,4 +21,6 @@ namespace fsc {
 	using Eigen::TensorRef;
 	using Eigen::TensorMap;
 	using Eigen::Sizes;
+	
+	using Eigen::TensorOpCost;
 }

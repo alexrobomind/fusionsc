@@ -330,12 +330,16 @@ namespace fsc {
 			using givemeatype = int[];
 			givemeatype { 0, (std::get<i>(*mappers).updateDevice(), 0)... };
 			
+			// Insert a barrier that returns when all pending memcpies are finished
+			Promise<void> preSync = hostMemSynchronize(device);
+			
 			// Call kernel
 			auto result = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params, Device>...>(device, n, cost, mv(prerequisite), std::get<i>(*mappers).get()...);
 			
 			// After calling kernel, update host memory where requested (might be async)
-			return result.then([mappers = mv(mappers), &device]() mutable {
+			return result.then([mappers = mv(mappers), preSync = mv(preSync), &device]() mutable {
 				givemeatype { 0, (std::get<i>(*mappers).updateHost(), 0)... };
+				return preSync;
 			});
 		}
 	}
@@ -369,13 +373,16 @@ namespace fsc {
 	 *
 	 * Returns:
 	 *  A Promise<void> which indicates when additional operations may be submitted
-	 *  to the underlying device without interfering with the launched kernel execution.
+	 *  to the underlying device without interfering with the launched kernel execution
+	 *  AND all host -> device copy operations prior to kernel launch are completed (meaning
+	 *  that IN-type kernel arguments may be deallocated on the host side).
 	 *
 	 *  The exact meaning of this depends on the device in question. For CPU devices,
 	 *  the fulfillment indicates completion (which is neccessary as memcpy operations
 	 *  on this device are immediate). For GPU devices, it only indicates that the
 	 *  operation was inserted into the device's compute stream (which is safe as
-	 *  memcpy requests are also inserted into the same compute stream).
+	 *  memcpy requests are also inserted into the same compute stream) and the preceeding
+	 *  memcpy operations all have completed.
 	 */
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
 	Promise<void> launchKernel(Promise<void> prerequisite, Device& device, size_t n, Eigen::TensorOpCost& cost, Params&... params) {
@@ -425,8 +432,6 @@ namespace fsc {
 	inline Promise<void> hostMemSynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& device) { return synchronizeGpuDevice(device); }
 	
 	#endif
-	
-	// === Specializations of mappers
 }
 
 
