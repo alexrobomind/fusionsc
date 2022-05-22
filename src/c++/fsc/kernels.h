@@ -101,70 +101,6 @@ namespace fsc {
 		
 		static T* deviceAlloc(Device& device, T* hostPtr, size_t size);
 	};
-	
-	namespace internal {
-		template<typename LHS>
-		struct OnDeviceAssignment {
-			LHS lhs;
-			Device& device;
-			Promise<void> prereq;
-			
-			bool consumed = false;
-			
-			OnDeviceAssignment(LHS lhs, Device& device, Promise<void> prereq) :
-				lhs(lhs),
-				device(device),
-				prereq(prereq)
-			{}
-			
-			template<typename RHS>
-			Promise<void> operator=(const RHS& rhs) {
-				KJ_REQUIRE(!consumed);
-				consumed = true;
-				
-				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-				auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
-					fulfiller -> fulfill();
-				};
-				
-				lhs.device(device, mv(callback)) = rhs;
-				return paf.promise.attach(mv(mappedNewField));
-			}
-			
-			template<typename RHS>
-			Promise<void> operator+=(const RHS& rhs) {
-				KJ_REQUIRE(!consumed);
-				consumed = true;
-				
-				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-				auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
-					fulfiller -> fulfill();
-				};
-				
-				lhs.device(device, mv(callback)) += rhs;
-				return paf.promise.attach(mv(mappedNewField));
-			}
-			
-			template<typename RHS>
-			Promise<void> operator-=(const RHS& rhs) {
-				KJ_REQUIRE(!consumed);
-				consumed = true;
-				
-				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-				auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
-					fulfiller -> fulfill();
-				};
-				
-				lhs.device(device, mv(callback)) += rhs;
-				return paf.promise.attach(mv(mappedNewField));
-			}
-		}
-	}
-	
-	template<typename LHS>
-	Promise<void> onDevice(LHS lhs, Device& device, Promise<void> prereq = READY_NOW) {
-		return internal::OnDeviceAssignment(lhs, device, prereq);
-	}
 
 	/** std::function is copy-constructableand therefore can only
 	 *  be used on copy-constructable lambdas. This is a move-only
@@ -339,7 +275,7 @@ namespace fsc {
 			// After calling kernel, update host memory where requested (might be async)
 			return result.then([mappers = mv(mappers), preSync = mv(preSync), &device]() mutable {
 				givemeatype { 0, (std::get<i>(*mappers).updateHost(), 0)... };
-				return preSync;
+				return mv(preSync);
 			});
 		}
 	}
@@ -386,12 +322,12 @@ namespace fsc {
 	 */
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
 	Promise<void> launchKernel(Promise<void> prerequisite, Device& device, size_t n, Eigen::TensorOpCost& cost, Params&... params) {
-		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, cost, mv(prerequisite), std::make_index_sequence<sizeof...(params)>(), params...);
+		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, mv(prerequisite), mv(cost), std::make_index_sequence<sizeof...(params)>(), params...);
 	}
 	
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
 	Promise<void> launchKernel(Device& device, size_t n, Eigen::TensorOpCost& cost, Params&... params) {
-		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, cost, READY_NOW, std::make_index_sequence<sizeof...(params)>(), params...);
+		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, READY_NOW, mv(cost), std::make_index_sequence<sizeof...(params)>(), params...);
 	}
 	
 	#define FSC_LAUNCH_KERNEL(x, ...) ::fsc::launchKernel<decltype(&x), &x>(__VA_ARGS__)
@@ -704,11 +640,11 @@ template<typename T, typename Device>
 struct MapToDevice<KernelArg<T>, Device> {
 	inline MapToDevice(KernelArg<T>& in, Device& device) :
 		delegate(in.ref, device),
-		_updateDevice(in.updateDevice),
-		_updateHost(in.updateHost)
+		_updateDevice(in.copyToDevice),
+		_updateHost(in.copyToHost)
 	{}
 	
-	inline T get() { return delegate.get(); }
+	inline auto get() { return delegate.get(); }
 	inline void updateDevice() { if(_updateDevice) delegate.updateDevice(); }
 	inline void updateHost()   { if(_updateHost)   delegate.updateHost();   }
 	

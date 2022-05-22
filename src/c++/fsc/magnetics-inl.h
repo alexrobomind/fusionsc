@@ -8,6 +8,9 @@ namespace fsc { namespace internal {
 	
 template<typename Device>
 struct FieldCalculation {
+	using Field = ::fsc::kernels::Field;
+	using MFilament = ::fsc::kernels::MFilament;
+	
 	Device& _device;
 	ToroidalGridStruct grid;
 	Field field;
@@ -167,7 +170,7 @@ struct CalculationSession : public FieldCalculationSession::Server {
 					builder.add(processField(calculator, newNode, scale));
 				}
 				
-				return kj::joinPromises(builder.releaseAsArray());
+				return kj::joinPromises(builder.finish());
 			}
 			case MagneticField::REF: {
 				// First download the ref

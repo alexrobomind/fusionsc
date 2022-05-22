@@ -127,7 +127,7 @@ inline void biotSavart(Device& device, Callback<> done, ToroidalGridStruct grid,
 }*/
 
 EIGEN_DEVICE_FUNC inline void addFieldKernel(const unsigned int idx, FieldRef out, FieldRef in, double scale) {
-	out.data(idx) += in.data(idx) * scale;
+	out.data()[idx] += in.data()[idx] * scale;
 }
 	
 EIGEN_DEVICE_FUNC inline void biotSavartKernel(const unsigned int idx, ToroidalGridStruct grid, FilamentRef filament, double current, double coilWidth, double stepSize, FieldRef out) {

@@ -68,14 +68,68 @@ T readTensor(T2 reader);
 template<typename T, int rank, int options, typename Index, typename T2>
 void writeTensor(const Tensor<T, rank, options, Index>& in, T2 builder);
 
-template<typename LHD, typename RHS, typename Device>
-Promise<void> assignOnDevice(Device& device, Promise<void> prerequisite, LHS& lhs, RHS& rhs) {
-	auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-	auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
-		fulfiller -> fulfill();
+namespace internal {
+	template<typename LHS, typename Device>
+	struct OnDeviceAssignment {
+		LHS lhs;
+		Device& device;
+		Promise<void> prereq;
+		
+		bool consumed = false;
+		
+		OnDeviceAssignment(LHS lhs, Device& device, Promise<void> prereq) :
+			lhs(lhs),
+			device(device),
+			prereq(prereq)
+		{}
+		
+		template<typename RHS>
+		Promise<void> operator=(const RHS& rhs) {
+			KJ_REQUIRE(!consumed);
+			consumed = true;
+			
+			auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+			auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
+				fulfiller -> fulfill();
+			};
+			
+			lhs.device(device, mv(callback)) = rhs;
+			return paf.promise.attach(mv(mappedNewField));
+		}
+		
+		template<typename RHS>
+		Promise<void> operator+=(const RHS& rhs) {
+			KJ_REQUIRE(!consumed);
+			consumed = true;
+			
+			auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+			auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
+				fulfiller -> fulfill();
+			};
+			
+			lhs.device(device, mv(callback)) += rhs;
+			return paf.promise.attach(mv(mappedNewField));
+		}
+		
+		template<typename RHS>
+		Promise<void> operator-=(const RHS& rhs) {
+			KJ_REQUIRE(!consumed);
+			consumed = true;
+			
+			auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+			auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
+				fulfiller -> fulfill();
+			};
+			
+			lhs.device(device, mv(callback)) += rhs;
+			return paf.promise.attach(mv(mappedNewField));
+		}
 	};
-	
-	
+}
+
+template<typename LHS, typename Device>
+Promise<void> onDevice(LHS lhs, Device& device, Promise<void> prereq = READY_NOW) {
+	return internal::OnDeviceAssignment<LHS, Device>(lhs, device, prereq);
 }
 
 // Implementation
