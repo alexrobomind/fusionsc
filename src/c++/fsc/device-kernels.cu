@@ -3,7 +3,7 @@
 
 namespace fsc {
 	namespace internal {
-		INSTANTIATE_KERNEL(kernels::biotSavartKernel, ToroidalGridStruct, FilamentRef, double, double, double, FieldRef);
-		INSTANTIATE_KERNEL(kernels::addFieldKernel, FieldRef, FieldRef, double);
+		INSTANTIATE_KERNEL(kernels::biotSavartKernel, ToroidalGridStruct, kernels::FilamentRef, double, double, double, kernels::FieldRef);
+		INSTANTIATE_KERNEL(kernels::addFieldKernel, kernels::FieldRef, kernels::FieldRef, double);
 	}
 }

@@ -1020,7 +1020,7 @@ void generateRequested(CodeGeneratorRequest::Reader request) {
 		
 		kj::String headerName = str(inputFilename, ".cu.h"); // str(baseName, ".cupnp.h");
 		
-		auto outFile = cwd.openFile(kj::Path::parse(headerName), kj::WriteMode::CREATE | kj::WriteMode::MODIFY);
+		auto outFile = cwd.openFile(kj::Path::parse(headerName), kj::WriteMode::CREATE | kj::WriteMode::MODIFY | kj::WriteMode::CREATE_PARENT );
 		outFile -> writeAll(str(result));
 	}
 	

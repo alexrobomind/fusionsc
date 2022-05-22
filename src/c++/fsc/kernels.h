@@ -253,7 +253,7 @@ namespace fsc {
 		 * over the parameter.
 		 */
 		template<typename Kernel, Kernel f, typename Device, typename... Params, size_t... i>
-		Promise<void> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost& cost, std::index_sequence<i...> indices, Params&... params) {
+		Promise<void> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params... params) {
 			// Create mappers for input
 			auto mappers = kj::heap<std::tuple<MapToDevice<Params, Device>...>>(
 				MapToDevice<Params, Device>(params, device)...
@@ -264,7 +264,7 @@ namespace fsc {
 			// Note: This is an extremely convoluted looking way of calling updateDevice on all tuple members
 			// C++ 17 has a neater way to do this, but we don't wanna require it just yet
 			using givemeatype = int[];
-			givemeatype { 0, (std::get<i>(*mappers).updateDevice(), 0)... };
+			(void) (givemeatype { 0, (std::get<i>(*mappers).updateDevice(), 0)... });
 			
 			// Insert a barrier that returns when all pending memcpies are finished
 			Promise<void> preSync = hostMemSynchronize(device);
@@ -274,7 +274,7 @@ namespace fsc {
 			
 			// After calling kernel, update host memory where requested (might be async)
 			return result.then([mappers = mv(mappers), preSync = mv(preSync), &device]() mutable {
-				givemeatype { 0, (std::get<i>(*mappers).updateHost(), 0)... };
+				(void) (givemeatype { 0, (std::get<i>(*mappers).updateHost(), 0)... });
 				return mv(preSync);
 			});
 		}
@@ -321,12 +321,12 @@ namespace fsc {
 	 *  memcpy operations all have completed.
 	 */
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Promise<void> launchKernel(Promise<void> prerequisite, Device& device, size_t n, Eigen::TensorOpCost& cost, Params&... params) {
+	Promise<void> launchKernel(Promise<void> prerequisite, Device& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
 		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, mv(prerequisite), mv(cost), std::make_index_sequence<sizeof...(params)>(), params...);
 	}
 	
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Promise<void> launchKernel(Device& device, size_t n, Eigen::TensorOpCost& cost, Params&... params) {
+	Promise<void> launchKernel(Device& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
 		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, READY_NOW, mv(cost), std::make_index_sequence<sizeof...(params)>(), params...);
 	}
 	
@@ -431,7 +431,7 @@ namespace internal {
 template<>
 struct KernelLauncher<Eigen::DefaultDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
-	static Promise<void> launch(Eigen::DefaultDevice& device, size_t n, Eigen::TensorOpCost& cost, Params... params) {
+	static Promise<void> launch(Eigen::DefaultDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
 		return kj::evalLater([=]() {
 			for(size_t i = 0; i < n; ++i)
 				f(i, params...);
@@ -442,7 +442,7 @@ struct KernelLauncher<Eigen::DefaultDevice> {
 template<>
 struct KernelLauncher<Eigen::ThreadPoolDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
-	static Promise<void> launch(Eigen::ThreadPoolDevice& device, size_t n, Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
+	static Promise<void> launch(Eigen::ThreadPoolDevice& device, size_t n, const Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
 		auto func = [params...](Eigen::Index start, Eigen::Index end) mutable {
 			for(Eigen::Index i = start; i < end; ++i)
 				f(i, params...);
@@ -545,16 +545,13 @@ Promise<void> synchronizeGpuDevice(Eigen::GpuDevice& device) {
 template<>
 struct KernelLauncher<Eigen::GpuDevice> {
 	template<typename Kernel, Kernel func, typename... Params>
-	static Promise<void> launch(Eigen::GpuDevice& device, size_t n, Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
+	static Promise<void> launch(Eigen::GpuDevice& device, size_t n, const Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
 		return prerequisite.then([&device, n, cost, params...]() {
 			KJ_LOG(WARNING, "Launching GPU kernel");
 			internal::gpuLaunch<Kernel, func, Params...>(device, n, params...);
 			
 			auto streamStatus = cudaStreamQuery(device.stream());
 			KJ_REQUIRE(streamStatus == cudaSuccess || streamStatus == cudaErrorNotReady, "CUDA launch failed", streamStatus, cudaGetErrorName(streamStatus), cudaGetErrorString(streamStatus));
-			
-			//return synchronizeGpuDevice(device);
-			return READY_NOW;
 		});
 	}
 };

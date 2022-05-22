@@ -193,7 +193,7 @@ EIGEN_DEVICE_FUNC inline void biotSavartKernel(const unsigned int idx, ToroidalG
 	outData[3 * idx + 2] += current * fieldR;
 }
 
-REFERENCE_KERNEL(addFieldKernel, FieldRef, FieldRef, double);
-REFERENCE_KERNEL(biotSavartKernel, ToroidalGridStruct, FilamentRef, double, double, double, FieldRef);
-
 }}
+
+REFERENCE_KERNEL(fsc::kernels::addFieldKernel, fsc::kernels::FieldRef, fsc::kernels::FieldRef, double);
+REFERENCE_KERNEL(fsc::kernels::biotSavartKernel, fsc::ToroidalGridStruct, fsc::kernels::FilamentRef, double, double, double, fsc::kernels::FieldRef);

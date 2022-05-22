@@ -80,7 +80,7 @@ namespace internal {
 		OnDeviceAssignment(LHS lhs, Device& device, Promise<void> prereq) :
 			lhs(lhs),
 			device(device),
-			prereq(prereq)
+			prereq(mv(prereq))
 		{}
 		
 		template<typename RHS>
@@ -88,13 +88,18 @@ namespace internal {
 			KJ_REQUIRE(!consumed);
 			consumed = true;
 			
-			auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-			auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
-				fulfiller -> fulfill();
-			};
+			Device& device = this -> device;
+			LHS& lhs = this -> lhs;
 			
-			lhs.device(device, mv(callback)) = rhs;
-			return paf.promise.attach(mv(mappedNewField));
+			return prereq.then([&device, lhs, rhs, prereq = mv(prereq)]() {
+				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+				auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
+					fulfiller -> fulfill();
+				};
+				
+				lhs.device(device, mv(callback)) = rhs;
+				return mv(paf.promise);
+			});
 		}
 		
 		template<typename RHS>
@@ -102,13 +107,18 @@ namespace internal {
 			KJ_REQUIRE(!consumed);
 			consumed = true;
 			
-			auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-			auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
-				fulfiller -> fulfill();
-			};
+			Device& device = this -> device;
+			LHS& lhs = this -> lhs;
 			
-			lhs.device(device, mv(callback)) += rhs;
-			return paf.promise.attach(mv(mappedNewField));
+			return prereq.then([&device, lhs, rhs, prereq = mv(prereq)]() {
+				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+				auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
+					fulfiller -> fulfill();
+				};
+				
+				lhs.device(device, mv(callback)) += rhs;
+				return mv(paf.promise);
+			});
 		}
 		
 		template<typename RHS>
@@ -116,13 +126,18 @@ namespace internal {
 			KJ_REQUIRE(!consumed);
 			consumed = true;
 			
-			auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-			auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
-				fulfiller -> fulfill();
-			};
+			Device& device = this -> device;
+			LHS& lhs = this -> lhs;
 			
-			lhs.device(device, mv(callback)) += rhs;
-			return paf.promise.attach(mv(mappedNewField));
+			return prereq.then([&device, lhs, rhs, prereq = mv(prereq)]() {
+				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+				auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
+					fulfiller -> fulfill();
+				};
+				
+				lhs.device(device, mv(callback)) -= rhs;
+				return mv(paf.promise);
+			});
 		}
 	};
 }
