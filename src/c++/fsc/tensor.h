@@ -35,6 +35,9 @@ using Vec4 = Vec<T, 4>;
 using Vec3d = Vec<double, 3>;
 using Vec4d = Vec<double, 4>;
 
+using Vec3f = Vec<float, 3>;
+using Vec4f = Vec<float, 4>;
+
 using Vec3u = Vec<unsigned int, 3>;
 using Vec4u = Vec<unsigned int, 4>;
 

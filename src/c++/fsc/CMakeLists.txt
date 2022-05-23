@@ -19,6 +19,8 @@ set(
 	http.capnp
 	offline.capnp
 	
+	flt.capnp
+	
 	devices/w7x.capnp
 	devices/w7x-test.capnp
 )
