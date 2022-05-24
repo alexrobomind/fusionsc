@@ -67,7 +67,10 @@ add_library(
 	magnetics-inl.h
 	magnetics.cpp
 	
+	flt.cpp
+	
 	kernels-biotsavart.h
+	kernels-flt.h
 	
 	http.h
 	http.cpp
