@@ -27,6 +27,9 @@ template<typename T, unsigned int n>
 using Vec = Eigen::Vector<T, n>;
 
 template<typename T>
+using Vec2 = Vec<T, 2>;
+
+template<typename T>
 using Vec3 = Vec<T, 3>;
 
 template<typename T>

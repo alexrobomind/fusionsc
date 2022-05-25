@@ -1,6 +1,7 @@
 #include <fsc/flt.capnp.cu.h>
 
 #include "tensor.h"
+#include "interpolation.h"
 
 namespace fsc {
 	
@@ -28,6 +29,23 @@ namespace fsc {
 			
 			return false;
 		};
+		
+		template<typename Num, int dim, typename F>
+		void runge_kutta_4_step(Eigen::Vector<Num, dim>& x, Num t, Num h, const F& f) {
+			using XType = Eigen::Vector<Num, dim>;
+
+			std::array<XType, 4> directions;
+
+			directions[0] = f(x                          , t          );
+			directions[1] = f(x + 0.5 * h * directions[0], t + 0.5 * h);
+			directions[2] = f(x + 0.5 * h * directions[1], t + 0.5 * h);
+			directions[3] = f(x +       h * directions[2], t +       h);
+
+			x += h * (
+				1.0 / 6.0 * (directions[0] + directions[3]) +
+				1.0 / 3.0 * (directions[1] + directions[2])
+			);
+		}
 	}
 
 	
