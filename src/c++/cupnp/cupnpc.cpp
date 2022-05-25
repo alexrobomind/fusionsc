@@ -559,6 +559,37 @@ StringTree generateMethod(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 	return mv(methodDeclaration);
 }
 
+StringTree generateEnum(CodeGeneratorRequest::Reader request, uint64_t nodeId, StringTree& methodDefinitions) {
+	auto nodeBrand = capnp::defaultValue<Brand>();
+		
+	auto node = getNode(request, nodeId);
+	
+	KJ_REQUIRE(node.isEnum());
+	auto asEnum = node.getEnum();
+	auto enumerants = asEnum.getEnumerants();
+	
+	auto name = nodeName(nodeId, request);
+	auto fullName = cppNodeTypeName(nodeId, capnp::defaultValue<Brand>(), nodeId, capnp::defaultValue<Brand>(), request);
+	
+	StringTree result = strTree();
+	
+	for(size_t i = 0; i < enumerants.size(); ++i) {
+		auto ecName = enumCase(enumerants[i].getName());
+		result = strTree(
+			mv(result),
+			"    ", mv(ecName), " = ", i, ";\n"
+		);
+	}
+	
+	result = strTree(
+		"enum class ", name.flatten(), " {\n",
+		mv(result),
+		"};\n\n"
+	);
+	
+	return result;
+}
+
 StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId, StringTree& methodDefinitions) {
 	auto nodeBrand = capnp::defaultValue<Brand>();
 		
@@ -659,14 +690,25 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 				
 				auto type = slot.getType();
 				auto typeName = cppTypeName(type, nodeId, capnp::defaultValue<Brand>(), request);
+				auto fieldType = type.which() == Type::ENUM ? str("uint16_t") : typeName.flatten();
 				
 				auto subName = camelCase(field.getName(), true);
 				auto enumName = enumCase(field.getName());
 				
 				auto pointerField = [&]() {
 				};
+						
+				auto wrapIfEnum = [&](kj::StringTree input) {
+					if(type.which() != Type::ENUM)
+						return mv(input);
+					
+					return strTree(
+						"static_cast<", typeName.flatten(), ">(", mv(input), ")"
+					);
+				};
 				
 				switch(type.which()) {
+					case Type::ENUM:
 					case Type::BOOL:
 					case Type::INT8:
 					case Type::INT16:
@@ -677,8 +719,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 					case Type::UINT32:
 					case Type::UINT64:
 					case Type::FLOAT32:
-					case Type::FLOAT64:
-					case Type::ENUM: {
+					case Type::FLOAT64:{
 						
 						if(field.getDiscriminantValue() != 0xffff) {
 							// Getters and setters for unionized primitive fields
@@ -689,16 +730,16 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 									typeName.flatten(), strTree("get", subName.asPtr(), "() const"),
 									strTree(
 										"	if(cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data) != ", field.getDiscriminantValue(), ")\n",
-										"		return ", cppDefaultValue(slot.getDefaultValue()), ";\n",
+										"		return ", wrapIfEnum(cppDefaultValue(slot.getDefaultValue())), ";\n",
 										"	\n",
-										"	return cupnp::getPrimitiveField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ");\n"
+										"	return ", wrapIfEnum(strTree("cupnp::getPrimitiveField<", fieldType, ", ", slot.getOffset(), ">(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ")")), ";\n"
 									)
 								),
 								generateMethod(
 									request, nodeId, methodDefinitions,
 									strTree("void"), strTree("set", subName.asPtr(), "(", typeName.flatten(), " newVal)"),
 									strTree(
-										"	cupnp::setPrimitiveField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ", newVal);\n",
+										"	cupnp::setPrimitiveField<", fieldType, ", ", slot.getOffset(), ">(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ", newVal);\n",
 										"	cupnp::setDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data, ", field.getDiscriminantValue(), ");\n"
 									)
 								),
@@ -712,14 +753,14 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 									request, nodeId, methodDefinitions,
 									typeName.flatten(), strTree("get", subName.asPtr(), "() const"),
 									strTree(
-										"	return cupnp::getPrimitiveField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ");\n"
+										"	return ", wrapIfEnum(strTree("cupnp::getPrimitiveField<", fieldType, ", ", slot.getOffset(), ">(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ")")), ";\n"
 									)
 								),
 								generateMethod(
 									request, nodeId, methodDefinitions,
 									strTree("void"), strTree("set", subName.asPtr(), "(", typeName.flatten(), " newVal)"),
 									strTree(
-										"	cupnp::setPrimitiveField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ", newVal);\n"
+										"	cupnp::setPrimitiveField<", fieldType, ", ", slot.getOffset(), ">(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ", newVal);\n"
 									)
 								),
 								"\n"
@@ -782,7 +823,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 							
 								generateMethod(
 									request, nodeId, methodDefinitions,
-									typeName.flatten(), strTree("get", subName.asPtr(), "() const"),
+									strTree("const ", typeName.flatten()), strTree("get", subName.asPtr(), "() const"),
 									strTree(
 										"	if(cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data) != ", field.getDiscriminantValue(), ")\n",
 										"		return cupnp::getPointer<", typeName.flatten(), ">(reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n",
@@ -812,7 +853,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 								
 								generateMethod(
 									request, nodeId, methodDefinitions,
-									typeName.flatten(), strTree("get", subName.asPtr(), "() const"),
+									strTree("const ", typeName.flatten()), strTree("get", subName.asPtr(), "() const"),
 									strTree(
 										"	return cupnp::getPointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data, reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n"
 									)
@@ -854,6 +895,10 @@ StringTree generateNode(CodeGeneratorRequest::Reader request, uint64_t nodeId, S
 	
 	if(node.isInterface()){
 		result = strTree(mv(result), generateInterface(request, node.getId(), methodDefinitions));
+	}
+	
+	if(node.isEnum()) {
+		result = strTree(mv(result), generateEnum(request, node.getId(), methodDefinitions));
 	}
 	
 	return mv(result);
