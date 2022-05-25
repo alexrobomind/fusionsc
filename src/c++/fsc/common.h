@@ -44,6 +44,32 @@ using kj::NEVER_DONE;
 using kj::PromiseFulfiller;
 using kj::CrossThreadPromiseFulfiller;
 
+/** 
+ *  \class DataRef
+ *  \tparam T Type of the root message stored in the data ref.
+ *  \memberof fsc
+ *
+ *  The DataRef template is a special capability recognized all throughout the FSC library.
+ *  It represents a link to a data storage location (local or remote), associated with abort
+ *  unique ID, which can be downloaded to local storage and accessed there. Locally downloaded
+ *  data are represented by the LocalDataRef class, which subclasses DataRef::Client.
+ *
+ *  The stored data is expected to be in one of the two following formats:
+ *  - If T is capnp::Data, then the dataref stores a raw binary data array
+ *  - If T is any other type, it must correspond to a CapNProto struct type. In
+ *    this case, the DataRef holds a message with the corresponding root type, and
+ *    a capability table that tracks any remote objects in use by this message
+ *    (including other DataRef instances).
+ *
+ *  Once obtained, DataRefs can be freely passed around as part of RPC calls or data published
+ *  in other DataRef instances. The fsc runtime will do all it possibly can to protect the integrity
+ *  of a DataRef. In the absence of hardware failure, data referenced via DataRef objects
+ *  can only go out of use once all referencing DataRef objects do so as well.
+ *
+ *  DataRefs only represent a link to locally or remotely stored data. To access the underlying
+ *  data, they must be converted into LocalDataRef instances using LocalDataRef::download methods.
+ */
+
 
 namespace internal {
 	
@@ -59,25 +85,31 @@ struct UnwrapIfPromise_<kj::Promise<T>> { using Type = T; };
 
 }
 
+//! Maps Promise<T> to T, otherwise returns T, no recursive unpacking
 template<typename T>
 using UnwrapIfPromise = typename internal::UnwrapIfPromise_<T>::Type;
 
+//! Wraps Maybe<T> to T, otherwise returs T, no recursive unpacking
 template<typename T>
 using UnwrapMaybe = typename internal::UnwrapMaybe_<T>::Type;
 
-template<typename T>
-using ReturnType = decltype(kj::instance<T>()());
+//! The result type of calling T(Args) with instances
+template<typename T, typename... Args>
+using ReturnType = decltype(kj::instance<T>(kj::instance<Args>()...));
 
+//! Casts capnp word (8 bytes) array to byte array
 inline Array<const byte> wordsToBytes(Array<const capnp::word> words) {
 	ArrayPtr<const byte> bytesPtr = words.asBytes();
 	return bytesPtr.attach(mv(words));
 }
 
+//! Casts capnp word (8 bytes) array to byte array
 inline Array<byte> wordsToBytes(Array<capnp::word> words) {
 	ArrayPtr<byte> bytesPtr = words.asBytes();
 	return bytesPtr.attach(mv(words));
 }
 
+//! Casts byte array to capnp word (8 bytes) array. Undefined if not aligned.
 inline Array<const capnp::word> bytesToWords(Array<const byte> bytes) {
 	ArrayPtr<const capnp::word> wordPtr = ArrayPtr<const capnp::word>(
 		reinterpret_cast<const capnp::word*>(bytes.begin()),
@@ -86,6 +118,7 @@ inline Array<const capnp::word> bytesToWords(Array<const byte> bytes) {
 	return wordPtr.attach(mv(bytes));
 }
 
+//! Casts byte array to capnp word (8 bytes) array. Undefined if not aligned.
 inline ArrayPtr<const capnp::word> bytesToWords(ArrayPtr<const byte> bytes) {
 	ArrayPtr<const capnp::word> wordPtr = ArrayPtr<const capnp::word>(
 		reinterpret_cast<const capnp::word*>(bytes.begin()),
@@ -94,6 +127,7 @@ inline ArrayPtr<const capnp::word> bytesToWords(ArrayPtr<const byte> bytes) {
 	return wordPtr;
 }
 
+//! Casts byte array to capnp word (8 bytes) array. Undefined if not aligned.
 inline Array<capnp::word> bytesToWords(Array<byte> bytes) {
 	ArrayPtr<capnp::word> wordPtr = ArrayPtr<capnp::word>(
 		reinterpret_cast<capnp::word*>(bytes.begin()),
@@ -102,33 +136,42 @@ inline Array<capnp::word> bytesToWords(Array<byte> bytes) {
 	return wordPtr.attach(mv(bytes));
 }
 
+/*
+
+//! This is evil. Don't use it.
 template<typename T>
 Promise<T*> share(Own<T> own) {
 	Promise<T*> resultRef(own.get());
 	return resultRef.attach(mv(own));
-}
+} */
 
 
+//! Type of a kj::tuple constructed from given types.
 template<typename... T>
 using TupleFor = decltype(tuple(instance<T>()...));
 
 // Similar to kj::_::Void (which is, annoyingly, internal), a placeholder for "nothing"
 // We don't call it Void both to maintain compatibility and because of semantic differences
+
+//! Replacement type for void in tuples created by joinPromises()
 struct Meaningless {};
 
 template<typename T> struct VoidToMeaningless_       { using Type = T; };
 template<>           struct VoidToMeaningless_<void> { using Type = Meaningless; };
 
+//! Replaces void by Meaningless
 template<typename T> using VoidToMeaningless = typename VoidToMeaningless_<T>::Type;
 
 template<typename T>
 struct TVoid_ { using Type = void; };
 
+//! Non-deduced void
 template<typename T>
 using TVoid = typename TVoid_<T>::Type;
 
 // Join promises into a tuple
 
+//! Joins promises into a tuple. Promises to void are replaced with an instance of Meaningless in the result.
 template<typename T1, typename... T>
 Promise<TupleFor<T1, VoidToMeaningless<T>...>> joinPromises(Promise<T1>&& p1, Promise<T>&&... tail) {
 	Tuple<Promise<T>...> tailTuple = tuple(mv(tail)...);
@@ -153,6 +196,7 @@ Promise<TupleFor<Meaningless, VoidToMeaningless<T>...>> joinPromises(Promise<voi
 
 inline Promise<Tuple<>> joinPromises() { return tuple(); }
 
+//! Identifier class wrapping a byte array
 struct ID {
 	Array<const byte> data;
 	
@@ -187,11 +231,26 @@ struct ID {
 	template<typename T>
 	inline bool operator != (const T& other) const { return this->cmp(other) != 0; }
 	
-	// Requires data.h
+	//! Construct ID by from Reader. Requires data.h
+	/** This method constructs an ID out of the canonical representation of the passed
+	 *  capnproto reader.
+	 
+	 *  If the reader holds any capabilities (such as DataRef),
+	 *  the canonicalization will fail. Use fromReaderWithRefs() instead.
+	 *
+	 * \note Requires data.h
+	 */
 	template<typename T>
 	static ID fromReader(T t);
 	
-	// Requires data.h
+	//! Construct ID from reader with datarefs. Requires data.h
+	/** In addition to fromReader(), this method also replaces all
+	 *  linked DataRef objects with their IDs. Since this might
+	 *  require remote calls, it can only return a Promise to
+	 *  an ID.
+	 *
+	 * \note Requires data.h
+	 */
 	template<typename T>
 	static Promise<ID> fromReaderWithRefs(T t);
 };
