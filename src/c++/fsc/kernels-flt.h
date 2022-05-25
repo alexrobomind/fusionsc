@@ -7,9 +7,9 @@ namespace fsc {
 	namespace kmath {
 		template<typename Num>
 		Num wrap(Num x) { 
-			x %= 2 * pi;
-			x += pi;
-			x %= 2 * pi;
+			x = fmod(x, 2 * pi);
+			x += 3 * pi;
+			x = fmod(x, 2 * pi);
 			x -= pi;
 			return x;
 		};
@@ -43,9 +43,9 @@ namespace fsc {
 	
 	*/
 	
-	EIGEN_DEVICE_FUNC fltKernel(
+	EIGEN_DEVICE_FUNC void fltKernel(
 		unsigned int idx,
-		fsc::cu::FLTKernelData kernelData
+		fsc::cu::FLTKernelData kernelData,
 		const fsc::cu::FLTKernelRequest request
 	) {
 		using Num = float;
@@ -56,9 +56,18 @@ namespace fsc {
 		fsc::cu::FLTKernelState state = myData.mutateState();
 		auto statePos = state.mutatePosition();
 		
+		// Copy initial state data into local memory
+		V3 x;
+		for(int i = 0; i < 3; ++i)
+			x[i] = statePos[i];
+		
+		uint32_t step = state.getNumSteps();
+		uint32_t eventCount = state.getEventCount();
+		double distance = state.getDistance();
+		
 		// The kernel terminates its execution with this macro
 		#define FSC_FLT_RETURN(reason) \
-			state.setStopReason(FLTStopReason::reason); \
+			myData.setStopReason(::fsc::cu::FLTStopReason::reason); \
 			goto THE_END
 		
 		// Event logging
@@ -69,7 +78,7 @@ namespace fsc {
 				auto evt = currentEvent(); \
 				evt.setStep(step); \
 				\
-				auto loc = evt.mutateLocation() \
+				auto loc = evt.mutateLocation(); \
 				for(int i = 0; i < 3; ++i) \
 					loc.set(i, x[i]); \
 			}\
@@ -82,16 +91,7 @@ namespace fsc {
 		
 		auto currentEvent = [&]() {
 			return myData.mutateEvents()[eventCount];
-		}
-		
-		// Copy initial state data into local memory
-		V3 x;
-		for(int i = 0; i < 3; ++i)
-			x[i] = statePos[i];
-		
-		uint32_t step = state.getStep();
-		uint32_t eventCount = state.getEventCount();
-		double distance = state.getDistance();
+		};
 		
 		// ... do the work ...
 		
@@ -103,7 +103,7 @@ namespace fsc {
 			if(distance >= request.getDistanceLimit() && request.getDistanceLimit() > 0)
 				FSC_FLT_RETURN(DISTANCE_LIMIT);
 			
-			if(state.getTurn() >= request.getTurnLimit() && request.getTurnLimit() > 0)
+			if(state.getTurnCount() >= request.getTurnLimit() && request.getTurnLimit() > 0)
 				FSC_FLT_RETURN(TURN_LIMIT);
 			
 			// TODO: Add runge kutta step here
@@ -118,11 +118,11 @@ namespace fsc {
 			Num phi0 = state.getPhi0();
 			if(kmath::crossedPhi(phi1, phi2, phi0)) {
 				auto l = kmath::wrap(phi0 - phi1) / kmath::wrap(phi2 - phi1);
-				V3 xCross = l * x2 + (1. - l) * x1;
+				V3 xCross = l * x2 + (1. - l) * x;
 				
-				state.setTurn(state.getTurn() + 1);
+				state.setTurnCount(state.getTurnCount() + 1);
 				
-				currentEvent().setNewTurn(state.getTurn());
+				currentEvent().setNewTurn(state.getTurnCount());
 				FSC_FLT_LOG_EVENT(xCross);				
 			}
 			
@@ -131,7 +131,7 @@ namespace fsc {
 			x = x2;
 			distance += request.getStepSize();
 			++step;
-			state.getEventCount(eventCount);
+			state.setEventCount(eventCount);
 		}
 		
 		// !!! The kernel returns by jumping to this label !!!
@@ -140,7 +140,7 @@ namespace fsc {
 		// Copy state data back from local memory
 		for(int i = 0; i < 3; ++i)
 			statePos.set(i, x[i]);
-		state.setStep(step):
+		state.setNumSteps(step);
 		state.setDistance(distance);
 		
 		// Note: The event count is not updated here but at the end of the loop

@@ -168,7 +168,7 @@ namespace fsc {
 	};
 	
 	template<typename T, typename Device>
-	using DeviceType = decltype(std::declval<MapToDevice<T, Device>>().get());
+	using DeviceType = decltype(std::declval<MapToDevice<Decay<T>, Device>>().get());
 	
 	template<typename Device, typename T>
 	MapToDevice<T, Device> mapToDevice(T& in, Device& device) { return MapToDevice<T, Device>(in, device); }
@@ -187,6 +187,10 @@ namespace fsc {
 		
 		inline MapToDevice(Delegate& delegate, Device& device) :
 			delegate(delegate)
+		{}
+		
+		inline MapToDevice(Delegate&& delegate, Device& device) :
+			delegate((Delegate&) delegate)
 		{}
 		
 		inline auto get() { return delegate.get(); }
@@ -253,10 +257,10 @@ namespace fsc {
 		 * over the parameter.
 		 */
 		template<typename Kernel, Kernel f, typename Device, typename... Params, size_t... i>
-		Promise<void> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params... params) {
+		Promise<void> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {
 			// Create mappers for input
-			auto mappers = kj::heap<std::tuple<MapToDevice<Params, Device>...>>(
-				MapToDevice<Params, Device>(params, device)...
+			auto mappers = kj::heap<std::tuple<MapToDevice<Decay<Params>, Device>...>>(
+				MapToDevice<Decay<Params>, Device>(fwd<Params>(params), device)...
 			);
 						
 			// Update device memory
@@ -321,13 +325,13 @@ namespace fsc {
 	 *  memcpy operations all have completed.
 	 */
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Promise<void> launchKernel(Promise<void> prerequisite, Device& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
-		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, mv(prerequisite), mv(cost), std::make_index_sequence<sizeof...(params)>(), params...);
+	Promise<void> launchKernel(Promise<void> prerequisite, Device& device, size_t n, const Eigen::TensorOpCost& cost, Params&&... params) {
+		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, mv(prerequisite), mv(cost), std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
 	}
 	
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Promise<void> launchKernel(Device& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
-		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, READY_NOW, mv(cost), std::make_index_sequence<sizeof...(params)>(), params...);
+	Promise<void> launchKernel(Device& device, size_t n, const Eigen::TensorOpCost& cost, Params&&... params) {
+		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, READY_NOW, mv(cost), std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
 	}
 	
 	#define FSC_LAUNCH_KERNEL(x, ...) ::fsc::launchKernel<decltype(&x), &x>(__VA_ARGS__)
@@ -431,7 +435,7 @@ namespace internal {
 template<>
 struct KernelLauncher<Eigen::DefaultDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
-	static Promise<void> launch(Eigen::DefaultDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+	static Promise<void> launch(Eigen::DefaultDevice& device, size_t n, const Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
 		return kj::evalLater([=]() {
 			for(size_t i = 0; i < n; ++i)
 				f(i, params...);
@@ -607,6 +611,8 @@ MappedData<T, Device>& MappedData<T, Device>::operator=(MappedData&& other)
 	size = other.size;
 	
 	other.devicePtr = nullptr;
+	
+	return *this;
 }
 
 template<typename T, typename Device>
@@ -635,7 +641,7 @@ T* MappedData<T, Device>::deviceAlloc(Device& device, T* hostPtr, size_t size) {
 
 template<typename T, typename Device>
 struct MapToDevice<KernelArg<T>, Device> {
-	inline MapToDevice(KernelArg<T>& in, Device& device) :
+	inline MapToDevice(KernelArg<T>&& in, Device& device) :
 		delegate(in.ref, device),
 		_updateDevice(in.copyToDevice),
 		_updateHost(in.copyToHost)

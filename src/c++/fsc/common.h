@@ -24,6 +24,8 @@ using kj::Promise;
 using kj::Own;
 using kj::Tuple;
 using kj::Maybe;
+using kj::Decay;
+using kj::RemoveConst;
 
 using kj::mv;
 using kj::fwd;

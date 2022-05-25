@@ -12,7 +12,7 @@ namespace fsc {
 		auto calculation = FSC_LAUNCH_KERNEL(
 			fltKernel,
 			
-			_device, field.size(), costEstimate,
+			d, 3, costEstimate,
 			
 			kernelData, kernelRequest
 		);

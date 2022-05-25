@@ -15,7 +15,7 @@ namespace internal {
  */
 template<typename T>
 kj::Array<kj::ArrayPtr<capnp::word>> coerceSegmentTableToNonConst(T table) {	
-	auto outputTable = heapArray<kj::ArrayPtr<capnp::word>>(table.size());
+	auto outputTable = kj::heapArray<kj::ArrayPtr<capnp::word>>(table.size());
 	
 	for(size_t i = 0; i < table.size(); ++i) {
 		auto maybeConstPtr = table[i].begin();
@@ -31,7 +31,7 @@ kj::Array<kj::ArrayPtr<capnp::word>> coerceSegmentTableToNonConst(T table) {
 }
 
 template<typename T>
-CupnpMessage {
+struct CupnpMessage {
 	kj::Array<kj::ArrayPtr<capnp::word>> segmentTable;
 	
 	T root() {
@@ -39,35 +39,46 @@ CupnpMessage {
 	}
 	
 	CupnpMessage(capnp::MessageBuilder& builder) :
-		segmentTable(coerceSegmentTableToNonConst(builder.getSegmentsForOutput()))
+		segmentTable(internal::coerceSegmentTableToNonConst(builder.getSegmentsForOutput()))
 	{}
 	
 	CupnpMessage(capnp::MessageReader& reader)
 	{
-		KJ_REQUIRE(std::is_const<T>::value, "Can only build const messages from message readers");
+		KJ_REQUIRE(std::is_const<T>::value, "Can only build non-const messages from message builders");
 		
-		kj::Vector<kj::ArrayPtr<const word>> segments;
+		kj::Vector<kj::ArrayPtr<const capnp::word>> segments;
 		
 		size_t segmentId = 0;
 		while(true) {
-			KJ_IF_MAYBE(pSegment, reader.getSegment(segmentId++)) {
-				segment.pushBack(*pSegment);
-			} else {
-				break;
-			}
+			auto segment = reader.getSegment(segmentId++);
+			
+			if(segment == nullptr) break;
+			
+			segments.add(segment);
 		}
 		
-		segmentTable = coerceSegmentTableToNonConst(segments.releaseAsArray());
+		segmentTable = internal::coerceSegmentTableToNonConst(segments.releaseAsArray());
 	}
 	
-	CupnpMessage(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) :
-		segmentTable(coerceSegmentTableToNonConst(segments))
+	CupnpMessage(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> segments) :
+		segmentTable(internal::coerceSegmentTableToNonConst(segments))
 	{}
 };
 
-template<typename CuT = cupnp::CuFor<T>, typename T>
-CupnpMessage<CuT> cupnpMessageFromTemporary(Temporary<T>& tmp) {
-	return CupnpMessage<CuT>(*(tmp.holder));
+namespace internal {
+	template<typename T, typename T2>
+	struct InferCuTIfVoid_ { using type = T2; };
+	
+	template<typename T>
+	struct InferCuTIfVoid_<T, void> { using type = cupnp::CuFor<T>; };
+	
+	template<typename T1, typename T2>
+	using InferCuTIfVoid = typename InferCuTIfVoid_<T1, T2>::type;
+}
+
+template<typename CuT = void, typename T>
+CupnpMessage<internal::InferCuTIfVoid<T, CuT>> cupnpMessageFromTemporary(Temporary<T>& tmp) {
+	return CupnpMessage<internal::InferCuTIfVoid<T, CuT>>(*(tmp.holder));
 }
 	
 template<typename T, typename Device>
@@ -77,19 +88,19 @@ struct MapToDevice<CupnpMessage<T>, Device> {
 	Msg& original;
 	Device& device;
 	
-	kj::Array<MappedData<capnp::word>> deviceSegments;
+	kj::Array<MappedData<capnp::word, Device>> deviceSegments;
 	
 	kj::Array<kj::ArrayPtr<capnp::word>> hostSegmentTable;
-	MappedData<kj::ArrayPtr<capnp::word>> deviceSegmentTable;
+	MappedData<kj::ArrayPtr<capnp::word>, Device> deviceSegmentTable;
 	
 	MapToDevice(Msg& original, Device& device) :
-		original(original), device(device)
+		original(original), device(device), deviceSegmentTable(device)
 	{
 		size_t nSegments = original.segmentTable.size();
 		
 		// Allocate segments
 		{
-			auto builder = kj::heapArrayBuilder<MappedData<capnp::word>>(nSegments);
+			auto builder = kj::heapArrayBuilder<MappedData<capnp::word, Device>>(nSegments);
 			
 			for(size_t i = 0; i < nSegments; ++i) {
 				kj::ArrayPtr<capnp::word> segment = original.segmentTable[i];
@@ -97,7 +108,7 @@ struct MapToDevice<CupnpMessage<T>, Device> {
 				builder.add(device, segment.begin(), segment.size());
 			}
 			
-			deviceSegments = builder.releaseAsArray();
+			deviceSegments = builder.finish();
 		}
 		
 		// Gather device pointers
@@ -111,11 +122,11 @@ struct MapToDevice<CupnpMessage<T>, Device> {
 				));
 			}
 			
-			hostSegmentTable = builder.releaseAsArray();
+			hostSegmentTable = builder.finish();
 		}
 		
 		// Map segment table onto device
-		deviceSegmentTable = MappedData(Device, hostSegmentTable.begin(), hostSegmentTable.size());		
+		deviceSegmentTable = MappedData(device, hostSegmentTable.begin(), hostSegmentTable.size());		
 	}
 	
 	void updateHost() {
