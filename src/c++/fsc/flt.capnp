@@ -55,7 +55,7 @@ struct FLTKernelRequest {
 	distanceLimit @2 : Float32;
 	stepLimit @3 : UInt32;
 	
-	stepSize : 4;
+	stepSize @4 : Float32;
 	
 	grid @5 : Magnetics.ToroidalGrid;
 	fieldData @6 : Data.Float64Tensor; #TODO: This might become a separate field for efficiency

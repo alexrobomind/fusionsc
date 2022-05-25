@@ -1019,10 +1019,14 @@ void generateRequested(CodeGeneratorRequest::Reader request) {
 			}
 		}
 		
+		auto inputFilename = fileNode.getFilename();
+		kj::Path inputFile = kj::Path::parse(inputFilename);
+		
 		StringTree result = strTree(
 			"#pragma once \n",
 			"\n",
 			"#include <cupnp/cupnp.h>\n",
+			"#include \"", inputFilename, ".h\"\n",
 			KJ_MAP(importNode, fileNode.getImports()) {				
 				auto path = importNode.getName();
 								
@@ -1046,9 +1050,6 @@ void generateRequested(CodeGeneratorRequest::Reader request) {
 			"\n",
 			mv(methodDefinitions)
 		);
-		
-		auto inputFilename = fileNode.getFilename();
-		kj::Path inputFile = kj::Path::parse(inputFilename);
 		
 		/*if(baseName.size() < 6 || baseName.slice(baseName.size() - 6) != ".capnp") {
 			KJ_LOG(WARNING, "Skipped file because its name does not end with '.capnp'", baseName);

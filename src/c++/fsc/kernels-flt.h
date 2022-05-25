@@ -43,7 +43,7 @@ namespace fsc {
 	
 	*/
 	
-	EIGEN_DEVICE_FUNC biotSavartKernel(
+	EIGEN_DEVICE_FUNC fltKernel(
 		unsigned int idx,
 		fsc::cu::FLTKernelData kernelData
 		const fsc::cu::FLTKernelRequest request
