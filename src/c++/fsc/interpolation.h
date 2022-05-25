@@ -11,7 +11,7 @@ private:
 	static constexpr size_t wrap_slices = 1; // Number of phi-entries added by wrapping
 
 	template<typename In>
-	auto wrap_phi(const In& input) {
+	static auto wrap_phi(const In& input) {
 		size_t nr = input.dimensions()[0];
 		size_t nz = input.dimensions()[1];
 
