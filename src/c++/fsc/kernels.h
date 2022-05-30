@@ -101,49 +101,6 @@ namespace fsc {
 		
 		static T* deviceAlloc(Device& device, T* hostPtr, size_t size);
 	};
-
-	/** std::function is copy-constructableand therefore can only
-	 *  be used on copy-constructable lambdas. This is a move-only
-	 *  variant of it.
-	 */
-	 
-	/*template<typename... Args>
-	struct Callback {
-		struct BaseHolder {
-			virtual void call(Args... args) = 0;
-			virtual ~BaseHolder() {}
-		};
-		
-		template<typename T>
-		struct Holder : BaseHolder {
-			T t;
-			Holder(T t) : t(mv(t)) {}
-			void call(Args... args) override { t(mv(args)...); }
-			~Holder() noexcept {};
-		};
-		
-		BaseHolder* holder;
-		
-		// Disable copy
-		Callback(const Callback<Args...>& other) = delete;
-		Callback<Args...>& operator=(const Callback<Args...>& other) = delete;
-		Callback(Callback<Args...>&& other) {
-			holder = other.holder;
-			other.holder = nullptr;
-		}
-		
-		
-		template<typename T>
-		Callback(T t) :
-			holder(new Holder<T>(mv(t)))
-		{}
-		
-		~Callback() { if(holder != nullptr) delete holder; }
-		
-		void operator()(Args... args) {
-			holder->call(args...);
-		}
-	};*/
 	
 	/** Helper class template that maps a value to a target device.
 	 *
@@ -176,7 +133,7 @@ namespace fsc {
 	/**
 	 * Instantiation of MapToDevice that allows reuse of existing mappings.
 	 *
-	 * /warning This uses a reference to the original mapping, so its lifetime
+	 * \warning This uses a reference to the original mapping, so its lifetime
 	 * is bound by the original mapping. Care must be taken that the original
 	 * mapping object is kept alive until the scheduled kernel finishes execution.
 	 *
@@ -214,7 +171,7 @@ namespace fsc {
 		);
 	};
 	
-	/** Helper type that describes kernel arguments and their in/out semantics */
+	/** \internal Helper type that describes kernel arguments and their in/out semantics */
 	template<typename T>
 	struct KernelArg {
 		T& ref;
@@ -246,6 +203,14 @@ namespace fsc {
 		);
 	}
 	
+	/**
+	 * \def FSC_KARG(val, type)
+	 * \brief Overrides kernel argument type
+	 * 
+	 * Use this macro (with an lvalue, no temporaries please) to override the
+	 * transfer behavior of the given argument. Possible values for type are
+	 * NOCOPY, IN (host->device), OUT (device -> host), INOUT (both)
+	 */
 	#define FSC_KARG(val, type) ::fsc::kArg(val, ::fsc::KernelArgType::type)
 	
 	template<typename T, typename Device>
