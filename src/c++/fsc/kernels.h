@@ -74,9 +74,7 @@ namespace fsc {
 		return KernelLauncher<Device>::template launch<Kernel, f, Params...>(device, mv(f), n, expensive, params...);
 	}
 
-	/**
-	 * Class for allocating an array on a device and manage a host and device pointer simultaneously
-	 */
+	//! Class for allocating an array on a device and manage a host and device pointer simultaneously
 	template<typename T, typename Device>
 	struct MappedData {
 		Device& device;
@@ -84,76 +82,49 @@ namespace fsc {
 		T* devicePtr;
 		size_t size;
 		
+		//! Construct a mapping using the given host- and device-pointers
+		/**
+		 * \warning Takes over ownership of the device pointer. The device pointer must
+		 *          be compatible with Device::deallocate().
+		 */
 		MappedData(Device& device, T* hostPtr, T* devicePtr, size_t size);
+		
+		//! Allocate storage on the device to hold data specified by hostPtr (sizeof(T) * size)
 		MappedData(Device& device, T* hostPtr, size_t size);
+		
+		//! Create a mapping with no device storage
 		MappedData(Device& device);
 		
-		MappedData(const MappedData& other) = delete;
+		//! Take over the storage from another mapping
 		MappedData(MappedData&& other);
 		
-		MappedData& operator=(const MappedData& other) = delete;
+		//! Assign the storage from another mapping
 		MappedData& operator=(MappedData&& other);
+		
+		MappedData(const MappedData& other) = delete;
+		MappedData& operator=(const MappedData& other) = delete;
 		
 		~MappedData();
 		
+		//! Copy data from device array to host array
 		void updateHost();
+		
+		//! Copy data from host array to device array
 		void updateDevice();
 		
-		static T* deviceAlloc(Device& device, T* hostPtr, size_t size);
+		//! Allocates size * sizeof(T) bytes on the device
+		static T* deviceAlloc(Device& device, size_t size);
 	};
-
-	/** std::function is copy-constructableand therefore can only
-	 *  be used on copy-constructable lambdas. This is a move-only
-	 *  variant of it.
-	 */
-	 
-	/*template<typename... Args>
-	struct Callback {
-		struct BaseHolder {
-			virtual void call(Args... args) = 0;
-			virtual ~BaseHolder() {}
-		};
-		
-		template<typename T>
-		struct Holder : BaseHolder {
-			T t;
-			Holder(T t) : t(mv(t)) {}
-			void call(Args... args) override { t(mv(args)...); }
-			~Holder() noexcept {};
-		};
-		
-		BaseHolder* holder;
-		
-		// Disable copy
-		Callback(const Callback<Args...>& other) = delete;
-		Callback<Args...>& operator=(const Callback<Args...>& other) = delete;
-		Callback(Callback<Args...>&& other) {
-			holder = other.holder;
-			other.holder = nullptr;
-		}
-		
-		
-		template<typename T>
-		Callback(T t) :
-			holder(new Holder<T>(mv(t)))
-		{}
-		
-		~Callback() { if(holder != nullptr) delete holder; }
-		
-		void operator()(Args... args) {
-			holder->call(args...);
-		}
-	};*/
 	
-	/** Helper class template that maps a value to a target device.
-	 *
+	//! Helper class template that maps a value to a target device.
+	/** 
 	 *  Specialize this template to override how a specified parameter gets converted
 	 *  into a device-located parameter.
 	 *
 	 *  The default implementation just leaves the transfer up to CUDA / HIP.
 	 */
 	template<typename T, typename Device, typename SFINAE = void>
-	struct MapToDevice {		
+	struct MapToDevice {
 		inline MapToDevice(const T in, Device& device) :
 			value(in)
 		{}
@@ -167,15 +138,18 @@ namespace fsc {
 		T value;
 	};
 	
+	/** \brief Returns the type to be passed to the kernel for a given
+	 *         argument passed into launchKernel.
+	 */
 	template<typename T, typename Device>
 	using DeviceType = decltype(std::declval<MapToDevice<Decay<T>, Device>>().get());
 	
+	//! Method to return a device mapper for a given value
 	template<typename Device, typename T>
 	MapToDevice<T, Device> mapToDevice(T& in, Device& device) { return MapToDevice<T, Device>(in, device); }
 	
+	//! Instantiation of MapToDevice that allows reuse of existing mappings.
 	/**
-	 * Instantiation of MapToDevice that allows reuse of existing mappings.
-	 *
 	 * /warning This uses a reference to the original mapping, so its lifetime
 	 * is bound by the original mapping. Care must be taken that the original
 	 * mapping object is kept alive until the scheduled kernel finishes execution.
@@ -185,10 +159,12 @@ namespace fsc {
 	struct MapToDevice<MapToDevice<T, Device>, Device> {
 		using Delegate = MapToDevice<T, Device>;
 		
+		//! LValue constructor for variables
 		inline MapToDevice(Delegate& delegate, Device& device) :
 			delegate(delegate)
 		{}
 		
+		//! RValue constructor for temporaries
 		inline MapToDevice(Delegate&& delegate, Device& device) :
 			delegate((Delegate&) delegate)
 		{}
@@ -202,9 +178,7 @@ namespace fsc {
 	};
 	
 	
-	/**
-	 * Guard check for attempt to use cross-device mapppings.
-	 */
+	//! Guard check against cross-device mapppings
 	template<typename T, typename Device, typename OtherDevice>
 	struct MapToDevice<MapToDevice<T, Device>, OtherDevice> {
 		static_assert(
@@ -214,7 +188,10 @@ namespace fsc {
 		);
 	};
 	
-	/** Helper type that describes kernel arguments and their in/out semantics */
+	//! Helper type that describes kernel arguments and their in/out semantics.
+	/**
+	 * \note For use with FSC_KARG(...)
+	 */
 	template<typename T>
 	struct KernelArg {
 		T& ref;
@@ -227,16 +204,19 @@ namespace fsc {
 		{}
 	};
 	
+	//! Specifies copy behavior for arguemts around kernel invocation
 	enum class KernelArgType {
-		NOCOPY = 0,
-		IN = 1,
-		OUT = 2,
-		INOUT = 3
+		NOCOPY = 0, //!< Don't copy data between host and device for this invocation
+		IN = 1,     //!< Only copy data to the device before kernel invocation
+		OUT = 2,    //!< Copy data to host after kernel invocation
+		INOUT = 3   //!< Equivalent to IN and OUT
 	};
 	
+	//! Allows to override the copy behavior on a specified argument
 	template<typename T>
 	KernelArg<T> kArg(T& in, bool copyToHost, bool copyToDevice) { return KernelArg<T>(in, copyToHost, copyToDevice); }
 	
+	//! Allows to override the copy behavior on a specified argument
 	template<typename T>
 	KernelArg<T> kArg(T& in, KernelArgType type) {
 		return kArg(
@@ -246,6 +226,7 @@ namespace fsc {
 		);
 	}
 	
+	//! Convenience macro to wrap kernel arguments with the given type
 	#define FSC_KARG(val, type) ::fsc::kArg(val, ::fsc::KernelArgType::type)
 	
 	template<typename T, typename Device>
@@ -284,45 +265,49 @@ namespace fsc {
 		}
 	}
 	
+	//! Launches the specified kernel on the given device.
 	/**
-	 * Launches the specified kernel on the given device.
-	 *
-	 * Note that you have to call fsc::hostMemSynchronize on the device and wait on its
-	 * result before using output parameters.
-	 *
-	 * It is recommended to use FSC_LAUNCH_KERNEL(f, ...), which eliminates the need to
-	 * specify the type of the target function.
-	 *
-	 * Template parameters:
-	 *  Kernel - Type of the kernel function (usually a decltype expression)
-	 *  f      - Static reference to kernel function
-	 *
-	 * Method parameters:
-	 *  prerequisite - Promise that has to be fulfilled before this kernel will be
-	 *                 added to the target device's execution queue.
-	 *  device       - Eigen Device on which this kernel should be launched.
-	 *                 Supported types are:
-	 *                   - DefaultDevice
-	 *                   - ThreadPoolDevice
-	 *                   - GpuDevice (if enabled)
-	 *  n            - Parameter range for the index (first argument for kernel)
-	 *  cost         - Cost estimate for the operation. Used by ThreadPoolDevice
-	 *                 to determine block size.
-	 *  params       - Parameters to be mapped to device (if neccessary)
-	 *                 and passed to the kernel as additional parameters.
-	 *
-	 * Returns:
-	 *  A Promise<void> which indicates when additional operations may be submitted
-	 *  to the underlying device without interfering with the launched kernel execution
-	 *  AND all host -> device copy operations prior to kernel launch are completed (meaning
-	 *  that IN-type kernel arguments may be deallocated on the host side).
-	 *
-	 *  The exact meaning of this depends on the device in question. For CPU devices,
+	 *  The exact meaning of the return value depends on the device in question. For CPU devices,
 	 *  the fulfillment indicates completion (which is neccessary as memcpy operations
 	 *  on this device are immediate). For GPU devices, it only indicates that the
 	 *  operation was inserted into the device's compute stream (which is safe as
 	 *  memcpy requests are also inserted into the same compute stream) and the preceeding
 	 *  memcpy operations all have completed.
+	 *
+	 *  \note After the returned promise resolves, you have to call fsc::hostMemSynchronize
+	 *  on the device and wait on its result before using output parameters.
+	 *
+	 *  It is recommended to use FSC_LAUNCH_KERNEL(f, ...), which fills in the template
+	 *  parameters from its first argument.
+	 *
+	 *  \tparam Kernel      Type of the kernel function (usually a decltype expression)
+	 *
+	 *  \tparam f           Static reference to kernel function
+	 *
+	 *  \param prerequisite Promise that has to be fulfilled before this kernel will be
+	 *                      added to the target device's execution queue.
+	 *
+	 *  \param device       Eigen Device on which this kernel should be launched.
+	 *                      Supported types are:
+	 *                       - DefaultDevice
+	 *                       - ThreadPoolDevice
+	 *                       - GpuDevice (if enabled)
+	 *
+	 *  \param n            Parameter range for the index (first argument for kernel)
+	 *
+	 *  \param cost         Cost estimate for the operation. Used by ThreadPoolDevice
+	 *                      to determine block size.
+	 *
+	 *  \param params       Parameters to be mapped to device (if neccessary)
+	 *                      and passed to the kernel as additional parameters.
+	 *                      For each parameter type P, the kernel will receive
+	 *                      a parameter of type DeviceType<P>.
+	 *
+	 *  \returns A Promise<void> which indicates when additional operations may be submitted
+	 *  to the underlying device without interfering with the launched kernel execution
+	 *  AND all host -> device copy operations prior to kernel launch are completed (meaning
+	 *  that IN-type kernel arguments may be deallocated on the host side).
+	 *
 	 */
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
 	Promise<void> launchKernel(Promise<void> prerequisite, Device& device, size_t n, const Eigen::TensorOpCost& cost, Params&&... params) {
@@ -577,7 +562,7 @@ template<typename T, typename Device>
 MappedData<T, Device>::MappedData(Device& device, T* hostPtr, size_t size) :
 	device(device),
 	hostPtr(hostPtr),
-	devicePtr(deviceAlloc(device, hostPtr, size)),
+	devicePtr(deviceAlloc(device, size)),
 	size(size)
 {
 }
@@ -633,7 +618,7 @@ void MappedData<T, Device>::updateDevice() {
 }
 
 template<typename T, typename Device>
-T* MappedData<T, Device>::deviceAlloc(Device& device, T* hostPtr, size_t size) {
+T* MappedData<T, Device>::deviceAlloc(Device& device, size_t size) {
 	return (T*) device.allocate(size * sizeof(T));
 }
 
