@@ -39,21 +39,17 @@ class LocalDataService;
 template<typename T>
 struct TensorReader;
 
-/**
- * Use this to get the fsc capnp tensor type for
- * a specific primitive.
- */
+//! Use this to get the fsc capnp tensor type for a specific primitive.
 template<typename T>
 using TensorFor = typename internal::TensorFor_<T>::Type;
 
-/**
- * Use this to figure out what datatype a reference points to.
- */
+//! Use this to figure out what datatype a DataRef points to.
 template<typename T>
 using References = typename internal::References_<T>::Type;
 
 // ============================================ API =============================================
 
+//! Publishes and downloads data into LocalDataRef instances.
 /**
  * Main entry point for handling local and remote data references. Can be used to both create
  * remotely-downloadable data references with its 'publish' methods and download (as in, create
@@ -63,16 +59,32 @@ class LocalDataService : public DataService::Client {
 public:
 	using Nursery = kj::Vector<kj::Own<void>>;
 	
+	//! \name Download methods
+	///@{
+	
+	//! Downloads remote DataRef::Client into LocalDataRef
 	/**
 	 * Downloads the data contained in the remote reference into the local backing
 	 * store and links the remote capabilities into a local capability table.
 	 *
-	 * Returns a local data ref instance which extends the interface by DataRef
+	 * \param src The DataRef<T>::Client to download from (can also be a LocalDataRef<T>)
+	 * \param recursive Whether to recursively download all referenced DataRef instances
+	 *        into the local data store as well. If true, all contained DataRef objects will
+	 *        point into local storage after the returned promise resolved, and are therefore
+	 *        guaranteed to instantly resolve in future download attempts.
+	 *
+	 * \returns Promise to a local data ref instance which extends the interface by DataRef
 	 * with direct access to the stored data.
 	 */
 	template<typename Reference, typename T = References<Reference>>
 	Promise<LocalDataRef<T>> download(Reference src, bool recursive = true);
 	
+	///@}
+	
+	//! \name Publication methods
+	///@{
+	
+	//! Publishes binary data and capability table
 	/**
 	 * Creates a local data reference directly from a backing array and a capability table.
 	 *
@@ -82,10 +94,20 @@ public:
 	 * Currently, any other type leads to the backing array being interpreted as containing
 	 * a CapNProto message (including its segment table) with a root of the specified data
 	 * type (can also be capnp::AnyPointer, capnp::AnyList or capnp::AnyStruct or similar).
+	 *
+	 * \param id The global ID to publish this data ref under.
+	 * \param backingArray The contents of the binary buffer. The LocalDataRef object will
+	 *        take ownership of this buffer.
+	 * \param capTable A list of capabilities (usually the capability table of the passed
+	 *        Cap'n'Proto message) to be stored alongside the binary data.
+	 *
+	 * \returns A LocalDataRef object which can be passed into all targets expecting abort
+	 *          DataRef::Client.
 	 */
 	template<typename T = capnp::Data>
 	LocalDataRef<T> publish(ArrayPtr<const byte> id, Array<const byte> backingArray, ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable = kj::heapArrayBuilder<Maybe<Own<capnp::Capability::Client>>>(0).finish());
 	
+	//! Publishes Cap'n'proto message
 	/**
 	 * Creates a local data reference by copying the contents of a capnproto reader.
 	 * If the reader is of type capnp::Data, the byte array it points to will be copied
@@ -93,19 +115,41 @@ public:
 	 * Currently, for any other type this method will create a message containing a deepcopy
 	 * copy of the data referenced by this reader and store it into the backing array (including
 	 * the message's segment table).
+	 * Capabilities contained in the reader's message will be added into the capability table
+	 * hosted by the DataRef.
 	 */
 	template<typename Reader, typename T = capnp::FromAny<Reader>>
 	LocalDataRef<T> publish(ArrayPtr<const byte> id, Reader reader);
 	
+	//! Publishes method with ID derived from first argument
 	/**
 	 * Creates a local data reference by copying the contents of the second argument.
-	 * The ID of the reference is derived from the first argument.
-	 * WARNING: The second argument must be a valid until the returned promise resolves.
+	 * The ID of the reference is derived from the first argument. This process requires
+	 * inspecting the ID of DataRef instances contained in the first argument, which might
+	 * involve remote calls. Therefore, only a promise is returned.
+	 *
+	 * \warning The second argument must be a valid until the returned promise resolves, as it
+	 * is only copied for publication after the ID is computed.
+	 *
+	 * \param dataForID Input from which the ID of this object will be derived. While this
+	 *        reader may contain DataRef s, no other type of Capability may be stored in
+	 *        its message. Currently, the following information is hashed to obtain the stored ID:
+	 *         - The Cap'n'Proto type ID of the given reader
+	 *         - The canonical representation of the reader, after replacing all
+	 *           contained DataRef instances with their IDs.
+	 * \param data The data to be stored under the ID computed from the first argument.
+	 
+	 * \param hashFunction The name of the hash function to be used for ID computation. Must be
+	 *        a valid hash function name for the Botan library.
+	 *
+	 * \returns A promise to a LocalDataRef, which will resolve once the information to compute
+	 *          the ID has been obtained.
 	 */
 	template<typename Reader, typename IDReader, typename T = capnp::FromAny<Reader>, typename T2 = capnp::FromAny<IDReader>>
 	Promise<LocalDataRef<T>> publish(IDReader dataForID, Reader data, kj::StringPtr hashFunction = "SHA-256"_kj) KJ_WARN_UNUSED_RESULT;
 	
 	
+	//! Shorthand for publish(data, data, hashFunction)
 	/**
 	 * Creates a local data reference with an ID derived from the contents.
 	 * WARNING: The first argument must be kept alive until the returned promise resolves.
@@ -115,6 +159,12 @@ public:
 		return publish(data, data, hashFunction);
 	}
 	
+	///@}
+	
+	//! \name Archiving methods
+	///@{
+	
+	//! Write DataRef to an archive file
 	/**
 	 * Downloads the target data and all its transitive dependencies and writes them
 	 * into an archive file. This file can then be shared with other customers to provide
@@ -123,6 +173,7 @@ public:
 	template<typename Ref, typename T = References<Ref>>
 	Promise<void> writeArchive(Ref reference, const kj::File& out) KJ_WARN_UNUSED_RESULT;	
 	
+	//! Publish contents of archive file as LocalDataRef
 	/**
 	 * Reads an archive file and publishes all data contained within. Returns a LocalDataRef
 	 * to the root used when writing the archive.
@@ -130,6 +181,7 @@ public:
 	template<typename T>
 	LocalDataRef<T> publishArchive(const kj::ReadableFile& in);
 	
+	//! Write DataRef to an Archive::Builder
 	/**
 	 * Like writeArchive, but instead of writing to a file, stores the data in memory in the
 	 * provided Archive::Builder.
@@ -137,11 +189,14 @@ public:
 	template<typename Ref, typename T = References<Ref>>
 	Promise<void> buildArchive(Ref reference, Archive::Builder out, Maybe<Nursery&> nursery = Maybe<Nursery&>()) KJ_WARN_UNUSED_RESULT;
 	
+	//! Publish the data in the given Archive::Reader as LocalDataRef
 	/**
 	 * Like publishArchive, but copies the data from the in-memory structure given
 	 */
 	template<typename T>
 	LocalDataRef<T> publishArchive(Archive::Reader in);
+	
+	///@}
 	
 	/**
 	 * Constructs a new data service instance using the shared backing store contained in the given
@@ -174,12 +229,13 @@ private:
 	friend class internal::LocalDataRefImpl;
 };
 
+//! Local version of DataRef::Client.
 /**
  * Data reference backed by local storage. In addition to the remote access functionality
- * provided by the interface in capnp::DataRef<...>, this class provides direct access to
+ * provided by the interface in capnp::DataRef, this class provides direct access to
  * locally stored data.
  * This class uses non-atomic reference counting for performance, so it can not be
- * shared across threads. To share this to other threads, pass the DataRef<...>::Client
+ * shared across threads. To share this to other threads, pass the DataRef::Client
  * capability it inherits from via RPC and use that thread's DataService to download
  * it into a local reference. If this ref and the other DataServce share the same
  * data store, the underlying data will not be copied, but shared between the references.
@@ -241,6 +297,14 @@ private:
 	friend class LocalDataRef;
 };
 
+//! Combined MessageBuilder and Struct::Builder
+/**
+ * \tparam T Data type of the contained message.
+ *
+ * This class holds a locally owned MessageBuilder and specifies
+ * the type of the message's root. It directly derives from T::Builder,
+ * so the root struct / list can be directly accessed.
+ */
 template<typename T>
 struct Temporary : public T::Builder {
 	template<typename... Params>
@@ -295,6 +359,11 @@ TensorVal<T> tensorGet(const T& tensor, const ArrayPtr<size_t> index);
 template<typename T>
 void tensorSet(const T& tensor, const ArrayPtr<size_t> index, TensorVal<T> value);
 
+//! Fast tensor reader
+/**
+ * Allows to quickly read a scalar value from a stored tensor (given a multiindex).
+ * \tparam T Type of the tensor holder. Must be a Builder or Reader type.
+ */
 template<typename T>
 struct TensorReader {	
 	TensorReader(const T ref);	
@@ -304,9 +373,29 @@ struct TensorReader {
 	decltype(instance<const T>().getShape()) shape;
 };
 
-
 bool hasMaximumOrdinal(capnp::DynamicStruct::Reader in, unsigned int maxOrdinal);
 
+//! Struct version checker
+/**
+ * When passing structured data between functions, Cap'n'proto will silently hide all fields which
+ * are not understood by the current version of the protocol. Likewise, if new fields are added,
+ * methods that do not yet understand them will likely not check for their presence. In many cases,
+ * this is useful behavior.
+ *
+ * However, for scientific codes, when data are requested, it is extremely important that a given
+ * request is understood completely. This method aims to enable protocol evolution with this contraint,
+ * by checking whether a function, that can only interpret fields up to the given ordinal number in the
+ * given struct, will be able to fully understand the passed data. It does so by not only inspecting
+ * the ordinal numbers of set fields, but also by inspecting the wire representation of the struct, to
+ * ensure that there are no unknown fields set by a potentially newer version of the protocol.
+ *
+ * \param in The data to be checked for consistency.
+ * \param maxOrdinal An upper bound on the ordinal number of fields. Any field with an ordinal number
+ *        exceeding this parameter (or unknown to this client) may only be set to its default value,
+ *        otherwise this method will return false.
+ *
+ * \returns true if the given struct meets the max ordinal requirements, otherwise false.
+ */
 template <typename T, typename = kj::EnableIf<capnp::kind<capnp::FromReader<T>>() == capnp::Kind::STRUCT>>
 bool hasMaximumOrdinal(T in, unsigned int maxOrdinal) {
 	return hasMaximumOrdinal(capnp::DynamicStruct::Reader(in), maxOrdinal);
@@ -314,12 +403,14 @@ bool hasMaximumOrdinal(T in, unsigned int maxOrdinal) {
 
 Promise<void> removeDatarefs(capnp::AnyPointer::Reader in, capnp::AnyPointer::Builder out);
 Promise<void> removeDatarefs(capnp::AnyStruct::Reader in, capnp::AnyStruct::Builder out);
-	
+
+//! Creates ID from canonical representation of reader
 template<typename T>
 ID ID::fromReader(T t) {
 	return ID(wordsToBytes(capnp::canonicalize(t)));
 }
 
+//! Creates ID from canonical representation of reader, replaces contained DataRef::Client s with their IDs.
 template<typename T>
 Promise<ID> ID::fromReaderWithRefs(T t) {
 	Temporary<capnp::FromAny<T>> tmp;

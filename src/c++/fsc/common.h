@@ -17,6 +17,9 @@ namespace kj {
 	class Own;
 }
 
+/**
+ * The FSC library.
+ */
 namespace fsc {
 
 using byte = kj::byte;
@@ -43,32 +46,6 @@ using kj::NEVER_DONE;
 
 using kj::PromiseFulfiller;
 using kj::CrossThreadPromiseFulfiller;
-
-/** 
- *  \class DataRef
- *  \tparam T Type of the root message stored in the data ref.
- *  \memberof fsc
- *
- *  The DataRef template is a special capability recognized all throughout the FSC library.
- *  It represents a link to a data storage location (local or remote), associated with abort
- *  unique ID, which can be downloaded to local storage and accessed there. Locally downloaded
- *  data are represented by the LocalDataRef class, which subclasses DataRef::Client.
- *
- *  The stored data is expected to be in one of the two following formats:
- *  - If T is capnp::Data, then the dataref stores a raw binary data array
- *  - If T is any other type, it must correspond to a CapNProto struct type. In
- *    this case, the DataRef holds a message with the corresponding root type, and
- *    a capability table that tracks any remote objects in use by this message
- *    (including other DataRef instances).
- *
- *  Once obtained, DataRefs can be freely passed around as part of RPC calls or data published
- *  in other DataRef instances. The fsc runtime will do all it possibly can to protect the integrity
- *  of a DataRef. In the absence of hardware failure, data referenced via DataRef objects
- *  can only go out of use once all referencing DataRef objects do so as well.
- *
- *  DataRefs only represent a link to locally or remotely stored data. To access the underlying
- *  data, they must be converted into LocalDataRef instances using LocalDataRef::download methods.
- */
 
 
 namespace internal {

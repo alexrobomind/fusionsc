@@ -229,4 +229,9 @@ endif()
 # Set up testing subsystem
 include(Catch)
 
+# Cross-communication variables
+SET(FSC_GENAPI "")
+
 add_subdirectory(src/c++)
+
+add_subdirectory(docs)

@@ -1,5 +1,5 @@
 # Set up capnpc options
-set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/fsc) # Set output dir
+set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/genapi/fsc) # Set output dir
 
 # Create output for .capnp files
 file(MAKE_DIRECTORY ${CAPNPC_OUTPUT_DIR})
@@ -87,6 +87,26 @@ add_library(
 	${FSC_CP_CUHEADERS}
 )
 
+set_property(
+	TARGET fsc
+	PROPERTY CP_HEADERS ${FSC_CP_HEADERS}
+)
+
+set_property(
+	TARGET fsc
+	PROPERTY CP_SRC ${FSC_CP_SRC}
+)
+
+set_property(
+	TARGET fsc
+	PROPERTY CP_CUHEADERS ${FSC_CP_CUHEADERS}
+)
+
+set_property(
+	TARGET fsc
+	PROPERTY SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
 if(FSC_WITH_CUDA)
 endif()
 
@@ -94,7 +114,7 @@ target_link_libraries(fsc PUBLIC deps cupnp)
 target_include_directories(
 	fsc
 	PUBLIC
-	$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/genapi>
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
 	# TODO $<INSTALL_INTERFACE:???>
 )

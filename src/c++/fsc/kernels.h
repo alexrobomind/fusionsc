@@ -150,7 +150,7 @@ namespace fsc {
 	
 	//! Instantiation of MapToDevice that allows reuse of existing mappings.
 	/**
-	 * /warning This uses a reference to the original mapping, so its lifetime
+	 * \warning This uses a reference to the original mapping, so its lifetime
 	 * is bound by the original mapping. Care must be taken that the original
 	 * mapping object is kept alive until the scheduled kernel finishes execution.
 	 *
@@ -227,6 +227,14 @@ namespace fsc {
 	}
 	
 	//! Convenience macro to wrap kernel arguments with the given type
+	/**
+	 * \def FSC_KARG(val, type)
+	 * \brief Overrides kernel argument type
+	 * 
+	 * Use this macro (with an lvalue, no temporaries please) to override the
+	 * transfer behavior of the given argument. Possible values for type are
+	 * NOCOPY, IN (host->device), OUT (device -> host), INOUT (both)
+	 */
 	#define FSC_KARG(val, type) ::fsc::kArg(val, ::fsc::KernelArgType::type)
 	
 	template<typename T, typename Device>
