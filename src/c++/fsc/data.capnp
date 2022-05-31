@@ -23,11 +23,19 @@ interface DataRef (T) {
 	transmit @3 (start : UInt64, end : UInt64, receiver : Receiver);
 }
 
+#//! [DataService]
 interface DataService @0xc6d48902ddb7e122 {
+	# Upload a message to the remote data service and have it publish it
 	store @0 [T] (id : Data, data : T) -> (ref : DataRef(T));
+	
+	# Have the remote data service download a DataRef and re-publish it
 	clone @1 [T] (source : DataRef(T)) -> (ref : DataRef(T));
+	
+	# Create a DataRef that on-demand downloads the remote DataRef and caches it
+	# RESERVED UNIMPLEMENTED
 	cache @2 [T] (source : DataRef(T)) -> (ref : DataRef(T));
 }
+#//! [DataService]
 
 # Archive types
 struct Archive {
@@ -48,6 +56,8 @@ struct Archive {
 }
 
 # Support data types
+
+# BEGIN [tensors]
 
 struct Float64Tensor {
 	shape @0 : List(UInt64);
@@ -83,3 +93,5 @@ struct ShapedList(ListType) {
 	shape @0 : List(UInt64);
 	data  @1 : ListType;
 }
+
+# END [tensors]

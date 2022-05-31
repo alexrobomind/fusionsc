@@ -61,6 +61,9 @@ namespace fsc {
 	
 	*/
 	
+	/**
+	 \ingroup kernels
+	 */
 	EIGEN_DEVICE_FUNC void fltKernel(
 		unsigned int idx,
 		fsc::cu::FLTKernelData kernelData,

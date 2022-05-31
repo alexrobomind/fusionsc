@@ -8,6 +8,8 @@ using Data = import "data.capnp";
 using DataRef = Data.DataRef;
 using Float64Tensor = Data.Float64Tensor;
 
+# BEGIN [magnetics]
+
 struct ToroidalGrid {
 	rMin @0 : Float64;
 	rMax @1 : Float64;
@@ -174,6 +176,8 @@ struct MagneticField {
 		}
 	}
 }
+
+# END [magnetics]
 
 const w7xEIMplus252 : MagneticField = (
 	w7xMagneticConfig = (),

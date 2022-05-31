@@ -19,11 +19,11 @@ configure_file(gendocs-doxyfile.in gendocs-doxyfile)
 configure_file(fsc-doxyfile.in fsc-doxyfile)
 
 # List dependencies of main documentation
-file(GLOB_RECURSE FSC_DOCSOURCES "${FSC_SRC_DIR}/*.h")
+file(GLOB_RECURSE FSC_DOCSOURCES "${FSC_SRC_DIR}/*")
 
 add_custom_command(
 	OUTPUT genapi.doxytag
-	DEPENDS ${FSC_CP_HEADERS} ${FSC_CH_CUHEADERS} Doxygen::doxygen gendocs-doxyfile
+	DEPENDS ${FSC_CP_HEADERS} ${FSC_CH_CUHEADERS} Doxygen::doxygen gendocs-doxyfile fsc
 	COMMAND Doxygen::doxygen
 	ARGS gendocs-doxyfile
 )

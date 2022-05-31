@@ -11,6 +11,14 @@
 #include "grids.h"
 
 namespace fsc {
+	
+/**
+ * \defgroup magnetics Magnetic field specification and computation
+ *
+ * Magnetic field services:
+ *
+ * \snippet magnetics.capnp magnetics
+ */
 
 ToroidalGridStruct readGrid(ToroidalGrid::Reader in, unsigned int maxOrdinal);
 void writeGrid(const ToroidalGridStruct& grid, ToroidalGrid::Builder out);

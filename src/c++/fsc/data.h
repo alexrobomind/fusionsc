@@ -10,6 +10,14 @@
 #include "common.h"
 #include "local.h"
 
+/**
+ * \defgroup network Distributed data and networking
+ * 
+ * For exchanging tensor information, the data module defines the following Cap'n'proto struct types:
+ *
+ * \snippet data.capnp tensors
+ */
+
 namespace kj {
 	class File;
 	class ReadableFile;
@@ -49,8 +57,62 @@ using References = typename internal::References_<T>::Type;
 
 // ============================================ API =============================================
 
+#ifdef DOXYGEN
+
+/** 
+ * \ingroup network
+ * \tparam T Type of the root message stored in the data ref.
+ *
+ * The DataRef template is a special capability recognized all throughout the FSC library.
+ * It represents a link to a data storage location (local or remote), associated with abort
+ * unique ID, which can be downloaded to local storage and accessed there. Locally downloaded
+ * data are represented by the LocalDataRef class, which subclasses DataRef::Client.
+ *
+ * The stored data is expected to be in one of the two following formats:
+ * - If T is capnp::Data, then the dataref stores a raw binary data array
+ * - If T is any other type, it must correspond to a Cap'n'proto struct type. In
+ *   this case, the DataRef holds a message with the corresponding root type, and
+ *   a capability table that tracks any remote objects in use by this message
+ *  (including other DataRef instances).
+ *
+ * Once obtained, DataRefs can be freely passed around as part of RPC calls or data published
+ * in other DataRef::Client instances. The fsc runtime will do all it possibly can to protect the integrity
+ * of a DataRef. In the absence of hardware failure, data referenced via DataRef objects
+ * can only go out of use once all referencing DataRef objects do so as well.
+ *
+ * DataRefs only represent a link to locally or remotely stored data. To access the underlying
+ * data, they must be converted into LocalDataRef instances using LocalDataService::download() methods.
+ *
+ * \capnpinterface
+ *
+ */
+template <typename T = ::capnp::AnyPointer>
+struct DataRef {
+	class Client : public virtual ::capnp::Capability::Client {
+		template <typename T2 = ::capnp::AnyPointer>
+		typename DataRef<T2>::Client asGeneric() {
+			return castAs<DataRef<T2>>();
+		}
+	};
+};
+
+//! Remote interface to data service
+/**
+ * \ingroup network
+ *
+ * This interface serves as an access point to remotely download 
+ *
+ * \snippet data.capnp DataService
+ * \capnpinterface
+ */
+struct DataService {
+};
+
+#endif
+
 //! Publishes and downloads data into LocalDataRef instances.
 /**
+ * \ingroup network
  * Main entry point for handling local and remote data references. Can be used to both create
  * remotely-downloadable data references with its 'publish' methods and download (as in, create
  * local copies of) remote references with its 'download' methods.
@@ -231,6 +293,7 @@ private:
 
 //! Local version of DataRef::Client.
 /**
+ * \ingroup network
  * Data reference backed by local storage. In addition to the remote access functionality
  * provided by the interface in capnp::DataRef, this class provides direct access to
  * locally stored data.
@@ -300,6 +363,7 @@ private:
 //! Combined MessageBuilder and Struct::Builder
 /**
  * \tparam T Data type of the contained message.
+ * \ingroup network
  *
  * This class holds a locally owned MessageBuilder and specifies
  * the type of the message's root. It directly derives from T::Builder,

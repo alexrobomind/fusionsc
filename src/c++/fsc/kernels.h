@@ -29,9 +29,12 @@
 
 /**
  * \defgroup kernelAPI User API for kernel submission.
+ *           Use the methods in here to map data onto the GPU and submit kernels for execution.
+ *
  * \defgroup kernelSupport Library support for kernel submission.
  *           Specialize the methods in here to implement custom kernel backends or customized
  *           the mapping of your classes onto GPUs.
+ *
  * \defgroup kernels Computation kernels
  */
 
