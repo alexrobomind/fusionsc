@@ -115,7 +115,7 @@ void bindStructClasses(py::module_& m) {
 	
 	py::class_<DST, DSB> cDST(m, "DynamicMessage");
 	
-	py::class_<DSR> cDSR(m, "DynamicStructReader");
+	py::class_<DSR> cDSR(m, "DynamicStructReader", py::dynamic_attr());
 	cDSR.def(py::init([](DynamicStruct::Reader r) { return r; }));
 	
 	defGet(cDSR);
@@ -131,6 +131,8 @@ void bindStructClasses(py::module_& m) {
 
 		return kj::mv(p);
 	}));
+	
+	py::class_<capnp::Response<DynamicStruct>, DSR>(m, "DynamicResponse");
 }
 
 void bindFieldDescriptors(py::module_& m) {

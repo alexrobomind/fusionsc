@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef DOXYGEN
+#define FSC_WITH_CUDA
+#endif
+
 #include <capnp/common.h>
 #include <capnp/message.h>
 #include <kj/common.h>

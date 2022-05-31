@@ -2,6 +2,8 @@
 
 #include "fscpy.h"
 
+#include <fsc/local.h>
+
 namespace fscpy {
 
 struct PyContext {

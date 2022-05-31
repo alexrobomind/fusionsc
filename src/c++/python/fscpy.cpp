@@ -48,6 +48,7 @@ PYBIND11_MODULE(fscpy, m) {
 	
 	bindKJClasses(m);
 	bindCapnpClasses(m);
+	bindAsyncClasses(m);
 	
 	loadDefaultSchema(m);
 }

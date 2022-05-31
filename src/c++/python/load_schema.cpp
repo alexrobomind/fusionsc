@@ -1,4 +1,5 @@
 #include "fscpy.h"
+#include "async.h"
 
 #include <capnp/dynamic.h>
 #include <capnp/message.h>
@@ -18,6 +19,8 @@ using capnp::AnyPointer;
 
 using capnp::Schema;
 using capnp::StructSchema;
+
+namespace fscpy {
 
 namespace {
 
@@ -41,6 +44,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 	
 	py::object output = (*baseMetaType)(schema.getUnqualifiedName(), py::make_tuple(), attrs);
 	
+	// Create Builder, Reader, and Pipeline classes
 	for(int i = 0; i < 3; ++i) {
 		FSCPyClassType classType = (FSCPyClassType) i;
 		
@@ -95,6 +99,30 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		attributes["__module__"] = moduleName;
 			
 		py::object newCls = metaClass(kj::str(schema.getUnqualifiedName(), ".", suffix).cStr(), py::make_tuple(baseClass), attributes);
+		output.attr(suffix.cStr()) = newCls;
+	}
+	
+	// Create Promise class
+	{
+		py::dict attributes;
+		
+		py::type promiseBase = py::type::of<PyPromise>();
+		py::type pipelineBase = output.attr("Pipeline");
+		
+		attributes["__init__"] = fscpy::methodDescriptor(py::cpp_function(
+			[promiseBase, pipelineBase](py::object self, PyPromise& pyPromise, py::object pipeline, py::object key) {
+				promiseBase.attr("__init__")(self, pyPromise);
+				pipelineBase.attr("__init__")(self, pipeline, key);
+			}
+		));
+		
+		kj::String suffix = kj::str("Promise");
+		attributes["__qualname__"] = qualName(output, suffix);
+		attributes["__module__"] = moduleName;
+		
+		py::type metaClass = py::type::of(promiseBase);
+		
+		py::object newCls = metaClass(kj::str(schema.getUnqualifiedName(), ".", suffix).cStr(), py::make_tuple(promiseBase, pipelineBase), attributes);
 		output.attr(suffix.cStr()) = newCls;
 	}
 		
@@ -240,17 +268,13 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 			name, " : ", typeName(paramType), " -> ", typeName(resultType)
 		);
 		
-		auto function = [paramType, resultType, types = mv(types), argFields = mv(argFields), nArgs](capnp::DynamicCapability::Client self, py::args pyArgs, py::kwargs pyKwargs) mutable {			
-			// Untyped function body
-			auto body = [paramType, resultType](DynamicStruct::Reader arg) {
-				KJ_REQUIRE(arg.getSchema() == paramType, "Invalid type, expected", paramType, "but got", arg.getSchema());
-				
-				KJ_UNIMPLEMENTED();
-				return DynamicStruct::Reader();
-			};
+		auto function = [paramType, resultType, method, types = mv(types), argFields = mv(argFields), nArgs](capnp::DynamicCapability::Client self, py::args pyArgs, py::kwargs pyKwargs) mutable -> py::object {
+			auto request = self.newRequest(method);
 			
 			// Check whether we got the argument structure passed
-			// In this case, just run the function body directly
+			// In this case, copy the fields over from input struct
+			
+			bool requestBuilt = false;
 			
 			if(!pyKwargs && py::len(pyArgs) == 1) {
 				// Check whether the first argument has the correct type
@@ -259,37 +283,72 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 				if(argVal.getType() == DynamicValue::STRUCT) {
 					DynamicStruct::Reader asStruct = argVal.as<DynamicStruct>();
 					
-					if(asStruct.getSchema() == paramType)
-						return body(asStruct);
+					if(asStruct.getSchema() == paramType) {
+						for(auto field : paramType.getNonUnionFields()) {
+							request.set(field, asStruct.get(field));
+						}
+						
+						KJ_IF_MAYBE(pField, asStruct.which()) {
+							request.set(*pField, asStruct.get(*pField));
+						}
+						
+						requestBuilt = true;
+					}
 				}
 			}
 
-			// Parse positional arguments
-			KJ_REQUIRE(pyArgs.size() <= argFields.size(), "Too many arguments specified");
-			
-			fsc::Temporary<DynamicStruct> newArg(paramType);
-			for(size_t i = 0; i < pyArgs.size(); ++i) {
-				auto field = argFields[i];
+			if(!requestBuilt) {
+				// Parse positional arguments
+				KJ_REQUIRE(pyArgs.size() <= argFields.size(), "Too many arguments specified");
 				
-				newArg.set(field, pyArgs[i].cast<DynamicValue::Reader>());
-			}
-			
-			// Parse keyword arguments
-			auto processEntry = [&newArg, paramType](kj::StringPtr name, DynamicValue::Reader value) mutable {
-				KJ_IF_MAYBE(pField, paramType.findFieldByName(name)) {
-					newArg.set(*pField, value);
-				} else {
-					KJ_FAIL_REQUIRE("Unknown named parameter", name);
+				for(size_t i = 0; i < pyArgs.size(); ++i) {
+					auto field = argFields[i];
+					
+					request.set(field, pyArgs[i].cast<DynamicValue::Reader>());
 				}
-			};
-			auto pyProcessEntry = py::cpp_function(processEntry);
-			
-			auto nameList = py::list(pyKwargs);
-			for(auto name : nameList) {
-				pyProcessEntry(name, pyKwargs[name]);
+				
+				// Parse keyword arguments
+				auto processEntry = [&request, paramType](kj::StringPtr name, DynamicValue::Reader value) mutable {
+					KJ_IF_MAYBE(pField, paramType.findFieldByName(name)) {
+						request.set(*pField, value);
+					} else {
+						KJ_FAIL_REQUIRE("Unknown named parameter", name);
+					}
+				};
+				auto pyProcessEntry = py::cpp_function(processEntry);
+				
+				auto nameList = py::list(pyKwargs);
+				for(auto name : nameList) {
+					pyProcessEntry(name, pyKwargs[name]);
+				}
 			}
 			
-			return body(newArg.asReader());
+			
+			using capnp::RemotePromise;
+			using capnp::Response;
+			
+			RemotePromise<DynamicStruct> result = request.send();
+			
+			// Extract promise
+			PyPromise resultPromise = result.then([](capnp::Response<capnp::DynamicStruct> response) {
+				return py::cast(mv(response));
+			});
+			
+			// Extract pipeline
+			DynamicStruct::Pipeline resultPipeline = mv(result);
+			py::object pyPipeline = py::cast(mv(resultPipeline));
+			
+			// Check for PromiseForResult class for type
+			auto id = resultType.getProto().getId();
+			
+			// If not found, we can only return the promise for a generic result (perhaps once in the future
+			// we can add the option for a full pass-through into RemotePromise<DynamicStruct>)
+			if(!globalClasses->contains(id))
+				return py::cast(resultPromise);
+			
+			// Construct merged promise / pipeline object from PyPromise and pipeline
+			py::type resultClass = (*globalClasses[id]).attr("Promise");
+			return resultClass(resultPromise, pyPipeline, INTERNAL_ACCESS_KEY);
 		};
 		
 		auto pyFunction = py::cpp_function(
@@ -378,8 +437,6 @@ py::object interpretSchema(capnp::SchemaLoader& loader, uint64_t id, py::object 
 capnp::SchemaLoader defaultLoader;
 
 }
-
-namespace fscpy {
 
 void loadDefaultSchema(py::module_& m) {
 	using capnp::SchemaLoader;

@@ -46,11 +46,11 @@ struct FieldCalculation {
 			newField->data()[i] = data[i];
 		}
 		
-		TensorOpCost costEstimate(1e12, 1e12, 1e12);
 		calculation = FSC_LAUNCH_KERNEL(
 			kernels::addFieldKernel,
+			_device, 
 			mv(calculation),
-			_device, field.size(), costEstimate,
+			field.size(),
 			FSC_KARG(mappedField, NOCOPY), FSC_KARG(*newField, IN), scale
 		);
 		calculation = calculation.attach(mv(newField));
@@ -80,11 +80,11 @@ struct FieldCalculation {
 		KJ_REQUIRE(stepSize != 0, "Please specify a step size in the Biot-Savart settings");
 		
 		// Launch calculation
-		TensorOpCost costEstimate(1e12, 1e12, 1e12);
 		calculation = FSC_LAUNCH_KERNEL(
 			kernels::biotSavartKernel,
+			_device,
 			mv(calculation),
-			_device, field.size() / 3, costEstimate,
+			field.size() / 3,
 			grid, FSC_KARG(*filament, IN), current, coilWidth, stepSize, FSC_KARG(mappedField, NOCOPY)
 		);
 		calculation = calculation.attach(mv(filament));

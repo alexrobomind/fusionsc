@@ -4,6 +4,8 @@
  #error "This file is not meant to be included"
  #endif
  
+ #include "common.h"
+ 
 /**
  * \file
  *
@@ -32,6 +34,14 @@
 		 * for newly received capabilities.
 		 */
 		struct Client {
+			//! Clients are copyable (via refcounting)
+			Client(Client&);
+			
+			//! Clients can be created from promises
+			Client(kj::Promise<Client>);
+			
+			//! Clients can be created from Server s
+			Client(kj::Own<Server>);
 		};
 		
 		/**
@@ -89,13 +99,12 @@
 	 *  DataRefs only represent a link to locally or remotely stored data. To access the underlying
 	 *  data, they must be converted into LocalDataRef instances using LocalDataService::download() methods.
 	 */
-	 template<typename T>
-	 struct DataRef : public capnp::Capability {
-		 //! DataRef client
-		 struct Client : public virtual capnp::Capability::Client {
-			 
-		 };
-	 };
+	template<typename T>
+	struct DataRef : public capnp::Capability {
+		//! DataRef client
+		struct Client : public virtual capnp::Capability::Client {
+		};
+	};
  }
  
  //! The Eigen library (https://eigen.tuxfamily.org)
@@ -110,4 +119,18 @@
 	 //! Tensor of fixed size and dimensionality
 	 template<typename T, typename Sizes>
 	 struct TensorFixedSize {};
+	 
+	 //! Reference to a tensor expression, which will evaluate lazily
+	 template<typename T>
+	 struct TensorRef {};
+	 
+	 //! Reference to an externally allocated tensor
+	 template<typename T>
+	 struct TensorMap {};
+	 
+	 //! Cost descriptor for individual kernel invocation
+	 /**
+	  * \ingroup kernelAPI
+	  */
+	 struct TensorOpCost {};
  }

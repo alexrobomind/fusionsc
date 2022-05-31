@@ -6,6 +6,7 @@ if(FSC_WITH_PYTHON)
 		kj.cpp
 		fscpy.cpp
 		load_schema.cpp
+		async.cpp
 	)
 
 	target_link_libraries(

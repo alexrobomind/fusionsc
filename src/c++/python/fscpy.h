@@ -12,6 +12,7 @@ namespace fscpy {
 	
 	void bindCapnpClasses(py::module_& m);
 	void bindKJClasses(py::module_& m);
+	void bindAsyncClasses(py::module_& m);
 	void loadDefaultSchema(py::module_& m);
 	
 	constexpr inline kj::StringPtr INTERNAL_ACCESS_KEY = "9821736419873251235"_kj;

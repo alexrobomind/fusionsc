@@ -30,7 +30,7 @@ add_custom_command(
 
 add_custom_command(
 	OUTPUT main.doxytag
-	DEPENDS ${FSC_DOCSOURCES} Doxygen::doxygen fsc-doxyfile genapi.doxytag
+	DEPENDS ${FSC_DOCSOURCES} Doxygen::doxygen fsc-doxyfile
 	COMMAND Doxygen::doxygen
 	ARGS fsc-doxyfile
 )

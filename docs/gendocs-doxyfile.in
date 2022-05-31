@@ -78,7 +78,7 @@ OUTPUT_DIRECTORY       = capnp
 # control the number of sub-directories.
 # The default value is: NO.
 
-CREATE_SUBDIRS         = NO
+CREATE_SUBDIRS         = YES
 
 # Controls the number of sub-directories that will be created when
 # CREATE_SUBDIRS tag is set to YES. Level 0 represents 16 directories, and every
@@ -830,7 +830,7 @@ WARNINGS               = YES
 # will automatically be disabled.
 # The default value is: YES.
 
-WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_UNDOCUMENTED   = NO
 
 # If the WARN_IF_DOC_ERROR tag is set to YES, doxygen will generate warnings for
 # potential errors in the documentation, such as documenting some parameters in

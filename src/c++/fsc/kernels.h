@@ -27,6 +27,14 @@
 
 #endif // FSC_WITH_CUDA
 
+/**
+ * \defgroup kernelAPI User API for kernel submission.
+ * \defgroup kernelSupport Library support for kernel submission.
+ *           Specialize the methods in here to implement custom kernel backends or customized
+ *           the mapping of your classes onto GPUs.
+ * \defgroup kernels Computation kernels
+ */
+
 namespace fsc {
 
 	// Number of threads to be used for evaluation
@@ -41,6 +49,7 @@ namespace fsc {
 	
 	/**
 	 * Helper to launch an int-based kernel on a specific device. Currently supports thread-pool- and GPU devices.
+	 * \ingroup kernelSupport
 	 */
 	template<typename Device>
 	struct KernelLauncher {
@@ -57,23 +66,23 @@ namespace fsc {
 		}
 	};
 	
+	//! Synchronizes device-to-host copies
+	/**
+	 * \ingroup kernelAPI
+	 * \param device Device to synchronize memcopy on.
+	 * \returns a promise whose resolution indicates that the outputs
+	 * of all previously scheduled kernels have been copied back
+	 * to the host
+	 */
 	template<typename Device>
 	Promise<void> hostMemSynchronize(Device& device) {
 		static_assert(sizeof(Device) == 0, "Memcpy synchronization not implemented for this device.");
 		return READY_NOW;
 	}
-	
-	
-	/**
-	 * Short hand method to launch an expensive kernel. Uses the kernel launcher to launch the
-	 * given kernel with a high cost estimate to ensure full parallelization.
-	 */
-	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Promise<void> launchExpensiveKernel(Device& device, size_t n, Params... params) {
-		Eigen::TensorOpCost expensive(1e12, 1e12, 1e12);
-		return KernelLauncher<Device>::template launch<Kernel, f, Params...>(device, mv(f), n, expensive, params...);
-	}
 
+	//! \addtogroup kernelSupport
+	//! @{
+		
 	//! Class for allocating an array on a device and manage a host and device pointer simultaneously
 	template<typename T, typename Device>
 	struct MappedData {
@@ -140,16 +149,21 @@ namespace fsc {
 	
 	/** \brief Returns the type to be passed to the kernel for a given
 	 *         argument passed into launchKernel.
+	 * \ingroup kernelSupport
 	 */
 	template<typename T, typename Device>
 	using DeviceType = decltype(std::declval<MapToDevice<Decay<T>, Device>>().get());
 	
 	//! Method to return a device mapper for a given value
+	/**
+	 * \ingroup kernelAPI
+	 */
 	template<typename Device, typename T>
 	MapToDevice<T, Device> mapToDevice(T& in, Device& device) { return MapToDevice<T, Device>(in, device); }
 	
 	//! Instantiation of MapToDevice that allows reuse of existing mappings.
 	/**
+	 * \ingroup kernelSupport
 	 * \warning This uses a reference to the original mapping, so its lifetime
 	 * is bound by the original mapping. Care must be taken that the original
 	 * mapping object is kept alive until the scheduled kernel finishes execution.
@@ -204,7 +218,7 @@ namespace fsc {
 		{}
 	};
 	
-	//! Specifies copy behavior for arguemts around kernel invocation
+	//! Specifies copy behavior for arguments around kernel invocation
 	enum class KernelArgType {
 		NOCOPY = 0, //!< Don't copy data between host and device for this invocation
 		IN = 1,     //!< Only copy data to the device before kernel invocation
@@ -228,12 +242,18 @@ namespace fsc {
 	
 	//! Convenience macro to wrap kernel arguments with the given type
 	/**
-	 * \def FSC_KARG(val, type)
 	 * \brief Overrides kernel argument type
+	 * \ingroup kernelAPI
 	 * 
-	 * Use this macro (with an lvalue, no temporaries please) to override the
-	 * transfer behavior of the given argument. Possible values for type are
-	 * NOCOPY, IN (host->device), OUT (device -> host), INOUT (both)
+	 * Use this macro to override the
+	 * transfer behavior of the given argument. 
+	 *
+	 * \param val LValue kernel parameter (no temporaries)
+	 * \param type Kernel parameter type. Possible values for type are
+	 *         - NOCOPY
+	 *         - IN  (copy host -> device)
+	 *         - OUT (cpüy device -> host)
+	 *         - INOUT (both)
 	 */
 	#define FSC_KARG(val, type) ::fsc::kArg(val, ::fsc::KernelArgType::type)
 	
@@ -273,6 +293,11 @@ namespace fsc {
 		}
 	}
 	
+	//! @}
+	
+	//! \addtogroup kernelAPI
+	//! @{
+	
 	//! Launches the specified kernel on the given device.
 	/**
 	 *  The exact meaning of the return value depends on the device in question. For CPU devices,
@@ -285,8 +310,17 @@ namespace fsc {
 	 *  \note After the returned promise resolves, you have to call fsc::hostMemSynchronize
 	 *  on the device and wait on its result before using output parameters.
 	 *
-	 *  It is recommended to use FSC_LAUNCH_KERNEL(f, ...), which fills in the template
+	 *  It is recommended to use the macro FSC_LAUNCH_KERNEL(f, ...), which fills in the template
 	 *  parameters from its first argument.
+	 *
+	 *  @code
+	 *  auto kernelScheduled = launchKernel<decltype(kernel), kernel>(device, 50, input, output);
+	 *  
+	 *  // is equivalent to
+	 *
+	 *  auto kernelScheduled = FSC_LAUNCH_KERNEL(kernel, device, 50, input, output);
+	 *  @endcode
+	 *
 	 *
 	 *  \tparam Kernel      Type of the kernel function (usually a decltype expression)
 	 *
@@ -318,16 +352,41 @@ namespace fsc {
 	 *
 	 */
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Promise<void> launchKernel(Promise<void> prerequisite, Device& device, size_t n, const Eigen::TensorOpCost& cost, Params&&... params) {
-		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, mv(prerequisite), mv(cost), std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
+	Promise<void> launchKernel(Device& device, const Eigen::TensorOpCost& cost, Promise<void> prerequisite, size_t n, Params&&... params) {
+		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, mv(prerequisite), cost, std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
 	}
 	
+	//! Version of launchKernel() without prerequisite
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Promise<void> launchKernel(Device& device, size_t n, const Eigen::TensorOpCost& cost, Params&&... params) {
-		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, READY_NOW, mv(cost), std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
+	Promise<void> launchKernel(Device& device, const Eigen::TensorOpCost& cost, size_t n, Params&&... params) {
+		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, READY_NOW, cost, std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
 	}
 	
-	#define FSC_LAUNCH_KERNEL(x, ...) ::fsc::launchKernel<decltype(&x), &x>(__VA_ARGS__)
+	//! Version of launchKernel() without cost
+	template<typename Kernel, Kernel f, typename Device, typename... Params>
+	Promise<void> launchKernel(Device& device, Promise<void> prerequisite, size_t n, Params&&... params) {
+		Eigen::TensorOpCost expensive(1e12, 1e12, 1e12);
+		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, mv(prerequisite), expensive, std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
+	}
+	
+	//! Version of launchKernel() without prerequisite and cost
+	template<typename Kernel, Kernel f, typename Device, typename... Params>
+	Promise<void> launchKernel(Device& device, size_t n, Params&&... params) {
+		Eigen::TensorOpCost expensive(1e12, 1e12, 1e12);
+		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, READY_NOW, expensive, std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
+	}
+	
+	//! Launches the given kernel.
+	/**
+	 * \param f Kernel function
+	 * \param ... Parameters to pass to launchKernel()
+	 */
+	#define FSC_LAUNCH_KERNEL(f, ...) ::fsc::launchKernel<decltype(&f), &f>(__VA_ARGS__)
+	
+	//! @}
+	
+	//! \addtogroup kernelSupport
+	//! @{
 	
 	// === Specializations of kernel launcher ===
 	
@@ -365,6 +424,8 @@ namespace fsc {
 	inline Promise<void> hostMemSynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& device) { return synchronizeGpuDevice(device); }
 	
 	#endif
+	
+	//! @}
 }
 
 

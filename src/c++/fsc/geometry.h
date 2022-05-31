@@ -22,6 +22,9 @@ struct GeometryResolverBase : public GeometryResolver::Server {
 	        Promise<void> processTransform(Transformed<Geometry>::Reader input, Transformed<Geometry>::Builder output, ResolveContext context);
 };
 
+/**
+ * Creates C++ interface to geometry library.
+ */
 GeometryLib::Client createGeometryLib(LibraryThread& lt);
 
 inline Vec3u locationInGrid(Vec3d point, Vec3d min, Vec3d max, Vec3u size) {
@@ -74,12 +77,19 @@ inline double rayCastTriangle(const Vec3d point, const Vec3d direction, const Ve
 	return l;
 }
 
+/**
+ * \ingroup geometry
+ */
 struct IntersectResult {
 	double l;
 	size_t iMesh;
 	size_t iElement;
 };
 
+
+/**
+ * \ingroup geometry
+ */
 inline IntersectResult intersectGeometry(const Vec3d p1, const Vec3d p2, const cu::MergedGeometry geometry, const cu::IndexedGeometry index) {
 	constexpr double inf = std::numeric_limits<double>::infinity();
 	double l = inf;

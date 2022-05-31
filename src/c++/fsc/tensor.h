@@ -163,7 +163,7 @@ struct MapToDevice<Tensor<TVal, tRank, tOpts, Index>, Device> : public TensorMap
 
 	MapToDevice(Maps& target, Device& device) :
 		TensorMap<Tensor<TVal, tRank, tOpts, Index>>(
-			MappedData<TVal, Device>::deviceAlloc(device, target.data(), target.size()),
+			MappedData<TVal, Device>::deviceAlloc(device, target.size()),
 			target.dimensions()
 		),
 		_data(device, target.data() /* Host pointer */, this->data() /* Device pointer allocated above */, this->size() /* Same as target.size() */)

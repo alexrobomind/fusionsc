@@ -8,11 +8,10 @@ namespace fsc {
 		capnp::MallocMessageBuilder mb;
 		CupnpMessage<cu::FLTKernelData> kernelData(mb);
 		CupnpMessage<cu::FLTKernelRequest> kernelRequest(mb);
-		TensorOpCost costEstimate(1e12, 1e12, 1e12);
 		auto calculation = FSC_LAUNCH_KERNEL(
 			fltKernel,
 			
-			d, 3, costEstimate,
+			d, 3,
 			
 			kernelData, kernelRequest
 		);
