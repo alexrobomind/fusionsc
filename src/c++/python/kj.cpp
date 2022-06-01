@@ -48,10 +48,12 @@ void defArray(kj::StringPtr name, py::module_ m) {
 
 namespace fscpy {
 	void bindKJClasses(py::module_& m) {
-		defArray<kj::byte>("ByteArray", m);
-		defArray<const kj::byte>("ConstByteArray", m);
+		py::module_ mkj = m.def_submodule("kj");
 		
-		py::class_<kj::StringPtr>(m, "StringPtr")
+		defArray<kj::byte>("ByteArray", mkj);
+		defArray<const kj::byte>("ConstByteArray", mkj);
+		
+		py::class_<kj::StringPtr>(mkj, "StringPtr")
 			.def("__str__", [](kj::StringPtr ptr) { return ptr.cStr(); })
 			.def("__repr__", [](kj::StringPtr ptr) { return ptr.cStr(); })
 		;

@@ -156,16 +156,24 @@ void bindMessageBuilders(py::module_& m) {
 	py::class_<capnp::MallocMessageBuilder>(m, "MallocMessageBuilder");
 }
 
+void bindCapClasses(py::module_& m) {
+	py::class_<capnp::DynamicCapability::Client>(m, "DynamicCapabilityClient");
+	py::class_<capnp::DynamicCapability::Server>(m, "DynamicCapabilityServer");
+}
+
 }}
 
 namespace fscpy {
 
 void bindCapnpClasses(py::module_& m) {
-	bindListClasses(m);
-	bindBlobClasses(m);
-	bindStructClasses(m);
-	bindFieldDescriptors(m);
-	bindMessageBuilders(m);
+	py::module_ mcapnp = m.def_submodule("capnp");
+	
+	bindListClasses(mcapnp);
+	bindBlobClasses(mcapnp);
+	bindStructClasses(mcapnp);
+	bindFieldDescriptors(mcapnp);
+	bindMessageBuilders(mcapnp);
+	bindCapClasses(mcapnp);
 }
 
 }

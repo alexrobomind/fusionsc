@@ -331,9 +331,12 @@ namespace pybind11 { namespace detail {
 			if(globalClasses->contains(typeId)) {
 				auto targetClass = (*globalClasses)[py::cast(typeId)].attr("Client");
 				
+				py::print("Redirecting requested class to", targetClass);
+				
 				object result = targetClass(src);
 				return result.inc_ref();
 			}
+			py::print("Using base DynamicCapability class");
 			
 			return type_caster_base<DynamicCapability::Client>::cast(src, policy, parent);
 		}

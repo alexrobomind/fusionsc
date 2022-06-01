@@ -20,6 +20,31 @@ using capnp::AnyPointer;
 using capnp::Schema;
 using capnp::StructSchema;
 
+namespace fscpy { namespace {
+
+struct PromiseHandle {
+	py::object pyPromise;
+};
+
+}}
+
+namespace pybind11 { namespace detail {
+	template<>
+	struct type_caster<fscpy::PromiseHandle> {
+		using PromiseHandle = fscpy::PromiseHandle;
+		
+		PYBIND11_TYPE_CASTER(fscpy::PromiseHandle, const_name("PromiseForResult"));
+		
+		bool load(handle src, bool convert) {
+			return false;		
+		}
+		
+		static handle cast(PromiseHandle src, return_value_policy policy, handle parent) {
+			return src.pyPromise.inc_ref();
+		}
+	};
+}}
+
 namespace fscpy {
 
 namespace {
@@ -35,14 +60,28 @@ kj::String qualName(py::object scope, kj::StringPtr name) {
 		return kj::heapString(name);
 }
 
+kj::String sanitizedStructName(kj::StringPtr input) {
+	KJ_IF_MAYBE(pLoc, input.findFirst('$')) {
+		// Method-local structs have a method$What name, this needs to be renamed
+		auto head = input.slice(0, *pLoc);
+		auto tail = input.slice(*pLoc + 1);
+		
+		// return str(tail, "For_", head);
+		return str(tail);
+	}
+	
+	return str(input);
+}
+
 py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchema schema, py::object scope) {	
 	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
+	auto structName = sanitizedStructName(schema.getUnqualifiedName());
 	
 	py::dict attrs;
-	attrs["__qualname__"] = qualName(scope, schema.getUnqualifiedName());
+	attrs["__qualname__"] = qualName(scope, structName);
 	attrs["__module__"] = moduleName;
 	
-	py::object output = (*baseMetaType)(schema.getUnqualifiedName(), py::make_tuple(), attrs);
+	py::object output = (*baseMetaType)(structName, py::make_tuple(), attrs);
 	
 	// Create Builder, Reader, and Pipeline classes
 	for(int i = 0; i < 3; ++i) {
@@ -98,7 +137,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		attributes["__qualname__"] = qualName(output, suffix);
 		attributes["__module__"] = moduleName;
 			
-		py::object newCls = metaClass(kj::str(schema.getUnqualifiedName(), ".", suffix).cStr(), py::make_tuple(baseClass), attributes);
+		py::object newCls = metaClass(kj::str(structName, ".", suffix).cStr(), py::make_tuple(baseClass), attributes);
 		output.attr(suffix.cStr()) = newCls;
 	}
 	
@@ -122,7 +161,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		
 		py::type metaClass = py::type::of(promiseBase);
 		
-		py::object newCls = metaClass(kj::str(schema.getUnqualifiedName(), ".", suffix).cStr(), py::make_tuple(promiseBase, pipelineBase), attributes);
+		py::object newCls = metaClass(kj::str(structName, ".", suffix).cStr(), py::make_tuple(promiseBase, pipelineBase), attributes);
 		output.attr(suffix.cStr()) = newCls;
 	}
 		
@@ -206,7 +245,9 @@ kj::StringTree typeName(capnp::Type type) {
 		
 		case ST::STRUCT: {
 			auto asStruct = type.asStruct();
-			return strTree(asStruct.getUnqualifiedName());
+			auto nameStr = asStruct.getUnqualifiedName();
+			
+			return strTree(sanitizedStructName(nameStr));
 		}
 		
 		case ST::INTERFACE: {
@@ -223,13 +264,23 @@ kj::StringTree typeName(capnp::Type type) {
 }
 
 py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::InterfaceSchema schema, py::object scope) {	
+	py::print("Building class ", schema.getUnqualifiedName(), " in ", scope);
+	
 	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
 	auto methods = schema.getMethods();
 	
-	auto collections = py::module_::import("Collections");
+	auto collections = py::module_::import("collections");
 	auto orderedDict = collections.attr("OrderedDict");
 	
-	py::dict attributes;
+	// We need dynamic resolution to get our base capability client
+	// Static resolution fails as we have overridden the type caster
+	py::object baseObject = py::cast(DynamicCapability::Client());
+	py::object baseClass = py::type::of(baseObject);
+	py::type metaClass = py::type::of(baseClass);
+	
+	py::dict outerAttrs;
+	py::dict clientAttrs;
+	
 	for(size_t i = 0; i < methods.size(); ++i) {
 		auto method = methods[i];
 		auto name = method.getProto().getName();
@@ -263,12 +314,14 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		}
 		
 		auto functionDesc = kj::strTree(
-			name, " : ", kj::StringTree(argumentDescs.releaseAsArray(), ", "), " -> ", typeName(resultType), "\n",
-			" or alternatively \n",
-			name, " : ", typeName(paramType), " -> ", typeName(resultType)
+			name, " : (", kj::StringTree(argumentDescs.releaseAsArray(), ", "), ") -> ", typeName(resultType), "\n",
+			"\n",
+			"    or alternatively \n",
+			"\n",
+			name, " : (", typeName(paramType), ") -> ", typeName(resultType)
 		);
 		
-		auto function = [paramType, resultType, method, types = mv(types), argFields = mv(argFields), nArgs](capnp::DynamicCapability::Client self, py::args pyArgs, py::kwargs pyKwargs) mutable -> py::object {
+		auto function = [paramType, resultType, method, types = mv(types), argFields = mv(argFields), nArgs](capnp::DynamicCapability::Client self, py::args pyArgs, py::kwargs pyKwargs) mutable {
 			auto request = self.newRequest(method);
 			
 			// Check whether we got the argument structure passed
@@ -343,48 +396,76 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 			
 			// If not found, we can only return the promise for a generic result (perhaps once in the future
 			// we can add the option for a full pass-through into RemotePromise<DynamicStruct>)
-			if(!globalClasses->contains(id))
-				return py::cast(resultPromise);
+			py::object resultObject = py::cast(resultPromise);
+			if(globalClasses->contains(id)) {
+				// Construct merged promise / pipeline object from PyPromise and pipeline
+				py::type resultClass = (*globalClasses[id]).attr("Promise");
+				
+				resultObject = resultClass(resultPromise, pyPipeline, INTERNAL_ACCESS_KEY);
+			}
 			
-			// Construct merged promise / pipeline object from PyPromise and pipeline
-			py::type resultClass = (*globalClasses[id]).attr("Promise");
-			return resultClass(resultPromise, pyPipeline, INTERNAL_ACCESS_KEY);
+			PromiseHandle handle;
+			handle.pyPromise = resultObject;
+			return handle;
 		};
 		
 		auto pyFunction = py::cpp_function(
 			kj::mv(function),
-			py::doc(functionDesc.flatten().cStr())
+			py::doc(functionDesc.flatten().cStr()),
+			py::arg("self")
 		);
+		
+		py::print("Assigning method", name.cStr());
 				
 		// TODO: Override the signature object
 		
-		attributes[name.cStr()] = pyFunction;
+		py::object descriptor = methodDescriptor(pyFunction);
+		descriptor.attr("__name__") = name.cStr();
+		descriptor.attr("__module__") = moduleName;
+		
+		clientAttrs[name.cStr()] = descriptor;
+		
+		py::object holder = simpleObject();
+		holder.attr("__qualname__") = qualName(scope, str(schema.getUnqualifiedName(), ".", name));
+		holder.attr("__name__") = name;
+		holder.attr("__module__") = moduleName;
+		holder.attr("desc") = str("Auxiliary classes for method ", name);
+		
+		py::object pyParamType = interpretStructSchema(loader, method.getParamType(), holder);
+		py::object pyResultType = interpretStructSchema(loader, method.getResultType(), holder);
+		
+		KJ_REQUIRE(!pyParamType.is_none());
+		KJ_REQUIRE(!pyResultType.is_none());
+		
+		holder.attr(pyParamType.attr("__name__")) = pyParamType;
+		holder.attr(pyResultType.attr("__name__")) = pyResultType;
+		
+		outerAttrs[name.cStr()] = holder;
 	}
 	
-	py::module_ module_ = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope;
+	/*py::print("Extracting surrounding module");
+	py::module_ module_ = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope;*/
 	
-	// We need dynamic resolution to get our base capability client
-	// Static resolution fails as we have overridden the type caster
-	py::object baseObject = py::cast(DynamicCapability::Client());
-	py::object baseClass = py::type::of(baseObject);
+	py::print("Creating outer class");
 	
 	auto outerName = qualName(scope, schema.getUnqualifiedName());
-	attributes["__qualname__"] = outerName;
-	attributes["__module__"] = moduleName;
+	outerAttrs["__qualname__"] = outerName;
+	outerAttrs["__module__"] = moduleName;
 	
-	py::type metaClass = py::type::of(baseClass);	
-	py::object newCls = metaClass(schema.getUnqualifiedName(), py::tuple(baseClass), attributes);
+	py::object outerCls = metaClass(schema.getUnqualifiedName(), py::make_tuple(baseClass), outerAttrs);
 	
-	auto innerName = qualName(newCls, "Client");
+	py::print("Creating client class");
+	auto innerName = qualName(outerCls, "Client");
 	
-	py::dict clientAttrs;
 	clientAttrs["__qualname__"] = innerName;
 	clientAttrs["__module__"] = moduleName;
 	
-	py::object output = (*baseMetaType)(schema.getUnqualifiedName().cStr(), py::make_tuple(), clientAttrs);
-	output.attr("Client") = newCls;
+	py::object clientCls = (*baseMetaType)(schema.getUnqualifiedName().cStr(), py::make_tuple(), clientAttrs);
+	outerCls.attr("Client") = clientCls;
 	
-	return output;
+	py::print("Done");
+	
+	return outerCls;
 }
 
 py::object interpretSchema(capnp::SchemaLoader& loader, uint64_t id, py::object scope) {	
@@ -417,7 +498,10 @@ py::object interpretSchema(capnp::SchemaLoader& loader, uint64_t id, py::object 
 			
 			output = (*baseMetaType)(schema.getUnqualifiedName().cStr(), py::make_tuple(), attrs);
 			break;
-	}	
+	}
+	
+	if(output.is_none())
+		return output;
 	
 	// Interpret child objects
 	for(auto nestedNode : schema.getProto().getNestedNodes()) {
@@ -441,27 +525,33 @@ capnp::SchemaLoader defaultLoader;
 void loadDefaultSchema(py::module_& m) {
 	using capnp::SchemaLoader;
 	
-	defaultLoader.loadCompiledTypeAndDependencies<capnp::schema::Node>();
+	defaultLoader.loadCompiledTypeAndDependencies<DataService>();
 	
-	auto m2 = m.def_submodule("api");
-	m2.attr("__all__") = py::list();
+	//auto m2 = m.def_submodule("api");
+	//m2.attr("__all__") = py::list();
 	
-	py::list m2all = m2.attr("__all__");
+	//py::list m2all = m2.attr("__all__");
 	
 	for(auto schema : defaultLoader.getAllLoaded()) {
 		auto parentId = schema.getProto().getScopeId();
+		
+		KJ_IF_MAYBE(dontCare, schema.getUnqualifiedName().findFirst('$')) {
+			continue;
+		}
+		
+		py::print("Root object ", schema.getUnqualifiedName(), " with parentID ", parentId);
 		
 		KJ_IF_MAYBE(dontCare, defaultLoader.tryGet(parentId)) {
 		} else {
 			auto name = schema.getUnqualifiedName();
 			
-			auto obj = interpretSchema(defaultLoader, schema.getProto().getId(), m2);
+			auto obj = interpretSchema(defaultLoader, schema.getProto().getId(), m);
 			
 			if(obj.is_none())
 				continue;
 			
-			m2.add_object(name.cStr(), obj);
-			m2all.append(name.cStr());
+			m.add_object(name.cStr(), obj);
+			//m2all.append(name.cStr());
 		}
 	}
 }

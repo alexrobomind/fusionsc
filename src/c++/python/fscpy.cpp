@@ -22,7 +22,10 @@ struct MethodDescriptor {
 	py::object target;
 	
 	MethodDescriptor(py::object target) : target(target) {}
-	BoundMethod get(py::object self, py::object objtype) { return BoundMethod(target, self); }
+	py::object get(py::object self, py::object objtype) { if(self.is_none()) return target; return py::cast(BoundMethod(target, self)); }
+};
+
+struct Simple {		
 };
 
 namespace fscpy {
@@ -31,15 +34,25 @@ py::object methodDescriptor(py::object method) {
 	return py::cast(MethodDescriptor(method));
 }
 
+py::object simpleObject() {
+	return py::cast(Simple());
+}
+
 }
 
 PYBIND11_MODULE(fscpy, m) {
-	py::class_<BoundMethod>(m, "BoundMethod")
+	py::class_<BoundMethod>(m, "_BoundMethod")
 		.def("__call__", &BoundMethod::call)
 	;
 	
-	py::class_<MethodDescriptor>(m, "MethodDescriptor")
+	py::class_<MethodDescriptor>(m, "_MethodDescriptor", py::dynamic_attr())
 		.def("__get__", &MethodDescriptor::get)
+		.def("__repr__", [](py::object self) { return "Method"; })
+	;
+	
+	py::class_<Simple>(m, "_Simple", py::dynamic_attr())
+		//.def("__str__", [](py::object self) { return py::hasattr(self, "desc") ? (py::str) self.attr("desc") : "<Unknown simple object>" ; })
+		.def("__repr__", [](py::object self) { return py::hasattr(self, "desc") ? (py::str) self.attr("desc") : "<Unknown simple object>" ; })
 	;
 	
 	globalClasses = kj::heap<py::dict>();

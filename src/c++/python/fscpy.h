@@ -18,6 +18,7 @@ namespace fscpy {
 	constexpr inline kj::StringPtr INTERNAL_ACCESS_KEY = "9821736419873251235"_kj;
 	
 	py::object methodDescriptor(py::object method);
+	py::object simpleObject();
 }
 
 extern kj::Own<py::dict> globalClasses;
