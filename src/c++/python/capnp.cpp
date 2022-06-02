@@ -14,6 +14,7 @@
 #include <fsc/data.h>
 
 #include "fscpy.h"
+#include "loader.h"
 
 using capnp::DynamicValue;
 using capnp::DynamicList;
@@ -24,9 +25,11 @@ using capnp::AnyPointer;
 
 namespace py = pybind11;
 
+using namespace fscpy;
+
 // Definitions local to translation unit
 
-namespace fscpy { namespace {
+namespace {
 
 void bindBlobClasses(py::module_& m) {
 	using TR = capnp::Text::Reader;
@@ -137,15 +140,18 @@ void bindStructClasses(py::module_& m) {
 
 void bindFieldDescriptors(py::module_& m) {
 	py::class_<capnp::StructSchema::Field>(m, "Field")
-		.def("__get__", [](capnp::StructSchema::Field& field, DynamicStruct::Pipeline& self, py::object type) { return self.get(field); },
+		.def("__get__", [](capnp::StructSchema::Field& field, DynamicStruct::Pipeline& self, py::object cls) { return self.get(field); },
 			py::arg("obj"), py::arg("type") = py::none()
 		)
-		.def("__get__", [](capnp::StructSchema::Field& field, DynamicStruct::Reader& self, py::object type) { return self.get(field); },
+		.def("__get__", [](capnp::StructSchema::Field& field, DynamicStruct::Reader& self, py::object cls) { return self.get(field); },
 			py::arg("obj"), py::arg("type") = py::none()
 		)
-		.def("__get__", [](capnp::StructSchema::Field& field, DynamicStruct::Builder& self, py::object type) { return self.get(field); },
+		.def("__get__", [](capnp::StructSchema::Field& field, DynamicStruct::Builder& self, py::object cls) { return self.get(field); },
 			py::arg("obj"), py::arg("type") = py::none()
 		)
+		
+		.def("__get__", [](capnp::StructSchema::Field& field, py::object self, py::object type) { py::print(self, type); return kj::str("Field ", field.getProto().getName(), " : ", typeName(field.getType())); })
+		
 		.def("__set__", [](capnp::StructSchema::Field& field, DynamicStruct::Builder& self, DynamicValue::Reader value) { self.set(field, value); })
 		.def("__delete__", [](capnp::StructSchema::Field& field, DynamicStruct::Builder& self) { self.clear(field); })
 	;
@@ -161,7 +167,7 @@ void bindCapClasses(py::module_& m) {
 	py::class_<capnp::DynamicCapability::Server>(m, "DynamicCapabilityServer");
 }
 
-}}
+}
 
 namespace fscpy {
 

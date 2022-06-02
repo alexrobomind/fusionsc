@@ -2,7 +2,9 @@
 
 #include <kj/common.h>
 
-namespace fscpy { namespace {
+using namespace fscpy;
+
+namespace {
 
 template<typename T>
 struct ArraySetDefinition {
@@ -44,7 +46,7 @@ void defArray(kj::StringPtr name, py::module_ m) {
 	ArrayPtrSetDefinition<T>::def(pyClass2);
 }
 
-}}
+}
 
 namespace fscpy {
 	void bindKJClasses(py::module_& m) {

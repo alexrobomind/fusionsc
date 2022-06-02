@@ -78,8 +78,6 @@ namespace pybind11 { namespace detail {
 			DynamicStruct::Builder dynamicStruct = src.as<DynamicStruct>();
 			auto typeId = dynamicStruct.getSchema().getProto().getId();
 			
-			KJ_LOG(WARNING, "Looked up type", typeId);
-			
 			if(globalClasses->contains(py::cast(typeId))) {
 				// Retrieve target class to use
 				auto targetClass = (*globalClasses)[py::cast(typeId)].attr("Builder");
@@ -121,7 +119,7 @@ namespace pybind11 { namespace detail {
 		bool load(handle src, bool convert) {
 			object pyType = eval("type")(src);
 			
-			if(pyType.equal(eval("real"))) {
+			if(pyType.equal(eval("float"))) {
 				value = src.cast<double>();
 				return true;
 			}

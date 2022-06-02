@@ -22,24 +22,28 @@ struct PyContext {
 	}
 	
 	static inline LibraryThread libraryThread() {
-		ensureLT();
+		startEventLoop();
 		return _libraryThread->addRef();
 	}
 	
 	static inline kj::WaitScope& waitScope() {
-		ensureLT();
+		startEventLoop();
 		return _libraryThread -> waitScope();
+	}
+	
+	static inline void startEventLoop() {
+		if(_libraryThread.get() == nullptr) {
+			_libraryThread = library() -> newThread();
+		}
+	}
+	
+	static inline bool hasEventLoop() {
+		return _libraryThread.get() != nullptr;
 	}
 	
 private:
 	static inline kj::MutexGuarded<Library> _library;
 	static inline thread_local LibraryThread _libraryThread;
-	
-	static inline void ensureLT() {
-		if(_libraryThread.get() == nullptr) {
-			_libraryThread = library() -> newThread();
-		}
-	}
 };
 
 struct PyPromise {
