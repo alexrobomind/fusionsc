@@ -814,6 +814,65 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(c
 	return handleEntry(archive.getRoot());
 }
 
+Promise<void> internal::LocalDataServiceImpl::clone(CloneContext context) {
+	return download(context.getParams().getSource(), false)
+	.then([context](LocalDataRef<capnp::AnyPointer> ref) mutable {
+		context.getResults().setRef(ref);
+	});
+}
+
+Promise<void> internal::LocalDataServiceImpl::store(StoreContext context) {
+	using capnp::AnyPointer;
+	using capnp::AnyList;
+	using capnp::ElementSize;
+	
+	auto params = context.getParams();
+	
+	AnyPointer::Reader inData = params.getData();
+	uint64_t typeId = params.getTypeId();
+	
+	Array<byte> data = nullptr;
+	
+	capnp::BuilderCapabilityTable capTable;
+	
+	if(typeId == 0) {
+		// typeId == 0 indicates raw byte data
+		
+		// Check format
+		KJ_REQUIRE(inData.isList());
+		auto asList = inData.getAs<AnyList>();
+		
+		KJ_REQUIRE(asList.getElementSize() == ElementSize::BYTE);
+		
+		// Copy into memory
+		data = kj::heapArray<byte>(inData.getAs<capnp::Data>());
+	} else {
+		// typeID != 0 indicates struct or capability
+		
+		// Check format
+		// Only structs and capabilities can be typed
+		// Lists have no corresponding schema nodes (and therefore no IDs)
+		KJ_REQUIRE(inData.isStruct() || inData.isCapability());
+		
+		capnp::MallocMessageBuilder mb;
+		AnyPointer::Builder root = capTable.imbue(mb.initRoot<AnyPointer>());
+		root.set(inData);
+		
+		data = wordsToBytes(capnp::messageToFlatArray(mb));
+	}
+	
+	auto ref = publish(
+		params.getId(),
+		mv(data),
+		capTable.getTable(),
+		typeId
+	);
+	
+	context.getResults().setRef(ref);
+	
+	return READY_NOW;
+}
+
 // === function hasMaximumOrdinal ===
 struct OrdinalChecker {
 	capnp::DynamicStruct::Reader in;

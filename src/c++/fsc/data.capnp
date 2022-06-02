@@ -26,7 +26,7 @@ interface DataRef (T) {
 #//! [DataService]
 interface DataService @0xc6d48902ddb7e122 {
 	# Upload a message to the remote data service and have it publish it
-	store @0 [T] (id : Data, data : T) -> (ref : DataRef(T));
+	store @0 [T] (id : Data, data : T, typeId : UInt64) -> (ref : DataRef(T));
 	
 	# Have the remote data service download a DataRef and re-publish it
 	clone @1 [T] (source : DataRef(T)) -> (ref : DataRef(T));

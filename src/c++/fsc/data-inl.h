@@ -41,6 +41,9 @@ public:
 	LocalDataRef<capnp::AnyPointer> publishArchive(const kj::ReadableFile& f);
 	
 	kj::FiberPool downloadPool;
+		
+	Promise<void> clone(CloneContext context) override;
+	Promise<void> store(StoreContext context) override;
 	
 private:
 	Promise<LocalDataRef<capnp::AnyPointer>> doDownload(DataRef<capnp::AnyPointer>::Client src, bool recursive);
