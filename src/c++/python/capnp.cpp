@@ -31,6 +31,35 @@ using namespace fscpy;
 
 namespace {
 
+template<typename T>
+py::object getField(py::object self, capnp::StructSchema::Field field) {
+	T& cppSelf = py::cast<T&>(self);
+	
+	auto fieldValue = cppSelf.get(field);
+	
+	bool backReference = false;
+	switch(fieldValue.getType()) {
+		case DynamicValue::TEXT:
+		case DynamicValue::DATA:
+		case DynamicValue::LIST:
+		case DynamicValue::STRUCT:
+		case DynamicValue::ANY_POINTER:
+		case DynamicValue::CAPABILITY:
+			backReference = true;
+			break;
+		
+		default:
+			break;
+	}
+	
+	py::object pyValue = py::cast(mv(fieldValue));
+	
+	if(backReference)
+		pyValue.attr("_parent") = self;
+	
+	return pyValue;
+}
+
 void bindBlobClasses(py::module_& m) {
 	using TR = capnp::Text::Reader;
 	using TB = capnp::Text::Builder;
@@ -82,10 +111,10 @@ void defGet(py::class_<T, Extra...>& c) {
 	auto getFun1 = [](T& ds, kj::StringPtr name) { return ds.get(name); };
 	auto getFun2 = [](T& ds, capnp::StructSchema::Field& field) { return ds.get(field); };
 	
-	c.def("get", getFun1, py::keep_alive<0, 1>());
-	c.def("get", getFun2, py::keep_alive<0, 1>());
-	c.def("__getitem__", getFun1, py::keep_alive<0, 1>());
-	c.def("__getitem__", getFun2, py::keep_alive<0, 1>());
+	c.def("_get", getFun1);
+	c.def("_get", getFun2);
+	// c.def("__getitem__", getFun1, py::keep_alive<0, 1>());
+	// c.def("__getitem__", getFun2, py::keep_alive<0, 1>());
 }
 
 template<typename T, typename... Extra>
