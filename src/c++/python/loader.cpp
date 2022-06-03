@@ -148,8 +148,6 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 			}
 		));
 		
-		py::print("Making", suffix);
-		
 		// Determine metaclass and build a new type with the given suffix
 		py::type metaClass = py::reinterpret_borrow<py::type>(reinterpret_cast<PyObject*>(&PyType_Type));//py::type::of(baseClass);
 		
@@ -159,8 +157,6 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		py::object newCls = (*baseMetaType)(kj::str(structName, ".", suffix).cStr(), py::make_tuple(baseClass, mappingAbstractBaseClass), attributes);
 		output.attr(suffix.cStr()) = newCls;
 	}
-	
-	py::print("Making promise");
 	
 	// Create Promise class
 	{
@@ -186,8 +182,6 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		py::object newCls = (*baseMetaType)(kj::str(structName, ".", suffix).cStr(), py::make_tuple(promiseBase, pipelineBase), attributes);
 		output.attr(suffix.cStr()) = newCls;
 	}
-	
-	py::print("Made all");
 		
 	output.attr("newMessage") = py::cpp_function(
 		[schema]() mutable {
