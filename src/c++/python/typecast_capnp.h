@@ -117,17 +117,17 @@ namespace pybind11 { namespace detail {
 		
 		static handle cast(DynamicValue::Builder src, return_value_policy policy, handle parent) {
 			switch(src.getType()) {
-				case DynamicValue::VOID: return none();
-				case DynamicValue::BOOL: return py::cast(src.as<bool>());
-				case DynamicValue::INT: return py::cast(src.as<int64_t>());
-				case DynamicValue::UINT: return py::cast(src.as<uint64_t>());
-				case DynamicValue::FLOAT: return py::cast(src.as<double>());
-				case DynamicValue::TEXT: return py::cast(src.as<capnp::Text>());
-				case DynamicValue::DATA: return py::cast(src.as<capnp::Data>());
-				case DynamicValue::LIST: return py::cast(src.as<capnp::DynamicList>());
-				case DynamicValue::ENUM: return py::cast(src.as<capnp::DynamicEnum>());
-				case DynamicValue::CAPABILITY: return py::cast(src.as<capnp::DynamicCapability>());
-				case DynamicValue::ANY_POINTER: return py::cast(src.as<capnp::AnyPointer>());
+				case DynamicValue::VOID: return none().inc_ref();
+				case DynamicValue::BOOL: return py::cast(src.as<bool>()).inc_ref();
+				case DynamicValue::INT: return py::cast(src.as<int64_t>()).inc_ref();
+				case DynamicValue::UINT: return py::cast(src.as<uint64_t>()).inc_ref();
+				case DynamicValue::FLOAT: return py::cast(src.as<double>()).inc_ref();
+				case DynamicValue::TEXT: return py::cast(src.as<capnp::Text>()).inc_ref();
+				case DynamicValue::DATA: return py::cast(src.as<capnp::Data>()).inc_ref();
+				case DynamicValue::LIST: return py::cast(src.as<capnp::DynamicList>()).inc_ref();
+				case DynamicValue::ENUM: return py::cast(src.as<capnp::DynamicEnum>()).inc_ref();
+				case DynamicValue::CAPABILITY: return py::cast(src.as<capnp::DynamicCapability>()).inc_ref();
+				case DynamicValue::ANY_POINTER: return py::cast(src.as<capnp::AnyPointer>()).inc_ref();
 				default: {}
 			}
 			
@@ -232,17 +232,17 @@ namespace pybind11 { namespace detail {
 		static handle cast(DynamicValue::Reader src, return_value_policy policy, handle parent) {
 			switch(src.getType()) {
 				case DynamicValue::VOID: return none();
-				case DynamicValue::BOOL: return py::cast(src.as<bool>());
-				case DynamicValue::INT: return py::cast(src.as<int64_t>());
-				case DynamicValue::UINT: return py::cast(src.as<uint64_t>());
-				case DynamicValue::FLOAT: return py::cast(src.as<double>());
-				case DynamicValue::TEXT: return py::cast(src.as<capnp::Text>());
-				case DynamicValue::DATA: return py::cast(src.as<capnp::Data>());
-				case DynamicValue::LIST: return py::cast(src.as<capnp::DynamicList>());
-				case DynamicValue::ENUM: return py::cast(src.as<capnp::DynamicEnum>());
+				case DynamicValue::BOOL: return py::cast(src.as<bool>()).inc_ref();
+				case DynamicValue::INT: return py::cast(src.as<int64_t>()).inc_ref();
+				case DynamicValue::UINT: return py::cast(src.as<uint64_t>()).inc_ref();
+				case DynamicValue::FLOAT: return py::cast(src.as<double>()).inc_ref();
+				case DynamicValue::TEXT: return py::cast(src.as<capnp::Text>()).inc_ref();
+				case DynamicValue::DATA: return py::cast(src.as<capnp::Data>()).inc_ref();
+				case DynamicValue::LIST: return py::cast(src.as<capnp::DynamicList>()).inc_ref();
+				case DynamicValue::ENUM: return py::cast(src.as<capnp::DynamicEnum>()).inc_ref();
 				// case DynamicValue::STRUCT: return py::cast(src.as<capnp::DynamicStruct>());
-				case DynamicValue::ANY_POINTER: return py::cast(src.as<capnp::AnyPointer>());
-				case DynamicValue::CAPABILITY: return py::cast(src.as<capnp::DynamicCapability>());
+				case DynamicValue::ANY_POINTER: return py::cast(src.as<capnp::AnyPointer>()).inc_ref();
+				case DynamicValue::CAPABILITY: return py::cast(src.as<capnp::DynamicCapability>()).inc_ref();
 				default: {}
 			}
 			

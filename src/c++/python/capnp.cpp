@@ -79,7 +79,13 @@ void bindListClasses(py::module_& m) {
 
 template<typename T, typename... Extra>
 void defGet(py::class_<T, Extra...>& c) {
-	c.def("get", [](T& ds, kj::StringPtr name) { return ds.get(name); }, py::keep_alive<0, 1>());
+	auto getFun1 = [](T& ds, kj::StringPtr name) { return ds.get(name); };
+	auto getFun2 = [](T& ds, capnp::StructSchema::Field& field) { return ds.get(field); };
+	
+	c.def("get", getFun1, py::keep_alive<0, 1>());
+	c.def("get", getFun2, py::keep_alive<0, 1>());
+	c.def("__getitem__", getFun1, py::keep_alive<0, 1>());
+	c.def("__getitem__", getFun2, py::keep_alive<0, 1>());
 }
 
 template<typename T, typename... Extra>
@@ -116,6 +122,29 @@ void bindStructClasses(py::module_& m) {
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Reader& val) { dsb.set(name, val); });
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Builder& val) { dsb.set(name, val.asReader()); });
 	
+	cDSB.def("__len__", [](DSB& ds) {
+		auto schema = ds.getSchema();
+		size_t result = schema.getNonUnionFields().size();
+		if(schema.getUnionFields().size() > 0)
+			result += 1;
+		
+		return result;
+	});
+	
+	cDSB.def("__iter__", [](DSB& ds) {
+		py::list result;
+		
+		KJ_IF_MAYBE(pField, ds.which()) {
+			result.append(pField -> getProto().getName());
+		}
+		
+		for(auto field : ds.getSchema().getNonUnionFields()) {
+			result.append(field.getProto().getName());
+		}
+		
+		return py::eval("iter")(result);
+	});
+	
 	py::class_<DST, DSB> cDST(m, "DynamicMessage");
 	
 	py::class_<DSR> cDSR(m, "DynamicStructReader", py::dynamic_attr(), py::multiple_inheritance());
@@ -124,6 +153,29 @@ void bindStructClasses(py::module_& m) {
 	defGet(cDSR);
 	defHas(cDSR);
 	defWhich(cDSR);
+	
+	cDSR.def("__len__", [](DSR& ds) {
+		auto schema = ds.getSchema();
+		size_t result = schema.getNonUnionFields().size();
+		if(schema.getUnionFields().size() > 0)
+			result += 1;
+		
+		return result;
+	});
+	
+	cDSR.def("__iter__", [](DSR& ds) {
+		py::list result;
+		
+		KJ_IF_MAYBE(pField, ds.which()) {
+			result.append(pField -> getProto().getName());
+		}
+		
+		for(auto field : ds.getSchema().getNonUnionFields()) {
+			result.append(field.getProto().getName());
+		}
+		
+		return py::eval("iter")(result);
+	});
 	
 	py::class_<DSP> cDSP(m, "DynamicStructPipeline", py::multiple_inheritance());
 	defGet(cDSP);
@@ -134,6 +186,23 @@ void bindStructClasses(py::module_& m) {
 		py::print("Moving pipeline"); 
 		return kj::mv(p);
 	}));
+	
+	cDSP.def("__len__", [](DSP& ds) {
+		auto schema = ds.getSchema();
+		size_t result = schema.getNonUnionFields().size();
+		
+		return result;
+	});
+	
+	cDSP.def("__iter__", [](DSP& ds) {
+		py::list result;
+		
+		for(auto field : ds.getSchema().getNonUnionFields()) {
+			result.append(field.getProto().getName());
+		}
+		
+		return py::eval("iter")(result);
+	});
 	
 	py::class_<capnp::Response<DynamicStruct>, DSR>(m, "DynamicResponse");
 }
