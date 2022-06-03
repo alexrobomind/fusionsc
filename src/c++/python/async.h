@@ -46,9 +46,18 @@ private:
 	static inline thread_local LibraryThread _libraryThread;
 };
 
+struct PyObjectHolder : public kj::Refcounted {
+	py::object content;
+	
+	PyObjectHolder(const PyObjectHolder& other) = delete;
+	PyObjectHolder(py::object&& newContent) : content(mv(newContent)) {}
+	
+	Own<PyObjectHolder> addRef() { return kj::addRef(*this); }
+};
+
 struct PyPromise {
 	inline PyPromise(Promise<py::object> input) :
-		holder(input.fork())
+		holder(input.then([](py::object input) { return kj::refcounted<PyObjectHolder>(mv(input)); }).fork())
 	{}
 	
 	inline PyPromise(PyPromise& other) :
@@ -56,7 +65,7 @@ struct PyPromise {
 	{}
 	
 	inline Promise<py::object> get() {
-		return holder.addBranch();
+		return holder.addBranch().then([](Own<PyObjectHolder> holder) { return holder->content; });
 	}
 	
 	inline operator Promise<py::object>() {
@@ -74,8 +83,14 @@ struct PyPromise {
 	}
 	
 	inline py::object wait() {
-		py::gil_scoped_release release_gil;
-		return holder.addBranch().wait(PyContext::waitScope());
+		Own<PyObjectHolder> pyObjectHolder;
+		
+		{
+			py::gil_scoped_release release_gil;
+			pyObjectHolder = holder.addBranch().wait(PyContext::waitScope());
+		}
+		
+		return pyObjectHolder -> content;
 	}
 	
 	inline bool poll() {
@@ -84,7 +99,7 @@ struct PyPromise {
 	}
 	
 private:
-	kj::ForkedPromise<py::object> holder;
+	kj::ForkedPromise<Own<PyObjectHolder>> holder;
 };
 
 }

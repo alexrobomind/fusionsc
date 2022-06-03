@@ -66,8 +66,18 @@ PYBIND11_MODULE(fscpy, m) {
 	;
 	
 	globalClasses = kj::heap<py::dict>();
+	
 	baseType = kj::heap<py::type>(py::eval("type('FSCPyObject', (object,), {})"));
-	baseMetaType = kj::heap<py::type>(py::eval("type"));
+	
+	py::type standardMeta    = py::reinterpret_borrow<py::type>(reinterpret_cast<PyObject*>(&PyType_Type));
+	py::type collectionsMeta = py::type::of(py::module_::import("collections.abc").attr("Mapping"));
+	
+	py::dict metaAttributes;
+	metaAttributes["__module__"] = "fscpy";
+	
+	baseMetaType = kj::heap<py::type>(standardMeta(
+		"MetaClass", py::make_tuple(collectionsMeta, standardMeta), metaAttributes
+	));
 	
 	bindKJClasses(m);
 	bindCapnpClasses(m);

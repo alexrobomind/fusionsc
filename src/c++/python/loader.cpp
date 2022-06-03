@@ -89,6 +89,9 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 	attrs["__qualname__"] = qualName(scope, structName);
 	attrs["__module__"] = moduleName;
 	
+	py::module_ collections = py::module_::import("collections");
+	py::type mappingAbstractBaseClass = collections.attr("abc").attr("Mapping");
+	
 	py::object output = (*baseMetaType)(structName, py::make_tuple(), attrs);
 	
 	// Create Builder, Reader, and Pipeline classes
@@ -145,15 +148,19 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 			}
 		));
 		
+		py::print("Making", suffix);
+		
 		// Determine metaclass and build a new type with the given suffix
 		py::type metaClass = py::reinterpret_borrow<py::type>(reinterpret_cast<PyObject*>(&PyType_Type));//py::type::of(baseClass);
 		
 		attributes["__qualname__"] = qualName(output, suffix);
 		attributes["__module__"] = moduleName;
 			
-		py::object newCls = metaClass(kj::str(structName, ".", suffix).cStr(), py::make_tuple(baseClass), attributes);
+		py::object newCls = (*baseMetaType)(kj::str(structName, ".", suffix).cStr(), py::make_tuple(baseClass, mappingAbstractBaseClass), attributes);
 		output.attr(suffix.cStr()) = newCls;
 	}
+	
+	py::print("Making promise");
 	
 	// Create Promise class
 	{
@@ -176,9 +183,11 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		//py::type metaClass = py::type::of(promiseBase);
 		py::type metaClass = py::reinterpret_borrow<py::type>(reinterpret_cast<PyObject*>(&PyType_Type));
 		
-		py::object newCls = metaClass(kj::str(structName, ".", suffix).cStr(), py::make_tuple(promiseBase, pipelineBase), attributes);
+		py::object newCls = (*baseMetaType)(kj::str(structName, ".", suffix).cStr(), py::make_tuple(promiseBase, pipelineBase), attributes);
 		output.attr(suffix.cStr()) = newCls;
 	}
+	
+	py::print("Made all");
 		
 	output.attr("newMessage") = py::cpp_function(
 		[schema]() mutable {
@@ -347,7 +356,16 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 			
 			// Extract promise
 			PyPromise resultPromise = result.then([](capnp::Response<capnp::DynamicStruct> response) {
-				return py::cast(mv(response));
+				py::gil_scoped_acquire withGIL;
+				
+				capnp::DynamicStruct::Reader structReader = response;
+				
+				py::object pyReader   = py::cast(capnp::DynamicValue::Reader(response));
+				py::object pyResponse = py::cast(mv(response));
+				
+				pyReader.attr("_response") = pyResponse;
+				
+				return pyReader;
 			});
 			
 			// Extract pipeline

@@ -31,34 +31,45 @@ using namespace fscpy;
 
 namespace {
 
+py::object getField(py::object self, py::object field) {
+	py::tuple getResult = self.attr("_get")(field);
+	
+	py::object fieldValue  = getResult[py::cast(0)];
+	bool backReference = py::cast<bool>(getResult[1]);
+	
+	if(backReference)
+		fieldValue.attr("_parent") = self;
+	
+	return fieldValue;
+}
+
 template<typename T>
-py::object getField(py::object self, capnp::StructSchema::Field field) {
-	T& cppSelf = py::cast<T&>(self);
-	
-	auto fieldValue = cppSelf.get(field);
-	
-	bool backReference = false;
-	switch(fieldValue.getType()) {
+bool needsBackReference(T& t) {
+	switch(t.getType()) {
 		case DynamicValue::TEXT:
 		case DynamicValue::DATA:
 		case DynamicValue::LIST:
 		case DynamicValue::STRUCT:
 		case DynamicValue::ANY_POINTER:
 		case DynamicValue::CAPABILITY:
-			backReference = true;
-			break;
+			return true;
 		
 		default:
-			break;
-	}
-	
-	py::object pyValue = py::cast(mv(fieldValue));
-	
-	if(backReference)
-		pyValue.attr("_parent") = self;
-	
-	return pyValue;
+			return false;
+	};
 }
+
+template<typename T, typename Field>
+py::tuple underscoreGet(T& ds, Field& field) {
+	auto cppValue = ds.get(field);
+	bool nbr = needsBackReference(cppValue);
+	
+	return py::make_tuple(
+		py::cast(mv(cppValue)),
+		py::cast(nbr)
+	);
+};
+
 
 void bindBlobClasses(py::module_& m) {
 	using TR = capnp::Text::Reader;
@@ -108,13 +119,13 @@ void bindListClasses(py::module_& m) {
 
 template<typename T, typename... Extra>
 void defGet(py::class_<T, Extra...>& c) {
-	auto getFun1 = [](T& ds, kj::StringPtr name) { return ds.get(name); };
-	auto getFun2 = [](T& ds, capnp::StructSchema::Field& field) { return ds.get(field); };
+	c.def("_get", &underscoreGet<T, capnp::StructSchema::Field>);
+	c.def("_get", &underscoreGet<T, kj::StringPtr>);
 	
-	c.def("_get", getFun1);
-	c.def("_get", getFun2);
-	// c.def("__getitem__", getFun1, py::keep_alive<0, 1>());
-	// c.def("__getitem__", getFun2, py::keep_alive<0, 1>());
+	auto genericGet = [](py::object ds, py::object field) { return getField(ds, field); };
+	
+	c.def("get", genericGet);
+	c.def("__getitem__", genericGet);
 }
 
 template<typename T, typename... Extra>
@@ -141,7 +152,7 @@ void bindStructClasses(py::module_& m) {
 	using DSP = DynamicStruct::Pipeline;
 	using DST = fsc::Temporary<DynamicStruct>;
 	
-	py::class_<DSB> cDSB(m, "DynamicStructBuilder", py::dynamic_attr(), py::multiple_inheritance());
+	py::class_<DSB> cDSB(m, "DynamicStructBuilder", py::dynamic_attr(), py::multiple_inheritance(), py::metaclass(*baseMetaType));
 	cDSB.def(py::init([](DynamicStruct::Builder b) { return b; }));
 	
 	defGet(cDSB);
@@ -150,6 +161,8 @@ void bindStructClasses(py::module_& m) {
 	
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Reader& val) { dsb.set(name, val); });
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Builder& val) { dsb.set(name, val.asReader()); });
+	cDSB.def("__setitem__", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Reader& val) { dsb.set(name, val); });
+	cDSB.def("__setitem__", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Builder& val) { dsb.set(name, val.asReader()); });
 	
 	cDSB.def("__len__", [](DSB& ds) {
 		auto schema = ds.getSchema();
@@ -164,19 +177,19 @@ void bindStructClasses(py::module_& m) {
 		py::list result;
 		
 		KJ_IF_MAYBE(pField, ds.which()) {
-			result.append(pField -> getProto().getName());
+			result.append(str(pField -> getProto().getName()));
 		}
 		
 		for(auto field : ds.getSchema().getNonUnionFields()) {
-			result.append(field.getProto().getName());
+			result.append(str(field.getProto().getName()));
 		}
 		
 		return py::eval("iter")(result);
 	});
 	
-	py::class_<DST, DSB> cDST(m, "DynamicMessage");
+	py::class_<DST, DSB> cDST(m, "DynamicMessage", py::metaclass(*baseMetaType));
 	
-	py::class_<DSR> cDSR(m, "DynamicStructReader", py::dynamic_attr(), py::multiple_inheritance());
+	py::class_<DSR> cDSR(m, "DynamicStructReader", py::dynamic_attr(), py::multiple_inheritance(), py::metaclass(*baseMetaType));
 	cDSR.def(py::init([](DynamicStruct::Reader r) { return r; }));
 	
 	defGet(cDSR);
@@ -196,17 +209,17 @@ void bindStructClasses(py::module_& m) {
 		py::list result;
 		
 		KJ_IF_MAYBE(pField, ds.which()) {
-			result.append(pField -> getProto().getName());
+			result.append(str(pField -> getProto().getName()));
 		}
 		
 		for(auto field : ds.getSchema().getNonUnionFields()) {
-			result.append(field.getProto().getName());
+			result.append(str(field.getProto().getName()));
 		}
 		
 		return py::eval("iter")(result);
 	});
 	
-	py::class_<DSP> cDSP(m, "DynamicStructPipeline", py::multiple_inheritance());
+	py::class_<DSP> cDSP(m, "DynamicStructPipeline", py::multiple_inheritance(), py::metaclass(*baseMetaType));
 	defGet(cDSP);
 	
 	// TODO: This is a little bit hacky, but currently the only way we can allow the construction of derived instances
@@ -227,7 +240,7 @@ void bindStructClasses(py::module_& m) {
 		py::list result;
 		
 		for(auto field : ds.getSchema().getNonUnionFields()) {
-			result.append(field.getProto().getName());
+			result.append(str(field.getProto().getName()));
 		}
 		
 		return py::eval("iter")(result);
@@ -237,18 +250,13 @@ void bindStructClasses(py::module_& m) {
 }
 
 void bindFieldDescriptors(py::module_& m) {
-	py::class_<capnp::StructSchema::Field>(m, "Field")
-		.def("__get__", [](capnp::StructSchema::Field& field, DynamicStruct::Pipeline& self, py::object cls) { return self.get(field); },
-			py::arg("obj"), py::arg("type") = py::none()
-		)
-		.def("__get__", [](capnp::StructSchema::Field& field, DynamicStruct::Reader& self, py::object cls) { return self.get(field); },
-			py::arg("obj"), py::arg("type") = py::none()
-		)
-		.def("__get__", [](capnp::StructSchema::Field& field, DynamicStruct::Builder& self, py::object cls) { return self.get(field); },
-			py::arg("obj"), py::arg("type") = py::none()
-		)
-		
-		.def("__get__", [](capnp::StructSchema::Field& field, py::object self, py::object type) { return kj::str("Field ", field.getProto().getName(), " : ", typeName(field.getType())); })
+	py::class_<capnp::StructSchema::Field>(m, "Field")		
+		.def("__get__", [](capnp::StructSchema::Field& field, py::object self, py::object type) -> py::object {
+			if(self.is_none())
+				return py::cast(kj::str("Field ", field.getProto().getName(), " : ", typeName(field.getType())));
+			
+			return getField(self, py::cast(field));
+		})
 		
 		.def("__set__", [](capnp::StructSchema::Field& field, DynamicStruct::Builder& self, DynamicValue::Reader value) { self.set(field, value); })
 		.def("__delete__", [](capnp::StructSchema::Field& field, DynamicStruct::Builder& self) { self.clear(field); })
@@ -261,10 +269,10 @@ void bindMessageBuilders(py::module_& m) {
 }
 
 void bindCapClasses(py::module_& m) {
-	py::class_<capnp::DynamicCapability::Client>(m, "DynamicCapabilityClient", py::multiple_inheritance())
+	py::class_<capnp::DynamicCapability::Client>(m, "DynamicCapabilityClient", py::multiple_inheritance(), py::metaclass(*baseMetaType))
 		.def(py::init([](capnp::DynamicCapability::Client src) { return src; }))
 	;
-	py::class_<capnp::DynamicCapability::Server>(m, "DynamicCapabilityServer", py::multiple_inheritance());
+	py::class_<capnp::DynamicCapability::Server>(m, "DynamicCapabilityServer", py::multiple_inheritance(), py::metaclass(*baseMetaType));
 }
 
 }
