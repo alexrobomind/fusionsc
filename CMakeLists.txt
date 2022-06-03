@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.17)
 project(FSC LANGUAGES CXX)
 
 set(CMAKE_CXX_EXTENSIONS On)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Dependencies:
 # - capnproto (https://github.com/capnproto/capnproto)
