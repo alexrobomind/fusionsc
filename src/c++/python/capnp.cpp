@@ -79,17 +79,17 @@ void bindBlobClasses(py::module_& m) {
 	using AP = kj::ArrayPtr<kj::byte>;
 	using CAP = kj::ArrayPtr<const kj::byte>;
 	
-	py::class_<TR, kj::StringPtr>(m, "TextReader");
-	py::class_<TB>(m, "TextBuilder");
-	py::class_<TP>(m, "TextPipeline");
+	py::class_<TR, kj::StringPtr>(m, "TextReader", py::dynamic_attr());
+	py::class_<TB>(m, "TextBuilder", py::dynamic_attr());
+	py::class_<TP>(m, "TextPipeline", py::dynamic_attr());
 	
 	using DR = capnp::Data::Reader;
 	using DB = capnp::Data::Builder;
 	using DP = capnp::Data::Pipeline;
 	
-	py::class_<DR, CAP>(m, "DataReader");
-	py::class_<DB, AP>(m, "DataBuilder");
-	py::class_<DP>(m, "DataPipeline");
+	py::class_<DR, CAP>(m, "DataReader", py::dynamic_attr());
+	py::class_<DB, AP>(m, "DataBuilder", py::dynamic_attr());
+	py::class_<DP>(m, "DataPipeline", py::dynamic_attr());
 }
 
 template<typename T>
@@ -109,11 +109,11 @@ void bindListClasses(py::module_& m) {
 	using DLB = DynamicList::Builder;
 	using DLR = DynamicList::Reader;
 	
-	py::class_<DLB> cDLB(m, "DynamicListBuilder");
+	py::class_<DLB> cDLB(m, "DynamicListBuilder", py::dynamic_attr());
 	defGetItem(cDLB);
 	defSetItem(cDLB);
 	
-	py::class_<DLR> cDLR(m, "DynamicListReader");
+	py::class_<DLR> cDLR(m, "DynamicListReader", py::dynamic_attr());
 	defGetItem(cDLR);
 }
 
