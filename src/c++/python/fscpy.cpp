@@ -9,6 +9,8 @@ kj::Own<py::dict> globalClasses;
 kj::Own<py::type> baseType;
 kj::Own<py::type> baseMetaType;
 
+namespace {
+
 struct BoundMethod {
 	py::object method;
 	py::object self;
@@ -27,6 +29,14 @@ struct MethodDescriptor {
 
 struct Simple {		
 };
+
+void atExitFunction() {
+	globalClasses = nullptr;
+	baseType = nullptr;
+	baseMetaType = nullptr;
+}
+
+}
 
 namespace fscpy {
 
@@ -65,4 +75,8 @@ PYBIND11_MODULE(fscpy, m) {
 	bindDataClasses(m);
 	
 	loadDefaultSchema(m);
+	
+	auto atexitModule = py::module_::import("atexit");
+	
+	atexitModule.attr("register")(py::cpp_function(&atExitFunction));
 }

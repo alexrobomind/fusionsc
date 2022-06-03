@@ -14,16 +14,16 @@ namespace fscpy {
 		bool importNode(uint64_t nodeID, py::module scope);
 		bool importNodeIfRoot(uint64_t nodeID, py::module scope);
 		
-		template<typename T>
-		void importCompiledAndDependencies();
-		
 		void add(capnp::schema::Node::Reader reader);
 		
-	private:
+		template<typename... T>
+		void addBuiltin();
+		
 		capnp::SchemaLoader capnpLoader;
 	};
 	
 	extern Loader defaultLoader;
+	
 	kj::StringTree typeName(capnp::Type type);
 	
 	template<typename... T>
@@ -40,5 +40,11 @@ namespace fscpy {
 			result.setWithCaveats(i, allLoaded[i].getProto());
 		
 		return result;
+	}
+	
+	template<typename... T>
+	void Loader::addBuiltin() {
+		using arrType = int [];
+		(void) arrType { 0, (capnpLoader.loadCompiledTypeAndDependencies<T>(), 0)... };
 	}
 }

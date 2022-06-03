@@ -4,6 +4,9 @@
 #include <pybind11/eval.h>
 #include <capnp/dynamic.h>
 #include <capnp/any.h>
+#include <kj/common.h>
+
+#include "loader.h"
 
 // This file contains the following type caster specializations:
 //
@@ -13,6 +16,61 @@
 //   capnp::DynamicCapability::Client
 
 namespace pybind11 { namespace detail {
+	
+	template<>
+	struct type_caster<capnp::DynamicCapability::Client> {
+		using DynamicCapability = capnp::DynamicCapability;
+		
+		PYBIND11_TYPE_CASTER(capnp::DynamicCapability::Client, const_name("DynamicCapability.Client"));
+		
+		// We need this so libstdc++ can declare tuples involving this class
+		type_caster() = default;
+		type_caster(const type_caster<capnp::DynamicCapability::Client>& other) = delete;
+		type_caster(type_caster<capnp::DynamicCapability::Client>&& other) = default;
+		
+		bool load(handle src, bool convert) {
+			type_caster_base<DynamicCapability::Client> base;
+			if(base.load(src, convert)) {
+				value = (DynamicCapability::Client) base;
+				return true;
+			}
+			
+			return false;		
+		}
+		
+		static handle cast(DynamicCapability::Client src, return_value_policy policy, handle parent) {
+			auto typeId = src.getSchema().getProto().getId();
+			
+			// Special handling for normal Capability::Client
+			KJ_IF_MAYBE(pythonSchema, ::fscpy::defaultLoader.capnpLoader.tryGet(typeId)) {
+				KJ_REQUIRE(pythonSchema->getProto().isInterface());
+				
+				if(*pythonSchema != src.getSchema().getGeneric()) {
+					KJ_REQUIRE(!src.getSchema().isBranded(), "Can only pass types without default parametrization from C++ to python");
+					
+					try {						
+						capnp::Capability::Client untyped = src;
+						src = untyped.castAs<DynamicCapability>(pythonSchema->asInterface());
+						
+						KJ_REQUIRE(src.getSchema() == ::fscpy::defaultLoader.capnpLoader.get(typeId));
+					} catch(kj::Exception& e) {
+						KJ_FAIL_REQUIRE("Failed to read python schema", typeId, src.getSchema().getProto().getDisplayName());
+					}
+				}
+			}
+			
+			object baseClient = reinterpret_steal<object>(type_caster_base<DynamicCapability::Client>::cast(kj::mv(src), policy, parent));
+			
+			if(globalClasses->contains(typeId)) {
+				auto targetClass = (*globalClasses)[py::cast(typeId)].attr("Client");
+				
+				object result = targetClass(baseClient);
+				return result.inc_ref();
+			}
+			
+			return baseClient.inc_ref();
+		}
+	};
 	
 	template<>
 	struct type_caster<capnp::DynamicValue::Builder> {
@@ -234,7 +292,7 @@ namespace pybind11 { namespace detail {
 		
 		static handle cast(DynamicValue::Pipeline src, return_value_policy policy, handle parent) {
 			switch(src.getType()) {
-				case DynamicValue::CAPABILITY: return py::cast(src.releaseAs<capnp::DynamicCapability>());
+				case DynamicValue::CAPABILITY: return type_caster<capnp::DynamicCapability::Client>::cast(src.releaseAs<capnp::DynamicCapability>(), policy, parent);
 				// case DynamicValue::ANY_POINTER: return py::cast(src.releaseAs<capnp::AnyPointer>());
 				default: {}
 			}
@@ -301,42 +359,4 @@ namespace pybind11 { namespace detail {
 			
 		}
 	};*/
-	
-	template<>
-	struct type_caster<capnp::DynamicCapability::Client> {
-		using DynamicCapability = capnp::DynamicCapability;
-		
-		PYBIND11_TYPE_CASTER(capnp::DynamicCapability::Client, const_name("DynamicCapability.Client"));
-		
-		// We need this so libstdc++ can declare tuples involving this class
-		type_caster() = default;
-		type_caster(const type_caster<capnp::DynamicCapability::Client>& other) = delete;
-		type_caster(type_caster<capnp::DynamicCapability::Client>&& other) = default;
-		
-		bool load(handle src, bool convert) {
-			type_caster_base<DynamicCapability::Client> base;
-			if(base.load(src, convert)) {
-				value = (DynamicCapability::Client) base;
-				return true;
-			}
-			
-			return false;		
-		}
-		
-		static handle cast(DynamicCapability::Client src, return_value_policy policy, handle parent) {
-			auto typeId = src.getSchema().getProto().getId();
-			
-			if(globalClasses->contains(typeId)) {
-				auto targetClass = (*globalClasses)[py::cast(typeId)].attr("Client");
-				
-				py::print("Redirecting requested class to", targetClass);
-				
-				object result = targetClass(src);
-				return result.inc_ref();
-			}
-			py::print("Using base DynamicCapability class");
-			
-			return type_caster_base<DynamicCapability::Client>::cast(src, policy, parent);
-		}
-	};
 }}

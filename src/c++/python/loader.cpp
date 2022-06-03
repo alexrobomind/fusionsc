@@ -2,6 +2,7 @@
 #include "async.h"
 #include "loader.h"
 
+
 #include <capnp/dynamic.h>
 #include <capnp/message.h>
 #include <capnp/schema.h>
@@ -10,6 +11,9 @@
 #include <kj/string-tree.h>
 
 #include <fsc/data.h>
+#include <fsc/services.h>
+
+#include <cstdint>
 
 using capnp::RemotePromise;
 using capnp::Response;
@@ -73,6 +77,9 @@ kj::String sanitizedStructName(kj::StringPtr input) {
 	
 	return str(input);
 }
+
+// Declaration for recursive calls
+py::object interpretSchema(capnp::SchemaLoader& loader, uint64_t id, py::object scope);
 
 py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchema schema, py::object scope) {	
 	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
@@ -139,7 +146,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		));
 		
 		// Determine metaclass and build a new type with the given suffix
-		py::type metaClass = py::type::of(baseClass);
+		py::type metaClass = py::reinterpret_borrow<py::type>(reinterpret_cast<PyObject*>(&PyType_Type));//py::type::of(baseClass);
 		
 		attributes["__qualname__"] = qualName(output, suffix);
 		attributes["__module__"] = moduleName;
@@ -166,7 +173,8 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		attributes["__qualname__"] = qualName(output, suffix);
 		attributes["__module__"] = moduleName;
 		
-		py::type metaClass = py::type::of(promiseBase);
+		//py::type metaClass = py::type::of(promiseBase);
+		py::type metaClass = py::reinterpret_borrow<py::type>(reinterpret_cast<PyObject*>(&PyType_Type));
 		
 		py::object newCls = metaClass(kj::str(structName, ".", suffix).cStr(), py::make_tuple(promiseBase, pipelineBase), attributes);
 		output.attr(suffix.cStr()) = newCls;
@@ -196,7 +204,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		switch(field.getProto().which()) {
 			case Field::GROUP: {
 				capnp::StructSchema subType = field.getType().asStruct();
-				output.attr(name.cStr()) = interpretStructSchema(loader, subType, output);
+				output.attr(name.cStr()) = interpretSchema(loader, subType.getProto().getId(), output);
 				break;
 			}
 			
@@ -207,9 +215,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 	return output;
 }
 
-py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::InterfaceSchema schema, py::object scope) {	
-	py::print("Building class ", schema.getUnqualifiedName(), " in ", scope);
-	
+py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::InterfaceSchema schema, py::object scope) {		
 	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
 	auto methods = schema.getMethods();
 	
@@ -220,7 +226,9 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 	// Static resolution fails as we have overridden the type caster
 	py::object baseObject = py::cast(DynamicCapability::Client());
 	py::object baseClass = py::type::of(baseObject);
-	py::type metaClass = py::type::of(baseClass);
+	
+	py::type metaClass = py::reinterpret_borrow<py::type>(reinterpret_cast<PyObject*>(&PyType_Type));
+	//py::type metaClass = py::type::of(baseClass);
 	
 	py::dict outerAttrs;
 	py::dict clientAttrs;
@@ -280,7 +288,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 			name, " : (", paramName.flatten(), ") -> ", resultName.flatten(), ".Promise"
 		);
 		
-		auto function = [paramType, resultType, method, types = mv(types), argFields = mv(argFields), nArgs](capnp::DynamicCapability::Client self, py::args pyArgs, py::kwargs pyKwargs) mutable {
+		auto function = [paramType, resultType, method, types = mv(types), argFields = mv(argFields), nArgs](capnp::DynamicCapability::Client self, py::args pyArgs, py::kwargs pyKwargs) mutable {			
 			auto request = self.newRequest(method);
 			
 			// Check whether we got the argument structure passed
@@ -335,7 +343,6 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 				}
 			}
 			
-						
 			RemotePromise<DynamicStruct> result = request.send();
 			
 			// Extract promise
@@ -352,12 +359,15 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 			
 			// If not found, we can only return the promise for a generic result (perhaps once in the future
 			// we can add the option for a full pass-through into RemotePromise<DynamicStruct>)
-			py::object resultObject = py::cast(resultPromise);
+			py::object resultObject = py::cast(mv(resultPromise));
+			
 			if(globalClasses->contains(id)) {
 				// Construct merged promise / pipeline object from PyPromise and pipeline
-				py::type resultClass = (*globalClasses[id]).attr("Promise");
+				py::type resultClass = (*globalClasses)[py::cast(id)].attr("Promise");
 				
-				resultObject = resultClass(resultPromise, pyPipeline, INTERNAL_ACCESS_KEY);
+				resultObject = resultClass(resultObject, pyPipeline, INTERNAL_ACCESS_KEY);
+			} else {
+				py::print("Could not find ID", id, "in global classes");
 			}
 			
 			PromiseHandle handle;
@@ -367,11 +377,10 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		
 		auto pyFunction = py::cpp_function(
 			kj::mv(function),
+			py::return_value_policy::move,
 			py::doc(functionDesc.flatten().cStr()),
 			py::arg("self")
 		);
-		
-		py::print("Assigning method", name.cStr());
 				
 		// TODO: Override the signature object
 		
@@ -387,8 +396,8 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		holder.attr("__module__") = moduleName;
 		holder.attr("desc") = str("Auxiliary classes (Params and/or Results) for method ", name);
 		
-		py::object pyParamType = interpretStructSchema(loader, method.getParamType(), holder);
-		py::object pyResultType = interpretStructSchema(loader, method.getResultType(), holder);
+		py::object pyParamType = interpretSchema(loader, method.getParamType().getProto().getId(), holder);
+		py::object pyResultType = interpretSchema(loader, method.getResultType().getProto().getId(), holder);
 		
 		KJ_REQUIRE(!pyParamType.is_none());
 		KJ_REQUIRE(!pyResultType.is_none());
@@ -402,15 +411,12 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 	/*py::print("Extracting surrounding module");
 	py::module_ module_ = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope;*/
 	
-	py::print("Creating outer class");
-	
 	auto outerName = qualName(scope, schema.getUnqualifiedName());
 	outerAttrs["__qualname__"] = outerName;
 	outerAttrs["__module__"] = moduleName;
 	
 	py::object outerCls = metaClass(schema.getUnqualifiedName(), py::make_tuple(), outerAttrs);
 	
-	py::print("Creating client class");
 	auto innerName = qualName(outerCls, "Client");
 	
 	clientAttrs["__qualname__"] = innerName;
@@ -419,7 +425,6 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 	py::object clientCls = (*baseMetaType)("Client", py::make_tuple(baseClass), clientAttrs);
 	outerCls.attr("Client") = clientCls;
 	
-	py::print("Done");
 	
 	return outerCls;
 }

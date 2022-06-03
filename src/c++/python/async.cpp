@@ -13,7 +13,7 @@ namespace {
 namespace fscpy {
 
 void bindAsyncClasses(py::module_& m) {
-	py::class_<PyPromise>(m, "Promise")
+	py::class_<PyPromise>(m, "Promise", py::multiple_inheritance())
 		.def(py::init([](PyPromise& other) { return PyPromise(other); }))
 	;
 	

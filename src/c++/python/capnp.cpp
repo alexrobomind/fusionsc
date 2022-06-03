@@ -106,7 +106,7 @@ void bindStructClasses(py::module_& m) {
 	using DSP = DynamicStruct::Pipeline;
 	using DST = fsc::Temporary<DynamicStruct>;
 	
-	py::class_<DSB> cDSB(m, "DynamicStructBuilder", py::dynamic_attr());
+	py::class_<DSB> cDSB(m, "DynamicStructBuilder", py::dynamic_attr(), py::multiple_inheritance());
 	cDSB.def(py::init([](DynamicStruct::Builder b) { return b; }));
 	
 	defGet(cDSB);
@@ -118,20 +118,20 @@ void bindStructClasses(py::module_& m) {
 	
 	py::class_<DST, DSB> cDST(m, "DynamicMessage");
 	
-	py::class_<DSR> cDSR(m, "DynamicStructReader", py::dynamic_attr());
+	py::class_<DSR> cDSR(m, "DynamicStructReader", py::dynamic_attr(), py::multiple_inheritance());
 	cDSR.def(py::init([](DynamicStruct::Reader r) { return r; }));
 	
 	defGet(cDSR);
 	defHas(cDSR);
 	defWhich(cDSR);
 	
-	py::class_<DSP> cDSP(m, "DynamicStructPipeline");
+	py::class_<DSP> cDSP(m, "DynamicStructPipeline", py::multiple_inheritance());
 	defGet(cDSP);
 	
 	// TODO: This is a little bit hacky, but currently the only way we can allow the construction of derived instances
 	cDSP.def(py::init([](DynamicStruct::Pipeline& p, kj::StringPtr key) {
 		KJ_REQUIRE((key == INTERNAL_ACCESS_KEY), "The pipeline constructor is reserved for internal use");
-
+		py::print("Moving pipeline"); 
 		return kj::mv(p);
 	}));
 	
@@ -150,7 +150,7 @@ void bindFieldDescriptors(py::module_& m) {
 			py::arg("obj"), py::arg("type") = py::none()
 		)
 		
-		.def("__get__", [](capnp::StructSchema::Field& field, py::object self, py::object type) { py::print(self, type); return kj::str("Field ", field.getProto().getName(), " : ", typeName(field.getType())); })
+		.def("__get__", [](capnp::StructSchema::Field& field, py::object self, py::object type) { return kj::str("Field ", field.getProto().getName(), " : ", typeName(field.getType())); })
 		
 		.def("__set__", [](capnp::StructSchema::Field& field, DynamicStruct::Builder& self, DynamicValue::Reader value) { self.set(field, value); })
 		.def("__delete__", [](capnp::StructSchema::Field& field, DynamicStruct::Builder& self) { self.clear(field); })
@@ -163,8 +163,10 @@ void bindMessageBuilders(py::module_& m) {
 }
 
 void bindCapClasses(py::module_& m) {
-	py::class_<capnp::DynamicCapability::Client>(m, "DynamicCapabilityClient");
-	py::class_<capnp::DynamicCapability::Server>(m, "DynamicCapabilityServer");
+	py::class_<capnp::DynamicCapability::Client>(m, "DynamicCapabilityClient", py::multiple_inheritance())
+		.def(py::init([](capnp::DynamicCapability::Client src) { return src; }))
+	;
+	py::class_<capnp::DynamicCapability::Server>(m, "DynamicCapabilityServer", py::multiple_inheritance());
 }
 
 }

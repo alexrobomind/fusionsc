@@ -42,7 +42,7 @@ struct PyContext {
 	}
 	
 private:
-	static inline kj::MutexGuarded<Library> _library;
+	static inline kj::MutexGuarded<Library> _library = kj::MutexGuarded<Library>();
 	static inline thread_local LibraryThread _libraryThread;
 };
 

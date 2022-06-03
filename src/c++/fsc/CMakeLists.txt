@@ -21,6 +21,8 @@ set(
 	
 	flt.capnp
 	
+	services.capnp
+	
 	devices/w7x.capnp
 	devices/w7x-test.capnp
 )
@@ -80,6 +82,9 @@ add_library(
 	
 	grids.h
 	tensor.h
+	
+	services.h
+	services.cpp
 	
 	
 	${FSC_CP_HEADERS}
