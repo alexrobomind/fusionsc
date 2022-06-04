@@ -61,7 +61,7 @@ bool needsBackReference(T& t) {
 }
 
 template<typename T, typename Field>
-py::tuple underscoreGet(T& ds, Field& field) {
+py::tuple underscoreGet(T& ds, Field field) {
 	auto cppValue = ds.get(field);
 	bool nbr = needsBackReference(cppValue);
 	
@@ -81,7 +81,9 @@ void bindBlobClasses(py::module_& m) {
 	using CAP = kj::ArrayPtr<const kj::byte>;
 	
 	py::class_<TR, kj::StringPtr>(m, "TextReader", py::dynamic_attr());
-	py::class_<TB>(m, "TextBuilder", py::dynamic_attr());
+	py::class_<TB>(m, "TextBuilder", py::dynamic_attr())
+		.def("__repr__", [](TB& self) { return self.asString(); })
+	;
 	py::class_<TP>(m, "TextPipeline", py::dynamic_attr());
 	
 	using DR = capnp::Data::Reader;
@@ -146,7 +148,7 @@ void bindListClasses(py::module_& m) {
 
 template<typename T, typename... Extra>
 void defGet(py::class_<T, Extra...>& c) {
-	c.def("_get", &underscoreGet<T, capnp::StructSchema::Field>);
+	c.def("_get", [](T& self, capnp::StructSchema::Field field) { return underscoreGet<T, kj::StringPtr>(self, field.getProto().getName()); });
 	c.def("_get", &underscoreGet<T, kj::StringPtr>);
 	
 	auto genericGet = [](py::object ds, py::object field) { return getField(ds, field); };
@@ -190,6 +192,7 @@ void bindStructClasses(py::module_& m) {
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Builder& val) { dsb.set(name, val.asReader()); });
 	cDSB.def("__setitem__", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Reader& val) { dsb.set(name, val); });
 	cDSB.def("__setitem__", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Builder& val) { dsb.set(name, val.asReader()); });
+	cDSB.def("__delitem__", [](DSB& dsb, kj::StringPtr name) { dsb.clear(name); });
 	
 	cDSB.def("__len__", [](DSB& ds) {
 		auto schema = ds.getSchema();
@@ -252,7 +255,6 @@ void bindStructClasses(py::module_& m) {
 	// TODO: This is a little bit hacky, but currently the only way we can allow the construction of derived instances
 	cDSP.def(py::init([](DynamicStruct::Pipeline& p, kj::StringPtr key) {
 		KJ_REQUIRE((key == INTERNAL_ACCESS_KEY), "The pipeline constructor is reserved for internal use");
-		py::print("Moving pipeline"); 
 		return kj::mv(p);
 	}));
 	
@@ -315,6 +317,8 @@ void bindCapnpClasses(py::module_& m) {
 	bindFieldDescriptors(mcapnp);
 	bindMessageBuilders(mcapnp);
 	bindCapClasses(mcapnp);
+	
+	m.add_object("void", py::cast(capnp::DynamicValue::Reader(capnp::Void())));
 }
 
 }

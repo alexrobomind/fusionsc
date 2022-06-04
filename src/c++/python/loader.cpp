@@ -117,7 +117,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 				
 				if(type.isList() || type.isData() || type.isText()) {
 					attributes[str("init", nameUpper).cStr()] =  methodDescriptor(py::cpp_function(
-						[field](DynamicStruct::Builder builder, size_t n) { return builder.init(field, n); }
+						[field](DynamicStruct::Builder builder, size_t n) { return builder.init(field.getProto().getName(), n); }
 					));
 				}
 			}
@@ -136,9 +136,9 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 				kj::String nameUpper = kj::heapString(name);
 				nameUpper[0] = toupper(name[0]);
 				
-				if(!type.isList() && !type.isData() && !type.isText()) {
+				if(type.isStruct()) {
 					attributes[str("init", nameUpper).cStr()] =  methodDescriptor(py::cpp_function(
-						[field](DynamicStruct::Builder builder) { return DynamicValue::Builder(builder.init(field)); }
+						[field](DynamicStruct::Builder builder) { return DynamicValue::Builder(builder.init(field.getProto().getName())); }
 					));
 				}
 			}
