@@ -6,6 +6,7 @@
 #include <kj/mutex.h>
 
 #include <capnp/dynamic.h>
+#include <capnp/list.h>
 #include <capnp/message.h>
 #include <capnp/blob.h>
 
@@ -92,9 +93,35 @@ void bindBlobClasses(py::module_& m) {
 	py::class_<DP>(m, "DataPipeline", py::dynamic_attr());
 }
 
+template<typename List>
+struct Iterator {
+	List& list;
+	size_t pos;
+	
+	Iterator(List& list, size_t pos) : list(list), pos(pos) {}
+	
+	bool operator==(Iterator other) { return pos == other.pos; }
+	bool operator!=(Iterator other) { return pos != other.pos; }
+	Iterator& operator++() { ++pos; return *this; }
+	
+	auto operator*() { return list[pos]; }
+};
+
 template<typename T>
-void defGetItem(py::class_<T>& c) {
+void defGetItemAndLen(py::class_<T>& c) {
 	c.def("__getitem__", [](T& list, size_t idx) { return list[idx]; });
+	c.def("__len__", [](T& list) { return list.size(); });
+	c.def("__iter__",
+		[](T& list) {
+			//TODO: This relies on internals, but the default way looks bugged
+			
+			Iterator begin(list, 0);
+			Iterator end(list, list.size());
+			
+			return py::make_iterator(begin, end);
+		},
+		py::keep_alive<0, 1>()
+	);
 }
 
 
@@ -110,11 +137,11 @@ void bindListClasses(py::module_& m) {
 	using DLR = DynamicList::Reader;
 	
 	py::class_<DLB> cDLB(m, "DynamicListBuilder", py::dynamic_attr());
-	defGetItem(cDLB);
+	defGetItemAndLen(cDLB);
 	defSetItem(cDLB);
 	
 	py::class_<DLR> cDLR(m, "DynamicListReader", py::dynamic_attr());
-	defGetItem(cDLR);
+	defGetItemAndLen(cDLR);
 }
 
 template<typename T, typename... Extra>

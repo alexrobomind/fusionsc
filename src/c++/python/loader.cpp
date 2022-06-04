@@ -14,6 +14,7 @@
 #include <fsc/services.h>
 
 #include <cstdint>
+#include <cctype>
 
 using capnp::RemotePromise;
 using capnp::Response;
@@ -104,20 +105,42 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 			
 			using Field = capnp::schema::Field;
 			
-			switch(field.getProto().which()) {
-				case Field::SLOT: {					
-					auto slot = field.getProto().getSlot();
-					auto type = field.getType();
-					
-					// Only emit pipeline fields for struct and interface fields
-					if(classType == FSCPyClassType::PIPELINE && !type.isStruct() && !type.isInterface())
-						break;
-					
-					attributes[name.cStr()] = field;
-					break;
-				}
+			auto type = field.getType();
+			
+			// Only emit pipeline fields for struct and interface fields
+			if(classType == FSCPyClassType::PIPELINE && !type.isStruct() && !type.isInterface())
+				break;
+			
+			if(classType == FSCPyClassType::BUILDER) {
+				kj::String nameUpper = kj::heapString(name);
+				nameUpper[0] = toupper(name[0]);
 				
-				case Field::GROUP: {} // We process these later
+				if(type.isList() || type.isData() || type.isText()) {
+					attributes[str("init", nameUpper).cStr()] =  methodDescriptor(py::cpp_function(
+						[field](DynamicStruct::Builder builder, size_t n) { return builder.init(field, n); }
+					));
+				}
+			}
+			
+			attributes[name.cStr()] = field;
+		}
+		
+		for(StructSchema::Field field : schema.getUnionFields()) {
+			kj::StringPtr name = field.getProto().getName();
+			
+			using Field = capnp::schema::Field;
+			
+			auto type = field.getType();
+			
+			if(classType == FSCPyClassType::BUILDER) {
+				kj::String nameUpper = kj::heapString(name);
+				nameUpper[0] = toupper(name[0]);
+				
+				if(!type.isList() && !type.isData() && !type.isText()) {
+					attributes[str("init", nameUpper).cStr()] =  methodDescriptor(py::cpp_function(
+						[field](DynamicStruct::Builder builder) { return DynamicValue::Builder(builder.init(field)); }
+					));
+				}
 			}
 		}
 		
