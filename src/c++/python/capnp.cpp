@@ -132,6 +132,96 @@ void defGetItemAndLen(py::class_<T>& c) {
 	);
 }
 
+template<typename T>
+void defBuffer(py::class_<T>& c, bool readOnly) {
+	c.def_buffer([readOnly](T& list) {
+		capnp::AnyList::Reader anyReader = list;
+		
+		kj::ArrayPtr<const byte> rawBytes = list.getRawBytes();
+		byte* bytesPtr = const_cast<byte*> rawList.begin();
+		
+		size_t elementSize = 0;
+		const char* formatString = "";
+		
+		switch(list.getType().which()) {
+			case capnp::schema::Type::VOID:
+			case capnp::schema::Type::BOOL:
+			case capnp::schema::Type::TEXT:
+			case capnp::schema::Type::DATA:
+			case capnp::schema::Type::LIST:
+			case capnp::schema::Type::STRUCT:
+			case capnp::schema::Type::INTERFACE:
+			case capnp::schema::Type::ANY_POINTER:
+				KJ_FAIL_REQUIRE("Can not access list of non-promitive data type.", list.getType().which());
+			
+			case capnp::schema::Type::INT8:
+				formatString="<b";
+				elementSize = 1;
+				break;
+			case capnp::schema::Type::INT16:
+				formatString="<h";
+				elementSize = 2;
+				break;
+			case capnp::schema::Type::INT32:
+				formatString="<i";
+				elementSize = 4;
+				break;
+			case capnp::schema::Type::INT64:
+				formatString="<q";
+				elementSize = 8;
+				break;
+			
+			case capnp::schema::Type::UINT8:
+				formatString="<B";
+				elementSize = 1;
+				break;
+			case capnp::schema::Type::UINT16:
+				formatString="<H";
+				elementSize = 2;
+				break;
+			case capnp::schema::Type::UINT32:
+				formatString="<I";
+				elementSize = 4;
+				break;
+			case capnp::schema::Type::UINT64:
+				formatString="<Q";
+				elementSize = 8;
+				break;
+				
+			case capnp::schema::Type::FLOAT32:
+				formatString="<f";
+				elementSize = 4;
+				break;
+			case capnp::schema::Type::FLOAT64:
+				formatString="<d";
+				elementSize = 8;
+				break;
+		}
+		
+		switch(list.getElementSize()) {
+			case capnp::ElementSize::BYTE:
+			case capnp::ElementSize::TWO_BYTES:
+			case capnp::ElementSize::FOUR_BYTES:
+			case capnp::ElementSize::EIGHT_BYTES:
+				KJ_REQUIRE(elementSize * list.size() == rawBytes.size());
+			
+			case capnp::ElementSize::VOID:
+			case capnp::ElementSize::BIT:
+				KJ_FAIL_REQUIRE("VOID and BIT lists may not be accessed directly");
+			
+			case capnp::ElementSize::POINTER:
+				KJ_FAIL_REQUIRE("Pointer lists may not be accessed directly");
+				
+			case capnp::ElementSize::INLINE_COMPOSITE:
+				KJ_FAIL_REQUIRE("Struct lists may not (yet) be accessed directly");
+		}
+		
+		return py::buffer_info(
+			(void*) bytesPtr, elementSize, std::string(formatString), list.size(), readOnly
+		);
+	});
+}
+
 
 template<typename T>
 void defSetItem(py::class_<T>& c) {
