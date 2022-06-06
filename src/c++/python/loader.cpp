@@ -23,6 +23,7 @@ using capnp::DynamicStruct;
 using capnp::DynamicValue;
 using capnp::StructSchema;
 using capnp::InterfaceSchema;
+using capnp::AnyPointer;
 
 using namespace fscpy;
 
@@ -160,7 +161,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 				break;
 				
 			case FSCPyClassType::PIPELINE:
-				baseClass = py::type::of<DynamicStruct::Pipeline>();
+				baseClass = py::type::of<DynamicStructPipeline>();
 				suffix = "Pipeline";
 				break;  
 		}
@@ -315,7 +316,10 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		);
 		
 		auto function = [paramType, resultType, method, types = mv(types), argFields = mv(argFields), nArgs](capnp::DynamicCapability::Client self, py::args pyArgs, py::kwargs pyKwargs) mutable {			
-			auto request = self.newRequest(method);
+			// auto request = self.newRequest(method);
+			capnp::Request<AnyPointer> request = self.typelessRequest<AnyPointer, AnyPointer>(
+				method.getContainingInterface().getProto().getId(), method.getOrdinal(), nullptr
+			);
 			
 			// Check whether we got the argument structure passed
 			// In this case, copy the fields over from input struct
@@ -330,13 +334,14 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 					DynamicStruct::Reader asStruct = argVal.as<DynamicStruct>();
 					
 					if(asStruct.getSchema() == paramType) {
-						for(auto field : paramType.getNonUnionFields()) {
+						/*for(auto field : paramType.getNonUnionFields()) {
 							request.set(field, asStruct.get(field));
 						}
 						
 						KJ_IF_MAYBE(pField, asStruct.which()) {
 							request.set(*pField, asStruct.get(*pField));
-						}
+						}*/
+						request.setAs(asStruct);
 						
 						requestBuilt = true;
 					}
@@ -344,19 +349,20 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 			}
 
 			if(!requestBuilt) {
+				DynamicStruct::Builder structRequest = request.initAs<DynamicStruct>(paramType);
 				// Parse positional arguments
 				KJ_REQUIRE(pyArgs.size() <= argFields.size(), "Too many arguments specified");
 				
 				for(size_t i = 0; i < pyArgs.size(); ++i) {
 					auto field = argFields[i];
 					
-					request.set(field, pyArgs[i].cast<DynamicValue::Reader>());
+					structRequest.set(field, pyArgs[i].cast<DynamicValue::Reader>());
 				}
 				
 				// Parse keyword arguments
-				auto processEntry = [&request, paramType](kj::StringPtr name, DynamicValue::Reader value) mutable {
+				auto processEntry = [&structRequest, paramType](kj::StringPtr name, DynamicValue::Reader value) mutable {
 					KJ_IF_MAYBE(pField, paramType.findFieldByName(name)) {
-						request.set(*pField, value);
+						structRequest.set(*pField, value);
 					} else {
 						KJ_FAIL_REQUIRE("Unknown named parameter", name);
 					}
@@ -369,13 +375,13 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 				}
 			}
 			
-			RemotePromise<DynamicStruct> result = request.send();
+			RemotePromise<AnyPointer> result = request.send();
 			
 			// Extract promise
-			PyPromise resultPromise = result.then([](capnp::Response<capnp::DynamicStruct> response) {
+			PyPromise resultPromise = result.then([resultType](capnp::Response<AnyPointer> response) {
 				py::gil_scoped_acquire withGIL;
 				
-				capnp::DynamicStruct::Reader structReader = response;
+				DynamicStruct::Reader structReader = response.getAs<DynamicStruct>(resultType);
 				
 				py::object pyReader   = py::cast(capnp::DynamicValue::Reader(response));
 				py::object pyResponse = py::cast(mv(response));
@@ -386,8 +392,8 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 			});
 			
 			// Extract pipeline
-			DynamicStruct::Pipeline resultPipeline = mv(result);
-			py::object pyPipeline = py::cast(mv(resultPipeline));
+			AnyPointer::Pipeline resultPipelineTypeless = mv(result);
+			py::object pyPipeline = py::cast(DynamicStructPipeline(mv(resultPipeline), resultType));
 			
 			// Check for PromiseForResult class for type
 			auto id = resultType.getProto().getId();
@@ -400,7 +406,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 				// Construct merged promise / pipeline object from PyPromise and pipeline
 				py::type resultClass = (*globalClasses)[py::cast(id)].attr("Promise");
 				
-				resultObject = resultClass(resultObject, pyPipeline, INTERNAL_ACCESS_KEY);
+				resultObject = resultClass(resultObject, pyPipeline);
 			} else {
 				py::print("Could not find ID", id, "in global classes");
 			}

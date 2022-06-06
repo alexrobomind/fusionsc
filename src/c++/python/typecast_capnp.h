@@ -18,7 +18,7 @@
 namespace pybind11 { namespace detail {
 	
 	template<>
-	struct type_caster<capnp::DynamicCapability::Client> {
+	struct type_caster<DynamicCapability::Client> {
 		using DynamicCapability = capnp::DynamicCapability;
 		
 		PYBIND11_TYPE_CASTER(capnp::DynamicCapability::Client, const_name("DynamicCapability.Client"));
@@ -28,10 +28,11 @@ namespace pybind11 { namespace detail {
 		type_caster(const type_caster<capnp::DynamicCapability::Client>& other) = delete;
 		type_caster(type_caster<capnp::DynamicCapability::Client>&& other) = default;
 		
+		
 		bool load(handle src, bool convert) {
-			type_caster_base<DynamicCapability::Client> base;
+			type_caster_base<DynamicCapabilityClient> base;
 			if(base.load(src, convert)) {
-				value = (DynamicCapability::Client) base;
+				value = (DynamicCapabilityClient) base;
 				return true;
 			}
 			
@@ -39,7 +40,7 @@ namespace pybind11 { namespace detail {
 		}
 		
 		static handle cast(DynamicCapability::Client src, return_value_policy policy, handle parent) {
-			auto typeId = src.getSchema().getProto().getId();
+			auto typeId = src.schema.getProto().getId();
 			
 			// Special handling for normal Capability::Client
 			KJ_IF_MAYBE(pythonSchema, ::fscpy::defaultLoader.capnpLoader.tryGet(typeId)) {
@@ -59,7 +60,7 @@ namespace pybind11 { namespace detail {
 				}
 			}
 			
-			object baseClient = reinterpret_steal<object>(type_caster_base<DynamicCapability::Client>::cast(kj::mv(src), policy, parent));
+			object baseClient = reinterpret_steal<object>(type_caster_base<DynamicCapabilityClient>::cast(kj::mv(src), policy, parent));
 			
 			if(globalClasses->contains(typeId)) {
 				auto targetClass = (*globalClasses)[py::cast(typeId)].attr("Client");
@@ -276,6 +277,49 @@ namespace pybind11 { namespace detail {
 	};
 	
 	template<>
+	struct type_caster<DynamicValuePipeline> {
+		PYBIND11_TYPE_CASTER(DynamicValuePipeline, const_name("DynamicValuePipeline"));
+		
+		// We need this so libstdc++ can declare tuples involving this class
+		type_caster() = default;
+		type_caster(const type_caster<DynamicValuePipeline>& other) = delete;
+		type_caster(type_caster<DynamicValuePipeline>&& other) = default;
+		
+		// Currently we don't have a use case to pass pipelines into C++ code
+		// This might change in the future
+		bool load(handle src, bool convert) {
+			return false;
+		}
+		
+		static handle cast(DynamicValuePipeline src, return_value_policy policy, handle parent) {
+			if(src.schema.getProto().isInterface()) {
+				return type_caster<capnp::DynamicCapability::Client>::cast(src.asCapability(), policy, parent);
+			}
+			
+			DynamicStructPipeline dynamicStruct = src.asStruct();
+			auto typeId = dynamicStruct.schema.getProto().getId();
+			
+			if(globalClasses->contains(py::cast(typeId))) {
+				// Retrieve target class to use
+				auto targetClass = (*globalClasses)[py::cast(typeId)].attr("Pipeline");
+				
+				// Construct instance of registered class by calling the class
+				// The target class inherits from DynamicStruct::Pipeline, which has a
+				// copy initializer. The target object will be forwarded to it
+				object result = targetClass(dynamicStruct);
+				return result.inc_ref();
+			}
+			
+			KJ_FAIL_REQUIRE("Unknown class type");
+			
+			// TODO: Just default-construct the target class on-demand?
+			// In principle, this should never be reached anyway
+			return type_caster_base<DynamicStructPipeline>::cast(dynamicStruct, policy, parent);
+		}
+	};
+	
+	/*
+	template<>
 	struct type_caster<capnp::DynamicValue::Pipeline> {
 		using DynamicValue = capnp::DynamicValue;
 		using DynamicList = capnp::DynamicList;
@@ -324,7 +368,7 @@ namespace pybind11 { namespace detail {
 			// In principle, this should never be reached anyway
 			return type_caster_base<DynamicStruct::Pipeline>::cast(dynamicStruct, policy, parent);
 		}
-	};
+	};*/
 	
 	/*template<>
 	struct type_caster<capnp::RemotePromise<capnp::DynamicStruct>> {

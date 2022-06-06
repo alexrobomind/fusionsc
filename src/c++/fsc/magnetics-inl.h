@@ -5,6 +5,11 @@
 #include "kernels-biotsavart.h"
 
 namespace fsc { namespace internal {
+
+template<typename T>
+class Proxy : public virtual T::Server, public virtual capnp::Capability::Server {
+	
+};
 	
 template<typename Device>
 struct FieldCalculation {

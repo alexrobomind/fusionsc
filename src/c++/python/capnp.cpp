@@ -178,7 +178,7 @@ void defWhich(py::class_<T, Extra...>& c) {
 void bindStructClasses(py::module_& m) {
 	using DSB = DynamicStruct::Builder;
 	using DSR = DynamicStruct::Reader;
-	using DSP = DynamicStruct::Pipeline;
+	using DSP = DynamicStructPipeline;
 	using DST = fsc::Temporary<DynamicStruct>;
 	
 	py::class_<DSB> cDSB(m, "DynamicStructBuilder", py::dynamic_attr(), py::multiple_inheritance(), py::metaclass(*baseMetaType));
@@ -307,6 +307,42 @@ void bindCapClasses(py::module_& m) {
 }
 
 namespace fscpy {
+	
+// class DynamicValuePipeline
+
+DynamicStructPipeline DynamicValuePipeline::asStruct() {
+	return DynamicStructPipeline(
+		typeless.noop(), schema.asStruct()
+	);
+}
+
+capnp::DynamicCapability::Client DynamicValuePipeline::asCapability() {
+	return typeless.castAs<DynamicCapability>(schema.asInterface());
+}
+
+// class DynamicStructPipeline
+
+DynamicValuePipeline DynamicStructPipeline::get(capnp::StructSchema::Field field) {
+	capnp::AnyPointer::Pipeline typelessValue;
+	
+	// Groups must point to the same field
+	if(field.getProto().isGroup()) {
+		typelessValue = typeless.noop();
+	} else {
+		KJ_ASSERT(field.getProto().isSlot());
+		
+		auto asSlot = field.getProto().getSlot();
+		typelessValue = typeless.asAnyStruct().getPointerField(asSlot.getOffset());
+	}
+	
+	return DynamicValuePipeline(
+		typelessValue, field.getType()
+	);
+}
+
+DynamicValuePipeline DynamicStructPipeline::get(kj::StringPtr name) {
+	return get(schema.findFieldByName(name));
+}
 
 void bindCapnpClasses(py::module_& m) {
 	py::module_ mcapnp = m.def_submodule("capnp");
