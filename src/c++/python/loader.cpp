@@ -381,13 +381,21 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 			PyPromise resultPromise = result.then([resultType](capnp::Response<AnyPointer> response) {
 				py::gil_scoped_acquire withGIL;
 				
+				py::print("Copying reader");
 				DynamicStruct::Reader structReader = response.getAs<DynamicStruct>(resultType);
 				
-				py::object pyReader   = py::cast(capnp::DynamicValue::Reader(response));
-				py::object pyResponse = py::cast(mv(response));
+				py::print("Pycasting reader");
+				py::object pyReader = py::cast(structReader);
+				py::print(pyReader);
 				
+				py::print("Pycasting response");
+				py::object pyResponse = py::cast(mv(response));
+				py::print(pyResponse);
+				
+				py::print("Assigning response to reader");
 				pyReader.attr("_response") = pyResponse;
 				
+				py::print("Returning");
 				return pyReader;
 			});
 			

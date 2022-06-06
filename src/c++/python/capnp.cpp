@@ -280,7 +280,7 @@ void bindStructClasses(py::module_& m) {
 		return py::eval("iter")(result);
 	});
 	
-	py::class_<capnp::Response<DynamicStruct>, DSR>(m, "DynamicResponse");
+	py::class_<capnp::Response<AnyPointer>>(m, "DynamicResponse");
 }
 
 void bindFieldDescriptors(py::module_& m) {
