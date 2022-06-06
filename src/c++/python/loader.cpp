@@ -190,9 +190,9 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		py::type pipelineBase = output.attr("Pipeline");
 		
 		attributes["__init__"] = fscpy::methodDescriptor(py::cpp_function(
-			[promiseBase, pipelineBase](py::object self, PyPromise& pyPromise, py::object pipeline, py::object key) {
+			[promiseBase, pipelineBase](py::object self, PyPromise& pyPromise, py::object pipeline) {
 				promiseBase.attr("__init__")(self, pyPromise);
-				pipelineBase.attr("__init__")(self, pipeline, key);
+				pipelineBase.attr("__init__")(self, pipeline);
 			}
 		));
 		
@@ -317,7 +317,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		
 		auto function = [paramType, resultType, method, types = mv(types), argFields = mv(argFields), nArgs](capnp::DynamicCapability::Client self, py::args pyArgs, py::kwargs pyKwargs) mutable {			
 			// auto request = self.newRequest(method);
-			capnp::Request<AnyPointer> request = self.typelessRequest<AnyPointer, AnyPointer>(
+			capnp::Request<AnyPointer, AnyPointer> request = self.typelessRequest(
 				method.getContainingInterface().getProto().getId(), method.getOrdinal(), nullptr
 			);
 			
@@ -341,7 +341,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 						KJ_IF_MAYBE(pField, asStruct.which()) {
 							request.set(*pField, asStruct.get(*pField));
 						}*/
-						request.setAs(asStruct);
+						request.setAs<DynamicStruct>(asStruct);
 						
 						requestBuilt = true;
 					}
@@ -393,7 +393,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 			
 			// Extract pipeline
 			AnyPointer::Pipeline resultPipelineTypeless = mv(result);
-			py::object pyPipeline = py::cast(DynamicStructPipeline(mv(resultPipeline), resultType));
+			py::object pyPipeline = py::cast(DynamicStructPipeline(mv(resultPipelineTypeless), resultType));
 			
 			// Check for PromiseForResult class for type
 			auto id = resultType.getProto().getId();

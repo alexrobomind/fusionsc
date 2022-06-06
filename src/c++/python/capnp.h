@@ -17,9 +17,14 @@ struct DynamicValuePipeline {
 		schema(mv(schema))
 	{}
 	
+	inline DynamicValuePipeline() : typeless(nullptr), schema() {}
+	
 	inline DynamicValuePipeline(DynamicValuePipeline& other) :
 		typeless(other.typeless.noop()),
-		
+		schema(other.schema)
+	{}
+	
+	inline DynamicValuePipeline(DynamicValuePipeline&& other) = default;
 	
 	DynamicStructPipeline asStruct();
 	capnp::DynamicCapability::Client asCapability();
@@ -29,12 +34,21 @@ struct DynamicStructPipeline {
 	capnp::AnyPointer::Pipeline typeless;
 	capnp::StructSchema schema;
 	
-	inline DynamicValuePipeline(capnp::AnyPointer::Pipeline typeless, capnp::StructSchema schema) :
+	inline DynamicStructPipeline(capnp::AnyPointer::Pipeline typeless, capnp::StructSchema schema) :
 		typeless(mv(typeless)),
 		schema(mv(schema))
 	{}
 	
-	DynamicValuePipeline get(capnp::Field field);
+	inline DynamicStructPipeline() : typeless(nullptr), schema() {}
+	
+	inline DynamicStructPipeline(DynamicStructPipeline& other) :
+		typeless(other.typeless.noop()),
+		schema(other.schema)
+	{}
+	
+	inline DynamicStructPipeline(DynamicStructPipeline&& other) = default;
+	
+	DynamicValuePipeline get(capnp::StructSchema::Field field);
 	DynamicValuePipeline get(kj::StringPtr fieldName);
 };
 

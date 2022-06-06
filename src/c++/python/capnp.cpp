@@ -60,6 +60,12 @@ bool needsBackReference(T& t) {
 	};
 }
 
+// Pipelines count references themselves
+template<>
+bool needsBackReference<DynamicValuePipeline>(DynamicValuePipeline& t) {
+	return false;
+}
+
 template<typename T, typename Field>
 py::tuple underscoreGet(T& ds, Field field) {
 	auto cppValue = ds.get(field);
@@ -253,14 +259,13 @@ void bindStructClasses(py::module_& m) {
 	defGet(cDSP);
 	
 	// TODO: This is a little bit hacky, but currently the only way we can allow the construction of derived instances
-	cDSP.def(py::init([](DynamicStruct::Pipeline& p, kj::StringPtr key) {
-		KJ_REQUIRE((key == INTERNAL_ACCESS_KEY), "The pipeline constructor is reserved for internal use");
-		return kj::mv(p);
+	cDSP.def(py::init([](DynamicStructPipeline& p) {
+		//KJ_REQUIRE((key == INTERNAL_ACCESS_KEY), "The pipeline constructor is reserved for internal use");
+		return p;
 	}));
 	
 	cDSP.def("__len__", [](DSP& ds) {
-		auto schema = ds.getSchema();
-		size_t result = schema.getNonUnionFields().size();
+		size_t result = ds.schema.getNonUnionFields().size();
 		
 		return result;
 	});
@@ -268,7 +273,7 @@ void bindStructClasses(py::module_& m) {
 	cDSP.def("__iter__", [](DSP& ds) {
 		py::list result;
 		
-		for(auto field : ds.getSchema().getNonUnionFields()) {
+		for(auto field : ds.schema.getNonUnionFields()) {
 			result.append(str(field.getProto().getName()));
 		}
 		
@@ -317,13 +322,14 @@ DynamicStructPipeline DynamicValuePipeline::asStruct() {
 }
 
 capnp::DynamicCapability::Client DynamicValuePipeline::asCapability() {
-	return typeless.castAs<DynamicCapability>(schema.asInterface());
+	capnp::Capability::Client anyCap = typeless;
+	return anyCap.castAs<DynamicCapability>(schema.asInterface());
 }
 
 // class DynamicStructPipeline
 
 DynamicValuePipeline DynamicStructPipeline::get(capnp::StructSchema::Field field) {
-	capnp::AnyPointer::Pipeline typelessValue;
+	capnp::AnyPointer::Pipeline typelessValue(nullptr);
 	
 	// Groups must point to the same field
 	if(field.getProto().isGroup()) {
@@ -332,16 +338,31 @@ DynamicValuePipeline DynamicStructPipeline::get(capnp::StructSchema::Field field
 		KJ_ASSERT(field.getProto().isSlot());
 		
 		auto asSlot = field.getProto().getSlot();
-		typelessValue = typeless.asAnyStruct().getPointerField(asSlot.getOffset());
+		capnp::AnyStruct::Pipeline typelessAsAnyStruct(typeless.noop());
+		typelessValue = typelessAsAnyStruct.getPointerField(asSlot.getOffset());
 	}
 	
-	return DynamicValuePipeline(
-		typelessValue, field.getType()
-	);
+	auto fieldType = field.getType();
+	
+	KJ_REQUIRE(fieldType.isStruct() || fieldType.isInterface());
+	
+	if(fieldType.isStruct()) {
+		return DynamicValuePipeline(
+			mv(typelessValue), field.getType().asStruct()
+		);
+	} else {
+		return DynamicValuePipeline(
+			mv(typelessValue), field.getType().asInterface()
+		);
+	}	
 }
 
 DynamicValuePipeline DynamicStructPipeline::get(kj::StringPtr name) {
-	return get(schema.findFieldByName(name));
+	KJ_IF_MAYBE(pField, schema.findFieldByName(name)) {
+		return get(*pField);
+	} else {
+		KJ_FAIL_REQUIRE("Field not found", name);
+	}
 }
 
 void bindCapnpClasses(py::module_& m) {
