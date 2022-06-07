@@ -44,14 +44,22 @@ LocalDataStore::Steward::Steward(kj::MutexGuarded<LocalDataStore>& target) :
 {}
 
 LocalDataStore::Steward::~Steward() {
+	KJ_LOG(WARNING, "Stopping steward");
 	getExecutor().executeSync([this](){
+		KJ_LOG(WARNING, "Performing cancel");
 		_canceler.cancel(STEWARD_STOPPED);
+		KJ_LOG(WARNING, "Promise cancelled");
 	});
+	
+	KJ_LOG(WARNING, "Sync stop done");
 }
 
 const kj::Executor& LocalDataStore::Steward::getExecutor() {
+	KJ_LOG(WARNING, "Locking executor");
 	auto locked = _executor.lockExclusive();
+	KJ_LOG(WARNING, "Waiting until available");
 	locked.wait([](const Own<const kj::Executor>& exec) { return exec != nullptr; });
+	KJ_LOG(WARNING, "Returning");
 	return **locked;
 }
 
@@ -59,8 +67,10 @@ void LocalDataStore::Steward::syncGC() {
 	// Perform garbage collection
 	//std::list<Array<const byte>> orphans;
 	
+	KJ_LOG(WARNING, "SyncGC start");
 	{
 		auto lStore = _store.lockExclusive();
+		KJ_LOG(WARNING, "SyncGC locked");
 		
 		/*for(auto pRow = lStore->table.begin(); pRow != lStore->table.end(); ++pRow) {
 			if((*pRow) -> isShared())
@@ -71,7 +81,9 @@ void LocalDataStore::Steward::syncGC() {
 		
 		auto predicate = [](Row& r) { return !r -> isShared(); };
 		lStore->table.eraseAll(predicate);
+		KJ_LOG(WARNING, "SyncGC unlocking");
 	}
+	KJ_LOG(WARNING, "SyncGC done");
 }
 
 void LocalDataStore::Steward::asyncGC() {
@@ -86,7 +98,12 @@ void LocalDataStore::Steward::_run() {
 	
 	// Store executor and gc request promise
 	_gcRequest = kj::newPromiseAndFulfiller<void>();
-	*(_executor.lockExclusive()) = kj::getCurrentThreadExecutor().addRef();
+	
+	{
+		auto locked = _executor.lockExclusive();
+		*locked = kj::getCurrentThreadExecutor().addRef();
+		KJ_LOG(WARNING, "Executor set");
+	}
 	
 	kj::Function<Promise<void>()> loop = [this, &aioCtx, &loop]() {	
 		syncGC();
@@ -95,16 +112,19 @@ void LocalDataStore::Steward::_run() {
 		_gcRequest = kj::newPromiseAndFulfiller<void>();
 		
 		return _gcRequest.promise
-		.exclusiveJoin(aioCtx.provider -> getTimer().afterDelay(30 * kj::SECONDS))
+		.exclusiveJoin(aioCtx.provider -> getTimer().afterDelay(1 * kj::SECONDS))
 		.then(loop);
 	};
 	
 	try {
 		_canceler.wrap(kj::evalLater(loop)).wait(aioCtx.waitScope);
 	} catch(kj::Exception& e) {
+		KJ_LOG(WARNING, "Steward stopped by exception", e.getDescription());
 		if(e.getDescription() != STEWARD_STOPPED)
 			throw e;
 	}
+	
+	KJ_LOG(WARNING, "Steward stopped");
 }
 
 // === class DataStoreMessageReader ===
