@@ -138,7 +138,7 @@ void defBuffer(py::class_<T>& c, bool readOnly) {
 		capnp::AnyList::Reader anyReader = list;
 		
 		kj::ArrayPtr<const byte> rawBytes = list.getRawBytes();
-		byte* bytesPtr = const_cast<byte*> rawList.begin();
+		byte* bytesPtr = const_cast<byte*>(rawBytes.begin());
 		
 		size_t elementSize = 0;
 		const char* formatString = "";
