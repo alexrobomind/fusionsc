@@ -5,6 +5,13 @@
 
 namespace fsc {
 	
+// === class LibraryHandle ===
+
+void LibraryHandle::stopSteward() const {
+	KJ_LOG(WARNING, "LibraryHandle::stopSteward()");
+	storeSteward.stop();
+}
+	
 // === class ThreadHandle ===
 
 ThreadHandle::ThreadHandle(Library l) :

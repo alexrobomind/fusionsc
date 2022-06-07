@@ -98,15 +98,21 @@ public:
 	
 	// Shift the next GC scheduled in the worker thread to "now"
 	void asyncGC();
+	
+	void stop();
 
 private:
+	struct PrivateVoid {};
+	
 	kj::MutexGuarded<LocalDataStore>& _store;
 	kj::Canceler _canceler;
 	
 	kj::PromiseFulfillerPair<void> _gcRequest;
-	kj::Thread _thread;
-	
 	kj::MutexGuarded<Own<const kj::Executor>> _executor;
+	
+	kj::MutexGuarded<bool> running;
+	
+	kj::Thread _thread;
 	
 	void _run();
 };

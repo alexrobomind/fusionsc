@@ -1,5 +1,7 @@
 #include "fscpy.h"
 
+#include <fsc/store.h>
+
 #include <pybind11/pybind11.h>
 #include <kj/common.h>
 
@@ -91,6 +93,5 @@ PYBIND11_MODULE(fscpy, m) {
 	loadDefaultSchema(m);
 	
 	auto atexitModule = py::module_::import("atexit");
-	
 	atexitModule.attr("register")(py::cpp_function(&atExitFunction));
 }

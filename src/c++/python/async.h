@@ -41,6 +41,11 @@ struct PyContext {
 		return _libraryThread.get() != nullptr;
 	}
 	
+	static inline void clearLibrary() {
+		auto locked = _library.lockExclusive();
+		*locked = nullptr;
+	}
+	
 private:
 	static inline kj::MutexGuarded<Library> _library = kj::MutexGuarded<Library>();
 	static inline thread_local LibraryThread _libraryThread;

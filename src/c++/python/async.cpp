@@ -8,6 +8,10 @@ namespace {
 	fsc::LocalDataService& dataService()  {
 		return fscpy::PyContext::libraryThread()->dataService();
 	}
+
+	void atExitFunction() {
+		fscpy::PyContext::library()->stopSteward();
+	}
 }
 
 namespace fscpy {
@@ -22,6 +26,9 @@ void bindAsyncClasses(py::module_& m) {
 	m.def("startEventLoop", &PyContext::startEventLoop);
 	m.def("hasEventLoop", &PyContext::hasEventLoop);
 	m.def("dataService", &dataService);
+	
+	auto atexitModule = py::module_::import("atexit");
+	atexitModule.attr("register")(py::cpp_function(&atExitFunction));
 }
 	
 }

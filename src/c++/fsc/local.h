@@ -38,6 +38,7 @@ public:
 	inline kj::Own<const LibraryHandle> addRef() const { return kj::atomicAddRef(*this); }
 	
 	inline LibraryThread newThread() const ;
+	void stopSteward() const;
 	
 private:
 	inline LibraryHandle() :
@@ -46,7 +47,7 @@ private:
 	
 	friend Own<LibraryHandle> kj::atomicRefcounted<LibraryHandle>();
 	
-	LocalDataStore::Steward storeSteward;
+	mutable LocalDataStore::Steward storeSteward;
 };
 
 
