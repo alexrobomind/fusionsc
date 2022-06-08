@@ -386,6 +386,17 @@ namespace fsc {
 	 */
 	#define FSC_LAUNCH_KERNEL(f, ...) ::fsc::launchKernel<decltype(&f), &f>(__VA_ARGS__)
 	
+	//! Creates a thread pool device
+	Own<Eigen::ThreadPoolDevice> newThreadPoolDevice();
+	
+	#ifdef FSC_WITH_CUDA
+	
+	//! Creates a GPU device
+	Own<Eigen::GPUDevice> newGPUDevice();
+	
+	#endif
+	
+	
 	//! @}
 	
 	//! \addtogroup kernelSupport

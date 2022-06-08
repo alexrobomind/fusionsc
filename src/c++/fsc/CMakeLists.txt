@@ -66,7 +66,6 @@ add_library(
 	geometry.cpp
 	
 	magnetics.h
-	magnetics-inl.h
 	magnetics.cpp
 	
 	flt.cpp

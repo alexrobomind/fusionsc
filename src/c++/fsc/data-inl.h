@@ -361,37 +361,33 @@ Cap::Client attach(T src, Attachments&&... attachments) {
 // === struct Cache ===
 
 template<typename Key, typename T, typename Map>
-struct Cache<Key, T, Map>::Holder {
+struct Cache<Key, T, Map>::Holder, public kj::Refcounted {
 	Own<T> target;
 	size_t refcount = 0;
 	
 	void clear() {
-		isValid = false;
 		target = nullptr;
 	}
 	
-	~Holder() {
-		KJ_REQUIRE(refcount == 0);
-	}
+	Own<Holder> addRef() { return kj::addRef(*this); }
 };
 
 template<typename Key, typename T, typename Map>
 struct Cache<Key, T, Map>::Ref {
-	Holder* target;
+	Own<Holder> target;
 	
 	Ref() : target(nullptr)
 	{}
 	
-	Ref(Holder& newTarget) : target(&newTarget) {
+	Ref(Holder& newTarget) : target(newTarget.addRef()) {
 		acquire();
 	}
 	
-	Ref(Ref& other) : target(other.target) {
+	Ref(Ref& other) : target(other.target->addRef()) {
 		acquire();
 	}
 	
-	Ref(Ref&& other) : target(other.target) {
-		other.target = nullptr;
+	Ref(Ref&& other) : target(mv(other.target)) {
 	}
 	
 	Ref& operator=(Ref& other) {
@@ -403,6 +399,7 @@ struct Cache<Key, T, Map>::Ref {
 		release();
 		target = other.target;
 		acquire();
+		
 		return *this;
 	}
 	
@@ -410,6 +407,8 @@ struct Cache<Key, T, Map>::Ref {
 		release();
 		target = other.target;
 		other.target = nullptr;
+		
+		return *this;
 	}	
 	
 	void acquire() {
@@ -433,10 +432,10 @@ struct Cache<Key, T, Map>::Ref {
 };
 
 template<typename Key, typename T, typename Map>
-Tuple<T&, Cache<Key, T, Map>::Entry> insert(Key key, T t) {
-	Holder& holder = map.findOrCreate(
+Tuple<T&, Cache<Key, T, Map>::Ref> insert(Key key, T t) {
+	Own<Holder>& pHolder = map.findOrCreate(
 		key,
-		[]() { return Holder(); }
+		[]() { return kj::heap<Holder>(); }
 	);
 	
 	if(pHolder->target == nullptr)
@@ -447,7 +446,7 @@ Tuple<T&, Cache<Key, T, Map>::Entry> insert(Key key, T t) {
 
 template<typename Key, typename T, typename Map>
 Maybe<T&> insert(Key key, T t) {
-	KJ_IF_MAYBE(pHolder, map.find(key)) {
+	KJ_IF_MAYBE(pHolder, map.find(key)()) {
 		if(pHolder -> target == nullptr)
 			return nullptr;
 		

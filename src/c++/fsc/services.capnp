@@ -6,7 +6,12 @@ using Geometry = import "geometry.capnp";
 struct RootConfig {
 }
 
+enum DeviceType {
+	cpu;
+	gpu;
+}
+
 interface RootService {
-	newFieldCalculator @0 () -> (calculator : Magnetics.FieldCalculator);
+	newFieldCalculator @0 (grid : Magnetics.ToroidalGrid, preferredDeviceType : DeviceType = gpu) -> (calculator : Magnetics.FieldCalculator, deviceType : DeviceType);
 	newGeometryLib     @1 () -> (service    : Geometry.GeometryLib);
 }

@@ -484,7 +484,7 @@ struct Cache {
 	Tuple<T&, Ref> insert(Key key, T t);
 	Maybe<T&> find(Key key);
 	
-	Map<Key, Holder> map;
+	Map<Key, Own<Holder>> map;
 };
 
 //! Creates ID from canonical representation of reader

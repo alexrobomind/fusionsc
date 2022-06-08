@@ -37,14 +37,14 @@ public:
 /**
  * Creates a new field calculator.
  */
-FieldCalculator::Client newCPUFieldCalculator(LibraryThread& lt);
+FieldCalculator::Client newFieldCalculator(LibraryThread& lt, ToroidalGrid::Reader grid, kj::Own<Eigen::ThreadPoolDevice> device);
 
 #ifdef FSC_WITH_CUDA
 
 /**
  * Creates a new gpu-based field calculator.
  */
-FieldCalculator::Client newGPUFieldCalculator(LibraryThread& lt);
+FieldCalculator::Client newFieldCalculator(LibraryThread& lt, ToroidalGrid::Reader grid, kj::Own<Eigen::GpuDevice> device);
 
 #endif
 

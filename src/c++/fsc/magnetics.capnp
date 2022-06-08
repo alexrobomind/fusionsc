@@ -36,10 +36,6 @@ interface FieldResolver {
 # Interface for the computation of magnetic fields
 
 interface FieldCalculator {
-	get @0 (grid : ToroidalGrid) -> (session : FieldCalculationSession);
-}
-
-interface FieldCalculationSession {
 	compute @0 (field : MagneticField) -> (computedField : ComputedField);
 }
 
