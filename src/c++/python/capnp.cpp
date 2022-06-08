@@ -277,6 +277,8 @@ void bindStructClasses(py::module_& m) {
 	using DSP = DynamicStructPipeline;
 	using DST = fsc::Temporary<DynamicStruct>;
 	
+	// ----------------- BUILDER ------------------
+	
 	py::class_<DSB> cDSB(m, "DynamicStructBuilder", py::dynamic_attr(), py::multiple_inheritance(), py::metaclass(*baseMetaType));
 	cDSB.def(py::init([](DynamicStruct::Builder b) { return b; }));
 	
@@ -286,8 +288,10 @@ void bindStructClasses(py::module_& m) {
 	
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Reader& val) { dsb.set(name, val); });
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Builder& val) { dsb.set(name, val.asReader()); });
+	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, capnp::Orphan<DynamicValue>& val) { dsb.adopt(name, mv(val)); });
 	cDSB.def("__setitem__", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Reader& val) { dsb.set(name, val); });
 	cDSB.def("__setitem__", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Builder& val) { dsb.set(name, val.asReader()); });
+	cDSB.def("__setitem__", [](DSB& dsb, kj::StringPtr name, capnp::Orphan<DynamicValue>& val) { dsb.adopt(name, mv(val)); });
 	cDSB.def("__delitem__", [](DSB& dsb, kj::StringPtr name) { dsb.clear(name); });
 	
 	cDSB.def("__len__", [](DSB& ds) {
@@ -313,7 +317,14 @@ void bindStructClasses(py::module_& m) {
 		return py::eval("iter")(result);
 	});
 	
-	py::class_<DST, DSB> cDST(m, "DynamicMessage", py::metaclass(*baseMetaType));
+	cDSB.def("disown", [](py::object self, kj::StringPtr field) {
+		DSB builder = py::cast<DSB>(self);
+		py::object result = py::cast(builder.disown(field));
+		result.attr("_src") = self;
+		return result;
+	});
+	
+	// ----------------- READER ------------------
 	
 	py::class_<DSR> cDSR(m, "DynamicStructReader", py::dynamic_attr(), py::multiple_inheritance(), py::metaclass(*baseMetaType));
 	cDSR.def(py::init([](DynamicStruct::Reader r) { return r; }));
@@ -345,6 +356,8 @@ void bindStructClasses(py::module_& m) {
 		return py::eval("iter")(result);
 	});
 	
+	// ----------------- PIPELINE ------------------
+	
 	py::class_<DSP> cDSP(m, "DynamicStructPipeline", py::multiple_inheritance(), py::metaclass(*baseMetaType));
 	defGet(cDSP);
 	
@@ -370,7 +383,14 @@ void bindStructClasses(py::module_& m) {
 		return py::eval("iter")(result);
 	});
 	
+	
+	// ----------------- OTHERS ------------------
+	
 	py::class_<capnp::Response<AnyPointer>>(m, "DynamicResponse");
+	
+	py::class_<capnp::Orphan<DynamicValue>>(m, "DynamicOrphan", py::dynamic_attr());
+	
+	py::class_<DST, DSB> cDST(m, "DynamicMessage", py::metaclass(*baseMetaType));
 }
 
 void bindFieldDescriptors(py::module_& m) {
@@ -383,13 +403,41 @@ void bindFieldDescriptors(py::module_& m) {
 		})
 		
 		.def("__set__", [](capnp::StructSchema::Field& field, DynamicStruct::Builder& self, DynamicValue::Reader value) { self.set(field, value); })
+		.def("__set__", [](capnp::StructSchema::Field& field, DynamicStruct::Builder& self, capnp::Orphan<DynamicValue>& orphan) { self.adopt(field, mv(orphan)); })
 		.def("__delete__", [](capnp::StructSchema::Field& field, DynamicStruct::Builder& self) { self.clear(field); })
 	;
 }
 
 void bindMessageBuilders(py::module_& m) {
-	py::class_<capnp::MessageBuilder>(m, "MessageBuilder");
-	py::class_<capnp::MallocMessageBuilder>(m, "MallocMessageBuilder");
+	py::class_<capnp::MessageBuilder>(m, "MessageBuilder")
+		.def("setRoot", [](py::object self, DynamicStruct::Builder newRoot) {
+			capnp::MessageBuilder& builder = py::cast<capnp::MessageBuilder&>(self);
+			builder.setRoot(newRoot.asReader());
+			py::object result = py::cast(builder.getRoot<DynamicStruct>(newRoot.getSchema()));
+			result.attr("_msg") = self;
+			return result;
+		})
+		.def("setRoot", [](py::object self, capnp::Orphan<DynamicValue>& newRoot) {
+			auto type = newRoot.getType();
+			KJ_REQUIRE(type == DynamicValue::STRUCT, "Can only adopt struct orphans", type);
+			
+			auto structRoot = newRoot.releaseAs<DynamicStruct>();
+			auto schema = structRoot.get().getSchema();
+			
+			capnp::MessageBuilder& builder = py::cast<capnp::MessageBuilder&>(self);
+			builder.adoptRoot(mv(structRoot));
+			
+			py::object result = py::cast(builder.getRoot<DynamicStruct>(schema));
+			result.attr("_msg") = self;
+			return result;
+		})
+		.def("initRoot", [](py::object self, py::object type) {
+			return type.attr("_initRootAs")(self);
+		})
+	;
+	py::class_<capnp::MallocMessageBuilder, capnp::MessageBuilder>(m, "MallocMessageBuilder")
+		.def(py::init())
+	;
 }
 
 void bindCapClasses(py::module_& m) {

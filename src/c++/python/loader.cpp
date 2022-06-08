@@ -222,6 +222,23 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		py::name("newMessage"),
 		py::scope(output)
 	);
+		
+	output.attr("_initRootAs") = py::cpp_function(
+		[schema](py::object src) mutable {
+			auto& msg = py::cast<capnp::MessageBuilder&>(src);
+			
+			// We use DynamicValue instead of DynamicStruct to engage our type-dependent dispatch
+			capnp::DynamicValue::Builder builder = msg.initRoot<capnp::DynamicStruct>(schema);			
+			py::object result = py::cast(builder);
+			
+			result.attr("_msg") = src;
+			
+			return result;
+		},
+		py::name("newMessage"),
+		py::scope(output),
+		py::arg("messageBuilder")
+	);
 	
 	for(StructSchema::Field field : schema.getFields()) {
 		kj::StringPtr name = field.getProto().getName();
