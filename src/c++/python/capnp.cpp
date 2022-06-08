@@ -324,6 +324,18 @@ void bindStructClasses(py::module_& m) {
 		return result;
 	});
 	
+	cDSB.def("clone", [](DSB& self) {
+		auto msg = new capnp::MallocMessageBuilder();
+		msg->setRoot(self.asReader());
+		
+		auto pyBuilder = py::cast(capnp::DynamicValue::Builder(msg->getRoot<capnp::DynamicStruct>(self.getSchema())));
+		
+		auto pyMsg = py::cast(msg);
+		pyBuilder.attr("_msg") = pyMsg;
+		
+		return pyBuilder;
+	});
+	
 	// ----------------- READER ------------------
 	
 	py::class_<DSR> cDSR(m, "DynamicStructReader", py::dynamic_attr(), py::multiple_inheritance(), py::metaclass(*baseMetaType));
@@ -354,6 +366,18 @@ void bindStructClasses(py::module_& m) {
 		}
 		
 		return py::eval("iter")(result);
+	});
+	
+	cDSR.def("clone", [](DSR& self) {
+		auto msg = new capnp::MallocMessageBuilder();
+		msg->setRoot(self);
+		
+		auto pyBuilder = py::cast(capnp::DynamicValue::Builder(msg->getRoot<capnp::DynamicStruct>(self.getSchema())));
+		
+		auto pyMsg = py::cast(msg);
+		pyBuilder.attr("_msg") = pyMsg;
+		
+		return pyBuilder;
 	});
 	
 	// ----------------- PIPELINE ------------------

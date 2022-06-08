@@ -92,10 +92,12 @@ namespace pybind11 { namespace detail {
 		
 		bool load(handle src, bool convert) {			
 			#define FSCPY_TRY_CAST(Type) \
-				try { \
-					value = src.cast<Type>(); \
-					return true; \
-				} catch(cast_error& e) { \
+				{ \
+					type_caster<Type> caster; \
+					if(caster.load(src, convert)) { \
+						value = (Type&) caster; \
+						return true; \
+					} \
 				}
 			
 			FSCPY_TRY_CAST(DynamicStruct::Builder)
@@ -203,12 +205,14 @@ namespace pybind11 { namespace detail {
 				value = capnp::Text::Reader((char*) strCaster);
 				return true;
 			}
-			
+						
 			#define FSCPY_TRY_CAST(Type) \
-				try { \
-					value = src.cast<Type>(); \
-					return true; \
-				} catch(cast_error& e) { \
+				{ \
+					type_caster<Type> caster; \
+					if(caster.load(src, convert)) { \
+						value = (Type&) caster; \
+						return true; \
+					} \
 				}
 			
 			FSCPY_TRY_CAST(DynamicStruct::Reader)
