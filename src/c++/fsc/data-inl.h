@@ -343,6 +343,120 @@ TensorReader<T>::TensorReader(const T ref) :
 	shape(ref.getShape())
 {}
 
+// === function attachToClient ===
+
+namespace internal {
+	kj::Own<capnp::Capability::Server> createProxy(capnp::Capability::Client client);
+}
+
+template<typename T, typename Cap = capnp::FromClient<T>, typename... Attachments>
+Cap::Client attach(T src, Attachments&&... attachments) {
+	capnp::Capability::Client typelessClient(mv(src));
+	auto proxy = createProxy(mv(typelessCLient));
+	
+	proxy = proxy.attach(fwd<Attachments...>(attachments...));
+	return capnp::Capability::Client(mv(proxy)).castAs<Cap>();
+}
+
+// === struct Cache ===
+
+template<typename Key, typename T, typename Map>
+struct Cache<Key, T, Map>::Holder {
+	Own<T> target;
+	size_t refcount = 0;
+	
+	void clear() {
+		isValid = false;
+		target = nullptr;
+	}
+	
+	~Holder() {
+		KJ_REQUIRE(refcount == 0);
+	}
+};
+
+template<typename Key, typename T, typename Map>
+struct Cache<Key, T, Map>::Ref {
+	Holder* target;
+	
+	Ref() : target(nullptr)
+	{}
+	
+	Ref(Holder& newTarget) : target(&newTarget) {
+		acquire();
+	}
+	
+	Ref(Ref& other) : target(other.target) {
+		acquire();
+	}
+	
+	Ref(Ref&& other) : target(other.target) {
+		other.target = nullptr;
+	}
+	
+	Ref& operator=(Ref& other) {
+		// Already set
+		if(other.target == target) {
+			return *this;
+		}
+		
+		release();
+		target = other.target;
+		acquire();
+		return *this;
+	}
+	
+	Ref& operator=(Ref&& other) {
+		release();
+		target = other.target;
+		other.target = nullptr;
+	}	
+	
+	void acquire() {
+		if(target == nullptr)
+			return;
+		
+		++(target->refcount);
+	}
+	
+	void release() {
+		if(target == nullptr)
+			return;
+		
+		if(--(target->refcount) == 0)
+			target->clear();
+	}
+	
+	~Ref() {
+		release();
+	}
+};
+
+template<typename Key, typename T, typename Map>
+Tuple<T&, Cache<Key, T, Map>::Entry> insert(Key key, T t) {
+	Holder& holder = map.findOrCreate(
+		key,
+		[]() { return Holder(); }
+	);
+	
+	if(pHolder->target == nullptr)
+		pHolder->target = kj::heap<T>(mv(t));
+
+	return make_tuple(*(pHolder->target), Ref(*pHolder));
+}
+
+template<typename Key, typename T, typename Map>
+Maybe<T&> insert(Key key, T t) {
+	KJ_IF_MAYBE(pHolder, map.find(key)) {
+		if(pHolder -> target == nullptr)
+			return nullptr;
+		
+		return *(pHolder -> target);
+	}
+	
+	return nullptr;
+}
+
 // === Helper methods ===
 
 template<typename T>

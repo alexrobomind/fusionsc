@@ -306,6 +306,8 @@ private:
 template<typename T>
 class LocalDataRef : public DataRef<T>::Client {
 public:
+	using DataRef<T>::Client::Calls;
+	
 	/**
 	 * Provides direct access to the raw underlying byte array associated
 	 * with this data reference.
@@ -404,6 +406,9 @@ struct Temporary : public T::Builder {
 	Own<capnp::MallocMessageBuilder> holder;
 };
 
+template<typename T, typename Cap = capnp::FromClient<T>, typename... Attachments>
+Cap::Client attachToClient(T src, Attachments&&... attachments);
+
 template<typename T>
 using TensorVal = decltype(instance<T>().getData().get(0));
 
@@ -439,6 +444,9 @@ struct TensorReader {
 
 bool hasMaximumOrdinal(capnp::DynamicStruct::Reader in, unsigned int maxOrdinal);
 
+template<typename T, typename Cap = capnp::FromClient<T>, typename... Attachments>
+Cap::Client attach(T src, Attachments&&... attachments);
+
 //! Struct version checker
 /**
  * When passing structured data between functions, Cap'n'proto will silently hide all fields which
@@ -467,6 +475,17 @@ bool hasMaximumOrdinal(T in, unsigned int maxOrdinal) {
 
 Promise<void> removeDatarefs(capnp::AnyPointer::Reader in, capnp::AnyPointer::Builder out);
 Promise<void> removeDatarefs(capnp::AnyStruct::Reader in, capnp::AnyStruct::Builder out);
+
+template<typename Key, typename T, template Map = kj::TreeMap>
+struct Cache {
+	struct Holder;
+	struct Ref;
+	
+	Tuple<T&, Ref> insert(Key key, T t);
+	Maybe<T&> find(Key key);
+	
+	Map<Key, Holder> map;
+};
 
 //! Creates ID from canonical representation of reader
 template<typename T>

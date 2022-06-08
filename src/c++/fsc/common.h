@@ -38,6 +38,7 @@ using kj::mv;
 using kj::fwd;
 using kj::cp;
 using kj::tuple;
+using kj::refTuple;
 
 using kj::ArrayPtr;
 using kj::Array;

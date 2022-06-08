@@ -873,7 +873,48 @@ Promise<void> internal::LocalDataServiceImpl::store(StoreContext context) {
 	return READY_NOW;
 }
 
+// === function attachToClient ===
+
+namespace internal {
+
+namespace {
+
+struct Proxy : public capnp::Capability::Server {
+	capnp::Capability::Client backend;
+	
+	using capnp::Capability::Server::DispatchCallResult;
+	
+	inline Proxy(capnp::Capability::Client newBackend) :
+		backend(mv(newBackend))
+	{}
+	
+	DispatchCallResult dispatchCall(
+		uint64_t interfaceId,
+		uint16_t methodId,
+        capnp::CallContext<AnyPointer, AnyPointer> context
+	) {
+		auto request = backend.typelessRequest(interfaceId, methodId);
+		request.set(context.getParams());
+		context.releaseParams();
+		
+		DispatchCallResult result;
+		result.promise = context.tailCall(request);
+		result.isStreaming = false;
+		
+		return result;
+	}
+};
+
+}
+
+kj::Own<capnp::Capability::Server> createProxy(capnp::Capability::Client client) {
+	return kj::heap<Proxy>(mv(client));
+}
+
+}
+
 // === function hasMaximumOrdinal ===
+
 struct OrdinalChecker {
 	capnp::DynamicStruct::Reader in;
 	unsigned int maxOrdinal;

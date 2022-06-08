@@ -110,7 +110,8 @@ struct FieldCalculation {
 };
 
 template<typename Device>
-struct CalculationSession : public FieldCalculationSession::Server {	
+struct CalculationSession : public FieldCalculationSession::Server {
+	
 	constexpr static unsigned int GRID_VERSION = 7;
 	
 	// Device device;
@@ -118,7 +119,7 @@ struct CalculationSession : public FieldCalculationSession::Server {
 	
 	ToroidalGridStruct grid;
 	LibraryThread lt;
-	kj::TreeMap<ID, kj::ForkedPromise<LocalDataRef<Float64Tensor>>> fieldCache;
+	Cache<ID, LocalDataRef<Float64Tensor>> cache;
 	
 	CalculationSession(Device& device, ToroidalGrid::Reader newGrid, LibraryThread& lt) :
 		device(device),
@@ -126,16 +127,28 @@ struct CalculationSession : public FieldCalculationSession::Server {
 		lt(lt->addRef())
 	{}
 	
+	//! Handles compute request
 	Promise<void> compute(ComputeContext context) {
+		// Start calculation
 		return processRoot(context.getParams().getField())
 		.then([this, context](LocalDataRef<Float64Tensor> tensorRef) mutable {
+		
+		// Cache field if not present, use existing if present
+		return ID::fromReaderWithDatarefs(context.getParams().getField())
+		.then([this, context, tensorRef = mv(tensorRef)](ID id) {
+			decltype(cache)::Ref cacheRef;
+			refTuple(tensorRef, cacheRef) = cache.insert(id, mv(tensorRef));
+						
 			auto compField = context.getResults().initComputedField();
 			
 			writeGrid(grid, compField.initGrid());
-			compField.setData(tensorRef);
-		}).attach(thisCap());
+			compField.setData(attach(tensorRef, mv(cacheRef)));
+		});
+		})
+		.attach(thisCap());
 	}
 	
+	//! Processes a root node of a magnetic field (creates calculator)
 	Promise<LocalDataRef<Float64Tensor>> processRoot(MagneticField::Reader node) {
 		auto newCalculator = kj::heap<FieldCalculation<Device>>(grid, device);
 		auto calcDone = processField(*newCalculator, node, 1);
@@ -167,79 +180,67 @@ struct CalculationSession : public FieldCalculationSession::Server {
 	}
 	
 	Promise<void> processField(FieldCalculation<Device>& calculator, MagneticField::Reader node, double scale) {
-		switch(node.which()) {
-			case MagneticField::SUM: {
-				auto builder = kj::heapArrayBuilder<Promise<void>>(node.getSum().size());
-				
-				for(auto newNode : node.getSum()) {
-					builder.add(processField(calculator, newNode, scale));
-				}
-				
-				return kj::joinPromises(builder.finish());
+		return ID::fromReaderWithDatarefs(node).then([this, &calculator, node, scale](ID id) {
+			// Check if the node is in the cache
+			KJ_IF_MAYBE(pFieldRef, fieldCache.find(id)) {
+				return calculator.add(scale, pFieldRef->get());
 			}
-			case MagneticField::REF: {
-				// First download the ref
-				auto ref = node.getRef();
-				return lt -> dataService().download(ref)
-				.then([&calculator, scale, this](LocalDataRef<MagneticField> local) {
-					// Then check if there is a calculation for it (running or finished)
-					ID id = local.getID();
+		
+			switch(node.which()) {
+				case MagneticField::SUM: {
+					auto builder = kj::heapArrayBuilder<Promise<void>>(node.getSum().size());
 					
-					auto addComputed = [&calculator, scale](auto& cacheEntry) {
-						return cacheEntry.addBranch().then([&calculator, scale](auto localRef) {
-							calculator.add(scale, localRef.get());
-						});
-					};
-					
-					KJ_IF_MAYBE(entry, fieldCache.find(id)) {
-						// If yes, add field as soon as calculation is finished
-						return addComputed(*entry);
+					for(auto newNode : node.getSum()) {
+						builder.add(processField(calculator, newNode, scale));
 					}
 					
-					// Otherwise, we need to schedule a new calculation ...
-					auto result = kj::evalLater([this, local]() mutable {
-						return processRoot(local.get()).attach(cp(local));
+					return kj::joinPromises(builder.finish());
+				}
+				case MagneticField::REF: {
+					// First download the ref
+					auto ref = node.getRef();
+					return lt -> dataService().download(ref)
+					.then([&calculator, scale, this](LocalDataRef<MagneticField> local) {
+						// Then process it like usual
+						return processField(calculator, local.get(), scale).attach(cp(local));
 					});
+				}
+				case MagneticField::COMPUTED_FIELD: {
+					// First check grid compatibility
+					auto cField = node.getComputedField();
+					auto grid = cField.getGrid();
 					
-					// ... and then reference its result
-					auto& entry = fieldCache.insert(id, result.fork());
-					return addComputed(entry.value);
-				});
+					Temporary<ToroidalGrid> myGrid;
+					writeGrid(this->grid, myGrid);
+					KJ_REQUIRE(ID::fromReader(grid) == ID::fromReader(myGrid.asReader()));
+					
+					// Then download data				
+					return lt->dataService().download(cField.getData()).
+					then([&calculator, scale](LocalDataRef<Float64Tensor> field) {
+						return calculator.add(scale, field.get());
+					});
+				}
+				case MagneticField::FILAMENT_FIELD: {
+					// Process Biot-Savart field
+					auto fField = node.getFilamentField();
+					
+					return processFilament(calculator, fField.getFilament(), fField.getBiotSavartSettings(), scale * fField.getCurrent() * fField.getWindingNo());
+				}
+				case MagneticField::SCALE_BY: {
+					auto scaleBy = node.getScaleBy();
+					
+					if(scaleBy.getFactor() == 0)
+						return READY_NOW;
+					
+					return processField(calculator, scaleBy.getField(), scale * scaleBy.getFactor());
+				}
+				case MagneticField::INVERT: {
+					return processField(calculator, node.getInvert(), -scale);
+				}
+				default:
+					KJ_FAIL_REQUIRE("Unknown magnetic field node encountered. This either indicates that a device-specific node was not resolved, or a generic node from a future library version was presented");
 			}
-			case MagneticField::COMPUTED_FIELD: {
-				// First check grid compatibility
-				auto cField = node.getComputedField();
-				auto grid = cField.getGrid();
-				
-				Temporary<ToroidalGrid> myGrid;
-				writeGrid(this->grid, myGrid);
-				KJ_REQUIRE(ID::fromReader(grid) == ID::fromReader(myGrid.asReader()));
-				
-				// Then download data				
-				return lt->dataService().download(cField.getData()).then([&calculator, scale](LocalDataRef<Float64Tensor> field) {
-					return calculator.add(scale, field.get());
-				});
-			}
-			case MagneticField::FILAMENT_FIELD: {
-				// Process Biot-Savart field
-				auto fField = node.getFilamentField();
-				
-				return processFilament(calculator, fField.getFilament(), fField.getBiotSavartSettings(), scale * fField.getCurrent() * fField.getWindingNo());
-			}
-			case MagneticField::SCALE_BY: {
-				auto scaleBy = node.getScaleBy();
-				
-				if(scaleBy.getFactor() == 0)
-					return READY_NOW;
-				
-				return processField(calculator, scaleBy.getField(), scale * scaleBy.getFactor());
-			}
-			case MagneticField::INVERT: {
-				return processField(calculator, node.getInvert(), -scale);
-			}
-			default:
-				KJ_FAIL_REQUIRE("Unknown magnetic field node encountered. This either indicates that a device-specific node was not resolved, or a generic node from a future library version was presented");
-		}
+		});
 	}
 };
 
