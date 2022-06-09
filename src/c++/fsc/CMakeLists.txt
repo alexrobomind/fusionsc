@@ -72,6 +72,8 @@ add_library(
 	
 	kernels-biotsavart.h
 	kernels-flt.h
+	kernels.h
+	kernels.cpp
 	
 	http.h
 	http.cpp

@@ -7,19 +7,19 @@ using namespace fsc;
 namespace {
 	
 template<typename T>
-auto selectDevice(T t, DeviceType preferredType) {
+auto selectDevice(T t, WorkerType preferredType) {
 	#ifdef FSC_WITH_CUDA
 	
 	try {
-		if(preferredType == DeviceType::Gpu) {
-			return make_tuple(t(newGpuDevice()), DeviceType::Gpu);
+		if(preferredType == WorkerType::GPU) {
+			return tuple(t(newGpuDevice()), WorkerType::GPU);
 		}
 	} catch(kj::Exception& e) {
 	}
 	
 	#endif
 	
-	return make_tuple(t(newCpuDevice()), DeviceType::Cpu);
+	return tuple(t(newThreadPoolDevice()), WorkerType::CPU);
 }
 
 struct RootServer : public RootService::Server {
@@ -28,20 +28,15 @@ struct RootServer : public RootService::Server {
 	{}
 	
 	Promise<void> newFieldCalculator(NewFieldCalculatorContext context) {
-		auto factory = [context](auto device) {
-			using EigenDevice = decltype(*device);
-			
-			return newFieldCalculator(lt, context.getParams().getGrid(), device);
+		auto factory = [this, context](auto device) mutable {			
+			return ::fsc::newFieldCalculator(lt, context.getParams().getGrid(), mv(device));
 		};
 		
-		FieldCalculator::Client result;
-		DeviceType type;
-		
-		refTuple(result, type) = selectDevice(factory, context.getParams().getPreferredDeviceType());
+		auto selectResult = selectDevice(factory, context.getParams().getPreferredDeviceType());
 		
 		auto results = context.getResults();
-		results.setCalculator(result);
-		results.setDeviceType(type);
+		results.setCalculator(kj::get<0>(selectResult));
+		results.setDeviceType(kj::get<1>(selectResult));
 		
 		return READY_NOW;
 	}

@@ -460,9 +460,7 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 	// Finally, copy the data from the accumulator into the output
 	.then([context, &geomAccum = *geomAccum, &tagNameTable = *tagNameTable, this]() mutable {
 		// Copy data over
-		KJ_LOG(WARNING, "Allocating output");
 		Temporary<MergedGeometry> output;
-		KJ_LOG(WARNING, "Copying geometry");
 		geomAccum.finish(output);
 		
 		// Copy tag names from the tag table
@@ -471,12 +469,10 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 			outTagNames.set(i, *(tagNameTable.begin() + i));
 		
 		// Publish the merged geometry into the data store
-		// Derive the ID from parameters
-		KJ_LOG(WARNING, "Publishing output");
+		// Derive the ID from parameters (is OK as cap table is empty)
 		context.getResults().setRef(
 			lt->dataService().publish(context.getParams(), output.asReader()).attach(mv(output))
 		);
-		KJ_LOG(WARNING, "Finished");
 	});
 	
 	return promise.attach(mv(tagNameTable), mv(geomAccum));

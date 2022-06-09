@@ -122,7 +122,7 @@ TEST_CASE("local_publish") {
 		
 		SECTION("tmpfile-archive") {
 			INFO("opening");
-			Own<const kj::File> file = kj::newDiskFilesystem()->getCurrent().createTemporary();
+			Own<const kj::File> file = kj::newInMemoryFile(kj::systemCoarseCalendarClock()); //kj::newDiskFilesystem()->getCurrent().createTemporary();
 			INFO("checking");
 			*file;
 			INFO("writing");

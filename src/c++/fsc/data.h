@@ -306,7 +306,7 @@ private:
 template<typename T>
 class LocalDataRef : public DataRef<T>::Client {
 public:
-	using DataRef<T>::Client::Calls;
+	using typename DataRef<T>::Client::Calls;
 	
 	/**
 	 * Provides direct access to the raw underlying byte array associated
@@ -407,7 +407,7 @@ struct Temporary : public T::Builder {
 };
 
 template<typename T, typename Cap = capnp::FromClient<T>, typename... Attachments>
-Cap::Client attachToClient(T src, Attachments&&... attachments);
+typename Cap::Client attachToClient(T src, Attachments&&... attachments);
 
 template<typename T>
 using TensorVal = decltype(instance<T>().getData().get(0));
@@ -445,7 +445,7 @@ struct TensorReader {
 bool hasMaximumOrdinal(capnp::DynamicStruct::Reader in, unsigned int maxOrdinal);
 
 template<typename T, typename Cap = capnp::FromClient<T>, typename... Attachments>
-Cap::Client attach(T src, Attachments&&... attachments);
+typename Cap::Client attach(T src, Attachments&&... attachments);
 
 //! Struct version checker
 /**
@@ -476,12 +476,17 @@ bool hasMaximumOrdinal(T in, unsigned int maxOrdinal) {
 Promise<void> removeDatarefs(capnp::AnyPointer::Reader in, capnp::AnyPointer::Builder out);
 Promise<void> removeDatarefs(capnp::AnyStruct::Reader in, capnp::AnyStruct::Builder out);
 
-template<typename Key, typename T, template Map = kj::TreeMap>
+template<typename Key, typename T, template<typename, typename> typename Map = kj::TreeMap>
 struct Cache {
 	struct Holder;
 	struct Ref;
 	
-	Tuple<T&, Ref> insert(Key key, T t);
+	struct InsertResult {
+		T& element;
+		Ref ref;
+	};
+	
+	InsertResult insert(Key key, T t);
 	Maybe<T&> find(Key key);
 	
 	Map<Key, Own<Holder>> map;

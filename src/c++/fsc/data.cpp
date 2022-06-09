@@ -316,13 +316,9 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownl
 	// Allocate backend struct
 	auto backend = kj::refcounted<internal::LocalDataRefImpl>();
 	
-	KJ_LOG(WARNING, "Initiating download");
-	KJ_LOG(WARNING, "Requesting cap table");
-	
 	// Sub-process 1: Download capabilities
 	auto downloadCaps = src.capTableRequest().send()
 	.then([backend = backend->addRef(), recursive, this](Response<RemoteRef::CapTableResults> capTableResponse) mutable {
-		KJ_LOG(WARNING, "Processing cap table");
 		auto capTable = capTableResponse.getTable();
 		
 		auto capHooks = kj::heapArray<Maybe<Own<capnp::ClientHook>>>(capTable.size());
@@ -364,7 +360,6 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownl
 	// Sub-process 2: Download metadata and (if neccessary) data
 	auto downloadData = src.metadataRequest().send()
 	.then([backend = backend->addRef(), src, this](Response<RemoteRef::MetadataResults> metadataResponse) mutable -> EntryPromise {
-		KJ_LOG(WARNING, "Processing metadata");
 		auto metadata = metadataResponse.getMetadata();
 		backend->_metadata.setRoot(metadata);
 				
@@ -891,17 +886,13 @@ struct Proxy : public capnp::Capability::Server {
 	DispatchCallResult dispatchCall(
 		uint64_t interfaceId,
 		uint16_t methodId,
-        capnp::CallContext<AnyPointer, AnyPointer> context
+        capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> context
 	) {
-		auto request = backend.typelessRequest(interfaceId, methodId);
+		auto request = backend.typelessRequest(interfaceId, methodId, context.getParams().targetSize());
 		request.set(context.getParams());
 		context.releaseParams();
 		
-		DispatchCallResult result;
-		result.promise = context.tailCall(request);
-		result.isStreaming = false;
-		
-		return result;
+		return { context.tailCall(mv(request)), false };
 	}
 };
 

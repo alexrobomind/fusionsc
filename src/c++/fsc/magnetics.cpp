@@ -133,15 +133,16 @@ struct CalculationSession : public FieldCalculator::Server {
 		.then([this, context](LocalDataRef<Float64Tensor> tensorRef) mutable {
 		
 		// Cache field if not present, use existing if present
-		return ID::fromReaderWithDatarefs(context.getParams().getField())
-		.then([this, context, tensorRef = mv(tensorRef)](ID id) {
-			decltype(cache)::Ref cacheRef;
-			refTuple(tensorRef, cacheRef) = cache.insert(id, mv(tensorRef));
+		return ID::fromReaderWithRefs(context.getParams().getField())
+		.then([this, context, tensorRef = mv(tensorRef)](ID id) mutable {
+			auto insertResult = cache.insert(id, mv(tensorRef));
 						
 			auto compField = context.getResults().initComputedField();
-			
 			writeGrid(grid, compField.initGrid());
-			compField.setData(attach(tensorRef, mv(cacheRef)));
+			
+			compField.setData(attach(
+				mv(insertResult.element), mv(insertResult.ref)
+			));
 		});
 		})
 		.attach(thisCap());
@@ -179,10 +180,11 @@ struct CalculationSession : public FieldCalculator::Server {
 	}
 	
 	Promise<void> processField(FieldCalculation<Device>& calculator, MagneticField::Reader node, double scale) {
-		return ID::fromReaderWithDatarefs(node).then([this, &calculator, node, scale](ID id) {
+		return ID::fromReaderWithRefs(node).then([this, &calculator, node, scale](ID id) -> Promise<void> {
 			// Check if the node is in the cache
-			KJ_IF_MAYBE(pFieldRef, fieldCache.find(id)) {
-				return calculator.add(scale, pFieldRef->get());
+			KJ_IF_MAYBE(pFieldRef, cache.find(id)) {
+				calculator.add(scale, pFieldRef->get());
+				return READY_NOW;
 			}
 		
 			switch(node.which()) {
@@ -370,7 +372,7 @@ Promise<void> FieldResolverBase::processFilament(Filament::Reader input, Filamen
 FieldCalculator::Client newFieldCalculator(LibraryThread& lt, ToroidalGrid::Reader grid, Own<Eigen::ThreadPoolDevice> dev) {
 	auto& devRef = *dev;
 	return FieldCalculator::Client(
-		kj::heap<internal::CalculationSession<D>>(devRef, grid, lt).attach(mv(dev))
+		kj::heap<CalculationSession<Eigen::ThreadPoolDevice>>(devRef, grid, lt).attach(mv(dev))
 	);
 }
 
@@ -381,7 +383,7 @@ FieldCalculator::Client newFieldCalculator(LibraryThread& lt, ToroidalGrid::Read
 FieldCalculator::Client newFieldCalculator(LibraryThread& lt, ToroidalGrid::Reader grid, Own<Eigen::GpuDevice> dev) {
 	auto& devRef = *dev;
 	return FieldCalculator::Client(
-		kj::heap<internal::CalculationSession<D>>(devRef, grid, lt).attach(mv(dev))
+		kj::heap<CalculationSession<Eigen::GpuDevice>>(devRef, grid, lt).attach(mv(dev))
 	);
 }
 

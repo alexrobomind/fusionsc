@@ -349,10 +349,10 @@ namespace internal {
 	kj::Own<capnp::Capability::Server> createProxy(capnp::Capability::Client client);
 }
 
-template<typename T, typename Cap = capnp::FromClient<T>, typename... Attachments>
-Cap::Client attach(T src, Attachments&&... attachments) {
+template<typename T, typename Cap, typename... Attachments>
+typename Cap::Client attach(T src, Attachments&&... attachments) {
 	capnp::Capability::Client typelessClient(mv(src));
-	auto proxy = createProxy(mv(typelessCLient));
+	auto proxy = internal::createProxy(mv(typelessClient));
 	
 	proxy = proxy.attach(fwd<Attachments...>(attachments...));
 	return capnp::Capability::Client(mv(proxy)).castAs<Cap>();
@@ -360,8 +360,8 @@ Cap::Client attach(T src, Attachments&&... attachments) {
 
 // === struct Cache ===
 
-template<typename Key, typename T, typename Map>
-struct Cache<Key, T, Map>::Holder, public kj::Refcounted {
+template<typename Key, typename T, template<typename, typename> typename Map>
+struct Cache<Key, T, Map>::Holder : public kj::Refcounted {
 	Own<T> target;
 	size_t refcount = 0;
 	
@@ -372,7 +372,7 @@ struct Cache<Key, T, Map>::Holder, public kj::Refcounted {
 	Own<Holder> addRef() { return kj::addRef(*this); }
 };
 
-template<typename Key, typename T, typename Map>
+template<typename Key, typename T, template<typename, typename> typename Map>
 struct Cache<Key, T, Map>::Ref {
 	Own<Holder> target;
 	
@@ -412,14 +412,14 @@ struct Cache<Key, T, Map>::Ref {
 	}	
 	
 	void acquire() {
-		if(target == nullptr)
+		if(target.get()== nullptr)
 			return;
 		
 		++(target->refcount);
 	}
 	
 	void release() {
-		if(target == nullptr)
+		if(target.get() == nullptr)
 			return;
 		
 		if(--(target->refcount) == 0)
@@ -431,26 +431,26 @@ struct Cache<Key, T, Map>::Ref {
 	}
 };
 
-template<typename Key, typename T, typename Map>
-Tuple<T&, Cache<Key, T, Map>::Ref> insert(Key key, T t) {
+template<typename Key, typename T, template<typename, typename> typename Map>
+typename Cache<Key, T, Map>::InsertResult Cache<Key, T, Map>::insert(Key key, T t) {
 	Own<Holder>& pHolder = map.findOrCreate(
 		key,
-		[]() { return kj::heap<Holder>(); }
+		[&key]() -> typename Map<Key, Own<Holder>>::Entry { return { key, kj::refcounted<Holder>() }; }
 	);
 	
-	if(pHolder->target == nullptr)
+	if(pHolder->target.get() == nullptr)
 		pHolder->target = kj::heap<T>(mv(t));
 
-	return make_tuple(*(pHolder->target), Ref(*pHolder));
+	return { *(pHolder->target), Ref(*pHolder) };
 }
 
-template<typename Key, typename T, typename Map>
-Maybe<T&> insert(Key key, T t) {
-	KJ_IF_MAYBE(pHolder, map.find(key)()) {
-		if(pHolder -> target == nullptr)
+template<typename Key, typename T, template<typename, typename> typename Map>
+Maybe<T&> Cache<Key, T, Map>::find(Key key) {
+	KJ_IF_MAYBE(pHolder, map.find(key)) {
+		if((**pHolder).target.get() == nullptr)
 			return nullptr;
 		
-		return *(pHolder -> target);
+		return *((**pHolder).target);
 	}
 	
 	return nullptr;

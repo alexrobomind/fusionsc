@@ -17,13 +17,8 @@ TEST_CASE("build-field") {
 	LibraryThread lt = l -> newThread();
 	auto& ws = lt->waitScope();
 		
-	auto calc = newCPUFieldCalculator(lt);
-	
 	auto grid = TEST_GRID.get();
-	auto sessRequest = calc.getRequest();
-	sessRequest.setGrid(grid);
-	
-	auto session = sessRequest.send().wait(ws).getSession();
+	auto session = newFieldCalculator(lt, grid, newThreadPoolDevice());
 	
 	auto computeRequest = session.computeRequest();
 	computeRequest.setField(WIRE_FIELD.get());
@@ -62,14 +57,9 @@ TEST_CASE("build-field-gpu") {
 	Library l = newLibrary();
 	LibraryThread lt = l -> newThread();
 	auto& ws = lt->waitScope();
-		
-	auto calc = newGPUFieldCalculator(lt);
 	
 	auto grid = TEST_GRID.get();
-	auto sessRequest = calc.getRequest();
-	sessRequest.setGrid(grid);
-	
-	auto session = sessRequest.send().wait(ws).getSession();
+	auto session = newFieldCalculator(lt, grid, newGpuDevice());
 	
 	auto computeRequest = session.computeRequest();
 	computeRequest.setField(WIRE_FIELD.get());

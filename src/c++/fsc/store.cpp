@@ -51,11 +51,9 @@ LocalDataStore::Steward::~Steward() {
 }
 
 void LocalDataStore::Steward::stop() {
-	KJ_LOG(WARNING, "Checking if stop");
 	auto locked = running.lockExclusive();
 	
 	if(*locked) {
-		KJ_LOG(WARNING, "Stopping");
 		getExecutor().executeSync([this](){
 			_canceler.cancel(STEWARD_STOPPED);
 		});
@@ -122,12 +120,7 @@ void LocalDataStore::Steward::_run() {
 	} catch(kj::Exception& e) {
 		if(e.getDescription() != STEWARD_STOPPED)
 			throw e;
-		KJ_LOG(WARNING, "Steward stopped by KJ exception", e.getDescription());
-	} catch(std::exception e) {
-		KJ_LOG(WARNING, "Steward stopped by regular exception", e.what());
-	}	
-	
-	KJ_LOG(WARNING, "Steward stopped");
+	}
 }
 
 // === class DataStoreMessageReader ===
