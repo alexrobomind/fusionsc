@@ -30,13 +30,13 @@ struct ComputedField {
 # Interface for the resolution of device-specific information
 
 interface FieldResolver {
-	resolve @0 (field : MagneticField, followRefs : Bool = false) -> (field : MagneticField);
+	resolveField @0 (field : MagneticField, followRefs : Bool = false) -> MagneticField;
 }
 
 # Interface for the computation of magnetic fields
 
 interface FieldCalculator {
-	compute @0 (field : MagneticField) -> (computedField : ComputedField);
+	compute @0 MagneticField -> ComputedField;
 }
 
 struct BiotSavartSettings {

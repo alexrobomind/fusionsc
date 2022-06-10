@@ -373,6 +373,8 @@ private:
  */
 template<typename T>
 struct Temporary : public T::Builder {
+	using Builds = T;
+	
 	template<typename... Params>
 	Temporary(Params... params) :
 		T::Builder(nullptr),
