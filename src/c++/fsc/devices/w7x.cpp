@@ -19,7 +19,7 @@ CoilsDBResolver::CoilsDBResolver(LibraryThread& lt, CoilsDB::Client backend) :
 	backend(backend)
 {}
 
-Promise<void> CoilsDBResolver::processField(MagneticField::Reader input, MagneticField::Builder output, ResolveContext context) {
+Promise<void> CoilsDBResolver::processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) {
 	switch(input.which()) {
 		case MagneticField::W7X_MAGNETIC_CONFIG: {
 			auto w7xConfig = input.getW7xMagneticConfig();
@@ -61,7 +61,7 @@ Promise<void> CoilsDBResolver::processField(MagneticField::Reader input, Magneti
 	}
 }
 
-Promise<void> CoilsDBResolver::coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAndCurrents::Reader reader, MagneticField::Builder output, ResolveContext context) {
+Promise<void> CoilsDBResolver::coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAndCurrents::Reader reader, MagneticField::Builder output, ResolveFieldContext context) {
 	output.initSum(N_MAIN_COILS + N_TRIM_COILS + N_CONTROL_COILS);
 	
 	return getCoilFields(reader.getCoils()).then([reader, output, context, this](LocalDataRef<CoilFields> coilFields) mutable {
@@ -137,7 +137,7 @@ Promise<LocalDataRef<CoilFields>> CoilsDBResolver::getCoilFields(W7XCoilSet::Rea
 	});
 }
 
-Promise<void> CoilsDBResolver::processFilament(Filament::Reader input, Filament::Builder output, ResolveContext context) {
+Promise<void> CoilsDBResolver::processFilament(Filament::Reader input, Filament::Builder output, ResolveFieldContext context) {
 	switch(input.which()) {
 		case Filament::W7X_COILS_D_B:
 			output.setRef(getCoil(input.getW7xCoilsDB()));
@@ -249,7 +249,7 @@ ComponentsDBResolver::ComponentsDBResolver(LibraryThread& lt, ComponentsDB::Clie
 	backend(backend)
 {}
 
-Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveContext context) {
+Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context) {
 	return GeometryResolverBase::processGeometry(input, output, context)
 	.then([input, output, context, this]() mutable -> Promise<void> {
 		switch(input.which()) {

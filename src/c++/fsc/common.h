@@ -237,6 +237,51 @@ struct ID {
 	static Promise<ID> fromReaderWithRefs(T t);
 };
 
+/**
+ * A pointer-like with special ownership semantics. Invoking its move constructor
+ * will transfer ownership of the contained object, while invoking the move
+ * constructor will create a non-owning pointer. To reduce the probability of a
+ * segmentation fault, the owning part must be explicitly released.
+ *
+ * This is mostly useful for lambdas, as Held instances can be passed into lambdas
+ * by value like pointers, while the owning part can then later be attached somewhere
+ * else. This is a more efficient alternative to shared pointers.
+ */
+template<typename T>
+struct Held {
+	Held(Own<T>&& src) :
+		owningPtr(mv(src)),
+		ref(*owningPtr)
+	{}
+	
+	Held(const Held& other) :
+		owningPtr(),
+		ref(other.ref)
+	{}
+	
+	Held(Held&& other) = default;
+	
+	~Held() {
+		KJ_REQUIRE(owningPtr.get() == nullptr, "Destroyed Held<...> without ownership transfer");
+	}
+	
+	T& operator*() { return ref; }
+	T* operator->() { return &ref; }
+	T* get() { return &ref; }
+	
+	Own<T> release() { return mv(owningPtr); }
+	Own<T> x() { return mv(owningPtr); }
+	
+private:
+	Own<T> owningPtr;
+	T& ref;
+};
+
+template<typename T, typename... Params>
+Held<T> heapHeld(Params&&... params) {
+	return Held<T>(kj::heap<T>(fwd<Params>(params)...));
+}
+
 // === Inline implementation ===
 
 inline int ID::cmp(const ArrayPtr<const byte>& other) const {

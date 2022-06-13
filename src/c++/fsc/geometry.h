@@ -16,10 +16,10 @@ struct GeometryResolverBase : public GeometryResolver::Server {
 	LibraryThread lt;
 	GeometryResolverBase(LibraryThread& lt);
 	
-	virtual Promise<void> resolve(ResolveContext context) override;
+	virtual Promise<void> resolveGeometry(ResolveGeometryContext context) override;
 	
-	virtual Promise<void> processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveContext context);
-	        Promise<void> processTransform(Transformed<Geometry>::Reader input, Transformed<Geometry>::Builder output, ResolveContext context);
+	virtual Promise<void> processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context);
+	        Promise<void> processTransform(Transformed<Geometry>::Reader input, Transformed<Geometry>::Builder output, ResolveGeometryContext context);
 };
 
 /**

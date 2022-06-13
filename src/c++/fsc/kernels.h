@@ -263,7 +263,9 @@ namespace fsc {
 	template<typename T, typename Device>
 	struct MapToDevice<KernelArg<T>, Device>;
 	
-	namespace internal {
+	namespace internal {				
+		extern thread_local kj::TaskSet kernelDaemon;
+		
 		/**
 		 * Helper function that actually launches the kernel. Needed to perform index expansion
 		 * over the parameter.
@@ -271,7 +273,7 @@ namespace fsc {
 		template<typename Kernel, Kernel f, typename Device, typename... Params, size_t... i>
 		Promise<void> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {
 			// Create mappers for input
-			auto mappers = kj::heap<std::tuple<MapToDevice<Decay<Params>, Device>...>>(
+			auto mappers = heapHeld<std::tuple<MapToDevice<Decay<Params>, Device>...>>(
 				MapToDevice<Decay<Params>, Device>(fwd<Params>(params), device)...
 			);
 						
@@ -283,16 +285,21 @@ namespace fsc {
 			(void) (givemeatype { 0, (std::get<i>(*mappers).updateDevice(), 0)... });
 			
 			// Insert a barrier that returns when all pending memcpies are finished
-			Promise<void> preSync = hostMemSynchronize(device);
+			// Promise<void> preSync = hostMemSynchronize(device);
 			
 			// Call kernel
 			auto result = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params, Device>...>(device, n, cost, mv(prerequisite), std::get<i>(*mappers).get()...);
 			
-			// After calling kernel, update host memory where requested (might be async)
-			return result.then([mappers = mv(mappers), preSync = mv(preSync), &device]() mutable {
+			// After calling kernel, update host memory where requested (might be async) and attach promise to that
+			auto afterUpdate = result.then([mappers, &device]() mutable {
 				(void) (givemeatype { 0, (std::get<i>(*mappers).updateHost(), 0)... });
-				return mv(preSync);
-			});
+				return hostMemSynchronize(device);
+			}).catch_([mappers, &device](kj::Exception&& e) {
+				return hostMemSynchronize(device).then([e = mv(e)]() { throw e; });
+			}).attach(mappers.x()).fork();
+			
+			kernelDaemon.add(afterUpdate.addBranch());
+			return afterUpdate.addBranch();
 		}
 	}
 	
@@ -392,7 +399,7 @@ namespace fsc {
 	#ifdef FSC_WITH_CUDA
 	
 	//! Creates a GPU device
-	Own<Eigen::GPUDevice> newGPUDevice();
+	Own<Eigen::GpuDevice> newGpuDevice();
 	
 	#endif
 	
