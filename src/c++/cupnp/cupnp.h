@@ -699,6 +699,14 @@ namespace cupnp {
 		uint32_t size() const {
 			return listSize;
 		}
+		
+		unsigned char* data() {
+			return listStart.ptr;
+		}
+		
+		const unsigned char* data() const {
+			return listStart.ptr;
+		}
 	}; 
 	
 	// Structs are stored in-line in the list, and use a structure tag placed
