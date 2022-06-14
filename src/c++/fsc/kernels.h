@@ -82,6 +82,16 @@ namespace fsc {
 		static_assert(sizeof(Device) == 0, "Memcpy synchronization not implemented for this device.");
 		return READY_NOW;
 	}
+	
+	//! Synchronizes device-to-host copies
+	/**
+	 * \ingroup kernelAPI
+	 * \param device Device to synchronize memcopy on.
+	 */
+	template<typename Device>
+	void hostMemSynchronizeBlocking(Device& device) {
+		static_assert(sizeof(Device) == 0, "Memcpy synchronization not implemented for this device.");
+	}
 
 	//! \addtogroup kernelSupport
 	//! @{
@@ -271,7 +281,7 @@ namespace fsc {
 		template<typename Kernel, Kernel f, typename Device, typename... Params, size_t... i>
 		Promise<void> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {
 			// Create mappers for input
-			auto mappers = kj::heap<std::tuple<MapToDevice<Decay<Params>, Device>...>>(
+			auto mappers = heapHeld<std::tuple<MapToDevice<Decay<Params>, Device>...>>(
 				MapToDevice<Decay<Params>, Device>(fwd<Params>(params), device)...
 			);
 						
@@ -282,17 +292,12 @@ namespace fsc {
 			using givemeatype = int[];
 			(void) (givemeatype { 0, (std::get<i>(*mappers).updateDevice(), 0)... });
 			
-			// Insert a barrier that returns when all pending memcpies are finished
-			Promise<void> preSync = hostMemSynchronize(device);
-			
 			// Call kernel
-			auto result = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params, Device>...>(device, n, cost, mv(prerequisite), std::get<i>(*mappers).get()...);
-			
-			// After calling kernel, update host memory where requested (might be async)
-			return result.then([mappers = mv(mappers), preSync = mv(preSync), &device]() mutable {
+			return prerequisite.then([mappers, n, cost, &device]() mutable {
+				return KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params, Device>...>(device, n, cost, std::get<i>(*mappers).get()...);
+			}).then([mappers]() mutable {
 				(void) (givemeatype { 0, (std::get<i>(*mappers).updateHost(), 0)... });
-				return mv(preSync);
-			});
+			}).attach(mappers.x());
 		}
 	}
 	
@@ -420,22 +425,29 @@ namespace fsc {
 	 */
 	template<>
 	inline Promise<void> hostMemSynchronize<Eigen::DefaultDevice>(Eigen::DefaultDevice& dev) { return READY_NOW; }
+	template<>
+	inline void hostMemSynchronizeBlocking<Eigen::DefaultDevice>(Eigen::DefaultDevice& dev) {}
 	
 	/**
 	 * CPU devices dont need host memory synchronization, as all memcpy() calls are executed in-line on the main thread.
 	 */
 	template<>
 	inline Promise<void> hostMemSynchronize<Eigen::ThreadPoolDevice>(Eigen::ThreadPoolDevice& dev) { return READY_NOW; }
+	template<>
+	inline void hostMemSynchronizeBlocking<Eigen::ThreadPoolDevice>(Eigen::ThreadPoolDevice& dev) {}
 	
 	#ifdef FSC_WITH_CUDA
 	
 	inline Promise<void> synchronizeGpuDevice(Eigen::GpuDevice& device);
+	inline void synchronizeGpuDeviceBlocking(Eigen::GpuDevice& device);
 	
 	/**
 	 * GPU devices schedule an asynch memcpy onto their stream. We therefore need to wait until the stream has advanced past it.
 	 */
 	template<>
 	inline Promise<void> hostMemSynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& device) { return synchronizeGpuDevice(device); }
+	template<>
+	inline void hostMemSynchronizeBlocking<Eigen::GpuDevice>(Eigen::GpuDevice& dev) { synchronizeGpuDeviceBlocking(device); }
 	
 	#endif
 	
@@ -503,7 +515,7 @@ namespace internal {
 template<>
 struct KernelLauncher<Eigen::DefaultDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
-	static Promise<void> launch(Eigen::DefaultDevice& device, size_t n, const Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
+	static Promise<void> launch(Eigen::DefaultDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
 		return kj::evalLater([=]() {
 			for(size_t i = 0; i < n; ++i)
 				f(i, params...);
@@ -514,7 +526,7 @@ struct KernelLauncher<Eigen::DefaultDevice> {
 template<>
 struct KernelLauncher<Eigen::ThreadPoolDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
-	static Promise<void> launch(Eigen::ThreadPoolDevice& device, size_t n, const Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
+	static Promise<void> launch(Eigen::ThreadPoolDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
 		auto func = [params...](Eigen::Index start, Eigen::Index end) mutable {
 			for(Eigen::Index i = start; i < end; ++i)
 				f(i, params...);
@@ -536,95 +548,35 @@ struct KernelLauncher<Eigen::ThreadPoolDevice> {
 			(*ptr)(start, end);
 		};
 		
-		return prerequisite.then([funcCopyable, doneCopyable, cost, n, &device, promise = mv(paf.promise)]() mutable {
+		device.parallelForAsync(n, cost, funcCopyable, doneCopyable);
+		return paf.promise.attach(mv(donePtr), mv(funcPtr));
+		
+		/*return prerequisite.then([funcCopyable, doneCopyable, cost, n, &device, promise = mv(paf.promise)]() mutable {
 			device.parallelForAsync(n, cost, funcCopyable, doneCopyable);
 			return mv(promise);
-		}).attach(mv(donePtr), mv(funcPtr));
+		}).attach(mv(donePtr), mv(funcPtr));*/
 	}
 };
 
 #ifdef FSC_WITH_CUDA
 
-namespace internal {
-
-/**
- * Internal callback to be passed to a synchronization barrier that fulfilles the given promise.
- */
-inline void gpuSynchCallback(gpuStream_t stream, gpuError_t status, void* userData) {
-	using Fulfiller = kj::CrossThreadPromiseFulfiller<void>;
-	
-	// Rescue the fulfiller into the stack a.s.a.p.
-	Own<Fulfiller>* typedUserData = (Own<Fulfiller>*) userData;
-	Own<Fulfiller> fulfiller = mv(*typedUserData);
-	delete typedUserData; // new in synchronizeGpuDevice
-	
-	if(fulfiller.get() != nullptr) {
-		if(status == gpuSuccess) {
-			fulfiller->fulfill();
-			return;
-		}
-		
-		// Note: We take a slightly convoluted path here for the purpose of debugging
-		// Debuggers can be set to stop execution on throw
-		// If we just assign the exception to the fulfiller, this will only trigger
-		// the debugger once it is waited on. This way, the exception gets thrown ASAP,
-		// caught by the fulfiller, and then thrown again on wait.
-		auto throwException = [&]() {
-			KJ_FAIL_REQUIRE("GPU computation failed", status);
-		};
-		
-		fulfiller->rejectIfThrows(throwException);
-	}
-}
-
-}
-
-/**
- * Schedules a promise to be fulfilled when all previous calls on the GPU device's command stream are finished.
- */
-Promise<void> synchronizeGpuDevice(Eigen::GpuDevice& device) {
-	// Schedule synchronization
-	auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-	
-	// POTENTIALLY UNSAFE
-	// Note: We REALLY trust that the callback will always be called, otherwise this is a memory leak
-	auto fulfiller = new Own<kj::CrossThreadPromiseFulfiller<void>>(); // delete in internal::gpuSynchCallback
-	*fulfiller = mv(paf.fulfiller);
-	
-	# ifdef FSC_WITH_HIP
-	auto result = hipStreamAddCallback (device.stream(), internal::gpuSynchCallback, (void*) fulfiller, 0);
-	# else
-	auto result = cudaStreamAddCallback(device.stream(), internal::gpuSynchCallback, (void*) fulfiller, 0);
-	# endif
-
-	// If the operation failed, we can't trust the callback to be called
-	// Better just fail now
-	if(result != gpuSuccess) {
-		(*fulfiller)->reject(KJ_EXCEPTION(FAILED, "Error setting up GPU synchronization callback", result));
-		
-		// TODO: Verify whether this is really neccessary
-		// Potentially the function will actually be never called and the fulfiller can be deleted
-		
-		// We don't know for sure whether the function will be called or not
-		// Better eat a tiny memory leak than calling undefined behavior (so no delete)
-		*fulfiller = nullptr;
-		KJ_FAIL_REQUIRE("Callback scheduling returned error code", result);
-	}
-	
-	return mv(paf.promise);
-}
-
 template<>
 struct KernelLauncher<Eigen::GpuDevice> {
 	template<typename Kernel, Kernel func, typename... Params>
-	static Promise<void> launch(Eigen::GpuDevice& device, size_t n, const Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
-		return prerequisite.then([&device, n, cost, params...]() {
+	static Promise<void> launch(Eigen::GpuDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+		internal::gpuLaunch<Kernel, func, Params...>(device, n, params...);
+		
+		auto streamStatus = cudaStreamQuery(device.stream());
+		KJ_REQUIRE(streamStatus == cudaSuccess || streamStatus == cudaErrorNotReady, "CUDA launch failed", streamStatus, cudaGetErrorName(streamStatus), cudaGetErrorString(streamStatus));
+		
+		return READY_NOW;
+		/*return prerequisite.then([&device, n, cost, params...]() {
 			KJ_LOG(WARNING, "Launching GPU kernel");
 			internal::gpuLaunch<Kernel, func, Params...>(device, n, params...);
 			
 			auto streamStatus = cudaStreamQuery(device.stream());
 			KJ_REQUIRE(streamStatus == cudaSuccess || streamStatus == cudaErrorNotReady, "CUDA launch failed", streamStatus, cudaGetErrorName(streamStatus), cudaGetErrorString(streamStatus));
-		});
+		});*/
 	}
 };
 
@@ -687,6 +639,7 @@ template<typename T, typename Device>
 MappedData<T, Device>::~MappedData() {
 	if(devicePtr != nullptr) {
 		device.deallocate(devicePtr);
+		hostMemSynchronizeBlocking(device);
 	}
 }
 
