@@ -8,6 +8,8 @@ namespace fsc {
 template<typename Num, typename Data>
 struct ToroidalInterpolator {
 private:
+	using Dims = typename Eigen::Tensor<Num, 3>::Dimensions;
+	
 	static constexpr size_t wrap_slices = 1; // Number of phi-entries added by wrapping
 
 	template<typename In>
@@ -15,9 +17,6 @@ private:
 		TensorRef<Tensor<Num, 3>> wrappedInput = input;
 		size_t nr = wrappedInput.dimensions()[0];
 		size_t nz = wrappedInput.dimensions()[1];
-
-		using Idx = typename Eigen::Tensor<Num, 3>::Index;
-		using Dims = typename Eigen::Tensor<Num, 3>::Dimensions;
 
 		const Dims pos(0, 0, 0);
 		const Dims len(nr, nz, 1);
@@ -44,12 +43,14 @@ private:
 	using WrappedExpr = decltype(wrap_phi(std::declval<Data>()));
 	WrappedExpr data;
 	
+	Dims dimensions;
+	
 public:
 	ToroidalInterpolator(
 		size_t mtor, Num r_min, Num r_max, Num z_min, Num z_max, const Data& ndata
 	) :
 		mtor(mtor), r_min(r_min), r_max(r_max), z_min(z_min), z_max(z_max),
-		data(wrap_phi(ndata))
+		data(wrap_phi(ndata)), dimensions(TensorRef<Tensor<Num, 3>>(data).dimensions())
 	{}
 
 	Num eval_phizr(Num phi, Num z, Num r) {
@@ -59,9 +60,9 @@ public:
 		
 		TensorRef<Tensor<Num, 3>> data = this->data;
 
-		size_t nr = data.dimensions()[0];
-		size_t nz = data.dimensions()[1];
-		size_t nphi = data.dimensions()[2] - wrap_slices;
+		size_t nr = dimensions[0];
+		size_t nz = dimensions[1];
+		size_t nphi = dimensions[2] - wrap_slices;
 
 		Num cr = (r - r_min) / (r_max - r_min) * (nr - 1);
 		Num cz = (z - z_min) / (z_max - z_min) * (nr - 1);
@@ -97,16 +98,21 @@ public:
 		Num lr = cr - i_r;
 		Num lz = cz - i_z;
 		Num lphi = cphi - i_phi;
+		
+		const Dims pos(i_r, i_z, i_phi);
+		const Dims len(1, 1, 1);
+
+		Tensor<Num, 3> slice = data.slice(pos, len);
 
 		return
-			(1 - lr) * (1 - lz) * (1 - lphi) * data(i_r    , i_z    , i_phi    ) + 
-			lr       * (1 - lz) * (1 - lphi) * data(i_r + 1, i_z    , i_phi    ) +
-			(1 - lr) * lz       * (1 - lphi) * data(i_r    , i_z + 1, i_phi    ) +
-			lr       * lz       * (1 - lphi) * data(i_r + 1, i_z + 1, i_phi    ) +
-			(1 - lr) * (1 - lz) * lphi       * data(i_r    , i_z    , i_phi + 1) + 
-			lr       * (1 - lz) * lphi       * data(i_r + 1, i_z    , i_phi + 1) +
-			(1 - lr) * lz       * lphi       * data(i_r    , i_z + 1, i_phi + 1) +
-			lr       * lz       * lphi       * data(i_r + 1, i_z + 1, i_phi + 1)
+			(1 - lr) * (1 - lz) * (1 - lphi) * slice(0, 0, 0) + 
+			lr       * (1 - lz) * (1 - lphi) * slice(1, 0, 0) +
+			(1 - lr) * lz       * (1 - lphi) * slice(0, 1, 0) +
+			lr       * lz       * (1 - lphi) * slice(1, 1, 0) +
+			(1 - lr) * (1 - lz) * lphi       * slice(0, 0, 1) + 
+			lr       * (1 - lz) * lphi       * slice(1, 0, 1) +
+			(1 - lr) * lz       * lphi       * slice(0, 1, 1) +
+			lr       * lz       * lphi       * slice(1, 1, 1)
 		;
 	}
 
