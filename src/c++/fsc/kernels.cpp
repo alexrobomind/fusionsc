@@ -10,11 +10,12 @@ Own<Eigen::ThreadPoolDevice> newThreadPoolDevice() {
 	return dev;
 }
 
+
 #ifdef FSC_WITH_CUDA
 
 #include <cuda_runtime_api.h>
 
-Own<Eigen::GPUDevice> newGPUDevice() {
+Own<Eigen::GpuDevice> newGpuDevice() {
 	auto stream = kj::heap<Eigen::GpuStreamDevice>();
 	
 	cudaError_t streamStatus = cudaStreamQuery(stream->stream());
@@ -105,5 +106,18 @@ void synchronizeGpuDeviceBlocking(Eigen::GpuDevice& device) {
 	
 #endif
 
+namespace {
+	
+struct ErrorHandler : public kj::TaskSet::ErrorHandler {
+	void taskFailed(kj::Exception&& exception) override {
+		KJ_LOG(WARNING, "Update Host task failed", exception);
+	}
+};
+
+ErrorHandler errorHandler;
+
+}
+
+thread_local kj::TaskSet internal::kernelDaemon(errorHandler);
 
 }

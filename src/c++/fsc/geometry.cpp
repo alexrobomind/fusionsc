@@ -6,7 +6,7 @@ namespace fsc {
 	
 GeometryResolverBase::GeometryResolverBase(LibraryThread& lt) : lt(lt->addRef()) {}
 
-Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveContext context) {
+Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context) {
 	output.setTags(input.getTags());
 	
 	switch(input.which()) {
@@ -51,7 +51,7 @@ Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geom
 	}
 }
 
-Promise<void> GeometryResolverBase::processTransform(Transformed<Geometry>::Reader input, Transformed<Geometry>::Builder output, ResolveContext context) {
+Promise<void> GeometryResolverBase::processTransform(Transformed<Geometry>::Reader input, Transformed<Geometry>::Builder output, ResolveGeometryContext context) {
 	switch(input.which()) {
 		case Transformed<Geometry>::LEAF: {
 			return processGeometry(input.getLeaf(), output.initLeaf(), context);
@@ -77,7 +77,7 @@ Promise<void> GeometryResolverBase::processTransform(Transformed<Geometry>::Read
 	}
 }
 
-Promise<void> GeometryResolverBase::resolve(ResolveContext context) {
+Promise<void> GeometryResolverBase::resolveGeometry(ResolveGeometryContext context) {
 	auto input = context.getParams().getGeometry();
 	auto output = context.initResults();
 	

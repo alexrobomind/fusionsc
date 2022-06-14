@@ -354,7 +354,7 @@ typename Cap::Client attach(T src, Attachments&&... attachments) {
 	capnp::Capability::Client typelessClient(mv(src));
 	auto proxy = internal::createProxy(mv(typelessClient));
 	
-	proxy = proxy.attach(fwd<Attachments...>(attachments...));
+	proxy = proxy.attach(fwd<Attachments>(attachments)...);
 	return capnp::Capability::Client(mv(proxy)).castAs<Cap>();
 }
 

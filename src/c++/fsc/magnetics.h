@@ -28,10 +28,10 @@ public:
 	LibraryThread lt;
 	FieldResolverBase(LibraryThread& lt);
 	
-	virtual Promise<void> resolve(ResolveContext context) override;
+	virtual Promise<void> resolveField(ResolveFieldContext context) override;
 	
-	virtual Promise<void> processField(MagneticField::Reader input, MagneticField::Builder output, ResolveContext context);
-	virtual Promise<void> processFilament(Filament::Reader input, Filament::Builder output, ResolveContext context);
+	virtual Promise<void> processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context);
+	virtual Promise<void> processFilament(Filament::Reader input, Filament::Builder output, ResolveFieldContext context);
 };
 
 /**

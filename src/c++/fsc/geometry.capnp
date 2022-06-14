@@ -10,7 +10,7 @@ using Float64Tensor = Data.Float64Tensor;
 using ShapedList = Data.ShapedList;
 
 interface GeometryResolver {
-	resolve @0 (geometry : Geometry, followRefs : Bool = false) -> Geometry;
+	resolveGeometry @0 (geometry : Geometry, followRefs : Bool = false) -> Geometry;
 }
 
 interface GeometryLib {

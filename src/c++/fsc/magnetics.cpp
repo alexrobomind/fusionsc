@@ -129,15 +129,17 @@ struct CalculationSession : public FieldCalculator::Server {
 		context.allowCancellation();
 		
 		// Start calculation
-		return processRoot(context.getParams().getField())
-		.then([this, context](LocalDataRef<Float64Tensor> tensorRef) mutable {
+		auto field = context.getParams().getField();
+		
+		return processRoot(field)
+		.then([this, context, field](LocalDataRef<Float64Tensor> tensorRef) mutable {
 		
 		// Cache field if not present, use existing if present
-		return ID::fromReaderWithRefs(context.getParams().getField())
+		return ID::fromReaderWithRefs(field)
 		.then([this, context, tensorRef = mv(tensorRef)](ID id) mutable {
 			auto insertResult = cache.insert(id, mv(tensorRef));
 						
-			auto compField = context.getResults().initComputedField();
+			auto compField = context.initResults().initComputedField();
 			writeGrid(grid, compField.initGrid());
 			
 			compField.setData(attach(
@@ -278,16 +280,16 @@ void writeGrid(const ToroidalGridStruct& in, ToroidalGrid::Builder out) {
 	out.setNPhi(in.nPhi);
 }
 
-Promise<void> FieldResolverBase::resolve(ResolveContext context) {
+Promise<void> FieldResolverBase::resolveField(ResolveFieldContext context) {
 	auto input = context.getParams().getField();
-	auto output = context.getResults().initField();
+	auto output = context.initResults();
 	
 	return processField(input, output, context);
 }
 
 FieldResolverBase::FieldResolverBase(LibraryThread& lt) : lt(lt->addRef()) {}
 
-Promise<void> FieldResolverBase::processField(MagneticField::Reader input, MagneticField::Builder output, ResolveContext context) {
+Promise<void> FieldResolverBase::processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) {
 	switch(input.which()) {
 		case MagneticField::SUM: {
 			auto inSum = input.getSum();
@@ -342,7 +344,7 @@ Promise<void> FieldResolverBase::processField(MagneticField::Reader input, Magne
 	}
 }
 
-Promise<void> FieldResolverBase::processFilament(Filament::Reader input, Filament::Builder output, ResolveContext context) {
+Promise<void> FieldResolverBase::processFilament(Filament::Reader input, Filament::Builder output, ResolveFieldContext context) {
 	switch(input.which()) {
 		case Filament::INLINE: {
 			output.setInline(input.getInline());

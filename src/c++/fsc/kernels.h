@@ -273,7 +273,9 @@ namespace fsc {
 	template<typename T, typename Device>
 	struct MapToDevice<KernelArg<T>, Device>;
 	
-	namespace internal {
+	namespace internal {				
+		extern thread_local kj::TaskSet kernelDaemon;
+		
 		/**
 		 * Helper function that actually launches the kernel. Needed to perform index expansion
 		 * over the parameter.
@@ -397,7 +399,7 @@ namespace fsc {
 	#ifdef FSC_WITH_CUDA
 	
 	//! Creates a GPU device
-	Own<Eigen::GPUDevice> newGPUDevice();
+	Own<Eigen::GpuDevice> newGpuDevice();
 	
 	#endif
 	

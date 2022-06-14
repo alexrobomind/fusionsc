@@ -36,7 +36,7 @@ interface FieldResolver {
 # Interface for the computation of magnetic fields
 
 interface FieldCalculator {
-	compute @0 MagneticField -> ComputedField;
+	compute @0 (field : MagneticField) -> (computedField : ComputedField);
 }
 
 struct BiotSavartSettings {

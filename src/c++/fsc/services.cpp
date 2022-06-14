@@ -2,6 +2,8 @@
 #include "magnetics.h"
 #include "kernels.h"
 
+#include <kj/list.h>
+
 using namespace fsc;
 
 namespace {
@@ -45,119 +47,103 @@ private:
 	LibraryThread lt;
 };
 
-struct ResolverChainImpl : public virtual capnp::Capability::Server, public virtual capnp::ResolverChain::Server {
+struct ResolverChainImpl : public virtual capnp::Capability::Server, public virtual ResolverChain::Server {
 	using capnp::Capability::Server::DispatchCallResult;
+	using ResolverChain::Server::RegisterContext;
 	
 	struct Registration {
 		ResolverChainImpl& parent;
-		ListLink<Registration> link;
+		kj::ListLink<Registration> link;
 		
 		capnp::Capability::Client entry;
 
 		Registration(ResolverChainImpl& parent, capnp::Capability::Client entry);
 		~Registration();
-	}
+	};
 	
 	kj::List<Registration, &Registration::link> registrations;
 	
-	Promise<void> register(RegisterContext ctx) override {
-		auto result = capnp::newBrokenCap(KJ_EXCEPTION(UNIMPLEMENTED, "Unimplemented"));
-		
-		result = attach(result, 
+	Promise<void> register_(RegisterContext ctx) override {		
+		auto result = attach(
+			ResolverChain::Client(capnp::newBrokenCap(KJ_EXCEPTION(UNIMPLEMENTED, "Unimplemented"))),
+			
 			thisCap(),
 			kj::heap<Registration>(*this, ctx.getParams().getResolver())
 		);
+		ctx.initResults().setRegistration(mv(result));
+		
+		return READY_NOW;
 	};
 	
-	static void rethrowIfNotUnimplemented(kj::Exception&& exc) {
-		
-	}
-	
-	DispatchCallResult dispatchCall(uint64_t interfaceId, uint16_t methodId, CallContext<AnyPointer, AnyPointer> ctx) {
-		Promise<void> result = mv(capnp::ResolverChain::Server::dispatchCall(interfaceId, methodId, ctx).promise)
-		.catch_([=, this](kj::Exception&& exc) {
+	DispatchCallResult dispatchCall(uint64_t interfaceId, uint16_t methodId, capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> ctx) override {
+		Promise<void> result = ResolverChain::Server::dispatchCall(interfaceId, methodId, ctx).promise
+		.catch_([=](kj::Exception&& exc) mutable -> Promise<void> {
 			using capnp::AnyStruct;
 			using capnp::AnyPointer;
 			
 			// We only handle generic methods if parent didnt have it implemented
 			if(exc.getType() != kj::Exception::Type::UNIMPLEMENTED) {
-				kj::throwRecoverableException(exc);
+				kj::throwRecoverableException(mv(exc));
+				return READY_NOW;
 			}
 			
 			// Updatable container on heap
-			auto paramMsg = kj::heap<Own<MallocMessageBuilder>>();
+			auto paramMsg = heapHeld<Own<capnp::MallocMessageBuilder>>();
 			
 			// Fill initial value from context
-			*paramMsg = kj::heap<MallocMessageBuilder>();
-			*paramMsg->setRoot(ctx.getParams());
+			*paramMsg = kj::heap<capnp::MallocMessageBuilder>();
+			(**paramMsg).setRoot(ctx.getParams());
 			ctx.releaseParams();
 			
 			// Check that first field is set
-			auto paramsStruct = (**paramMsg).getRoot<AnyStruct>();
-			auto pSec = paramsStruct.getPointerSection();
-			KJ_REQUIRE(pSec.size() > 0);
+			{
+				auto paramsStruct = (**paramMsg).getRoot<AnyStruct>();
+				auto pSec = paramsStruct.getPointerSection();
+				KJ_REQUIRE(pSec.size() > 0);
+			}
 			
 			Promise<void> result = READY_NOW;
 			for(auto& reg : registrations) {
-				result = result.then([=, this, &paramMsg = *paramMsg]() {
-					auto paramsStruct = paramMsg->getRoot<AnyStruct>();
-					auto pSec = paramsStruct.getPointerSection();
+				result = result.then([=, e = cp(reg.entry)]() mutable {
+					auto params = (**paramMsg).getRoot<AnyPointer>();
 					
-					auto request = reg.entry.typelessRequest(
-						interfaceId, methodId, paramsStruct.messageSize()
+					auto request = e.typelessRequest(
+						interfaceId, methodId, params.targetSize()
 					);
-					request.getParams().set(paramsStruct);
+					request.set(params);
 					
 					return request.send();
-				}).then([=, this, &paramMsg = *paramMsg](auto result) {
+				}).then([=](auto result) mutable {
 					// Copy old extra parameters into new message, but drop old result
 					{
-						auto paramsStruct = paramMsg->getRoot<AnyStruct>();
+						auto paramsStruct = (**paramMsg).getRoot<AnyStruct>();
+						auto params       = (**paramMsg).getRoot<AnyPointer>();
+						
 						auto pSec = paramsStruct.getPointerSection();		
 						pSec[0].clear();
 						
-						auto newParamMsg = kj::heap<MallocMessageBuilder>();
-						newParamMsg->setRoot(paramsStruct);
-						paramMsg = mv(newParamMsg);
+						auto newParamMsg = kj::heap<capnp::MallocMessageBuilder>();
+						newParamMsg->setRoot(params.asReader());
+						*paramMsg = mv(newParamMsg);
 					}
 					
 					// Copy result into params
-					auto paramsStruct = paramMsg->getRoot<AnyStruct>();
+					auto paramsStruct = (**paramMsg).getRoot<AnyStruct>();
 					auto pSec = paramsStruct.getPointerSection();		
-					pSec[0].setAs(result);
-				}).catch_([]kj::Exception&& e) {
+					pSec[0].set(result);
+				}).catch_([](kj::Exception&& e) mutable {
+					KJ_LOG(WARNING, "Exception in resolver chain", mv(e));
 				});
 			}
 			
-			result = result.then([=, this, &paramMsg = *paramMsg]() {
-				ctx.getResults().setAs(paramMsg->getRoot<AnyPointer>());
+			result = result.then([=]() mutable {
+				ctx.getResults().set((**paramMsg).getRoot<AnyPointer>());
 			});
 			
-			return result.attach(mv(paramMsg));
-		}
+			return result.attach(paramMsg.x(), thisCap());
+		});
 		
 		return { mv(result), false };
-	}
-	
-	Promise<void> resolveField(ResolveFieldContext ctx) {
-		Promise<void> result = READY_NOW;
-		
-		auto pField = kj::heap<Own<Temporary<MagneticField>>>();
-		*pField = kj::heap<Temporary<MagneticField>>(ctx.getParams().getField());
-		
-		for(auto& reg : registrations) {
-			result = result.then([ctx, &field = *pField]() {
-				auto request = reg.entry.castAs<FieldResolver>().resolveFieldRequest();
-				auto params  = request.getParams();
-				params.setField(field->asBuilder());
-				params.setFollowRefs(ctx.getParams().getFollowRefs());
-				
-				return request.send();
-			}).then([&field = *pField](auto result) {
-				field = kj::heap<Temporary<MagneticField>>(result.getField);
-			}).catch_([](kj::Exception& e) {
-				if(e.getType() == kj::Exception::Type::UNIMPLEMENTED);
-		}
 	}
 };
 
@@ -168,7 +154,7 @@ ResolverChainImpl::Registration::Registration(ResolverChainImpl& parent, capnp::
 }
 
 ResolverChainImpl::Registration::~Registration() {
-	parent.registrations.remote(*this);
+	parent.registrations.remove(*this);
 }
 
 }

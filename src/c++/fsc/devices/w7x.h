@@ -31,11 +31,11 @@ class CoilsDBResolver : public FieldResolverBase {
 	
 	CoilsDB::Client backend;
 	
-	Promise<void> processField   (MagneticField::Reader input, MagneticField::Builder output, ResolveContext context) override;
-	Promise<void> processFilament(Filament     ::Reader input, Filament     ::Builder output, ResolveContext context) override;
+	Promise<void> processField   (MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) override;
+	Promise<void> processFilament(Filament     ::Reader input, Filament     ::Builder output, ResolveFieldContext context) override;
 	
 	// Extra function to handle the "coilsAndCurrents" type of W7-X magnetic config
-	Promise<void> coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAndCurrents::Reader reader, MagneticField::Builder output, ResolveContext context);
+	Promise<void> coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAndCurrents::Reader reader, MagneticField::Builder output, ResolveFieldContext context);
 	
 	// Returns a set of magnetic fields required for processing a configuration node.
 	// Caches the field set
@@ -56,7 +56,7 @@ class ComponentsDBResolver : public GeometryResolverBase {
 	
 	ComponentsDB::Client backend;
 	
-	Promise<void> processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveContext context) override;
+	Promise<void> processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context) override;
 	
 	// Loads a component from the components db (caches result)
 	DataRef<Mesh>::Client getComponent(uint64_t cdbID);
