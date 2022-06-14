@@ -7,5 +7,7 @@
 namespace fsc {
 
 RootService::Client createRoot(LibraryThread& lt, RootConfig::Reader config);
+
+ResolverChain::Client newResolverChain();
 	
 }

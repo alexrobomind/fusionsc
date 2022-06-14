@@ -6,6 +6,9 @@ $Cxx.namespace("fsc");
 using Magnetics = import "magnetics.capnp";
 using Data = import "data.capnp";
 
+# The following structures are internal and not intended to be used in network protocols
+# They might change in incompatible versions throughout the library
+
 enum FLTStopReason {
 	unknown @0;
 	stepLimit @1;
@@ -58,5 +61,4 @@ struct FLTKernelRequest {
 	stepSize @4 : Float32;
 	
 	grid @5 : Magnetics.ToroidalGrid;
-	fieldData @6 : Data.Float64Tensor; #TODO: This might become a separate field for efficiency
 }

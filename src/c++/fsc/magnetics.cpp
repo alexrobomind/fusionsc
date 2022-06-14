@@ -128,41 +128,42 @@ struct CalculationSession : public FieldCalculator::Server {
 	Promise<void> compute(ComputeContext context) {
 		context.allowCancellation();
 		
-		// Start calculation
-		auto field = context.getParams().getField();
+		// Copy input field (so that call context can be released)
+		auto field = heapHeld<Temporary<MagneticField>>(context.getParams().getField());
+		context.releaseParams();
 		
-		return processRoot(field)
-		.then([this, context, field](LocalDataRef<Float64Tensor> tensorRef) mutable {
+		// Start calculation lazily
+		auto data = processRoot(*field)
+		.then([this, field](LocalDataRef<Float64Tensor> tensorRef) mutable {
+			// Cache field if not present, use existing if present
+			return ID::fromReaderWithRefs(field->asBuilder())
+			.then([this, tensorRef = mv(tensorRef)](ID id) mutable -> DataRef<Float64Tensor>::Client {
+				auto insertResult = cache.insert(id, mv(tensorRef));
+				return attach(mv(insertResult.element), mv(insertResult.ref));
+			});
+		}).attach(thisCap(), field.x());
 		
-		// Cache field if not present, use existing if present
-		return ID::fromReaderWithRefs(field)
-		.then([this, context, tensorRef = mv(tensorRef)](ID id) mutable {
-			auto insertResult = cache.insert(id, mv(tensorRef));
-						
-			auto compField = context.initResults().initComputedField();
-			writeGrid(grid, compField.initGrid());
-			
-			compField.setData(attach(
-				mv(insertResult.element), mv(insertResult.ref)
-			));
-		});
-		})
-		.attach(thisCap());
+		// Fill in computed grid struct
+		auto compField = context.initResults().initComputedField();
+		writeGrid(grid, compField.initGrid());
+		compField.setData(mv(data));
+		
+		return READY_NOW;
 	}
 	
 	//! Processes a root node of a magnetic field (creates calculator)
 	Promise<LocalDataRef<Float64Tensor>> processRoot(MagneticField::Reader node) {
-		auto newCalculator = kj::heap<FieldCalculation<Device>>(grid, device);
+		auto newCalculator = heapHeld<FieldCalculation<Device>>(grid, device);
 		auto calcDone = processField(*newCalculator, node, 1);
 		
-		return calcDone.then([newCalculator = mv(newCalculator), this]() mutable {		
+		return calcDone.then([newCalculator, this]() mutable {		
 			auto result = kj::heap<Temporary<Float64Tensor>>();					
 			auto readout = newCalculator->finish(*result);
 			auto publish = readout.then([result=result.get(), this]() {
 				return lt->dataService().publish(lt->randomID(), result->asReader());
 			});
-			return publish.attach(mv(result), thisCap(), mv(newCalculator));
-		});
+			return publish.attach(mv(result));
+		}).attach(thisCap(), newCalculator.x());
 	}
 	
 	Promise<void> processFilament(FieldCalculation<Device>& calculator, Filament::Reader node, BiotSavartSettings::Reader settings, double scale) {

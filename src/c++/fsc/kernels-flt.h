@@ -67,6 +67,7 @@ namespace fsc {
 	EIGEN_DEVICE_FUNC void fltKernel(
 		unsigned int idx,
 		fsc::cu::FLTKernelData kernelData,
+		const fsc::cu::Float32Tensor fieldData,
 		const fsc::cu::FLTKernelRequest request
 	) {
 		using Num = float;
@@ -84,7 +85,15 @@ namespace fsc {
 		
 		uint32_t step = state.getNumSteps();
 		uint32_t eventCount = state.getEventCount();
-		double distance = state.getDistance();
+		Num distance = state.getDistance();
+		
+		// Set up the magnetic field
+		Num* tensorData = (float*) fieldData.getData().data();
+		auto grid = request.getGrid();
+		
+		TensorMap<Tensor<Num, 4>> tField(tensorData, (int64_t) 3, (int64_t) grid.getNPhi(), (int64_t) grid.getNZ(), (int64_t) grid.getNR());
+		auto field = slabCoordinateField<true, Num>(grid.getNSym(), grid.getRMin(), grid.getRMax(), grid.getZMin(), grid.getZMax(), tField); // The boolean parameter forces normalization
+		auto fieldWithT = [&field](V3 x, Num t) { return field(x); };
 		
 		// The kernel terminates its execution with this macro
 		#define FSC_FLT_RETURN(reason) \
@@ -127,10 +136,9 @@ namespace fsc {
 			if(state.getTurnCount() >= request.getTurnLimit() && request.getTurnLimit() > 0)
 				FSC_FLT_RETURN(TURN_LIMIT);
 			
-			// TODO: Add runge kutta step here
-			V3 x2;
-			KJ_UNIMPLEMENTED("Runge Kutta");
-			
+			V3 x2 = x;
+			kmath::runge_kutta_4_step(x2, .0f, request.getStepSize(), fieldWithT);
+						
 			// --- Check for phi crossings ---
 			
 			Num phi1 = atan2(x[1], x[0]);

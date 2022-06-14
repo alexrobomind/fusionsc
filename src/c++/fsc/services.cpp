@@ -137,7 +137,10 @@ struct ResolverChainImpl : public virtual capnp::Capability::Server, public virt
 			}
 			
 			result = result.then([=]() mutable {
-				ctx.getResults().set((**paramMsg).getRoot<AnyPointer>());
+				auto paramsStruct = (**paramMsg).getRoot<AnyStruct>();
+				auto pSec = paramsStruct.getPointerSection();
+				
+				ctx.getResults().set(pSec[0]);
 			});
 			
 			return result.attach(paramMsg.x(), thisCap());
@@ -161,4 +164,8 @@ ResolverChainImpl::Registration::~Registration() {
 
 RootService::Client fsc::createRoot(LibraryThread& lt, RootConfig::Reader config) {
 	return kj::heap<RootServer>(lt, config);
+}
+
+ResolverChain::Client fsc::newResolverChain() {
+	return kj::heap<ResolverChainImpl>();
 }

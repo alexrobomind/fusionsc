@@ -12,8 +12,9 @@ private:
 
 	template<typename In>
 	static auto wrap_phi(const In& input) {
-		size_t nr = input.dimensions()[0];
-		size_t nz = input.dimensions()[1];
+		TensorRef<Tensor<Num, 3>> wrappedInput = input;
+		size_t nr = wrappedInput.dimensions()[0];
+		size_t nz = wrappedInput.dimensions()[1];
 
 		using Idx = typename Eigen::Tensor<Num, 3>::Index;
 		using Dims = typename Eigen::Tensor<Num, 3>::Dimensions;
@@ -55,6 +56,8 @@ public:
 		// If we have a NAN input, return a NAN output
 		if(phi != phi || z != z || r != r)
 			return std::nan("");
+		
+		TensorRef<Tensor<Num, 3>> data = this->data;
 
 		size_t nr = data.dimensions()[0];
 		size_t nz = data.dimensions()[1];
@@ -75,9 +78,9 @@ public:
 				", reduced angle is " + std::to_string(reduce_angle(phi))
 			);
 
-		size_t i_r = (size_t) floor(cr);
-		size_t i_z = (size_t) floor(cz);
-		size_t i_phi = (size_t) floor(cphi);
+		int64_t i_r = (int64_t) floor(cr);
+		int64_t i_z = (int64_t) floor(cz);
+		int64_t i_phi = (int64_t) floor(cphi);
 
 		if(i_r >= nr - 1 || i_z >= nz - 1)
 			return std::nan("");
@@ -144,7 +147,7 @@ struct SlabCoordinateField {
 		size_t mtor, Num r_min, Num r_max, Num z_min, Num z_max,
 		const Expr& expr
 	):
-		mtor(mtor), r_min(r_min), r_max(r_max), z_min(z_min), z_max(z_max)
+		expr(expr), mtor(mtor), r_min(r_min), r_max(r_max), z_min(z_min), z_max(z_max)
 	{}
 
 	// Returns the magnetic field (optionally normalized) at a given phi, r, z position in cartesian components
@@ -152,9 +155,9 @@ struct SlabCoordinateField {
 		using std::sin;
 		using std::cos;
 		
-		auto Bphi = interpolateToroidal(mtor, r_min, r_max, z_min, z_max, expr.slice(0, 0));
-		auto Bz =   interpolateToroidal(mtor, r_min, r_max, z_min, z_max, expr.slice(0, 1));
-		auto Br =   interpolateToroidal(mtor, r_min, r_max, z_min, z_max, expr.slice(0, 2));
+		auto Bphi = interpolateToroidal(mtor, r_min, r_max, z_min, z_max, expr.chip(0, 0));
+		auto Bz =   interpolateToroidal(mtor, r_min, r_max, z_min, z_max, expr.chip(0, 1));
+		auto Br =   interpolateToroidal(mtor, r_min, r_max, z_min, z_max, expr.chip(0, 2));
 
 		Num Bval_r   = Br  .eval_phizr(phi, z, r);
 		Num Bval_z   = Bz  .eval_phizr(phi, z, r);
