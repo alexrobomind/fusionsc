@@ -13,7 +13,7 @@ private:
 	static constexpr size_t wrap_slices = 1; // Number of phi-entries added by wrapping
 
 	template<typename In>
-	static auto wrap_phi(const In& input) {
+	static auto wrap_phi(In& input) {
 		TensorRef<Tensor<Num, 3>> wrappedInput = input;
 		size_t nr = wrappedInput.dimensions()[0];
 		size_t nz = wrappedInput.dimensions()[1];
@@ -40,8 +40,8 @@ private:
 	Num z_min;
 	Num z_max;
 
-	using WrappedExpr = decltype(wrap_phi(std::declval<Data>()));
-	WrappedExpr data;
+	using WrappedExpr = decltype(wrap_phi(std::declval<const Data>()));
+	const WrappedExpr data;
 	
 	Dims dimensions;
 	
@@ -57,8 +57,6 @@ public:
 		// If we have a NAN input, return a NAN output
 		if(phi != phi || z != z || r != r)
 			return std::nan("");
-		
-		TensorRef<Tensor<Num, 3>> data = this->data;
 
 		size_t nr = dimensions[0];
 		size_t nz = dimensions[1];
@@ -151,7 +149,7 @@ struct SlabCoordinateField {
 
 	SlabCoordinateField(
 		size_t mtor, Num r_min, Num r_max, Num z_min, Num z_max,
-		const Expr& expr
+		Expr& expr
 	):
 		expr(expr), mtor(mtor), r_min(r_min), r_max(r_max), z_min(z_min), z_max(z_max)
 	{}
@@ -202,7 +200,7 @@ struct SlabCoordinateField {
 template<bool normalize, typename Num, typename Expr>
 SlabCoordinateField<Num, Expr, normalize> slabCoordinateField(
 	size_t mtor, Num r_min, Num r_max, Num z_min, Num z_max,
-	const Expr& expr
+	Expr& expr
 ) {
 	return SlabCoordinateField<Num, Expr, normalize>(mtor, r_min, r_max, z_min, z_max, expr);
 }

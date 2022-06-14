@@ -149,9 +149,9 @@ EIGEN_DEVICE_FUNC inline void biotSavartKernel(const unsigned int idx, ToroidalG
 		}
 	}
 	
-	int i_phi = midx[0];
+	int i_r = midx[0];
 	int i_z   = midx[1];
-	int i_r   = midx[2];
+	int i_phi   = midx[2];
 
 	Vec3d x_grid = grid.xyz(i_phi, i_z, i_r);
 	Vec3d field_cartesian { 0, 0, 0 };

@@ -10,10 +10,10 @@ namespace {
 void validateField(ToroidalGrid::Reader grid, Float64Tensor::Reader data) {	
 	auto shape = data.getShape();
 	KJ_REQUIRE(shape.size() == 4);
-	KJ_REQUIRE(shape[0] == 3);
-	KJ_REQUIRE(shape[1] == grid.getNPhi());
-	KJ_REQUIRE(shape[2] == grid.getNZ());
-	KJ_REQUIRE(shape[3] == grid.getNR());
+	KJ_REQUIRE(shape[0] == grid.getNPhi());
+	KJ_REQUIRE(shape[1] == grid.getNZ());
+	KJ_REQUIRE(shape[2] == grid.getNR());
+	KJ_REQUIRE(shape[3] == 3);
 	
 	KJ_REQUIRE(data.getData().size() == shape[0] * shape[1] * shape[2] * shape[3]);	
 }

@@ -26,7 +26,7 @@ struct FieldCalculation {
 	FieldCalculation(ToroidalGridStruct in, Device& device) :
 		_device(device),
 		grid(in),
-		field(3, grid.nPhi, grid.nZ, grid.nR),
+		field(3, grid.nR, grid.nZ, grid.nPhi),
 		mappedField(field, _device)
 	{
 		field.setZero();
@@ -44,7 +44,7 @@ struct FieldCalculation {
 		auto data = input.getData();
 		
 		// Write field into native format
-		auto newField = kj::heap<Field>(3, grid.nPhi, grid.nZ, grid.nR);
+		auto newField = kj::heap<Field>(3, grid.nR, grid.nZ, grid.nPhi);
 		for(int i = 0; i < newField->size(); ++i) {
 			newField->data()[i] = data[i];
 		}
