@@ -99,6 +99,8 @@ namespace fsc {
 	//! Class for allocating an array on a device and manage a host and device pointer simultaneously
 	template<typename T, typename Device>
 	struct MappedData {
+		//! This helps us prevent our program from crashing. See inside ~MappedData
+		kj::UnwindDetector unwindDetector;
 		Device& device;
 		T* hostPtr;
 		T* devicePtr;
@@ -640,8 +642,10 @@ MappedData<T, Device>& MappedData<T, Device>::operator=(MappedData&& other)
 template<typename T, typename Device>
 MappedData<T, Device>::~MappedData() {
 	if(devicePtr != nullptr) {
-		device.deallocate(devicePtr);
-		hostMemSynchronizeBlocking(device);
+		unwindDetector.catchExceptionsIfUnwinding([&, this]() {
+			device.deallocate(devicePtr);
+			hostMemSynchronizeBlocking(device);
+		});
 	}
 }
 
