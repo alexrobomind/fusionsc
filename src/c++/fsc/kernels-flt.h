@@ -103,7 +103,11 @@ namespace fsc {
 		// Event logging
 		// As this involves our return macro, it can't go
 		// into a lambda
-		#define FSC_FLT_LOG_EVENT(x) \
+		#define FSC_FLT_LOG_EVENT(x) {\
+			if(eventCount >= myData.getEvents().size()) { \
+				FSC_FLT_RETURN(EVENT_BUFFER_FULL); \
+			} \
+			\
 			{\
 				auto evt = currentEvent(); \
 				evt.setStep(step); \
@@ -114,10 +118,7 @@ namespace fsc {
 			}\
 			\
 			++eventCount; \
-			\
-			if(eventCount >= myData.getEvents().size()) { \
-				FSC_FLT_RETURN(EVENT_BUFFER_FULL); \
-			} \
+		}
 		
 		auto currentEvent = [&]() {
 			return myData.mutateEvents()[eventCount];
@@ -135,6 +136,12 @@ namespace fsc {
 			
 			if(state.getTurnCount() >= request.getTurnLimit() && request.getTurnLimit() > 0)
 				FSC_FLT_RETURN(TURN_LIMIT);
+			
+			Num r = std::sqrt(x[0] * x[0] + x[1] * x[1]);
+			Num z = x[2];
+			
+			if(r <= grid.getRMin() || r >= grid.getRMax() || z <= grid.getZMin() || z >= grid.getZMax())
+				FSC_FLT_RETURN(OUT_OF_GRID);
 			
 			V3 x2 = x;
 			kmath::runge_kutta_4_step(x2, .0f, request.getStepSize(), fieldWithT);

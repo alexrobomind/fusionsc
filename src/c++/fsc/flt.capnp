@@ -33,7 +33,7 @@ struct FLTKernelEvent {
 	distance @2 : Float32;
 
 	union {
-		outOfGrid @3 : Void;
+		notSet @3 : Void;
 		phiPlaneIntersection : group {
 			planeNo @4 : UInt32;
 		}
