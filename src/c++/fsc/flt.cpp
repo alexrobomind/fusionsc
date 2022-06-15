@@ -98,18 +98,54 @@ struct TraceCalculation {
 		return round;
 	}
 	
-	Round& setupRound() {
-		if(rounds.size() == 0) {
-			return setupInitialRound();
-		}
-		KJ_UNIMPLEMENTED("Multiple rounds not supported");
-	}
-	
 	Promise<void> startRound(Round& r) {
 		CupnpMessage<cu::FLTKernelData> kernelData(r.kernelData);
-		CupnpMessage<cu::FLTKernelRequest> (r.kernelRequest);
+		CupnpMessage<cu::FLTKernelRequest> kernelRequest(r.kernelRequest);
 		
-		return READY_NOW;
+		return FSC_LAUNCH_KERNEL(
+			fltKernel, device,
+			r.kernelData.getData().size(),
+			
+			kernelData, FSC_KARG(deviceField, IN), kernelRequest
+		).then([this]() {
+			return hostMemSynchronize(device);
+		});
+	}
+	
+	bool isFinished(FLTKernelData::Entry::Reader entry) {
+		auto stopReason = entry.getStopReason();
+		
+		if(stopReason == FLTStopReason::UNKNOWN) {
+			KJ_FAIL_REQUIRE("Kernel stopped for unknown reason");
+		}
+		
+		if(stopReason == FLTStopReason::EVENT_BUFFER_FULL)
+			return false;
+		
+		if(stopReason == FLTStopReason::STEP_LIMIT && entry.getState().getNumSteps() < request.getStepLimit())
+			return false;
+		
+		return true;
+	}
+	
+	bool isFinished(Round& r) {
+		for(auto kDatum : r.kernelData.getData()) {
+			if(!isFinished(kDatum))
+				return false;
+		}
+		
+		return true;
+	}
+	
+	Promise<void> run() {
+		auto& round1 = setupInitialRound();
+		Promise<void> calculation = startRound(round1);
+		
+		//TODO: Followup rounds
+		
+		return calculation.then([&]() {
+			KJ_REQUIRE(isFinished(round1), "FLT can not handle multi-round launches yet");
+		});
 	}
 };
 

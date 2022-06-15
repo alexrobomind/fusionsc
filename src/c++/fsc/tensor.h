@@ -329,7 +329,9 @@ void readTensor(T2 reader, Tensor<T, rank, options, Index>& out) {
 	}
 	
 	auto data = reader.getData();
+	
 	KJ_REQUIRE(out.size() == data.size());
+	
 	auto dataOut = out.data();
 	for(size_t i = 0; i < out.size(); ++i)
 		dataOut[i] = (T) data[i];
@@ -359,15 +361,19 @@ Own<TensorMap<T>> mapTensor(Reader reader) {
 	KJ_REQUIRE(shape.size() == rank);
 	
 	Dims dims;
+	size_t size = 1;
 	for(int i = 0; i < rank; ++i) {
 		if(options & Eigen::RowMajor) {
 			dims[i] = shape[i];
 		} else {
 			dims[i] = shape[rank - i - 1];
 		}
+		size *= dims[i];
 	}
 	
 	auto data = reader.getData();
+	
+	KJ_REQUIRE(size == data.size);
 		
 	// Fast path for little-endian CPUs
 	#ifdef FSC_WIRE_MATCHES_NATIVE
@@ -390,6 +396,7 @@ void writeTensor(const Tensor<T, rank, options, Index>& in, T2 builder) {
 		auto shape = builder.initShape(rank);
 	
 		auto dims = in.dimensions();
+		size_t size = 1;
 		for(size_t i = 0; i < rank; ++i) {
 			if(options & Eigen::RowMajor) {
 				shape.set(i, dims[i]);
@@ -401,6 +408,9 @@ void writeTensor(const Tensor<T, rank, options, Index>& in, T2 builder) {
 	
 	auto dataOut = builder.initData(in.size());
 	auto data = in.data();
+	
+	KJ_REQUIRE(in.size() == data.size());
+	
 	for(size_t i = 0; i < in.size(); ++i)
 		dataOut.set(i, data[i]);
 }
