@@ -13,8 +13,8 @@ private:
 	static constexpr size_t wrap_slices = 1; // Number of phi-entries added by wrapping
 
 	template<typename In>
-	static auto wrap_phi(In& input) {
-		TensorRef<Tensor<Num, 3>> wrappedInput = input;
+	static auto wrap_phi(const In& input) {
+		TensorRef<Tensor<const Num, 3>> wrappedInput = input.template cast<const Num>();
 		size_t nr = wrappedInput.dimensions()[0];
 		size_t nz = wrappedInput.dimensions()[1];
 
@@ -50,7 +50,7 @@ public:
 		size_t mtor, Num r_min, Num r_max, Num z_min, Num z_max, const Data& ndata
 	) :
 		mtor(mtor), r_min(r_min), r_max(r_max), z_min(z_min), z_max(z_max),
-		data(wrap_phi(ndata)), dimensions(TensorRef<Tensor<Num, 3>>(data).dimensions())
+		data(wrap_phi(ndata)), dimensions(TensorRef<Tensor<const Num, 3>>(data.template cast<const Num>()).dimensions())
 	{}
 
 	Num eval_phizr(Num phi, Num z, Num r) {
@@ -138,30 +138,34 @@ ToroidalInterpolator<Num, Data> interpolateToroidal(size_t mtor, Num r_min, Num 
 
 template<typename Num, typename Expr, bool normalize>
 struct SlabCoordinateField {
-	Expr expr;
+	using ChippedExpr = decltype(kj::instance<Expr>().chip(0, 0));
 	
-	size_t mtor;
+	/*size_t mtor;
 
 	Num r_min;
 	Num r_max;
 	Num z_min;
-	Num z_max;
+	Num z_max;*/
+	
+	ToroidalInterpolator<Num, ChippedExpr> Bphi;
+	ToroidalInterpolator<Num, ChippedExpr> Bz;
+	ToroidalInterpolator<Num, ChippedExpr> Br;
 
 	SlabCoordinateField(
 		size_t mtor, Num r_min, Num r_max, Num z_min, Num z_max,
 		Expr& expr
 	):
-		expr(expr), mtor(mtor), r_min(r_min), r_max(r_max), z_min(z_min), z_max(z_max)
+		// mtor(mtor), r_min(r_min), r_max(r_max), z_min(z_min), z_max(z_max),
+		
+		Bphi(mtor, r_min, r_max, z_min, z_max, expr.chip(0, 0)),
+		Bz(mtor, r_min, r_max, z_min, z_max, expr.chip(0, 1)),
+		Br(mtor, r_min, r_max, z_min, z_max, expr.chip(0, 2))
 	{}
 
 	// Returns the magnetic field (optionally normalized) at a given phi, r, z position in cartesian components
 	Vec3<Num> eval_phizr(Num phi, Num z, Num r) {
 		using std::sin;
 		using std::cos;
-		
-		auto Bphi = interpolateToroidal(mtor, r_min, r_max, z_min, z_max, expr.chip(0, 0));
-		auto Bz =   interpolateToroidal(mtor, r_min, r_max, z_min, z_max, expr.chip(0, 1));
-		auto Br =   interpolateToroidal(mtor, r_min, r_max, z_min, z_max, expr.chip(0, 2));
 
 		Num Bval_r   = Br  .eval_phizr(phi, z, r);
 		Num Bval_z   = Bz  .eval_phizr(phi, z, r);

@@ -29,18 +29,7 @@ struct TraceCalculation {
 	
 	template<typename T>
 	using MappedMessage = MapToDevice<CupnpMessage<T>, Device>;
-	
-	TraceCalculation(Temporary<FLTKernelRequest>&& newRequest, Tensor< newFieldData) :
-		request(mv(newRequest)),
-		mappedRequest(request),
-		fieldData(mv(newFieldData)),
-		mappedFieldData(fieldData)
-	{
-		mappedRequest.copyToDevice();
-		mappedFieldData.copyToDevice();
-	}
 		
-	
 	struct Round {
 		Temporary<FLTKernelData> kernelData;
 		Temporary<FLTKernelRequest> kernelRequest;
@@ -49,6 +38,27 @@ struct TraceCalculation {
 		
 		size_t upperBound;
 	};
+	
+	Device& device;
+	Tensor<double, 2> positions;
+	
+	Own<TensorMap<Tensor<const double, 4>>> field;
+	MapToDevice<TensorMap<Tensor<const double, 4>>, Device> deviceField;
+	
+	Temporary<FLTKernelRequest> request;
+	kj::Vector<Round> rounds;
+	
+	TraceCalculation(Device& device, Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<Tensor<const double, 4>>> newField, Tensor<double, 2> positions) :
+		device(device),
+		positions(mv(positions)),
+		
+		field(mv(newField)),
+		deviceField(mapToDevice(*field, device)),
+		
+		request(mv(newRequest))
+	{
+		deviceField.updateDevice();
+	}
 	
 	// Prepares the memory structure for a round
 	Round& prepareRound(size_t nParticipants) {
@@ -95,15 +105,12 @@ struct TraceCalculation {
 		KJ_UNIMPLEMENTED("Multiple rounds not supported");
 	}
 	
-	Tensor<double, 2> positions;
-	
-	LocalDataRef<Float64Tensor> fieldData;
-	Maybe<
-	MappedMessage<cu::Float64Tensor> mappedFieldData;
-	
-	Temporary<FLTKernelRequest> request;
-	
-	kj::Vector<Round> rounds;
+	Promise<void> startRound(Round& r) {
+		CupnpMessage<cu::FLTKernelData> kernelData(r.kernelData);
+		CupnpMessage<cu::FLTKernelRequest> (r.kernelRequest);
+		
+		return READY_NOW;
+	}
 };
 
 template<typename Device>
@@ -125,15 +132,18 @@ namespace fsc {
 	void calc(Eigen::DefaultDevice& d) {
 		capnp::MallocMessageBuilder mb;
 		CupnpMessage<cu::FLTKernelData> kernelData(mb);
-		CupnpMessage<cu::Float32Tensor> f32tensor(mb);
+		Tensor<double, 4> field(3, 1, 1, 1);
 		CupnpMessage<cu::FLTKernelRequest> kernelRequest(mb);
 		auto calculation = FSC_LAUNCH_KERNEL(
 			fltKernel,
 			
 			d, 3,
 			
-			kernelData, f32tensor, kernelRequest
+			kernelData, field, kernelRequest
 		);
+		
+		Temporary<Float64Tensor> testTensor;
+		mapTensor<const Tensor<double, 3>>(testTensor.asReader());
 	}
 	
 	FLT::Client newCpuTracer() {

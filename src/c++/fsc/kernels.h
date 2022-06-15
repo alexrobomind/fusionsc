@@ -99,11 +99,13 @@ namespace fsc {
 	//! Class for allocating an array on a device and manage a host and device pointer simultaneously
 	template<typename T, typename Device>
 	struct MappedData {
+		using NonConst = kj::RemoveConst<T>;
+		
 		//! This helps us prevent our program from crashing. See inside ~MappedData
 		kj::UnwindDetector unwindDetector;
 		Device& device;
 		T* hostPtr;
-		T* devicePtr;
+		NonConst* devicePtr;
 		size_t size;
 		
 		//! Construct a mapping using the given host- and device-pointers
@@ -111,7 +113,7 @@ namespace fsc {
 		 * \warning Takes over ownership of the device pointer. The device pointer must
 		 *          be compatible with Device::deallocate().
 		 */
-		MappedData(Device& device, T* hostPtr, T* devicePtr, size_t size);
+		MappedData(Device& device, T* hostPtr, NonConst* devicePtr, size_t size);
 		
 		//! Allocate storage on the device to hold data specified by hostPtr (sizeof(T) * size)
 		MappedData(Device& device, T* hostPtr, size_t size);
@@ -137,7 +139,7 @@ namespace fsc {
 		void updateDevice();
 		
 		//! Allocates size * sizeof(T) bytes on the device
-		static T* deviceAlloc(Device& device, size_t size);
+		static NonConst* deviceAlloc(Device& device, size_t size);
 	};
 	
 	//! Helper class template that maps a value to a target device.
@@ -589,7 +591,7 @@ struct KernelLauncher<Eigen::GpuDevice> {
 // MappedData
 	
 template<typename T, typename Device>
-MappedData<T, Device>::MappedData(Device& device, T* hostPtr, T* devicePtr, size_t size) :
+MappedData<T, Device>::MappedData(Device& device, T* hostPtr, NonConst* devicePtr, size_t size) :
 	device(device),
 	hostPtr(hostPtr),
 	devicePtr(devicePtr),
@@ -651,7 +653,11 @@ MappedData<T, Device>::~MappedData() {
 
 template<typename T, typename Device>
 void MappedData<T, Device>::updateHost() {
-	device.memcpyDeviceToHost(hostPtr, devicePtr, size * sizeof(T));
+	KJ_REQUIRE(!kj::isConst<T>(), "Can not update host on a const type") {
+		return;
+	}
+	
+	device.memcpyDeviceToHost(const_cast<NonConst*>(hostPtr), devicePtr, size * sizeof(T));
 }
 
 template<typename T, typename Device>
@@ -660,8 +666,8 @@ void MappedData<T, Device>::updateDevice() {
 }
 
 template<typename T, typename Device>
-T* MappedData<T, Device>::deviceAlloc(Device& device, size_t size) {
-	return (T*) device.allocate(size * sizeof(T));
+RemoveConst<T>* MappedData<T, Device>::deviceAlloc(Device& device, size_t size) {
+	return (NonConst*) device.allocate(size * sizeof(T));
 }
 
 // Mapper specializations

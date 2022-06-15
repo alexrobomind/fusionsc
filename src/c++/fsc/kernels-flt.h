@@ -67,7 +67,7 @@ namespace fsc {
 	EIGEN_DEVICE_FUNC void fltKernel(
 		unsigned int idx,
 		fsc::cu::FLTKernelData kernelData,
-		const fsc::cu::Float64Tensor fieldData,
+		TensorMap<Tensor<double, 4>> fieldData,
 		const fsc::cu::FLTKernelRequest request
 	) {
 		using Num = double;
@@ -88,11 +88,8 @@ namespace fsc {
 		Num distance = state.getDistance();
 		
 		// Set up the magnetic field
-		Num* tensorData = (double*) fieldData.getData().data();
 		auto grid = request.getGrid();
-		
-		TensorMap<Tensor<Num, 4>> tField(tensorData, (int64_t) 3, (int64_t) grid.getNPhi(), (int64_t) grid.getNZ(), (int64_t) grid.getNR());
-		auto field = slabCoordinateField<true, Num>(grid.getNSym(), grid.getRMin(), grid.getRMax(), grid.getZMin(), grid.getZMax(), tField); // The boolean parameter forces normalization
+		auto field = slabCoordinateField<true, Num>(grid.getNSym(), grid.getRMin(), grid.getRMax(), grid.getZMin(), grid.getZMax(), fieldData); // The boolean parameter forces normalization
 		auto fieldWithT = [&field](V3 x, Num t) { return field(x); };
 		
 		// The kernel terminates its execution with this macro

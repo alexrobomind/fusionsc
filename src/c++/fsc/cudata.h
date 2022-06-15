@@ -89,7 +89,7 @@ struct CupnpMessage {
 	{}
 	
 	CupnpMessage(kj::ArrayPtr<const capnp::word> flatData) :
-		CupnpMessage(extractSegmentTable(flatData))
+		CupnpMessage(internal::extractSegmentTable(flatData))
 	{}
 	
 	template<typename T2>
