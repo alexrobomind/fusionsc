@@ -2,6 +2,7 @@
 
 using Magnetics = import "magnetics.capnp";
 using Geometry = import "geometry.capnp";
+using FLT = import "flt.capnp";
 
 struct RootConfig {
 }
@@ -18,4 +19,5 @@ interface ResolverChain extends(Magnetics.FieldResolver, Geometry.GeometryResolv
 interface RootService {
 	newFieldCalculator @0 (grid : Magnetics.ToroidalGrid, preferredDeviceType : WorkerType = gpu) -> (calculator : Magnetics.FieldCalculator, deviceType : WorkerType);
 	newGeometryLib     @1 () -> (service    : Geometry.GeometryLib);
+	newTracer          @2 () -> (service    : FLT.FLT);
 }

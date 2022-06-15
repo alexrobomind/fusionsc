@@ -1,6 +1,7 @@
 #include "services.h"
 #include "magnetics.h"
 #include "kernels.h"
+#include "flt.h"
 
 #include <kj/list.h>
 
@@ -40,6 +41,11 @@ struct RootServer : public RootService::Server {
 		results.setCalculator(kj::get<0>(selectResult));
 		results.setDeviceType(kj::get<1>(selectResult));
 		
+		return READY_NOW;
+	}
+	
+	Promise<void> newTracer(NewTracerContext context) {
+		context.initResults().setService(newCpuTracer());
 		return READY_NOW;
 	}
 	

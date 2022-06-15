@@ -1,6 +1,7 @@
 #include "kernels-flt.h"
 #include "cudata.h"
 #include "kernels.h"
+#include "flt.h"
 
 #include <kj/vector.h>
 
