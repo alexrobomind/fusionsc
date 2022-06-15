@@ -22,20 +22,35 @@ void validateField(ToroidalGrid::Reader grid, Float64Tensor::Reader data) {
 	KJ_REQUIRE(data.getData().size() == shape[0] * shape[1] * shape[2] * shape[3]);	
 }
 
-struct KernelScheduler {
+template<typename Device>
+struct TraceCalculation {
 	constexpr static size_t STEPS_PER_ROUND = 1000;
 	constexpr static size_t EVENTBUF_SIZE = 20;
+	
+	template<typename T>
+	using MappedMessage = MapToDevice<CupnpMessage<T>, Device>;
+	
+	TraceCalculation(Temporary<FLTKernelRequest>&& newRequest, Tensor< newFieldData) :
+		request(mv(newRequest)),
+		mappedRequest(request),
+		fieldData(mv(newFieldData)),
+		mappedFieldData(fieldData)
+	{
+		mappedRequest.copyToDevice();
+		mappedFieldData.copyToDevice();
+	}
+		
 	
 	struct Round {
 		Temporary<FLTKernelData> kernelData;
 		Temporary<FLTKernelRequest> kernelRequest;
 		
-		Promise<void> whenDone = kj::READY_NOW;
 		kj::Vector<size_t> participants;
 		
 		size_t upperBound;
 	};
 	
+	// Prepares the memory structure for a round
 	Round& prepareRound(size_t nParticipants) {
 		Round round;
 		
@@ -51,7 +66,7 @@ struct KernelScheduler {
 		return rounds.add(mv(round));
 	}
 	
-	Round& setupInitialRound(FLTKernelRequest::Reader requestTemplate, const TensorMap<Tensor<double, 2>> positions) {
+	Round& setupInitialRound() {
 		KJ_REQUIRE(positions.dimension(0) == 3);
 		
 		const size_t nParticipants = positions.dimension(1);
@@ -69,15 +84,24 @@ struct KernelScheduler {
 			
 			state.setPhi0(std::atan2(pos[1], pos[0]));
 		}
+		
+		return round;
 	}
 	
 	Round& setupRound() {
 		if(rounds.size() == 0) {
+			return setupInitialRound();
 		}
+		KJ_UNIMPLEMENTED("Multiple rounds not supported");
 	}
 	
-	FLTKernelRequest::Reader request;
 	Tensor<double, 2> positions;
+	
+	LocalDataRef<Float64Tensor> fieldData;
+	Maybe<
+	MappedMessage<cu::Float64Tensor> mappedFieldData;
+	
+	Temporary<FLTKernelRequest> request;
 	
 	kj::Vector<Round> rounds;
 };
@@ -89,9 +113,11 @@ struct FLTImpl : public FLT::Server {
 	FLTImpl(Own<Device> device) : device(mv(device)) {}
 	
 	Promise<void> trace(TraceContext ctx) override {
-		KJ_UNIMPLEMENTED("Impl not ready");
+		return READY_NOW;
 	}
 };
+
+template struct TraceCalculation<Eigen::ThreadPoolDevice>;
 	
 }
 

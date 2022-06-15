@@ -67,10 +67,10 @@ namespace fsc {
 	EIGEN_DEVICE_FUNC void fltKernel(
 		unsigned int idx,
 		fsc::cu::FLTKernelData kernelData,
-		const fsc::cu::Float32Tensor fieldData,
+		const fsc::cu::Float64Tensor fieldData,
 		const fsc::cu::FLTKernelRequest request
 	) {
-		using Num = float;
+		using Num = double;
 		using V3 = Vec3<Num>;
 		
 		// Extract local scratch space
@@ -88,7 +88,7 @@ namespace fsc {
 		Num distance = state.getDistance();
 		
 		// Set up the magnetic field
-		Num* tensorData = (float*) fieldData.getData().data();
+		Num* tensorData = (double*) fieldData.getData().data();
 		auto grid = request.getGrid();
 		
 		TensorMap<Tensor<Num, 4>> tField(tensorData, (int64_t) 3, (int64_t) grid.getNPhi(), (int64_t) grid.getNZ(), (int64_t) grid.getNR());
@@ -144,7 +144,7 @@ namespace fsc {
 				FSC_FLT_RETURN(OUT_OF_GRID);
 			
 			V3 x2 = x;
-			kmath::runge_kutta_4_step(x2, .0f, request.getStepSize(), fieldWithT);
+			kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), fieldWithT);
 						
 			// --- Check for phi crossings ---
 			

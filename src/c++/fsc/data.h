@@ -396,9 +396,10 @@ struct Temporary : public T::Builder {
 	{}
 	
 	Temporary(Temporary<T>&&) = default;
+	Temporary<T>& operator=(Temporary<T>&& other) = default;
 	
 	Temporary<T>& operator=(typename T::Reader other) {
-		capnp::toAny(*this).setAs(other);
+		return (*this) = Temporary<T>(other);
 	}
 	
 	typename T::Builder asBuilder() { return *this; }

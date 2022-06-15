@@ -4,6 +4,8 @@
 #include "kernels.h"
 #include "data.h"
 
+#include <capnp/serialize.h>
+
 namespace fsc {
 	
 namespace internal {
@@ -26,6 +28,23 @@ kj::Array<kj::ArrayPtr<capnp::word>> coerceSegmentTableToNonConst(T table) {
 	}
 	
 	return outputTable;
+}
+
+kj::Array<kj::ArrayPtr<const capnp::word>> extractSegmentTable(kj::ArrayPtr<const capnp::word> flatArray) {
+	capnp::FlatArrayMessageReader reader(flatArray);
+	
+	kj::Vector<ArrayPtr<const capnp::word>> segments;
+	
+	size_t iSegment = 0;
+	while(true) {
+		auto segment = reader.getSegment(iSegment++);
+		if(segment == nullptr)
+			break;
+		
+		segments.add(segment);
+	}
+	
+	return segments.releaseAsArray();
 }
 
 }
@@ -60,8 +79,22 @@ struct CupnpMessage {
 		segmentTable = internal::coerceSegmentTableToNonConst(segments.releaseAsArray());
 	}
 	
+	template<typename T2>
+	CupnpMessage(Temporary<T2>& t) :
+		CupnpMessage(*(t.holder))
+	{}
+	
 	CupnpMessage(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> segments) :
 		segmentTable(internal::coerceSegmentTableToNonConst(segments))
+	{}
+	
+	CupnpMessage(kj::ArrayPtr<const capnp::word> flatData) :
+		CupnpMessage(extractSegmentTable(flatData))
+	{}
+	
+	template<typename T2>
+	CupnpMessage(LocalDataRef<T2>& srcData) :
+		CupnpMessage(bytesToWords(srcData.getRaw()))
 	{}
 };
 

@@ -19,4 +19,9 @@ TEST_CASE("flt") {
 	
 	auto req = createRoot(lt, config).newTracerRequest();
 	auto flt = req.send().getService();
+	
+	SECTION("basic-trace") {
+		auto traceReq = flt.traceRequest();
+		auto promise = traceReq.send().wait(ws);
+	}
 }

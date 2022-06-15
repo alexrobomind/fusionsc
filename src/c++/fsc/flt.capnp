@@ -6,18 +6,21 @@ $Cxx.namespace("fsc");
 using Magnetics = import "magnetics.capnp";
 using Data = import "data.capnp";
 
+
+# ============================== Service interface ===================================
+
 struct FLTRequest {
 	# Tensor of shape [3, ...] indicating tracing start points
-	startPoints @0 : Data.Float32Tensor;
+	startPoints @0 : Data.Float64Tensor;
 	field @1 : Data.DataRef(Magnetics.ComputedField);
 	
-	poincarePlanes @2 : List(Float32);
+	poincarePlanes @2 : List(Float64);
 	
 	turnLimit @3 : UInt32;
-	distanceLimit @4 : Float32;
+	distanceLimit @4 : Float64;
 	stepLimit @5 : UInt32;
 	
-	stepSize @6 : Float32;
+	stepSize @6 : Float64;
 }
 
 struct FLTResponse {
@@ -32,6 +35,9 @@ interface FLT {
 	trace @0 FLTRequest -> FLTResponse;
 }
 
+
+# ============================== Kernel interface ===================================
+
 # The following structures are internal and not intended to be used in network protocols
 # They might change in incompatible versions throughout the library
 
@@ -45,18 +51,18 @@ enum FLTStopReason {
 }
 
 struct FLTKernelState {
-	position @0 : List(Float32);
+	position @0 : List(Float64);
 	numSteps @1 : UInt32;
-	distance @2 : Float32;
+	distance @2 : Float64;
 	turnCount @3 : UInt32;
-	phi0 @4 : Float32;
+	phi0 @4 : Float64;
 	eventCount @5 : UInt32;
 }
 
 struct FLTKernelEvent {
-	location @0 : List(Float32);
+	location @0 : List(Float64);
 	step @1 : UInt32;
-	distance @2 : Float32;
+	distance @2 : Float64;
 
 	union {
 		notSet @3 : Void;
@@ -78,13 +84,13 @@ struct FLTKernelData {
 }
 
 struct FLTKernelRequest {
-	phiPlanes @0 : List(Float32);
+	phiPlanes @0 : List(Float64);
 	
 	turnLimit @1 : UInt32;
-	distanceLimit @2 : Float32;
+	distanceLimit @2 : Float64;
 	stepLimit @3 : UInt32;
 	
-	stepSize @4 : Float32;
+	stepSize @4 : Float64;
 	
 	grid @5 : Magnetics.ToroidalGrid;
 }

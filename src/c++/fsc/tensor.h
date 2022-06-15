@@ -64,6 +64,12 @@ struct MapToDevice<Tensor<TVal, rank, options, Index>, Device>;
 
 template<typename TVal, typename Dims, int options, typename Index, typename Device>
 struct MapToDevice<TensorFixedSize<TVal, Dims, options, Index>, Device>;
+
+template<typename TVal, int rank, int options, typename Index, typename Device>
+struct MapToDevice<TensorMap<Tensor<TVal, rank, options, Index>>, Device>;
+
+template<typename TVal, typename Dims, int options, typename Index, typename Device>
+struct MapToDevice<TensorMap<TensorFixedSize<TVal, Dims, options, Index>>, Device>;
 	
 template<typename T, int rank, int options, typename Index, typename T2>
 void readTensor(T2 reader, Tensor<T, rank, options, Index>& out);
@@ -191,7 +197,47 @@ struct MapToDevice<TensorFixedSize<TVal, Dims, options, Index>, Device> : public
 	void updateHost() { _data.updateHost(); }
 	void updateDevice() { _data.updateDevice(); }
 	
-	TensorRef<Maps> get() { return TensorRef<Maps>(*this); }
+	TensorMap<Maps> get() { return TensorMap<Maps>(*this); }
+};
+
+
+template<typename TVal, int tRank, int tOpts, typename Index, typename Device>
+struct MapToDevice<TensorMap<Tensor<TVal, tRank, tOpts, Index>>, Device> : public TensorMap<Tensor<TVal, tRank, tOpts, Index>> {
+	using Maps = TensorMap<Tensor<TVal, tRank, tOpts, Index>>;
+
+	MappedData<TVal, Device> _data;
+
+	MapToDevice(Maps& target, Device& device) :
+		TensorMap<Tensor<TVal, tRank, tOpts, Index>>(
+			MappedData<TVal, Device>::deviceAlloc(device, target.size()),
+			target.dimensions()
+		),
+		_data(device, target.data() /* Host pointer */, this->data() /* Device pointer allocated above */, this->size() /* Same as target.size() */)
+	{};
+
+	void updateHost() { _data.updateHost(); }
+	void updateDevice() { _data.updateDevice(); }
+	
+	Maps get() { return TensorMap<Maps>(*this); }
+};
+
+template<typename TVal, typename Dims, int options, typename Index, typename Device>
+struct MapToDevice<TensorMap<TensorFixedSize<TVal, Dims, options, Index>>, Device> : public TensorMap<TensorFixedSize<TVal, Dims, options, Index>> {
+	using Maps = TensorMap<TensorFixedSize<TVal, Dims, options, Index>>;
+	
+	MappedData<TVal, Device> _data;
+
+	MapToDevice(Maps& target, Device& device) :
+		TensorMap<TensorFixedSize<TVal, Dims, options, Index>> (
+			MappedData<TVal, Device>::deviceAlloc(device, target.data(), target.size())
+		),
+		_data(target.data(), target.size())
+	{}
+
+	void updateHost() { _data.updateHost(); }
+	void updateDevice() { _data.updateDevice(); }
+	
+	Maps get() { return Maps(*this); }
 };
 
 template<typename T, int rank, int options, typename Index, typename T2>
