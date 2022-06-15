@@ -69,6 +69,7 @@ add_library(
 	magnetics.cpp
 	
 	flt.cpp
+	flt.h
 	
 	kernels-biotsavart.h
 	kernels-flt.h

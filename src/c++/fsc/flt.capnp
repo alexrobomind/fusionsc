@@ -6,6 +6,32 @@ $Cxx.namespace("fsc");
 using Magnetics = import "magnetics.capnp";
 using Data = import "data.capnp";
 
+struct FLTRequest {
+	# Tensor of shape [3, ...] indicating tracing start points
+	startPoints @0 : Data.Float32Tensor;
+	field @1 : Data.DataRef(Magnetics.ComputedField);
+	
+	poincarePlanes @2 : List(Float32);
+	
+	turnLimit @3 : UInt32;
+	distanceLimit @4 : Float32;
+	stepLimit @5 : UInt32;
+	
+	stepSize @6 : Float32;
+}
+
+struct FLTResponse {
+	# Maximum number of toroidal turns traversed by the fieldline
+	nTurns @0 : UInt32;
+	
+	# Tensor of shape [3] + startPoints.shape[1:] + [len(poincarePlanes), nTurns]
+	poincareHits @1 : Data.Float32Tensor;
+}
+
+interface FLT {
+	trace @0 FLTRequest -> FLTResponse;
+}
+
 # The following structures are internal and not intended to be used in network protocols
 # They might change in incompatible versions throughout the library
 

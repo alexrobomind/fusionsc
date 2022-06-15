@@ -1,5 +1,8 @@
 #include "kernels-flt.h"
 #include "cudata.h"
+#include "kernels.h"
+
+#include <kj/vector.h>
 
 #include <fsc/flt.capnp.cu.h>
 
@@ -26,8 +29,8 @@ struct KernelScheduler {
 		Temporary<FLTKernelData> kernelData;
 		Temporary<FLTKernelRequest> kernelRequest;
 		
-		Promise<void> whenDone;
-		Vector<size_t> participants;
+		Promise<void> whenDone = kj::READY_NOW;
+		kj::Vector<size_t> participants;
 		
 		size_t upperBound;
 	};
@@ -40,14 +43,14 @@ struct KernelScheduler {
 			data[i].initState();
 			auto events = data[i].initEvents(EVENTBUF_SIZE);
 			
-			for(event : events)
+			for(auto event : events)
 				event.initLocation(3);
 		}
 		
 		return rounds.add(mv(round));
 	}
 	
-	Round& prepareInitialRound(FLTKernelRequest::Reader requestTemplate, const TensorMap<Tensor<double, 2>> positions) {
+	Round& setupInitialRound(FLTKernelRequest::Reader requestTemplate, const TensorMap<Tensor<double, 2>> positions) {
 		KJ_REQUIRE(positions.dimension(0) == 3);
 		
 		const size_t nParticipants = positions.dimension(1);
@@ -57,17 +60,36 @@ struct KernelScheduler {
 		
 		auto data = round.kernelData.getData();
 		for(size_t i = 0; i < nParticipants; ++i) {
-			auto state = data[i];
+			auto state = data[i].initState();
 			
 			auto pos = state.initPosition(3);
 			for(unsigned char iDim = 0; iDim < 3; ++iDim)
-				pos[iDim] = positions(iDim, i);
+				pos.set(iDim, positions(iDim, i));
 			
 			state.setPhi0(std::atan2(pos[1], pos[0]));
 		}
 	}
 	
+	Round& setupRound() {
+		if(rounds.size() == 0) {
+		}
+	}
+	
+	FLTKernelRequest::Reader request;
+	Tensor<double, 2> positions;
+	
 	kj::Vector<Round> rounds;
+};
+
+template<typename Device>
+struct FLTImpl : public FLT::Server {
+	Own<Device> device;
+	
+	FLTImpl(Own<Device> device) : device(mv(device)) {}
+	
+	Promise<void> trace(TraceContext ctx) override {
+		KJ_UNIMPLEMENTED("Impl not ready");
+	}
 };
 	
 }
@@ -85,5 +107,9 @@ namespace fsc {
 			
 			kernelData, f32tensor, kernelRequest
 		);
+	}
+	
+	FLT::Client newCpuTracer() {
+		return kj::heap<FLTImpl<Eigen::ThreadPoolDevice>>(newThreadPoolDevice());
 	}
 }
