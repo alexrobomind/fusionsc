@@ -345,8 +345,8 @@ T readTensor(T2 reader) {
 }
 
 template<typename T, typename Reader>
-Own<TensorMap<T>> mapTensor(Reader reader) {
-	using MapType    = TensorMap<T>;
+Own<TensorMap<const T>> mapTensor(Reader reader) {
+	using MapType    = TensorMap<const T>;
 	
 	using Dims = typename T::Dimensions;
 	using Num  = typename T::Scalar;
@@ -354,7 +354,6 @@ Own<TensorMap<T>> mapTensor(Reader reader) {
 	constexpr int rank = T::NumIndices;
 	constexpr int options = T::Options;
 	
-	static_assert(kj::isConst<T>(), "Can only produce const tensors");
 	static_assert(kj::isSameType<Num, decltype(reader.getData()[0])>(), "Tensor value types must match");
 	
 	auto shape = reader.getShape();
@@ -373,7 +372,7 @@ Own<TensorMap<T>> mapTensor(Reader reader) {
 	
 	auto data = reader.getData();
 	
-	KJ_REQUIRE(size == data.size);
+	KJ_REQUIRE(size == data.size());
 		
 	// Fast path for little-endian CPUs
 	#ifdef FSC_WIRE_MATCHES_NATIVE
@@ -409,7 +408,7 @@ void writeTensor(const Tensor<T, rank, options, Index>& in, T2 builder) {
 	auto dataOut = builder.initData(in.size());
 	auto data = in.data();
 	
-	KJ_REQUIRE(in.size() == data.size());
+	KJ_REQUIRE(in.size() == dataOut.size());
 	
 	for(size_t i = 0; i < in.size(); ++i)
 		dataOut.set(i, data[i]);

@@ -74,13 +74,13 @@ Promise<void> synchronizeGpuDevice(Eigen::GpuDevice& device) {
 	
 	// POTENTIALLY UNSAFE
 	// Note: We REALLY trust that the callback will always be called, otherwise this is a memory leak
-	auto fulfiller = new Own<kj::CrossThreadPromiseFulfiller<void>>(); // delete in internal::gpuSynchCallback
+	auto fulfiller = new Own<kj::CrossThreadPromiseFulfiller<void>>(); // delete in gpuSynchCallback
 	*fulfiller = mv(paf.fulfiller);
 	
 	# ifdef FSC_WITH_HIP
-	auto result = hipStreamAddCallback (device.stream(), internal::gpuSynchCallback, (void*) fulfiller, 0);
+	auto result = hipStreamAddCallback (device.stream(), gpuSynchCallback, (void*) fulfiller, 0);
 	# else
-	auto result = cudaStreamAddCallback(device.stream(), internal::gpuSynchCallback, (void*) fulfiller, 0);
+	auto result = cudaStreamAddCallback(device.stream(), gpuSynchCallback, (void*) fulfiller, 0);
 	# endif
 
 	// If the operation failed, we can't trust the callback to be called

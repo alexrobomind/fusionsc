@@ -42,13 +42,13 @@ struct TraceCalculation {
 	Device& device;
 	Tensor<double, 2> positions;
 	
-	Own<TensorMap<Tensor<const double, 4>>> field;
-	MapToDevice<TensorMap<Tensor<const double, 4>>, Device> deviceField;
+	Own<TensorMap<const Tensor<double, 4>>> field;
+	MapToDevice<TensorMap<const Tensor<double, 4>>, Device> deviceField;
 	
 	Temporary<FLTKernelRequest> request;
 	kj::Vector<Round> rounds;
 	
-	TraceCalculation(Device& device, Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<Tensor<const double, 4>>> newField, Tensor<double, 2> positions) :
+	TraceCalculation(Device& device, Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<const Tensor<double, 4>>> newField, Tensor<double, 2> positions) :
 		device(device),
 		positions(mv(positions)),
 		
@@ -152,11 +152,107 @@ struct TraceCalculation {
 template<typename Device>
 struct FLTImpl : public FLT::Server {
 	Own<Device> device;
+	LibraryThread lt;
 	
 	FLTImpl(Own<Device> device) : device(mv(device)) {}
 	
 	Promise<void> trace(TraceContext ctx) override {
-		return READY_NOW;
+		ctx.allowCancellation();
+		auto request = ctx.getParams();
+		
+		return lt->dataService().download(request.getField().getData())
+		.then([ctx, request, this](LocalDataRef<Float64Tensor> fieldData) mutable {
+			// Extract kernel request
+			Temporary<FLTKernelRequest> kernelRequest;
+			kernelRequest.setPhiPlanes(request.getPoincarePlanes());
+			kernelRequest.setTurnLimit(request.getTurnLimit());
+			kernelRequest.setDistanceLimit(request.getDistanceLimit());
+			kernelRequest.setStepLimit(request.getStepLimit());
+			kernelRequest.setStepSize(request.getStepSize());
+			kernelRequest.setGrid(request.getField().getGrid());
+			
+			// Extract field data
+			auto field = mapTensor<Tensor<double, 4>>(fieldData.get());
+			
+			// Extract positions
+			auto inStartPoints = request.getStartPoints();
+			auto startPointShape = inStartPoints.getShape();
+			KJ_REQUIRE(startPointShape.size() >= 2, "Start points must have at least 1 dimension");
+			KJ_REQUIRE(startPointShape[0] == 3, "First dimension of start points must have size 3");
+			
+			size_t nStartPoints = 1;
+			for(size_t i = 1; i < startPointShape.size(); ++i)
+				nStartPoints *= startPointShape[i];
+			
+			Temporary<Float64Tensor> reshapedStartPoints;
+			reshapedStartPoints.setData(inStartPoints.getData());
+			{
+				reshapedStartPoints.setShape({3, nStartPoints});
+				// shape[0] = 3; shape[1] = nStartPoints;
+			}			
+			
+			Tensor<double, 2> positions = mapTensor<Tensor<double, 2>>(reshapedStartPoints.asReader())
+				-> shuffle(Eigen::array<int, 2>{1, 0});
+			
+			auto calc = heapHeld<TraceCalculation<Device>>(
+				*device, mv(kernelRequest), mv(field), mv(positions)
+			);
+			
+			return calc->run()
+			.then([ctx, calc, request, startPointShape, nStartPoints]() mutable {
+				// Count maximum number of turns
+				KJ_REQUIRE(calc->rounds.size() == 1, "Only supports single-round execution");
+				
+				auto& round = calc->rounds[0];
+				size_t nTurns = 0;
+				
+				auto kData = round.kernelData.getData();
+				
+				// Single-round strategy
+				KJ_REQUIRE(kData.size() == nStartPoints, "Internal error");
+				
+				for(auto entry : kData) {
+					nTurns = std::max(nTurns, (size_t) entry.getState().getTurnCount());
+				}
+				
+				nTurns = std::min(nTurns, (size_t) request.getTurnLimit());
+				size_t nSurfs = request.getPoincarePlanes().size();
+				
+				Tensor<double, 4> pcCuts(nTurns, nStartPoints, nSurfs, 3);
+				for(size_t iStartPoint = 0; iStartPoint < nStartPoints; ++iStartPoint) {
+					auto entry = kData[iStartPoint];
+					auto state = entry.getState();
+					auto events = entry.getEvents();
+			
+					// DO NOT iterate over the whole event list
+					// There might be invalid events at the end that
+					// got rolled back
+					size_t nEvents = state.getEventCount();
+					KJ_REQUIRE(nEvents <= events.size(), "Internal error");
+					
+					size_t iTurn = 0;
+					
+					for(size_t iEvt = 0; iEvt < nEvents; ++iEvt) {
+						auto evt = events[iEvt];
+						
+						KJ_REQUIRE(!evt.isNotSet(), "Internal error");
+						
+						if(evt.isNewTurn()) {
+							iTurn = evt.getNewTurn();
+							KJ_DBG(iTurn);
+						} else if(evt.isPhiPlaneIntersection()) {
+							auto ppi = evt.getPhiPlaneIntersection();
+							KJ_DBG(ppi);
+							
+							auto loc = evt.getLocation();
+							for(size_t iDim = 0; iDim < 3; ++iDim) {
+								pcCuts(iTurn, iStartPoint, ppi.getPlaneNo(), iDim) = loc[iDim];
+							}
+						}
+					}
+				}
+			}).attach(calc.x());
+		}).attach(thisCap());
 	}
 };
 

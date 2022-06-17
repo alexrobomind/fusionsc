@@ -444,8 +444,8 @@ namespace fsc {
 	
 	#ifdef FSC_WITH_CUDA
 	
-	inline Promise<void> synchronizeGpuDevice(Eigen::GpuDevice& device);
-	inline void synchronizeGpuDeviceBlocking(Eigen::GpuDevice& device);
+	Promise<void> synchronizeGpuDevice(Eigen::GpuDevice& device);
+	void synchronizeGpuDeviceBlocking(Eigen::GpuDevice& device);
 	
 	/**
 	 * GPU devices schedule an asynch memcpy onto their stream. We therefore need to wait until the stream has advanced past it.
@@ -453,7 +453,7 @@ namespace fsc {
 	template<>
 	inline Promise<void> hostMemSynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& device) { return synchronizeGpuDevice(device); }
 	template<>
-	inline void hostMemSynchronizeBlocking<Eigen::GpuDevice>(Eigen::GpuDevice& dev) { synchronizeGpuDeviceBlocking(device); }
+	inline void hostMemSynchronizeBlocking<Eigen::GpuDevice>(Eigen::GpuDevice& device) { synchronizeGpuDeviceBlocking(device); }
 	
 	#endif
 	

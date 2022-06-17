@@ -12,7 +12,7 @@ using Data = import "data.capnp";
 struct FLTRequest {
 	# Tensor of shape [3, ...] indicating tracing start points
 	startPoints @0 : Data.Float64Tensor;
-	field @1 : Data.DataRef(Magnetics.ComputedField);
+	field @1 : Magnetics.ComputedField;
 	
 	poincarePlanes @2 : List(Float64);
 	
@@ -20,7 +20,7 @@ struct FLTRequest {
 	distanceLimit @4 : Float64;
 	stepLimit @5 : UInt32;
 	
-	stepSize @6 : Float64;
+	stepSize @6 : Float64 = 0.001;
 }
 
 struct FLTResponse {
