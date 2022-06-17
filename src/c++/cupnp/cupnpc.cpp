@@ -484,11 +484,11 @@ StringTree generateInterface(CodeGeneratorRequest::Reader request, uint64_t node
 		"	// Interface pointer that holds the capability table offset\n",
 		"	uint64_t ptrData;\n",
 		"	\n",
-		"	", name.flatten(), "(uint64_t structure, cupnp::Location data) : ptrData(structure) {\n",
+		"	inline ", name.flatten(), "(uint64_t structure, cupnp::Location data) : ptrData(structure) {\n",
 		"		cupnp::validateInterfacePointer(structure, data);\n",
 		"	}\n",
 		"	\n",
-		"	bool isDefault() { return ptrData == 0; }\n",
+		"	inline bool isDefault() { return ptrData == 0; }\n",
 		"	\n",
 		generateNested(request, nodeId, methodDefinitions),
 		"};\n\n"
@@ -541,12 +541,12 @@ StringTree generateMethod(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 	kj::StringPtr typeNameRef = fullTypeName.startsWith("typename ") ? fullTypeName.slice(9) : fullTypeName;
 	
 	StringTree methodDeclaration = strTree(
-		"	inline ", returnType.flatten(), " ", name.flatten(), ";\n"
+		"	inline CUPNP_FUNCTION ", returnType.flatten(), " ", name.flatten(), ";\n"
 	);
 	
 	StringTree methodDefinition = strTree(
 		generateAllTemplateHeaders(request, nodeId),
-		returnType.flatten(), " ", typeNameRef, "::", name.flatten(), " { \n",
+		"inline CUPNP_FUNCTION ", returnType.flatten(), " ", typeNameRef, "::", name.flatten(), " { \n",
 		mv(contents),
 		"} \n\n"
 	);
@@ -609,14 +609,14 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 		"	uint64_t structure;\n",
 		"	cupnp::Location data;\n",
 		"	\n",
-		"	inline ", name.flatten(), "(uint64_t structure, cupnp::Location data) :\n",
+		"	inline CUPNP_FUNCTION ", name.flatten(), "(uint64_t structure, cupnp::Location data) :\n",
 		"		structure(structure),\n",
 		"		data(data)\n",
 		"	{\n",
 		"		cupnp::validateStructPointer(structure, data);\n",
 		"	}\n",
 		"	\n",
-		"	inline bool isDefault() { return structure == 0; }\n",
+		"	inline CUPNP_FUNCTION bool isDefault() { return structure == 0; }\n",
 		"	\n"
 	);
 	

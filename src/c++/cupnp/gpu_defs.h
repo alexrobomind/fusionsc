@@ -19,6 +19,12 @@
 	# define CUPNP_FAIL_REQUIRE(...) KJ_FAIL_REQUIRE((__VA_ARGS__))
 # endif
 
+#ifdef CUPNP_GPUCC
+	#define CUPNP_FUNCTION __host__ __device__
+#else
+	#define CUPNP_FUNCTION
+#endif
+
 #include <cstdlib>
 
 namespace cupnp {

@@ -13,7 +13,7 @@ private:
 	static constexpr size_t wrap_slices = 1; // Number of phi-entries added by wrapping
 
 	template<typename In>
-	static auto wrap_phi(const In& input) {
+	static EIGEN_DEVICE_FUNC auto wrap_phi(const In& input) {
 		TensorRef<Tensor<const Num, 3>> wrappedInput = input.template cast<const Num>();
 		size_t nr = wrappedInput.dimensions()[0];
 		size_t nz = wrappedInput.dimensions()[1];
@@ -25,7 +25,7 @@ private:
 		return input.concatenate(phi_slice, 2);
 	}
 
-	Num reduce_angle(Num in) {
+	EIGEN_DEVICE_FUNC Num reduce_angle(Num in) {
 		const Num pi = 3.14159265358979323846;
 		const Num wrap = 2 * pi / mtor;
 
@@ -46,14 +46,14 @@ private:
 	Dims dimensions;
 	
 public:
-	ToroidalInterpolator(
+	EIGEN_DEVICE_FUNC ToroidalInterpolator(
 		size_t mtor, Num r_min, Num r_max, Num z_min, Num z_max, const Data& ndata
 	) :
 		mtor(mtor), r_min(r_min), r_max(r_max), z_min(z_min), z_max(z_max),
 		data(wrap_phi(ndata)), dimensions(TensorRef<Tensor<const Num, 3>>(data.template cast<const Num>()).dimensions())
 	{}
 
-	Num eval_phizr(Num phi, Num z, Num r) {
+	EIGEN_DEVICE_FUNC Num eval_phizr(Num phi, Num z, Num r) {		
 		// If we have a NAN input, return a NAN output
 		if(phi != phi || z != z || r != r)
 			return std::nan("");
@@ -69,13 +69,19 @@ public:
 		if(cr < 0 || cz < 0)
 			return std::nan("");
 
-		if(cphi < 0)
-			throw std::logic_error(
-				"Internal error: cphi (" + std::to_string(cphi) + ") < 0" +
-				", phi value is " + std::to_string(phi) +
-				", mtor is " + std::to_string(mtor) +
-				", reduced angle is " + std::to_string(reduce_angle(phi))
-			);
+		if(cphi < 0) {
+			#ifndef EIGEN_GPUCC
+				throw std::logic_error(
+					"Internal error: cphi (" + std::to_string(cphi) + ") < 0" +
+					", phi value is " + std::to_string(phi) +
+					", mtor is " + std::to_string(mtor) +
+					", reduced angle is " + std::to_string(reduce_angle(phi))
+				);
+			#else
+				return std::nan("");
+			#endif
+		}
+				
 
 		int64_t i_r = (int64_t) floor(cr);
 		int64_t i_z = (int64_t) floor(cz);
@@ -84,54 +90,59 @@ public:
 		if(i_r >= nr - 1 || i_z >= nz - 1)
 			return std::nan("");
 
-		if(i_phi >= nphi + wrap_slices - 1)
-			throw std::logic_error(
-				"Internal error: i_phi (" + std::to_string(i_phi) + ") exceeded grid maximum " + std::to_string(nphi + wrap_slices - 1) +
-				", phi value is " + std::to_string(phi) +
-				", cphi is " + std::to_string(cphi) +
-				", mtor is " + std::to_string(mtor) +
-				", reduced angle is " + std::to_string(reduce_angle(phi))
-			);
+		if(i_phi >= nphi + wrap_slices - 1) {
+			#ifndef EIGEN_GPUCC
+				throw std::logic_error(
+					"Internal error: i_phi (" + std::to_string(i_phi) + ") exceeded grid maximum " + std::to_string(nphi + wrap_slices - 1) +
+					", phi value is " + std::to_string(phi) +
+					", cphi is " + std::to_string(cphi) +
+					", mtor is " + std::to_string(mtor) +
+					", reduced angle is " + std::to_string(reduce_angle(phi))
+				);
+			#else
+				return std::nan("");
+			#endif
+		}
 
 		Num lr = cr - i_r;
 		Num lz = cz - i_z;
 		Num lphi = cphi - i_phi;
 		
 		const Dims pos(i_r, i_z, i_phi);
-		const Dims len(1, 1, 1);
+		const Dims len(2, 2, 2);
 
 		Tensor<Num, 3> slice = data.slice(pos, len);
 
 		return
-			(1 - lr) * (1 - lz) * (1 - lphi) * slice(0, 0, 0) + 
-			lr       * (1 - lz) * (1 - lphi) * slice(1, 0, 0) +
-			(1 - lr) * lz       * (1 - lphi) * slice(0, 1, 0) +
-			lr       * lz       * (1 - lphi) * slice(1, 1, 0) +
-			(1 - lr) * (1 - lz) * lphi       * slice(0, 0, 1) + 
-			lr       * (1 - lz) * lphi       * slice(1, 0, 1) +
-			(1 - lr) * lz       * lphi       * slice(0, 1, 1) +
-			lr       * lz       * lphi       * slice(1, 1, 1)
+			(1 - lr) * (1 - lz) * (1 - lphi) * slice.coeff(0, 0, 0) + 
+			lr       * (1 - lz) * (1 - lphi) * slice.coeff(1, 0, 0) +
+			(1 - lr) * lz       * (1 - lphi) * slice.coeff(0, 1, 0) +
+			lr       * lz       * (1 - lphi) * slice.coeff(1, 1, 0) +
+			(1 - lr) * (1 - lz) * lphi       * slice.coeff(0, 0, 1) + 
+			lr       * (1 - lz) * lphi       * slice.coeff(1, 0, 1) +
+			(1 - lr) * lz       * lphi       * slice.coeff(0, 1, 1) +
+			lr       * lz       * lphi       * slice.coeff(1, 1, 1)
 		;
 	}
 
-	Num eval_xyz(Num x, Num y, Num z) {
+	EIGEN_DEVICE_FUNC Num eval_xyz(Num x, Num y, Num z) {
 		Num r = std::sqrt(x*x + y*y);
 		Num phi = atan2(y, x);
 
 		return eval_phizr(phi, z, r);
 	}
 
-	Num eval_xyz(const std::array<Num, 3>& x) {
+	EIGEN_DEVICE_FUNC Num eval_xyz(const std::array<Num, 3>& x) {
 		return eval_xyz(x[0], x[1], x[2]);
 	}
 	
-	Num operator()(const Vec3<Num>& xyz) {
+	EIGEN_DEVICE_FUNC Num operator()(const Vec3<Num>& xyz) {
 		return eval_xyz(xyz[0], xyz[1], xyz[2]);
 	}
 };
 
 template<typename Num, typename Data>
-ToroidalInterpolator<Num, Data> interpolateToroidal(size_t mtor, Num r_min, Num r_max, Num z_min, Num z_max, const Data& data) {
+EIGEN_DEVICE_FUNC ToroidalInterpolator<Num, Data> interpolateToroidal(size_t mtor, Num r_min, Num r_max, Num z_min, Num z_max, const Data& data) {
 	return ToroidalInterpolator<Num, Data>(mtor, r_min, r_max, z_min, z_max, data);
 }
 
@@ -151,7 +162,7 @@ struct SlabCoordinateField {
 	ToroidalInterpolator<Num, ChippedExpr> Bz;
 	ToroidalInterpolator<Num, ChippedExpr> Br;
 
-	SlabCoordinateField(
+	EIGEN_DEVICE_FUNC SlabCoordinateField(
 		size_t mtor, Num r_min, Num r_max, Num z_min, Num z_max,
 		Expr& expr
 	):
@@ -163,7 +174,7 @@ struct SlabCoordinateField {
 	{}
 
 	// Returns the magnetic field (optionally normalized) at a given phi, r, z position in cartesian components
-	Vec3<Num> eval_phizr(Num phi, Num z, Num r) {
+	EIGEN_DEVICE_FUNC Vec3<Num> eval_phizr(Num phi, Num z, Num r) {
 		using std::sin;
 		using std::cos;
 
@@ -189,20 +200,20 @@ struct SlabCoordinateField {
 		};
 	}
 
-	Vec3<Num> eval_xyz(Num x, Num y, Num z) {
+	EIGEN_DEVICE_FUNC Vec3<Num> eval_xyz(Num x, Num y, Num z) {
 		Num r = std::sqrt(x*x + y*y);
 		Num phi = std::atan2(y, x);
 
 		return eval_phizr(phi, z, r);
 	}
 	
-	Vec3<Num> operator()(const Vec3<Num>& xyz) {
+	EIGEN_DEVICE_FUNC Vec3<Num> operator()(const Vec3<Num>& xyz) {
 		return eval_xyz(xyz[0], xyz[1], xyz[2]);
 	}
 };
 
 template<bool normalize, typename Num, typename Expr>
-SlabCoordinateField<Num, Expr, normalize> slabCoordinateField(
+EIGEN_DEVICE_FUNC SlabCoordinateField<Num, Expr, normalize> slabCoordinateField(
 	size_t mtor, Num r_min, Num r_max, Num z_min, Num z_max,
 	Expr& expr
 ) {

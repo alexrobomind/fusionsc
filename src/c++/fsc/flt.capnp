@@ -48,6 +48,7 @@ enum FLTStopReason {
 	turnLimit @3;
 	eventBufferFull @4;
 	outOfGrid @5;
+	nanEncountered @6;
 }
 
 struct FLTKernelState {

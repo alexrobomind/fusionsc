@@ -47,18 +47,26 @@ kj::Array<kj::ArrayPtr<const capnp::word>> extractSegmentTable(kj::ArrayPtr<cons
 	return segments.releaseAsArray();
 }
 
+kj::Array<cupnp::SegmentTable::Entry> buildSegmentTable(kj::ArrayPtr<kj::ArrayPtr<capnp::word>> input) {
+	auto result = kj::heapArrayBuilder<cupnp::SegmentTable::Entry>(input.size());
+	for(auto e : input)
+		result.add(e);
+	return result.finish();
+}
+
 }
 
 template<typename T>
 struct CupnpMessage {
-	kj::Array<kj::ArrayPtr<capnp::word>> segmentTable;
+	// kj::Array<kj::ArrayPtr<capnp::word>> segmentTable;
+	kj::Array<cupnp::SegmentTable::Entry> segmentTable;
 	
 	T root() {
 		return cupnp::messageRoot<T>(segmentTable[0], segmentTable);
 	}
 	
 	CupnpMessage(capnp::MessageBuilder& builder) :
-		segmentTable(internal::coerceSegmentTableToNonConst(builder.getSegmentsForOutput()))
+		segmentTable(internal::buildSegmentTable(internal::coerceSegmentTableToNonConst(builder.getSegmentsForOutput())))
 	{}
 	
 	CupnpMessage(capnp::MessageReader& reader)
@@ -76,7 +84,7 @@ struct CupnpMessage {
 			segments.add(segment);
 		}
 		
-		segmentTable = internal::coerceSegmentTableToNonConst(segments.releaseAsArray());
+		segmentTable = internal::buildSegmentTable(internal::coerceSegmentTableToNonConst(segments.releaseAsArray()));
 	}
 	
 	template<typename T2>
@@ -85,7 +93,7 @@ struct CupnpMessage {
 	{}
 	
 	CupnpMessage(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> segments) :
-		segmentTable(internal::coerceSegmentTableToNonConst(segments))
+		segmentTable(internal::buildSegmentTable(internal::coerceSegmentTableToNonConst(segments)))
 	{}
 	
 	CupnpMessage(kj::ArrayPtr<const capnp::word> flatData) :
@@ -123,8 +131,8 @@ struct MapToDevice<CupnpMessage<T>, Device> {
 	
 	kj::Array<MappedData<capnp::word, Device>> deviceSegments;
 	
-	kj::Array<kj::ArrayPtr<capnp::word>> hostSegmentTable;
-	MappedData<kj::ArrayPtr<capnp::word>, Device> deviceSegmentTable;
+	kj::Array<cupnp::SegmentTable::Entry> hostSegmentTable;
+	MappedData<cupnp::SegmentTable::Entry, Device> deviceSegmentTable;
 	
 	MapToDevice(Msg& original, Device& device) :
 		original(original), device(device), deviceSegmentTable(device)
@@ -136,7 +144,7 @@ struct MapToDevice<CupnpMessage<T>, Device> {
 			auto builder = kj::heapArrayBuilder<MappedData<capnp::word, Device>>(nSegments);
 			
 			for(size_t i = 0; i < nSegments; ++i) {
-				kj::ArrayPtr<capnp::word> segment = original.segmentTable[i];
+				cupnp::SegmentTable::Entry segment = original.segmentTable[i];
 				
 				builder.add(device, segment.begin(), segment.size());
 			}
@@ -146,7 +154,7 @@ struct MapToDevice<CupnpMessage<T>, Device> {
 		
 		// Gather device pointers
 		{
-			auto builder = kj::heapArrayBuilder<kj::ArrayPtr<capnp::word>>(nSegments);
+			auto builder = kj::heapArrayBuilder<cupnp::SegmentTable::Entry>(nSegments);
 			
 			for(size_t i = 0; i < nSegments; ++i) {
 				builder.add(kj::ArrayPtr<capnp::word>(
@@ -159,7 +167,8 @@ struct MapToDevice<CupnpMessage<T>, Device> {
 		}
 		
 		// Map segment table onto device
-		deviceSegmentTable = MappedData(device, hostSegmentTable.begin(), hostSegmentTable.size());		
+		deviceSegmentTable = MappedData(device, hostSegmentTable.begin(), hostSegmentTable.size());
+		deviceSegmentTable.updateDevice();
 	}
 	
 	void updateHost() {
@@ -178,10 +187,10 @@ struct MapToDevice<CupnpMessage<T>, Device> {
 	}
 	
 	T get() {
-		kj::ArrayPtr<kj::ArrayPtr<capnp::word>> ptrSegmentTable(deviceSegmentTable.devicePtr, deviceSegmentTable.size);
-		kj::ArrayPtr<capnp::word> firstSegment = hostSegmentTable[0];
+		kj::ArrayPtr<cupnp::SegmentTable::Entry> ptrSegmentTable(deviceSegmentTable.devicePtr, deviceSegmentTable.size);
+		cupnp::SegmentTable::Entry firstSegment = hostSegmentTable[0];
 		
-		return cupnp::messageRoot<T>(firstSegment, ptrSegmentTable);
+		return cupnp::messageRoot<T>(firstSegment, cupnp::SegmentTable(ptrSegmentTable));
 	}
 };
 

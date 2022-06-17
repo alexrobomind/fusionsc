@@ -95,6 +95,8 @@ struct TraceCalculation {
 			state.setPhi0(std::atan2(pos[1], pos[0]));
 		}
 		
+		round.kernelRequest = request.asReader();
+		
 		return round;
 	}
 	

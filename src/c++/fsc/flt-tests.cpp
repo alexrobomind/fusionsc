@@ -53,13 +53,14 @@ TEST_CASE("flt") {
 		auto traceReq = flt.traceRequest();
 		prepareToroidalField(lt, traceReq.getField());
 		
-		traceReq.getStartPoints().setShape({3});
-		traceReq.getStartPoints().setData({1.0, 0.0, 0.0});
+		traceReq.getStartPoints().setShape({3, 4});
+		traceReq.getStartPoints().setData({1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
 		
 		traceReq.setPoincarePlanes({3.141592});
 		
-		traceReq.setTurnLimit(1);
+		traceReq.setTurnLimit(10);
 		traceReq.setStepSize(0.001);
+		// traceReq.setStepLimit(1);
 		
 		KJ_DBG("Sending request");
 		auto promise = traceReq.send().wait(ws);
