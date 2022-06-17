@@ -29,7 +29,7 @@ void prepareToroidalField(LibraryThread& lt, ComputedField::Builder field) {
 	}
 	
 	field.setData(lt->dataService().publish(
-		lt->randomID().data, fieldData.asReader()
+		lt->randomID(), fieldData.asReader()
 	));
 }
 
@@ -61,6 +61,7 @@ TEST_CASE("flt") {
 		traceReq.setTurnLimit(1);
 		traceReq.setStepSize(0.001);
 		
+		KJ_DBG("Sending request");
 		auto promise = traceReq.send().wait(ws);
 	}
 }

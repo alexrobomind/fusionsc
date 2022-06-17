@@ -154,14 +154,16 @@ struct FLTImpl : public FLT::Server {
 	Own<Device> device;
 	LibraryThread lt;
 	
-	FLTImpl(Own<Device> device) : device(mv(device)) {}
+	FLTImpl(LibraryThread& lt, Own<Device> device) : device(mv(device)), lt(lt->addRef()) {}
 	
 	Promise<void> trace(TraceContext ctx) override {
+		KJ_DBG("Processing trace request");
 		ctx.allowCancellation();
 		auto request = ctx.getParams();
 		
 		return lt->dataService().download(request.getField().getData())
 		.then([ctx, request, this](LocalDataRef<Float64Tensor> fieldData) mutable {
+			KJ_DBG("Converting request");
 			// Extract kernel request
 			Temporary<FLTKernelRequest> kernelRequest;
 			kernelRequest.setPhiPlanes(request.getPoincarePlanes());
@@ -177,17 +179,17 @@ struct FLTImpl : public FLT::Server {
 			// Extract positions
 			auto inStartPoints = request.getStartPoints();
 			auto startPointShape = inStartPoints.getShape();
-			KJ_REQUIRE(startPointShape.size() >= 2, "Start points must have at least 1 dimension");
+			KJ_REQUIRE(startPointShape.size() >= 1, "Start points must have at least 1 dimension");
 			KJ_REQUIRE(startPointShape[0] == 3, "First dimension of start points must have size 3");
 			
-			size_t nStartPoints = 1;
+			int64_t nStartPoints = 1;
 			for(size_t i = 1; i < startPointShape.size(); ++i)
 				nStartPoints *= startPointShape[i];
 			
 			Temporary<Float64Tensor> reshapedStartPoints;
 			reshapedStartPoints.setData(inStartPoints.getData());
 			{
-				reshapedStartPoints.setShape({3, nStartPoints});
+				reshapedStartPoints.setShape({3, (uint64_t) nStartPoints});
 				// shape[0] = 3; shape[1] = nStartPoints;
 			}			
 			
@@ -198,13 +200,15 @@ struct FLTImpl : public FLT::Server {
 				*device, mv(kernelRequest), mv(field), mv(positions)
 			);
 			
+			KJ_DBG("Running");
 			return calc->run()
 			.then([ctx, calc, request, startPointShape, nStartPoints]() mutable {
+				KJ_DBG("Extracting response");
 				// Count maximum number of turns
 				KJ_REQUIRE(calc->rounds.size() == 1, "Only supports single-round execution");
 				
 				auto& round = calc->rounds[0];
-				size_t nTurns = 0;
+				int64_t nTurns = 0;
 				
 				auto kData = round.kernelData.getData();
 				
@@ -212,14 +216,14 @@ struct FLTImpl : public FLT::Server {
 				KJ_REQUIRE(kData.size() == nStartPoints, "Internal error");
 				
 				for(auto entry : kData) {
-					nTurns = std::max(nTurns, (size_t) entry.getState().getTurnCount());
+					nTurns = std::max(nTurns, (int64_t) entry.getState().getTurnCount());
 				}
 				
-				nTurns = std::min(nTurns, (size_t) request.getTurnLimit());
-				size_t nSurfs = request.getPoincarePlanes().size();
+				nTurns = std::min(nTurns, (int64_t) request.getTurnLimit());
+				int64_t nSurfs = request.getPoincarePlanes().size();
 				
 				Tensor<double, 4> pcCuts(nTurns, nStartPoints, nSurfs, 3);
-				for(size_t iStartPoint = 0; iStartPoint < nStartPoints; ++iStartPoint) {
+				for(int64_t iStartPoint = 0; iStartPoint < nStartPoints; ++iStartPoint) {
 					auto entry = kData[iStartPoint];
 					auto state = entry.getState();
 					auto events = entry.getEvents();
@@ -230,9 +234,9 @@ struct FLTImpl : public FLT::Server {
 					size_t nEvents = state.getEventCount();
 					KJ_REQUIRE(nEvents <= events.size(), "Internal error");
 					
-					size_t iTurn = 0;
+					int64_t iTurn = 0;
 					
-					for(size_t iEvt = 0; iEvt < nEvents; ++iEvt) {
+					for(int64_t iEvt = 0; iEvt < nEvents; ++iEvt) {
 						auto evt = events[iEvt];
 						
 						KJ_REQUIRE(!evt.isNotSet(), "Internal error");
@@ -245,7 +249,7 @@ struct FLTImpl : public FLT::Server {
 							KJ_DBG(ppi);
 							
 							auto loc = evt.getLocation();
-							for(size_t iDim = 0; iDim < 3; ++iDim) {
+							for(int64_t iDim = 0; iDim < 3; ++iDim) {
 								pcCuts(iTurn, iStartPoint, ppi.getPlaneNo(), iDim) = loc[iDim];
 							}
 						}
@@ -278,7 +282,8 @@ namespace fsc {
 		mapTensor<const Tensor<double, 3>>(testTensor.asReader());
 	}
 	
-	FLT::Client newCpuTracer() {
-		return kj::heap<FLTImpl<Eigen::ThreadPoolDevice>>(newThreadPoolDevice());
+	// TODO: Make this accept data service instead
+	FLT::Client newCpuTracer(LibraryThread& lt) {
+		return kj::heap<FLTImpl<Eigen::ThreadPoolDevice>>(lt, newThreadPoolDevice());
 	}
 }
