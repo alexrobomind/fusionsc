@@ -87,12 +87,16 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
 	auto structName = sanitizedStructName(schema.getUnqualifiedName());
 	
+	py::module_ collections = py::module_::import("collections");
+	py::type mappingAbstractBaseClass = collections.attr("abc").attr("Mapping");
+	
 	py::dict attrs;
 	attrs["__qualname__"] = qualName(scope, structName);
 	attrs["__module__"] = moduleName;
 	
-	py::module_ collections = py::module_::import("collections");
-	py::type mappingAbstractBaseClass = collections.attr("abc").attr("Mapping");
+	attrs["__init__"] = py::cpp_function([]() {
+		KJ_UNIMPLEMENTED("Do not create instances of this class. Use StructType.newMessage() instead");
+	});
 	
 	py::object output = (*baseMetaType)(structName, py::make_tuple(), attrs);
 	

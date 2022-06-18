@@ -180,7 +180,7 @@ namespace pybind11 { namespace detail {
 		
 		bool load(handle src, bool convert) {
 			object pyType = eval("type")(src);
-			
+						
 			if(src.is_none()) {
 				value = capnp::Void();
 				return true;
