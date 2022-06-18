@@ -4,220 +4,163 @@
 
 namespace fsc {
 
-/** Function defined over an R-Z-phi grid */
-template<typename Num, typename Data>
-struct ToroidalInterpolator {
-private:
-	using Dims = typename Eigen::Tensor<Num, 3>::Dimensions;
+/**
+ * Simple fast linear interpolation strategy
+ */
+template<typename Num>
+struct LinearInterpolation {
+	using Scalar = Num;
 	
-	static constexpr size_t wrap_slices = 1; // Number of phi-entries added by wrapping
-
-	template<typename In>
-	static EIGEN_DEVICE_FUNC auto wrap_phi(const In& input) {
-		TensorRef<Tensor<const Num, 3>> wrappedInput = input.template cast<const Num>();
-		size_t nr = wrappedInput.dimensions()[0];
-		size_t nz = wrappedInput.dimensions()[1];
-
-		const Dims pos(0, 0, 0);
-		const Dims len(nr, nz, 1);
-		auto phi_slice = input.slice(pos, len);
-
-		return input.concatenate(phi_slice, 2);
+	constexpr EIGEN_DEVICE_FUNC size_t nPoints() { return 2; }
+	constexpr std::array<Scalar, 2> coefficients(Num x) {
+		return {1 - x, x};
 	}
-
-	EIGEN_DEVICE_FUNC Num reduce_angle(Num in) {
-		const Num pi = 3.14159265358979323846;
-		const Num wrap = 2 * pi / mtor;
-
-		const Num base = wrap * floor(in / wrap);
-		return (in - base) / wrap;
-	}
-	
-	size_t mtor;
-
-	Num r_min;
-	Num r_max;
-	Num z_min;
-	Num z_max;
-
-	using WrappedExpr = decltype(wrap_phi(std::declval<const Data>()));
-	const WrappedExpr data;
-	
-	Dims dimensions;
-	
-public:
-	EIGEN_DEVICE_FUNC ToroidalInterpolator(
-		size_t mtor, Num r_min, Num r_max, Num z_min, Num z_max, const Data& ndata
-	) :
-		mtor(mtor), r_min(r_min), r_max(r_max), z_min(z_min), z_max(z_max),
-		data(wrap_phi(ndata)), dimensions(TensorRef<Tensor<const Num, 3>>(data.template cast<const Num>()).dimensions())
-	{}
-
-	EIGEN_DEVICE_FUNC Num eval_phizr(Num phi, Num z, Num r) {		
-		// If we have a NAN input, return a NAN output
-		if(phi != phi || z != z || r != r)
-			return std::nan("");
-
-		size_t nr = dimensions[0];
-		size_t nz = dimensions[1];
-		size_t nphi = dimensions[2] - wrap_slices;
-
-		Num cr = (r - r_min) / (r_max - r_min) * (nr - 1);
-		Num cz = (z - z_min) / (z_max - z_min) * (nr - 1);
-		Num cphi = reduce_angle(phi) * nphi;
-
-		if(cr < 0 || cz < 0)
-			return std::nan("");
-
-		if(cphi < 0) {
-			#ifndef EIGEN_GPUCC
-				throw std::logic_error(
-					"Internal error: cphi (" + std::to_string(cphi) + ") < 0" +
-					", phi value is " + std::to_string(phi) +
-					", mtor is " + std::to_string(mtor) +
-					", reduced angle is " + std::to_string(reduce_angle(phi))
-				);
-			#else
-				return std::nan("");
-			#endif
-		}
-				
-
-		int64_t i_r = (int64_t) floor(cr);
-		int64_t i_z = (int64_t) floor(cz);
-		int64_t i_phi = (int64_t) floor(cphi);
-
-		if(i_r >= nr - 1 || i_z >= nz - 1)
-			return std::nan("");
-
-		if(i_phi >= nphi + wrap_slices - 1) {
-			#ifndef EIGEN_GPUCC
-				throw std::logic_error(
-					"Internal error: i_phi (" + std::to_string(i_phi) + ") exceeded grid maximum " + std::to_string(nphi + wrap_slices - 1) +
-					", phi value is " + std::to_string(phi) +
-					", cphi is " + std::to_string(cphi) +
-					", mtor is " + std::to_string(mtor) +
-					", reduced angle is " + std::to_string(reduce_angle(phi))
-				);
-			#else
-				return std::nan("");
-			#endif
-		}
-
-		Num lr = cr - i_r;
-		Num lz = cz - i_z;
-		Num lphi = cphi - i_phi;
-		
-		const Dims pos(i_r, i_z, i_phi);
-		const Dims len(2, 2, 2);
-
-		Tensor<Num, 3> slice = data.slice(pos, len);
-
-		return
-			(1 - lr) * (1 - lz) * (1 - lphi) * slice.coeff(0, 0, 0) + 
-			lr       * (1 - lz) * (1 - lphi) * slice.coeff(1, 0, 0) +
-			(1 - lr) * lz       * (1 - lphi) * slice.coeff(0, 1, 0) +
-			lr       * lz       * (1 - lphi) * slice.coeff(1, 1, 0) +
-			(1 - lr) * (1 - lz) * lphi       * slice.coeff(0, 0, 1) + 
-			lr       * (1 - lz) * lphi       * slice.coeff(1, 0, 1) +
-			(1 - lr) * lz       * lphi       * slice.coeff(0, 1, 1) +
-			lr       * lz       * lphi       * slice.coeff(1, 1, 1)
-		;
-	}
-
-	EIGEN_DEVICE_FUNC Num eval_xyz(Num x, Num y, Num z) {
-		Num r = std::sqrt(x*x + y*y);
-		Num phi = atan2(y, x);
-
-		return eval_phizr(phi, z, r);
-	}
-
-	EIGEN_DEVICE_FUNC Num eval_xyz(const std::array<Num, 3>& x) {
-		return eval_xyz(x[0], x[1], x[2]);
-	}
-	
-	EIGEN_DEVICE_FUNC Num operator()(const Vec3<Num>& xyz) {
-		return eval_xyz(xyz[0], xyz[1], xyz[2]);
+	constexpr std::array<int, 2> offsets() {
+		return {0, 1};
 	}
 };
 
-template<typename Num, typename Data>
-EIGEN_DEVICE_FUNC ToroidalInterpolator<Num, Data> interpolateToroidal(size_t mtor, Num r_min, Num r_max, Num z_min, Num z_max, const Data& data) {
-	return ToroidalInterpolator<Num, Data>(mtor, r_min, r_max, z_min, z_max, data);
-}
-
-
-template<typename Num, typename Expr, bool normalize>
-struct SlabCoordinateField {
-	using ChippedExpr = decltype(kj::instance<Expr>().chip(0, 0));
+/**
+ * Multi-dimensional interpolator that runs based on a given
+ * 1-dimensional interpolation strategy
+ */
+template<int nDims, typename Strategy>
+struct NDInterpolator {
+	using Scalar = typename Strategy::Scalar;
+	static_assert(nDims >= 1);
 	
-	/*size_t mtor;
-
-	Num r_min;
-	Num r_max;
-	Num z_min;
-	Num z_max;*/
-	
-	ToroidalInterpolator<Num, ChippedExpr> Bphi;
-	ToroidalInterpolator<Num, ChippedExpr> Bz;
-	ToroidalInterpolator<Num, ChippedExpr> Br;
-
-	EIGEN_DEVICE_FUNC SlabCoordinateField(
-		size_t mtor, Num r_min, Num r_max, Num z_min, Num z_max,
-		Expr& expr
-	):
-		// mtor(mtor), r_min(r_min), r_max(r_max), z_min(z_min), z_max(z_max),
+	struct Axis {
+		Scalar x1;
+		Scalar x2;
+		int nIntervals;
 		
-		Bphi(mtor, r_min, r_max, z_min, z_max, expr.chip(0, 0)),
-		Bz(mtor, r_min, r_max, z_min, z_max, expr.chip(0, 1)),
-		Br(mtor, r_min, r_max, z_min, z_max, expr.chip(0, 2))
-	{}
-
-	// Returns the magnetic field (optionally normalized) at a given phi, r, z position in cartesian components
-	EIGEN_DEVICE_FUNC Vec3<Num> eval_phizr(Num phi, Num z, Num r) {
-		using std::sin;
-		using std::cos;
-
-		Num Bval_r   = Br  .eval_phizr(phi, z, r);
-		Num Bval_z   = Bz  .eval_phizr(phi, z, r);
-		Num Bval_phi = Bphi.eval_phizr(phi, z, r);
-
-		if(normalize) {
-			Num norm = 1 / std::sqrt(Bval_r * Bval_r + Bval_z * Bval_z + Bval_phi * Bval_phi);
+		inline EIGEN_DEVICE_FUNC Axis(Scalar x1, Scalar x2, int nIntervals) :
+			x1(x1), x2(x2), nIntervals(nIntervals)
+		{}
+	};
 	
-			Bval_r *= norm;
-			Bval_z *= norm;
-			Bval_phi *= norm;
+	template<int iDim>
+	struct Evaluator {
+		static_assert(iDim < nDims);
+		static_assert(iDim >= 0);
+		
+		template<typename F, typename... Indices>
+		static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, Vec<int, nDims>& base, Vec<Scalar, nDims> lx, Indices... indices) {
+			static_assert(sizeof...(indices) == iDim);
+			
+			Scalar result = 0;
+			
+			auto coefficients = strategy.coefficients(lx[iDim]);
+			auto offsets      = strategy.offsets();
+						
+			for(int idx = 0; idx < strategy.nPoints(); ++idx) {
+				result += coefficients[idx] * Evaluator<iDim + 1>::evaluate(strategy, f, base, lx, indices..., base[iDim] + offsets[idx]);
+			}
+			
+			return result;
 		}
+	};
+	
+	template<>
+	struct Evaluator<nDims> {
+		template<typename F, typename... Indices>
+		static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, Vec<int, nDims>& base, Vec<Scalar, nDims> lx, Indices... indices) {
+			static_assert(sizeof...(indices) == nDims);
+			
+			return f(indices...);
+		}
+	};
+	
+	Strategy strategy;
+	
+	Scalar scaleMultipliers[nDims];
+	Scalar offsets[nDims];
+	
+	EIGEN_DEVICE_FUNC NDInterpolator(const Strategy& strategy, const Axis axes[nDims]) :
+		strategy(strategy)
+	{
+		for(int i = 0; i < nDims; ++i) {
+			offsets[i] = -axes[i].x1;
+			scaleMultipliers[i] = 1.0 / (axes[i].x2 - axes[i].x1) * axes[i].nIntervals;
+		}
+	}
+	
+	EIGEN_DEVICE_FUNC NDInterpolator(const Strategy& strategy, std::initializer_list<Axis> axes) :
+		NDInterpolator(strategy, axes.begin())
+	{
+		CUPNP_REQUIRE(axes.size() == nDims);
+	}
+	
+	template<typename F>
+	EIGEN_DEVICE_FUNC Scalar operator()(const F& f, Vec<Scalar, nDims> x) {
+		Vec<int, nDims> base;
+		Vec<Scalar, nDims> lx;
+		
+		for(int i = 0; i < nDims; ++i) {
+			Scalar scaled = scaleMultipliers[i] * (x[i] + offsets[i]);
+			base[i] = floor(scaled);
+			lx[i] = scaled - base[i];
+		}
+		
+		return Evaluator<0>::evaluate(strategy, f, base, lx);
+	}
+};
 
-		Vec2<Num> e_r = {cos(phi), sin(phi)};
-		Vec2<Num> e_phi = {-sin(phi), cos(phi)};
+template<typename Strategy>
+struct SlabFieldInterpolator {
+	using Scalar = typename Strategy::Scalar;
+	
+	NDInterpolator<3, Strategy> interpolator;
+	using Axis = typename NDInterpolator<3, Strategy>::Axis;
+	
+	EIGEN_DEVICE_FUNC SlabFieldInterpolator(const Strategy& strategy, const cu::ToroidalGrid grid) :
+		interpolator(strategy, {
+			Axis(grid.getRMin(), grid.getRMax(), grid.getNR() - 1),
+			Axis(grid.getZMin(), grid.getZMax(), grid.getNZ() - 1),
+			Axis(0, 2 * fsc::pi / grid.getNSym(), grid.getNPhi()),
+		})
+	{
+	}
+	
+	EIGEN_DEVICE_FUNC Vec<Scalar, 3> operator()(const TensorMap<Tensor<Scalar, 4>>& fieldData, const Vec<Scalar, 3>& xyz) {
+		Scalar x = xyz[0];
+		Scalar y = xyz[1];
+		Scalar z = xyz[2];
+		
+		Scalar r = std::sqrt(x*x + y*y);
+		Scalar phi = atan2(y, x);
+		
+		// Lambda functions that return individual phi components
+		// and clamp the field for evaluation
+		auto selectComponent = [&fieldData](int iDim) {
+			return [&fieldData, iDim](int iPhi, int iZ, int iR) {
+				if(iR < 0) iR = 0;
+				if(iZ < 0) iZ = 0;
+				if(iR > fieldData.dimension(1)) iR = fieldData.dimension(1);
+				if(iZ > fieldData.dimension(2)) iZ = fieldData.dimension(2);
+				
+				int nPhi = fieldData.dimension(3);
+				iPhi = (iPhi % nPhi + nPhi) % nPhi;
+				
+				return fieldData(iDim, iR, iZ, iPhi);
+			};
+		};
+		
+		Scalar bPhi = interpolator(selectComponent(0), {phi, z, r});
+		Scalar bZ   = interpolator(selectComponent(1), {phi, z, r});
+		Scalar bR   = interpolator(selectComponent(2), {phi, z, r});
+		
+		// KJ_DBG(bPhi, bZ, bR);
+		
+		Vec2<Scalar> eR   = { cos(phi), sin(phi)};
+		Vec2<Scalar> ePhi = {-sin(phi), cos(phi)};
 
 		return {
-			Bval_r * e_r[0] + Bval_phi * e_phi[0],
-			Bval_r * e_r[1] + Bval_phi * e_phi[1],
-			Bval_z
+			bR * eR[0] + bPhi * ePhi[0],
+			bR * eR[1] + bPhi * ePhi[1],
+			bZ
 		};
 	}
-
-	EIGEN_DEVICE_FUNC Vec3<Num> eval_xyz(Num x, Num y, Num z) {
-		Num r = std::sqrt(x*x + y*y);
-		Num phi = std::atan2(y, x);
-
-		return eval_phizr(phi, z, r);
-	}
-	
-	EIGEN_DEVICE_FUNC Vec3<Num> operator()(const Vec3<Num>& xyz) {
-		return eval_xyz(xyz[0], xyz[1], xyz[2]);
-	}
 };
-
-template<bool normalize, typename Num, typename Expr>
-EIGEN_DEVICE_FUNC SlabCoordinateField<Num, Expr, normalize> slabCoordinateField(
-	size_t mtor, Num r_min, Num r_max, Num z_min, Num z_max,
-	Expr& expr
-) {
-	return SlabCoordinateField<Num, Expr, normalize>(mtor, r_min, r_max, z_min, z_max, expr);
-}
 
 }

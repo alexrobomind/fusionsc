@@ -64,7 +64,7 @@ namespace fsc {
 	/**
 	 \ingroup kernels
 	 */
-	EIGEN_DEVICE_FUNC void fltKernel(
+	inline EIGEN_DEVICE_FUNC void fltKernel(
 		unsigned int idx,
 		fsc::cu::FLTKernelData kernelData,
 		TensorMap<Tensor<double, 4>> fieldData,
@@ -92,9 +92,20 @@ namespace fsc {
 		Num distance = state.getDistance();
 		
 		// Set up the magnetic field
+		using InterpolationStrategy = LinearInterpolation<Num>;
+		
 		auto grid = request.getGrid();
-		auto field = slabCoordinateField<true, Num>(grid.getNSym(), grid.getRMin(), grid.getRMax(), grid.getZMin(), grid.getZMax(), fieldData); // The boolean parameter forces normalization
-		auto fieldWithT = [&field](V3 x, Num t) { return field(x); };
+		SlabFieldInterpolator<InterpolationStrategy> interpolator(InterpolationStrategy(), grid);
+		
+		auto rungeKuttaInput = [&](V3 x, Num t) -> V3 {
+			V3 fieldValue = interpolator(fieldData, x);
+			auto result = fieldValue / fieldValue.norm();
+			
+			/*if(step % 1000 == 0) {
+				KJ_DBG(result[0], result[1], result[2], result.norm());
+			}*/
+			return result;
+		};
 		
 		// The kernel terminates its execution with this macro
 		#define FSC_FLT_RETURN(reason) {\
@@ -113,10 +124,12 @@ namespace fsc {
 			{\
 				auto evt = currentEvent(); \
 				evt.setStep(step); \
+				evt.setDistance(distance); \
 				\
 				auto loc = evt.mutateLocation(); \
-				for(int i = 0; i < 3; ++i) \
+				for(int i = 0; i < 3; ++i) {\
 					loc.set(i, x[i]); \
+				}\
 			}\
 			\
 			++eventCount; \
@@ -155,7 +168,8 @@ namespace fsc {
 			// KJ_DBG("Limits passed");
 			
 			V3 x2 = x;
-			kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), fieldWithT);
+			// KJ_DBG(request.getStepSize());
+			kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), rungeKuttaInput);
 			
 			// KJ_DBG("Step advanced", x[0], x[1], x[2], x2[0], x2[1], x2[2]);
 			// KJ_DBG("|dx|", (x2 - x).norm());
@@ -165,15 +179,36 @@ namespace fsc {
 			Num phi1 = atan2(x[1], x[0]);
 			Num phi2 = atan2(x2[1], x2[0]);
 			
+			/*if(step % 1000 == 0) {
+				KJ_DBG(step, phi1, z, r);
+			}*/
+			
 			Num phi0 = state.getPhi0();
+			
 			if(kmath::crossedPhi(phi1, phi2, phi0)) {
 				auto l = kmath::wrap(phi0 - phi1) / kmath::wrap(phi2 - phi1);
 				V3 xCross = l * x2 + (1. - l) * x;
 				
 				state.setTurnCount(state.getTurnCount() + 1);
 				
+				// KJ_DBG(idx, state.getTurnCount());
+				
 				currentEvent().setNewTurn(state.getTurnCount());
 				FSC_FLT_LOG_EVENT(xCross);				
+			}
+			
+			const auto phiPlanes = request.getPhiPlanes();
+			for(size_t iPlane = 0; iPlane < phiPlanes.size(); ++iPlane) {
+				Num planePhi = phiPlanes[iPlane];
+				
+				if(kmath::crossedPhi(phi1, phi2, planePhi)) {
+					auto l = kmath::wrap(planePhi - phi1) / kmath::wrap(phi2 - phi1);
+					V3 xCross = l * x2 + (1. - l) * x;
+					
+					// KJ_DBG(iPlane);
+					currentEvent().mutatePhiPlaneIntersection().setPlaneNo(iPlane);
+					FSC_FLT_LOG_EVENT(xCross);				
+				}
 			}
 			
 			// KJ_DBG("Phi cross checks passed");

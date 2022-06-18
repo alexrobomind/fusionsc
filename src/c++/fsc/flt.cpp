@@ -4,7 +4,7 @@
 #include "flt.h"
 
 #include <kj/vector.h>
-
+// #include <capnp/serialize-text.h>
 #include <fsc/flt.capnp.cu.h>
 
 using namespace fsc;
@@ -25,7 +25,7 @@ void validateField(ToroidalGrid::Reader grid, Float64Tensor::Reader data) {
 template<typename Device>
 struct TraceCalculation {
 	constexpr static size_t STEPS_PER_ROUND = 1000;
-	constexpr static size_t EVENTBUF_SIZE = 20;
+	constexpr static size_t EVENTBUF_SIZE = 50;
 	
 	template<typename T>
 	using MappedMessage = MapToDevice<CupnpMessage<T>, Device>;
@@ -221,7 +221,9 @@ struct FLTImpl : public FLT::Server {
 					nTurns = std::max(nTurns, (int64_t) entry.getState().getTurnCount());
 				}
 				
-				nTurns = std::min(nTurns, (int64_t) request.getTurnLimit());
+				if(request.getTurnLimit() > 0)
+					nTurns = std::min(nTurns, (int64_t) request.getTurnLimit());
+				
 				int64_t nSurfs = request.getPoincarePlanes().size();
 				
 				Tensor<double, 4> pcCuts(nTurns, nStartPoints, nSurfs, 3);
@@ -242,13 +244,11 @@ struct FLTImpl : public FLT::Server {
 						auto evt = events[iEvt];
 						
 						KJ_REQUIRE(!evt.isNotSet(), "Internal error");
-						
+												
 						if(evt.isNewTurn()) {
 							iTurn = evt.getNewTurn();
-							KJ_DBG(iTurn);
 						} else if(evt.isPhiPlaneIntersection()) {
 							auto ppi = evt.getPhiPlaneIntersection();
-							KJ_DBG(ppi);
 							
 							auto loc = evt.getLocation();
 							for(int64_t iDim = 0; iDim < 3; ++iDim) {
@@ -257,7 +257,12 @@ struct FLTImpl : public FLT::Server {
 						}
 					}
 				}
-			}).attach(calc.x());
+				
+				auto results = ctx.getResults();
+				results.setNTurns(nTurns);
+				writeTensor(pcCuts, results.getPoincareHits());
+				
+			}).attach(cp(fieldData)).attach(calc.x());
 		}).attach(thisCap());
 	}
 };

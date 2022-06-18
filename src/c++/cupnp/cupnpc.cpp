@@ -670,13 +670,36 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 						),
 						"	\n"
 					);
+				
+					result = strTree(
+						mv(result),
+						generateMethod(
+							request, nodeId, methodDefinitions,
+							typeName.flatten(), strTree("mutate", camelCase(field.getName(), true), "()"),
+							strTree(
+							"	cupnp::setDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data, ", field.getDiscriminantValue(), ");\n",
+							"	return ", typeName.flatten(), "(structure, data);\n"
+							)
+						)
+					);
+				} else {
+					result = strTree(
+						mv(result),
+						generateMethod(
+							request, nodeId, methodDefinitions,
+							typeName.flatten(), strTree("mutate", camelCase(field.getName(), true), "()"),
+							strTree(
+							"	return ", typeName.flatten(), "(structure, data);\n"
+							)
+						)
+					);
 				}
 				
 				result = strTree(
 					mv(result),
 					generateMethod(
 						request, nodeId, methodDefinitions,
-						typeName.flatten(), strTree("get", camelCase(field.getName(), true), "() const"),
+						strTree("const ", typeName.flatten()), strTree("get", camelCase(field.getName(), true), "() const"),
 						strTree(
 						"	return ", typeName.flatten(), "(structure, data);\n"
 						)

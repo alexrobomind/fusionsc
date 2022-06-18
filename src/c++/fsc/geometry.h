@@ -55,7 +55,7 @@ Vec3u locationInGrid(Vec3d point, CartesianGrid::Reader reader);
 
 inline double rayCastTriangle(const Vec3d point, const Vec3d direction, const Vec3d triangle[3]) {
 	using Eigen::seq;
-	using Eigen::placeholders::all;
+	using Eigen::all;
 	
 	Mat3d m;
 	m(0, all) = direction;

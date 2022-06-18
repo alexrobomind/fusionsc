@@ -234,7 +234,7 @@ namespace fsc {
 			ref(in), copyToHost(copyToHost), copyToDevice(copyToDevice)
 		{}
 	};
-	
+		
 	//! Specifies copy behavior for arguments around kernel invocation
 	enum class KernelArgType {
 		NOCOPY = 0, //!< Don't copy data between host and device for this invocation
@@ -277,7 +277,7 @@ namespace fsc {
 	template<typename T, typename Device>
 	struct MapToDevice<KernelArg<T>, Device>;
 	
-	namespace internal {				
+	namespace internal {			
 		extern thread_local kj::TaskSet kernelDaemon;
 		
 		/**

@@ -15,6 +15,10 @@
 # include <Eigen/Core>
 # include <cmath>
 
+# undef NOCOPY
+# undef IN
+# undef OUT
+
 namespace fsc {
 	using Eigen::Tensor;
 	using Eigen::TensorFixedSize;
