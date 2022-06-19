@@ -572,7 +572,8 @@ namespace cupnp {
 			uint16_t pointerSectionSize = structure >> 48;
 			return dataSectionSizeInWords + pointerSectionSize;
 		} else {
-			CUPNP_FAIL_REQUIRE("Implement missing nested list size");
+			CUPNP_FAIL_REQUIRE("Implement missing nested list size")
+			; // This is on a new line to silence an empty for loop warning from CLANG
 			
 			#ifndef CUPNP_GPUCC
 				KJ_UNREACHABLE;

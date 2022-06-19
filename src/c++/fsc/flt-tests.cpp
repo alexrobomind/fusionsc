@@ -63,7 +63,7 @@ TEST_CASE("flt") {
 		
 		traceReq.setPoincarePlanes({3.141592});
 		
-		traceReq.setTurnLimit(100);
+		traceReq.setTurnLimit(10);
 		traceReq.setStepSize(0.001);
 		
 		KJ_DBG("Sending request");

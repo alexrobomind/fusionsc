@@ -3,6 +3,8 @@
 #include "kernels.h"
 #include "flt.h"
 
+#include <algorithm>
+
 #include <kj/vector.h>
 // #include <capnp/serialize-text.h>
 #include <fsc/flt.capnp.cu.h>
@@ -25,7 +27,7 @@ void validateField(ToroidalGrid::Reader grid, Float64Tensor::Reader data) {
 template<typename Device>
 struct TraceCalculation {
 	constexpr static size_t STEPS_PER_ROUND = 1000;
-	constexpr static size_t EVENTBUF_SIZE = 50;
+	constexpr static size_t EVENTBUF_SIZE = 100;
 	
 	template<typename T>
 	using MappedMessage = MapToDevice<CupnpMessage<T>, Device>;
@@ -73,11 +75,15 @@ struct TraceCalculation {
 				event.initLocation(3);
 		}
 		
+		round.participants.reserve(nParticipants);
+		
 		return rounds.add(mv(round));
 	}
 	
 	Round& setupInitialRound() {
 		KJ_REQUIRE(positions.dimension(0) == 3);
+		
+		KJ_REQUIRE(rounds.size() == 0, "Internal error");
 		
 		const size_t nParticipants = positions.dimension(1);
 		Round& round = prepareRound(nParticipants);
@@ -99,6 +105,47 @@ struct TraceCalculation {
 		
 		return round;
 	}
+	
+	Round& setupFollowupRound() {
+		KJ_REQUIRE(rounds.size() > 0, "Internal error");
+		
+		// Check previous round
+		Round& prevRound = rounds[rounds.size() - 1];
+		
+		// Count unfinished participants
+		kj::Vector<size_t> unfinished;
+		auto kDataIn = prevRound.kernelData.getData();
+		
+		for(size_t i = 0; i < kDataIn.size(); ++i) {
+			if(!isFinished(kDataIn[i])) unfinished.add(i);
+		}
+		
+		KJ_REQUIRE(unfinished.size() > 0, "Internal error");
+		
+		Round& newRound = prepareRound(unfinished.size());
+		auto kDataOut = newRound.kernelData.getData();
+		for(size_t i = 0; i < unfinished.size(); ++i) {
+			newRound.participants.add(unfinished[i]);
+			
+			auto entryOut = kDataOut[i];
+			auto entryIn  = kDataIn[unfinished[i]];
+			
+			entryOut.setState(entryIn.getState());
+			entryOut.getState().setEventCount(0);
+		}
+		
+		newRound.kernelRequest = request.asReader();
+		
+		return newRound;
+	}
+	
+	Round& setupRound() {
+		if(rounds.size() == 0)
+			return setupInitialRound();
+		else
+			return setupFollowupRound();
+	}
+		
 	
 	Promise<void> startRound(Round& r) {
 		CupnpMessage<cu::FLTKernelData> kernelData(r.kernelData);
@@ -139,15 +186,69 @@ struct TraceCalculation {
 		return true;
 	}
 	
+	Promise<void> runRound() {
+		auto& round = setupRound();
+		return startRound(round);
+	}		
+	
 	Promise<void> run() {
-		auto& round1 = setupInitialRound();
-		Promise<void> calculation = startRound(round1);
+		if(rounds.size() == 0) {
+			return runRound().then([this]() { return run(); });
+		}
+			
+		auto& round = rounds[rounds.size() - 1];
+			
+		if(isFinished(round))
+			return READY_NOW;
 		
-		//TODO: Followup rounds
+		return runRound().then([this]() { return run(); });
+	}
+	
+	Temporary<FLTKernelData::Entry> consolidateRuns(size_t participantIndex) {
+		const size_t nRounds = rounds.size();
+		auto participantIndices = kj::heapArray<Maybe<size_t>>(nRounds);
 		
-		return calculation.then([&]() {
-			KJ_REQUIRE(isFinished(round1), "FLT can not handle multi-round launches yet");
-		});
+		for(size_t i = 0; i < nRounds; ++i) {
+			auto& round = rounds[i];
+			auto range = std::equal_range(round.participants.begin(), round.participants.end(), participantIndex);
+			
+			if(range.first != range.second)
+				participantIndices[i] = range.first - round.participants.begin();
+			else
+				participantIndices[i] = nullptr;
+		}
+		
+		size_t nEvents = 0;
+		for(size_t i = 0; i < nRounds; ++i) {
+			KJ_IF_MAYBE(pIdx, participantIndices[i]) {
+				auto kData = rounds[i].kernelData.getData()[*pIdx];
+				size_t eventCount = kData.getState().getEventCount();
+				
+				nEvents += eventCount;
+			}
+		}
+		
+		Temporary<FLTKernelData::Entry> result;
+		auto eventsOut = result.initEvents(nEvents);
+		
+		size_t iEvent = 0;
+		for(size_t i = 0; i < nRounds; ++i) {
+			KJ_IF_MAYBE(pIdx, participantIndices[i]) {
+				auto kData = rounds[i].kernelData.getData()[*pIdx];
+				size_t eventCount = kData.getState().getEventCount();
+				
+				auto eventsIn = kData.getEvents();
+				KJ_ASSERT(eventCount <= eventsIn.size());
+				
+				for(size_t iEvtIn = 0; iEvtIn < eventCount; ++iEvtIn)
+					eventsOut.setWithCaveats(iEvent++, eventsIn[iEvtIn]);
+				
+				result.setStopReason(kData.getStopReason());
+				result.setState(kData.getState());
+			}
+		}
+		
+		return result;
 	}
 };
 
@@ -206,18 +307,15 @@ struct FLTImpl : public FLT::Server {
 			return calc->run()
 			.then([ctx, calc, request, startPointShape, nStartPoints]() mutable {
 				KJ_DBG("Extracting response");
-				// Count maximum number of turns
-				KJ_REQUIRE(calc->rounds.size() == 1, "Only supports single-round execution");
-				
-				auto& round = calc->rounds[0];
 				int64_t nTurns = 0;
 				
-				auto kData = round.kernelData.getData();
+				auto resultBuilder = kj::heapArrayBuilder<Temporary<FLTKernelData::Entry>>(nStartPoints);
+				for(size_t i = 0; i < nStartPoints; ++i)
+					resultBuilder.add(calc->consolidateRuns(i));
 				
-				// Single-round strategy
-				KJ_REQUIRE(kData.size() == nStartPoints, "Internal error");
-				
-				for(auto entry : kData) {
+				auto kData = resultBuilder.finish();
+								
+				for(auto& entry : kData) {
 					nTurns = std::max(nTurns, (int64_t) entry.getState().getTurnCount());
 				}
 				
@@ -228,21 +326,13 @@ struct FLTImpl : public FLT::Server {
 				
 				Tensor<double, 4> pcCuts(nTurns, nStartPoints, nSurfs, 3);
 				for(int64_t iStartPoint = 0; iStartPoint < nStartPoints; ++iStartPoint) {
-					auto entry = kData[iStartPoint];
+					auto entry = kData[iStartPoint].asReader();
 					auto state = entry.getState();
 					auto events = entry.getEvents();
-			
-					// DO NOT iterate over the whole event list
-					// There might be invalid events at the end that
-					// got rolled back
-					size_t nEvents = state.getEventCount();
-					KJ_REQUIRE(nEvents <= events.size(), "Internal error");
-					
+								
 					int64_t iTurn = 0;
 					
-					for(int64_t iEvt = 0; iEvt < nEvents; ++iEvt) {
-						auto evt = events[iEvt];
-						
+					for(auto evt : events) {						
 						KJ_REQUIRE(!evt.isNotSet(), "Internal error");
 												
 						if(evt.isNewTurn()) {
