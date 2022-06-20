@@ -57,7 +57,10 @@ struct MainCls {
 		
 		auto address = network.parseAddress(this->address, port).wait(ws);
 		auto receiver = address->listen();
+		
 		std::cout << receiver->getPort() << std::endl;
+		std::cout << std::endl;
+		std::cout << "Listening on port " << receiver->getPort() << std::endl;
 		
 		DefaultErrorHandler errorHandler;
 		kj::TaskSet tasks(errorHandler);
