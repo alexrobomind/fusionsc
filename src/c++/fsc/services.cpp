@@ -45,7 +45,7 @@ struct RootServer : public RootService::Server {
 	}
 	
 	Promise<void> newTracer(NewTracerContext context) {
-		context.initResults().setService(newCpuTracer(lt));
+		context.initResults().setService(newFLT(lt, newThreadPoolDevice()));
 		return READY_NOW;
 	}
 	

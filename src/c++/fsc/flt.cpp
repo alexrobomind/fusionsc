@@ -1,4 +1,4 @@
-#include "kernels-flt.h"
+#include "flt-kernels.h"
 #include "cudata.h"
 #include "kernels.h"
 #include "flt.h"
@@ -260,13 +260,11 @@ struct FLTImpl : public FLT::Server {
 	FLTImpl(LibraryThread& lt, Own<Device> device) : device(mv(device)), lt(lt->addRef()) {}
 	
 	Promise<void> trace(TraceContext ctx) override {
-		KJ_DBG("Processing trace request");
 		ctx.allowCancellation();
 		auto request = ctx.getParams();
 		
 		return lt->dataService().download(request.getField().getData())
 		.then([ctx, request, this](LocalDataRef<Float64Tensor> fieldData) mutable {
-			KJ_DBG("Converting request");
 			// Extract kernel request
 			Temporary<FLTKernelRequest> kernelRequest;
 			kernelRequest.setPhiPlanes(request.getPoincarePlanes());
@@ -303,10 +301,8 @@ struct FLTImpl : public FLT::Server {
 				*device, mv(kernelRequest), mv(field), mv(positions)
 			);
 			
-			KJ_DBG("Running");
 			return calc->run()
 			.then([ctx, calc, request, startPointShape, nStartPoints]() mutable {
-				KJ_DBG("Extracting response");
 				int64_t nTurns = 0;
 				
 				auto resultBuilder = kj::heapArrayBuilder<Temporary<FLTKernelData::Entry>>(nStartPoints);
@@ -316,7 +312,7 @@ struct FLTImpl : public FLT::Server {
 				auto kData = resultBuilder.finish();
 								
 				for(auto& entry : kData) {
-					nTurns = std::max(nTurns, (int64_t) entry.getState().getTurnCount());
+					nTurns = std::max(nTurns, (int64_t) entry.getState().getTurnCount() + 1);
 				}
 				
 				if(request.getTurnLimit() > 0)
@@ -379,8 +375,16 @@ namespace fsc {
 		mapTensor<const Tensor<double, 3>>(testTensor.asReader());
 	}
 	
-	// TODO: Make this accept data service instead
-	FLT::Client newCpuTracer(LibraryThread& lt) {
-		return kj::heap<FLTImpl<Eigen::ThreadPoolDevice>>(lt, newThreadPoolDevice());
+	// TODO: Make this accept data service instead	
+	FLT::Client newFLT(LibraryThread& lt, Own<Eigen::ThreadPoolDevice> device) {
+		return kj::heap<FLTImpl<Eigen::ThreadPoolDevice>>(lt, mv(device));
 	}
+	
+	#ifdef FSC_WITH_CUDA
+	
+	FLT::Client newFLT(LibraryThread& lt, Own<Eigen::GpuDevice> device) {
+		return kj::heap<FLTImpl<Eigen::GpuDevice>>(lt, mv(device));
+	}
+	
+	#endif
 }

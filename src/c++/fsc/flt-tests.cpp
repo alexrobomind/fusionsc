@@ -5,6 +5,7 @@
 #include <capnp/serialize-text.h>
 
 #include "services.h"
+#include "flt.h"
 #include "local.h"
 #include "magnetics.h"
 #include "geometry.h"
@@ -44,6 +45,7 @@ TEST_CASE("flt") {
 	Temporary<RootConfig> config;
 	
 	auto req = createRoot(lt, config).newTracerRequest();
+	req.setPreferredDeviceType(WorkerType::CPU);
 	auto flt = req.send().getService();
 	
 	/*SECTION("basic-trace") {
@@ -64,6 +66,7 @@ TEST_CASE("flt") {
 		traceReq.setPoincarePlanes({3.141592});
 		
 		traceReq.setTurnLimit(10);
+		// traceReq.setStepLimit(10000);
 		traceReq.setStepSize(0.001);
 		
 		KJ_DBG("Sending request");
@@ -72,3 +75,38 @@ TEST_CASE("flt") {
 		KJ_DBG(response);
 	}
 }
+
+#ifdef FSC_WITH_CUDA
+
+TEST_CASE("flt-gpu") {
+	auto l = newLibrary();
+	auto lt = l->newThread();
+	
+	auto& ws = lt->waitScope();
+	
+	auto flt = newFLT(lt, newGpuDevice());
+	
+	SECTION("1start-trace") {	
+		auto traceReq = flt.traceRequest();
+		prepareToroidalField(lt, traceReq.getField());
+		
+		// traceReq.getStartPoints().setShape({3, 4});
+		// traceReq.getStartPoints().setData({1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+		
+		traceReq.getStartPoints().setShape({3});
+		traceReq.getStartPoints().setData({1.0, 0.0, 0.0});
+		
+		traceReq.setPoincarePlanes({3.141592});
+		
+		traceReq.setTurnLimit(10);
+		// traceReq.setStepLimit(10000);
+		traceReq.setStepSize(0.001);
+		
+		KJ_DBG("Sending request");
+		auto response = traceReq.send().wait(ws);
+		
+		KJ_DBG(response);
+	}
+}
+
+#endif

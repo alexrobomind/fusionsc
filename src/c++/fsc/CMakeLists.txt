@@ -66,13 +66,13 @@ add_library(
 	geometry.cpp
 	
 	magnetics.h
+	magnetics-kernels.h
 	magnetics.cpp
 	
-	flt.cpp
 	flt.h
+	flt-kernels.h
+	flt.cpp
 	
-	kernels-biotsavart.h
-	kernels-flt.h
 	kernels.h
 	kernels.cpp
 	
@@ -114,9 +114,6 @@ set_property(
 	PROPERTY SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-if(FSC_WITH_CUDA)
-endif()
-
 target_link_libraries(fsc PUBLIC deps cupnp)
 target_include_directories(
 	fsc
@@ -145,7 +142,9 @@ if(FSC_WITH_CUDA)
 	target_sources(
 		fsc
 		PRIVATE
-		device-kernels.cu
+		
+		flt.cu
+		magnetics.cu
 	)
 	set_target_properties(fsc PROPERTIES CUDA_ARCHITECTURES "60")
 	set_target_properties(fsc PROPERTIES LINKER_LANGUAGE CUDA)

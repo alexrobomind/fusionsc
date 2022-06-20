@@ -161,6 +161,13 @@ namespace cupnp {
 	CUPNP_FUNCTION T getPointer(Location base);
 	
 	template<typename T>
+	struct TypedLocation : public Location {
+		using Location::Location;
+		
+		CUPNP_FUNCTION T operator*() { return getPointer<T>(*this); }
+	};
+	
+	template<typename T>
 	inline kj::Array<size_t> calculateSizes(const kj::ArrayPtr<T>& segments) {
 		auto sizes = kj::heapArrayBuilder<size_t>(segments.size());
 		for(const auto& segment : segments)
@@ -184,7 +191,7 @@ namespace cupnp {
 	}
 	
 	template<typename T>
-	inline T messageRoot(SegmentTable::Entry firstSegment, /*kj::ArrayPtr<kj::ArrayPtr<capnp::word>>*/SegmentTable segmentRefs);
+	inline TypedLocation<T> messageRoot(SegmentTable::Entry firstSegment, /*kj::ArrayPtr<kj::ArrayPtr<capnp::word>>*/SegmentTable segmentRefs);
 	
 	/*struct Message {
 		// Host-located array of segments (which can individually be device-located)
@@ -638,13 +645,13 @@ namespace cupnp {
 	}
 	
 	template<typename T>
-	inline T messageRoot(SegmentTable::Entry firstSegment, /*kj::ArrayPtr<kj::ArrayPtr<capnp::word>>*/SegmentTable segmentRefs) {
-		Location root;
+	inline TypedLocation<T> messageRoot(SegmentTable::Entry firstSegment, SegmentTable segmentRefs) {
+		TypedLocation<T> root;
 		root.segmentId = 0;
 		root.ptr = reinterpret_cast<unsigned char*>(firstSegment.begin());
 		root.segments = segmentRefs;
 		
-		return getPointer<T>(root);
+		return root;
 	}
 	
 	// Ensures that the location presented can hold enough data to support

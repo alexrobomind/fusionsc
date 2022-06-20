@@ -1,6 +1,7 @@
 #include <fsc/flt.capnp.cu.h>
 
 #include "tensor.h"
+#include "cudata.h"
 #include "interpolation.h"
 
 namespace fsc {
@@ -66,13 +67,17 @@ namespace fsc {
 	 */
 	inline EIGEN_DEVICE_FUNC void fltKernel(
 		unsigned int idx,
-		fsc::cu::FLTKernelData kernelData,
+		CuPtr<fsc::cu::FLTKernelData> pKernelData,
 		TensorMap<Tensor<double, 4>> fieldData,
-		const fsc::cu::FLTKernelRequest request
+		CuPtr<fsc::cu::FLTKernelRequest> pRequest
 	) {
 		using Num = double;
 		using V3 = Vec3<Num>;
 		
+		auto kernelData = *pKernelData;
+		auto request   = *pRequest;
+		
+		// printf("Hello there\n");
 		// KJ_DBG("FLT kernel started");
 		
 		// Extract local scratch space
@@ -191,6 +196,8 @@ namespace fsc {
 				
 				state.setTurnCount(state.getTurnCount() + 1);
 				
+				// printf("New turn\n");
+				
 				// KJ_DBG(idx, state.getTurnCount());
 				
 				currentEvent().setNewTurn(state.getTurnCount());
@@ -241,3 +248,11 @@ namespace fsc {
 		#undef FSC_FLT_LOG_EVENT
 	}
 }
+
+REFERENCE_KERNEL(
+	fsc::fltKernel,
+	
+	fsc::CuPtr<fsc::cu::FLTKernelData>,
+	Eigen::TensorMap<Eigen::Tensor<double, 4>>,
+	fsc::CuPtr<fsc::cu::FLTKernelRequest>
+);

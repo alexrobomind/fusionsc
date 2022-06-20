@@ -8,6 +8,9 @@
 
 namespace fsc {
 	
+template<typename T>
+using CuPtr = cupnp::TypedLocation<T>;
+	
 namespace internal {
 	
 /**
@@ -30,7 +33,7 @@ kj::Array<kj::ArrayPtr<capnp::word>> coerceSegmentTableToNonConst(T table) {
 	return outputTable;
 }
 
-kj::Array<kj::ArrayPtr<const capnp::word>> extractSegmentTable(kj::ArrayPtr<const capnp::word> flatArray) {
+inline kj::Array<kj::ArrayPtr<const capnp::word>> extractSegmentTable(kj::ArrayPtr<const capnp::word> flatArray) {
 	capnp::FlatArrayMessageReader reader(flatArray);
 	
 	kj::Vector<ArrayPtr<const capnp::word>> segments;
@@ -47,7 +50,7 @@ kj::Array<kj::ArrayPtr<const capnp::word>> extractSegmentTable(kj::ArrayPtr<cons
 	return segments.releaseAsArray();
 }
 
-kj::Array<cupnp::SegmentTable::Entry> buildSegmentTable(kj::ArrayPtr<kj::ArrayPtr<capnp::word>> input) {
+inline kj::Array<cupnp::SegmentTable::Entry> buildSegmentTable(kj::ArrayPtr<kj::ArrayPtr<capnp::word>> input) {
 	auto result = kj::heapArrayBuilder<cupnp::SegmentTable::Entry>(input.size());
 	for(auto e : input)
 		result.add(e);
@@ -186,7 +189,7 @@ struct MapToDevice<CupnpMessage<T>, Device> {
 		}
 	}
 	
-	T get() {
+	CuPtr<T> get() {
 		kj::ArrayPtr<cupnp::SegmentTable::Entry> ptrSegmentTable(deviceSegmentTable.devicePtr, deviceSegmentTable.size);
 		cupnp::SegmentTable::Entry firstSegment = hostSegmentTable[0];
 		

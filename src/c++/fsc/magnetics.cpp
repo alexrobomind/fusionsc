@@ -3,7 +3,7 @@
 #include "magnetics.h"
 #include "data.h"
 #include "kernels.h"
-#include "kernels-biotsavart.h"
+#include "magnetics-kernels.h"
 
 namespace fsc {
 	
