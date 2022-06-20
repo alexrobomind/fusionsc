@@ -83,10 +83,10 @@ FetchContent_Declare(
 
 FetchContent_Declare(
   Eigen3
-  #GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-  #GIT_TAG        3.4.0
-  GIT_REPOSITORY https://github.com/alexrobomind/eigen.git
-  GIT_TAG        cudafix
+  GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+  GIT_TAG        3.4
+  #GIT_REPOSITORY https://github.com/alexrobomind/eigen.git
+  #GIT_TAG        cudafix
   GIT_SHALLOW    On
   GIT_PROGRESS   On
 )
@@ -184,6 +184,7 @@ target_link_libraries(
 	CapnProto::kj-http
 	CapnProto::kj
 	Eigen3::Eigen
+	#eigen
 )
 
 if(TARGET capnpc)
