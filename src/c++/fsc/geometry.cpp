@@ -42,12 +42,17 @@ Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geom
 				output.setRef(lt->dataService().publish(lt->randomID(), tmp));
 			}).attach(mv(tmp), thisCap());
 		}
+		case Geometry::NESTED: {
+			return processGeometry(input.getNested(), output, context);
+		}
 		case Geometry::MESH: {
 			output.setMesh(input.getMesh());
 			return READY_NOW;
 		}
-		default:
-			return READY_NOW;	
+		default: {
+			output.setNested(input);
+			return READY_NOW;
+		}
 	}
 }
 
@@ -178,6 +183,9 @@ Promise<void> GeometryLibImpl::collectTagNames(Geometry::Reader input, kj::HashS
 			.then([input, &output, this](LocalDataRef<Geometry> geo) {
 				return collectTagNames(geo.get(), output);
 			});
+		case Geometry::NESTED: {
+			return collectTagNames(input.getNested(), output);
+		}
 		case Geometry::MESH:
 			return READY_NOW;
 		default:
@@ -231,6 +239,8 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 			.then([input, &tagTable, tagValues = mv(tagValues), transform, &output, this](LocalDataRef<Geometry> geo) {
 				return mergeGeometries(geo.get(), tagTable, tagValues, transform, output);
 			});
+		case Geometry::NESTED:
+			return mergeGeometries(input.getNested(), tagTable, tagValues, transform, output);
 			
 		case Geometry::MESH:
 			return lt->dataService().download(input.getMesh())

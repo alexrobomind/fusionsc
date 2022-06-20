@@ -75,6 +75,17 @@ TEST_CASE("compdb") {
 		}
 	}
 }
+ 
+TEST_CASE("preheat") {
+	Library l = newLibrary();
+	LibraryThread t = l -> newThread();
+	
+	auto& ws = t -> waitScope();
+	
+	// Get fields to preheat
+	auto fields = preheatFields(Temporary<W7XCoilSet>().asReader());
+	KJ_DBG(fields);
+}
 
 }}
 

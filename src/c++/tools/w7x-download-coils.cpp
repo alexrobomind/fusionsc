@@ -100,6 +100,8 @@ struct MainCls {
 	
 	bool addDefault() {
 		// Add default stuff here
+		for(auto i : kj::Range<unsigned int>(160, 230))
+			downloadCoil(i);
 		return true;
 	}
 	
@@ -243,14 +245,14 @@ struct MainCls {
 	
 	auto getMain() {
 		return kj::MainBuilder(context, "Coils downloader", "Downloads W7-X coils into OfflineData database")
-			.addOptionWithArg({"--coilsdb"}, KJ_BIND_METHOD(*this, setCoilsDBAddress), "<address>", "Address of CoilsDB")
-			.addOptionWithArg({"--compsdb"}, KJ_BIND_METHOD(*this, setCompsDBAddress), "<address>", "Address of ComponentsDB")
-			.addOptionWithArg({"--coil"}, KJ_BIND_METHOD(*this, addCoil), "<coilID>", "Download a single coil")
-			.addOptionWithArg({"--config"}, KJ_BIND_METHOD(*this, addConfig), "<coilID>", "Download a single coil")
-			.addOptionWithArg({"--mesh"}, KJ_BIND_METHOD(*this, addMesh), "<coilID>", "Download a single coil")
-			.addOptionWithArg({"--assembly"}, KJ_BIND_METHOD(*this, addAssembly), "<coilID>", "Download a single coil")
-			.addOption({"--default"}, KJ_BIND_METHOD(*this, addDefault), "Add default payloads (CAD coils, baseline configurations, most-used PFCs)")
-			.addOptionWithArg({"-o", "--output"}, KJ_BIND_METHOD(*this, setOutput), "<output file name>", "Specify output file")
+			.addOptionWithArg({"coilsdb"}, KJ_BIND_METHOD(*this, setCoilsDBAddress), "<address>", "Address of CoilsDB")
+			.addOptionWithArg({"compsdb"}, KJ_BIND_METHOD(*this, setCompsDBAddress), "<address>", "Address of ComponentsDB")
+			.addOptionWithArg({"coil"}, KJ_BIND_METHOD(*this, addCoil), "<coilID>", "Download a single coil")
+			.addOptionWithArg({"config"}, KJ_BIND_METHOD(*this, addConfig), "<coilID>", "Download a single coil")
+			.addOptionWithArg({"mesh"}, KJ_BIND_METHOD(*this, addMesh), "<coilID>", "Download a single coil")
+			.addOptionWithArg({"assembly"}, KJ_BIND_METHOD(*this, addAssembly), "<coilID>", "Download a single coil")
+			.addOption({"default"}, KJ_BIND_METHOD(*this, addDefault), "Add default payloads (CAD coils, baseline configurations, most-used PFCs)")
+			.addOptionWithArg({"-o", "output"}, KJ_BIND_METHOD(*this, setOutput), "<output file name>", "Specify output file")
 			.callAfterParsing(KJ_BIND_METHOD(*this, run))
 			.build();
 	}

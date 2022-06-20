@@ -88,14 +88,15 @@ struct Geometry {
 		transformed @2 : Transformed(Geometry);
 		
 		ref @3 : DataRef(Geometry);
+		nested @4 : Geometry;
 		
-		mesh @4 : DataRef(Mesh);
+		mesh @5 : DataRef(Mesh);
 		
 		# ====== Device-specific ======
 		# ----------- W7-X ------------
 		
-		componentsDBMeshes     @5 : List(UInt64);
-		componentsDBAssemblies @6 : List(UInt64);
+		componentsDBMeshes     @6 : List(UInt64);
+		componentsDBAssemblies @7 : List(UInt64);
 	}
 }
 

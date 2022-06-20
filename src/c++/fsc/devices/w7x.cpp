@@ -6,6 +6,59 @@
 namespace fsc {
 
 namespace devices { namespace w7x {
+	
+namespace {
+	
+/**
+ * Magnetic field resolver that processes W7-X configuration descriptions and
+ * CoilsDB references.
+ */
+struct CoilsDBResolver : public FieldResolverBase {	
+	constexpr static unsigned int N_MAIN_COILS = 7;
+	constexpr static unsigned int N_MODULES = 10;
+	constexpr static unsigned int N_TRIM_COILS = 5;
+	constexpr static unsigned int N_CONTROL_COILS = 10;
+	
+	CoilsDBResolver(LibraryThread& lt, CoilsDB::Client backend);
+	
+	kj::TreeMap<uint64_t, DataRef<Filament>::Client> coils;
+	kj::TreeMap<ID, LocalDataRef<CoilFields>> coilPacks;
+	
+	CoilsDB::Client backend;
+	
+	Promise<void> processField   (MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) override;
+	Promise<void> processFilament(Filament     ::Reader input, Filament     ::Builder output, ResolveFieldContext context) override;
+	
+	// Extra function to handle the "coilsAndCurrents" type of W7-X magnetic config
+	void coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAndCurrents::Reader reader, MagneticField::Builder output, ResolveFieldContext context);
+	
+	// Returns a set of magnetic fields required for processing a configuration node.
+	// Caches the field set
+	// Promise<LocalDataRef<CoilFields>> getCoilFields(W7XCoilSet::Reader reader);
+	static Temporary<CoilFields> buildCoilFields(W7XCoilSet::Reader reader);
+	
+	// Loads the coils from the backend coilsDB. Caches the result
+	DataRef<Filament>::Client getCoil(uint64_t cdbID);	
+};
+
+struct ComponentsDBResolver : public GeometryResolverBase {
+	constexpr static kj::StringPtr CDB_ID_TAG = "w7x-component-id"_kj;
+	constexpr static kj::StringPtr CDB_ASID_TAG = "w7x-assembly-id"_kj;
+	
+	ComponentsDBResolver(LibraryThread& lt, ComponentsDB::Client backend);
+	
+	kj::TreeMap<uint64_t, DataRef<Mesh>::Client> meshes;
+	
+	ComponentsDB::Client backend;
+	
+	Promise<void> processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context) override;
+	
+	// Loads a component from the components db (caches result)
+	DataRef<Mesh>::Client getComponent(uint64_t cdbID);
+	
+	// Loads an assembly from the components db
+	Promise<Array<uint64_t>> getAssembly(uint64_t cdbID);
+};
 
 // === class CoilsDBResolver ===
 
@@ -24,17 +77,26 @@ Promise<void> CoilsDBResolver::processField(MagneticField::Reader input, Magneti
 		case MagneticField::W7X_MAGNETIC_CONFIG: {
 			auto w7xConfig = input.getW7xMagneticConfig();
 			
+			auto tmpField = heapHeld<Temporary<MagneticField>>();
+			Promise<void> inner = READY_NOW;
+			
 			switch(w7xConfig.which()) {
-				case MagneticField::W7xMagneticConfig::COILS_AND_CURRENTS:
-					return coilsAndCurrents(w7xConfig.getCoilsAndCurrents(), output, context);
+				// The 'coils and currents' type of field is processed separately
+				case MagneticField::W7xMagneticConfig::COILS_AND_CURRENTS: {
+					coilsAndCurrents(w7xConfig.getCoilsAndCurrents(), *tmpField, context);
+					
+					break;
+				}
+					
+				// Send config requests to the W7-X Config DB
 				case MagneticField::W7xMagneticConfig::CONFIGURATION_D_B: {
 					auto cdbConfig = w7xConfig.getConfigurationDB();
-					//TODO: This should probably be cached
+					
 					auto request = backend.getConfigRequest();
 					request.setId(cdbConfig.getConfigID());
 					auto coilsDBResponse = request.send();
 					
-					return coilsDBResponse.then([this, output, cdbConfig](auto config) mutable {						
+					inner = coilsDBResponse.then([this, output, cdbConfig](auto config) mutable {						
 						auto coils = config.getCoils();
 						auto currents = config.getCurrents();
 						
@@ -48,79 +110,86 @@ Promise<void> CoilsDBResolver::processField(MagneticField::Reader input, Magneti
 							auto filField = sum[i].initFilamentField();
 							filField.setCurrent(scale * currents[i]);
 							filField.setBiotSavartSettings(cdbConfig.getBiotSavartSettings());
-							filField.initFilament().setRef(getCoil(coils[i]));
+							filField.initFilament().setW7xCoilsDB(coils[i]);
 						}
+					}).catch_([input, tmpField](kj::Exception e) mutable {
+						(*tmpField) = input;
 					});
+					
+					break;
 				}
 				default:
-					throw "Unknown W7-X configuration";
+					break;
 			}
+			
+			// After pre-processing the field, process it with the parent method to resolve the coil references where possible
+			return inner.then([this, tmpField, output, context]() mutable {
+				FieldResolverBase::processField(*tmpField, output, context);
+			}).attach(tmpField.x());
 		}
+		
 		default:
 			return FieldResolverBase::processField(input, output, context);
 	}
 }
 
-Promise<void> CoilsDBResolver::coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAndCurrents::Reader reader, MagneticField::Builder output, ResolveFieldContext context) {
+void CoilsDBResolver::coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAndCurrents::Reader reader, MagneticField::Builder output, ResolveFieldContext context) {
 	output.initSum(N_MAIN_COILS + N_TRIM_COILS + N_CONTROL_COILS);
 	
-	return getCoilFields(reader.getCoils()).then([reader, output, context, this](LocalDataRef<CoilFields> coilFields) mutable {
-		CoilFields::Reader fieldsReader = coilFields.get();
-		
-		using FieldRef = DataRef<MagneticField>::Client;
-		unsigned int offset = 0;
-		
-		auto addOutput = [&](FieldRef field, double current) mutable {
-			auto subField = output.getSum()[offset++];
-			auto scaleBy = subField.initScaleBy();
-			scaleBy.setFactor(current);
-			scaleBy.initField().setRef(field);				
-		};
-		
-		for(unsigned int i = 0; i < 5; ++i) {
-			addOutput(fieldsReader.getMainCoils()[i], reader.getNonplanar()[i]);
+	auto coilFields = buildCoilFields(reader.getCoils());
+	
+	unsigned int offset = 0;
+	
+	auto addOutput = [&](MagneticField::Builder field, double current) mutable {
+		auto subField = output.getSum()[offset++];
+		auto scaleBy = subField.initScaleBy();
+		scaleBy.setFactor(current);
+		scaleBy.setField(field);			
+	};
+	
+	for(unsigned int i = 0; i < 5; ++i) {
+		addOutput(coilFields.getMainCoils()[i], reader.getNonplanar()[i]);
+	}
+	
+	for(unsigned int i = 0; i < 2; ++i) {
+		addOutput(coilFields.getMainCoils()[i + 5], reader.getPlanar()[i]);
+	}
+	
+	KJ_ASSERT(offset == N_MAIN_COILS);
+	
+	for(unsigned int i = 0; i < N_TRIM_COILS; ++i) {
+		addOutput(coilFields.getTrimCoils()[i], reader.getTrim()[i]);
+	}
+	
+	double controlCurrents[10];
+	auto cc = reader.getControl();
+	for(unsigned int i = 0; i < 10; ++i) {
+		switch(cc.size()) {
+			case 10:
+				controlCurrents[i] = cc[i];
+				break;
+			case 2:
+				controlCurrents[i] = cc[i % 2];
+				break;
+			case 5:
+				// TODO: Check if the control coils are grouped by module
+				controlCurrents[i] = cc[i / 2];
+				break;
+			case 0:
+				controlCurrents[i] = 0;
+			default:
+				KJ_FAIL_REQUIRE("Control coil currents must be of length 0 (no CC), 2 (upper and lower), 5 (one per module), or 10 (upper and lower per module)", cc.size());
 		}
-		
-		for(unsigned int i = 0; i < 2; ++i) {
-			addOutput(fieldsReader.getMainCoils()[i + 5], reader.getPlanar()[i]);
-		}
-		
-		KJ_ASSERT(offset == N_MAIN_COILS);
-		
-		for(unsigned int i = 0; i < N_TRIM_COILS; ++i) {
-			addOutput(fieldsReader.getTrimCoils()[i], reader.getTrim()[i]);
-		}
-		
-		double controlCurrents[10];
-		auto cc = reader.getControl();
-		for(unsigned int i = 0; i < 10; ++i) {
-			switch(cc.size()) {
-				case 10:
-					controlCurrents[i] = cc[i];
-					break;
-				case 2:
-					controlCurrents[i] = cc[i % 2];
-					break;
-				case 5:
-					// TODO: Check if the control coils are grouped by module
-					controlCurrents[i] = cc[i / 2];
-					break;
-				case 0:
-					controlCurrents[i] = 0;
-				default:
-					KJ_FAIL_REQUIRE("Control coil currents must be of length 0 (no CC), 2 (upper and lower), 5 (one per module), or 10 (upper and lower per module)", cc.size());
-			}
-		}
-		
-		for(unsigned int i = 0; i < N_CONTROL_COILS; ++i) {
-			addOutput(fieldsReader.getControlCoils()[i], controlCurrents[i]);
-		}
-		
-		KJ_ASSERT(offset == output.getSum().size());
-	});
+	}
+	
+	for(unsigned int i = 0; i < N_CONTROL_COILS; ++i) {
+		addOutput(coilFields.getControlCoils()[i], controlCurrents[i]);
+	}
+	
+	KJ_ASSERT(offset == output.getSum().size());
 }
 
-Promise<LocalDataRef<CoilFields>> CoilsDBResolver::getCoilFields(W7XCoilSet::Reader reader) {	
+/*Promise<LocalDataRef<CoilFields>> CoilsDBResolver::getCoilFields(W7XCoilSet::Reader reader) {	
 	return ID::fromReaderWithRefs(reader)
 	.then([this, reader](ID id) {
 		KJ_IF_MAYBE(coilPack, coilPacks.find(id)) {
@@ -135,7 +204,7 @@ Promise<LocalDataRef<CoilFields>> CoilsDBResolver::getCoilFields(W7XCoilSet::Rea
 		coilPacks.insert(id, ref);
 		return ref;
 	});
-}
+}*/
 
 Promise<void> CoilsDBResolver::processFilament(Filament::Reader input, Filament::Builder output, ResolveFieldContext context) {
 	switch(input.which()) {
@@ -167,76 +236,74 @@ DataRef<Filament>::Client CoilsDBResolver::getCoil(uint64_t cdbID) {
 	return newCoil;
 }
 
-void CoilsDBResolver::buildCoilFields(W7XCoilSet::Reader reader, CoilFields::Builder coilPack) {	
-	auto getMainCoil = [=](unsigned int i_mod, unsigned int i_coil) -> DataRef<Filament>::Client {
+Temporary<CoilFields> CoilsDBResolver::buildCoilFields(W7XCoilSet::Reader reader) {	
+	auto getMainCoil = [=](unsigned int i_mod, unsigned int i_coil, Filament::Builder out) {
 		if(reader.isCoilsDBSet()) {
 			unsigned int offset = reader.getCoilsDBSet().getMainCoilOffset();
 			unsigned int coilID = i_coil < 5
 				? offset + 5 * i_mod + i_coil
 				: offset + 2 * i_mod + i_coil + 50;
-			return getCoil(coilID);
+			out.setW7xCoilsDB(coilID);
 		} else {
 			KJ_REQUIRE(reader.isCustomCoilSet());
-			return reader.getCustomCoilSet().getMainCoils()[N_MAIN_COILS * i_mod + i_coil];
+			out.setRef(reader.getCustomCoilSet().getMainCoils()[N_MAIN_COILS * i_mod + i_coil]);
 		}
 	};
 	
-	auto getTrimCoil = [=](unsigned int i_coil) -> DataRef<Filament>::Client {
+	auto getTrimCoil = [=](unsigned int i_coil, Filament::Builder out) {
 		if(reader.isCoilsDBSet())
-			return getCoil(reader.getCoilsDBSet().getTrimCoilIDs()[i_coil]);
+			out.setW7xCoilsDB(reader.getCoilsDBSet().getTrimCoilIDs()[i_coil]);
 		else {
 			KJ_REQUIRE(reader.isCustomCoilSet());
-			return reader.getCustomCoilSet().getTrimCoils()[i_coil];
+			out.setRef(reader.getCustomCoilSet().getTrimCoils()[i_coil]);
 		}
 	};
 	
-	auto getControlCoil = [=](unsigned int i_coil) -> DataRef<Filament>::Client {
+	auto getControlCoil = [=](unsigned int i_coil, Filament::Builder out) {
 		if(reader.isCoilsDBSet())
-			return getCoil(reader.getCoilsDBSet().getControlCoilOffset() + i_coil);
+			out.setW7xCoilsDB(reader.getCoilsDBSet().getControlCoilOffset() + i_coil);
 		else {
 			KJ_REQUIRE(reader.isCustomCoilSet());
-			return reader.getCustomCoilSet().getControlCoils()[i_coil];
+			out.setRef(reader.getCustomCoilSet().getControlCoils()[i_coil]);
 		}
 	};
 	
-	auto initField = [=](MagneticField::Builder out, DataRef<Filament>::Client coil, unsigned int windingNo, bool invert) {
+	auto initField = [=](MagneticField::Builder out, unsigned int windingNo, bool invert) {
 		auto filField = out.initFilamentField();
 		filField.setCurrent(invert ? 1 : -1);
 		filField.setBiotSavartSettings(reader.getBiotSavartSettings());
 		filField.setWindingNo(windingNo);
-		filField.initFilament().setRef(coil);
+		
+		return filField;
 	};
 	
-	auto publish = [this](MagneticField::Builder b) -> LocalDataRef<MagneticField> {
-		return lt -> dataService().publish(lt -> randomID(), b);
-	};
-			
-	auto mainCoils = coilPack.initMainCoils(N_MAIN_COILS);
+	Temporary<CoilFields> output;
+	auto mainCoils = output.initMainCoils(N_MAIN_COILS);
 	auto nWindMain = reader.getNWindMain();
 	for(unsigned int i_coil = 0; i_coil < N_MAIN_COILS; ++i_coil) {
-		Temporary<MagneticField> output;
-		auto sum = output.initSum(N_MODULES);
+		auto sum = mainCoils[i_coil].initSum(N_MODULES);
+		
 		for(unsigned int i_mod = 0; i_mod < N_MODULES; ++i_mod) {
-			initField(sum[i_mod], getMainCoil(i_mod, i_coil), nWindMain[i_coil], reader.getInvertMainCoils());
+			auto filField = initField(sum[i_mod], nWindMain[i_coil], reader.getInvertMainCoils());
+			getMainCoil(i_mod, i_coil, filField.getFilament());
 		}
-		mainCoils[i_coil] = publish(output);
 	}
 	
-	auto trimCoils = coilPack.initTrimCoils(N_TRIM_COILS);
+	auto trimCoils = output.initTrimCoils(N_TRIM_COILS);
 	auto nWindTrim = reader.getNWindTrim();
 	for(unsigned int i_coil = 0; i_coil < N_TRIM_COILS; ++i_coil) {
-		Temporary<MagneticField> output;
-		initField(output, getTrimCoil(i_coil), nWindTrim[i_coil], false);
-		trimCoils[i_coil] = publish(output);
+		auto filField = initField(trimCoils[i_coil], nWindTrim[i_coil], false);
+		getTrimCoil(i_coil, filField.getFilament());
 	}
 	
-	auto controlCoils = coilPack.initControlCoils(N_CONTROL_COILS);
+	auto controlCoils = output.initControlCoils(N_CONTROL_COILS);
 	auto nWindControl = reader.getNWindControl();
 	for(unsigned int i_coil = 0; i_coil < N_CONTROL_COILS; ++i_coil) {
-		Temporary<MagneticField> output;
-		initField(output, getControlCoil(i_coil), nWindControl[i_coil], reader.getInvertControlCoils()[i_coil]);
-		controlCoils[i_coil] = publish(output);
-	}		
+		auto filField = initField(controlCoils[i_coil], nWindControl[i_coil], reader.getInvertControlCoils()[i_coil]);
+		getControlCoil(i_coil, filField.getFilament());
+	}
+	
+	return output;
 }
 
 // === class ComponentsDBResolver ===
@@ -420,49 +487,6 @@ struct CoilsDBWebservice : public CoilsDB::Server {
 	}
 };
 
-struct OfflineCoilsDB : public CoilsDB::Server {
-	LibraryThread lt;
-	Array<LocalDataRef<OfflineData>> offlineData;
-	
-	CoilsDB::Client backend;
-	
-	OfflineCoilsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt, CoilsDB::Client backend) :
-		lt(lt->addRef()),
-		offlineData(kj::heapArray(offlineData)),
-		backend(backend)
-	{}
-	
-	Promise<void> getCoil(GetCoilContext context) override {
-		for(auto& entry : offlineData) {
-			for(auto coilEntry : entry.get().getW7xCoils()) {
-				if(coilEntry.getId() == context.getParams().getId()) {
-					context.setResults(coilEntry.getFilament());
-					return kj::READY_NOW;
-				}
-			}
-		}
-		
-		auto tail = backend.getCoilRequest();
-		tail.setId(context.getParams().getId());
-		return context.tailCall(mv(tail));
-	}
-	
-	Promise<void> getConfig(GetConfigContext context) override {
-		for(auto& entry : offlineData) {
-			for(auto configEntry : entry.get().getW7xConfigs()) {
-				if(configEntry.getId() == context.getParams().getId()) {
-					context.setResults(configEntry.getConfig());
-					return kj::READY_NOW;
-				}
-			}
-		}
-		
-		auto tail = backend.getConfigRequest();
-		tail.setId(context.getParams().getId());
-		return context.tailCall(mv(tail));
-	}
-};
-
 struct ComponentsDBWebservice : public ComponentsDB::Server {
 	kj::String address;
 	LibraryThread lt;
@@ -591,16 +615,49 @@ struct ComponentsDBWebservice : public ComponentsDB::Server {
 	}
 };
 
+struct OfflineCoilsDB : public CoilsDB::Server {
+	LibraryThread lt;
+	Array<LocalDataRef<OfflineData>> offlineData;
+	
+	OfflineCoilsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt) :
+		lt(lt->addRef()),
+		offlineData(kj::heapArray(offlineData))
+	{}
+	
+	Promise<void> getCoil(GetCoilContext context) override {
+		for(auto& entry : offlineData) {
+			for(auto coilEntry : entry.get().getW7xCoils()) {
+				if(coilEntry.getId() == context.getParams().getId()) {
+					context.setResults(coilEntry.getFilament());
+					return kj::READY_NOW;
+				}
+			}
+		}
+		
+		KJ_FAIL_REQUIRE("Unknown coil");
+	}
+	
+	Promise<void> getConfig(GetConfigContext context) override {
+		for(auto& entry : offlineData) {
+			for(auto configEntry : entry.get().getW7xConfigs()) {
+				if(configEntry.getId() == context.getParams().getId()) {
+					context.setResults(configEntry.getConfig());
+					return kj::READY_NOW;
+				}
+			}
+		}
+		
+		KJ_FAIL_REQUIRE("Unknown configuration");
+	}
+};
+
 struct OfflineComponentsDB : public ComponentsDB::Server {
 	LibraryThread lt;
 	Array<LocalDataRef<OfflineData>> offlineData;
 	
-	ComponentsDB::Client backend;
-	
-	OfflineComponentsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt, ComponentsDB::Client backend) :
+	OfflineComponentsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt) :
 		lt(lt->addRef()),
-		offlineData(kj::heapArray(offlineData)),
-		backend(backend)
+		offlineData(kj::heapArray(offlineData))
 	{}
 	
 	Promise<void> getMesh(GetMeshContext context) override {
@@ -613,9 +670,7 @@ struct OfflineComponentsDB : public ComponentsDB::Server {
 			}
 		}
 		
-		auto tail = backend.getMeshRequest();
-		tail.setId(context.getParams().getId());
-		return context.tailCall(mv(tail));
+		KJ_FAIL_REQUIRE("Unknown mesh");
 	}
 	
 	Promise<void> getAssembly(GetAssemblyContext context) override {
@@ -628,26 +683,43 @@ struct OfflineComponentsDB : public ComponentsDB::Server {
 			}
 		}
 		
-		auto tail = backend.getAssemblyRequest();
-		tail.setId(context.getParams().getId());
-		return context.tailCall(mv(tail));
+		KJ_FAIL_REQUIRE("Unknown assembly");
 	}
 };
 
-CoilsDB::Client newCoilsDBFromWebservice(kj::StringPtr address, LibraryThread& lt) {
-	return CoilsDB::Client(kj::heap<CoilsDBWebservice>(address, lt));
 }
 
-CoilsDB::Client newOfflineCoilsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt, CoilsDB::Client backend) {
-	return CoilsDB::Client(kj::heap<OfflineCoilsDB>(offlineData, lt, backend));
+CoilsDB::Client newCoilsDBFromWebservice(kj::StringPtr address, LibraryThread& lt) {
+	return CoilsDB::Client(kj::heap<CoilsDBWebservice>(address, lt));
 }
 
 ComponentsDB::Client newComponentsDBFromWebservice(kj::StringPtr address, LibraryThread& lt) {
 	return ComponentsDB::Client(kj::heap<ComponentsDBWebservice>(address, lt));
 }
 
-ComponentsDB::Client newOfflineComponentsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt, ComponentsDB::Client backend) {
-	return ComponentsDB::Client(kj::heap<OfflineComponentsDB>(offlineData, lt, backend));
+CoilsDB::Client newOfflineCoilsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt) {
+	return CoilsDB::Client(kj::heap<OfflineCoilsDB>(offlineData, lt));
+}
+
+ComponentsDB::Client newComponentsDBFromOfflineData(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt) {
+	return ComponentsDB::Client(kj::heap<OfflineComponentsDB>(offlineData, lt));
+}
+
+kj::Array<Temporary<MagneticField>> preheatFields(W7XCoilSet::Reader coils) {
+	auto resolved = CoilsDBResolver::buildCoilFields(coils);
+	
+	kj::Vector<Temporary<MagneticField>> results;
+	
+	for(auto f : resolved.getMainCoils())
+		results.add(f);
+	
+	for(auto f : resolved.getTrimCoils())
+		results.add(f);
+	
+	for(auto f : resolved.getControlCoils())
+		results.add(f);
+	
+	return results.releaseAsArray();
 }
 	
 }}

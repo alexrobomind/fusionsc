@@ -241,6 +241,9 @@ struct CalculationSession : public FieldCalculator::Server {
 				case MagneticField::INVERT: {
 					return processField(calculator, node.getInvert(), -scale);
 				}
+				case MagneticField::NESTED: {
+					return processField(calculator, node.getNested(), scale);
+				}
 				default:
 					KJ_FAIL_REQUIRE("Unknown magnetic field node encountered. This either indicates that a device-specific node was not resolved, or a generic node from a future library version was presented");
 			}
@@ -340,8 +343,13 @@ Promise<void> FieldResolverBase::processField(MagneticField::Reader input, Magne
 		case MagneticField::INVERT: {
 			return processField(input.getInvert(), output.initInvert(), context);
 		}
-		default:
-			return kj::READY_NOW;	
+		case MagneticField::NESTED: {
+			return processField(input.getNested(), output, context);
+		}
+		default: {
+			output.setNested(input);
+			return READY_NOW;
+		}
 	}
 }
 
@@ -367,8 +375,13 @@ Promise<void> FieldResolverBase::processFilament(Filament::Reader input, Filamen
 				return output.setRef(lt->dataService().publish(lt->randomID(), newOutput));
 			}).attach(mv(tmpMessage), thisCap());
 		}
-		default:
-			return kj::READY_NOW;
+		case Filament::NESTED: {
+			return processFilament(input.getNested(), output, context);
+		}
+		default: {
+			output.setNested(input);
+			return READY_NOW;
+		}
 	}
 }
 

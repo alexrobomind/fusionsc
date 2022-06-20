@@ -83,7 +83,7 @@ FetchContent_Declare(
 
 FetchContent_Declare(
   Eigen3
-  GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+  GIT_REPOSITORY https://github.com/alexrobomind/eigen34.git
   GIT_TAG        3.4
   #GIT_REPOSITORY https://github.com/alexrobomind/eigen.git
   #GIT_TAG        cudafix
@@ -155,7 +155,8 @@ else()
 		set(BOTAN_XARGS "")
 	endif()
 
-	execute_process(
+	add_custom_command(
+		OUTPUT "${botan_SOURCE_DIR}/botan_all.cpp"
 		COMMAND ${Python3_EXECUTABLE}
 		"${botan_SOURCE_DIR}/configure.py"
 		"--minimized-build"
@@ -165,7 +166,6 @@ else()
 		"--cc-bin" "${CMAKE_CXX_COMPILER}"
 		${BOTAN_XARGS}
 		WORKING_DIRECTORY ${botan_SOURCE_DIR}
-		COMMAND_ECHO STDOUT
 	)
 	
 	add_library(botan "${botan_SOURCE_DIR}/botan_all.cpp")
@@ -235,5 +235,31 @@ include(Catch)
 SET(FSC_GENAPI "")
 
 add_subdirectory(src/c++)
-
 add_subdirectory(docs)
+
+option(FSC_WITH_INSTRUMENTATION "Whether to perform instrumentation")
+
+# Coverage testing
+if(FSC_WITH_INSTRUMENTATION AND (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
+	target_compile_options(fsc PRIVATE -fprofile-instr-generate -fcoverage-mapping)
+	target_link_options(tests PRIVATE -fprofile-instr-generate -fcoverage-mapping)
+	
+	set(LLVM_PROFDATA_COMMAND "llvm-profdata" CACHE STRING "Path to llvm-profdata executable")
+	
+	add_custom_command(
+		OUTPUT fsc.profraw
+		COMMAND "${CMAKE_COMMAND}" ARGS -E env LLVM_PROFILE_FILE=fsc.profraw $<TARGET_FILE:tests>
+		DEPENDS tests
+	)
+	
+	add_custom_command(
+		OUTPUT fsc.profdata
+		COMMAND "${LLVM_PROFDATA_COMMAND}" ARGS merge -sparse fsc.profraw -o fsc.profdata
+		DEPENDS fsc.profraw
+	)
+	
+	add_custom_target(
+		profiledata
+		DEPENDS fsc.profdata
+	)
+endif()
