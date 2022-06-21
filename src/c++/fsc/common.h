@@ -28,6 +28,7 @@ namespace fsc {
 
 using byte = kj::byte;
 using kj::Promise;
+using kj::ForkedPromise;
 using kj::Own;
 using kj::Tuple;
 using kj::Maybe;
@@ -280,6 +281,11 @@ private:
 template<typename T, typename... Params>
 Held<T> heapHeld(Params&&... params) {
 	return Held<T>(kj::heap<T>(fwd<Params>(params)...));
+}
+
+template<typename T>
+Held<T> ownHeld(Own<T>&& src) {
+	return Held<T>(mv(src));
 }
 
 // === Inline implementation ===

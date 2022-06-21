@@ -174,19 +174,25 @@ class DefaultErrorHandler : public kj::TaskSet::ErrorHandler {
 	}
 };
 
-struct AcceptHandler {
+struct ServerImpl : public fsc::Server {
 	Own<kj::ConnectionReceiver> receiver;
 	DefaultErrorHandler errorHandler;
 	
 	kj::TaskSet tasks;
 	
+	Maybe<ForkedPromise<void>> drainPromise;
+	
+	kj::Canceler acceptLoopCanceler;
+		
 	RootService::Client rootInterface;
 	
-	AcceptHandler(kj::NetworkAddress& address, RootService::Client rootInterface) :
+	ServerImpl(kj::NetworkAddress& address, RootService::Client rootInterface) :
 		receiver(address.listen()),
 		tasks(errorHandler),
 		rootInterface(rootInterface)
 	{}
+	
+	~ServerImpl() noexcept {}
 	
 	Promise<void> accept(Own<kj::AsyncIoStream> connection) {
 		auto task = connection->write(MAGIC_TOKEN.begin(), MAGIC_TOKEN.size() - 1);
@@ -204,13 +210,33 @@ struct AcceptHandler {
 		
 		tasks.add(mv(task));
 		
+		auto result = receiver->accept().then([this](Own<kj::AsyncIoStream> connection) { return accept(mv(connection)); });
+		result = acceptLoopCanceler.wrap(mv(result));
+		return result;
+	}
+	
+	unsigned int getPort() override { return receiver->getPort(); }
+	
+	Promise<void> run() override {
 		return receiver->accept().then([this](Own<kj::AsyncIoStream> connection) { return accept(mv(connection)); });
 	}
 	
-	Promise<void> run() {
-		return receiver->accept().then([this](Own<kj::AsyncIoStream> connection) { return accept(mv(connection)); });
+	Promise<void> drain() override {
+		acceptLoopCanceler.cancel("Server draining");
+		
+		KJ_IF_MAYBE(pP, drainPromise) {
+		} else {
+			drainPromise = tasks.onEmpty().fork();
+		}
+		
+		KJ_IF_MAYBE(pP, drainPromise)	{
+			return pP->addBranch();
+		}
+		
+		KJ_FAIL_REQUIRE("Internal error");
 	}
 };
+	
 
 }
 
@@ -252,7 +278,7 @@ RootService::Client fsc::connectRemote(LibraryThread& lt, kj::StringPtr address,
 	});
 }
 
-Promise<Tuple<unsigned int, Promise<void>>> fsc::startServer(LibraryThread& lt, unsigned int portHint, kj::StringPtr address) {
+Promise<Own<fsc::Server>> fsc::startServer(LibraryThread& lt, unsigned int portHint, kj::StringPtr address) {
 	auto& ws = lt->waitScope();
 	
 	Temporary<RootConfig> rootConfig;
@@ -262,8 +288,7 @@ Promise<Tuple<unsigned int, Promise<void>>> fsc::startServer(LibraryThread& lt, 
 	auto& network = lt->network();
 	
 	return network.parseAddress(address, portHint)
-	.then([rootInterface](auto address) mutable  {
-		auto handler = heapHeld<AcceptHandler>(*address, rootInterface);
-		return tuple(handler->receiver->getPort(), handler->run().attach(handler.x()));
+	.then([rootInterface](auto address) mutable -> Own<fsc::Server> {
+		return kj::heap<ServerImpl>(*address, rootInterface);
 	});
 }

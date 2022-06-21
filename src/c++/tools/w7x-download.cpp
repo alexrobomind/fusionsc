@@ -99,9 +99,30 @@ struct MainCls {
 	}
 	
 	bool addDefault() {
-		// Add default stuff here
-		for(auto i : kj::Range<unsigned int>(160, 230))
+		using kj::range;
+		
+		// CAD coils
+		for(auto i : range(160, 230))
 			downloadCoil(i);
+		
+		// W7-X calculation boundary
+		downloadMesh(164);
+		
+		// TDU
+		for(auto i : range(165, 170))
+			downloadMesh(i);
+		
+		// Baffles, baffle covers, heat shield
+		for(auto i : range(320, 335))
+			downloadMesh(i);
+		
+		// Pump slits
+		for(auto i : range(450, 455))
+			downloadMesh(i);
+		
+		downloadAssembly(8); // OP1.2 Steel panels
+		downloadAssembly(9); // OP1.2 Heat shield
+		
 		return true;
 	}
 	

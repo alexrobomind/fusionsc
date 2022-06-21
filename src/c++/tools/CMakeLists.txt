@@ -1,9 +1,9 @@
 add_executable(
-	w7x-download-coils
-	w7x-download-coils.cpp
+	w7x-download
+	w7x-download.cpp
 )
 
-target_link_libraries(w7x-download-coils fsc)
+target_link_libraries(w7x-download fsc)
 
 add_executable(
 	fsc-server

@@ -17,7 +17,7 @@ using namespace fsc;
 
 struct MainCls {
 	kj::ProcessContext& context;
-	Maybe<int64_t> port = nullptr;
+	Maybe<uint64_t> port = nullptr;
 	kj::String address = kj::heapString("0.0.0.0");
 	
 	MainCls(kj::ProcessContext& context):
@@ -30,7 +30,7 @@ struct MainCls {
 	}
 	
 	bool setPort(kj::StringPtr val) {
-		port = val.parseAs<int>();
+		port = val.parseAs<uint64_t>();
 		return true;
 	}
 		
@@ -39,13 +39,12 @@ struct MainCls {
 		auto lt = l -> newThread();
 		auto& ws = lt->waitScope();
 		
-		int port = 0;
+		unsigned int port = 0;
 		KJ_IF_MAYBE(pPort, this -> port)
 			port = *pPort;
 			
-		auto portAndPromise = fsc::startServer(lt, port, this->address).wait(ws);
-		port = kj::get<0>(portAndPromise);
-		Promise<void> promise = mv(kj::get<1>(portAndPromise));
+		auto server = fsc::startServer(lt, port, this->address).wait(ws);
+		port = server->getPort();
 		
 		std::cout << port << std::endl;
 		std::cout << std::endl;
@@ -63,12 +62,13 @@ struct MainCls {
 		kj::Thread cinReader(readThenFulfill);
 		
 		//TODO: On unix, listen for shutdown signals
+		Promise<void> promise = server->run();
 		promise = promise.exclusiveJoin(mv(shutdownPaf.promise));
 		
 		promise.wait(ws);
 		
 		std::cout << "Waiting for clients to disconnect. Press Ctrl+C again to force shutdown." << std::endl;
-		tasks.onEmpty().wait(ws);
+		server->drain().wait(ws);
 		std::cout << "All clients disconnected. Good bye :-)" << std::endl;
 		
 		return true;
