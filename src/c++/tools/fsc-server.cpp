@@ -15,12 +15,6 @@
 
 using namespace fsc;
 
-class DefaultErrorHandler : public kj::TaskSet::ErrorHandler {
-	void taskFailed(kj::Exception&& exception) override {
-		KJ_LOG(WARNING, "Exception in connection", exception);
-	}
-};
-
 struct MainCls {
 	kj::ProcessContext& context;
 	Maybe<int64_t> port = nullptr;
@@ -45,43 +39,17 @@ struct MainCls {
 		auto lt = l -> newThread();
 		auto& ws = lt->waitScope();
 		
-		Temporary<RootConfig> rootConfig;
-		auto rootInterface = createRoot(lt, rootConfig);
-		
 		int port = 0;
 		KJ_IF_MAYBE(pPort, this -> port)
 			port = *pPort;
+			
+		auto portAndPromise = fsc::startServer(lt, port, this->address).wait(ws);
+		port = kj::get<0>(portAndPromise);
+		Promise<void> promise = mv(kj::get<1>(portAndPromise));
 		
-		// Get root network
-		auto& network = lt->network();
-		
-		auto address = network.parseAddress(this->address, port).wait(ws);
-		auto receiver = address->listen();
-		
-		std::cout << receiver->getPort() << std::endl;
+		std::cout << port << std::endl;
 		std::cout << std::endl;
-		std::cout << "Listening on port " << receiver->getPort() << std::endl;
-		
-		DefaultErrorHandler errorHandler;
-		kj::TaskSet tasks(errorHandler);
-		
-		// The accept handler runs in a recusrive loop and accepts new connections
-		
-		kj::Function<Promise<void>(Own<kj::AsyncIoStream>)> acceptHandler = [&](Own<kj::AsyncIoStream> connection) mutable -> Promise<void> {
-			// Create RPC network
-			auto vatNetwork = heapHeld<capnp::TwoPartyVatNetwork>(*connection, capnp::rpc::twoparty::Side::SERVER);
-			
-			// Initialize RPC system on top of network
-			auto rpcSystem = heapHeld<capnp::RpcSystem<capnp::rpc::twoparty::VatId>>(capnp::makeRpcServer(*vatNetwork, rootInterface));
-			
-			// Run until the underlying connection disconnects
-			auto task = vatNetwork->onDisconnect().attach(vatNetwork.x(), rpcSystem.x());
-			tasks.add(mv(task));
-			
-			return receiver->accept().then(acceptHandler);
-		};
-		
-		auto acceptLoop = receiver->accept().then(acceptHandler);
+		std::cout << "Listening on port " << port << std::endl;
 		
 		auto shutdownPaf = kj::newPromiseAndCrossThreadFulfiller<void>();
 		auto readThenFulfill = [&]() {
@@ -95,9 +63,9 @@ struct MainCls {
 		kj::Thread cinReader(readThenFulfill);
 		
 		//TODO: On unix, listen for shutdown signals
-		acceptLoop = acceptLoop.exclusiveJoin(mv(shutdownPaf.promise));
+		promise = promise.exclusiveJoin(mv(shutdownPaf.promise));
 		
-		acceptLoop.wait(ws);
+		promise.wait(ws);
 		
 		std::cout << "Waiting for clients to disconnect. Press Ctrl+C again to force shutdown." << std::endl;
 		tasks.onEmpty().wait(ws);

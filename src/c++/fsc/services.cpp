@@ -5,6 +5,8 @@
 
 #include <kj/list.h>
 
+#include <capnp/rpc-twoparty.h>
+
 using namespace fsc;
 
 namespace {
@@ -166,6 +168,50 @@ ResolverChainImpl::Registration::~Registration() {
 	parent.registrations.remove(*this);
 }
 
+class DefaultErrorHandler : public kj::TaskSet::ErrorHandler {
+	void taskFailed(kj::Exception&& exception) override {
+		KJ_LOG(WARNING, "Exception in connection", exception);
+	}
+};
+
+struct AcceptHandler {
+	Own<kj::ConnectionReceiver> receiver;
+	DefaultErrorHandler errorHandler;
+	
+	kj::TaskSet tasks;
+	
+	RootService::Client rootInterface;
+	
+	AcceptHandler(kj::NetworkAddress& address, RootService::Client rootInterface) :
+		receiver(address.listen()),
+		tasks(errorHandler),
+		rootInterface(rootInterface)
+	{}
+	
+	Promise<void> accept(Own<kj::AsyncIoStream> connection) {
+		auto task = connection->write(MAGIC_TOKEN.begin(), MAGIC_TOKEN.size() - 1);
+		
+		task = task.then([&, connection=mv(connection)]() mutable {
+			// Create RPC network
+			auto vatNetwork = heapHeld<capnp::TwoPartyVatNetwork>(*connection, capnp::rpc::twoparty::Side::SERVER);
+			
+			// Initialize RPC system on top of network
+			auto rpcSystem = heapHeld<capnp::RpcSystem<capnp::rpc::twoparty::VatId>>(capnp::makeRpcServer(*vatNetwork, rootInterface));
+			
+			// Run until the underlying connection disconnects
+			return vatNetwork->onDisconnect().attach(vatNetwork.x(), rpcSystem.x(), mv(connection));
+		});
+		
+		tasks.add(mv(task));
+		
+		return receiver->accept().then([this](Own<kj::AsyncIoStream> connection) { return accept(mv(connection)); });
+	}
+	
+	Promise<void> run() {
+		return receiver->accept().then([this](Own<kj::AsyncIoStream> connection) { return accept(mv(connection)); });
+	}
+};
+
 }
 
 RootService::Client fsc::createRoot(LibraryThread& lt, RootConfig::Reader config) {
@@ -174,4 +220,50 @@ RootService::Client fsc::createRoot(LibraryThread& lt, RootConfig::Reader config
 
 ResolverChain::Client fsc::newResolverChain() {
 	return kj::heap<ResolverChainImpl>();
+}
+
+RootService::Client fsc::connectRemote(LibraryThread& lt, kj::StringPtr address, unsigned int portHint) {
+	return lt->network().parseAddress(address, portHint)
+	.then([](Own<kj::NetworkAddress> addr) {
+		return addr->connect();
+	})
+	.then([](Own<kj::AsyncIoStream> connection) {
+		auto tokenBuffer = kj::heapArray<byte>(MAGIC_TOKEN.size() - 1);
+		auto task = connection->read(tokenBuffer.begin(), MAGIC_TOKEN.size() - 1);
+		
+		auto clientPromise = task.then([connection = mv(connection), tokenBuffer = mv(tokenBuffer)]() mutable {
+			KJ_REQUIRE(tokenBuffer == MAGIC_TOKEN.asArray(), "Server returned invalid token");
+			
+			// Create RPC network
+			auto vatNetwork = heapHeld<capnp::TwoPartyVatNetwork>(*connection, capnp::rpc::twoparty::Side::CLIENT);
+			
+			// Initialize RPC system on top of network
+			auto rpcSystem = heapHeld<capnp::RpcSystem<capnp::rpc::twoparty::VatId>>(capnp::makeRpcClient(*vatNetwork));
+			
+			// Retrieve server's bootstrap interface
+			Temporary<capnp::rpc::twoparty::VatId> serverID;
+			serverID.setSide(capnp::rpc::twoparty::Side::SERVER);
+			auto server = rpcSystem->bootstrap(serverID);
+			
+			return attach(server, rpcSystem.x(), vatNetwork.x(), mv(connection));
+		});
+		
+		return capnp::Capability::Client(mv(clientPromise)).castAs<RootService>();
+	});
+}
+
+Promise<Tuple<unsigned int, Promise<void>>> fsc::startServer(LibraryThread& lt, unsigned int portHint, kj::StringPtr address) {
+	auto& ws = lt->waitScope();
+	
+	Temporary<RootConfig> rootConfig;
+	auto rootInterface = createRoot(lt, rootConfig);
+	
+	// Get root network
+	auto& network = lt->network();
+	
+	return network.parseAddress(address, portHint)
+	.then([rootInterface](auto address) mutable  {
+		auto handler = heapHeld<AcceptHandler>(*address, rootInterface);
+		return tuple(handler->receiver->getPort(), handler->run().attach(handler.x()));
+	});
 }

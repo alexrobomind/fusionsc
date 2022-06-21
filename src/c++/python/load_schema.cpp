@@ -34,14 +34,19 @@ auto getAndAddBuiltin() {
 }
 */
 	
-DynamicCapability::Client connectLocal(RootConfig::Reader config) {
+DynamicCapability::Client connectLocal1(RootConfig::Reader config) {
 	LibraryThread lt = fscpy::PyContext::libraryThread();
 	return createRoot(lt, config);
 }
 	
-DynamicCapability::Client connectLocal() {
+DynamicCapability::Client connectLocal2() {
 	Temporary<RootConfig> config;
-	return connectLocal(config);
+	return connectLocal1(config);
+}
+
+DynamicCapability::Client connectRemote1(kj::StringPtr address, unsigned int port) {
+	LibraryThread lt = fscpy::PyContext::libraryThread();
+	return connectRemote(lt, address, port);
 }
 
 }
@@ -59,8 +64,9 @@ void loadDefaultSchema(py::module_& m) {
 		defaultLoader.importNodeIfRoot(node.getId(), m);
 	}
 	
-	m.def("connectLocal", (DynamicCapability::Client (*)()) &connectLocal);
-	m.def("connectLocal", (DynamicCapability::Client (*)(RootConfig::Reader)) &connectLocal);
+	m.def("connectLocal", &connectLocal1);
+	m.def("connectLocal", &connectLocal2);
+	m.def("connectLocal", &connectRemote1, py::arg("address"), py::arg("port") = 0);
 }
 
 }

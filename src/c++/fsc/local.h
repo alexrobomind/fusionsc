@@ -80,7 +80,7 @@ public:
 	 * System clock timer
 	 */
 	inline kj::Timer& timer() { return _ioContext.provider->getTimer(); }
-	
+		
 	/**
 	 * This thread's random number generator.
 	 */
