@@ -4,9 +4,13 @@
 
 #include <kj/one-of.h>
 
+#include <index.capnp.h>
+
 #include "eigen.h"
 
-namespace fsc {
+using namespace fsc
+
+namespace {
 	template<typename Num, int dim>
 	struct Box {
 		using P = Vec<Num, dim>;
@@ -174,7 +178,104 @@ namespace fsc {
 				nodes = packOnce(nodes, leafSize);
 			}
 			
-			return nodes;
+			return mv(nodes[0]);
 		}
+	};
+	
+	struct Box3DAdapter	{
+		using Scalar = double;
+		constexpr int dimensions = 3;
+		
+		using CP = Box3D;
+		
+		using Leaf = TreeNode<CP>::Reader;
+		
+		Box<double, 3> boundingBox(Leaf box) {
+			auto box = leaf.getData();
+			
+			auto boxMin = box.getMin();
+			auto boxMax = box.getMax();
+			
+			Vec3d min(boxMin.getX(), boxMin.getY(), boxMin.getZ());
+			Vec3d max(boxMax.getX(), boxMax.getY(). boxMax.getZ());
+			
+			return Box<double, 3>(min, max);
+		}
+		
+		static void writeBox(const Box<double, 3>& in, Box3D::Builder out) {
+			auto boxMin = box.getMin();
+			auto boxMax = box.getMax();
+			
+			boxMin.setX(in.min[0]);
+			boxMin.setY(in.min[1]);
+			boxMin.setZ(in.min[2]);
+			
+			boxMax.setX(in.max[0]);
+			boxMax.setY(in.max[1]);
+			boxMax.setZ(in.max[2]);
+		}
+	};
+	
+	struct Box2DAdapter	{
+		using Scalar = double;
+		constexpr int dimensions = 2;
+		
+		using CP = Box2D;
+		using Leaf = TreeNode<CP>::Reader;
+		
+		Box<double, 2> boundingBox(Leaf leaf) {
+			auto box = leaf.getData();
+			
+			auto boxMin = box.getMin();
+			auto boxMax = box.getMax();
+			
+			Vec3d min(boxMin.getX(), boxMin.getY());
+			Vec3d max(boxMax.getX(), boxMax.getY());
+			
+			return Box<double, 2>(min, max);
+		}
+		
+		static void writeBox(const Box<double, 3>& in, Box3D::Builder out) {
+			auto boxMin = box.getMin();
+			auto boxMax = box.getMax();
+			
+			boxMin.setX(in.min[0]);
+			boxMin.setY(in.min[1]);
+			
+			boxMax.setX(in.max[0]);
+			boxMax.setY(in.max[1]);
+		}
+	};
+	
+	template<typename Adapter>
+	buildKDTree(capnp::List<TreeNode<typename Adapter::CP>>::Reader input, size_t leafSize, TreeNode<typename Adapter::CP>::Builder output, Adapter&& adapter) {
+		using Leaf = Adapter::Leaf;
+		
+		using Packer = PackImpl<Adapter>;
+		using HeapNode = typename Packer::HeapNode;
+		
+		Vector<Leaf> packInput(input.begin(), input.end());
+		Leaf result = PackImpl<Adapter>::pack(packInput, leafSize, fwd<Adapter>(adapter));
+
+		auto tranferNode = [](const HeapNode& in, TreeNode<typename Adapter::CP>::Builder out) {
+			Adapter::writeBox(in.box, out.initBox());
+			
+			if(in.data.is<Leaf>()) {
+				out.setLeaf(in.data.get<Leaf>());
+			} else {
+				auto& children = in.data.get<typename Packer::Children>();
+				auto outChildren = out.initChildren(children.size());
+				
+				for(auto i : kj::range(children.size())) {
+					transferNode(children[i], outChildren[i]);
+				}
+			}
+		};
+		
+		transferNode(result, output);
+	}
+	
+	struct TreeBuliderImpl : public TreeBuilder::Server {
+		
 	};
 }

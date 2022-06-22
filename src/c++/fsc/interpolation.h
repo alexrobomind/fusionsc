@@ -20,6 +20,42 @@ struct LinearInterpolation {
 	}
 };
 
+template<int nDims, typename Strategy, int iDim>
+struct NDInterpEvaluator {
+	using Scalar = typename Strategy::Scalar;
+	
+	static_assert(iDim < nDims);
+	static_assert(iDim >= 0);
+	
+	template<typename F, typename... Indices>
+	static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, Vec<int, nDims>& base, Vec<Scalar, nDims> lx, Indices... indices) {
+		static_assert(sizeof...(indices) == iDim);
+		
+		Scalar result = 0;
+		
+		auto coefficients = strategy.coefficients(lx[iDim]);
+		auto offsets      = strategy.offsets();
+					
+		for(int idx = 0; idx < strategy.nPoints(); ++idx) {
+			result += coefficients[idx] * NDInterpEvaluator<nDims, Strategy, iDim + 1>::evaluate(strategy, f, base, lx, indices..., base[iDim] + offsets[idx]);
+		}
+		
+		return result;
+	}
+};
+
+template<int nDims, typename Strategy>
+struct NDInterpEvaluator<nDims, Strategy, nDims> {
+	using Scalar = typename Strategy::Scalar;
+	
+	template<typename F, typename... Indices>
+	static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, Vec<int, nDims>& base, Vec<Scalar, nDims> lx, Indices... indices) {
+		static_assert(sizeof...(indices) == nDims);
+		
+		return f(indices...);
+	}
+};
+
 /**
  * Multi-dimensional interpolator that runs based on a given
  * 1-dimensional interpolation strategy
@@ -37,38 +73,6 @@ struct NDInterpolator {
 		inline EIGEN_DEVICE_FUNC Axis(Scalar x1, Scalar x2, int nIntervals) :
 			x1(x1), x2(x2), nIntervals(nIntervals)
 		{}
-	};
-	
-	template<int iDim>
-	struct Evaluator {
-		static_assert(iDim < nDims);
-		static_assert(iDim >= 0);
-		
-		template<typename F, typename... Indices>
-		static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, Vec<int, nDims>& base, Vec<Scalar, nDims> lx, Indices... indices) {
-			static_assert(sizeof...(indices) == iDim);
-			
-			Scalar result = 0;
-			
-			auto coefficients = strategy.coefficients(lx[iDim]);
-			auto offsets      = strategy.offsets();
-						
-			for(int idx = 0; idx < strategy.nPoints(); ++idx) {
-				result += coefficients[idx] * Evaluator<iDim + 1>::evaluate(strategy, f, base, lx, indices..., base[iDim] + offsets[idx]);
-			}
-			
-			return result;
-		}
-	};
-	
-	template<>
-	struct Evaluator<nDims> {
-		template<typename F, typename... Indices>
-		static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, Vec<int, nDims>& base, Vec<Scalar, nDims> lx, Indices... indices) {
-			static_assert(sizeof...(indices) == nDims);
-			
-			return f(indices...);
-		}
 	};
 	
 	Strategy strategy;
@@ -102,7 +106,7 @@ struct NDInterpolator {
 			lx[i] = scaled - base[i];
 		}
 		
-		return Evaluator<0>::evaluate(strategy, f, base, lx);
+		return NDInterpEvaluator<nDims, Strategy, 0>::evaluate(strategy, f, base, lx);
 	}
 };
 

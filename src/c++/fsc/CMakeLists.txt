@@ -10,6 +10,8 @@ set(
 	data.capnp
 	data-test.capnp
 	
+	index.capnp
+	
 	magnetics.capnp
 	magnetics-test.capnp
 	
@@ -61,6 +63,8 @@ add_library(
 	
 	data.h
 	data.cpp
+	
+	index.cpp
 	
 	geometry.h
 	geometry.cpp
