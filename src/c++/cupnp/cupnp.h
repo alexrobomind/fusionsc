@@ -743,10 +743,12 @@ namespace cupnp {
 		}
 		
 		CUPNP_FUNCTION auto operator[] (unsigned int i) {
+			CUPNP_REQUIRE(i < size());
 			return cupnp::ListHelper<T, CPKind>::get(this, i);
 		}
 		
 		CUPNP_FUNCTION const auto operator[] (unsigned int i) const {
+			CUPNP_REQUIRE(i < size());
 			return cupnp::ListHelper<T, CPKind>::get(this, i);
 		}
 		

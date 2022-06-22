@@ -44,7 +44,7 @@ namespace fsc {
 	template<typename Adapter>
 	struct KDPackImpl {
 		using Scalar = typename Adapter::Scalar;
-		using Leaf   = typename Scalar::Leaf;
+		using Leaf   = typename Adapter::Leaf;
 		static constexpr int dims = Adapter::dimensions;
 		
 		using P = Vec<Scalar, dims>;
@@ -58,7 +58,7 @@ namespace fsc {
 		
 		using Children = kj::Vector<HeapNode>;
 		
-		kj::Vector<HeapNode> packOnce(Vector<HeapNode> nodes, size_t leafSize) {
+		static kj::Vector<HeapNode> packOnce(Vector<HeapNode> nodes, size_t leafSize) {
 			using kj::Vector;
 			
 			// Estimate the splitting factor (no. of root nodes per dimension)
@@ -156,7 +156,7 @@ namespace fsc {
 			return out;
 		}
 		
-		Vector<HeapNode> pack(Vector<Leaf> leaves, size_t leafSize, Adapter&& adapter) {
+		static Vector<HeapNode> pack(Vector<Leaf> leaves, size_t leafSize, Adapter&& adapter) {
 			Vector<HeapNode> nodes;
 			nodes.reserve(leaves.size());
 			
