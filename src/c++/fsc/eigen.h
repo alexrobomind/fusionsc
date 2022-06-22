@@ -27,4 +27,51 @@ namespace fsc {
 	using Eigen::Sizes;
 	
 	using Eigen::TensorOpCost;
+	
+	constexpr inline double pi = 3.14159265358979323846; // "Defined" in magnetics.cpp
+
+	template<typename T, unsigned int n>
+	using TVec = Eigen::TensorFixedSize<T, Eigen::Sizes<n>>;
+
+	template<typename T>
+	using TVec3 = TVec<T, 3>;
+
+	template<typename T>
+	using TVec4 = TVec<T, 4>;
+
+	using TVec3d = TVec3<double>;
+	using TVec4d = TVec4<double>;
+
+	template<typename T, unsigned int n>
+	using Vec = Eigen::Vector<T, n>;
+
+	template<typename T>
+	using Vec2 = Vec<T, 2>;
+
+	template<typename T>
+	using Vec3 = Vec<T, 3>;
+
+	template<typename T>
+	using Vec4 = Vec<T, 4>;
+
+	using Vec3d = Vec<double, 3>;
+	using Vec4d = Vec<double, 4>;
+
+	using Vec3f = Vec<float, 3>;
+	using Vec4f = Vec<float, 4>;
+
+	using Vec3u = Vec<unsigned int, 3>;
+	using Vec4u = Vec<unsigned int, 4>;
+
+	using Vec3i = Vec<int, 3>;
+	using Vec4i = Vec<int, 4>;
+
+	template<typename T>
+	using Mat4 = Eigen::Matrix<T, 4, 4>;
+
+	template<typename T>
+	using Mat3 = Eigen::Matrix<T, 3, 3>;
+
+	using Mat4d = Mat4<double>;
+	using Mat3d = Mat3<double>;
 }
