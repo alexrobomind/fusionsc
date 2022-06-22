@@ -1,27 +1,26 @@
-#pragma once
-
 #include <limits>
 
 #include <kj/one-of.h>
+#include <kj/function.h>
 
-#include <index.capnp.h>
+#include <fsc/index.capnp.h>
 
 #include "eigen.h"
 
-using namespace fsc
+using namespace fsc;
 
 namespace {
-	template<typename Num, int dim>
+	template<typename Num, int dims>
 	struct Box {
-		using P = Vec<Num, dim>;
+		using P = Vec<Num, dims>;
 		
-		P min_;
-		P max_;
+		P min;
+		P max;
 		
 		Box() = default;
 		Box(P min, P max) : min(min), max(max) {}
 		
-		P center const() {
+		P center() const {
 			return (min + max) / 2;
 		}
 		
@@ -55,18 +54,18 @@ namespace {
 		
 		struct HeapNode {
 			P center;
-			Box box;
+			Box<Scalar, dims> box;
 			
 			kj::OneOf<Leaf, kj::Vector<HeapNode>> data;	
-		}:
+		};
 		
 		using Children = kj::Vector<HeapNode>;
 		
-		static kj::Vector<HeapNode> packOnce(Vector<HeapNode> nodes, size_t leafSize) {
+		static kj::Vector<HeapNode> packOnce(kj::Vector<HeapNode>&& nodes, size_t leafSize) {
 			using kj::Vector;
 			
 			// Estimate the splitting factor (no. of root nodes per dimension)
-			double dfactor = std::pow(((double) nodes.size()) / leafSize, 1.0 / dim);
+			double dfactor = std::pow(((double) nodes.size()) / leafSize, 1.0 / dims);
 			size_t factor = (size_t) dfactor;
 			
 			if(factor < 1)
@@ -82,17 +81,17 @@ namespace {
 			
 			// For the other dimensions, split up the selected intervals into 'factor'
 			// sub-intervals.
-			for(auto iDim : kj::range(dims)) {
-				const Vector& in = indices[iDim];
-				Vector& out = indices[iDim + 1];
+			for(auto iDim : kj::range(0, dims)) {
+				const Vector<size_t>& in = indices[iDim];
+				Vector<size_t>& out = indices[iDim + 1];
 				
 				const size_t nIn = in.size() - 1;
 				const size_t nOut = factor * nIn;
 				
 				out.resize(nOut + 1);
-				out[nOut] = storage.size();
+				out[nOut] = nodes.size();
 				
-				for(auto i : kj::range(nIn)) {
+				for(auto i : kj::range(0, nIn)) {
 					size_t inStart = in[i];
 					size_t inEnd   = in[i+1];
 					size_t inCount = inEnd - inStart;
@@ -104,7 +103,7 @@ namespace {
 					// Assign subintervals (only need to write start points, end points are handled
 					// as start points of later intervals
 					size_t offset = inStart;
-					for(auto iSub : kj::Range(factor)) {
+					for(auto iSub : kj::range(0, factor)) {
 						size_t subSize = iSub < remain ? inAll + 1 : inAll;
 						
 						out[factor * i + iSub] = offset;
@@ -114,15 +113,15 @@ namespace {
 			}
 			
 			// Execute sorting strategy
-			for(auto iDim : kj::range(dims)) {
+			for(auto iDim : kj::range(0, dims)) {
 				const Vector<size_t>& intervals = indices[iDim];
 				const size_t nInt = intervals.size() - 1;
 				
 				auto comparator = [iDim](const HeapNode& n1, const HeapNode& n2) -> bool {
 					return n1.center[iDim] < n2.center[iDim];
-				}
+				};
 				
-				for(auto iInt : kj::range(nInt)) {
+				for(auto iInt : kj::range(0, nInt)) {
 					size_t start = intervals[iInt];
 					size_t end   = intervals[iInt + 1];
 					
@@ -134,33 +133,35 @@ namespace {
 			}
 			
 			// Group the nodes inside the intervals into leaves
-			const std::vector<size_t> lastStage = indices[dims];
+			const kj::Vector<size_t>& lastStage = indices[dims];
 			const size_t nOut = lastStage.size() - 1;
 			
 			Vector<HeapNode> out(nOut);
-			for(auto i : kj::range(nOut)) {
+			for(auto i : kj::range(0, nOut)) {
 				size_t start = lastStage[i];
-				size_t end   = lastState[i + 1];
+				size_t end   = lastStage[i + 1];
 				size_t n     = end - start;
 				
 				HeapNode& node = out[i];
 				node.box = Box<Scalar, dims>::empty();
 				
-				Children& children = node.data.init<Children>(n);
+				Children& children = node.data.template init<Children>(n);
 				
-				for(auto iChild : kj::range(n)) {
-					children[n] = mv(nodes[start + iChild]);
+				for(auto iChild : kj::range(0, n)) {
+					children[iChild] = mv(nodes[start + iChild]);
 					
 					const HeapNode& child = children[n];
 					node.box.expand(child.box);
 				}
-				node.center = box.center();
+				node.center = node.box.center();
 			}
 			
 			return out;
 		}
 		
-		static Vector<HeapNode> pack(Vector<Leaf> leaves, size_t leafSize, Adapter&& adapter) {
+		static HeapNode pack(kj::Vector<Leaf>&& leaves, size_t leafSize, Adapter&& adapter) {
+			using kj::Vector;
+			
 			Vector<HeapNode> nodes;
 			nodes.reserve(leaves.size());
 			
@@ -168,14 +169,14 @@ namespace {
 				HeapNode newNode;
 				
 				newNode.box = adapter.boundingBox(leaf);
-				newNode.center = box.center();
+				newNode.center = newNode.box.center();
 				newNode.data = mv(leaf);
 				
-				nodes.add(mv(node));
+				nodes.add(mv(newNode));
 			}
 			
 			while(nodes.size() > 1) {
-				nodes = packOnce(nodes, leafSize);
+				nodes = packOnce(mv(nodes), leafSize);
 			}
 			
 			return mv(nodes[0]);
@@ -184,27 +185,27 @@ namespace {
 	
 	struct Box3DAdapter	{
 		using Scalar = double;
-		constexpr int dimensions = 3;
+		static constexpr int dimensions = 3;
 		
 		using CP = Box3D;
 		
 		using Leaf = TreeNode<CP>::Reader;
 		
-		Box<double, 3> boundingBox(Leaf box) {
+		Box<double, 3> boundingBox(Leaf leaf) {
 			auto box = leaf.getData();
 			
 			auto boxMin = box.getMin();
 			auto boxMax = box.getMax();
 			
 			Vec3d min(boxMin.getX(), boxMin.getY(), boxMin.getZ());
-			Vec3d max(boxMax.getX(), boxMax.getY(). boxMax.getZ());
+			Vec3d max(boxMax.getX(), boxMax.getY(), boxMax.getZ());
 			
 			return Box<double, 3>(min, max);
 		}
 		
 		static void writeBox(const Box<double, 3>& in, Box3D::Builder out) {
-			auto boxMin = box.getMin();
-			auto boxMax = box.getMax();
+			auto boxMin = out.getMin();
+			auto boxMax = out.getMax();
 			
 			boxMin.setX(in.min[0]);
 			boxMin.setY(in.min[1]);
@@ -218,7 +219,7 @@ namespace {
 	
 	struct Box2DAdapter	{
 		using Scalar = double;
-		constexpr int dimensions = 2;
+		static constexpr int dimensions = 2;
 		
 		using CP = Box2D;
 		using Leaf = TreeNode<CP>::Reader;
@@ -229,15 +230,15 @@ namespace {
 			auto boxMin = box.getMin();
 			auto boxMax = box.getMax();
 			
-			Vec3d min(boxMin.getX(), boxMin.getY());
-			Vec3d max(boxMax.getX(), boxMax.getY());
+			Vec2d min(boxMin.getX(), boxMin.getY());
+			Vec2d max(boxMax.getX(), boxMax.getY());
 			
 			return Box<double, 2>(min, max);
 		}
 		
-		static void writeBox(const Box<double, 3>& in, Box3D::Builder out) {
-			auto boxMin = box.getMin();
-			auto boxMax = box.getMax();
+		static void writeBox(const Box<double, 2>& in, Box2D::Builder out) {
+			auto boxMin = out.getMin();
+			auto boxMax = out.getMax();
 			
 			boxMin.setX(in.min[0]);
 			boxMin.setY(in.min[1]);
@@ -248,25 +249,31 @@ namespace {
 	};
 	
 	template<typename Adapter>
-	buildKDTree(capnp::List<TreeNode<typename Adapter::CP>>::Reader input, size_t leafSize, TreeNode<typename Adapter::CP>::Builder output, Adapter&& adapter) {
-		using Leaf = Adapter::Leaf;
+	void buildKDTree(typename capnp::List<TreeNode<typename Adapter::CP>>::Reader input, size_t leafSize, typename TreeNode<typename Adapter::CP>::Builder output, Adapter&& adapter) {
+		using kj::Vector;
 		
-		using Packer = PackImpl<Adapter>;
+		using Leaf = typename Adapter::Leaf;
+		
+		using Packer = KDPackImpl<Adapter>;
 		using HeapNode = typename Packer::HeapNode;
 		
-		Vector<Leaf> packInput(input.begin(), input.end());
-		Leaf result = PackImpl<Adapter>::pack(packInput, leafSize, fwd<Adapter>(adapter));
+		Vector<Leaf> packInput;
+		packInput.reserve(input.size());
+		for(auto i : input)
+			packInput.add(i);
+		
+		typename Packer::HeapNode result = Packer::pack(mv(packInput), leafSize, fwd<Adapter>(adapter));
 
-		auto tranferNode = [](const HeapNode& in, TreeNode<typename Adapter::CP>::Builder out) {
-			Adapter::writeBox(in.box, out.initBox());
+		kj::Function<void(const HeapNode& in, typename TreeNode<typename Adapter::CP>::Builder out)> transferNode = [&transferNode](const HeapNode& in, typename TreeNode<typename Adapter::CP>::Builder out) {
+			Adapter::writeBox(in.box, out.initData());
 			
-			if(in.data.is<Leaf>()) {
-				out.setLeaf(in.data.get<Leaf>());
+			if(in.data.template is<Leaf>()) {
+				out.setLeaf(in.data.template get<Leaf>().getLeaf());
 			} else {
-				auto& children = in.data.get<typename Packer::Children>();
+				const typename Packer::Children& children = in.data.template get<typename Packer::Children>();
 				auto outChildren = out.initChildren(children.size());
 				
-				for(auto i : kj::range(children.size())) {
+				for(auto i : kj::range(0, children.size())) {
 					transferNode(children[i], outChildren[i]);
 				}
 			}
@@ -275,7 +282,6 @@ namespace {
 		transferNode(result, output);
 	}
 	
-	struct TreeBuliderImpl : public TreeBuilder::Server {
-		
-	};
+	template void buildKDTree<Box2DAdapter>(typename capnp::List<TreeNode<Box2D>>::Reader input, size_t leafSize, typename TreeNode<Box2D>::Builder output, Box2DAdapter&& adapter);
+	template void buildKDTree<Box3DAdapter>(typename capnp::List<TreeNode<Box3D>>::Reader input, size_t leafSize, typename TreeNode<Box3D>::Builder output, Box3DAdapter&& adapter);
 }

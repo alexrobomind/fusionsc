@@ -54,15 +54,19 @@ namespace fsc {
 	template<typename T>
 	using Vec4 = Vec<T, 4>;
 
+	using Vec2d = Vec<double, 2>;
 	using Vec3d = Vec<double, 3>;
 	using Vec4d = Vec<double, 4>;
 
+	using Vec2f = Vec<float, 2>;
 	using Vec3f = Vec<float, 3>;
 	using Vec4f = Vec<float, 4>;
 
+	using Vec2u = Vec<unsigned int, 2>;
 	using Vec3u = Vec<unsigned int, 3>;
 	using Vec4u = Vec<unsigned int, 4>;
 
+	using Vec2i = Vec<int, 2>;
 	using Vec3i = Vec<int, 3>;
 	using Vec4i = Vec<int, 4>;
 
