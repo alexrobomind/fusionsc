@@ -374,7 +374,7 @@ namespace cupnp {
 		CUPNP_REQUIRE(ptrTagVal == 2);
 		
 		auto message = in.segments;
-		CUPNP_REQUIRE(message != nullptr);
+		CUPNP_REQUIRE(message != nullptr) { return Location(nullptr); }
 		
 		// Far pointer decoding
 		uint8_t landingPadType;
@@ -385,9 +385,9 @@ namespace cupnp {
 		landingPadOffset = (nativeVal & ((1ull << 32) - 1)) >> 3; // C
 		segmentId = nativeVal >> 32; // D
 		
-		CUPNP_REQUIRE(segmentId < message.size());
+		CUPNP_REQUIRE(segmentId < message.size()) { return Location(nullptr); }
 		out.ptr = reinterpret_cast<unsigned char*>(message[segmentId].begin() + landingPadOffset); // Offset calculation is in 8-byte words
-		CUPNP_REQUIRE(out.ptr < reinterpret_cast<unsigned char*>(message[segmentId].end()));
+		CUPNP_REQUIRE(out.ptr < reinterpret_cast<unsigned char*>(message[segmentId].end())) { return Location(nullptr); }
 		
 		out.segmentId = segmentId;
 		out.segments = message;
@@ -502,7 +502,7 @@ namespace cupnp {
 	CUPNP_FUNCTION void setPrimitiveField(uint64_t structure, Location data, T defaultValue, T value) {
 		uint16_t dataSectionSizeInWords = structure >> 32;
 		
-		CUPNP_REQUIRE(sizeof(T) * (offset + 1) <= sizeof(capnp::word) * dataSectionSizeInWords);
+		CUPNP_REQUIRE(sizeof(T) * (offset + 1) <= sizeof(capnp::word) * dataSectionSizeInWords) { return; }
 		
 		EncodedType<T> wireData       = encodePrimitive(value);
 		
@@ -517,7 +517,7 @@ namespace cupnp {
 	CUPNP_FUNCTION void setPrimitiveField(uint64_t structure, Location data, T value) {
 		uint16_t dataSectionSizeInWords = structure >> 32;
 		
-		CUPNP_REQUIRE(sizeof(T) * (offset + 1) <= sizeof(capnp::word) * dataSectionSizeInWords);
+		CUPNP_REQUIRE(sizeof(T) * (offset + 1) <= sizeof(capnp::word) * dataSectionSizeInWords) { return; }
 		
 		EncodedType<T> wireData       = encodePrimitive(value);
 		(data + offset * sizeof(T)).write(wireData);
@@ -543,7 +543,7 @@ namespace cupnp {
 		uint16_t dataSectionSizeInWords = structure >> 32;
 		uint16_t pointerSectionSize = structure >> 48;
 		
-		CUPNP_REQUIRE(offset < pointerSectionSize);
+		CUPNP_REQUIRE(offset < pointerSectionSize) { return getPointer<T>(nullptr); }
 		
 		Location ptrLoc = data + sizeof(capnp::word) * (dataSectionSizeInWords + offset);
 		bool isDefault = ptrLoc.read<uint64_t>() == 0;
@@ -624,13 +624,13 @@ namespace cupnp {
 		
 			if(decodeResult == 0) {
 				// Pointer is a far ("inter-segment") pointer, but no special landing pad
-				CUPNP_REQUIRE(structureLoc.isValid(sizeof(capnp::word)));
+				CUPNP_REQUIRE(structureLoc.isValid(sizeof(capnp::word))) { return T(0, nullptr); }
 				dataLoc = decodeNearPtr(structureLoc);
 			} else if(decodeResult == 1) {
 				// Landing pad is indirect far pointer to data (without special landing pad)
 				// Structure information is located one word behind it		
-				CUPNP_REQUIRE(structureLoc.isValid(2 * sizeof(capnp::word)));
-				auto secondDecodeResult = decodeFarPtr(structureLoc, dataLoc);
+				CUPNP_REQUIRE(structureLoc.isValid(2 * sizeof(capnp::word))) { return T(0, nullptr); }
+				auto secondDecodeResult = decodeFarPtr(structureLoc, dataLoc) { return T(0, nullptr); }
 				CUPNP_REQUIRE(secondDecodeResult == 0);
 				
 				structureLoc = structureLoc + sizeof(capnp::word);
@@ -791,6 +791,7 @@ namespace cupnp {
 		// Primitive lists may be interpreted as struct lists, with the special exception of boolean lists
 		// (which have tag 1)
 		static CUPNP_FUNCTION bool validList(List<T>* list) { return list->sizeEnum != 1; }
+		static CUPNP_FUNCTION T getDefault() { return T(0, nullptr); }
 	};
 	
 	// Blob type values are stored as pointers without shared structure information.
@@ -811,6 +812,7 @@ namespace cupnp {
 		}
 		
 		static CUPNP_FUNCTION bool validList(List<T>* list) { return list->sizeEnum == 7 || list->sizeEnum == 6; }
+		static CUPNP_FUNCTION T getDefault() { return T(0, nullptr); }
 	};
 	
 	// Similarly to Blob types, lists are stored as pointers as well (the term similar is misleading,
@@ -831,6 +833,7 @@ namespace cupnp {
 		}
 		
 		static CUPNP_FUNCTION bool validList(List<T>* list) { return list->sizeEnum == 7 || list->sizeEnum == 6; }
+		static CUPNP_FUNCTION T getDefault() { return T(0, nullptr); }
 	};
 	
 	// Primitives, like structs, are stored in-line in the list, and must be accessed
@@ -863,6 +866,7 @@ namespace cupnp {
 			// Non-composite list must match exactly
 			return list->elementSize == sizeof(T);
 		}
+		static CUPNP_FUNCTION T getDefault() { return (T) 0; }
 	};
 	
 	// Bool values need some special handling, as they are not aligned on byte boundaries.
@@ -889,6 +893,7 @@ namespace cupnp {
 		}
 		
 		static CUPNP_FUNCTION bool validList(List<bool>* list) { return list->sizeEnum == capnp::ElementSize::BIT; }
+		static CUPNP_FUNCTION T getDefault() { return false; }
 	};
 	
 	struct Data {
