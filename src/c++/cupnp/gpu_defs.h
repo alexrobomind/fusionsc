@@ -10,7 +10,7 @@
 
 # ifdef CUPNP_GPUCC
 	//TODO: Better error handling for device code?
-	# define CUPNP_REQUIRE(expr, ...) if(!(expr))
+	# define CUPNP_REQUIRE(expr, ...) if(!(expr)) [[unlikely]]
 	# define CUPNP_FAIL_REQUIRE(...) if(true)
 # else
 	# include <kj/debug.h>

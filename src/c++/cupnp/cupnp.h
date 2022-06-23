@@ -374,7 +374,7 @@ namespace cupnp {
 		CUPNP_REQUIRE(ptrTagVal == 2);
 		
 		auto message = in.segments;
-		CUPNP_REQUIRE(message != nullptr) { return Location(nullptr); }
+		CUPNP_REQUIRE(message != nullptr) { out = Location(nullptr); return 0; }
 		
 		// Far pointer decoding
 		uint8_t landingPadType;
@@ -385,9 +385,9 @@ namespace cupnp {
 		landingPadOffset = (nativeVal & ((1ull << 32) - 1)) >> 3; // C
 		segmentId = nativeVal >> 32; // D
 		
-		CUPNP_REQUIRE(segmentId < message.size()) { return Location(nullptr); }
+		CUPNP_REQUIRE(segmentId < message.size()) { out = Location(nullptr); return 0; }
 		out.ptr = reinterpret_cast<unsigned char*>(message[segmentId].begin() + landingPadOffset); // Offset calculation is in 8-byte words
-		CUPNP_REQUIRE(out.ptr < reinterpret_cast<unsigned char*>(message[segmentId].end())) { return Location(nullptr); }
+		CUPNP_REQUIRE(out.ptr < reinterpret_cast<unsigned char*>(message[segmentId].end())) { out = Location(nullptr); return 0; }
 		
 		out.segmentId = segmentId;
 		out.segments = message;
@@ -630,8 +630,8 @@ namespace cupnp {
 				// Landing pad is indirect far pointer to data (without special landing pad)
 				// Structure information is located one word behind it		
 				CUPNP_REQUIRE(structureLoc.isValid(2 * sizeof(capnp::word))) { return T(0, nullptr); }
-				auto secondDecodeResult = decodeFarPtr(structureLoc, dataLoc) { return T(0, nullptr); }
-				CUPNP_REQUIRE(secondDecodeResult == 0);
+				auto secondDecodeResult = decodeFarPtr(structureLoc, dataLoc);
+				CUPNP_REQUIRE(secondDecodeResult == 0) { return T(0, nullptr); }
 				
 				structureLoc = structureLoc + sizeof(capnp::word);
 			}
@@ -893,7 +893,7 @@ namespace cupnp {
 		}
 		
 		static CUPNP_FUNCTION bool validList(List<bool>* list) { return list->sizeEnum == capnp::ElementSize::BIT; }
-		static CUPNP_FUNCTION T getDefault() { return false; }
+		static CUPNP_FUNCTION bool getDefault() { return false; }
 	};
 	
 	struct Data {
