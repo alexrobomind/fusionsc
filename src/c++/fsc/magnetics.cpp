@@ -405,4 +405,67 @@ FieldCalculator::Client newFieldCalculator(LibraryThread& lt, ToroidalGrid::Read
 
 #endif
 
+namespace {
+	void buildCoil(double rMaj, double rMin, double phi, Filament::Builder out) {
+		const size_t nTheta = 4;
+		
+		Tensor<double, 2> result(3, nTheta);
+		for(auto i : kj::range(0, nTheta)) {
+			double theta = 2 * pi / nTheta * i;
+			
+			double r = rMaj + rMin * std::cos(theta);
+			double z =        rMin * std::sin(theta);
+			
+			double x = std::cos(phi) * r;
+			double y = std::sin(phi) * r;
+			
+			result(0, i) = x;
+			result(1, i) = y;
+			result(2, i) = z;
+		}
+		
+		writeTensor(result, out.initInline());
+	}
+	
+	void buildAxis(double rMaj, Filament::Builder out) {
+		const size_t nPhi = 4;
+		
+		Tensor<double, 2> result(3, nPhi);
+		for(auto i : kj::range(0, nPhi)) {
+			double phi = 2 * pi / nPhi * i;
+			
+			double x = std::cos(phi) * rMaj;
+			double y = std::sin(phi) * rMaj;
+			double z = 0;
+			
+			result(0, i) = x;
+			result(1, i) = y;
+			result(2, i) = z;
+		}
+		
+		writeTensor(result, out.initInline());
+	}
+}
+
+void simpleTokamak(MagneticField::Builder output, double rMajor, double rMinor, unsigned int nCoils, double Ip) {
+	auto fields = output.initSum(nCoils + 1);
+	
+	for(auto i : kj::range(0, nCoils)) {
+		auto filamentField = fields[i].initFilamentField();
+		filamentField.getBiotSavartSettings().setStepSize(0.01);
+		
+		double phi = 2 * pi / nCoils * i;
+		
+		buildCoil(rMajor, rMinor, phi, filamentField.getFilament());	
+	}
+	
+	{
+		auto filamentField = fields[nCoils].initFilamentField();
+		filamentField.setCurrent(Ip);
+		filamentField.getBiotSavartSettings().setStepSize(0.01);
+		
+		buildAxis(rMajor, filamentField.getFilament());
+	}
+}
+
 }

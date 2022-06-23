@@ -27,8 +27,6 @@ namespace fsc {
 	using Eigen::Sizes;
 	
 	using Eigen::TensorOpCost;
-	
-	constexpr inline double pi = 3.14159265358979323846; // "Defined" in magnetics.cpp
 
 	template<typename T, unsigned int n>
 	using TVec = Eigen::TensorFixedSize<T, Eigen::Sizes<n>>;

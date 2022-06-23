@@ -53,12 +53,13 @@ DynamicCapability::Client connectRemote1(kj::StringPtr address, unsigned int por
 
 namespace fscpy {
 
-void loadDefaultSchema(py::module_& m) {	
+void loadDefaultSchema(py::module_& m) {
+	defaultLoader.addBuiltin<ToroidalGrid, MagneticField, RootService>();
 	auto schemas = getBuiltinSchemas<RootService>();
 	
-	for(auto node : schemas) {
+	/*for(auto node : schemas) {
 		defaultLoader.add(node);
-	}
+	}*/
 	
 	for(auto node : schemas) {
 		defaultLoader.importNodeIfRoot(node.getId(), m);

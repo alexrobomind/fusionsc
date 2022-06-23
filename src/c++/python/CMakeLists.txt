@@ -9,6 +9,7 @@ if(FSC_WITH_PYTHON)
 		async.cpp
 		loader.cpp
 		data.cpp
+		devices.cpp
 	)
 
 	target_link_libraries(

@@ -13,85 +13,8 @@
 #endif
 
 namespace fsc {
+	
 
-namespace internal {
-	template<typename LHS, typename Device>
-	struct OnDeviceAssignment {
-		LHS lhs;
-		Device& device;
-		Promise<void> prereq;
-		
-		bool consumed = false;
-		
-		OnDeviceAssignment(LHS lhs, Device& device, Promise<void> prereq) :
-			lhs(lhs),
-			device(device),
-			prereq(mv(prereq))
-		{}
-		
-		template<typename RHS>
-		Promise<void> operator=(const RHS& rhs) {
-			KJ_REQUIRE(!consumed);
-			consumed = true;
-			
-			Device& device = this -> device;
-			LHS& lhs = this -> lhs;
-			
-			return prereq.then([&device, lhs, rhs, prereq = mv(prereq)]() {
-				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-				auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
-					fulfiller -> fulfill();
-				};
-				
-				lhs.device(device, mv(callback)) = rhs;
-				return mv(paf.promise);
-			});
-		}
-		
-		template<typename RHS>
-		Promise<void> operator+=(const RHS& rhs) {
-			KJ_REQUIRE(!consumed);
-			consumed = true;
-			
-			Device& device = this -> device;
-			LHS& lhs = this -> lhs;
-			
-			return prereq.then([&device, lhs, rhs, prereq = mv(prereq)]() {
-				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-				auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
-					fulfiller -> fulfill();
-				};
-				
-				lhs.device(device, mv(callback)) += rhs;
-				return mv(paf.promise);
-			});
-		}
-		
-		template<typename RHS>
-		Promise<void> operator-=(const RHS& rhs) {
-			KJ_REQUIRE(!consumed);
-			consumed = true;
-			
-			Device& device = this -> device;
-			LHS& lhs = this -> lhs;
-			
-			return prereq.then([&device, lhs, rhs, prereq = mv(prereq)]() {
-				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-				auto callback = [fulfiller = mv(paf.fulfiller)]() mutable {
-					fulfiller -> fulfill();
-				};
-				
-				lhs.device(device, mv(callback)) -= rhs;
-				return mv(paf.promise);
-			});
-		}
-	};
-}
-
-template<typename LHS, typename Device>
-Promise<void> onDevice(LHS lhs, Device& device, Promise<void> prereq = READY_NOW) {
-	return internal::OnDeviceAssignment<LHS, Device>(lhs, device, prereq);
-}
 
 // ------------------- Lots of different device mappings for tensors -------------------------
 
@@ -340,17 +263,19 @@ Own<TensorMap<const T>> mapTensor(Reader reader) {
 	#endif
 }
 	
-template<typename T, int rank, int options, typename Index, typename T2>
-void writeTensor(const Tensor<T, rank, options, Index>& in, T2 builder) {
-	using TensorType = Tensor<T, rank, options, Index>;
+// template<typename T, int rank, int options, typename Index, typename T2>
+template<typename TensorType, typename T2>
+void writeTensor(const TensorType& in, T2 builder) {
+	// using TensorType = Tensor<T, rank, options, Index>;
+	constexpr int rank = TensorType::NumIndices;
 	
 	{
 		auto shape = builder.initShape(rank);
 	
 		auto dims = in.dimensions();
 		size_t size = 1;
-		for(size_t i = 0; i < rank; ++i) {
-			if(options & Eigen::RowMajor) {
+		for(int i = 0; i < rank; ++i) {
+			if(TensorType::Options & Eigen::RowMajor) {
 				shape.set(i, dims[i]);
 			} else {
 				shape.set(rank - i - 1, dims[i]);

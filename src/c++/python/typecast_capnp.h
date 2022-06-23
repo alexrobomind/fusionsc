@@ -6,6 +6,8 @@
 #include <capnp/any.h>
 #include <kj/common.h>
 
+#include <fsc/data.h>
+
 #include "loader.h"
 #include "capnp.h"
 
@@ -324,6 +326,88 @@ namespace pybind11 { namespace detail {
 			// In principle, this should never be reached anyway
 			return type_caster_base<DynamicStructPipeline>::cast(dynamicStruct, policy, parent);
 		}
+	};
+	
+	template<typename Builder>
+	struct type_caster<Builder, kj::EnableIf<capnp::kind<capnp::FromBuilder<Builder>>() == capnp::Kind::STRUCT && !fsc::isTemporary<Builder>()>> {
+		using DynamicStruct = capnp::DynamicStruct;
+		using Builds = typename Builder::Builds;
+		
+		
+		PYBIND11_TYPE_CASTER(Builder, const_name<Builds>() + const_name(".Builder"));
+		
+		bool load(handle src, bool convert) {
+			// Try to load as dynamic struct
+			type_caster<DynamicStruct::Builder> subCaster;
+			if(!subCaster.load(src, convert))
+				return false;
+			
+			DynamicStruct::Builder dynamic = (DynamicStruct::Builder&) subCaster;
+			
+			try {
+				value = dynamic.as<Builds>();
+			} catch(kj::Exception e) {
+				return false;
+			}
+			
+			return true;
+		}
+		
+		static handle cast(Builder src, return_value_policy policy, handle parent) {
+			capnp::DynamicValue::Builder dynamic = capnp::toDynamic(src);
+			return type_caster<capnp::DynamicValue::Builder>::cast(dynamic, policy, parent);
+		}		
+	};
+	
+	template<typename Reader>
+	struct type_caster<Reader, kj::EnableIf<capnp::kind<capnp::FromReader<Reader>>() == capnp::Kind::STRUCT>> {
+		using DynamicStruct = capnp::DynamicStruct;
+		using Reads = typename Reader::Reads;
+		
+		PYBIND11_TYPE_CASTER(Reader, const_name<Reads>() + const_name(".Reader"));
+		
+		bool load(handle src, bool convert) {
+			// Try to load as dynamic struct
+			type_caster<DynamicStruct::Reader> subCaster;
+			if(!subCaster.load(src, convert))
+				return false;
+			
+			DynamicStruct::Reader dynamic = (DynamicStruct::Reader&) subCaster;
+			
+			try {
+				value = dynamic.as<Reads>();
+			} catch(kj::Exception e) {
+				return false;
+			}
+			
+			return true;
+		}
+		
+		static handle cast(Reader src, return_value_policy policy, handle parent) {
+			capnp::DynamicValue::Reader dynamic = capnp::toDynamic(src);
+			return type_caster<capnp::DynamicValue::Reader>::cast(dynamic, policy, parent);
+		}		
+	};
+	
+	template<typename T>
+	struct type_caster<fsc::Temporary<T>, kj::EnableIf<capnp::kind<T>() == capnp::Kind::STRUCT>> {		
+		PYBIND11_TYPE_CASTER(fsc::Temporary<T>, const_name<T>() + const_name(".Builder"));
+		
+		bool load(handle src, bool convert) {
+			false;
+		}
+		
+		static handle cast(fsc::Temporary<T> src, return_value_policy policy, handle parent) {
+			capnp::DynamicValue::Builder dynamic = capnp::toDynamic(src.asBuilder());
+			
+			py::handle builder = type_caster<capnp::DynamicValue::Builder>::cast(dynamic, policy, parent);
+			
+			auto holder = new fscpy::UnknownHolder<kj::Own<capnp::MallocMessageBuilder>>(mv(src.holder));
+			py::object msg = py::cast((fscpy::UnknownObject*) holder);
+			builder.attr("_msg") = msg;
+			
+			return builder;
+		}		
 	};
 	
 	/*

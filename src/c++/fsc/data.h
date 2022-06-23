@@ -44,13 +44,6 @@ namespace internal {
 template<typename T> class LocalDataRef;
 class LocalDataService;
 
-template<typename T>
-struct TensorReader;
-
-//! Use this to get the fsc capnp tensor type for a specific primitive.
-template<typename T>
-using TensorFor = typename internal::TensorFor_<T>::Type;
-
 //! Use this to figure out what datatype a DataRef points to.
 template<typename T>
 using References = typename internal::References_<T>::Type;
@@ -409,46 +402,25 @@ struct Temporary : public T::Builder {
 	Own<capnp::MallocMessageBuilder> holder;
 };
 
+template<typename T>
+struct _IsTemporary { constexpr static bool val = false; };
+
+template<typename T>
+struct _IsTemporary<fsc::Temporary<T>> { constexpr static bool val = true; };
+
+template<typename T>
+constexpr bool isTemporary() { return _IsTemporary<T>::val; }
+
 template<typename T, typename Cap = capnp::FromClient<T>, typename... Attachments>
 typename Cap::Client attachToClient(T src, Attachments&&... attachments);
-
-template<typename T>
-using TensorVal = decltype(instance<T>().getData().get(0));
-
-/**
- * Reads a single element from an underlying tensor.
- *
- * WARNING: To enforce security on untrusted data, if the underlying class is a
- * ...::Reader, then capnproto performs a bounds check on the shape and data sections.
- * If you need to read repeatedly read from this tensor, use a TensorReader. This
- * will move the bounds check to its creation.
- *
- * TODO: Potential conversion to Eigen3 tensors.
- */
-template<typename T>
-TensorVal<T> tensorGet(const T& tensor, const ArrayPtr<size_t> index);
-
-template<typename T>
-void tensorSet(const T& tensor, const ArrayPtr<size_t> index, TensorVal<T> value);
-
-//! Fast tensor reader
-/**
- * Allows to quickly read a scalar value from a stored tensor (given a multiindex).
- * \tparam T Type of the tensor holder. Must be a Builder or Reader type.
- */
-template<typename T>
-struct TensorReader {	
-	TensorReader(const T ref);	
-	TensorVal<T> get(const ArrayPtr<size_t> index);
-	
-	decltype(instance<const T>().getData()) data;
-	decltype(instance<const T>().getShape()) shape;
-};
 
 bool hasMaximumOrdinal(capnp::DynamicStruct::Reader in, unsigned int maxOrdinal);
 
 template<typename T, typename Cap = capnp::FromClient<T>, typename... Attachments>
 typename Cap::Client attach(T src, Attachments&&... attachments);
+
+//! Helper function for calculating linear index based on shape info
+size_t linearIndex(const capnp::List<uint64_t>::Reader& shape, const ArrayPtr<size_t> index);
 
 //! Struct version checker
 /**

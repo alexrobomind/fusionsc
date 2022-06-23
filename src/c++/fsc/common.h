@@ -25,6 +25,8 @@ namespace kj {
  * The FSC library.
  */
 namespace fsc {
+		
+constexpr inline double pi = 3.14159265358979323846; // "Defined" in magnetics.cpp
 
 using byte = kj::byte;
 using kj::Promise;
@@ -118,16 +120,6 @@ inline Array<capnp::word> bytesToWords(Array<byte> bytes) {
 	);
 	return wordPtr.attach(mv(bytes));
 }
-
-/*
-
-//! This is evil. Don't use it.
-template<typename T>
-Promise<T*> share(Own<T> own) {
-	Promise<T*> resultRef(own.get());
-	return resultRef.attach(mv(own));
-} */
-
 
 //! Type of a kj::tuple constructed from given types.
 template<typename... T>

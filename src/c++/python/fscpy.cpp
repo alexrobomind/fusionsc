@@ -1,9 +1,11 @@
 #include "fscpy.h"
 
 #include <fsc/store.h>
+#include <fsc/magnetics.h>
 
 #include <pybind11/pybind11.h>
 #include <kj/common.h>
+#include <capnp/dynamic.h>
 
 using namespace fscpy;
 
@@ -29,14 +31,23 @@ struct MethodDescriptor {
 	py::object get(py::object self, py::object objtype) { if(self.is_none()) return target; return py::cast(BoundMethod(target, self)); }
 };
 
-struct Simple {		
-};
-
 void atExitFunction() {
 	globalClasses = nullptr;
 	baseType = nullptr;
 	baseMetaType = nullptr;
 }
+
+auto pySimpleTokamak(double rMaj, double rMin, unsigned int nCoils, double Ip) {
+	Temporary<MagneticField> result;
+	simpleTokamak(result, rMaj, rMin, nCoils, Ip);
+	return result;
+}
+
+void helperFunctions(py::module_& m) {
+	m.def("simpleTokamak", &pySimpleTokamak, py::arg("rMaj") = 5.5, py::arg("rMin") = 1.5, py::arg("nCoils") = 25, py::arg("iP") = 0.2);
+}
+
+struct Simple {};
 
 }
 
@@ -89,8 +100,11 @@ PYBIND11_MODULE(fscpy, m) {
 	bindCapnpClasses(m);
 	bindAsyncClasses(m);
 	bindDataClasses(m);
+	bindDevices(m);
 	
 	loadDefaultSchema(m);
+	
+	helperFunctions(m);
 	
 	auto atexitModule = py::module_::import("atexit");
 	atexitModule.attr("register")(py::cpp_function(&atExitFunction));

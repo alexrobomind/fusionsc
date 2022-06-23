@@ -9,9 +9,6 @@
 
 #include "data.h"
 
-namespace {
-}
-
 namespace fsc {
 	
 // === functions in internal ===
@@ -1253,6 +1250,17 @@ Promise<void> removeCapability(capnp::Capability::Client client, capnp::AnyPoint
 		if(e.getType() != kj::Exception::Type::UNIMPLEMENTED)
 			kj::throwRecoverableException(mv(e));
 	});
+}
+
+size_t linearIndex(const capnp::List<uint64_t>::Reader& shape, const ArrayPtr<size_t> index) {
+	size_t linearIndex = 0;
+	size_t stride = 1;
+	for(int dim = (int) index.size() - 1; dim >= 0; --dim) {
+		linearIndex += index[dim] * stride;
+		stride *= shape[dim];
+	}
+	
+	return linearIndex;
 }
 
 } // namespace fsc

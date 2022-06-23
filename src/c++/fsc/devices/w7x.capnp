@@ -14,6 +14,17 @@ using BiotSavartSettings = Magnetics.BiotSavartSettings;
 using Geometry = import "../geometry.capnp";
 using Mesh = Geometry.Mesh;
 
+const defaultGrid : Magnetics.ToroidalGrid = (
+	rMin = 4,
+	rMax = 6,
+	zMin = -1.5,
+	zMax = 1.5,
+	nR = 128,
+	nZ = 128,
+	nPhi = 16,
+	nSym = 5
+);
+
 interface CoilsDB {
 	getCoil @0 (id : UInt64) -> Filament;
 	getConfig @1 (id : UInt64) -> CoilsDBConfig;

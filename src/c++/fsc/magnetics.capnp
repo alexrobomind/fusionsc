@@ -49,7 +49,10 @@ struct BiotSavartSettings {
 struct Filament {
 	union {
 		# ============= General ============
+		
+		# Tensor of shape [3, nPoints]
 		inline @0 : Float64Tensor;
+		
 		ref    @1 : DataRef(Filament);
 		nested @2 : Filament;
 		
@@ -126,7 +129,7 @@ struct MagneticField {
 		
 		# Magnetic field originating from a filament
 		filamentField : group {
-			current @3 : Float64;
+			current @3 : Float64 = 1;
 			biotSavartSettings @4 : BiotSavartSettings;
 			filament @5 : Filament;
 			windingNo @6 : UInt32 = 1;

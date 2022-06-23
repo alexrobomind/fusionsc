@@ -48,6 +48,11 @@ FieldCalculator::Client newFieldCalculator(LibraryThread& lt, ToroidalGrid::Read
 
 #endif
 
+/**
+ * For testing
+ */
+void simpleTokamak(MagneticField::Builder output, double rMajor = 5.5, double rMinor = 1.5, unsigned int nCoils = 25, double Ip = 0.3);
+
 // Inline Implementation
 
 }

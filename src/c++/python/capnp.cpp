@@ -10,6 +10,7 @@
 #include <capnp/message.h>
 #include <capnp/blob.h>
 #include <capnp/endian.h>
+#include <capnp/pretty-print.h>
 
 #include <fsc/local.h>
 #include <fsc/common.h>
@@ -471,6 +472,10 @@ void bindStructClasses(py::module_& m) {
 		return kj::str(self);
 	});
 	
+	cDSB.def("pretty", [](DSB& self) {
+		return capnp::prettyPrint(self).flatten();
+	});
+	
 	// ----------------- READER ------------------
 	
 	py::class_<DSR> cDSR(m, "DynamicStructReader", py::dynamic_attr(), py::multiple_inheritance(), py::metaclass(*baseMetaType), py::buffer_protocol());
@@ -517,8 +522,12 @@ void bindStructClasses(py::module_& m) {
 		return pyBuilder;
 	});
 	
-	cDSR.def("__repr__", [](DST& self) {
+	cDSR.def("__repr__", [](DSR& self) {
 		return kj::str(self);
+	});
+	
+	cDSR.def("pretty", [](DSR& self) {
+		return capnp::prettyPrint(self).flatten();
 	});
 	
 	// ----------------- PIPELINE ------------------
@@ -553,7 +562,9 @@ void bindStructClasses(py::module_& m) {
 	
 	py::class_<capnp::Response<AnyPointer>>(m, "DynamicResponse");
 	
-	py::class_<capnp::Orphan<DynamicValue>>(m, "DynamicOrphan", py::dynamic_attr());
+	py::class_<capnp::Orphan<DynamicValue>>(m, "DynamicOrphan", py::dynamic_attr())
+		.def_property_readonly("val", [](capnp::Orphan<DynamicValue>& self) { return self.get(); }, py::keep_alive<0, 1>())
+	;
 	
 	py::class_<DST, DSB> cDST(m, "DynamicMessage", py::metaclass(*baseMetaType));
 }

@@ -5,6 +5,7 @@ $Cxx.namespace("fsc");
 
 using Magnetics = import "magnetics.capnp";
 using Data = import "data.capnp";
+using Index = import "index.capnp";
 
 
 # ============================== Service interface ===================================
@@ -21,6 +22,24 @@ struct FLTRequest {
 	stepLimit @5 : UInt32;
 	
 	stepSize @6 : Float64 = 0.001;
+}
+
+struct FieldlineMappingData {
+	struct MappingFilament {
+		# Tensor of shape [N, 3]
+		points @0 : Data.Float64Tensor;
+		
+		# Tensor of shape [N, 3, 3]
+		jacobians @1 : Data.Float64Tensor;
+	}
+	
+	struct FilamentPoint {
+		filamentIndex @0 : UInt32;
+		pointIndex @1 : UInt32;
+	}
+	
+	indexRoot @0 : Index.TreeNode(Index.Box3D, FilamentPoint);
+	filaments @1 : List(MappingFilament);
 }
 
 struct FLTResponse {

@@ -145,14 +145,6 @@ inline uint64_t constexpr capnpTypeId<capnp::AnyPointer>() { return 1; }
 
 template<>
 inline uint64_t constexpr capnpTypeId<capnp::AnyStruct>() { return 1; }
-
-// Helper methods to read / write data in tensors
-	
-template<typename T, typename Val = typename capnp::ListElementType<capnp::FromAny<T>>>
-T tensorGetFast(const T& data, const capnp::List<uint64_t>::Reader& shape, const ArrayPtr<size_t> index);
-
-inline size_t linearIndex(const capnp::List<uint64_t>::Reader& shape, const ArrayPtr<size_t> index);
-
 // Type inference helper that tells what a data ref references
 
 template<typename T>
@@ -330,19 +322,6 @@ uint64_t LocalDataRef<T>::getTypeID() {
 	return backend -> localMetadata().getTypeId();
 }
 
-// === class TensorAccessor ===
-
-template<typename T>
-TensorVal<T> TensorReader<T>::get(const ArrayPtr<size_t> index) {
-	return internal::tensorGetFast(data, shape, index);
-}
-
-template<typename T>
-TensorReader<T>::TensorReader(const T ref) :
-	data(ref.getData()),
-	shape(ref.getShape())
-{}
-
 // === function attachToClient ===
 
 namespace internal {
@@ -486,32 +465,6 @@ typename T::Reader internal::getDataRefAs(internal::LocalDataRefImpl& impl) {
 	
 	// Copy root onto the heap and attach objects needed to keep it running
 	return root.getAs<T>();
-}
-
-inline size_t internal::linearIndex(const capnp::List<uint64_t>::Reader& shape, const ArrayPtr<size_t> index) {
-	size_t linearIndex = 0;
-	size_t stride = 1;
-	for(int dim = (int) index.size() - 1; dim >= 0; --dim) {
-		linearIndex += index[dim] * stride;
-		stride *= shape[dim];
-	}
-	
-	return linearIndex;
-}
-
-template<typename T, typename Val>
-T internal::tensorGetFast(const T& data, const capnp::List<uint64_t>::Reader& shape, const ArrayPtr<size_t> index) {
-	return data[linearIndex(shape, index)];
-}
-
-template<typename T>
-TensorVal<T> tensorGet(const T& tensor, const ArrayPtr<size_t> index) {
-	return tensor.getData()[internal::linearIndex(tensor.getShape(), index)];
-}
-
-template<typename T>
-TensorVal<T> tensorSet(const T& tensor, const ArrayPtr<size_t> index, TensorVal<T> value) {
-	return tensor.getData().set(internal::linearIndex(tensor.getShape(), index), value);
 }
 
 }
