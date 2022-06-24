@@ -34,17 +34,17 @@ auto getAndAddBuiltin() {
 }
 */
 	
-DynamicCapability::Client connectLocal1(RootConfig::Reader config) {
+RootService::Client connectLocal1(RootConfig::Reader config) {
 	LibraryThread lt = fscpy::PyContext::libraryThread();
 	return createRoot(lt, config);
 }
 	
-DynamicCapability::Client connectLocal2() {
+RootService::Client connectLocal2() {
 	Temporary<RootConfig> config;
 	return connectLocal1(config);
 }
 
-DynamicCapability::Client connectRemote1(kj::StringPtr address, unsigned int port) {
+RootService::Client connectRemote1(kj::StringPtr address, unsigned int port) {
 	LibraryThread lt = fscpy::PyContext::libraryThread();
 	return connectRemote(lt, address, port);
 }
