@@ -327,12 +327,11 @@ namespace pybind11 { namespace detail {
 			return type_caster_base<DynamicStructPipeline>::cast(dynamicStruct, policy, parent);
 		}
 	};
-	
+		
 	template<typename Builder>
-	struct type_caster<Builder, kj::EnableIf<capnp::kind<capnp::FromBuilder<Builder>>() == capnp::Kind::STRUCT && !fsc::isTemporary<Builder>()>> {
+	struct type_caster<Builder, typename kj::EnableIf<CAPNP_KIND(capnp::FromBuilder<Builder>) == capnp::Kind::STRUCT && !fsc::isTemporary<Builder>()>> {
 		using DynamicStruct = capnp::DynamicStruct;
 		using Builds = typename Builder::Builds;
-		
 		
 		PYBIND11_TYPE_CASTER(Builder, const_name<Builds>() + const_name(".Builder"));
 		
@@ -354,14 +353,16 @@ namespace pybind11 { namespace detail {
 		}
 		
 		static handle cast(Builder src, return_value_policy policy, handle parent) {
+			capnp::StructSchema schema = fscpy::defaultLoader.capnpLoader.getSchemaFor<Builds>().asStruct();
+			
 			capnp::AnyStruct::Builder any = capnp::toAny(src);
-			capnp::DynamicValue::Builder dynamic = any.as<capnp::DynamicStruct>(fscpy::defaultLoader.capnpLoader.schemaFor<Builds>().asStruct());
+			capnp::DynamicValue::Builder dynamic = any.as<capnp::DynamicStruct>(schema);
 			return type_caster<capnp::DynamicValue::Builder>::cast(dynamic, policy, parent);
 		}		
 	};
 	
 	template<typename Reader>
-	struct type_caster<Reader, kj::EnableIf<capnp::kind<capnp::FromReader<Reader>>() == capnp::Kind::STRUCT>> {
+	struct type_caster<Reader, kj::EnableIf<CAPNP_KIND(capnp::FromReader<Reader>) == capnp::Kind::STRUCT>> {
 		using DynamicStruct = capnp::DynamicStruct;
 		using Reads = typename Reader::Reads;
 		
@@ -394,11 +395,11 @@ namespace pybind11 { namespace detail {
 	};
 	
 	template<typename T>
-	struct type_caster<fsc::Temporary<T>, kj::EnableIf<capnp::kind<T>() == capnp::Kind::STRUCT>> {			
+	struct type_caster<fsc::Temporary<T>, kj::EnableIf<capnp::kind<T>() == capnp::Kind::STRUCT>> {
 		PYBIND11_TYPE_CASTER(fsc::Temporary<T>, const_name<T>() + const_name(".Builder"));
 		
 		bool load(handle src, bool convert) {
-			false;
+			return false;
 		}
 		
 		static handle cast(fsc::Temporary<T> src, return_value_policy policy, handle parent) {
@@ -423,7 +424,7 @@ namespace pybind11 { namespace detail {
 		struct CastThisCap_ { static constexpr bool val = capnp::kind<T>() == capnp::Kind::INTERFACE; };
 		
 		template<>
-		struct CastThisCap_<capnp::Capability> { static constexpr bool val = false; };
+		struct CastThisCap_<capnp::DynamicCapability> { static constexpr bool val = false; };
 		
 		template<typename T>
 		constexpr bool castThisCap() { return CastThisCap_<T>::val; }		
@@ -437,11 +438,11 @@ namespace pybind11 { namespace detail {
 		
 		bool load(handle src, bool convert) {
 			// Try to load as dynamic struct
-			type_caster<DynamicCapability::Reader> subCaster;
+			type_caster<capnp::DynamicCapability::Client> subCaster;
 			if(!subCaster.load(src, convert))
 				return false;
 			
-			DynamicCapability::Reader dynamic = (DynamicStruct::Reader&) subCaster;
+			capnp::DynamicCapability::Client dynamic = (capnp::DynamicCapability::Client&) subCaster;
 			
 			try {
 				value = dynamic.as<ClientFor>();
@@ -456,7 +457,7 @@ namespace pybind11 { namespace detail {
 			capnp::InterfaceSchema schema = fscpy::defaultLoader.capnpLoader.getSchemaFor<ClientFor>().asInterface();
 			
 			capnp::Capability::Client anyCap = src;
-			capnp::DynamicCapability::Client dynamic = src.castAs<capnp::DynamicCapability>(schema);
+			capnp::DynamicCapability::Client dynamic = src.template castAs<capnp::DynamicCapability>(schema);
 			
 			return type_caster<capnp::DynamicCapability::Client>::cast(dynamic, policy, parent);
 		}		

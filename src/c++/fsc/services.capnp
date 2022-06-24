@@ -1,5 +1,8 @@
 @0x91fc03b633e5bb48;
 
+using Cxx = import "/capnp/c++.capnp";
+$Cxx.namespace("fsc");
+
 using Magnetics = import "magnetics.capnp";
 using Geometry = import "geometry.capnp";
 using FLT = import "flt.capnp";

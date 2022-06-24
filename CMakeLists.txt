@@ -67,8 +67,10 @@ FetchContent_Declare(
 
 FetchContent_Declare(
   CapnProto
-  GIT_REPOSITORY https://github.com/capnproto/capnproto.git
-  GIT_TAG        v0.9.1
+  #GIT_REPOSITORY https://github.com/capnproto/capnproto.git
+  #GIT_TAG        v0.9.1
+  GIT_REPOSITORY https://github.com/alexrobomind/capnproto.git
+  GIT_TAG schema_loader_for
   GIT_SHALLOW    On
   GIT_PROGRESS   On
 )

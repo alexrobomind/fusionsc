@@ -83,6 +83,7 @@ struct FieldCalculation {
 		KJ_REQUIRE(stepSize != 0, "Please specify a step size in the Biot-Savart settings");
 		
 		// Launch calculation
+		calculation = calculation.then([]() { KJ_DBG("starting calculation"); });
 		calculation = FSC_LAUNCH_KERNEL(
 			kernels::biotSavartKernel,
 			_device,
@@ -90,7 +91,9 @@ struct FieldCalculation {
 			field.size() / 3,
 			grid, FSC_KARG(*filament, IN), current, coilWidth, stepSize, FSC_KARG(mappedField, NOCOPY)
 		);
+		calculation = calculation.then([]() { KJ_DBG("calculation done"); });
 		calculation = calculation.attach(mv(filament));
+		calculation = calculation.then([]() { KJ_DBG("filament freed"); });
 	}
 	
 	Promise<void> finish(Float64Tensor::Builder out) {
@@ -126,13 +129,16 @@ struct CalculationSession : public FieldCalculator::Server {
 	
 	//! Handles compute request
 	Promise<void> compute(ComputeContext context) {
+		KJ_DBG("Compute request");
 		context.allowCancellation();
 		
 		// Copy input field (so that call context can be released)
+		KJ_DBG("Saving field");
 		auto field = heapHeld<Temporary<MagneticField>>(context.getParams().getField());
 		context.releaseParams();
 		
 		// Start calculation lazily
+		KJ_DBG("Processing root");
 		auto data = processRoot(*field)
 		.then([this, field](LocalDataRef<Float64Tensor> tensorRef) mutable {
 			// Cache field if not present, use existing if present
@@ -141,9 +147,10 @@ struct CalculationSession : public FieldCalculator::Server {
 				auto insertResult = cache.insert(id, mv(tensorRef));
 				return attach(mv(insertResult.element), mv(insertResult.ref));
 			});
-		}).attach(thisCap(), field.x());
+		}).attach(thisCap(), field.x()).eagerlyEvaluate(nullptr);
 		
 		// Fill in computed grid struct
+		KJ_DBG("Filling in data");
 		auto compField = context.initResults().initComputedField();
 		writeGrid(grid, compField.initGrid());
 		compField.setData(mv(data));
@@ -153,10 +160,14 @@ struct CalculationSession : public FieldCalculator::Server {
 	
 	//! Processes a root node of a magnetic field (creates calculator)
 	Promise<LocalDataRef<Float64Tensor>> processRoot(MagneticField::Reader node) {
+		KJ_CONTEXT("processRoot");
 		auto newCalculator = heapHeld<FieldCalculation<Device>>(grid, device);
+		KJ_DBG("Calculator created");
 		auto calcDone = processField(*newCalculator, node, 1);
+		KJ_DBG("Field processing initiated");
 		
-		return calcDone.then([newCalculator, this]() mutable {		
+		return calcDone.then([newCalculator, this]() mutable {	
+			KJ_DBG("Reading result");
 			auto result = kj::heap<Temporary<Float64Tensor>>();					
 			auto readout = newCalculator->finish(*result);
 			auto publish = readout.then([result=result.get(), this]() {
@@ -170,6 +181,7 @@ struct CalculationSession : public FieldCalculator::Server {
 		switch(node.which()) {
 			case Filament::INLINE:
 				// The biot savart operation is chained by the calculator
+				KJ_DBG("Biot-Savart", scale, node.getInline(), settings);
 				calculator.biotSavart(scale, node.getInline(), settings);
 				return READY_NOW;
 				
@@ -448,6 +460,7 @@ namespace {
 }
 
 void simpleTokamak(MagneticField::Builder output, double rMajor, double rMinor, unsigned int nCoils, double Ip) {
+	nCoils = 1;
 	auto fields = output.initSum(nCoils + 1);
 	
 	for(auto i : kj::range(0, nCoils)) {

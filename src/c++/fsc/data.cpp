@@ -1142,6 +1142,7 @@ Promise<void> removeDatarefs(capnp::AnyPointer::Reader in, capnp::AnyPointer::Bu
 	using capnp::PointerType;
 	using capnp::AnyPointer;
 	
+		
 	switch(in.getPointerType()) {
 		case PointerType::NULL_: {
 			out.clear();
@@ -1215,12 +1216,13 @@ Promise<void> removeDatarefs(capnp::AnyPointer::Reader in, capnp::AnyPointer::Bu
 }
 
 Promise<void> removeDatarefs(capnp::AnyStruct::Reader in, capnp::AnyStruct::Builder out) {
-	return removeDatarefsInStruct(in, out);
+	auto result = removeDatarefsInStruct(in, out);
+	return result;
 }
 
-Promise<void> removeDatarefsInStruct(capnp::AnyStruct::Reader in, capnp::AnyStruct::Builder out) {
+Promise<void> removeDatarefsInStruct(capnp::AnyStruct::Reader in, capnp::AnyStruct::Builder out) {	
 	// Copy over data section
-	KJ_ASSERT(out.getDataSection().size() == in.getDataSection().size());
+	KJ_REQUIRE(out.getDataSection().size() == in.getDataSection().size());
 	memcpy(out.getDataSection().begin(), in.getDataSection().begin(), in.getDataSection().size());
 	
 	// Handle pointers
@@ -1249,6 +1251,7 @@ Promise<void> removeCapability(capnp::Capability::Client client, capnp::AnyPoint
 		// UNIMPLEMENTED exceptions are normal here, as we want to ignore non-dataref capabilities
 		if(e.getType() != kj::Exception::Type::UNIMPLEMENTED)
 			kj::throwRecoverableException(mv(e));
+		
 	});
 }
 
