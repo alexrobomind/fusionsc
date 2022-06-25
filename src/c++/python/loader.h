@@ -19,7 +19,14 @@ namespace fscpy {
 		template<typename... T>
 		void addBuiltin();
 		
+		capnp::Schema import(capnp::Schema input);
+		
+		template<typename T>
+		capnp::Schema importBuiltin();
+		
 		capnp::SchemaLoader capnpLoader;
+		
+		kj::HashMap<capnp::Schema, capnp::Schema> imported;
 	};
 	
 	extern Loader defaultLoader;
@@ -47,4 +54,11 @@ namespace fscpy {
 		using arrType = int [];
 		(void) arrType { 0, (capnpLoader.loadCompiledTypeAndDependencies<T>(), 0)... };
 	}
+	
+	template<typename T>
+	capnp::Schema Loader::importBuiltin() {
+		return import(capnp::Schema::from<T>());
+	}
+	
+	
 }
