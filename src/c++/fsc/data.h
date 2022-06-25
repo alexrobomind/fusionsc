@@ -477,6 +477,7 @@ ID ID::fromReader(T t) {
 template<typename T>
 Promise<ID> ID::fromReaderWithRefs(T t) {
 	Temporary<capnp::FromAny<T>> tmp;
+	
 	auto stripped = removeDatarefs(capnp::toAny(t), capnp::toAny(tmp));
 	
 	return stripped.then([tmp = mv(tmp)]() mutable {

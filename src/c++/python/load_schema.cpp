@@ -10,6 +10,8 @@
 
 #include <kj/string-tree.h>
 
+#include <pybind11/pybind11.h>
+
 #include <fsc/services.h>
 
 using capnp::DynamicValue;
@@ -33,11 +35,12 @@ auto getAndAddBuiltin() {
 	return getBuiltinSchemas<T...>();
 }
 */
-	
+
 RootService::Client connectLocal1(RootConfig::Reader config) {
 	LibraryThread lt = fscpy::PyContext::libraryThread();
 	return createRoot(lt, config);
 }
+
 	
 RootService::Client connectLocal2() {
 	Temporary<RootConfig> config;
