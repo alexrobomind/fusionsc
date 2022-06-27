@@ -20,10 +20,13 @@ ThreadHandle::ThreadHandle(Library l) :
 	_executor(kj::getCurrentThreadExecutor()),
 	_dataService(kj::heap<LocalDataService>(l)),
 	_filesystem(kj::newDiskFilesystem())
-{}
+{
+	KJ_REQUIRE(current == nullptr, "Can only have one active ThreadHandle / LibraryThread per thread");
+	current = this;
+}
 
 ThreadHandle::~ThreadHandle() {
-	//delete _dataService;
+	KJ_REQUIRE(current == this, "Destroying LibraryThread in wrong thread") {}
 }
 
 // === class CrossThreadConnection ===
@@ -123,5 +126,52 @@ Promise<Own<kj::AsyncIoStream>> CrossThreadConnection::connect(ThreadHandle& h) 
 	})
 	;
 }
+
+// ============================ class DaemonRunner ===========================
+
+namespace {
+	class TaskSetErrorHandler : public kj::TaskSet::ErrorHandler {
+		void taskFailed(kj::Exception&& exception) override {
+			KJ_LOG(WARNING, "Exception in daemon task", exception);
+		}
+	};
+	
+	TaskSetErrorHandler errorHandler;
+}
+
+DaemonRunner::DaemonRunner(const kj::Executor& executor) {
+	executor.executeSync([this, &executor]() {
+		auto locked = connection.lockExclusive();
+		
+		*locked = Connection { executor.addRef(), kj::heap<kj::TaskSet>(errorHandler) };
+	});
+}
+
+bool DaemonRunner::run(kj::Function<Promise<void>()> func) const {
+	auto locked = connection.lockExclusive();
+	KJ_IF_MAYBE(pConn, *locked) {
+		pConn -> executor.executeSync([func = mv(func), &tasks = *(pConn -> tasks)]() {
+			auto task = kj::evalNow(mv(func));
+			tasks.add(task);
+		});
+		
+		return true;
+	}
+	
+	return false;
+}
+
+void DaemonRunner::disconnect() {
+	auto locked = connection.lockExclusive();
+	
+	KJ_IF_MAYBE(pConn, *locked) {
+		Own<const kj::Executor> executor = pConn->executor.addRef();
+		
+		executor.executeSync([&locked]() {
+			*locked = nullptr;
+		});
+	}
+}
+
 
 }

@@ -24,10 +24,41 @@ using Library = Own<const LibraryHandle>;
 class ThreadHandle;
 using LibraryThread = Own<ThreadHandle>;
 
+class DaemonRunner : public kj::AtomicRefcounted {
+	/**
+	 * Runs the given task in the event loop associated with this runner, if it is still available.
+	 * If the task can not be run, it will be silently destroyed in the current thread.
+	 *
+	 * \returns true if the task could be scheduled to the target event loop, false if the target event
+	 *          loop is dead
+	 */
+	bool run(kj::Function<Promise<void>()> func) const;
+	
+	DaemonRunner(const kj::Executor& target);
+	inline DaemonRunner() : DaemonRunner(kj::getCurrentThreadExecutor()) {}
+	
+	inline Own<const DaemonRunner> addRef() { return kj::atomicAddRef(*this); }
+	
+	/**
+	 * Disconnects the runner from the target thread. After returning, the target event loop can be
+	 * destroyed and existing references to this runner can safely outlive it. All attempts to schedule
+	 * tasks will fail by returning false, and the passed functions will be destroyed.
+	 */
+	void disconnect() const;
+
+private:
+	struct Connection {
+		Own<const kj::Executor> executor;
+		Own<kj::TaskSet> taskSet;
+	};
+	
+	kj::MutexGuarded<Maybe<Connection>> connection;
+};
+
 /**
  *  "Global" libary handle. This class serves as the dependency injection context
  *  for objects that should be shared across all threads. Currently, this is only
- *  the local data store table.
+ *  the local data store table and a shared daemon runner.
  */
 class LibraryHandle : public kj::AtomicRefcounted {
 public:
@@ -40,14 +71,22 @@ public:
 	inline LibraryThread newThread() const ;
 	void stopSteward() const;
 	
+	inline const DaemonRunner& daemonRunner() const { return *_daemonRunner; }
+	
 private:
 	inline LibraryHandle() :
-		storeSteward(store)
+		storeSteward(store),
+		_daemonRunner(kj::heap<DaemonRunner>(storeSteward.getExecutor()))
 	{};
 	
-	friend Own<LibraryHandle> kj::atomicRefcounted<LibraryHandle>();
+	inline ~LibraryHandle() {
+		daemonRunner->disconnect();
+	}
 	
 	mutable LocalDataStore::Steward storeSteward;
+	Own<DaemonRunner> _daemonRunner;
+	
+	friend Own<LibraryHandle> kj::atomicRefcounted<LibraryHandle>();
 };
 
 
@@ -107,6 +146,7 @@ public:
 	inline const Library&                          library()  const { return _library; }
 	inline const kj::MutexGuarded<LocalDataStore>& store()    const { return _library -> store; }
 	inline const kj::Executor&                     executor() const { return _executor; }
+	inline const kj::DaemonRunner&                 daemonRunner() const { return _library -> daemonRunner(); }
 	
 	// Obtain an additional reference. Requres this object to be acquired through create()
 	inline kj::Own<ThreadHandle> addRef() { return kj::addRef(*this); }
@@ -122,7 +162,207 @@ private:
 	
 	Own<LocalDataService> _dataService;
 	Own<kj::Filesystem> _filesystem;
+	
+	inline static thread_local ThreadHandle* current = nullptr;
+	
+	friend ThreadHandle& getActiveThread();
 };
+
+inline ThreadHandle& getActiveThread() {
+	KJ_REQUIRE(ThreadHandle::current != nullptr, "No active thread");
+	return *ThreadHandle::current;
+}
+
+struct Operation : kj::AtomicRefcounted {
+	struct Node {
+		ListLink<Node> link;
+		
+		virtual void onFinish() {};
+		virtual void onFailure(kj::Exception&& e) {};
+		virtual ~Node() {};
+	};
+	
+	using NodeList = kj::List<Node, &node::link>;
+	using Data = OneOf<NodeList, kj::Exception, int>;
+	kj::MutexGuarded<Data> nodes;
+	
+	Operation() {
+		nodes.lockExclusive() -> init<NodeList>();
+	}
+	
+	~Operation() {
+		onFailure(KJ_EXCEPTION("Operation cancelled"));
+	}
+	
+	/**
+	 * Registers the given promise as a dependency of this operation. If the given
+	 * promise fails, the operation will fail with the same exception.
+	 */
+	Promise<void> dependsOn(Promise<void> promise) {
+		return promise.catch_([this](kj::Exception&& e) {
+			this->fail(e);
+			kj::throwRecoverableException(e);
+		});
+	}
+	
+	/**
+	 * Returns a promise that resolves when the operation completes. If the operation
+	 * fails or is cancelled, the returned promise will fail.
+	 */
+	Promise<void> whenDone() const {
+		auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+		
+		struct PromiseNode {
+			kj::Own<CrossThreadFulfiller<void>> fulfiller;
+			
+			PromiseNode(kj::Own<CrossThreadFulfiller<void>>&& fulfiller) :
+				fulfiller(mv(fulfiller))
+			{}
+			
+			void onFinish() override {
+				fulfiller->fulfill(kj::READY_NOW);
+			}
+			
+			void onFailure(kj::Exception&& e) override {
+				fulfiller->reject(mv(e));
+			}
+		};
+		
+		auto locked = nodes.lockExclusive();
+		KJ_IF_MAYBE(pNodes, *locked) {
+			pNodes -> add(new PromiseNode(mv(paf->fulfiller));
+		} else {
+			return kj::
+		
+		return mv(paf.promise);
+	}
+	
+	/**
+	 * Attaches the given objects to the promise, so that their lifetime is extended
+	 * until the operation completes, fails, or is cancelled. If the current library's
+	 * daemon runner is still alive, it will try to destroy the attached objects in the
+	 * target thread. If that fails, they will be destroyed in the daemon runner thread.
+	 * If the daemon runner is already dead, the attached objects will be destroyed in
+	 * whatever thread finished / failed / cancelled the operation.
+	 */
+	template<typename... T>
+	void attachDestroyInThread(const kj::Executor& executor, T&&... params) {
+		struct AttachmentNode {
+			Own<const kj::Executor> executor;
+			Own<DaemonRunner> runner;
+			
+			kj::TupleFor<kj::Decay<T>...> contents;
+			
+			AttachmentNode(const Executor& executor, T&&... params) :
+				executor(executor.addRef()),
+				tuple(fwd<T...>(params))
+			{}
+			
+			void onFinish() override {};
+			void onFailure(kj::Exception&& e) override {};
+			
+			void ~AttachmentNode() {
+				if(executor != nullptr && runner != nullptr) {
+					// Task that schedules the destruction on the actual target thread
+					auto destroyTask = [executor = mv(executor), contents = mv(contents)]() -> Promise<void> mutable {
+						return executor->executeAsync([contents = mv(contents)]() mutable {
+							// This will move the contents into a local tuple that gets destroyed
+							// in the target thread.
+							// This is important as the surrounding lambda will get moved back
+							// into the calling thread before getting destroyed.
+							
+							auto destroyedLocally = mv(contents);
+						});
+					};
+					runner -> run(mv(destroyTask));
+				}
+			}
+		};
+				
+		attachNode(AttachmentNode(executor, fwd<T>(params)...));
+	};
+	
+	/**
+	 * Attaches the target objects to live with the operation and be destroyed in this
+	 * event loop. See above for details.
+	 */
+	template<typename... T>
+	void attachDestroyHere(T&&... params) const {
+		attachDestroyInThread(kj::getCurrentThreadExecutor(), fwd<T>(params)...);
+	}
+	
+	/**
+	 * Attaches a thread-safe object to be kept until the end of this operation. Will
+	 * be destroyed in the thread that calls done() / failed() or the last destructor.
+	 */
+	template<typename... T>
+	void attachDestroyAnywhere(T&&... params) const {
+		struct AttachmentNode {			
+			kj::TupleFor<kj::Decay<T>...> contents;
+			
+			AttachmentNode(T&&... params) :
+				tuple(fwd<T...>(params))
+			{}
+			
+			void onFinish() override {};
+			void onFailure(kj::Exception&& e) override {};
+		};
+		
+		attachNode(AttachmentNode(fwd<T>(params)...));
+	}
+	
+	void done() const {
+		{
+			auto locked = nodes.lockExclusive();
+			
+			if(!locked->is<NodeList>())
+				return;
+			
+			for(Node& node : locked->get<NodeList>()) {
+				node.onFinish();
+			}
+			
+			clear(locked->get<NodeList>());
+			*locked = (int) 0;
+		}
+	}
+	
+	void failed(kj::Exception&& e) const {
+		{
+			auto locked = nodes.lockExclusive();
+			
+			if(!locked->is<NodeList>())
+				return;
+			
+			for(Node& node : locked->get<NodeList>()) {
+				node.onFailure(cp(e));
+			}
+			
+			clear(locked->get<NodeList>());
+			*locked = mv(e);
+		}
+	}
+
+private:
+	void clear(NodeList& nodes) const {
+		for(Node& node : *pNodes) {
+			locked->remove(node);
+			delete &node;
+		}
+	}
+	
+	template<typename T>
+	void attachNode(T node) {
+		auto locked = nodes.lockExclusive();
+		if(locked->is<NodeList>()) {
+			locked->get<NodeList>().addFront(new AttachmentNode(mv(node)));
+		} else if(locked->is<kj::Exception>()) {
+			node.onFailure(cp(locked->get<kj::Exception>()));
+		} else {
+			node.onFinish();
+		}
+	}
+};	
 
 
 /**
