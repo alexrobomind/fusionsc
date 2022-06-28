@@ -27,6 +27,7 @@ ThreadHandle::ThreadHandle(Library l) :
 
 ThreadHandle::~ThreadHandle() {
 	KJ_REQUIRE(current == this, "Destroying LibraryThread in wrong thread") {}
+	current = nullptr;
 }
 
 // === class CrossThreadConnection ===
@@ -150,9 +151,9 @@ DaemonRunner::DaemonRunner(const kj::Executor& executor) {
 bool DaemonRunner::run(kj::Function<Promise<void>()> func) const {
 	auto locked = connection.lockExclusive();
 	KJ_IF_MAYBE(pConn, *locked) {
-		pConn -> executor.executeSync([func = mv(func), &tasks = *(pConn -> tasks)]() {
-			auto task = kj::evalNow(mv(func));
-			tasks.add(task);
+		pConn -> executor -> executeSync([func = mv(func), &tasks = *(pConn -> tasks)]() mutable {
+			Promise<void> task = kj::evalNow(mv(func));
+			tasks.add(mv(task));
 		});
 		
 		return true;
@@ -161,13 +162,13 @@ bool DaemonRunner::run(kj::Function<Promise<void>()> func) const {
 	return false;
 }
 
-void DaemonRunner::disconnect() {
+void DaemonRunner::disconnect() const {
 	auto locked = connection.lockExclusive();
 	
 	KJ_IF_MAYBE(pConn, *locked) {
-		Own<const kj::Executor> executor = pConn->executor.addRef();
+		Own<const kj::Executor> executor = mv(pConn -> executor);
 		
-		executor.executeSync([&locked]() {
+		executor -> executeSync([&locked]() {
 			*locked = nullptr;
 		});
 	}

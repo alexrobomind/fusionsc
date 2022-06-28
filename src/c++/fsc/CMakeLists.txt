@@ -83,6 +83,9 @@ add_library(
 	http.h
 	http.cpp
 	
+	operation.h
+	operation.cpp
+	
 	devices/w7x.h
 	devices/w7x.cpp
 	
@@ -138,6 +141,7 @@ target_sources(
 	http-tests.cpp
 	services-tests.cpp
 	flt-tests.cpp
+	operation-tests.cpp
 	devices/w7x-test.cpp
 )
 target_link_libraries(tests PUBLIC fsc)
