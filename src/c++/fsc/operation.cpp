@@ -7,11 +7,29 @@ Operation::~Operation() {
 	clear();
 }
 
-Promise<void> Operation::dependsOn(Promise<void> promise) const {
-	return promise.catch_([this](kj::Exception&& e) mutable {
-		this->fail(cp(e));
-		kj::throwRecoverableException(mv(e));
-	});
+Own<const Operation> Operation::addRef() const {
+	return kj::atomicAddRef(*this);
+}
+
+Own<Operation> Operation::newChild() const {
+	auto result = newOperation();
+	result -> attachDestroyAnywhere(this->addRef());
+	return result;
+}
+
+void Operation::dependsOn(Promise<void> promise) const {
+	// Note: This creates a recursive ownership loop by attaching the op to the promise
+	// and vice versa. This is only safe because eventually the incoming promise will eventually
+	// resolve (in fact, we expect it to resolve fairly fast), and then the reference to the
+	// operation will be deleted.
+	promise = promise
+		.eagerlyEvaluate([this](kj::Exception&& e) mutable {
+			this->fail(cp(e));
+		})
+		.attach(this->addRef());
+	;
+	
+	attachDestroyHere(mv(promise));
 }
 
 Promise<void> Operation::whenDone() const {
@@ -36,7 +54,7 @@ Promise<void> Operation::whenDone() const {
 	};
 	
 	attachNode(new PromiseNode(mv(paf.fulfiller)));		
-	return mv(paf.promise);
+	return paf.promise.attach(this->addRef());
 }
 
 void Operation::done() const {
@@ -72,6 +90,10 @@ void Operation::clear() const {
 		locked->nodes.remove(node);
 		delete &node; // blergh
 	}
+}
+
+Own<Operation> newOperation() {
+	return kj::atomicRefcounted<Operation>();
 }
 
 }

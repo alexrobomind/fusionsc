@@ -50,16 +50,21 @@ struct TraceCalculation {
 	Temporary<FLTKernelRequest> request;
 	kj::Vector<Round> rounds;
 	
-	TraceCalculation(Device& device, Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<const Tensor<double, 4>>> newField, Tensor<double, 2> positions) :
+	const Operation& rootOp;
+	
+	TraceCalculation(Device& device, Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<const Tensor<double, 4>>> newField, Tensor<double, 2> positions, const Operation& rootOp) :
 		device(device),
 		positions(mv(positions)),
 		
 		field(mv(newField)),
 		deviceField(mapToDevice(*field, device)),
 		
-		request(mv(newRequest))
+		request(mv(newRequest)),
+		
+		rootOp(rootOp)
 	{
 		deviceField.updateDevice();
+		hostMemSynchronize(device, rootOp);
 	}
 	
 	// Prepares the memory structure for a round
@@ -151,14 +156,14 @@ struct TraceCalculation {
 		CupnpMessage<cu::FLTKernelData> kernelData(r.kernelData);
 		CupnpMessage<cu::FLTKernelRequest> kernelRequest(r.kernelRequest);
 		
-		return FSC_LAUNCH_KERNEL(
+		auto calcOp = FSC_LAUNCH_KERNEL(
 			fltKernel, device,
 			r.kernelData.getData().size(),
 			
 			kernelData, FSC_KARG(deviceField, IN), kernelRequest
-		).then([this]() {
-			return hostMemSynchronize(device);
-		});
+		);
+		calcOp -> attachDestroyAnywhere(rootOp.addRef());
+		return calcOp -> whenDone();
 	}
 	
 	bool isFinished(FLTKernelData::Entry::Reader entry) {
@@ -297,12 +302,16 @@ struct FLTImpl : public FLT::Server {
 			Tensor<double, 2> positions = mapTensor<Tensor<double, 2>>(reshapedStartPoints.asReader())
 				-> shuffle(Eigen::array<int, 2>{1, 0});
 			
+			auto rootOp = newOperation();
+			
 			auto calc = heapHeld<TraceCalculation<Device>>(
-				*device, mv(kernelRequest), mv(field), mv(positions)
+				*device, mv(kernelRequest), mv(field), mv(positions), *rootOp
 			);
 			
+			rootOp -> attachDestroyHere(calc.x(), thisCap(), cp(fieldData));
+			
 			return calc->run()
-			.then([ctx, calc, request, startPointShape, nStartPoints]() mutable {
+			.then([ctx, calc, request, startPointShape, nStartPoints, rootOp = mv(rootOp)]() mutable {
 				int64_t nTurns = 0;
 				
 				auto resultBuilder = kj::heapArrayBuilder<Temporary<FLTKernelData::Entry>>(nStartPoints);
@@ -348,7 +357,7 @@ struct FLTImpl : public FLT::Server {
 				results.setNTurns(nTurns);
 				writeTensor(pcCuts, results.getPoincareHits());
 				
-			}).attach(cp(fieldData)).attach(calc.x());
+			}).attach(mv(rootOp));
 		}).attach(thisCap());
 	}
 };

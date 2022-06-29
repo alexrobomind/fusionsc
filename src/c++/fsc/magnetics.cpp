@@ -23,17 +23,21 @@ struct FieldCalculation {
 	// calculation once the previous is finished
 	Promise<void> calculation = READY_NOW;
 	
-	FieldCalculation(ToroidalGridStruct in, Device& device) :
+	const Operation& rootOp;
+	
+	FieldCalculation(ToroidalGridStruct in, Device& device, const Operation& rootOp) :
 		_device(device),
 		grid(in),
 		field(3, grid.nR, grid.nZ, grid.nPhi),
-		mappedField(field, _device)
+		mappedField(field, _device),
+		rootOp(rootOp)
 	{
 		field.setZero();
 		mappedField.updateDevice();
+		hostMemSynchronize(device, rootOp);
 	}
 	
-	~FieldCalculation() {}
+	~FieldCalculation() { KJ_DBG("~FC"); }
 	
 	void add(double scale, Float64Tensor::Reader input) {
 		auto shape = input.getShape();
@@ -49,14 +53,16 @@ struct FieldCalculation {
 			newField->data()[i] = data[i];
 		}
 		
-		calculation = FSC_LAUNCH_KERNEL(
+		Own<Operation> calcOp = FSC_LAUNCH_KERNEL(
 			kernels::addFieldKernel,
 			_device, 
 			mv(calculation),
 			field.size(),
 			FSC_KARG(mappedField, NOCOPY), FSC_KARG(*newField, IN), scale
 		);
-		calculation = calculation.attach(mv(newField));
+		calcOp -> attachDestroyAnywhere(mv(newField), rootOp.addRef());
+		
+		calculation = calcOp -> whenDone();
 	}
 	
 	void biotSavart(double current, Float64Tensor::Reader input, BiotSavartSettings::Reader settings) {
@@ -84,29 +90,35 @@ struct FieldCalculation {
 		
 		// Launch calculation
 		calculation = calculation.then([]() { KJ_DBG("starting calculation"); });
-		calculation = FSC_LAUNCH_KERNEL(
+		Own<Operation> calcOp = FSC_LAUNCH_KERNEL(
 			kernels::biotSavartKernel,
 			_device,
 			mv(calculation),
 			field.size() / 3,
 			grid, FSC_KARG(*filament, IN), current, coilWidth, stepSize, FSC_KARG(mappedField, NOCOPY)
 		);
+		calcOp -> attachDestroyAnywhere(mv(filament), rootOp.addRef());
+		calculation = calcOp -> whenDone();
+		
 		calculation = calculation.then([]() { KJ_DBG("calculation done"); });
-		calculation = calculation.attach(mv(filament));
-		calculation = calculation.then([]() { KJ_DBG("filament freed"); });
 	}
 	
-	Promise<void> finish(Float64Tensor::Builder out) {
+	void finish(Float64Tensor::Builder out) {
 		calculation = calculation
 		.then([this]() {
+			KJ_DBG("Update host");
 			mappedField.updateHost();
-			return hostMemSynchronize(_device);
+			return hostMemSynchronize(_device, rootOp);
 		})
 		.then([this, out]() {
+			KJ_DBG("Writing tensor");
 			writeTensor(field, out);
+			
+			KJ_DBG("Op done");
+			rootOp.done();
 		});
 		
-		return mv(calculation);
+		rootOp.dependsOn(mv(calculation));
 	}
 };
 
@@ -159,22 +171,26 @@ struct CalculationSession : public FieldCalculator::Server {
 	}
 	
 	//! Processes a root node of a magnetic field (creates calculator)
-	Promise<LocalDataRef<Float64Tensor>> processRoot(MagneticField::Reader node) {
-		KJ_CONTEXT("processRoot");
-		auto newCalculator = heapHeld<FieldCalculation<Device>>(grid, device);
+	Promise<LocalDataRef<Float64Tensor>> processRoot(MagneticField::Reader node) {		
+		auto rootOp = newOperation();
+		auto newCalculator = heapHeld<FieldCalculation<Device>>(grid, device, *rootOp);
+		
+		rootOp -> attachDestroyHere(thisCap(), newCalculator.x());
 		KJ_DBG("Calculator created");
+		
 		auto calcDone = processField(*newCalculator, node, 1);
 		KJ_DBG("Field processing initiated");
 		
-		return calcDone.then([newCalculator, this]() mutable {	
+		return calcDone.then([newCalculator, this, rootOp = mv(rootOp)]() mutable {	
 			KJ_DBG("Reading result");
 			auto result = kj::heap<Temporary<Float64Tensor>>();					
-			auto readout = newCalculator->finish(*result);
-			auto publish = readout.then([result=result.get(), this]() {
+			newCalculator->finish(*result);
+			
+			auto publish = rootOp -> whenDone().then([result=result.get(), this]() {
 				return lt->dataService().publish(lt->randomID(), result->asReader());
 			});
 			return publish.attach(mv(result));
-		}).attach(thisCap(), newCalculator.x());
+		});
 	}
 	
 	Promise<void> processFilament(FieldCalculation<Device>& calculator, Filament::Reader node, BiotSavartSettings::Reader settings, double scale) {

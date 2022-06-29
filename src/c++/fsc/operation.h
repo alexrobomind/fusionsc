@@ -7,6 +7,8 @@ namespace fsc {
 struct Operation : kj::AtomicRefcounted {
 	~Operation();
 	
+	Own<const Operation> addRef() const;
+	
 	/**
 	 * Returns a promise that resolves when the operation completes. If the operation
 	 * fails or is cancelled, the returned promise will fail.
@@ -28,7 +30,7 @@ struct Operation : kj::AtomicRefcounted {
 	 * promise fails, the operation will fail with the same exception. If it is can-
 	 * celled, the operation will continue.
 	 */
-	Promise<void> dependsOn(Promise<void> promise) const;
+	void dependsOn(Promise<void> promise) const;
 	
 	/**
 	 * Attaches the given objects to the promise, so that their lifetime is extended
@@ -54,6 +56,8 @@ struct Operation : kj::AtomicRefcounted {
 	 */
 	template<typename... T>
 	void attachDestroyAnywhere(T&&... params) const;
+	
+	Own<Operation> newChild() const;
 
 private:
 	struct Node {
@@ -85,6 +89,8 @@ private:
 	template<typename T>
 	void attachNode(T* node) const;
 };
+
+Own<Operation> newOperation();
 
 // ================================== Inline implementation =================================
 
@@ -141,6 +147,7 @@ void Operation::attachDestroyAnywhere(T&&... params) const {
 		
 		void onFinish() override {};
 		void onFailure(kj::Exception&& e) override {};
+		~AttachmentNode() noexcept {};
 	};
 	
 	attachNode(new AttachmentNode(fwd<T>(params)...));

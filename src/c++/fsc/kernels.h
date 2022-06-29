@@ -7,6 +7,7 @@
 #endif
 
 #include "eigen.h"
+#include "operation.h"
 	
 #ifdef FSC_WITH_CUDA
 	#ifdef EIGEN_GPUCC
@@ -63,9 +64,9 @@ namespace fsc {
 		 *  The kernel will run asynchronously. It is guaranteed that it will not start before this function has returned.
 		 */
 		template<typename Kernel, Kernel f, typename... Params>
-		static Promise<void> launch(Device& device, size_t n, Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
+		static Own<const Operation> launch(Device& device, size_t n, Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
 			static_assert(sizeof(Device) == 0, "Kernel launcher not implemented / enabled for this device.");
-			return READY_NOW;
+			return newOperation();
 		}
 	};
 	
@@ -78,9 +79,9 @@ namespace fsc {
 	 * to the host
 	 */
 	template<typename Device>
-	Promise<void> hostMemSynchronize(Device& device) {
+	Promise<void> hostMemSynchronize(Device& device, const Operation& op) {
 		static_assert(sizeof(Device) == 0, "Memcpy synchronization not implemented for this device.");
-		return READY_NOW;
+		return NEVER_DONE;
 	}
 	
 	//! Synchronizes device-to-host copies
@@ -88,10 +89,10 @@ namespace fsc {
 	 * \ingroup kernelAPI
 	 * \param device Device to synchronize memcopy on.
 	 */
-	template<typename Device>
+	/*template<typename Device>
 	void hostMemSynchronizeBlocking(Device& device) {
 		static_assert(sizeof(Device) == 0, "Memcpy synchronization not implemented for this device.");
-	}
+	}*/
 
 	//! \addtogroup kernelSupport
 	//! @{
@@ -285,25 +286,36 @@ namespace fsc {
 		 * over the parameter.
 		 */
 		template<typename Kernel, Kernel f, typename Device, typename... Params, size_t... i>
-		Promise<void> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {
+		Own<Operation> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {
+			auto result = ownHeld(newOperation());
+			
 			// Create mappers for input
 			auto mappers = heapHeld<std::tuple<MapToDevice<Decay<Params>, Device>...>>(
 				MapToDevice<Decay<Params>, Device>(fwd<Params>(params), device)...
 			);
 						
-			// Update device memory
-			
-			// Note: This is an extremely convoluted looking way of calling updateDevice on all tuple members
-			// C++ 17 has a neater way to do this, but we don't wanna require it just yet
 			using givemeatype = int[];
-			(void) (givemeatype { 0, (std::get<i>(*mappers).updateDevice(), 0)... });
 			
 			// Call kernel
-			return prerequisite.then([mappers, n, cost, &device]() mutable {
-				return KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params, Device>...>(device, n, cost, std::get<i>(*mappers).get()...);
-			}).then([mappers]() mutable {
+			Promise<void> task = prerequisite.then([mappers, n, cost, &device, result = result->addRef()]() mutable {
+			// Update device memory
+				// Note: This is an extremely convoluted looking way of calling updateDevice on all tuple members
+				// C++ 17 has a neater way to do this, but we don't wanna require it just yet
+				(void) (givemeatype { 0, (std::get<i>(*mappers).updateDevice(), 0)... });
+				
+				auto kernelLaunchResult = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params, Device>...>(device, n, cost, std::get<i>(*mappers).get()...);
+				kernelLaunchResult -> attachDestroyAnywhere(result->addRef());
+				return kernelLaunchResult -> whenDone();
+			}).then([device, mappers, result = result->addRef()]() mutable {
 				(void) (givemeatype { 0, (std::get<i>(*mappers).updateHost(), 0)... });
-			}).attach(mappers.x());
+				
+				hostMemSynchronize(device, *result);
+			}).attach(result->addRef());
+			
+			result -> dependsOn(mv(task));			
+			result -> attachDestroyHere(mappers.x());
+			
+			return result.x();
 		}
 	}
 	
@@ -366,26 +378,26 @@ namespace fsc {
 	 *
 	 */
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Promise<void> launchKernel(Device& device, const Eigen::TensorOpCost& cost, Promise<void> prerequisite, size_t n, Params&&... params) {
+	Own<Operation> launchKernel(Device& device, const Eigen::TensorOpCost& cost, Promise<void> prerequisite, size_t n, Params&&... params) {
 		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, mv(prerequisite), cost, std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
 	}
 	
 	//! Version of launchKernel() without prerequisite
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Promise<void> launchKernel(Device& device, const Eigen::TensorOpCost& cost, size_t n, Params&&... params) {
+	Own<Operation> launchKernel(Device& device, const Eigen::TensorOpCost& cost, size_t n, Params&&... params) {
 		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, READY_NOW, cost, std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
 	}
 	
 	//! Version of launchKernel() without cost
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Promise<void> launchKernel(Device& device, Promise<void> prerequisite, size_t n, Params&&... params) {
+	Own<Operation> launchKernel(Device& device, Promise<void> prerequisite, size_t n, Params&&... params) {
 		Eigen::TensorOpCost expensive(1e12, 1e12, 1e12);
 		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, mv(prerequisite), expensive, std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
 	}
 	
 	//! Version of launchKernel() without prerequisite and cost
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Promise<void> launchKernel(Device& device, size_t n, Params&&... params) {
+	Own<Operation> launchKernel(Device& device, size_t n, Params&&... params) {
 		Eigen::TensorOpCost expensive(1e12, 1e12, 1e12);
 		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, READY_NOW, expensive, std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
 	}
@@ -430,30 +442,30 @@ namespace fsc {
 	 * CPU devices dont need host memory synchronization, as all memcpy() calls are executed in-line on the main thread.
 	 */
 	template<>
-	inline Promise<void> hostMemSynchronize<Eigen::DefaultDevice>(Eigen::DefaultDevice& dev) { return READY_NOW; }
-	template<>
-	inline void hostMemSynchronizeBlocking<Eigen::DefaultDevice>(Eigen::DefaultDevice& dev) {}
+	inline Promise<void> hostMemSynchronize<Eigen::DefaultDevice>(Eigen::DefaultDevice& dev, const Operation& op) { return READY_NOW; }
+	/*template<>
+	inline void hostMemSynchronizeBlocking<Eigen::DefaultDevice>(Eigen::DefaultDevice& dev) {}*/
 	
 	/**
 	 * CPU devices dont need host memory synchronization, as all memcpy() calls are executed in-line on the main thread.
 	 */
 	template<>
-	inline Promise<void> hostMemSynchronize<Eigen::ThreadPoolDevice>(Eigen::ThreadPoolDevice& dev) { return READY_NOW; }
-	template<>
-	inline void hostMemSynchronizeBlocking<Eigen::ThreadPoolDevice>(Eigen::ThreadPoolDevice& dev) {}
+	inline Promise<void> hostMemSynchronize<Eigen::ThreadPoolDevice>(Eigen::ThreadPoolDevice& dev, const Operation& op) { return READY_NOW; }
+	/*template<>
+	inline void hostMemSynchronizeBlocking<Eigen::ThreadPoolDevice>(Eigen::ThreadPoolDevice& dev) {}*/
 	
 	#ifdef FSC_WITH_CUDA
 	
-	Promise<void> synchronizeGpuDevice(Eigen::GpuDevice& device);
-	void synchronizeGpuDeviceBlocking(Eigen::GpuDevice& device);
+	void synchronizeGpuDevice(Eigen::GpuDevice& device, const Operation& op);
+	//void synchronizeGpuDeviceBlocking(Eigen::GpuDevice& device);
 	
 	/**
 	 * GPU devices schedule an asynch memcpy onto their stream. We therefore need to wait until the stream has advanced past it.
 	 */
 	template<>
-	inline Promise<void> hostMemSynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& device) { return synchronizeGpuDevice(device); }
-	template<>
-	inline void hostMemSynchronizeBlocking<Eigen::GpuDevice>(Eigen::GpuDevice& device) { synchronizeGpuDeviceBlocking(device); }
+	inline Promise<void> hostMemSynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& device, const Operation& op) { auto child = op.newChild(); synchronizeGpuDevice(device, *child); return child.whenDone(); }
+	/*template<>
+	inline void hostMemSynchronizeBlocking<Eigen::GpuDevice>(Eigen::GpuDevice& device) { synchronizeGpuDeviceBlocking(device); }*/
 	
 	#endif
 	
@@ -521,46 +533,57 @@ namespace internal {
 template<>
 struct KernelLauncher<Eigen::DefaultDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
-	static Promise<void> launch(Eigen::DefaultDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
-		return kj::evalLater([=]() {
+	static Own<Operation> launch(Eigen::DefaultDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+		auto result = newOperation();
+		
+		auto task = kj::evalLater([=, result = result->addRef()]() {
 			for(size_t i = 0; i < n; ++i)
 				f(i, params...);
+			result->done();
 		});
+		result -> dependsOn(mv(task));
+		
+		return result;
 	}
 };
 
 template<>
 struct KernelLauncher<Eigen::ThreadPoolDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
-	static Promise<void> launch(Eigen::ThreadPoolDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+	static Own<Operation> launch(Eigen::ThreadPoolDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
 		auto func = [params...](Eigen::Index start, Eigen::Index end) mutable {
 			for(Eigen::Index i = start; i < end; ++i)
 				f(i, params...);
 		};
 		
-		auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-		auto done = [fulfiller = mv(paf.fulfiller)]() mutable {
-			fulfiller->fulfill();
+		auto result = newOperation();
+		
+		struct DoneFunctor {
+			Own<const Operation> op;
+			
+			DoneFunctor(Own<const Operation> op) :
+				op(mv(op))
+			{}
+			
+			DoneFunctor(const DoneFunctor& other) :
+				op(other.op->addRef())
+			{}
+			
+			void operator()() {
+				op->done();
+			}
 		};
 		
-		auto donePtr = kj::heap<decltype(done)>(mv(done));
 		auto funcPtr = kj::heap<decltype(func)>(mv(func));
-		
-		auto doneCopyable = [ptr = donePtr.get()]() {
-			(*ptr)();
-		};
+		result->attachDestroyAnywhere(mv(funcPtr));
 		
 		auto funcCopyable = [ptr = funcPtr.get()](Eigen::Index start, Eigen::Index end) {
 			(*ptr)(start, end);
 		};
 		
-		device.parallelForAsync(n, cost, funcCopyable, doneCopyable);
-		return paf.promise.attach(mv(donePtr), mv(funcPtr));
+		device.parallelForAsync(n, cost, funcCopyable, DoneFunctor(result->addRef()));
 		
-		/*return prerequisite.then([funcCopyable, doneCopyable, cost, n, &device, promise = mv(paf.promise)]() mutable {
-			device.parallelForAsync(n, cost, funcCopyable, doneCopyable);
-			return mv(promise);
-		}).attach(mv(donePtr), mv(funcPtr));*/
+		return result;
 	}
 };
 
@@ -569,13 +592,15 @@ struct KernelLauncher<Eigen::ThreadPoolDevice> {
 template<>
 struct KernelLauncher<Eigen::GpuDevice> {
 	template<typename Kernel, Kernel func, typename... Params>
-	static Promise<void> launch(Eigen::GpuDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+	static Own<Operation> launch(Eigen::GpuDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
 		internal::gpuLaunch<Kernel, func, Params...>(device, n, params...);
 		
 		auto streamStatus = cudaStreamQuery(device.stream());
 		KJ_REQUIRE(streamStatus == cudaSuccess || streamStatus == cudaErrorNotReady, "CUDA launch failed", streamStatus, cudaGetErrorName(streamStatus), cudaGetErrorString(streamStatus));
 		
-		return READY_NOW;
+		auto op = newOperation();
+		synchronizeGpuDevice(*op);
+		return op;
 		/*return prerequisite.then([&device, n, cost, params...]() {
 			KJ_LOG(WARNING, "Launching GPU kernel");
 			internal::gpuLaunch<Kernel, func, Params...>(device, n, params...);
@@ -646,7 +671,7 @@ MappedData<T, Device>::~MappedData() {
 	if(devicePtr != nullptr) {
 		unwindDetector.catchExceptionsIfUnwinding([&, this]() {
 			device.deallocate(devicePtr);
-			hostMemSynchronizeBlocking(device);
+			// hostMemSynchronizeBlocking(device);
 		});
 	}
 }

@@ -40,7 +40,7 @@ struct DaemonRunner : public kj::AtomicRefcounted {
 	 *          is disconnected.
 	 */
 	bool run(kj::Function<Promise<void>()> func) const;
-	
+		
 	/**
 	 * Disconnects the runner from the target thread. After returning, the target event loop can be
 	 * destroyed and existing references to this runner can safely outlive it. All attempts to schedule
