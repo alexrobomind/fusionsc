@@ -28,13 +28,11 @@ auto selectDevice(T t, WorkerType preferredType) {
 }
 
 struct RootServer : public RootService::Server {
-	RootServer(LibraryThread& lt, RootConfig::Reader config) :
-		lt(lt->addRef())
-	{}
+	RootServer(RootConfig::Reader config) {}
 	
 	Promise<void> newFieldCalculator(NewFieldCalculatorContext context) {
 		auto factory = [this, context](auto device) mutable {			
-			return ::fsc::newFieldCalculator(lt, context.getParams().getGrid(), mv(device));
+			return ::fsc::newFieldCalculator(context.getParams().getGrid(), mv(device));
 		};
 		
 		auto selectResult = selectDevice(factory, context.getParams().getPreferredDeviceType());
@@ -47,12 +45,9 @@ struct RootServer : public RootService::Server {
 	}
 	
 	Promise<void> newTracer(NewTracerContext context) {
-		context.initResults().setService(newFLT(lt, newThreadPoolDevice()));
+		context.initResults().setService(newFLT(newThreadPoolDevice()));
 		return READY_NOW;
 	}
-	
-private:
-	LibraryThread lt;
 };
 
 struct ResolverChainImpl : public virtual capnp::Capability::Server, public virtual ResolverChain::Server {
@@ -240,16 +235,16 @@ struct ServerImpl : public fsc::Server {
 
 }
 
-RootService::Client fsc::createRoot(LibraryThread& lt, RootConfig::Reader config) {
-	return kj::heap<RootServer>(lt, config);
+RootService::Client fsc::createRoot(RootConfig::Reader config) {
+	return kj::heap<RootServer>(config);
 }
 
 ResolverChain::Client fsc::newResolverChain() {
 	return kj::heap<ResolverChainImpl>();
 }
 
-RootService::Client fsc::connectRemote(LibraryThread& lt, kj::StringPtr address, unsigned int portHint) {
-	return lt->network().parseAddress(address, portHint)
+RootService::Client fsc::connectRemote(kj::StringPtr address, unsigned int portHint) {
+	return getActiveThread().network().parseAddress(address, portHint)
 	.then([](Own<kj::NetworkAddress> addr) {
 		return addr->connect();
 	})
@@ -278,14 +273,12 @@ RootService::Client fsc::connectRemote(LibraryThread& lt, kj::StringPtr address,
 	});
 }
 
-Promise<Own<fsc::Server>> fsc::startServer(LibraryThread& lt, unsigned int portHint, kj::StringPtr address) {
-	auto& ws = lt->waitScope();
-	
+Promise<Own<fsc::Server>> fsc::startServer(unsigned int portHint, kj::StringPtr address) {	
 	Temporary<RootConfig> rootConfig;
-	auto rootInterface = createRoot(lt, rootConfig);
+	auto rootInterface = createRoot(rootConfig);
 	
 	// Get root network
-	auto& network = lt->network();
+	auto& network = getActiveThread().network();
 	
 	return network.parseAddress(address, portHint)
 	.then([rootInterface](auto address) mutable -> Own<fsc::Server> {

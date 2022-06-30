@@ -10,6 +10,10 @@ Own<Eigen::ThreadPoolDevice> newThreadPoolDevice() {
 	return dev;
 }
 
+Own<Eigen::DefaultDevice> newDefaultDevice() {
+	return kj::heap<Eigen::DefaultDevice>();
+}
+
 
 #ifdef FSC_WITH_CUDA
 

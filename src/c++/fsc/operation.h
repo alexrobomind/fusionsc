@@ -60,6 +60,10 @@ struct Operation : kj::AtomicRefcounted {
 	Own<Operation> newChild() const;
 
 private:
+	Operation() {};
+	Operation(const Operation& other) = delete;
+	Operation(Operation&& other) = delete;
+	
 	struct Node {
 		kj::ListLink<Node> link;
 		
@@ -88,6 +92,8 @@ private:
 	
 	template<typename T>
 	void attachNode(T* node) const;
+	
+	friend Own<Operation> kj::atomicRefcounted<Operation>();
 };
 
 Own<Operation> newOperation();
@@ -111,19 +117,23 @@ void Operation::attachDestroyInThread(const kj::Executor& executor, T&&... param
 		void onFailure(kj::Exception&& e) override {};
 		
 		~AttachmentNode() noexcept {
-			if(executor.get() != nullptr && runner.get() != nullptr) {
-				// Task that schedules the destruction on the actual target thread
-				auto destroyTask = [executor = mv(executor), contents = mv(contents)]() mutable -> Promise<void> {
-					return executor->executeAsync([contents = mv(contents)]() mutable {
-						// This will move the contents into a local tuple that gets destroyed
-						// in the target thread.
-						// This is important as the surrounding lambda will get moved back
-						// into the calling thread before getting destroyed.
-						
-						auto destroyedLocally = mv(contents);
-					});
-				};
-				runner -> run(mv(destroyTask));
+			try {
+				if(executor.get() != nullptr && runner.get() != nullptr) {
+					// Task that schedules the destruction on the actual target thread
+					auto destroyTask = [executor = mv(executor), contents = mv(contents)]() mutable -> Promise<void> {
+						return executor->executeAsync([contents = mv(contents)]() mutable {
+							// This will move the contents into a local tuple that gets destroyed
+							// in the target thread.
+							// This is important as the surrounding lambda will get moved back
+							// into the calling thread before getting destroyed.
+							
+							auto destroyedLocally = mv(contents);
+						});
+					};
+					runner -> run(mv(destroyTask));
+				}
+			} catch(kj::Exception error) {
+				KJ_LOG(WARNING, "Could not clean up object in destructor", error);
 			}
 		}
 	};

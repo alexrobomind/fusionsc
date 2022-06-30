@@ -25,10 +25,10 @@ TEST_CASE("coilsdb") {
 	
 	auto testData = CDB_TEST.get();
 	
-	SimpleHttpServer server(network.parseAddress("127.0.0.1"), t, testData.getHttpRoot() /* from w7x-test.capnp */);
+	SimpleHttpServer server(network.parseAddress("127.0.0.1"), testData.getHttpRoot() /* from w7x-test.capnp */);
 	unsigned int port = server.getPort().wait(ws);
 	
-	CoilsDB::Client cdb = newCoilsDBFromWebservice(kj::str("http://127.0.0.1:", port), t);
+	CoilsDB::Client cdb = newCoilsDBFromWebservice(kj::str("http://127.0.0.1:", port));
 	
 	for(auto e : testData.getEntries()) {
 		auto request = cdb.getCoilRequest();
@@ -55,10 +55,10 @@ TEST_CASE("compdb") {
 	
 	auto testData = COMPDB_TEST.get();
 	
-	SimpleHttpServer server(network.parseAddress("127.0.0.1"), t, testData.getHttpRoot() /* from w7x-test.capnp */);
+	SimpleHttpServer server(network.parseAddress("127.0.0.1"), testData.getHttpRoot() /* from w7x-test.capnp */);
 	unsigned int port = server.getPort().wait(ws);
 	
-	ComponentsDB::Client cdb = newComponentsDBFromWebservice(kj::str("http://127.0.0.1:", port), t);
+	ComponentsDB::Client cdb = newComponentsDBFromWebservice(kj::str("http://127.0.0.1:", port));
 	
 	for(auto e : testData.getEntries()) {
 		auto request = cdb.getMeshRequest();

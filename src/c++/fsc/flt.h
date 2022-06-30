@@ -8,11 +8,11 @@
 namespace fsc {
 	
 	// TODO: Make this accept data service instead	
-	FLT::Client newFLT(LibraryThread& lt, Own<Eigen::ThreadPoolDevice> device);
+	FLT::Client newFLT(Own<Eigen::ThreadPoolDevice> device);
 	
 	#ifdef FSC_WITH_CUDA
 	
-	FLT::Client newFLT(LibraryThread& lt, Own<Eigen::GpuDevice> device);
+	FLT::Client newFLT(Own<Eigen::GpuDevice> device);
 	
 	#endif
 }

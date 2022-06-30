@@ -103,7 +103,7 @@ inline Library newLibrary() {
  * Thread-local library handle. This holds local infrastructure components required by the
  * library, but which may not be shared in-between threads.
  */
-class ThreadHandle : public kj::Refcounted {
+class ThreadHandle /*: public kj::Refcounted*/ {
 public:
 	// Creates a new library handle from a library handle
 	ThreadHandle(Library lh);
@@ -154,7 +154,7 @@ public:
 	inline const DaemonRunner&                     daemonRunner() const { return _library -> daemonRunner(); }
 	
 	// Obtain an additional reference. Requres this object to be acquired through create()
-	inline kj::Own<ThreadHandle> addRef() { return kj::addRef(*this); }
+	// inline kj::Own<ThreadHandle> addRef() { return kj::addRef(*this); }
 	
 private:
 	kj::AsyncIoContext _ioContext;
@@ -246,7 +246,7 @@ kj::Maybe<kj::Promise<UnwrapIfPromise<UnwrapMaybe<ReturnType<Func>>>>> executeMa
 // Inline implementations
 
 LibraryThread LibraryHandle::newThread() const {
-	return kj::refcounted<ThreadHandle>(addRef());
+	return kj::heap<ThreadHandle>(addRef());
 }
 
 } // namespace fsc

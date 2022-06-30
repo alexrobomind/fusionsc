@@ -53,6 +53,7 @@ struct FieldCalculation {
 			newField->data()[i] = data[i];
 		}
 		
+		calculation = calculation.then([]() { KJ_DBG("starting add"); });
 		Own<Operation> calcOp = FSC_LAUNCH_KERNEL(
 			kernels::addFieldKernel,
 			_device, 
@@ -89,6 +90,7 @@ struct FieldCalculation {
 		KJ_REQUIRE(stepSize != 0, "Please specify a step size in the Biot-Savart settings");
 		
 		// Launch calculation
+		KJ_DBG("Scheduling calculation");
 		calculation = calculation.then([]() { KJ_DBG("starting calculation"); });
 		Own<Operation> calcOp = FSC_LAUNCH_KERNEL(
 			kernels::biotSavartKernel,
@@ -130,13 +132,11 @@ struct CalculationSession : public FieldCalculator::Server {
 	Device& device;
 	
 	ToroidalGridStruct grid;
-	LibraryThread lt;
 	Cache<ID, LocalDataRef<Float64Tensor>> cache;
 	
-	CalculationSession(Device& device, ToroidalGrid::Reader newGrid, LibraryThread& lt) :
+	CalculationSession(Device& device, ToroidalGrid::Reader newGrid) :
 		device(device),
-		grid(readGrid(newGrid, GRID_VERSION)),
-		lt(lt->addRef())
+		grid(readGrid(newGrid, GRID_VERSION))
 	{}
 	
 	//! Handles compute request
@@ -187,7 +187,7 @@ struct CalculationSession : public FieldCalculator::Server {
 			newCalculator->finish(*result);
 			
 			auto publish = rootOp -> whenDone().then([result=result.get(), this]() {
-				return lt->dataService().publish(lt->randomID(), result->asReader());
+				return getActiveThread().dataService().publish(getActiveThread().randomID(), result->asReader());
 			});
 			return publish.attach(mv(result));
 		});
@@ -202,7 +202,7 @@ struct CalculationSession : public FieldCalculator::Server {
 				return READY_NOW;
 				
 			case Filament::REF:
-				return lt->dataService().download(node.getRef()).then([&calculator, settings, scale, this](LocalDataRef<Filament> local) mutable {
+				return getActiveThread().dataService().download(node.getRef()).then([&calculator, settings, scale, this](LocalDataRef<Filament> local) mutable {
 					return processFilament(calculator, local.get(), settings, scale).attach(cp(local));
 				});
 			default:
@@ -231,7 +231,7 @@ struct CalculationSession : public FieldCalculator::Server {
 				case MagneticField::REF: {
 					// First download the ref
 					auto ref = node.getRef();
-					return lt -> dataService().download(ref)
+					return getActiveThread().dataService().download(ref)
 					.then([&calculator, scale, this](LocalDataRef<MagneticField> local) {
 						// Then process it like usual
 						return processField(calculator, local.get(), scale).attach(cp(local));
@@ -247,7 +247,7 @@ struct CalculationSession : public FieldCalculator::Server {
 					KJ_REQUIRE(ID::fromReader(grid) == ID::fromReader(myGrid.asReader()));
 					
 					// Then download data				
-					return lt->dataService().download(cField.getData()).
+					return getActiveThread().dataService().download(cField.getData()).
 					then([&calculator, scale](LocalDataRef<Float64Tensor> field) {
 						return calculator.add(scale, field.get());
 					});
@@ -319,8 +319,6 @@ Promise<void> FieldResolverBase::resolveField(ResolveFieldContext context) {
 	return processField(input, output, context);
 }
 
-FieldResolverBase::FieldResolverBase(LibraryThread& lt) : lt(lt->addRef()) {}
-
 Promise<void> FieldResolverBase::processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) {
 	switch(input.which()) {
 		case MagneticField::SUM: {
@@ -343,11 +341,11 @@ Promise<void> FieldResolverBase::processField(MagneticField::Reader input, Magne
 			auto tmpMessage = kj::heap<capnp::MallocMessageBuilder>();
 			MagneticField::Builder newOutput = tmpMessage -> initRoot<MagneticField>();
 			
-			return lt->dataService().download(input.getRef())
+			return getActiveThread().dataService().download(input.getRef())
 			.then([this, newOutput, context] (LocalDataRef<MagneticField> ref) mutable {
 				return processField(ref.get(), newOutput, context);
 			}).then([this, output, newOutput]() mutable {
-				return output.setRef(lt->dataService().publish(lt->randomID(), newOutput));
+				return output.setRef(getActiveThread().dataService().publish(getActiveThread().randomID(), newOutput));
 			}).attach(mv(tmpMessage), thisCap());
 		}
 		case MagneticField::COMPUTED_FIELD: {
@@ -396,11 +394,11 @@ Promise<void> FieldResolverBase::processFilament(Filament::Reader input, Filamen
 			auto tmpMessage = kj::heap<capnp::MallocMessageBuilder>();
 			Filament::Builder newOutput = tmpMessage -> initRoot<Filament>();
 			
-			return lt->dataService().download(input.getRef())
+			return getActiveThread().dataService().download(input.getRef())
 			.then([this, newOutput, context] (LocalDataRef<Filament> ref) mutable {
 				return processFilament(ref.get(), newOutput, context);
 			}).then([this, output, newOutput]() mutable {
-				return output.setRef(lt->dataService().publish(lt->randomID(), newOutput));
+				return output.setRef(getActiveThread().dataService().publish(getActiveThread().randomID(), newOutput));
 			}).attach(mv(tmpMessage), thisCap());
 		}
 		case Filament::NESTED: {
@@ -413,10 +411,17 @@ Promise<void> FieldResolverBase::processFilament(Filament::Reader input, Filamen
 	}
 }
 
-FieldCalculator::Client newFieldCalculator(LibraryThread& lt, ToroidalGrid::Reader grid, Own<Eigen::ThreadPoolDevice> dev) {
+FieldCalculator::Client newFieldCalculator(ToroidalGrid::Reader grid, Own<Eigen::ThreadPoolDevice> dev) {
 	auto& devRef = *dev;
 	return FieldCalculator::Client(
-		kj::heap<CalculationSession<Eigen::ThreadPoolDevice>>(devRef, grid, lt).attach(mv(dev))
+		kj::heap<CalculationSession<Eigen::ThreadPoolDevice>>(devRef, grid).attach(mv(dev))
+	);
+}
+
+FieldCalculator::Client newFieldCalculator(ToroidalGrid::Reader grid, Own<Eigen::DefaultDevice> dev) {
+	auto& devRef = *dev;
+	return FieldCalculator::Client(
+		kj::heap<CalculationSession<Eigen::DefaultDevice>>(devRef, grid).attach(mv(dev))
 	);
 }
 
@@ -424,10 +429,10 @@ FieldCalculator::Client newFieldCalculator(LibraryThread& lt, ToroidalGrid::Read
 
 #include <cuda_runtime_api.h>
 
-FieldCalculator::Client newFieldCalculator(LibraryThread& lt, ToroidalGrid::Reader grid, Own<Eigen::GpuDevice> dev) {
+FieldCalculator::Client newFieldCalculator(ToroidalGrid::Reader grid, Own<Eigen::GpuDevice> dev) {
 	auto& devRef = *dev;
 	return FieldCalculator::Client(
-		kj::heap<CalculationSession<Eigen::GpuDevice>>(devRef, grid, lt).attach(mv(dev))
+		kj::heap<CalculationSession<Eigen::GpuDevice>>(devRef, grid).attach(mv(dev))
 	);
 }
 

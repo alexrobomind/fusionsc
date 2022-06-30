@@ -12,7 +12,7 @@
 
 using namespace fsc;
 
-void prepareToroidalField(LibraryThread& lt, ComputedField::Builder field) {
+void prepareToroidalField(ComputedField::Builder field) {
 	auto grid = field.initGrid();
 	grid.setNR(2);
 	grid.setNZ(2);
@@ -31,8 +31,8 @@ void prepareToroidalField(LibraryThread& lt, ComputedField::Builder field) {
 			data.set(i, i % 3 == 0 ? 1 : 0);
 	}
 	
-	field.setData(lt->dataService().publish(
-		lt->randomID(), fieldData.asReader()
+	field.setData(getActiveThread().dataService().publish(
+		getActiveThread().randomID(), fieldData.asReader()
 	));
 }
 
@@ -44,7 +44,7 @@ TEST_CASE("flt") {
 	
 	Temporary<RootConfig> config;
 	
-	auto req = createRoot(lt, config).newTracerRequest();
+	auto req = createRoot(config).newTracerRequest();
 	req.setPreferredDeviceType(WorkerType::CPU);
 	auto flt = req.send().getService();
 	
@@ -55,7 +55,7 @@ TEST_CASE("flt") {
 	
 	SECTION("1start-trace") {	
 		auto traceReq = flt.traceRequest();
-		prepareToroidalField(lt, traceReq.getField());
+		prepareToroidalField(traceReq.getField());
 		
 		// traceReq.getStartPoints().setShape({3, 4});
 		// traceReq.getStartPoints().setData({1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
@@ -84,11 +84,11 @@ TEST_CASE("flt-gpu") {
 	
 	auto& ws = lt->waitScope();
 	
-	auto flt = newFLT(lt, newGpuDevice());
+	auto flt = newFLT(newGpuDevice());
 	
 	SECTION("1start-trace") {	
 		auto traceReq = flt.traceRequest();
-		prepareToroidalField(lt, traceReq.getField());
+		prepareToroidalField(traceReq.getField());
 		
 		// traceReq.getStartPoints().setShape({3, 4});
 		// traceReq.getStartPoints().setData({1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});

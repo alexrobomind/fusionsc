@@ -24,10 +24,7 @@ ToroidalGridStruct readGrid(ToroidalGrid::Reader in, unsigned int maxOrdinal);
 void writeGrid(const ToroidalGridStruct& grid, ToroidalGrid::Builder out);
 
 class FieldResolverBase : public FieldResolver::Server {
-public:
-	LibraryThread lt;
-	FieldResolverBase(LibraryThread& lt);
-	
+public:	
 	virtual Promise<void> resolveField(ResolveFieldContext context) override;
 	
 	virtual Promise<void> processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context);
@@ -37,14 +34,19 @@ public:
 /**
  * Creates a new field calculator.
  */
-FieldCalculator::Client newFieldCalculator(LibraryThread& lt, ToroidalGrid::Reader grid, kj::Own<Eigen::ThreadPoolDevice> device);
+FieldCalculator::Client newFieldCalculator(ToroidalGrid::Reader grid, kj::Own<Eigen::ThreadPoolDevice> device);
+
+/**
+ * Creates a new field calculator.
+ */
+FieldCalculator::Client newFieldCalculator(ToroidalGrid::Reader grid, kj::Own<Eigen::DefaultDevice> device);
 
 #ifdef FSC_WITH_CUDA
 
 /**
  * Creates a new gpu-based field calculator.
  */
-FieldCalculator::Client newFieldCalculator(LibraryThread& lt, ToroidalGrid::Reader grid, kj::Own<Eigen::GpuDevice> device);
+FieldCalculator::Client newFieldCalculator(ToroidalGrid::Reader grid, kj::Own<Eigen::GpuDevice> device);
 
 #endif
 

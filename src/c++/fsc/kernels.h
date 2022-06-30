@@ -289,6 +289,7 @@ namespace fsc {
 		Own<Operation> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {
 			auto result = ownHeld(newOperation());
 			
+			KJ_DBG("Mapping");
 			// Create mappers for input
 			auto mappers = heapHeld<std::tuple<MapToDevice<Decay<Params>, Device>...>>(
 				MapToDevice<Decay<Params>, Device>(fwd<Params>(params), device)...
@@ -297,6 +298,7 @@ namespace fsc {
 			using givemeatype = int[];
 			
 			// Call kernel
+			KJ_DBG("Creating task");
 			Promise<void> task = prerequisite.then([mappers, n, cost, &device, result = result->addRef()]() mutable {
 			// Update device memory
 				// Note: This is an extremely convoluted looking way of calling updateDevice on all tuple members
@@ -307,13 +309,18 @@ namespace fsc {
 				kernelLaunchResult -> attachDestroyAnywhere(result->addRef());
 				return kernelLaunchResult -> whenDone();
 			}).then([device, mappers, result = result->addRef()]() mutable {
+				KJ_DBG("Kernel done, copying");
 				(void) (givemeatype { 0, (std::get<i>(*mappers).updateHost(), 0)... });
 				
-				hostMemSynchronize(device, *result);
-			}).attach(result->addRef());
+				return hostMemSynchronize(device, *result);
+			}).then([result = result->addRef()]() mutable {
+				result->done();
+			});
 			
+			KJ_DBG("Attaching");
 			result -> dependsOn(mv(task));			
 			result -> attachDestroyHere(mappers.x());
+			KJ_DBG("Done");
 			
 			return result.x();
 		}
@@ -411,6 +418,9 @@ namespace fsc {
 	
 	//! Creates a thread pool device
 	Own<Eigen::ThreadPoolDevice> newThreadPoolDevice();
+	
+	//! Creates a thread pool device
+	Own<Eigen::DefaultDevice> newDefaultDevice();
 	
 	#ifdef FSC_WITH_CUDA
 	
@@ -552,6 +562,7 @@ struct KernelLauncher<Eigen::ThreadPoolDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
 	static Own<Operation> launch(Eigen::ThreadPoolDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
 		auto func = [params...](Eigen::Index start, Eigen::Index end) mutable {
+			KJ_DBG("Executing", start, end);
 			for(Eigen::Index i = start; i < end; ++i)
 				f(i, params...);
 		};
@@ -570,16 +581,17 @@ struct KernelLauncher<Eigen::ThreadPoolDevice> {
 			{}
 			
 			void operator()() {
+				KJ_DBG("TDP done");
 				op->done();
 			}
 		};
 		
 		auto funcPtr = kj::heap<decltype(func)>(mv(func));
-		result->attachDestroyAnywhere(mv(funcPtr));
-		
 		auto funcCopyable = [ptr = funcPtr.get()](Eigen::Index start, Eigen::Index end) {
+			KJ_DBG("fCopyable", ptr);
 			(*ptr)(start, end);
 		};
+		result->attachDestroyAnywhere(mv(funcPtr));
 		
 		device.parallelForAsync(n, cost, funcCopyable, DoneFunctor(result->addRef()));
 		
@@ -669,6 +681,7 @@ MappedData<T, Device>& MappedData<T, Device>::operator=(MappedData&& other)
 template<typename T, typename Device>
 MappedData<T, Device>::~MappedData() {
 	if(devicePtr != nullptr) {
+		KJ_DBG("Unmapping");
 		unwindDetector.catchExceptionsIfUnwinding([&, this]() {
 			device.deallocate(devicePtr);
 			// hostMemSynchronizeBlocking(device);
@@ -681,7 +694,6 @@ void MappedData<T, Device>::updateHost() {
 	KJ_REQUIRE(!kj::isConst<T>(), "Can not update host on a const type") {
 		return;
 	}
-	
 	device.memcpyDeviceToHost(const_cast<NonConst*>(hostPtr), devicePtr, size * sizeof(T));
 }
 

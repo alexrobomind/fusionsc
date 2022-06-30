@@ -31,12 +31,12 @@ struct MapToDevice<Tensor<TVal, tRank, tOpts, Index>, Device> : public TensorMap
 			target.dimensions()
 		),
 		_data(device, target.data() /* Host pointer */, this->data() /* Device pointer allocated above */, this->size() /* Same as target.size() */)
-	{};
+	{ KJ_DBG(target.data(), this->data()); };
 
 	void updateHost() { _data.updateHost(); }
 	void updateDevice() { _data.updateDevice(); }
 	
-	Parent get() { return Parent(*this); }
+	Parent get() { KJ_DBG("get()", this->data()); return Parent(*this); }
 };
 
 template<typename TVal, int tRank, int tOpts, typename Index, typename Device>
@@ -52,12 +52,12 @@ struct MapToDevice<const Tensor<TVal, tRank, tOpts, Index>, Device> : public Ten
 			target.dimensions()
 		),
 		_data(device, target.data() /* Host pointer */, this->data() /* Device pointer allocated above */, this->size() /* Same as target.size() */)
-	{};
+	{ KJ_DBG(target.data(), this->data()); };
 
 	void updateHost() { _data.updateHost(); }
 	void updateDevice() { _data.updateDevice(); }
 	
-	Parent get() { return Parent(*this); }
+	Parent get() { KJ_DBG("get()", this->data()); return Parent(*this); }
 };
 
 template<typename TVal, typename Dims, int options, typename Index, typename Device>
@@ -72,12 +72,12 @@ struct MapToDevice<TensorFixedSize<TVal, Dims, options, Index>, Device> : public
 			MappedData<TVal, Device>::deviceAlloc(device, target.data(), target.size())
 		),
 		_data(target.data(), target.size())
-	{}
+	{ KJ_DBG(target.data(), this->data()); };
 
 	void updateHost() { _data.updateHost(); }
 	void updateDevice() { _data.updateDevice(); }
 	
-	Parent get() { return Parent(*this); }
+	Parent get() { KJ_DBG("get()", this->data()); return Parent(*this); }
 };
 
 template<typename TVal, typename Dims, int options, typename Index, typename Device>
@@ -92,12 +92,12 @@ struct MapToDevice<const TensorFixedSize<TVal, Dims, options, Index>, Device> : 
 			MappedData<TVal, Device>::deviceAlloc(device, target.data(), target.size())
 		),
 		_data(target.data(), target.size())
-	{}
+	{ KJ_DBG(target.data(), this->data()); };
 
 	void updateHost() { _data.updateHost(); }
 	void updateDevice() { _data.updateDevice(); }
 	
-	Parent get() { return Parent(*this); }
+	Parent get() { KJ_DBG("get()", this->data()); return Parent(*this); }
 };
 
 template<typename TVal, int tRank, int tOpts, typename Index, typename Device>
@@ -113,12 +113,12 @@ struct MapToDevice<TensorMap<Tensor<TVal, tRank, tOpts, Index>>, Device> : publi
 			target.dimensions()
 		),
 		_data(device, target.data() /* Host pointer */, this->data() /* Device pointer allocated above */, this->size() /* Same as target.size() */)
-	{};
+	{ KJ_DBG(target.data(), this->data()); };
 
 	void updateHost() { _data.updateHost(); }
 	void updateDevice() { _data.updateDevice(); }
 	
-	Parent get() { return Parent(*this); }
+	Parent get() { KJ_DBG("get()", this->data()); return Parent(*this); }
 };
 
 template<typename TVal, int tRank, int tOpts, typename Index, typename Device>
@@ -134,12 +134,12 @@ struct MapToDevice<TensorMap<const Tensor<TVal, tRank, tOpts, Index>>, Device> :
 			target.dimensions()
 		),
 		_data(device, target.data() /* Host pointer */, this->data() /* Device pointer allocated above */, this->size() /* Same as target.size() */)
-	{};
+	{ KJ_DBG(target.data(), this->data()); };
 
 	void updateHost() { _data.updateHost(); }
 	void updateDevice() { _data.updateDevice(); }
 	
-	Parent get() { return Parent(*this); }
+	Parent get() { KJ_DBG("get()", this->data()); return Parent(*this); }
 };
 
 template<typename TVal, typename Dims, int options, typename Index, typename Device>
@@ -154,12 +154,12 @@ struct MapToDevice<TensorMap<TensorFixedSize<TVal, Dims, options, Index>>, Devic
 			MappedData<TVal, Device>::deviceAlloc(device, target.data(), target.size())
 		),
 		_data(target.data(), target.size())
-	{}
+	{ KJ_DBG(target.data(), this->data()); };
 
 	void updateHost() { _data.updateHost(); }
 	void updateDevice() { _data.updateDevice(); }
 	
-	Parent get() { return Parent(*this); }
+	Parent get() { KJ_DBG("get()", this->data()); return Parent(*this); }
 };
 
 template<typename TVal, typename Dims, int options, typename Index, typename Device>
@@ -174,12 +174,12 @@ struct MapToDevice<TensorMap<const TensorFixedSize<TVal, Dims, options, Index>>,
 			MappedData<TVal, Device>::deviceAlloc(device, target.data(), target.size())
 		),
 		_data(target.data(), target.size())
-	{}
+	{ KJ_DBG(target.data(), this->data()); };
 
 	void updateHost() { _data.updateHost(); }
 	void updateDevice() { _data.updateDevice(); }
 	
-	Parent get() { return Parent(*this); }
+	Parent get() { KJ_DBG("get()", this->data()); return Parent(*this); }
 };
 
 // ===================== Reads and writes form serialized tensors ========================

@@ -4,7 +4,7 @@
 
 namespace fsc {
 
-SimpleHttpServer::SimpleHttpServer(Promise<Own<kj::NetworkAddress>> address, LibraryThread& lt, HttpRoot::Reader data) :
+SimpleHttpServer::SimpleHttpServer(Promise<Own<kj::NetworkAddress>> address, HttpRoot::Reader data) :
 	_headerTable(kj::heap<kj::HttpHeaderTable>()),
 	_data(capnp::clone(data)),
 	_server(nullptr),
@@ -14,12 +14,12 @@ SimpleHttpServer::SimpleHttpServer(Promise<Own<kj::NetworkAddress>> address, Lib
 	auto portInfo = kj::newPromiseAndFulfiller<unsigned int>();
 	_port = portInfo.promise.fork();
 	
-	_server = address.then([this, portInfo = mv(portInfo), lt = lt->addRef()](Own<kj::NetworkAddress> address) mutable {
+	_server = address.then([this, portInfo = mv(portInfo)](Own<kj::NetworkAddress> address) mutable {
 		auto listener = address->listen();
 		portInfo.fulfiller->fulfill(listener->getPort());
 		
 		auto result = std::make_shared<kj::HttpServer>(
-			lt -> ioContext().provider -> getTimer(),
+			getActiveThread().ioContext().provider -> getTimer(),
 			*_headerTable,
 			*this
 		);

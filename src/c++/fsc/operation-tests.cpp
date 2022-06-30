@@ -15,19 +15,19 @@ TEST_CASE("operation-promises") {
 	auto& ws = lt->waitScope();
 	
 	{
-		Operation op1;
-		Promise<void> p = op1.whenDone();
+		auto op1 = newOperation();
+		Promise<void> p = op1->whenDone();
 		
-		op1.done();
+		op1->done();
 		
 		REQUIRE(p.poll(ws));
 	}
 	
 	{
-		Operation op1;
-		Promise<void> p = op1.whenDone();
+		auto op1 = newOperation();
+		Promise<void> p = op1->whenDone();
 		
-		op1.fail(KJ_EXCEPTION(FAILED, "Test exception"));
+		op1->fail(KJ_EXCEPTION(FAILED, "Test exception"));
 		
 		REQUIRE(p.poll(ws));
 		REQUIRE_THROWS(p.wait(ws));
@@ -40,8 +40,8 @@ TEST_CASE("operation-lifecycle") {
 	auto& ws = lt->waitScope();
 	
 	{
-		Operation op1;
-		op1.attachDestroyHere(DestroyedIn());
+		auto op1 = newOperation();
+		op1->attachDestroyHere(DestroyedIn());
 	}
 	
 	REQUIRE(DestroyedIn::pThread == &kj::getCurrentThreadExecutor());

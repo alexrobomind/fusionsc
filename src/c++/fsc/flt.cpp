@@ -260,15 +260,14 @@ struct TraceCalculation {
 template<typename Device>
 struct FLTImpl : public FLT::Server {
 	Own<Device> device;
-	LibraryThread lt;
 	
-	FLTImpl(LibraryThread& lt, Own<Device> device) : device(mv(device)), lt(lt->addRef()) {}
+	FLTImpl(Own<Device> device) : device(mv(device)) {}
 	
 	Promise<void> trace(TraceContext ctx) override {
 		ctx.allowCancellation();
 		auto request = ctx.getParams();
 		
-		return lt->dataService().download(request.getField().getData())
+		return getActiveThread().dataService().download(request.getField().getData())
 		.then([ctx, request, this](LocalDataRef<Float64Tensor> fieldData) mutable {
 			// Extract kernel request
 			Temporary<FLTKernelRequest> kernelRequest;
@@ -385,14 +384,14 @@ namespace fsc {
 	}
 	
 	// TODO: Make this accept data service instead	
-	FLT::Client newFLT(LibraryThread& lt, Own<Eigen::ThreadPoolDevice> device) {
-		return kj::heap<FLTImpl<Eigen::ThreadPoolDevice>>(lt, mv(device));
+	FLT::Client newFLT(Own<Eigen::ThreadPoolDevice> device) {
+		return kj::heap<FLTImpl<Eigen::ThreadPoolDevice>>(mv(device));
 	}
 	
 	#ifdef FSC_WITH_CUDA
 	
-	FLT::Client newFLT(LibraryThread& lt, Own<Eigen::GpuDevice> device) {
-		return kj::heap<FLTImpl<Eigen::GpuDevice>>(lt, mv(device));
+	FLT::Client newFLT(Own<Eigen::GpuDevice> device) {
+		return kj::heap<FLTImpl<Eigen::GpuDevice>>(mv(device));
 	}
 	
 	#endif

@@ -4,8 +4,6 @@
 
 namespace fsc {
 	
-GeometryResolverBase::GeometryResolverBase(LibraryThread& lt) : lt(lt->addRef()) {}
-
 Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context) {
 	output.setTags(input.getTags());
 	
@@ -35,11 +33,11 @@ Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geom
 			}
 						
 			Temporary<Geometry> tmp;
-			return lt->dataService().download(input.getRef())
+			return getActiveThread().dataService().download(input.getRef())
 			.then([tmp = Geometry::Builder(tmp), context, this](LocalDataRef<Geometry> local) mutable {
 				return processGeometry(local.get(), tmp, context);
-			}).then([tmp = tmp.asReader(), output, this]() mutable {
-				output.setRef(lt->dataService().publish(lt->randomID(), tmp));
+			}).then([tmp = tmp.asReader(), output]() mutable {
+				output.setRef(getActiveThread().dataService().publish(getActiveThread().randomID(), tmp));
 			}).attach(mv(tmp), thisCap());
 		}
 		case Geometry::NESTED: {
@@ -91,10 +89,7 @@ Promise<void> GeometryResolverBase::resolveGeometry(ResolveGeometryContext conte
 
 // Class GeometryLibImpl
 
-struct GeometryLibImpl : public GeometryLib::Server {
-	LibraryThread lt;
-	GeometryLibImpl(LibraryThread& lt);
-	
+struct GeometryLibImpl : public GeometryLib::Server {	
 	Promise<void> merge(MergeContext context) override;
 	Promise<void> index(IndexContext context) override;
 	
@@ -156,8 +151,6 @@ namespace {
 	
 }
 
-GeometryLibImpl::GeometryLibImpl(LibraryThread& lt) : lt(lt->addRef()) {}
-
 Promise<void> GeometryLibImpl::collectTagNames(Geometry::Reader input, kj::HashSet<kj::String>& output) {
 	for(auto tag : input.getTags()) {
 		const kj::StringPtr tagName = tag.getName();
@@ -179,7 +172,7 @@ Promise<void> GeometryLibImpl::collectTagNames(Geometry::Reader input, kj::HashS
 		case Geometry::TRANSFORMED:
 			return collectTagNames(input.getTransformed(), output);
 		case Geometry::REF:
-			return lt->dataService().download(input.getRef())
+			return getActiveThread().dataService().download(input.getRef())
 			.then([input, &output, this](LocalDataRef<Geometry> geo) {
 				return collectTagNames(geo.get(), output);
 			});
@@ -235,7 +228,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 		case Geometry::TRANSFORMED:
 			return mergeGeometries(input.getTransformed(), tagTable, tagValues, transform, output);
 		case Geometry::REF:
-			return lt->dataService().download(input.getRef())
+			return getActiveThread().dataService().download(input.getRef())
 			.then([input, &tagTable, tagValues = mv(tagValues), transform, &output, this](LocalDataRef<Geometry> geo) {
 				return mergeGeometries(geo.get(), tagTable, tagValues, transform, output);
 			});
@@ -243,7 +236,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 			return mergeGeometries(input.getNested(), tagTable, tagValues, transform, output);
 			
 		case Geometry::MESH:
-			return lt->dataService().download(input.getMesh())
+			return getActiveThread().dataService().download(input.getMesh())
 			.then([input, &tagTable, tagValues = mv(tagValues), transform, &output](LocalDataRef<Mesh> inputMeshRef) {
 				auto inputMesh = inputMeshRef.get();
 				auto vertexShape = inputMesh.getVertices().getShape();
@@ -324,7 +317,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader inp
 
 Promise<void> GeometryLibImpl::index(IndexContext context) {
 	// First we need to download the geometry we want to index
-	return lt->dataService().download(context.getParams().getGeoRef())
+	return getActiveThread().dataService().download(context.getParams().getGeoRef())
 	.then([this, context](LocalDataRef<MergedGeometry> inputRef) mutable {
 		// Create output temporary and read information about input
 		Temporary<IndexedGeometry> output;
@@ -438,7 +431,7 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 		
 		// Publish output into data store and return reference
 		// Derive the ID from the parameters struct
-		DataRef<IndexedGeometry>::Client outputRef = lt->dataService().publish(context.getParams(), output.asReader());
+		DataRef<IndexedGeometry>::Client outputRef = getActiveThread().dataService().publish(context.getParams(), output.asReader());
 		context.getResults().setRef(outputRef);
 	});
 }
@@ -481,15 +474,15 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 		// Publish the merged geometry into the data store
 		// Derive the ID from parameters (is OK as cap table is empty)
 		context.getResults().setRef(
-			lt->dataService().publish(context.getParams(), output.asReader()).attach(mv(output))
+			getActiveThread().dataService().publish(context.getParams(), output.asReader()).attach(mv(output))
 		);
 	});
 	
 	return promise.attach(mv(tagNameTable), mv(geomAccum));
 }
 
-GeometryLib::Client createGeometryLib(LibraryThread& lt) {
-	return GeometryLib::Client(kj::heap<GeometryLibImpl>(lt));
+GeometryLib::Client createGeometryLib() {
+	return GeometryLib::Client(kj::heap<GeometryLibImpl>());
 };
 
 // Grid location methods

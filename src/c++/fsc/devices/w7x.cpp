@@ -19,7 +19,7 @@ struct CoilsDBResolver : public FieldResolverBase {
 	constexpr static unsigned int N_TRIM_COILS = 5;
 	constexpr static unsigned int N_CONTROL_COILS = 10;
 	
-	CoilsDBResolver(LibraryThread& lt, CoilsDB::Client backend);
+	CoilsDBResolver(CoilsDB::Client backend);
 	
 	kj::TreeMap<uint64_t, DataRef<Filament>::Client> coils;
 	kj::TreeMap<ID, LocalDataRef<CoilFields>> coilPacks;
@@ -45,7 +45,7 @@ struct ComponentsDBResolver : public GeometryResolverBase {
 	constexpr static kj::StringPtr CDB_ID_TAG = "w7x-component-id"_kj;
 	constexpr static kj::StringPtr CDB_ASID_TAG = "w7x-assembly-id"_kj;
 	
-	ComponentsDBResolver(LibraryThread& lt, ComponentsDB::Client backend);
+	ComponentsDBResolver(ComponentsDB::Client backend);
 	
 	kj::TreeMap<uint64_t, DataRef<Mesh>::Client> meshes;
 	
@@ -67,8 +67,7 @@ constexpr unsigned int CoilsDBResolver::N_MODULES ;
 constexpr unsigned int CoilsDBResolver::N_TRIM_COILS;
 constexpr unsigned int CoilsDBResolver::N_CONTROL_COILS ;
 	
-CoilsDBResolver::CoilsDBResolver(LibraryThread& lt, CoilsDB::Client backend) :
-	FieldResolverBase(lt),
+CoilsDBResolver::CoilsDBResolver(CoilsDB::Client backend) :
 	backend(backend)
 {}
 
@@ -227,7 +226,7 @@ DataRef<Filament>::Client CoilsDBResolver::getCoil(uint64_t cdbID) {
 	
 	DataRef<Filament>::Client newCoil = coilRequest.send().then([cdbID, this](auto filament) {
 		// auto filament = response.getFilament();
-		auto ref = lt -> dataService().publish(lt -> randomID(), Filament::Reader(filament));
+		auto ref = getActiveThread().dataService().publish(getActiveThread().randomID(), Filament::Reader(filament));
 		
 		return ref;
 	});
@@ -311,8 +310,7 @@ Temporary<CoilFields> CoilsDBResolver::buildCoilFields(W7XCoilSet::Reader reader
 constexpr kj::StringPtr ComponentsDBResolver::CDB_ID_TAG;
 constexpr kj::StringPtr ComponentsDBResolver::CDB_ASID_TAG;
 
-ComponentsDBResolver::ComponentsDBResolver(LibraryThread& lt, ComponentsDB::Client backend) :
-	GeometryResolverBase(lt),
+ComponentsDBResolver::ComponentsDBResolver(ComponentsDB::Client backend) :
 	backend(backend)
 {}
 
@@ -401,7 +399,7 @@ DataRef<Mesh>::Client ComponentsDBResolver::getComponent(uint64_t id) {
 			return *pMesh;
 		}
 		
-		DataRef<Mesh>::Client published = lt->dataService().publish(lt->randomID(), (Mesh::Reader&) response);
+		DataRef<Mesh>::Client published = getActiveThread().dataService().publish(getActiveThread().randomID(), (Mesh::Reader&) response);
 		meshes.insert(id, published);
 		return published;
 	});
@@ -411,13 +409,11 @@ DataRef<Mesh>::Client ComponentsDBResolver::getComponent(uint64_t id) {
 // Does not perform any local caching.
 struct CoilsDBWebservice : public CoilsDB::Server {
 	kj::String address;
-	LibraryThread lt;
 		
 	Own<kj::HttpHeaderTable> headerTbl = kj::heap<kj::HttpHeaderTable>();
 	
-	CoilsDBWebservice(kj::StringPtr address, LibraryThread& lt) :
-		address(kj::heapString(address)),
-		lt(lt -> addRef())
+	CoilsDBWebservice(kj::StringPtr address) :
+		address(kj::heapString(address))
 	{}
 	
 	Promise<void> getCoil(GetCoilContext context) override {
@@ -426,9 +422,9 @@ struct CoilsDBWebservice : public CoilsDB::Server {
 		using capnp::JsonCodec;
 		
 		auto client = kj::newHttpClient(
-			lt->timer(),
+			getActiveThread().timer(),
 			*headerTbl,
-			lt -> network(),
+			getActiveThread().network(),
 			nullptr
 		);
 		auto response = client->request(
@@ -468,9 +464,9 @@ struct CoilsDBWebservice : public CoilsDB::Server {
 		using capnp::JsonCodec;
 		
 		auto client = kj::newHttpClient(
-			lt->timer(),
+			getActiveThread().timer(),
 			*headerTbl,
-			lt -> network(),
+			getActiveThread().network(),
 			nullptr
 		);
 		auto response = client->request(
@@ -489,13 +485,11 @@ struct CoilsDBWebservice : public CoilsDB::Server {
 
 struct ComponentsDBWebservice : public ComponentsDB::Server {
 	kj::String address;
-	LibraryThread lt;
 		
 	Own<kj::HttpHeaderTable> headerTbl = kj::heap<kj::HttpHeaderTable>();
 	
-	ComponentsDBWebservice(kj::StringPtr address, LibraryThread& lt) :
-		address(kj::heapString(address)),
-		lt(lt -> addRef())
+	ComponentsDBWebservice(kj::StringPtr address) :
+		address(kj::heapString(address))
 	{}
 	
 	Promise<void> getMesh(GetMeshContext context) override  {
@@ -504,9 +498,9 @@ struct ComponentsDBWebservice : public ComponentsDB::Server {
 		using capnp::JsonCodec;
 		
 		auto client = kj::newHttpClient(
-			lt->timer(),
+			getActiveThread().timer(),
 			*headerTbl,
-			lt -> network(),
+			getActiveThread().network(),
 			nullptr
 		);
 		auto response = client->request(
@@ -594,9 +588,9 @@ struct ComponentsDBWebservice : public ComponentsDB::Server {
 		using capnp::JsonCodec;
 		
 		auto client = kj::newHttpClient(
-			lt->timer(),
+			getActiveThread().timer(),
 			*headerTbl,
-			lt -> network(),
+			getActiveThread().network(),
 			nullptr
 		);
 		auto response = client->request(
@@ -616,11 +610,9 @@ struct ComponentsDBWebservice : public ComponentsDB::Server {
 };
 
 struct OfflineCoilsDB : public CoilsDB::Server {
-	LibraryThread lt;
 	Array<LocalDataRef<OfflineData>> offlineData;
 	
-	OfflineCoilsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt) :
-		lt(lt->addRef()),
+	OfflineCoilsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData) :
 		offlineData(kj::heapArray(offlineData))
 	{}
 	
@@ -652,11 +644,9 @@ struct OfflineCoilsDB : public CoilsDB::Server {
 };
 
 struct OfflineComponentsDB : public ComponentsDB::Server {
-	LibraryThread lt;
 	Array<LocalDataRef<OfflineData>> offlineData;
 	
-	OfflineComponentsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt) :
-		lt(lt->addRef()),
+	OfflineComponentsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData) :
 		offlineData(kj::heapArray(offlineData))
 	{}
 	
@@ -689,20 +679,20 @@ struct OfflineComponentsDB : public ComponentsDB::Server {
 
 }
 
-CoilsDB::Client newCoilsDBFromWebservice(kj::StringPtr address, LibraryThread& lt) {
-	return CoilsDB::Client(kj::heap<CoilsDBWebservice>(address, lt));
+CoilsDB::Client newCoilsDBFromWebservice(kj::StringPtr address) {
+	return CoilsDB::Client(kj::heap<CoilsDBWebservice>(address));
 }
 
-ComponentsDB::Client newComponentsDBFromWebservice(kj::StringPtr address, LibraryThread& lt) {
-	return ComponentsDB::Client(kj::heap<ComponentsDBWebservice>(address, lt));
+ComponentsDB::Client newComponentsDBFromWebservice(kj::StringPtr address) {
+	return ComponentsDB::Client(kj::heap<ComponentsDBWebservice>(address));
 }
 
-CoilsDB::Client newOfflineCoilsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt) {
-	return CoilsDB::Client(kj::heap<OfflineCoilsDB>(offlineData, lt));
+CoilsDB::Client newOfflineCoilsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData) {
+	return CoilsDB::Client(kj::heap<OfflineCoilsDB>(offlineData));
 }
 
-ComponentsDB::Client newComponentsDBFromOfflineData(ArrayPtr<LocalDataRef<OfflineData>> offlineData, LibraryThread& lt) {
-	return ComponentsDB::Client(kj::heap<OfflineComponentsDB>(offlineData, lt));
+ComponentsDB::Client newComponentsDBFromOfflineData(ArrayPtr<LocalDataRef<OfflineData>> offlineData) {
+	return ComponentsDB::Client(kj::heap<OfflineComponentsDB>(offlineData));
 }
 
 kj::Array<Temporary<MagneticField>> preheatFields(W7XCoilSet::Reader coils) {

@@ -13,9 +13,6 @@
 namespace fsc {
 	
 struct GeometryResolverBase : public GeometryResolver::Server {
-	LibraryThread lt;
-	GeometryResolverBase(LibraryThread& lt);
-	
 	virtual Promise<void> resolveGeometry(ResolveGeometryContext context) override;
 	
 	virtual Promise<void> processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context);
@@ -25,7 +22,7 @@ struct GeometryResolverBase : public GeometryResolver::Server {
 /**
  * Creates C++ interface to geometry library.
  */
-GeometryLib::Client createGeometryLib(LibraryThread& lt);
+GeometryLib::Client createGeometryLib();
 
 inline Vec3u locationInGrid(Vec3d point, Vec3d min, Vec3d max, Vec3u size) {
 	auto fraction = (point - min).array() / (max - min).array();

@@ -12,7 +12,7 @@
 namespace fsc {
 
 struct SimpleHttpServer : public kj::HttpService {
-	SimpleHttpServer(Promise<Own<kj::NetworkAddress>> address, LibraryThread& lt, HttpRoot::Reader data);
+	SimpleHttpServer(Promise<Own<kj::NetworkAddress>> address, HttpRoot::Reader data);
 	
 	inline Promise<unsigned int> getPort() { return _port.addBranch(); }
 	Promise<void> drain();

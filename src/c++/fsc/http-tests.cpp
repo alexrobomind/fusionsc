@@ -23,7 +23,6 @@ TEST_CASE("http") {
 	
 	SimpleHttpServer srv(
 		network.parseAddress("127.0.0.1"),
-		th,
 		HTTP_TEST_DATA
 	);
 	
