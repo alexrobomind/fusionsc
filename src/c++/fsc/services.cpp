@@ -31,7 +31,8 @@ struct RootServer : public RootService::Server {
 	RootServer(RootConfig::Reader config) {}
 	
 	Promise<void> newFieldCalculator(NewFieldCalculatorContext context) {
-		auto factory = [this, context](auto device) mutable {			
+		auto factory = [this, context](auto device) mutable {		
+		KJ_DBG(context.getParams());
 			return ::fsc::newFieldCalculator(context.getParams().getGrid(), mv(device));
 		};
 		

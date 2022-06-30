@@ -255,7 +255,13 @@ struct Held {
 	Held(Held&& other) = default;
 	
 	~Held() {
-		KJ_REQUIRE(owningPtr.get() == nullptr, "Destroyed Held<...> without ownership transfer");
+		if(owningPtr.get() != nullptr) {
+			KJ_LOG(WARNING, "Unwinding across a Held<...>. Application might segfault");
+		}
+		kj::UnwindDetector ud;
+		if(false/*!ud.isUnwinding()*/) {
+			KJ_REQUIRE(owningPtr.get() == nullptr, "Destroyed Held<...> without ownership transfer");
+		}
 	}
 	
 	T& operator*() { return ref; }

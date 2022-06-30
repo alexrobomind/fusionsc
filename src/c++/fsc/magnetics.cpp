@@ -53,17 +53,18 @@ struct FieldCalculation {
 			newField->data()[i] = data[i];
 		}
 		
-		calculation = calculation.then([]() { KJ_DBG("starting add"); });
-		Own<Operation> calcOp = FSC_LAUNCH_KERNEL(
-			kernels::addFieldKernel,
-			_device, 
-			mv(calculation),
-			field.size(),
-			FSC_KARG(mappedField, NOCOPY), FSC_KARG(*newField, IN), scale
-		);
-		calcOp -> attachDestroyAnywhere(mv(newField), rootOp.addRef());
+		calculation = calculation.then([this, newField = mv(newField), scale]() mutable {
+			KJ_DBG("Start Add");
+			Own<Operation> calcOp = FSC_LAUNCH_KERNEL(
+				kernels::addFieldKernel,
+				_device, 
+				field.size(),
+				FSC_KARG(mappedField, NOCOPY), FSC_KARG(*newField, IN), scale
+			);
+			calcOp -> attachDestroyAnywhere(mv(newField), rootOp.addRef());
 		
-		calculation = calcOp -> whenDone();
+			return calcOp -> whenDone();
+		});
 	}
 	
 	void biotSavart(double current, Float64Tensor::Reader input, BiotSavartSettings::Reader settings) {
@@ -89,23 +90,22 @@ struct FieldCalculation {
 		
 		KJ_REQUIRE(stepSize != 0, "Please specify a step size in the Biot-Savart settings");
 		
-		// Launch calculation
-		KJ_DBG("Scheduling calculation");
-		calculation = calculation.then([]() { KJ_DBG("starting calculation"); });
-		Own<Operation> calcOp = FSC_LAUNCH_KERNEL(
-			kernels::biotSavartKernel,
-			_device,
-			mv(calculation),
-			field.size() / 3,
-			grid, FSC_KARG(*filament, IN), current, coilWidth, stepSize, FSC_KARG(mappedField, NOCOPY)
-		);
-		calcOp -> attachDestroyAnywhere(mv(filament), rootOp.addRef());
-		calculation = calcOp -> whenDone();
-		
-		calculation = calculation.then([]() { KJ_DBG("calculation done"); });
+		calculation = calculation.then([this, filament = mv(filament), coilWidth, stepSize, current]() mutable {
+			KJ_DBG("Start BS");
+			// Launch calculation
+			Own<Operation> calcOp = FSC_LAUNCH_KERNEL(
+				kernels::biotSavartKernel,
+				_device,
+				field.size() / 3,
+				grid, FSC_KARG(*filament, IN), current, coilWidth, stepSize, FSC_KARG(mappedField, NOCOPY)
+			);
+			calcOp -> attachDestroyAnywhere(mv(filament), rootOp.addRef());
+			return calcOp -> whenDone();
+		});
 	}
 	
-	void finish(Float64Tensor::Builder out) {
+	Promise<void> finish(Float64Tensor::Builder out) {
+		KJ_DBG("FC::finish()");
 		calculation = calculation
 		.then([this]() {
 			KJ_DBG("Update host");
@@ -115,12 +115,10 @@ struct FieldCalculation {
 		.then([this, out]() {
 			KJ_DBG("Writing tensor");
 			writeTensor(field, out);
-			
-			KJ_DBG("Op done");
-			rootOp.done();
 		});
+		KJ_DBG("calc set up)");
 		
-		rootOp.dependsOn(mv(calculation));
+		return mv(calculation);
 	}
 };
 
@@ -152,7 +150,7 @@ struct CalculationSession : public FieldCalculator::Server {
 		// Start calculation lazily
 		KJ_DBG("Processing root");
 		auto data = processRoot(*field)
-		.then([this, field](LocalDataRef<Float64Tensor> tensorRef) mutable {
+		.then([this, field, context](LocalDataRef<Float64Tensor> tensorRef) mutable {
 			// Cache field if not present, use existing if present
 			return ID::fromReaderWithRefs(field->asBuilder())
 			.then([this, tensorRef = mv(tensorRef)](ID id) mutable -> DataRef<Float64Tensor>::Client {
@@ -181,16 +179,20 @@ struct CalculationSession : public FieldCalculator::Server {
 		auto calcDone = processField(*newCalculator, node, 1);
 		KJ_DBG("Field processing initiated");
 		
-		return calcDone.then([newCalculator, this, rootOp = mv(rootOp)]() mutable {	
+		return calcDone.then([newCalculator, this]() mutable {	
 			KJ_DBG("Reading result");
-			auto result = kj::heap<Temporary<Float64Tensor>>();					
-			newCalculator->finish(*result);
 			
-			auto publish = rootOp -> whenDone().then([result=result.get(), this]() {
+			auto result = heapHeld<Temporary<Float64Tensor>>();	
+			
+			auto publish = newCalculator->finish(*result).then([result, this]() mutable {
+				KJ_DBG("Publishing");
 				return getActiveThread().dataService().publish(getActiveThread().randomID(), result->asReader());
-			});
-			return publish.attach(mv(result));
-		});
+			})
+			.eagerlyEvaluate(nullptr)
+			.attach(result.x());
+			
+			return publish;
+		}).attach(mv(rootOp));
 	}
 	
 	Promise<void> processFilament(FieldCalculation<Device>& calculator, Filament::Reader node, BiotSavartSettings::Reader settings, double scale) {
@@ -295,7 +297,7 @@ ToroidalGridStruct readGrid(ToroidalGrid::Reader in, unsigned int maxOrdinal) {
 	out.nSym = (int) in.getNSym();
 	out.nPhi = (int) in.getNPhi();
 	
-	KJ_REQUIRE(out.isValid());
+	KJ_REQUIRE(out.isValid(), in);
 	return out;
 }
 

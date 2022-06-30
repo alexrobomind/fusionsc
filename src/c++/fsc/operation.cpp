@@ -27,7 +27,8 @@ void Operation::dependsOn(Promise<void> promise) const {
 		.eagerlyEvaluate([this](kj::Exception&& e) mutable {
 			this->fail(cp(e));
 		})
-		.attach(this->addRef());
+		.attach(this->addRef())
+		.eagerlyEvaluate(nullptr);
 	;
 	
 	attachDestroyHere(mv(promise));

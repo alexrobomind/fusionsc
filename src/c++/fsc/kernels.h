@@ -306,7 +306,7 @@ namespace fsc {
 				(void) (givemeatype { 0, (std::get<i>(*mappers).updateDevice(), 0)... });
 				
 				auto kernelLaunchResult = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params, Device>...>(device, n, cost, std::get<i>(*mappers).get()...);
-				kernelLaunchResult -> attachDestroyAnywhere(result->addRef());
+				kernelLaunchResult -> attachDestroyAnywhere(mv(result));
 				return kernelLaunchResult -> whenDone();
 			}).then([device, mappers, result = result->addRef()]() mutable {
 				KJ_DBG("Kernel done, copying");
@@ -634,6 +634,7 @@ MappedData<T, Device>::MappedData(Device& device, T* hostPtr, NonConst* devicePt
 	devicePtr(devicePtr),
 	size(size)
 {
+	KJ_DBG("Mapping", this);
 }
 
 template<typename T, typename Device>
@@ -643,6 +644,7 @@ MappedData<T, Device>::MappedData(Device& device, T* hostPtr, size_t size) :
 	devicePtr(deviceAlloc(device, size)),
 	size(size)
 {
+	KJ_DBG("Mapping", this);
 }
 
 template<typename T, typename Device>
@@ -651,7 +653,9 @@ MappedData<T, Device>::MappedData(Device& device) :
 	hostPtr(nullptr),
 	devicePtr(nullptr),
 	size(0)
-{}
+{
+	KJ_DBG("Mapping", this);
+}
 
 
 template<typename T, typename Device>
@@ -681,11 +685,12 @@ MappedData<T, Device>& MappedData<T, Device>::operator=(MappedData&& other)
 template<typename T, typename Device>
 MappedData<T, Device>::~MappedData() {
 	if(devicePtr != nullptr) {
-		KJ_DBG("Unmapping");
+		KJ_DBG("Unmapping", this);
 		unwindDetector.catchExceptionsIfUnwinding([&, this]() {
 			device.deallocate(devicePtr);
 			// hostMemSynchronizeBlocking(device);
 		});
+		KJ_DBG("OK");
 	}
 }
 
