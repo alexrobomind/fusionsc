@@ -37,8 +37,8 @@ auto getAndAddBuiltin() {
 */
 
 RootService::Client connectLocal1(RootConfig::Reader config) {
-	LibraryThread lt = fscpy::PyContext::libraryThread();
-	return createRoot(lt, config);
+	fscpy::PyContext::startEventLoop();
+	return createRoot(config);
 }
 
 	
@@ -48,8 +48,8 @@ RootService::Client connectLocal2() {
 }
 
 RootService::Client connectRemote1(kj::StringPtr address, unsigned int port) {
-	LibraryThread lt = fscpy::PyContext::libraryThread();
-	return connectRemote(lt, address, port);
+	fscpy::PyContext::startEventLoop();
+	return connectRemote(address, port);
 }
 
 }

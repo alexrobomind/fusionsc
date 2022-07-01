@@ -30,7 +30,7 @@ struct DaemonRunner : public kj::AtomicRefcounted {
 	
 	inline ~DaemonRunner() { disconnect(); }
 	
-	inline Own<const DaemonRunner> addRef() { return kj::atomicAddRef(*this); }
+	inline Own<const DaemonRunner> addRef() const { return kj::atomicAddRef(*this); }
 	
 	/**
 	 * Runs the given task in the event loop associated with this runner, if it is still available.
@@ -81,7 +81,7 @@ public:
 private:
 	inline LibraryHandle() :
 		storeSteward(store),
-		_daemonRunner(kj::heap<DaemonRunner>(storeSteward.getExecutor()))
+		_daemonRunner(kj::atomicRefcounted<DaemonRunner>(storeSteward.getExecutor()))
 	{};
 	
 	inline ~LibraryHandle() {

@@ -104,12 +104,13 @@ template<typename... T>
 void Operation::attachDestroyInThread(const kj::Executor& executor, T&&... params) const {
 	struct AttachmentNode : public Node {
 		Own<const kj::Executor> executor;
-		Own<DaemonRunner> runner;
+		Own<const DaemonRunner> runner;
 		
 		TupleFor<kj::Decay<T>...> contents;
 		
 		AttachmentNode(const kj::Executor& executor, T&&... params) :
 			executor(executor.addRef()),
+			runner(getActiveThread().daemonRunner().addRef()),
 			contents(tuple(fwd<T>(params)...))
 		{}
 		

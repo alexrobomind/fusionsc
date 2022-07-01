@@ -341,15 +341,16 @@ namespace pybind11 { namespace detail {
 			if(!subCaster.load(src, convert))
 				return false;
 			
-			DynamicStruct::Builder dynamic = (DynamicStruct::Builder&) subCaster;
-			capnp::Schema staticSchema = fscpy::defaultLoader.importBuiltin<Builds>().asStruct();
-			
-			KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
-			capnp::AnyStruct::Builder any = dynamic;
-			
 			try {
+				DynamicStruct::Builder dynamic = (DynamicStruct::Builder&) subCaster;
+				capnp::StructSchema staticSchema = fscpy::defaultLoader.importBuiltin<Builds>().asStruct();
+				
+				KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
+				capnp::AnyStruct::Builder any = dynamic;
+			
 				value = any.as<Builds>();
 			} catch(kj::Exception e) {
+				KJ_LOG(WARNING, "Error during conversion", e);
 				return false;
 			}
 			
@@ -379,15 +380,16 @@ namespace pybind11 { namespace detail {
 			if(!subCaster.load(src, convert))
 				return false;
 			
-			DynamicStruct::Reader dynamic = (DynamicStruct::Reader&) subCaster;
-			capnp::Schema staticSchema = fscpy::defaultLoader.importBuiltin<Reads>().asStruct();
-			
-			KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
-			capnp::AnyStruct::Reader any = dynamic;
-			
 			try {
+				DynamicStruct::Reader dynamic = (DynamicStruct::Reader&) subCaster;
+				capnp::StructSchema staticSchema = fscpy::defaultLoader.importBuiltin<Reads>().asStruct();
+				
+				KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
+				capnp::AnyStruct::Reader any = dynamic;
+			
 				value = any.as<Reads>();
 			} catch(kj::Exception e) {
+				KJ_LOG(WARNING, "Error during conversion", e);
 				return false;
 			}
 			
@@ -452,16 +454,17 @@ namespace pybind11 { namespace detail {
 			if(!subCaster.load(src, convert))
 				return false;
 			
-			capnp::DynamicCapability::Client dynamic = (capnp::DynamicCapability::Client&) subCaster;
-			
-			capnp::Schema staticSchema = fscpy::defaultLoader.importBuiltin<Client>().asInterface();
-			
-			KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
-			capnp::Capability::Client any = dynamic;
-			
 			try {
+				capnp::DynamicCapability::Client dynamic = (capnp::DynamicCapability::Client&) subCaster;
+				
+				capnp::InterfaceSchema staticSchema = fscpy::defaultLoader.importBuiltin<Client>().asInterface();
+				
+				KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
+				capnp::Capability::Client any = dynamic;
+			
 				value = dynamic.castAs<ClientFor>();
 			} catch(kj::Exception e) {
+				KJ_LOG(WARNING, "Error during conversion", e);
 				return false;
 			}
 			

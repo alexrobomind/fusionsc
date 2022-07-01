@@ -21,9 +21,9 @@ struct PyContext {
 		return locked->get()->addRef();
 	}
 	
-	static inline LibraryThread libraryThread() {
+	static inline LibraryThread& libraryThread() {
 		startEventLoop();
-		return _libraryThread->addRef();
+		return _libraryThread;
 	}
 	
 	static inline kj::WaitScope& waitScope() {

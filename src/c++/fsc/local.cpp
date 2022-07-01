@@ -9,6 +9,8 @@ namespace fsc {
 
 void LibraryHandle::stopSteward() const {
 	KJ_LOG(WARNING, "LibraryHandle::stopSteward()");
+	_daemonRunner->disconnect();
+	KJ_LOG(WARNING, "DaemonRunner disconnected");
 	storeSteward.stop();
 }
 	
@@ -168,9 +170,13 @@ void DaemonRunner::disconnect() const {
 	KJ_IF_MAYBE(pConn, *locked) {
 		Own<const kj::Executor> executor = mv(pConn -> executor);
 		
-		executor -> executeSync([&locked]() {
-			*locked = nullptr;
-		});
+		try {
+			executor -> executeSync([&locked]() {
+				*locked = nullptr;
+			});
+		} catch(kj::Exception e) {
+			KJ_LOG(WARNING, "Exception in cleanup routine", e);
+		}
 	}
 }
 
