@@ -47,6 +47,8 @@ struct MainCls {
 	
 	kj::String outputName = kj::heapString("w7x-offline.fsc");
 	
+	bool _printOutput = false;
+	
 	MainCls(kj::ProcessContext& context):
 		context(context),
 		l(newLibrary()),
@@ -95,6 +97,11 @@ struct MainCls {
 	
 	bool setOutput(kj::StringPtr str) {
 		outputName = kj::heapString(str);
+		return true;
+	}
+	
+	bool printOutput() {
+		_printOutput = true;
 		return true;
 	}
 	
@@ -259,6 +266,10 @@ struct MainCls {
 		auto filePath = kj::Path::parse(outputName);
 		auto file = lt->filesystem().getCurrent().openFile(filePath, kj::WriteMode::CREATE | kj::WriteMode::MODIFY | kj::WriteMode::CREATE_PARENT);
 		
+		if(_printOutput) {
+			KJ_LOG(INFO, output);
+		}
+		
 		LocalDataService& ds = lt->dataService();
 		ds.writeArchive(
 			ds.publish(lt->randomID(), output.asReader()),
@@ -277,6 +288,7 @@ struct MainCls {
 			.addOptionWithArg({"mesh"}, KJ_BIND_METHOD(*this, addMesh), "<coilID>", "Download a single coil")
 			.addOptionWithArg({"assembly"}, KJ_BIND_METHOD(*this, addAssembly), "<coilID>", "Download a single coil")
 			.addOption({"default"}, KJ_BIND_METHOD(*this, addDefault), "Add default payloads (CAD coils, baseline configurations, most-used PFCs)")
+			.addOption({"printOutput"}, KJ_BIND_METHOD(*this, printOutput), "Print output builder")
 			.addOptionWithArg({"-o", "output"}, KJ_BIND_METHOD(*this, setOutput), "<output file name>", "Specify output file")
 			.callAfterParsing(KJ_BIND_METHOD(*this, run))
 			.build();
