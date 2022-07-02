@@ -209,6 +209,7 @@ struct MainCls {
 		for(auto it = configs.begin(); i < nConfigs; ++i, ++it) {
 			auto outConfig = outConfigs[i];
 			
+			KJ_LOG(INFO, "Waiting for config", i);
 			outConfig.setId(it->key);
 			outConfig.setConfig(it->value.wait(ws));
 		}
@@ -223,6 +224,7 @@ struct MainCls {
 			
 			auto result = it->value.wait(ws);
 			
+			KJ_LOG(INFO, "Waiting for assembly", i);
 			outAssembly.setId(it->key);
 			outAssembly.setAssembly(result.getComponents());
 		}
@@ -235,6 +237,7 @@ struct MainCls {
 		for(auto it = coils.begin(); i < nCoils; ++i, ++it) {
 			auto outCoil = outCoils[i];
 			
+			KJ_LOG(INFO, "Waiting for coil", i);
 			outCoil.setId(it->key);
 			outCoil.setFilament(it->value.wait(ws));
 		}
@@ -247,6 +250,7 @@ struct MainCls {
 		for(auto it = meshes.begin(); i < nMeshes; ++i, ++it) {
 			auto outMesh = outMeshes[i];
 			
+			KJ_LOG(INFO, "Waiting for mesh", i);
 			outMesh.setId(it->key);
 			outMesh.setComponent(it->value.wait(ws));
 		}
