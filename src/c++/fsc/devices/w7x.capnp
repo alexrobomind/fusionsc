@@ -63,13 +63,14 @@ struct ComponentsDBAssembly {
 
 # === Client-side JSON interface for CoilsDB ===
 
-struct CoilsDBCoil {
-	struct PLFilament {
-		x1 @0 : List(Float64);
-		x2 @1 : List(Float64);
-		x3 @2 : List(Float64);
+struct CoilsDBCoil {	
+	polylineFilament : group {
+		vertices : group {
+			x1 @0 : List(Float64);
+			x2 @1 : List(Float64);
+			x3 @2 : List(Float64);
+		}
 	}
-	polylineFilament @0 : PLFilament;
 }
 
 struct CoilsDBCoilInfo {

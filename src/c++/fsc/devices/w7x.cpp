@@ -436,9 +436,12 @@ struct CoilsDBWebservice : public CoilsDB::Server {
 		auto read = response.then([](auto response) { KJ_REQUIRE(response.statusCode == 200); return response.body->readAllText().attach(mv(response.body)); });
 		return read.then([context](kj::String rawJson) mutable {			
 			Temporary<CoilsDBCoil> tmp;
-			JsonCodec().decode(rawJson, tmp);
+			// JsonCodec().decode(rawJson, tmp);
+			JsonCodec codec;
+			codec.setRejectUnknownFields(true);
+			codec.decode(rawJson, tmp);
 			
-			auto plf = tmp.getPolylineFilament();
+			auto plf = tmp.getPolylineFilament().getVertices();
 			auto x1 = plf.getX1();
 			auto x2 = plf.getX2();
 			auto x3 = plf.getX3();
@@ -479,7 +482,7 @@ struct CoilsDBWebservice : public CoilsDB::Server {
 		return read.then([context](kj::String rawJson) mutable {			
 			Temporary<CoilsDBConfig> tmp;
 			JsonCodec().decode(rawJson, context.initResults());
-		}).attach(mv(headerTbl), mv(response), mv(client), thisCap());	
+		}).attach(mv(response), mv(client), thisCap());	
 	}
 };
 
@@ -595,7 +598,7 @@ struct ComponentsDBWebservice : public ComponentsDB::Server {
 		);
 		auto response = client->request(
 			kj::HttpMethod::GET,
-			kj::str(address, "/component/", context.getParams().getId(), "/data"),
+			kj::str(address, "/assembly/", context.getParams().getId(), "/data"),
 			HttpHeaders(*headerTbl)
 		).response;
 		
