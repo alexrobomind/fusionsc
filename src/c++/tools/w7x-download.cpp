@@ -196,8 +196,8 @@ struct MainCls {
 	
 	bool run() {
 		// Set up client
-		coilsFulfiller->fulfill(newCoilsDBFromWebservice(mv(coilsAddress), lt));
-		compsFulfiller->fulfill(newComponentsDBFromWebservice(mv(compsAddress), lt));
+		coilsFulfiller->fulfill(newCoilsDBFromWebservice(mv(coilsAddress)));
+		compsFulfiller->fulfill(newComponentsDBFromWebservice(mv(compsAddress)));
 		
 		Temporary<OfflineData> output;
 		
