@@ -16,7 +16,7 @@ using namespace fsc::devices::w7x;
 
 struct MainCls {
 	static constexpr auto DEFAULT_COILSDB_ADDRESS = "http://esb.ipp-hgw.mpg.de:8280/services/CoilsDBRest";
-	static constexpr auto DEFAULT_COMPSDB_ADDRESS = "http://esb.ipp-hgw.mpg.de:8280/services/ComponentsDBRest";
+	static constexpr auto DEFAULT_COMPSDB_ADDRESS = "http://esb.ipp-hgw.mpg.de:8280/services/ComponentsDbRest";
 	
 	// Fields initialized in the constructor
 	kj::ProcessContext& context;
