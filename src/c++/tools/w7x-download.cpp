@@ -16,7 +16,7 @@ using namespace fsc::devices::w7x;
 
 struct MainCls {
 	static constexpr auto DEFAULT_COILSDB_ADDRESS = "http://esb.ipp-hgw.mpg.de:8280/services/CoilsDBRest";
-	static constexpr auto DEFAULT_COMPSDB_ADDRESS = "http://esb.ipp-hgw.mpg.de:8280/services/ComponentsDBRest";
+	static constexpr auto DEFAULT_COMPSDB_ADDRESS = "http://esb.ipp-hgw.mpg.de:8280/services/ComponentsDbRest";
 	
 	// Fields initialized in the constructor
 	kj::ProcessContext& context;
@@ -46,6 +46,8 @@ struct MainCls {
 	Own<PromiseFulfiller<ComponentsDB::Client>> compsFulfiller;
 	
 	kj::String outputName = kj::heapString("w7x-offline.fsc");
+	
+	bool _printOutput = false;
 	
 	MainCls(kj::ProcessContext& context):
 		context(context),
@@ -95,6 +97,11 @@ struct MainCls {
 	
 	bool setOutput(kj::StringPtr str) {
 		outputName = kj::heapString(str);
+		return true;
+	}
+	
+	bool printOutput() {
+		_printOutput = true;
 		return true;
 	}
 	
@@ -196,8 +203,8 @@ struct MainCls {
 	
 	bool run() {
 		// Set up client
-		coilsFulfiller->fulfill(newCoilsDBFromWebservice(mv(coilsAddress), lt));
-		compsFulfiller->fulfill(newComponentsDBFromWebservice(mv(compsAddress), lt));
+		coilsFulfiller->fulfill(newCoilsDBFromWebservice(mv(coilsAddress)));
+		compsFulfiller->fulfill(newComponentsDBFromWebservice(mv(compsAddress)));
 		
 		Temporary<OfflineData> output;
 		
@@ -209,6 +216,7 @@ struct MainCls {
 		for(auto it = configs.begin(); i < nConfigs; ++i, ++it) {
 			auto outConfig = outConfigs[i];
 			
+			KJ_LOG(INFO, "Waiting for config", i);
 			outConfig.setId(it->key);
 			outConfig.setConfig(it->value.wait(ws));
 		}
@@ -223,6 +231,7 @@ struct MainCls {
 			
 			auto result = it->value.wait(ws);
 			
+			KJ_LOG(INFO, "Waiting for assembly", i);
 			outAssembly.setId(it->key);
 			outAssembly.setAssembly(result.getComponents());
 		}
@@ -235,6 +244,7 @@ struct MainCls {
 		for(auto it = coils.begin(); i < nCoils; ++i, ++it) {
 			auto outCoil = outCoils[i];
 			
+			KJ_LOG(INFO, "Waiting for coil", i);
 			outCoil.setId(it->key);
 			outCoil.setFilament(it->value.wait(ws));
 		}
@@ -247,6 +257,7 @@ struct MainCls {
 		for(auto it = meshes.begin(); i < nMeshes; ++i, ++it) {
 			auto outMesh = outMeshes[i];
 			
+			KJ_LOG(INFO, "Waiting for mesh", i);
 			outMesh.setId(it->key);
 			outMesh.setComponent(it->value.wait(ws));
 		}
@@ -254,6 +265,10 @@ struct MainCls {
 		// Write archive
 		auto filePath = kj::Path::parse(outputName);
 		auto file = lt->filesystem().getCurrent().openFile(filePath, kj::WriteMode::CREATE | kj::WriteMode::MODIFY | kj::WriteMode::CREATE_PARENT);
+		
+		if(_printOutput) {
+			KJ_LOG(INFO, output);
+		}
 		
 		LocalDataService& ds = lt->dataService();
 		ds.writeArchive(
@@ -273,6 +288,7 @@ struct MainCls {
 			.addOptionWithArg({"mesh"}, KJ_BIND_METHOD(*this, addMesh), "<coilID>", "Download a single coil")
 			.addOptionWithArg({"assembly"}, KJ_BIND_METHOD(*this, addAssembly), "<coilID>", "Download a single coil")
 			.addOption({"default"}, KJ_BIND_METHOD(*this, addDefault), "Add default payloads (CAD coils, baseline configurations, most-used PFCs)")
+			.addOption({"printOutput"}, KJ_BIND_METHOD(*this, printOutput), "Print output builder")
 			.addOptionWithArg({"-o", "output"}, KJ_BIND_METHOD(*this, setOutput), "<output file name>", "Specify output file")
 			.callAfterParsing(KJ_BIND_METHOD(*this, run))
 			.build();
