@@ -24,14 +24,8 @@ CoilsDB::Client newCoilsDBFromWebservice(kj::StringPtr addressPrefix);
 
 ComponentsDB::Client newComponentsDBFromWebservice(kj::StringPtr address);
 
-CoilsDB::Client newCoilsDBFromOfflineData(
-	ArrayPtr<LocalDataRef<OfflineData>> offlineData
-);
-
-
-ComponentsDB::Client newComponentsDBFromOfflineData(
-	ArrayPtr<LocalDataRef<OfflineData>> offlineData
-);
+CoilsDB::Client newCoilsDBFromOfflineData(LocalDataRef<OfflineData> offlineData);
+ComponentsDB::Client newComponentsDBFromOfflineData(LocalDataRef<OfflineData> offlineData);
 
 kj::Array<Temporary<MagneticField>> preheatFields(W7XCoilSet::Reader coils);
 

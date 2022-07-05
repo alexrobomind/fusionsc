@@ -610,19 +610,17 @@ struct ComponentsDBWebservice : public ComponentsDB::Server {
 };
 
 struct OfflineCoilsDB : public CoilsDB::Server {
-	Array<LocalDataRef<OfflineData>> offlineData;
+	LocalDataRef<OfflineData> offlineData;
 	
-	OfflineCoilsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData) :
-		offlineData(kj::heapArray(offlineData))
+	OfflineCoilsDB(LocalDataRef<OfflineData> offlineData) :
+		offlineData(mv(offlineData))
 	{}
 	
 	Promise<void> getCoil(GetCoilContext context) override {
-		for(auto& entry : offlineData) {
-			for(auto coilEntry : entry.get().getW7xCoils()) {
-				if(coilEntry.getId() == context.getParams().getId()) {
-					context.setResults(coilEntry.getFilament());
-					return kj::READY_NOW;
-				}
+		for(auto coilEntry : offlineData.get().getW7xCoils()) {
+			if(coilEntry.getId() == context.getParams().getId()) {
+				context.setResults(coilEntry.getFilament());
+				return kj::READY_NOW;
 			}
 		}
 		
@@ -630,12 +628,10 @@ struct OfflineCoilsDB : public CoilsDB::Server {
 	}
 	
 	Promise<void> getConfig(GetConfigContext context) override {
-		for(auto& entry : offlineData) {
-			for(auto configEntry : entry.get().getW7xConfigs()) {
-				if(configEntry.getId() == context.getParams().getId()) {
-					context.setResults(configEntry.getConfig());
-					return kj::READY_NOW;
-				}
+		for(auto configEntry : offlineData.get().getW7xConfigs()) {
+			if(configEntry.getId() == context.getParams().getId()) {
+				context.setResults(configEntry.getConfig());
+				return kj::READY_NOW;
 			}
 		}
 		
@@ -644,19 +640,17 @@ struct OfflineCoilsDB : public CoilsDB::Server {
 };
 
 struct OfflineComponentsDB : public ComponentsDB::Server {
-	Array<LocalDataRef<OfflineData>> offlineData;
+	LocalDataRef<OfflineData> offlineData;
 	
-	OfflineComponentsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData) :
-		offlineData(kj::heapArray(offlineData))
+	OfflineComponentsDB(LocalDataRef<OfflineData> offlineData) :
+		offlineData(mv(offlineData))
 	{}
 	
 	Promise<void> getMesh(GetMeshContext context) override {
-		for(auto& entry : offlineData) {
-			for(auto componentEntry : entry.get().getW7xComponents()) {
-				if(componentEntry.getId() == context.getParams().getId()) {
-					context.setResults(componentEntry.getComponent());
-					return kj::READY_NOW;
-				}
+		for(auto componentEntry : offlineData.get().getW7xComponents()) {
+			if(componentEntry.getId() == context.getParams().getId()) {
+				context.setResults(componentEntry.getComponent());
+				return kj::READY_NOW;
 			}
 		}
 		
@@ -664,12 +658,10 @@ struct OfflineComponentsDB : public ComponentsDB::Server {
 	}
 	
 	Promise<void> getAssembly(GetAssemblyContext context) override {
-		for(auto& entry : offlineData) {
-			for(auto assemblyEntry : entry.get().getW7xAssemblies()) {
-				if(assemblyEntry.getId() == context.getParams().getId()) {
-					context.initResults().setComponents(assemblyEntry.getAssembly());
-					return kj::READY_NOW;
-				}
+		for(auto assemblyEntry : offlineData.get().getW7xAssemblies()) {
+			if(assemblyEntry.getId() == context.getParams().getId()) {
+				context.initResults().setComponents(assemblyEntry.getAssembly());
+				return kj::READY_NOW;
 			}
 		}
 		
@@ -687,12 +679,12 @@ ComponentsDB::Client newComponentsDBFromWebservice(kj::StringPtr address) {
 	return ComponentsDB::Client(kj::heap<ComponentsDBWebservice>(address));
 }
 
-CoilsDB::Client newOfflineCoilsDB(ArrayPtr<LocalDataRef<OfflineData>> offlineData) {
-	return CoilsDB::Client(kj::heap<OfflineCoilsDB>(offlineData));
+CoilsDB::Client newOfflineCoilsDB(LocalDataRef<OfflineData> offlineData) {
+	return CoilsDB::Client(mv(offlineData));
 }
 
-ComponentsDB::Client newComponentsDBFromOfflineData(ArrayPtr<LocalDataRef<OfflineData>> offlineData) {
-	return ComponentsDB::Client(kj::heap<OfflineComponentsDB>(offlineData));
+ComponentsDB::Client newComponentsDBFromOfflineData(LocalDataRef<OfflineData> offlineData) {
+	return ComponentsDB::Client(mv(offlineData));
 }
 
 kj::Array<Temporary<MagneticField>> preheatFields(W7XCoilSet::Reader coils) {
