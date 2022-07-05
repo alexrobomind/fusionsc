@@ -70,7 +70,12 @@ struct PyPromise {
 	{}
 	
 	inline Promise<py::object> get() {
-		return holder.addBranch().then([](Own<PyObjectHolder> holder) { return holder->content; });
+		return holder.addBranch().then([](Own<PyObjectHolder> holder) {
+			py::gil_scoped_acquire withGIL;
+			
+			py::object increasedRefcount = holder->content;
+			return increasedRefcount; // Either move-returned or RVO'd, so this doesnt change refcount and therefore doesnt need GIL
+		});
 	}
 	
 	inline operator Promise<py::object>() {

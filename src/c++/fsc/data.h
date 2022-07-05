@@ -253,6 +253,18 @@ public:
 	
 	///@}
 	
+	//! \name Limit configuration
+	///@{
+		
+	struct Limits {
+		uint64_t maxRAMObjectSize = 100000000; // Store up to 100MB in Ram
+		Maybe<uint64_t> ramRemaining = nullptr; // Sets the remaining RAM budget. After this amount of RAM is requested, switch to file-backed allocation
+	};
+	
+	void setLimits(Limits limits);	
+	
+	///@}
+	
 	/**
 	 * Constructs a new data service instance using the shared backing store contained in the given
 	 * library handle.

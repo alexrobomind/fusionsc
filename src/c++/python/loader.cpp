@@ -184,7 +184,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		
 		// attributes["__slots__"] = py::make_tuple("_msg");
 			
-		py::object newCls = (*baseMetaType)(kj::str(structName, ".", suffix).cStr(), py::make_tuple(baseClass, mappingAbstractBaseClass), attributes);
+		py::object newCls = (*baseMetaType)(kj::str(structName, ".", suffix).cStr(), py::make_tuple(baseClass /*, mappingAbstractBaseClass*/), attributes);
 				
 		output.attr(suffix.cStr()) = newCls;
 	}
@@ -724,7 +724,6 @@ void extractBrand(capnp::Schema in, capnp::schema::Brand::Builder out) {
 
 // ================== Implementation of fscpy::Loader =====================
 
-
 bool fscpy::Loader::importNode(uint64_t nodeID, py::module scope) {
 	auto obj = interpretSchema(capnpLoader, nodeID, scope);
 	auto schema = capnpLoader.get(nodeID);
@@ -774,48 +773,7 @@ capnp::Schema fscpy::Loader::import(capnp::Schema input) {
 	
 	return importedSchema;
 }
-/*
-capnp::Schema fscpy::Loader::extract(capnp::Schema input) {
-	auto id = input.getProto().getId();
-	
-	// Find all potential scopes
-	kj::Vector<uint64_t> scopes;
-	scopes.add(id);
-	
-	while(true) {
-		auto prev = scopes[scopes.size() - 1];
-		KJ_IF_MAYBE(pSchema, capnpLoader.tryGet(prev)) {
-			auto scopeId = pSchema->getProto().getScopeId();
-			
-			if(scopeId == 0)
-				break;
-			
-			scopes.add(scopeId);
-		} else {
-			break;
-		}
-	}
-	
-	// Extract all bindings
-	kj::Vector<capnp::Schema::BrandArgumentList> arguments;
-	arguments.reserve(scopes.size());
-	
-	for(auto scope : scopes)
-		arguments.add(schema.getBrandArgumentsAtScope(scope));
-	
-	Temporary<capnp::schema::Brand> brand;
-	auto brandScopes = brand.initScopes(scopes.size());
-	for(auto iScope : kj::range(0, scopes.size())) {
-		auto& scopeArgs = arguments[iScope];
-		
-		auto brandScope = brandScopes[iScope];
-		brandScope.setScopeId(scopes[iScope]);
-		
-		auto brandBindings = brandScope.initBindings(scopeArgs.size());
-		for(auto iArg : kj::range(0, scopeArgs.size())) {
-			brandBindings[iArg].setType(
-		}
-	}
-}*/
 
 fscpy::Loader fscpy::defaultLoader;
+
+void fscpy::initLoader(py::module_& m) {}

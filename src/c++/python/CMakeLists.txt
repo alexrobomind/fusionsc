@@ -5,11 +5,12 @@ if(FSC_WITH_PYTHON)
 		capnp.cpp
 		kj.cpp
 		fscpy.cpp
-		load_schema.cpp
 		async.cpp
 		loader.cpp
 		data.cpp
 		devices.cpp
+		
+		service.cpp
 	)
 
 	target_link_libraries(

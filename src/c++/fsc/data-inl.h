@@ -21,6 +21,52 @@ FSC_DECLARE_TENSOR(double,  Float64Tensor);
 
 #undef FSC_DECLARE_TENSOR
 
+struct MMapTemporary {
+	int64_t dedicatedObjectSize = 1024 * 1024;
+	int64_t fileSize = 1024 * 1024 * 20;
+	
+	inline kj::Array<byte> request(size_t size) {
+		KJ_REQUIRE(fileSize >= dedicatedObjectSize);
+		
+		if(size >= dedicatedObjectSize) {
+			// Otherwise, if the object is big, give it is own file
+			auto mapping = dir->createTemporary()->mmapWritable(0, size);
+			
+			auto ptr = mapping->get();
+			return ptr.attach(mv(mapping));
+		} 
+		
+		// Check if we can stuff the object into the remainder of this file
+		if(offset + size >= fileSize) {
+			reset();
+		}
+		
+		return alloc(size);
+	};
+	
+	inline MMapTemporary(Own<const kj::Directory> dir) : dir(mv(dir)) {
+		reset();
+	}
+	
+private:
+	inline void reset() {
+		offset = 0;
+		file = dir->createTemporary();
+	}
+	
+	kj::Array<byte> alloc(uint64_t size) {
+		auto mapping = file->mmapWritable(offset, size);
+		offset += size;
+		
+		auto ptr = mapping->get();
+		return ptr.attach(mv(mapping));
+	}		
+	
+	uint64_t offset = 0;
+	Own<const kj::File> file;
+	Own<const kj::Directory> dir;
+};
+
 /**
  * Backend implementation of the local data service.
  */
@@ -45,12 +91,17 @@ public:
 	Promise<void> clone(CloneContext context) override;
 	Promise<void> store(StoreContext context) override;
 	
+	inline void setLimits(LocalDataService::Limits newLimits);
+	
 private:
 	Promise<LocalDataRef<capnp::AnyPointer>> doDownload(DataRef<capnp::AnyPointer>::Client src, bool recursive);
 	Promise<Archive::Entry::Builder> createArchiveEntry(DataRef<capnp::AnyPointer>::Client ref, kj::TreeMap<ID, capnp::Orphan<Archive::Entry>>& entries, capnp::Orphanage orphanage, Maybe<Nursery&> nursery);
 	
 	capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> serverSet;
 	Library library;
+	
+	LocalDataService::Limits limits;
+	MMapTemporary fileBackedMemory;
 	
 	friend class LocalDataRefImpl;
 };

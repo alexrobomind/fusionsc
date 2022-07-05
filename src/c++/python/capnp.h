@@ -1,3 +1,5 @@
+#pragma once
+
 #include "fscpy.h"
 
 #include <capnp/any.h>
@@ -47,6 +49,8 @@ struct DynamicStructPipeline {
 	{}
 	
 	inline DynamicStructPipeline(DynamicStructPipeline&& other) = default;
+	
+	inline capnp::StructSchema getSchema() { return schema; }
 	
 	DynamicValuePipeline get(capnp::StructSchema::Field field);
 	DynamicValuePipeline get(kj::StringPtr fieldName);

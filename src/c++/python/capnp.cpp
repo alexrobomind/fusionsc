@@ -366,6 +366,10 @@ void defGet(py::class_<T, Extra...>& c) {
 	
 	c.def("get", genericGet);
 	c.def("__getitem__", genericGet);
+	
+	// Register class as ABC
+	auto abcModule = py::module_::import("collections.abc");
+	abcModule.attr("Mapping").attr("register")(c);
 }
 
 template<typename T, typename... Extra>
@@ -431,6 +435,21 @@ void bindStructClasses(py::module_& m) {
 		size_t result = schema.getNonUnionFields().size();
 		if(schema.getUnionFields().size() > 0)
 			result += 1;
+		
+		return result;
+	});
+	
+	cDSB.def("items", [](DSB& reader) {
+		py::list result;
+		
+		auto schema = reader.getSchema();
+		
+		for(auto field : schema.getNonUnionFields())
+			result.append(py::make_tuple(field.getProto().getName(), reader.get(field)));
+		
+		KJ_IF_MAYBE(pField, reader.which()) {
+			result.append(py::make_tuple(pField->getProto().getName(), reader.get(*pField)));
+		}
 		
 		return result;
 	});
@@ -510,6 +529,21 @@ void bindStructClasses(py::module_& m) {
 		return py::eval("iter")(result);
 	});
 	
+	cDSR.def("items", [](DSR& reader) {
+		py::list result;
+		
+		auto schema = reader.getSchema();
+		
+		for(auto field : schema.getNonUnionFields())
+			result.append(py::make_tuple(field.getProto().getName(), reader.get(field)));
+		
+		KJ_IF_MAYBE(pField, reader.which()) {
+			result.append(py::make_tuple(pField->getProto().getName(), reader.get(*pField)));
+		}
+		
+		return result;
+	});
+	
 	cDSR.def("clone", [](DSR& self) {
 		auto msg = new capnp::MallocMessageBuilder();
 		msg->setRoot(self);
@@ -555,6 +589,17 @@ void bindStructClasses(py::module_& m) {
 		}
 		
 		return py::eval("iter")(result);
+	});
+	
+	cDSP.def("items", [](DSP& reader) {
+		py::list result;
+		
+		auto schema = reader.getSchema();
+		
+		for(auto field : schema.getNonUnionFields())
+			result.append(py::make_tuple(field.getProto().getName(), reader.get(field)));
+		
+		return result;
 	});
 	
 	
@@ -645,6 +690,22 @@ void bindEnumClasses(py::module_& m) {
 
 namespace fscpy {
 	
+// init method
+
+void initCapnp(py::module_& m) {
+	py::module_ mcapnp = m.def_submodule("capnp");
+	
+	bindListClasses(mcapnp);
+	bindBlobClasses(mcapnp);
+	bindStructClasses(mcapnp);
+	bindFieldDescriptors(mcapnp);
+	bindMessageBuilders(mcapnp);
+	bindCapClasses(mcapnp);
+	bindEnumClasses(mcapnp);
+	
+	m.add_object("void", py::cast(capnp::DynamicValue::Reader(capnp::Void())));
+}
+	
 // class DynamicValuePipeline
 
 DynamicStructPipeline DynamicValuePipeline::asStruct() {
@@ -695,20 +756,6 @@ DynamicValuePipeline DynamicStructPipeline::get(kj::StringPtr name) {
 	} else {
 		KJ_FAIL_REQUIRE("Field not found", name);
 	}
-}
-
-void bindCapnpClasses(py::module_& m) {
-	py::module_ mcapnp = m.def_submodule("capnp");
-	
-	bindListClasses(mcapnp);
-	bindBlobClasses(mcapnp);
-	bindStructClasses(mcapnp);
-	bindFieldDescriptors(mcapnp);
-	bindMessageBuilders(mcapnp);
-	bindCapClasses(mcapnp);
-	bindEnumClasses(mcapnp);
-	
-	m.add_object("void", py::cast(capnp::DynamicValue::Reader(capnp::Void())));
 }
 
 }

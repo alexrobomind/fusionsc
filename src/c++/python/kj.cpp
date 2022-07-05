@@ -49,7 +49,7 @@ void defArray(kj::StringPtr name, py::module_ m) {
 }
 
 namespace fscpy {
-	void bindKJClasses(py::module_& m) {
+	void initKj(py::module_& m) {
 		py::module_ mkj = m.def_submodule("kj");
 		
 		defArray<kj::byte>("ByteArray", mkj);

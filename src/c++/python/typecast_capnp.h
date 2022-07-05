@@ -15,8 +15,16 @@
 //
 //   capnp::DynamicValue::Builder
 //   capnp::DynamicValue::Reader
-//   capnp::DynamicValue::Pipeline
 //   capnp::DynamicCapability::Client
+//
+//   capnp struct readers
+//   capnp struct builders
+//   capnp capabilities
+//
+//   fsc::Temporary<...>
+//
+//   fscpy::DynamicValuePipeline
+//   fscpy::DynamicStructPipeline
 
 namespace pybind11 { namespace detail {
 	

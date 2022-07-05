@@ -10,7 +10,6 @@ namespace py = pybind11;
 namespace fscpy {
 	using namespace fsc;
 
-	// Bound in data.cpp
 	struct UnknownObject {
 		inline virtual ~UnknownObject() {};
 	};
@@ -22,14 +21,19 @@ namespace fscpy {
 		~UnknownHolder () noexcept {}
 	};
 	
-	void bindCapnpClasses(py::module_& m);
-	void bindKJClasses(py::module_& m);
-	void bindAsyncClasses(py::module_& m);
-	void bindDataClasses(py::module_& m);
-	void loadDefaultSchema(py::module_& m);
-	void bindDevices(py::module_& m);
+	// Init methods for various components
+	void initAsync(py::module_& m);
+	void initCapnp(py::module_& m);
+	void initData(py::module_& m);
+	void initDevices(py::module_& m);
+	void initKj(py::module_& m);
+	void initLoader(py::module_& m);	
+	void initService(py::module_& m);
 	
-	constexpr inline kj::StringPtr INTERNAL_ACCESS_KEY = "9821736419873251235"_kj;
+	// Defined in service.cpp
+	void loadDefaultSchema(py::module_& m);
+	
+	// constexpr inline kj::StringPtr INTERNAL_ACCESS_KEY = "9821736419873251235"_kj;
 	
 	py::object methodDescriptor(py::object method);
 	py::object simpleObject();

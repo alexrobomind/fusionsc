@@ -11,7 +11,7 @@ fsc::ToroidalGrid::Reader w7xDefaultGrid() {
 }
 
 namespace fscpy {
-	void bindDevices(py::module_& root) {
+	void initDevices(py::module_& root) {
 		py::module_ devices = root.def_submodule("devices");
 		py::module_ w7x = devices.def_submodule("w7x");
 		

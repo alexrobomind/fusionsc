@@ -28,49 +28,37 @@ using namespace fscpy;
 
 namespace {
 
-/*
-template<typename... T>
-auto getAndAddBuiltin() {
-	defaultLoader.addBuiltin<T...>();
-	return getBuiltinSchemas<T...>();
-}
-*/
-
-RootService::Client connectLocal1(RootConfig::Reader config) {
+RootService::Client connectSameThread1(RootConfig::Reader config) {
 	fscpy::PyContext::startEventLoop();
 	return createRoot(config);
 }
-
 	
-RootService::Client connectLocal2() {
+RootService::Client connectSameThread2() {
 	Temporary<RootConfig> config;
-	return connectLocal1(config);
+	return connectSameThread1(config);
 }
 
 RootService::Client connectRemote1(kj::StringPtr address, unsigned int port) {
 	fscpy::PyContext::startEventLoop();
+	KJ_UNIMPLEMENTED("Remote connection not implemented");
 	return connectRemote(address, port);
 }
 
 }
 
 namespace fscpy {
-
-void loadDefaultSchema(py::module_& m) {
-	defaultLoader.addBuiltin<ToroidalGrid, MagneticField, RootService>();
-	auto schemas = getBuiltinSchemas<RootService>();
-	
-	/*for(auto node : schemas) {
-		defaultLoader.add(node);
-	}*/
-	
-	for(auto node : schemas) {
-		defaultLoader.importNodeIfRoot(node.getId(), m);
+	void initService(py::module_& m) {	
+		m.def("connectSameThread", &connectSameThread1);
+		m.def("connectSameThread", &connectSameThread2);
+		m.def("connectSameThread", &connectRemote1, py::arg("address"), py::arg("port") = 0);
 	}
-	
-	m.def("connectLocal", &connectLocal1);
-	m.def("connectLocal", &connectLocal2);
-	m.def("connectLocal", &connectRemote1, py::arg("address"), py::arg("port") = 0);
-}
 
+	void loadDefaultSchema(py::module_& m) {
+		defaultLoader.addBuiltin<ToroidalGrid, MagneticField, RootService>();
+		auto schemas = getBuiltinSchemas<RootService>();
+			
+		for(auto node : schemas) {
+			defaultLoader.importNodeIfRoot(node.getId(), m);
+		}
+	}
 }

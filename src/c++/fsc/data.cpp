@@ -55,6 +55,8 @@ LocalDataService& LocalDataService::operator=(LocalDataService&& other) {
 	return *this;
 }
 
+void LocalDataService::setLimits(Limits newLimits) { impl->setLimits(newLimits); }
+
 /*LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, Array<const byte>&& data) {
 	return impl->publish(
 		id,
@@ -198,11 +200,16 @@ capnp::FlatArrayMessageReader& internal::LocalDataRefImpl::ensureReader() {
 
 internal::LocalDataServiceImpl::LocalDataServiceImpl(Library& lib) :
 	library(lib -> addRef()),
-	downloadPool(65536)
+	downloadPool(65536),
+	fileBackedMemory(kj::newDiskFilesystem()->getCurrent().clone())
 {}
 
 Own<internal::LocalDataServiceImpl> internal::LocalDataServiceImpl::addRef() {
 	return kj::addRef(*this);
+}
+
+void internal::LocalDataServiceImpl::setLimits(LocalDataService::Limits newLimits) {
+	limits = newLimits;
 }
 
 Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::download(DataRef<capnp::AnyPointer>::Client src, bool recursive) {

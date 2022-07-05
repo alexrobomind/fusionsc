@@ -13,6 +13,8 @@ kj::Own<py::dict> globalClasses;
 kj::Own<py::type> baseType;
 kj::Own<py::type> baseMetaType;
 
+// ============================= Helper classes ===========================
+
 namespace {
 
 struct BoundMethod {
@@ -49,6 +51,26 @@ void helperFunctions(py::module_& m) {
 
 struct Simple {};
 
+void bindHelperClasses(py::module_& m) {
+	auto helpersModule = m.def_submodule("_helpers", "Internal helper classes");
+	
+	py::class_<BoundMethod>(helpersModule, "_BoundMethod")
+		.def("__call__", &BoundMethod::call)
+	;
+	
+	py::class_<UnknownObject>(helpersModule, "UnknownObject");
+	
+	py::class_<MethodDescriptor>(helpersModule, "MethodDescriptor", py::dynamic_attr())
+		.def("__get__", &MethodDescriptor::get)
+		.def("__repr__", [](py::object self) { return "Method"; })
+	;
+	
+	py::class_<Simple>(helpersModule, "Simple", py::dynamic_attr())
+		//.def("__str__", [](py::object self) { return py::hasattr(self, "desc") ? (py::str) self.attr("desc") : "<Unknown simple object>" ; })
+		.def("__repr__", [](py::object self) { return py::hasattr(self, "desc") ? (py::str) self.attr("desc") : "<Unknown simple object>" ; })
+	;
+}
+
 }
 
 namespace fscpy {
@@ -67,44 +89,38 @@ PYBIND11_MODULE(fscpy, m) {
 	// Creating a temporary ClientHook initializes a run-time
 	// link between the capnp library and the capnp-rpc library
 	(void) capnp::newBrokenCap("Don't look at me. I'm shy.");
-		
-	py::class_<BoundMethod>(m, "_BoundMethod")
-		.def("__call__", &BoundMethod::call)
-	;
 	
-	py::class_<MethodDescriptor>(m, "_MethodDescriptor", py::dynamic_attr())
-		.def("__get__", &MethodDescriptor::get)
-		.def("__repr__", [](py::object self) { return "Method"; })
-	;
-	
-	py::class_<Simple>(m, "_Simple", py::dynamic_attr())
-		//.def("__str__", [](py::object self) { return py::hasattr(self, "desc") ? (py::str) self.attr("desc") : "<Unknown simple object>" ; })
-		.def("__repr__", [](py::object self) { return py::hasattr(self, "desc") ? (py::str) self.attr("desc") : "<Unknown simple object>" ; })
-	;
-	
+	// Perform run-time initialization of python-related globals
 	globalClasses = kj::heap<py::dict>();
 	
+	// Create global meta class
 	baseType = kj::heap<py::type>(py::eval("type('FSCPyObject', (object,), {})"));
-	
 	py::type standardMeta    = py::reinterpret_borrow<py::type>(reinterpret_cast<PyObject*>(&PyType_Type));
-	py::type collectionsMeta = py::type::of(py::module_::import("collections.abc").attr("Mapping"));
+	/* py::type collectionsMeta = py::type::of(py::module_::import("collections.abc").attr("Mapping"));
 	
 	py::dict metaAttributes;
 	metaAttributes["__module__"] = "fscpy";
 	
 	baseMetaType = kj::heap<py::type>(standardMeta(
 		"MetaClass", py::make_tuple(collectionsMeta, standardMeta), metaAttributes
-	));
+	));*/
+	baseMetaType = kj::heap<py::type>(standardMeta);
 	
-	bindKJClasses(m);
-	bindCapnpClasses(m);
-	bindAsyncClasses(m);
-	bindDataClasses(m);
-	bindDevices(m);
-	
-	loadDefaultSchema(m);
-	
+	// Helper classes
+	bindHelperClasses(m);
 	helperFunctions(m);
+	
+	// Initialize bindings for all components
+	initKj(m);
+	initAsync(m);
+	initCapnp(m);
+	initData(m);
+	initLoader(m);	
+	initDevices(m);
+	initService(m);
+	
+	// Load built-in schema
+	loadDefaultSchema(m);
 	
 	auto atexitModule = py::module_::import("atexit");
 	atexitModule.attr("register")(py::cpp_function(&atExitFunction));

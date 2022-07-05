@@ -20,7 +20,7 @@ namespace {
 
 namespace fscpy {
 
-void bindAsyncClasses(py::module_& m) {
+void initAsync(py::module_& m) {
 	py::class_<PyPromise>(m, "Promise", py::multiple_inheritance(), py::metaclass(*baseMetaType))
 		.def(py::init([](PyPromise& other) { return PyPromise(other); }))
 		.def("wait", &PyPromise::wait)
