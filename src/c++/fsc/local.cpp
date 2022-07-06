@@ -376,9 +376,13 @@ namespace {
 				mine.inQueue.add(e);
 			}
 			
-			auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-			locked -> newInputsReady = mv(paf.fulfiller);
-			mine.newInputsReady = mv(paf.promise);
+			KJ_IF_MAYBE(pErr, locked->sendError) {
+				mine.newInputsReady = *pErr:
+			} else {
+				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+				locked -> newInputsReady = mv(paf.fulfiller);
+				mine.newInputsReady = mv(paf.promise);
+			}
 		}
 		
 		Promise<void> pump() {
