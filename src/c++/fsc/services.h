@@ -6,6 +6,17 @@
 
 namespace fsc {
 
+kj::Function<capnp::Capability::Client()> newInProcessServer(kj::Function<capnp::Capability::Client()> serviceFactory);
+
+template<typename T>
+kj::Function<typename T::Client()> newInProcessServer(kj::Function<typename T::Client()> factory) {
+	auto backend = newInProcessServer([factory = mv(factory)]() mutable -> capnp::Capability::Client { return factory(); });
+	
+	return [backend = mv(backend)]() mutable {
+		return backend().template castAs<T>();
+	};
+}
+
 RootService::Client createRoot(RootConfig::Reader config);
 
 ResolverChain::Client newResolverChain();

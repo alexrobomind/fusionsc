@@ -170,27 +170,34 @@ class DefaultErrorHandler : public kj::TaskSet::ErrorHandler {
 	}
 };
 
-struct InProcessServerImpl {
+struct InProcessServerImpl : public kj::AtomicRefcounted {
 	using Service = capnp::Capability;
 	using Factory = kj::Function<Service::Client()>;
 	
 	Library library;
-	Factory factory;
+	mutable Factory factory;
 	kj::Thread thread;
 	
 	Own<const kj::Executor> executor;
-	MutexGuarded<bool> ready = false;
+	kj::MutexGuarded<bool> ready;
 	
 	Own<CrossThreadPromiseFulfiller<void>> doneFulfiller;
 		
-	InProcessServer(const Library& library, kj::Function<capnp::Capability::Client()> factory) :
-		library(library->addRef()),
-		factory(factory),
-		thread(KJ_BIND_METHOD(*this, run))
+	InProcessServerImpl(kj::Function<capnp::Capability::Client()> factory) :
+		library(getActiveThread().library()->addRef()),
+		factory(mv(factory)),
+		thread(KJ_BIND_METHOD(*this, run)),
+		ready(false)
 	{
-		auto locked = ready.lock();
+		auto locked = ready.lockExclusive();
 		locked.wait([](bool ready) { return ready; });
 	}
+	
+	~InProcessServerImpl() {
+		doneFulfiller->fulfill();
+	}
+	
+	Own<const InProcessServerImpl> addRef() const { return kj::atomicAddRef(*this); }
 	
 	void run() {
 		// Initialize event loop
@@ -201,7 +208,7 @@ struct InProcessServerImpl {
 		Promise<void> donePromise = READY_NOW;
 		
 		{
-			auto locked = ready.lock();
+			auto locked = ready.lockExclusive();
 			executor = kj::getCurrentThreadExecutor().addRef();
 			*locked = true;
 			
@@ -213,16 +220,39 @@ struct InProcessServerImpl {
 		donePromise.wait(ws);
 	}
 	
-	Service::Client accept() {
-		auto pipe = getActiveThread().ioContext().provider->newTwoWayPipe();
+	Service::Client connect() const {
+		using capnp::TwoPartyVatNetwork;
+		using capnp::RpcSystem;
+		using capnp::rpc::twoparty::VatId;
+		using capnp::rpc::twoparty::Side;
 		
+		// auto pipe = getActiveThread().ioContext().provider->newTwoWayPipe();
+				
 		// Create server
-		auto serverRunnable = [stream = mv(pipe.ends[1]), this]() {
-			using capnp::TwoPartyVatNetwork;
-			using capnp::rpc::twoparty::VatId;
+		auto serverRunnable = [stream = mv(pipe.ends[1]), srv = this->addRef()]() mutable -> Promise<void> {
+			KJ_DBG("Creating server");
 			// Create RPC server on stream
-			auto vatNetwork = heapHeld<capnp
+			auto vatNetwork = heapHeld<TwoPartyVatNetwork>(*stream, Side::SERVER);
+			auto rpcSystem  = heapHeld<RpcSystem<VatId>>(capnp::makeRpcServer(*vatNetwork, srv->factory()));
+			
+			return vatNetwork->onDisconnect().attach(mv(srv), mv(stream), vatNetwork.x(), rpcSystem.x());
 		};
+		
+		auto serverDone = executor->executeAsync(mv(serverRunnable));
+		
+		// Create connection
+		auto stream = mv(pipe.ends[0]);
+		
+		auto vatNetwork = heapHeld<TwoPartyVatNetwork>(*stream, Side::CLIENT);
+		auto rpcClient  = heapHeld<RpcSystem<VatId>>(capnp::makeRpcClient(*vatNetwork));
+		
+		// Retrieve server's bootstrap interface
+		Temporary<VatId> serverID;
+		serverID.setSide(Side::SERVER);
+		auto interface = rpcClient->bootstrap(serverID);
+		
+		return attach(interface, rpcClient.x(), vatNetwork.x(), mv(stream), mv(serverDone));
+	}
 };
 
 struct ServerImpl : public fsc::Server {
@@ -256,7 +286,7 @@ struct ServerImpl : public fsc::Server {
 			auto rpcSystem = heapHeld<capnp::RpcSystem<capnp::rpc::twoparty::VatId>>(capnp::makeRpcServer(*vatNetwork, rootInterface));
 			
 			// Run until the underlying connection disconnects
-			return vatNetwork->onDisconnect().attach(vatNetwork.x(), rpcSystem.x(), mv(connection));
+			return vatNetwork->onDisconnect().attach(mv(connection), vatNetwork.x(), rpcSystem.x());
 		});
 		
 		tasks.add(mv(task));
@@ -289,6 +319,15 @@ struct ServerImpl : public fsc::Server {
 };
 	
 
+}
+
+
+kj::Function<capnp::Capability::Client()> fsc::newInProcessServer(kj::Function<capnp::Capability::Client()> serviceFactory) {
+	auto server = kj::atomicRefcounted<InProcessServerImpl>(mv(serviceFactory));
+	
+	return [server = mv(server)]() mutable {
+		return server->connect();
+	};
 }
 
 RootService::Client fsc::createRoot(RootConfig::Reader config) {

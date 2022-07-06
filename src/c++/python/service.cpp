@@ -44,12 +44,24 @@ RootService::Client connectRemote1(kj::StringPtr address, unsigned int port) {
 	return connectRemote(address, port);
 }
 
+RootService::Client connectLocal1() {
+	fscpy::PyContext::startEventLoop();
+	auto serverFactory = newInProcessServer<RootService>([]() mutable {
+		Temporary<RootConfig> rootConfig;
+		return createRoot(rootConfig);
+	});
+	
+	auto server = serverFactory();
+	return attach(server, mv(serverFactory));
+}
+
 }
 
 namespace fscpy {
 	void initService(py::module_& m) {	
 		m.def("connectSameThread", &connectSameThread1);
 		m.def("connectSameThread", &connectSameThread2);
+		m.def("connectLocal", &connectLocal1);
 		m.def("connectSameThread", &connectRemote1, py::arg("address"), py::arg("port") = 0);
 	}
 
