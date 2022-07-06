@@ -170,6 +170,61 @@ class DefaultErrorHandler : public kj::TaskSet::ErrorHandler {
 	}
 };
 
+struct InProcessServerImpl {
+	using Service = capnp::Capability;
+	using Factory = kj::Function<Service::Client()>;
+	
+	Library library;
+	Factory factory;
+	kj::Thread thread;
+	
+	Own<const kj::Executor> executor;
+	MutexGuarded<bool> ready = false;
+	
+	Own<CrossThreadPromiseFulfiller<void>> doneFulfiller;
+		
+	InProcessServer(const Library& library, kj::Function<capnp::Capability::Client()> factory) :
+		library(library->addRef()),
+		factory(factory),
+		thread(KJ_BIND_METHOD(*this, run))
+	{
+		auto locked = ready.lock();
+		locked.wait([](bool ready) { return ready; });
+	}
+	
+	void run() {
+		// Initialize event loop
+		Library library = mv(this->library);
+		auto lt = library -> newThread();
+		auto& ws = lt -> waitScope();
+		
+		Promise<void> donePromise = READY_NOW;
+		
+		{
+			auto locked = ready.lock();
+			executor = kj::getCurrentThreadExecutor().addRef();
+			*locked = true;
+			
+			auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+			doneFulfiller = mv(paf.fulfiller);
+			donePromise = mv(paf.promise);
+		}
+		
+		donePromise.wait(ws);
+	}
+	
+	Service::Client accept() {
+		auto pipe = getActiveThread().ioContext().provider->newTwoWayPipe();
+		
+		// Create server
+		auto serverRunnable = [stream = mv(pipe.ends[1]), this]() {
+			using capnp::TwoPartyVatNetwork;
+			using capnp::rpc::twoparty::VatId;
+			// Create RPC server on stream
+			auto vatNetwork = heapHeld<capnp
+		};
+};
+
 struct ServerImpl : public fsc::Server {
 	Own<kj::ConnectionReceiver> receiver;
 	DefaultErrorHandler errorHandler;
