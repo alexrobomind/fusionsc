@@ -156,6 +156,28 @@ public:
 	// Obtain an additional reference. Requres this object to be acquired through create()
 	// inline kj::Own<ThreadHandle> addRef() { return kj::addRef(*this); }
 	
+	struct Ref {
+		inline ThreadHandle& operator*() { return *handle; }
+		inline ThreadHandle* operator->() { return handle; }
+		
+		inline Ref(ThreadHandle& newParent) :
+			parent(&newParent)
+		{
+			parent -> refs.lockExclusive().add(*this);
+		}
+		
+		inline ~Ref() {
+			parent -> refs.lockExclusive().remove(*this);
+		}
+	};
+	
+	inline Ref newRef() { return Ref(*this) };
+			
+	private:
+		kj::ListLink<Ref> link;
+		ThreadHandle* handle;
+	};
+	
 private:
 	kj::AsyncIoContext _ioContext;
 	CSPRNG _rng;
@@ -172,6 +194,9 @@ private:
 	inline static thread_local ThreadHandle* current = nullptr;
 	friend ThreadHandle& getActiveThread();
 	friend bool hasActiveThread();
+	
+	// References
+	kj::MutexGuarded<kj::List<Ref, &Ref::link>> refs;
 };
 
 inline ThreadHandle& getActiveThread() {
@@ -227,6 +252,8 @@ private:
 	FixedArray<byte, tokenSize> sendToken2;
 	FixedArray<byte, tokenSize> recvToken2;
 };
+
+kj::TwoWayPipe newPipe();
 
 template<typename Func>
 kj::Maybe<kj::Promise<UnwrapIfPromise<UnwrapMaybe<ReturnType<Func>>>>> executeMaybe(const kj::Executor& executor, Func&& func) {

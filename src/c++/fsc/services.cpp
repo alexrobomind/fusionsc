@@ -226,7 +226,7 @@ struct InProcessServerImpl : public kj::AtomicRefcounted {
 		using capnp::rpc::twoparty::VatId;
 		using capnp::rpc::twoparty::Side;
 		
-		// auto pipe = getActiveThread().ioContext().provider->newTwoWayPipe();
+		auto pipe = getActiveThread().ioContext().provider->newTwoWayPipe();
 				
 		// Create server
 		auto serverRunnable = [stream = mv(pipe.ends[1]), srv = this->addRef()]() mutable -> Promise<void> {

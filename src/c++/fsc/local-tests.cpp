@@ -135,6 +135,44 @@ TEST_CASE("threading") {
 	}
 }
 
+TEST_CASE("pipe") {
+	Library lib = newLibrary();
+	
+	auto h1 = lib->newThread();
+	
+	auto pipe = newPipe();
+	
+	constexpr size_t nBytes = 256;
+	auto rBuf = kj::heapArray<byte>(nBytes);
+	auto wBuf = kj::heapArray<byte>(nBytes);
+	
+	h1->rng().randomize(rBuf);
+	
+	SECTION("single-thread") {
+		KJ_DBG("Writing");
+		auto p1 = pipe.ends[0] -> write(rBuf.begin(), rBuf.size());
+		KJ_DBG("Reading");
+		auto p2 = pipe.ends[1] -> read(wBuf.begin(), wBuf.size(), wBuf.size());
+		
+		KJ_DBG("Wait read");
+		p2.wait(h1->waitScope());
+		KJ_DBG("Wait write");
+		p1.wait(h1->waitScope());
+	}
+	
+	/*SECTION("multithread", "Can open a second handle in another thread") {
+		{
+			kj::Thread t([&]() {
+				ThreadHandle h2(lib->addRef());
+			});
+		}
+		SUCCEED();
+	}*/
+	
+	KJ_DBG("Check");
+	REQUIRE(wBuf == rBuf);
+}
+
 /*
 TEST_CASE("oopsie") {
 	using namespace kj;

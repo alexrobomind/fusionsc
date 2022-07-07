@@ -30,11 +30,11 @@ const cdbTest : DBTest(Filament) = (
 	httpRoot = (entries = [
 		(
 			loc = "/coil/0/data",
-			text = "{ \"polylineFilament\" : { \"x1\" : [0.0, 3.0, 6.0], \"x2\" : [1.0, 4.0, 7.0], \"x3\" : [2.0, 5.0, 8.0] } }"
+			text = "{ \"polylineFilament\" : { \"vertices\" : { \"x1\" : [0.0, 3.0, 6.0], \"x2\" : [1.0, 4.0, 7.0], \"x3\" : [2.0, 5.0, 8.0] } } }"
 		),
 		(
 			loc = "/coil/123/data",
-			text = "{ \"polylineFilament\" : { \"x1\" : [0.0, 3.0], \"x2\" : [1.0, 4.0], \"x3\" : [2.0, 5.0] } }"
+			text = "{ \"polylineFilament\" : { \"vertices\" : { \"x1\" : [0.0, 3.0], \"x2\" : [1.0, 4.0], \"x3\" : [2.0, 5.0] } } }"
 		)
 	]),
 	entries = [

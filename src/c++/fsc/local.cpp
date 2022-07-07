@@ -29,6 +29,10 @@ ThreadHandle::ThreadHandle(Library l) :
 
 ThreadHandle::~ThreadHandle() {
 	KJ_REQUIRE(current == this, "Destroying LibraryThread in wrong thread") {}
+	
+	auto locked = refs.lockExclusive();
+	locked.wait([](auto& refs) { return refs.size() == 0; });
+	
 	current = nullptr;
 }
 
@@ -183,27 +187,29 @@ void DaemonRunner::disconnect() const {
 // ======================= crossThreadPipe ================================
 
 namespace {
-	struct AsyncMessageQueue : kj::AtomicRefcounted {
+	struct AsyncMessageQueue : kj::AtomicRefcounted {		
 		struct DstBufferQueueEntry {
 			kj::ListLink<DstBufferQueueEntry> link;
 			kj::ArrayPtr<byte> ptr;
-			Own<PromiseFulfiller> whenConsumed;
+			Own<PromiseFulfiller<size_t>> whenConsumed;
 			size_t minBytes;
 		};
 		
 		struct SrcBufferQueueEntry {
 			kj::ListLink<SrcBufferQueueEntry> link;
 			kj::ArrayPtr<const byte> ptr;
-			Maybe<Own<CrossThreadPromiseFulfiller>> whenConsumed;
+			Maybe<Own<CrossThreadPromiseFulfiller<void>>> whenConsumed;
 		};
 		
+		//! Members shared across different threads
 		struct Shared {
 			kj::List<SrcBufferQueueEntry, &SrcBufferQueueEntry::link> queue;
-			Own<CrossThreadPromiseFulfiller> newInputsReady;
+			Own<CrossThreadPromiseFulfiller<void>> newInputsReady;
 			
 			Maybe<kj::Exception> sendError;
 		};
 		
+		//! Members local to the reader thread
 		struct ReaderPrivate {
 			kj::List<SrcBufferQueueEntry, &SrcBufferQueueEntry::link> inQueue;
 			kj::List<DstBufferQueueEntry, &DstBufferQueueEntry::link> outQueue;
@@ -211,113 +217,120 @@ namespace {
 			size_t inConsumed;
 			size_t outConsumed;
 			
-			Promise<void> newInputsReady;
+			Promise<void> newInputsReady = READY_NOW;
 					
 			Maybe<Promise<void>> pumpLoop;
 			Maybe<kj::Exception> readError;
+			kj::Canceler readCanceler;
 		};
-		
-		kj::MutexGuarded<Shared> shared;
-		ReaderPrivate readerPrivate;
-		Canceler readCanceler;
 		
 		Own<const AsyncMessageQueue> addRef() const { return kj::atomicAddRef(*this); }
 		
-		Promise<void> send(kj::ArrayPtr<kj::ArrayPtr<const byte>> queue) const {
+		Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> queue) const {
 			auto locked = shared.lockExclusive();
 			
-			KJ_IF_MAYBE(locked->sendError) {
-				return locked->sendError;
+			KJ_IF_MAYBE(pErr, locked->sendError) {
+				return cp(*pErr);
 			}
 			
 			for(auto ptr : queue) {
-				BufferQueueEntry* e = new BufferQueueEntry();
-				e.ptr = ptr;
-				locked.queue.add(*e);
+				SrcBufferQueueEntry* e = new SrcBufferQueueEntry();
+				e -> ptr = ptr;
+				locked -> queue.add(*e);
 			}
 			
-			auto paf = kj::newPromiseAndCrossThreadFulfiller();
-			BufferQueueEntry* barrier = new BufferQueueEntry();
-			barrier.whenConsumed = mv(paf.fulfiller);
-			locked.queue.add(*e);
+			auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+			SrcBufferQueueEntry* barrier = new SrcBufferQueueEntry();
+			barrier -> whenConsumed = mv(paf.fulfiller);
+			locked -> queue.add(*barrier);
 		
-			if(locked.newInputsReady().get() != nullptr)
-				locked.newInputsReady->fulfill();
+			if(locked -> newInputsReady.get() != nullptr)
+				locked -> newInputsReady -> fulfill();
+			
+			return mv(paf.promise);
 		}
 		
 		void shutdownWriteEnd(kj::Exception e) const {
 			auto locked = shared.lockExclusive();
 			
-			locked->sendError = e;
-			locked->newInputsReady->reject(e);
+			locked -> sendError = e;
 			
-			auto& queue = shared->queue;
+			if(locked -> newInputsReady.get() != nullptr)
+				locked -> newInputsReady->reject(cp(e));
 			
-			for(auto& e : queue) {
-				queue.remove(e);
+			auto& queue = locked -> queue;
+			
+			for(auto& eIn : queue) {
+				queue.remove(eIn);
 					
 				KJ_IF_MAYBE(pWC, eIn.whenConsumed) {
-					(**pWC).reject(e);
+					(**pWC).reject(cp(e));
 				}
 				
 				delete &eIn;
 			}
 		}
 		
-		Promise<void> read(kj::ArrayPtr<byte> out, size_t minBytes) {
+		Promise<size_t> read(kj::ArrayPtr<byte> out, size_t minBytes) {
 			auto& mine = readerPrivate;
 			
-			// If the read end has shut down, return reason
-			KJ_IF_MAYBE(pErr, mine.readError) {
-				return *pErr;
-			}
+			auto paf = kj::newPromiseAndFulfiller<size_t>();
 			
-			KJ_IF_MAYBE(dontCare, mine.pumpLoop) {
-			} else {
-				mine.pumpLoop = readCanceler.wrap(pump()).eagerlyEvaluate([this, &mine](kj::Exception e){
-					// Pump the local queue one last time
-					pumpLocal();
-					
-					mine.readError = e;
-					
-					// Cancel all outstanding read requests
-					auto& queue = mine.outQueue;
-					for(auto& eOut : queue) {
-						queue.remove(eOut);
-						eOut.whenConsumed.reject(e);
-						delete &eOut;
-					}
-				});
-			}
-			
-			auto paf = kj::newPromiseAndFulfiller();
-			
-			auto e = new BufferQueueEntry();
+			auto e = new DstBufferQueueEntry();
 			e -> ptr = out;
 			e -> minBytes = minBytes;
 			e -> whenConsumed = mv(paf.fulfiller);
 			
 			mine.outQueue.add(*e);
 			
-			pumpLocal();
+			if(!pumpLocal())
+				startPumpLoop();
 			
 			return mv(paf.promise);
 		}
 		
 		void shutdownReadEnd(kj::Exception&& reason) {
-			readCanceler.cancel(mv(reason));
+			readerPrivate.readCanceler.cancel(mv(reason));
+		}
+		
+		Maybe<uint64_t> tryGetLength() {
+			auto locked = shared.lockExclusive();
+			
+			// We can only predict the no. of remaining elements if the send end is shut down
+			if(locked -> sendError == nullptr)
+				return nullptr;
+			
+			if(readerPrivate.outQueue.size() != 0)
+				return nullptr;
+			
+			uint64_t total = 0;
+			for(auto& e : locked -> queue)
+				total += e.ptr.size();
+			
+			for(auto& e : readerPrivate.inQueue)
+				total += e.ptr.size();
+			
+			total -= readerPrivate.inConsumed;
+			
+			KJ_REQUIRE(readerPrivate.outConsumed == 0, "Internal error");
+			
+			return total;
 		}
 		
 	private:
-		void pumpLocal() {
+		kj::MutexGuarded<Shared> shared;
+		ReaderPrivate readerPrivate;
+		
+		bool pumpLocal() {
+			KJ_DBG("pumpLocal");
 			auto& mine = readerPrivate;
 			
 			while(true) {
-				if(inQueue.size() == 0 || outQueue.size() == 0)
+				if(mine.inQueue.size() == 0 || mine.outQueue.size() == 0)
 					break;
 				
-				auto& eIn = *inQueue.begin();
-				auto& eOut = *outQueue.begin();
+				auto& eIn = *mine.inQueue.begin();
+				auto& eOut = *mine.outQueue.begin();
 				
 				auto inBuf = eIn.ptr;
 				auto outBuf = eOut.ptr;
@@ -327,13 +340,16 @@ namespace {
 				
 				size_t rem = std::min(inRem, outRem);
 				
-				memcpy(outBuf.begin() + mine.outConsumed, inBuf.begin() + mine.inConsumed, rem);
+				KJ_DBG("transfer", rem);
+				
+				if(rem > 0)
+					memcpy(outBuf.begin() + mine.outConsumed, inBuf.begin() + mine.inConsumed, rem);
 				
 				mine.inConsumed += rem;
 				mine.outConsumed += rem;
 				
 				if(mine.inConsumed >= inBuf.size()) {
-					inQueue.remove(eIn);
+					mine.inQueue.remove(eIn);
 					
 					KJ_IF_MAYBE(pWC, eIn.whenConsumed) {
 						(**pWC).fulfill();
@@ -342,22 +358,24 @@ namespace {
 					delete &eIn;
 					mine.inConsumed = 0;
 				}
-				
-				if(mine.outConsumed >= outBuf.size()) {
-					outQueue.remove(eOut);
-					eOut.whenConsumed -> fulfill();
+								
+				if(mine.outConsumed == outBuf.size()) {
+					mine.outQueue.remove(eOut);
+					eOut.whenConsumed -> fulfill(cp(mine.outConsumed));
 					
 					delete &eOut;
 					mine.outConsumed = 0;
 				}
 			}
 			
-			while(outQueue.size() > 0) {
-				auto& eOut = *outQueue.begin();
+			// If there are outstanding partial reads, fulfill them if possible
+			// OR if the read end has shut down
+			while(mine.outQueue.size() > 0) {
+				auto& eOut = *mine.outQueue.begin();
 				
-				if(mine.outConsumed >= eOut.minBytes) {
-					outQueue.remove(eOut);
-					eOut.whenConsumed -> fulfill();
+				if(mine.outConsumed >= eOut.minBytes || mine.readError != nullptr) {
+					mine.outQueue.remove(eOut);
+					eOut.whenConsumed -> fulfill(cp(mine.outConsumed));
 					
 					delete &eOut;
 					mine.outConsumed = 0;
@@ -365,6 +383,26 @@ namespace {
 					break;
 				}
 			}
+			
+			// If there are empty writes (barrier entries), fulfill them
+			while(mine.inQueue.size() > 0) {
+				auto& eIn = *mine.inQueue.begin();
+				
+				if(mine.inConsumed == eIn.ptr.size()) {
+					mine.inQueue.remove(eIn);
+					
+					KJ_IF_MAYBE(pWC, eIn.whenConsumed) {
+						(**pWC).fulfill();
+					}
+					
+					delete &eIn;
+					mine.inConsumed = 0;
+				} else {
+					break;
+				}
+			}
+			
+			return mine.outQueue.size() == 0;
 		}
 		
 		void steal() {
@@ -377,7 +415,7 @@ namespace {
 			}
 			
 			KJ_IF_MAYBE(pErr, locked->sendError) {
-				mine.newInputsReady = *pErr:
+				mine.newInputsReady = cp(*pErr);
 			} else {
 				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
 				locked -> newInputsReady = mv(paf.fulfiller);
@@ -385,14 +423,94 @@ namespace {
 			}
 		}
 		
+		void startPumpLoop() {
+			auto& mine = readerPrivate;
+			
+			if(mine.pumpLoop != nullptr)
+				return;
+			
+			mine.pumpLoop = mine.readCanceler.wrap(pump())
+			.eagerlyEvaluate([this, &mine](kj::Exception e){
+				mine.readError = e;
+				pumpLocal();
+			});
+		}
+		
 		Promise<void> pump() {
 			steal();
 			pumpLocal();
 			
-			return mine.newInputsReady.then(KJ_BIND_METHOD(*this, pump));
+			return readerPrivate.newInputsReady.then([this]() { return pump(); });
 		}
 	};
 	
+	struct MessageQueueIOStream : public kj::AsyncIoStream {
+		Own<AsyncMessageQueue> readFrom;
+		Own<const AsyncMessageQueue> writeTo;
+		
+		MessageQueueIOStream(Own<AsyncMessageQueue> readFromIn, Own<const AsyncMessageQueue> writeToIn):
+			readFrom(mv(readFromIn)),
+			writeTo(mv(writeToIn))
+		{}
+		
+		~MessageQueueIOStream() {
+			writeTo  -> shutdownWriteEnd(KJ_EXCEPTION(DISCONNECTED, "Stream destroyed"));
+			readFrom -> shutdownReadEnd(KJ_EXCEPTION(DISCONNECTED, "Stream destroyed"));
+		}
+		
+		// ======== AsyncOutputStream =========
+		
+		Promise<void> write(const void* buffer, size_t size) override {
+			KJ_STACK_ARRAY(ArrayPtr<const byte>, out, 1, 1, 1);
+			
+			out[0] = ArrayPtr(reinterpret_cast<const byte*>(buffer), size);
+			return writeTo -> write(out);
+		}
+		
+		Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+			return writeTo -> write(pieces);
+		}
+		
+		Promise<void> whenWriteDisconnected() override { return NEVER_DONE; }
+		
+		// ======== AsyncInputStream =========
+		
+		Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+			kj::ArrayPtr<byte> bufPtr(
+				reinterpret_cast<byte*>(buffer),
+				maxBytes
+			);
+			return readFrom -> read(bufPtr, minBytes);
+		}
+		
+		Maybe<uint64_t> tryGetLength() override {
+			return readFrom -> tryGetLength();
+		}
+		
+		// ========= AsyncIoStream ===========
+		
+		void shutdownWrite() override {
+			writeTo -> shutdownWriteEnd(KJ_EXCEPTION(DISCONNECTED, "Write end shut down"));
+		}
+		
+		void abortRead() override {
+			readFrom -> shutdownReadEnd(KJ_EXCEPTION(DISCONNECTED, "Read aborted"));
+		}
+	};
 }
+
+kj::TwoWayPipe newPipe() {
+	auto queue1Read = kj::atomicRefcounted<AsyncMessageQueue>();
+	auto queue2Read = kj::atomicRefcounted<AsyncMessageQueue>();
+	
+	auto queue1Write = queue1Read->addRef();
+	auto queue2Write = queue2Read->addRef();
+	
+	kj::TwoWayPipe result;
+	result.ends[0] = kj::heap<MessageQueueIOStream>(mv(queue1Read), mv(queue2Write));
+	result.ends[1] = kj::heap<MessageQueueIOStream>(mv(queue2Read), mv(queue1Write));
+	
+	return result;
+}	
 
 }
