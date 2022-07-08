@@ -30,8 +30,10 @@ ThreadHandle::ThreadHandle(Library l) :
 ThreadHandle::~ThreadHandle() {
 	KJ_REQUIRE(current == this, "Destroying LibraryThread in wrong thread") {}
 	
-	auto locked = refs.lockExclusive();
-	locked.wait([](auto& refs) { return refs.size() == 0; });
+	if(!library.inShutdownMode()) {
+		auto locked = refs.lockExclusive();
+		locked.wait([](auto& refs) { return refs.size() == 0; });
+	}
 	
 	current = nullptr;
 }

@@ -78,10 +78,14 @@ public:
 	
 	inline const DaemonRunner& daemonRunner() const { return *_daemonRunner; }
 	
+	inline bool inShutdownMode() { return *(shutdownMode.lockShared()); }
+	inline void setShutdownMode() { *(shutdownMode.lockExclusive()) = true; }
+	
 private:
 	inline LibraryHandle() :
 		storeSteward(store),
-		_daemonRunner(kj::atomicRefcounted<DaemonRunner>(storeSteward.getExecutor()))
+		_daemonRunner(kj::atomicRefcounted<DaemonRunner>(storeSteward.getExecutor())),
+		shutdownMode(false)
 	{};
 	
 	inline ~LibraryHandle() {
@@ -90,6 +94,7 @@ private:
 	
 	mutable LocalDataStore::Steward storeSteward;
 	Own<DaemonRunner> _daemonRunner;
+	kj::MutexGuarded<bool> shutdownMode;
 	
 	friend Own<LibraryHandle> kj::atomicRefcounted<LibraryHandle>();
 };
