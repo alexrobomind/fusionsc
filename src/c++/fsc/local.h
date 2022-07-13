@@ -78,7 +78,7 @@ public:
 	
 	inline const DaemonRunner& daemonRunner() const { return *_daemonRunner; }
 	
-	inline bool inShutdownMode() { return *(shutdownMode.lockShared()); }
+	inline bool inShutdownMode() const { return *(shutdownMode.lockShared()); }
 	inline void setShutdownMode() { *(shutdownMode.lockExclusive()) = true; }
 	
 private:
@@ -161,27 +161,9 @@ public:
 	// Obtain an additional reference. Requres this object to be acquired through create()
 	// inline kj::Own<ThreadHandle> addRef() { return kj::addRef(*this); }
 	
-	struct Ref {
-		inline ThreadHandle& operator*() { return *handle; }
-		inline ThreadHandle* operator->() { return handle; }
-		
-		inline Ref(ThreadHandle& newParent) :
-			parent(&newParent)
-		{
-			parent -> refs.lockExclusive().add(*this);
-		}
-		
-		inline ~Ref() {
-			parent -> refs.lockExclusive().remove(*this);
-		}
-	};
-	
-	inline Ref newRef() { return Ref(*this) };
-			
-	private:
-		kj::ListLink<Ref> link;
-		ThreadHandle* handle;
-	};
+	inline Own<const ThreadHandle> addRef() const {
+		return Own<const ThreadHandle>(this, kj::NullDisposer::instance).attach(kj::heap<ThreadHandle::Ref>(this));
+	}
 	
 private:
 	kj::AsyncIoContext _ioContext;
@@ -200,8 +182,33 @@ private:
 	friend ThreadHandle& getActiveThread();
 	friend bool hasActiveThread();
 	
-	// References
+	// Reference tracking
+	struct Ref {		
+		inline const ThreadHandle& operator*() const { return *parent; }
+		inline const ThreadHandle* operator->() const { return parent; }
+		
+		inline Ref(const ThreadHandle* newParent) :
+			parent(newParent)
+		{
+			parent -> refs.lockExclusive() -> add(*this);
+		}
+		
+		inline ~Ref() {
+			auto locked = parent -> refs.lockExclusive();
+			locked -> remove(*this);
+			
+			auto& pFulfiller = parent -> whenNoRefs.get(locked);
+			if(pFulfiller.get() != nullptr) {
+				pFulfiller->fulfill();
+				pFulfiller = nullptr;
+			}
+		}
+			
+		kj::ListLink<Ref> link;
+		const ThreadHandle* parent;
+	};
 	kj::MutexGuarded<kj::List<Ref, &Ref::link>> refs;
+	mutable kj::ExternalMutexGuarded<Own<CrossThreadPromiseFulfiller<void>>> whenNoRefs;
 };
 
 inline ThreadHandle& getActiveThread() {

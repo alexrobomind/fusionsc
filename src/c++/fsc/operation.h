@@ -32,6 +32,8 @@ struct Operation : kj::AtomicRefcounted {
 	 */
 	void dependsOn(Promise<void> promise) const;
 	
+	Promise<void> destroy() const;
+	
 	/**
 	 * Attaches the given objects to the promise, so that their lifetime is extended
 	 * until all references to this operation are destroyed. If the current library's
@@ -41,7 +43,7 @@ struct Operation : kj::AtomicRefcounted {
 	 * whatever thread finished / failed / cancelled the operation.
 	 */
 	template<typename... T>
-	void attachDestroyInThread(const kj::Executor& executor, T&&... params) const ;
+	void attachDestroyInThread(const ThreadHandle& handle, T&&... params) const ;
 	
 	/**
 	 * Attaches the target objects to live with the operation and be destroyed in this
@@ -69,7 +71,8 @@ private:
 		
 		virtual void onFinish() {};
 		virtual void onFailure(kj::Exception&& e) {};
-		virtual ~Node() {};
+		virtual Promise<void> destroy() { return READY_NOW; };
+		virtual ~Node() noexcept(false) {};
 	};
 	
 	enum State {
@@ -84,6 +87,7 @@ private:
 		State state = ACTIVE;
 		NodeList nodes;
 		Own<kj::Exception> exception;
+		Own<DaemonRunner> clearRunner;
 	};
 	
 	kj::MutexGuarded<Data> data;
@@ -101,50 +105,42 @@ Own<Operation> newOperation();
 // ================================== Inline implementation =================================
 
 template<typename... T>
-void Operation::attachDestroyInThread(const kj::Executor& executor, T&&... params) const {
+void Operation::attachDestroyInThread(const ThreadHandle& thread, T&&... params) const {
 	struct AttachmentNode : public Node {
-		Own<const kj::Executor> executor;
-		Own<const DaemonRunner> runner;
+		Own<const ThreadHandle> owningThread;
 		
 		TupleFor<kj::Decay<T>...> contents;
 		
-		AttachmentNode(const kj::Executor& executor, T&&... params) :
-			executor(executor.addRef()),
-			runner(getActiveThread().daemonRunner().addRef()),
+		AttachmentNode(const ThreadHandle& thread, T&&... params) :
+			owningThread(thread.addRef()),
 			contents(tuple(fwd<T>(params)...))
 		{}
 		
 		void onFinish() override {};
 		void onFailure(kj::Exception&& e) override {};
 		
-		~AttachmentNode() noexcept {
-			try {
-				if(executor.get() != nullptr && runner.get() != nullptr) {
-					// Task that schedules the destruction on the actual target thread
-					auto destroyTask = [executor = mv(executor), contents = mv(contents)]() mutable -> Promise<void> {
-						return executor->executeAsync([contents = mv(contents)]() mutable {
-							// This will move the contents into a local tuple that gets destroyed
-							// in the target thread.
-							// This is important as the surrounding lambda will get moved back
-							// into the calling thread before getting destroyed.
-							
-							auto destroyedLocally = mv(contents);
-						});
-					};
-					runner -> run(mv(destroyTask));
+		Promise<void> destroy() override {
+			auto result = owningThread -> executor().executeAsync(
+				[contents = mv(contents)]() mutable {
+					// This will move the contents into a local tuple that gets destroyed
+					// in the target thread.
+					// This is important as the surrounding lambda will get moved back
+					// into the calling thread before getting destroyed.
+					
+					auto destroyedLocally = mv(contents);
 				}
-			} catch(kj::Exception error) {
-				KJ_LOG(WARNING, "Could not clean up object in destructor", error);
-			}
-		}
+			);
+			
+			return result.attach(mv(owningThread));
+		};
 	};
 			
-	attachNode(new AttachmentNode(executor, fwd<T>(params)...));
+	attachNode(new AttachmentNode(thread, fwd<T>(params)...));
 };
 
 template<typename... T>
 void Operation::attachDestroyHere(T&&... params) const {
-	this -> attachDestroyInThread(kj::getCurrentThreadExecutor(), fwd<T>(params)...);
+	this -> attachDestroyInThread(getActiveThread(), fwd<T>(params)...);
 }
 
 template<typename... T>
@@ -158,6 +154,11 @@ void Operation::attachDestroyAnywhere(T&&... params) const {
 		
 		void onFinish() override {};
 		void onFailure(kj::Exception&& e) override {};
+		Promise<void> destroy() override {
+			auto destroyedLocally = mv(contents);
+			return READY_NOW;
+		}
+		
 		~AttachmentNode() noexcept {};
 	};
 	

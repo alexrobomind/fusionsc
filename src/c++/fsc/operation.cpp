@@ -88,10 +88,23 @@ void Operation::fail(kj::Exception&& e) const {
 void Operation::clear() const {
 	auto locked = data.lockExclusive();
 	
-	for(Node& node : locked -> nodes) {
-		locked->nodes.remove(node);
-		delete &node; // blergh
+	auto nodes = kj::heapArrayBuilder<Node*>(locked->nodes.size());
+	for(auto& node : locked -> nodes) {
+		nodes.add(&node);
+		locked -> nodes.remove(node);
 	}
+	
+	locked -> clearRunner -> run([nodes = nodes.finish()]() mutable -> Promise<void> {
+		Promise<void> result = READY_NOW;
+		
+		for(Node* pNode : nodes) {
+			result = result
+			.then([pNode]() { delete pNode; })
+			.catch_([](kj::Exception e) {});
+		}
+		
+		return result;				
+	});
 }
 
 Own<Operation> newOperation() {

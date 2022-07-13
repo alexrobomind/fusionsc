@@ -21,18 +21,34 @@ ThreadHandle::ThreadHandle(Library l) :
 	_library(l -> addRef()),
 	_executor(kj::getCurrentThreadExecutor()),
 	_dataService(kj::heap<LocalDataService>(l)),
-	_filesystem(kj::newDiskFilesystem())
-{
+	_filesystem(kj::newDiskFilesystem()),
+	whenNoRefs(refs.lockExclusive())
+{	
 	KJ_REQUIRE(current == nullptr, "Can only have one active ThreadHandle / LibraryThread per thread");
 	current = this;
 }
 
 ThreadHandle::~ThreadHandle() {
 	KJ_REQUIRE(current == this, "Destroying LibraryThread in wrong thread") {}
-	
-	if(!library.inShutdownMode()) {
-		auto locked = refs.lockExclusive();
-		locked.wait([](auto& refs) { return refs.size() == 0; });
+		
+	if(_library->inShutdownMode()) {
+		while(true) {
+			Promise<void> noMoreRefs = READY_NOW;
+			
+			{
+				auto locked = refs.lockExclusive();
+				
+				if(locked -> size() == 0)
+					break;
+				
+				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+				noMoreRefs = mv(paf.promise);
+				
+				this -> whenNoRefs.set(locked, mv(paf.fulfiller));
+			}
+			
+			noMoreRefs.wait(waitScope());
+		}
 	}
 	
 	current = nullptr;
