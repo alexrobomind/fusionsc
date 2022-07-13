@@ -47,6 +47,13 @@ struct DaemonRunner : public kj::AtomicRefcounted {
 	 * tasks will fail by returning false, and the passed functions will be destroyed immediately.
 	 */
 	void disconnect() const;
+	
+	/**
+	 * Blocks the current thread until all daemon tasks have finished.
+	 * \note Since usually daemon tasks run forever or until cancelled,
+	 *       this method is intended mostly for debug purposes.
+	 */
+	Promise<void> whenDone() const;
 
 private:
 	struct Connection {
@@ -158,13 +165,15 @@ public:
 	inline const kj::Executor&                     executor()     const { return _executor; }
 	inline const DaemonRunner&                     daemonRunner() const { return _library -> daemonRunner(); }
 	
-	// Obtain an additional reference. Requres this object to be acquired through create()
-	// inline kj::Own<ThreadHandle> addRef() { return kj::addRef(*this); }
-	
-	inline Own<const ThreadHandle> addRef() const {
-		return Own<const ThreadHandle>(this, kj::NullDisposer::instance).attach(kj::heap<ThreadHandle::Ref>(this));
-	}
-	
+	//! Creates a keep-alive reference to this thread
+	/**
+	 * Creates a reference that acts similar to a shared pointer. However, instead of shared ownership
+	 * semantics, holding this reference causes the ThreadHandle's destructor to cycle its event
+	 * loop until all references are destroyed.
+	 */
+	Own<ThreadHandle> addRef();
+	Own<const ThreadHandle> addRef() const;
+		
 private:
 	kj::AsyncIoContext _ioContext;
 	CSPRNG _rng;
@@ -182,33 +191,10 @@ private:
 	friend ThreadHandle& getActiveThread();
 	friend bool hasActiveThread();
 	
-	// Reference tracking
-	struct Ref {		
-		inline const ThreadHandle& operator*() const { return *parent; }
-		inline const ThreadHandle* operator->() const { return parent; }
-		
-		inline Ref(const ThreadHandle* newParent) :
-			parent(newParent)
-		{
-			parent -> refs.lockExclusive() -> add(*this);
-		}
-		
-		inline ~Ref() {
-			auto locked = parent -> refs.lockExclusive();
-			locked -> remove(*this);
-			
-			auto& pFulfiller = parent -> whenNoRefs.get(locked);
-			if(pFulfiller.get() != nullptr) {
-				pFulfiller->fulfill();
-				pFulfiller = nullptr;
-			}
-		}
-			
-		kj::ListLink<Ref> link;
-		const ThreadHandle* parent;
-	};
-	kj::MutexGuarded<kj::List<Ref, &Ref::link>> refs;
-	mutable kj::ExternalMutexGuarded<Own<CrossThreadPromiseFulfiller<void>>> whenNoRefs;
+	struct Ref;
+	struct RefData;
+	
+	kj::MutexGuarded<RefData>* refData;
 };
 
 inline ThreadHandle& getActiveThread() {

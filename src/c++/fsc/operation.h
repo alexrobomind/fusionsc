@@ -62,7 +62,10 @@ struct Operation : kj::AtomicRefcounted {
 	Own<Operation> newChild() const;
 
 private:
-	Operation() {};
+	inline Operation() {
+		auto locked = data.lockExclusive();
+		locked -> clearRunner = getActiveThread().daemonRunner().addRef();
+	};
 	Operation(const Operation& other) = delete;
 	Operation(Operation&& other) = delete;
 	
@@ -87,7 +90,7 @@ private:
 		State state = ACTIVE;
 		NodeList nodes;
 		Own<kj::Exception> exception;
-		Own<DaemonRunner> clearRunner;
+		Own<const DaemonRunner> clearRunner;
 	};
 	
 	kj::MutexGuarded<Data> data;
@@ -120,6 +123,7 @@ void Operation::attachDestroyInThread(const ThreadHandle& thread, T&&... params)
 		void onFailure(kj::Exception&& e) override {};
 		
 		Promise<void> destroy() override {
+			KJ_DBG("AttachmentNode::destroy()");
 			auto result = owningThread -> executor().executeAsync(
 				[contents = mv(contents)]() mutable {
 					// This will move the contents into a local tuple that gets destroyed

@@ -307,7 +307,7 @@ struct FLTImpl : public FLT::Server {
 				*device, mv(kernelRequest), mv(field), mv(positions), *rootOp
 			);
 			
-			rootOp -> attachDestroyHere(calc.x(), thisCap(), cp(fieldData));
+			rootOp -> attachDestroyHere(thisCap(), cp(fieldData), calc.x());
 			
 			return calc->run()
 			.then([ctx, calc, request, startPointShape, nStartPoints, rootOp = mv(rootOp)]() mutable {

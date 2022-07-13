@@ -16,13 +16,44 @@ void LibraryHandle::stopSteward() const {
 	
 // === class ThreadHandle ===
 
+struct ThreadHandle::Ref {		
+	Ref(const kj::MutexGuarded<RefData>* refData);
+	~Ref();
+		
+	kj::ListLink<Ref> link;
+	const kj::MutexGuarded<RefData>* refData;
+};
+
+struct ThreadHandle::RefData {
+	kj::List<Ref, &Ref::link> refs;
+	Own<CrossThreadPromiseFulfiller<void>> whenNoRefs;
+	const ThreadHandle* owner;
+};
+		
+ThreadHandle::Ref::Ref(const kj::MutexGuarded<RefData>* refData) :
+	refData(refData)
+{
+	refData -> lockExclusive() -> refs.add(*this);
+}
+
+ThreadHandle::Ref::~Ref() {
+	auto locked = refData -> lockExclusive();
+	locked -> refs.remove(*this);
+	
+	auto& pFulfiller = locked -> whenNoRefs;
+	if(pFulfiller.get() != nullptr) {
+		pFulfiller->fulfill();
+		pFulfiller = nullptr;
+	}
+}
+
 ThreadHandle::ThreadHandle(Library l) :
 	_ioContext(kj::setupAsyncIo()),
 	_library(l -> addRef()),
 	_executor(kj::getCurrentThreadExecutor()),
 	_dataService(kj::heap<LocalDataService>(l)),
 	_filesystem(kj::newDiskFilesystem()),
-	whenNoRefs(refs.lockExclusive())
+	refData(new kj::MutexGuarded<RefData>())
 {	
 	KJ_REQUIRE(current == nullptr, "Can only have one active ThreadHandle / LibraryThread per thread");
 	current = this;
@@ -30,28 +61,53 @@ ThreadHandle::ThreadHandle(Library l) :
 
 ThreadHandle::~ThreadHandle() {
 	KJ_REQUIRE(current == this, "Destroying LibraryThread in wrong thread") {}
-		
-	if(_library->inShutdownMode()) {
+	
+	// If the library is in shutdown mode, we have to (conservatively) assume 
+	// that all other threads  have unexpectedly died and this is the last
+	// remaining active thread. We can not BANK on it, but we can not wait
+	// for any other promises on the event loop to resolve.
+	if(!_library->inShutdownMode()) {
 		while(true) {
 			Promise<void> noMoreRefs = READY_NOW;
 			
 			{
-				auto locked = refs.lockExclusive();
+				auto locked = refData -> lockExclusive();
 				
-				if(locked -> size() == 0)
+				if(locked -> refs.size() == 0)
 					break;
 				
 				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
 				noMoreRefs = mv(paf.promise);
 				
-				this -> whenNoRefs.set(locked, mv(paf.fulfiller));
+				locked -> whenNoRefs = mv(paf.fulfiller);
 			}
 			
 			noMoreRefs.wait(waitScope());
 		}
+		
+		delete refData;
+	} else {
+		bool canDeleteRefdata = false;
+		{
+			auto locked = refData -> lockExclusive();
+		
+			if(locked -> refs.size() == 0)
+				canDeleteRefdata = true;
+		}
+		
+		if(canDeleteRefdata)
+			delete refData;
 	}
-	
+			
 	current = nullptr;
+}
+
+Own<ThreadHandle> ThreadHandle::addRef() {
+	return Own<ThreadHandle>(this, kj::NullDisposer::instance).attach(kj::heap<ThreadHandle::Ref>(this->refData));
+}
+
+Own<const ThreadHandle> ThreadHandle::addRef() const {
+	return Own<const ThreadHandle>(this, kj::NullDisposer::instance).attach(kj::heap<ThreadHandle::Ref>(this->refData));
 }
 
 // === class CrossThreadConnection ===
@@ -176,7 +232,7 @@ bool DaemonRunner::run(kj::Function<Promise<void>()> func) const {
 	auto locked = connection.lockExclusive();
 	KJ_IF_MAYBE(pConn, *locked) {
 		pConn -> executor -> executeSync([func = mv(func), &tasks = *(pConn -> tasks)]() mutable {
-			Promise<void> task = kj::evalNow(mv(func));
+			Promise<void> task = kj::evalLater(mv(func));
 			tasks.add(mv(task));
 		});
 		
@@ -200,6 +256,18 @@ void DaemonRunner::disconnect() const {
 			KJ_LOG(WARNING, "Exception in cleanup routine", e);
 		}
 	}
+}
+
+Promise<void> DaemonRunner::whenDone() const {
+	auto locked = connection.lockExclusive();
+	
+	KJ_IF_MAYBE(pConn, *locked) {
+		return pConn -> executor -> executeAsync([this, &tasks = *(pConn -> tasks)]() {
+			return tasks.onEmpty();
+		}).attach(addRef());
+	}
+	
+	return READY_NOW;
 }
 
 // ======================= crossThreadPipe ================================

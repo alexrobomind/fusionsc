@@ -6,7 +6,13 @@ using namespace fsc;
 	
 struct DestroyedIn {
 	static inline const kj::Executor* pThread;
-	~DestroyedIn() { pThread = &kj::getCurrentThreadExecutor(); }
+	bool active = true;
+	
+	DestroyedIn() {}
+	DestroyedIn(DestroyedIn&& other) { other.active = false; }
+	DestroyedIn(const DestroyedIn&) = delete;
+	
+	~DestroyedIn() { if(active) pThread = &kj::getCurrentThreadExecutor(); }
 };
 
 TEST_CASE("operation-promises") {
@@ -44,5 +50,7 @@ TEST_CASE("operation-lifecycle") {
 		op1->attachDestroyHere(DestroyedIn());
 	}
 	
+	// REQUIRE(DestroyedIn::pThread == nullptr);
+	lt -> daemonRunner().whenDone().wait(ws);
 	REQUIRE(DestroyedIn::pThread == &kj::getCurrentThreadExecutor());
 }

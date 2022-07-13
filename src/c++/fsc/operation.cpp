@@ -99,8 +99,9 @@ void Operation::clear() const {
 		
 		for(Node* pNode : nodes) {
 			result = result
-			.then([pNode]() { delete pNode; })
-			.catch_([](kj::Exception e) {});
+			.then([pNode]() { return pNode -> destroy(); })
+			.catch_([](kj::Exception e) {})
+			.then([pNode]() { delete pNode; });
 		}
 		
 		return result;				
