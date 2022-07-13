@@ -262,8 +262,15 @@ Promise<void> DaemonRunner::whenDone() const {
 	auto locked = connection.lockExclusive();
 	
 	KJ_IF_MAYBE(pConn, *locked) {
-		return pConn -> executor -> executeAsync([this, &tasks = *(pConn -> tasks)]() {
-			return tasks.onEmpty();
+		return pConn -> executor -> executeAsync([this]() -> Promise<void> {
+			// Since we are wrapped inside executeAsync, this is guaranteed not to block
+			// with the outer lock
+			auto locked = connection.lockExclusive();
+			
+			KJ_IF_MAYBE(pConn, *locked) {
+				return pConn -> tasks -> onEmpty();
+			}
+			return READY_NOW;
 		}).attach(addRef());
 	}
 	
