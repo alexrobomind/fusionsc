@@ -14,7 +14,8 @@ namespace fsc {
 // === functions in internal ===
 
 template<>
-capnp::Data::Reader internal::getDataRefAs<capnp::Data>(internal::LocalDataRefImpl& impl) {
+capnp::Data::Reader internal::getDataRefAs<capnp::Data>(internal::LocalDataRefImpl& impl, const capnp::ReaderOptions& options) {
+	(void) options;
 	return impl.entryRef -> value.asPtr();
 }
 	
@@ -86,7 +87,7 @@ Promise<void> internal::LocalDataRefImpl::rawBytes(RawBytesContext context) {
 	uint64_t start = context.getParams().getStart();
 	uint64_t end   = context.getParams().getEnd();
 	
-	auto ptr = get<capnp::Data>();
+	auto ptr = get<capnp::Data>(READ_UNLIMITED);
 	
 	KJ_REQUIRE(end >= start);
 	KJ_REQUIRE(start < ptr.size());
@@ -170,7 +171,7 @@ Promise<void> internal::LocalDataRefImpl::transmit(TransmitContext context) {
 	auto process = kj::heap<TransmissionProcess>();
 	
 	// Prepare a pointer to the data that will also keep the data alive
-	process -> data = getDataRefAs<capnp::Data>(*this).attach(addRef());
+	process -> data = getDataRefAs<capnp::Data>(*this, READ_UNLIMITED).attach(addRef());
 	process -> end = params.getEnd();
 	process -> receiver = params.getReceiver();
 	
@@ -179,13 +180,13 @@ Promise<void> internal::LocalDataRefImpl::transmit(TransmitContext context) {
 	return result.attach(mv(process));
 }	
 
-capnp::FlatArrayMessageReader& internal::LocalDataRefImpl::ensureReader() {
+capnp::FlatArrayMessageReader& internal::LocalDataRefImpl::ensureReader(const capnp::ReaderOptions& options) {
 	KJ_IF_MAYBE(reader, maybeReader) {
 		return *reader;
 	}
 	
 	// Obtain data as a byte pointer (note that this drops all attached objects to keep alive0
-	ArrayPtr<const byte> bytePtr = getDataRefAs<capnp::Data>(*this);
+	ArrayPtr<const byte> bytePtr = getDataRefAs<capnp::Data>(*this, options);
 	
 	// Cast the data to a word array (let's hope they are aligned properly)
 	ArrayPtr<const capnp::word> wordPtr = ArrayPtr<const capnp::word>(
@@ -193,7 +194,7 @@ capnp::FlatArrayMessageReader& internal::LocalDataRefImpl::ensureReader() {
 		bytePtr.size() / sizeof(capnp::word)
 	);
 	
-	return maybeReader.emplace(wordPtr);
+	return maybeReader.emplace(wordPtr, options);
 }
 
 // === class internal::LocalDataServiceImpl ===
@@ -692,7 +693,7 @@ namespace {
 	};
 }
 
-LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(const kj::ReadableFile & f) {
+LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(const kj::ReadableFile & f, const capnp::ReaderOptions options) {
 	using RemoteRef = DataRef<capnp::AnyPointer>::Client;
 	using LocalRef  = LocalDataRef<capnp::AnyPointer>;
 	
@@ -705,7 +706,7 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(c
 		arrayHolder->data = mv(data);
 	}
 	
-	capnp::FlatArrayMessageReader reader(arrayHolder->data);
+	capnp::FlatArrayMessageReader reader(arrayHolder->data, options);
 	auto archive = reader.getRoot<Archive>();
 	
 	kj::TreeMap<ID, Own<kj::PromiseFulfiller<LocalRef>>> fulfillers;

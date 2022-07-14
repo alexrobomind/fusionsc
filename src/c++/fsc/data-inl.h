@@ -84,7 +84,7 @@ public:
 	Promise<void> buildArchive(DataRef<capnp::AnyPointer>::Client ref, Archive::Builder out, Maybe<Nursery&> nursery);
 	Promise<void> writeArchive(DataRef<capnp::AnyPointer>::Client ref, const kj::File& out);
 	LocalDataRef<capnp::AnyPointer> publishArchive(Archive::Reader archive);
-	LocalDataRef<capnp::AnyPointer> publishArchive(const kj::ReadableFile& f);
+	LocalDataRef<capnp::AnyPointer> publishArchive(const kj::ReadableFile& f, const capnp::ReaderOptions options);
 	
 	kj::FiberPool downloadPool;
 		
@@ -123,7 +123,7 @@ public:
 	
 	// Decodes the underlying data as a capnproto message
 	template<typename T>
-	typename T::Reader get();
+	typename T::Reader get(const capnp::ReaderOptions& options);
 	
 	// Returns a reader to the locally stored metadata
 	Metadata::Reader localMetadata();
@@ -147,7 +147,7 @@ public:
 
 	virtual ~LocalDataRefImpl() {};
 	
-	capnp::FlatArrayMessageReader& ensureReader();
+	capnp::FlatArrayMessageReader& ensureReader(const capnp::ReaderOptions& options);
 
 private:
 	LocalDataRefImpl() {};
@@ -160,10 +160,10 @@ private:
 // Helper methods to handle the special representation for capnp::Data.
 
 template<typename T>
-typename T::Reader getDataRefAs(LocalDataRefImpl& impl);
+typename T::Reader getDataRefAs(LocalDataRefImpl& impl, const capnp::ReaderOptions& options);
 
 template<>
-capnp::Data::Reader getDataRefAs<capnp::Data>(LocalDataRefImpl& impl);
+capnp::Data::Reader getDataRefAs<capnp::Data>(LocalDataRefImpl& impl, const capnp::ReaderOptions& options);
 
 template<typename T>
 Array<const byte> buildData(typename T::Reader reader, capnp::BuilderCapabilityTable& builderTable);
@@ -288,15 +288,15 @@ LocalDataRef<T> LocalDataService::publishArchive(Archive::Reader in) {
 }
 
 template<typename T>
-LocalDataRef<T> LocalDataService::publishArchive(const kj::ReadableFile& in) {
-	return impl -> publishArchive(in).as<T>();
+LocalDataRef<T> LocalDataService::publishArchive(const kj::ReadableFile& in, const capnp::ReaderOptions options) {
+	return impl -> publishArchive(in, options).as<T>();
 }
 
 // === class LocalDataRefImpl ===
 
 template<typename T>
-typename T::Reader internal::LocalDataRefImpl::get() {
-	return internal::getDataRefAs<T>(*this);
+typename T::Reader internal::LocalDataRefImpl::get(const capnp::ReaderOptions& options) {
+	return internal::getDataRefAs<T>(*this, options);
 }
 
 // === class LocalDataRef ===
@@ -344,12 +344,12 @@ LocalDataRef<T>& LocalDataRef<T>::operator=(LocalDataRef<T>&& other) {
 
 template<typename T>
 ArrayPtr<const byte> LocalDataRef<T>::getRaw() {
-	return backend -> get<capnp::Data>();
+	return backend -> get<capnp::Data>(READ_UNLIMITED);
 }
 
 template<typename T>
-typename T::Reader LocalDataRef<T>::get() {
-	return backend -> get<T>();
+typename T::Reader LocalDataRef<T>::get(const capnp::ReaderOptions& options) {
+	return backend -> get<T>(options);
 }
 
 template<typename T>
@@ -507,8 +507,8 @@ Array<const byte> internal::buildData(typename T::Reader reader, capnp::BuilderC
 }
 
 template<typename T>
-typename T::Reader internal::getDataRefAs(internal::LocalDataRefImpl& impl) {
-	auto& msgReader = impl.ensureReader();
+typename T::Reader internal::getDataRefAs(internal::LocalDataRefImpl& impl, const capnp::ReaderOptions& options) {
+	auto& msgReader = impl.ensureReader(options);
 	
 	// Return the reader's root at the requested type
 	capnp::AnyPointer::Reader root = msgReader.getRoot<capnp::AnyPointer>();

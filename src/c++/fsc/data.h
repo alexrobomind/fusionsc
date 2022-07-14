@@ -5,6 +5,7 @@
 #include <capnp/any.h>
 #include <capnp/dynamic.h>
 #include <kj/async.h>
+#include <limits>
 //#include <kj/filesystem.h>
 
 #include "common.h"
@@ -102,6 +103,8 @@ struct DataService {
 };
 
 #endif
+
+constexpr capnp::ReaderOptions READ_UNLIMITED { std::numeric_limits<uint64_t>::max(), std::numeric_limits<int>::max() };
 
 //! Publishes and downloads data into LocalDataRef instances.
 /**
@@ -234,7 +237,7 @@ public:
 	 * to the root used when writing the archive.
 	 */
 	template<typename T>
-	LocalDataRef<T> publishArchive(const kj::ReadableFile& in);
+	LocalDataRef<T> publishArchive(const kj::ReadableFile& in, const capnp::ReaderOptions readerOpts = READ_UNLIMITED);
 	
 	//! Write DataRef to an Archive::Builder
 	/**
@@ -326,7 +329,7 @@ public:
 	 * at its root. Note that if T is not capnp::Data, and the backing array
 	 * can not be interpreted as a CapNProto message, this method will fail.
 	 */
-	typename T::Reader get();
+	typename T::Reader get(const capnp::ReaderOptions& options = READ_UNLIMITED);
 	
 	/**
 	 * Provides a new data reference sharing the underling buffer and
