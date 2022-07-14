@@ -705,7 +705,7 @@ void extractBrand(capnp::Schema in, capnp::schema::Brand::Builder out) {
 		return;
 	}
 	
-	auto scopeIds = in.listBrandArgumentScopes();
+	auto scopeIds = in.getGenericScopeIds();
 	
 	auto outScopes = out.initScopes(scopeIds.size());
 	for(auto iScope : kj::indices(scopeIds)) {
