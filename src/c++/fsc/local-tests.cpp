@@ -160,14 +160,33 @@ TEST_CASE("pipe") {
 		p1.wait(h1->waitScope());
 	}
 	
-	/*SECTION("multithread", "Can open a second handle in another thread") {
+	SECTION("multithread", "Can open a second handle in another thread") {
 		{
 			kj::Thread t([&]() {
 				ThreadHandle h2(lib->addRef());
+				auto p2 = pipe.ends[1] -> read(wBuf.begin(), wBuf.size(), wBuf.size());
+				p2.wait(h2.waitScope());
+				
+				pipe.ends[1] -> abortRead();
 			});
+			
+			auto p1 = pipe.ends[0] -> write(rBuf.begin(), rBuf.size());
+			p1.wait(h1->waitScope());
 		}
-		SUCCEED();
-	}*/
+	}
+	
+	SECTION("multithread-reverse", "Can open a second handle in another thread") {
+		{
+			kj::Thread t([&]() {
+				ThreadHandle h2(lib->addRef());
+				auto p2 = pipe.ends[1] -> write(rBuf.begin(), rBuf.size());
+				p2.wait(h2.waitScope());
+			});
+			
+			auto p1 = pipe.ends[0] -> read(wBuf.begin(), wBuf.size(), wBuf.size());
+			p1.wait(h1->waitScope());
+		}
+	}
 	
 	KJ_DBG("Check");
 	REQUIRE(wBuf == rBuf);

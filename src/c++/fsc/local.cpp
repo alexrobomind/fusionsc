@@ -376,14 +376,28 @@ namespace {
 			
 			mine.outQueue.add(*e);
 			
-			if(!pumpLocal())
-				startPumpLoop();
+			startPumpLoop();
 			
 			return mv(paf.promise);
 		}
 		
-		void shutdownReadEnd(kj::Exception&& reason) {
+		void shutdownReadEnd(kj::Exception&& reason) {		
+			// Stop pump loop
 			readerPrivate.readCanceler.cancel(mv(reason));
+			readerPrivate.readError = reason;
+			readerPrivate.pumpLoop = NEVER_DONE;
+			
+			// Perform last pump
+			pumpLocal();
+			
+			// Delete existing fulfiller
+			auto locked = shared.lockExclusive();
+			
+			if(locked -> newInputsReady.get() != nullptr) {
+				KJ_DBG("Clear NIR", this);
+				locked -> newInputsReady -> reject(cp(reason));
+				locked -> newInputsReady = nullptr;
+			}
 		}
 		
 		Maybe<uint64_t> tryGetLength() {
@@ -510,6 +524,7 @@ namespace {
 			KJ_IF_MAYBE(pErr, locked->sendError) {
 				mine.newInputsReady = cp(*pErr);
 			} else {
+				KJ_DBG("Set NIR", this);
 				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
 				locked -> newInputsReady = mv(paf.fulfiller);
 				mine.newInputsReady = mv(paf.promise);
@@ -522,11 +537,11 @@ namespace {
 			if(mine.pumpLoop != nullptr)
 				return;
 			
-			mine.pumpLoop = mine.readCanceler.wrap(pump())
+			mine.pumpLoop = mine.readCanceler.wrap(pump())/*
 			.eagerlyEvaluate([this, &mine](kj::Exception e){
 				mine.readError = e;
 				pumpLocal();
-			});
+			})*/;
 		}
 		
 		Promise<void> pump() {
