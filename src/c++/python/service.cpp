@@ -13,6 +13,7 @@
 #include <pybind11/pybind11.h>
 
 #include <fsc/services.h>
+#include <fsc/offline.capnp.h>
 
 using capnp::DynamicValue;
 using capnp::DynamicList;
@@ -66,8 +67,8 @@ namespace fscpy {
 	}
 
 	void loadDefaultSchema(py::module_& m) {
-		defaultLoader.addBuiltin<ToroidalGrid, MagneticField, RootService>();
-		auto schemas = getBuiltinSchemas<RootService>();
+		defaultLoader.addBuiltin<ToroidalGrid, MagneticField, RootService, OfflineData>();
+		auto schemas = getBuiltinSchemas<RootService, OfflineData>();
 			
 		for(auto node : schemas) {
 			defaultLoader.importNodeIfRoot(node.getId(), m);

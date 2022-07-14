@@ -14,6 +14,8 @@ PyPromise download(capnp::DynamicCapability::Client capability) {
 	using capnp::DynamicList;
 	using capnp::DynamicValue;
 	
+	fscpy::PyContext::startEventLoop();
+	
 	constexpr uint64_t DR_ID = capnp::typeId<DataRef<capnp::AnyPointer>>();
 	
 	capnp::InterfaceSchema refSchema = capability.getSchema();
@@ -79,10 +81,12 @@ capnp::DynamicValue::Reader loadArchive(kj::StringPtr path) {
 	using capnp::DynamicList;
 	using capnp::DynamicValue;
 	
+	fscpy::PyContext::startEventLoop();
+	
 	//TODO: Put an injection context into Library
 	auto fs = kj::newDiskFilesystem();
 	
-	auto absPath = fs->getCurrentPath().eval(path);
+	auto absPath = fs->getCurrentPath().evalNative(path);
 	auto file = fs->getRoot().openFile(absPath);
 	
 	LocalDataRef<AnyPointer> root = getActiveThread().dataService().publishArchive<AnyPointer>(*file);
