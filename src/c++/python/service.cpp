@@ -56,6 +56,11 @@ RootService::Client connectLocal1() {
 	return attach(server, mv(serverFactory));
 }
 
+ResolverChain::Client newResolverChain1() {
+	fscpy::PyContext::startEventLoop();
+	return newResolverChain();
+}
+
 }
 
 namespace fscpy {
@@ -64,11 +69,12 @@ namespace fscpy {
 		m.def("connectSameThread", &connectSameThread2);
 		m.def("connectLocal", &connectLocal1);
 		m.def("connectSameThread", &connectRemote1, py::arg("address"), py::arg("port") = 0);
+		m.def("newResolverChain", &newResolverChain1);
 	}
 
 	void loadDefaultSchema(py::module_& m) {
-		defaultLoader.addBuiltin<ToroidalGrid, MagneticField, RootService, OfflineData>();
-		auto schemas = getBuiltinSchemas<RootService, OfflineData>();
+		defaultLoader.addBuiltin<ToroidalGrid, MagneticField, RootService, OfflineData, ResolverChain>();
+		auto schemas = getBuiltinSchemas<FieldResolver, GeometryResolver, RootService, OfflineData, ResolverChain>();
 			
 		for(auto node : schemas) {
 			defaultLoader.importNodeIfRoot(node.getId(), m);

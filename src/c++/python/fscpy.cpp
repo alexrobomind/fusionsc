@@ -104,11 +104,13 @@ PYBIND11_MODULE(fscpy, m) {
 	baseMetaType = kj::heap<py::type>(standardMeta(
 		"MetaClass", py::make_tuple(collectionsMeta, standardMeta), metaAttributes
 	));*/
-	baseMetaType = kj::heap<py::type>(standardMeta);
 	
-	// Helper classes
+	// Helper classes (we need these to define the standard metaclass)
 	bindHelperClasses(m);
 	helperFunctions(m);
+	
+	// baseMetaType = kj::heap<py::type>(standardMeta, py::type::of(py::type::of<Simple>()));
+	baseMetaType  = kj::heap<py::type>(py::type::of(py::type::of<Simple>()));
 	
 	// Initialize bindings for all components
 	initKj(m);

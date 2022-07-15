@@ -486,7 +486,20 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 	clientAttrs["__qualname__"] = innerName;
 	clientAttrs["__module__"] = moduleName;
 	
-	py::object clientCls = (*baseMetaType)("Client", py::make_tuple(baseClass), clientAttrs);
+	py::list bases;
+	for(auto baseType : schema.getSuperclasses()) {
+		auto id = baseType.getProto().getId();
+		
+		if(globalClasses -> contains(id))
+			bases.append((*globalClasses)[py::cast(id)].attr("Client"));
+		else
+			py::print("Missing base class when creating class", innerName, ", id =", id);
+	}
+	
+	if(bases.size() == 0)
+		bases.append(baseClass);
+	
+	py::object clientCls = (*baseMetaType)("Client", py::eval("tuple")(bases), clientAttrs);
 	outerCls.attr("Client") = clientCls;
 	
 	
@@ -729,6 +742,9 @@ bool fscpy::Loader::importNode(uint64_t nodeID, py::module scope) {
 	auto schema = capnpLoader.get(nodeID);
 	
 	if(!obj.is_none()) {
+		if(py::hasattr(scope, schema.getUnqualifiedName().cStr()))
+			return false;
+		
 		scope.add_object(schema.getUnqualifiedName().cStr(), obj);
 		return true;
 	}
