@@ -93,6 +93,8 @@ public:
 	
 	inline void setLimits(LocalDataService::Limits newLimits);
 	
+	void setChunkDebugMode();
+	
 private:
 	Promise<LocalDataRef<capnp::AnyPointer>> doDownload(DataRef<capnp::AnyPointer>::Client src, bool recursive);
 	Promise<Archive::Entry::Builder> createArchiveEntry(DataRef<capnp::AnyPointer>::Client ref, kj::TreeMap<ID, capnp::Orphan<Archive::Entry>>& entries, capnp::Orphanage orphanage, Maybe<Nursery&> nursery);
@@ -104,6 +106,8 @@ private:
 	MMapTemporary fileBackedMemory;
 	
 	friend class LocalDataRefImpl;
+	
+	bool debugChunks = false;
 };
 
 /**

@@ -21,6 +21,7 @@ TEST_CASE("local_publish") {
 	LibraryThread th = l -> newThread();
 	
 	LocalDataService ds(l);
+	ds.setChunkDebugMode();
 	
 	auto id   = kj::heapArray<const byte>({0x00, 0xFF});
 	
@@ -67,7 +68,8 @@ TEST_CASE("local_publish") {
 		using DDH = DataRefHolder<DataHolder>;
 
 		auto& ws = th -> ioContext().waitScope;
-		auto data1 = kj::heapArray<const byte>({0x00, 0x01});
+		auto data1 = kj::heapArray<byte>(1024);
+		th -> rng().randomize(data1);
 
 		capnp::MallocMessageBuilder mb1;
 		DataHolder::Builder inner = mb1.initRoot<DataHolder>();
@@ -108,14 +110,19 @@ TEST_CASE("local_publish") {
 			capnp::MallocMessageBuilder tmp;
 			auto archive = tmp.initRoot<Archive>();
 			
+			INFO("Building");
 			ds.buildArchive(ref2, archive).wait(ws);
 			
 			Library l2 = newLibrary();
 			LocalDataService ds2(l2);
 			
+			INFO("Reading");
 			LocalDataRef<DDH> ref22 = ds2.publishArchive<DDH>(archive);
+			
+			INFO("Downloading");
 			LocalDataRef<DataHolder> ref12 = ds2.download(ref22.get().getRef()).wait(ws);
 			
+			INFO("Extracting");
 			DataHolder::Reader inner2 = ref12.get();
 			REQUIRE(inner.getData() == inner2.getData());
 		}

@@ -268,6 +268,9 @@ public:
 	
 	///@}
 	
+	//! Reduces chunk size to 1kB and throws error if chunks can't be mapped
+	void setChunkDebugMode();
+	
 	/**
 	 * Constructs a new data service instance using the shared backing store contained in the given
 	 * library handle.

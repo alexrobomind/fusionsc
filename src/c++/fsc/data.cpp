@@ -58,6 +58,10 @@ LocalDataService& LocalDataService::operator=(LocalDataService&& other) {
 
 void LocalDataService::setLimits(Limits newLimits) { impl->setLimits(newLimits); }
 
+void LocalDataService::setChunkDebugMode() {
+	impl -> setChunkDebugMode();
+}
+
 /*LocalDataRef<capnp::Data> LocalDataService::publish(ArrayPtr<const byte> id, Array<const byte>&& data) {
 	return impl->publish(
 		id,
@@ -211,6 +215,11 @@ Own<internal::LocalDataServiceImpl> internal::LocalDataServiceImpl::addRef() {
 
 void internal::LocalDataServiceImpl::setLimits(LocalDataService::Limits newLimits) {
 	limits = newLimits;
+}
+
+
+void internal::LocalDataServiceImpl::setChunkDebugMode() {
+	debugChunks = true;
 }
 
 Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::download(DataRef<capnp::AnyPointer>::Client src, bool recursive) {
@@ -478,7 +487,7 @@ Promise<Archive::Entry::Builder> internal::LocalDataServiceImpl::createArchiveEn
 		auto raw = local.getRaw();
 		auto rawSize = raw.size();
 		
-		constexpr size_t CHUNK_SIZE = 1024 * 1024 * 256;
+		const size_t CHUNK_SIZE = debugChunks ? 64 : 1024 * 1024 * 256;
 		const size_t nChunks = rawSize < CHUNK_SIZE ? 1 : rawSize / CHUNK_SIZE + 1;
 		
 		auto chunkData = kj::heapArray<capnp::Orphan<capnp::Data>>(nChunks);
@@ -658,7 +667,7 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(A
 			size_t end = start + chunk.size();
 			auto out = data.slice(start, end);
 			memcpy(out.begin(), chunk.begin(), chunk.size());
-			end = start;
+			start = end;
 		}
 		
 		LocalRef local = publish(
@@ -758,6 +767,10 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(c
 		size_t totalSize = 0;
 		for(auto chunk : inData)
 			totalSize += chunk.size();
+		
+		if(debugChunks) {
+			KJ_REQUIRE(canMMap);
+		}
 		
 		//if(inData.size() == 1) {
 		if(canMMap) {
