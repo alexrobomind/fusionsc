@@ -84,7 +84,6 @@ TEST_CASE("preheat") {
 	
 	// Get fields to preheat
 	auto fields = preheatFields(Temporary<W7XCoilSet>().asReader());
-	KJ_DBG(fields);
 }
 
 }}

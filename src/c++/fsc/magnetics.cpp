@@ -483,7 +483,7 @@ namespace {
 }
 
 void simpleTokamak(MagneticField::Builder output, double rMajor, double rMinor, unsigned int nCoils, double Ip) {
-	nCoils = 1;
+	nCoils = 20;
 	auto fields = output.initSum(nCoils + 1);
 	
 	for(auto i : kj::range(0, nCoils)) {

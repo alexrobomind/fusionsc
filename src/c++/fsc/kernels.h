@@ -562,7 +562,6 @@ struct KernelLauncher<Eigen::ThreadPoolDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
 	static Own<Operation> launch(Eigen::ThreadPoolDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
 		auto func = [params...](Eigen::Index start, Eigen::Index end) mutable {
-			KJ_DBG("Executing", start, end);
 			for(Eigen::Index i = start; i < end; ++i)
 				f(i, params...);
 		};
@@ -581,14 +580,12 @@ struct KernelLauncher<Eigen::ThreadPoolDevice> {
 			{}
 			
 			void operator()() {
-				KJ_DBG("TDP done");
 				op->done();
 			}
 		};
 		
 		auto funcPtr = kj::heap<decltype(func)>(mv(func));
 		auto funcCopyable = [ptr = funcPtr.get()](Eigen::Index start, Eigen::Index end) {
-			KJ_DBG("fCopyable", ptr);
 			(*ptr)(start, end);
 		};
 		result->attachDestroyAnywhere(mv(funcPtr));
