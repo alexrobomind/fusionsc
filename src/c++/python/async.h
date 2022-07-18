@@ -108,6 +108,14 @@ struct PyPromise {
 		return holder.addBranch().poll(PyContext::waitScope());
 	}
 	
+	inline PyPromise then(py::function f) {
+		return holder.addBranch().then([f = mv(f)](Own<PyObjectHolder> holder) {
+			py::gil_scoped_acquire withGIL;
+			
+			return f(holder->content);
+		});
+	}
+	
 private:
 	kj::ForkedPromise<Own<PyObjectHolder>> holder;
 };

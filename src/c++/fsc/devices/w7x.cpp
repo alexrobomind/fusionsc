@@ -682,12 +682,18 @@ ComponentsDB::Client newComponentsDBFromWebservice(kj::StringPtr address) {
 	return ComponentsDB::Client(kj::heap<ComponentsDBWebservice>(address));
 }
 
-CoilsDB::Client newOfflineCoilsDB(LocalDataRef<OfflineData> offlineData) {
-	return CoilsDB::Client(kj::heap<OfflineCoilsDB>(mv(offlineData)));
+CoilsDB::Client newCoilsDBFromOfflineData(DataRef<OfflineData>::Client offlineData) {
+	return getActiveThread().dataService().download(offlineData)
+	.then([](LocalDataRef<OfflineData> offlineData) {
+		return CoilsDB::Client(kj::heap<OfflineCoilsDB>(mv(offlineData)));
+	});
 }
 
-ComponentsDB::Client newComponentsDBFromOfflineData(LocalDataRef<OfflineData> offlineData) {
-	return ComponentsDB::Client(kj::heap<OfflineComponentsDB>(mv(offlineData)));
+ComponentsDB::Client newComponentsDBFromOfflineData(DataRef<OfflineData>::Client offlineData) {
+	return getActiveThread().dataService().download(offlineData)
+	.then([](LocalDataRef<OfflineData> offlineData) {
+		return ComponentsDB::Client(kj::heap<OfflineComponentsDB>(mv(offlineData)));
+	});
 }
 
 kj::Array<Temporary<MagneticField>> preheatFields(W7XCoilSet::Reader coils) {

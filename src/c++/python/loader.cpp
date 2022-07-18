@@ -723,6 +723,7 @@ void extractBrand(capnp::Schema in, capnp::schema::Brand::Builder out) {
 	auto outScopes = out.initScopes(scopeIds.size());
 	for(auto iScope : kj::indices(scopeIds)) {
 		auto outScope = outScopes[iScope];
+		outScope.setScopeId(scopeIds[iScope]);
 		
 		auto inBindings  = in.getBrandArgumentsAtScope(scopeIds[iScope]);
 		auto outBindings = outScope.initBind(inBindings.size());

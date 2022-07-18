@@ -343,6 +343,11 @@ namespace pybind11 { namespace detail {
 		
 		PYBIND11_TYPE_CASTER(Builder, const_name<Builds>() + const_name(".Builder"));
 		
+		// We need this so libstdc++ can declare tuples involving this class
+		type_caster() = default;
+		type_caster(const type_caster<Builder, typename kj::EnableIf<CAPNP_KIND(capnp::FromBuilder<Builder>) == capnp::Kind::STRUCT && !fsc::isTemporary<Builder>()>>& other) = delete;
+		type_caster(type_caster<Builder, typename kj::EnableIf<CAPNP_KIND(capnp::FromBuilder<Builder>) == capnp::Kind::STRUCT && !fsc::isTemporary<Builder>()>>&& other) = default;
+		
 		bool load(handle src, bool convert) {
 			// Try to load as dynamic struct
 			type_caster<DynamicStruct::Builder> subCaster;
@@ -382,6 +387,11 @@ namespace pybind11 { namespace detail {
 		
 		PYBIND11_TYPE_CASTER(Reader, const_name<Reads>() + const_name(".Reader"));
 		
+		// We need this so libstdc++ can declare tuples involving this class
+		type_caster() = default;
+		type_caster(const type_caster<Reader, kj::EnableIf<CAPNP_KIND(capnp::FromReader<Reader>) == capnp::Kind::STRUCT>>& other) = delete;
+		type_caster(type_caster<Reader, kj::EnableIf<CAPNP_KIND(capnp::FromReader<Reader>) == capnp::Kind::STRUCT>>&& other) = default;
+		
 		bool load(handle src, bool convert) {
 			// Try to load as dynamic struct
 			type_caster<DynamicStruct::Reader> subCaster;
@@ -417,6 +427,11 @@ namespace pybind11 { namespace detail {
 	template<typename T>
 	struct type_caster<fsc::Temporary<T>, kj::EnableIf<capnp::kind<T>() == capnp::Kind::STRUCT>> {
 		PYBIND11_TYPE_CASTER(fsc::Temporary<T>, const_name<T>() + const_name(".Builder"));
+		
+		// We need this so libstdc++ can declare tuples involving this class
+		type_caster() = default;
+		type_caster(const type_caster<fsc::Temporary<T>, kj::EnableIf<capnp::kind<T>() == capnp::Kind::STRUCT>>& other) = delete;
+		type_caster(type_caster<fsc::Temporary<T>, kj::EnableIf<capnp::kind<T>() == capnp::Kind::STRUCT>>&& other) = default;
 		
 		bool load(handle src, bool convert) {
 			return false;
@@ -454,18 +469,24 @@ namespace pybind11 { namespace detail {
 	struct type_caster<Client, kj::EnableIf<pybind_fsc::castThisCap<capnp::FromClient<Client>>()>> {	
 		using ClientFor = capnp::FromClient<Client>;
 		
-		PYBIND11_TYPE_CASTER(ClientFor, const_name<ClientFor>() + const_name(".Client"));
+		PYBIND11_TYPE_CASTER(Client, const_name<ClientFor>() + const_name(".Client"));
+		
+		// We need this so libstdc++ can declare tuples involving this class
+		type_caster() : value(nullptr) {};
+		type_caster(const type_caster<Client, kj::EnableIf<pybind_fsc::castThisCap<capnp::FromClient<Client>>()>>& other) = delete;
+		type_caster(type_caster<Client, kj::EnableIf<pybind_fsc::castThisCap<capnp::FromClient<Client>>()>>&& other) = default;
 		
 		bool load(handle src, bool convert) {
 			// Try to load as dynamic struct
 			type_caster<capnp::DynamicCapability::Client> subCaster;
-			if(!subCaster.load(src, convert))
+			if(!subCaster.load(src, convert)) {
 				return false;
+			}
 			
 			try {
 				capnp::DynamicCapability::Client dynamic = (capnp::DynamicCapability::Client&) subCaster;
 				
-				capnp::InterfaceSchema staticSchema = fscpy::defaultLoader.importBuiltin<Client>().asInterface();
+				capnp::InterfaceSchema staticSchema = fscpy::defaultLoader.importBuiltin<ClientFor>().asInterface();
 				
 				KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
 				capnp::Capability::Client any = dynamic;

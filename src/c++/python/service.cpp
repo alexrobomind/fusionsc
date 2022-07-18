@@ -73,7 +73,14 @@ namespace fscpy {
 	}
 
 	void loadDefaultSchema(py::module_& m) {
-		defaultLoader.addBuiltin<ToroidalGrid, MagneticField, RootService, OfflineData, ResolverChain>();
+		defaultLoader.addBuiltin<
+			ToroidalGrid,
+			MagneticField,
+			RootService,
+			OfflineData,
+			ResolverChain
+		>();
+		
 		auto schemas = getBuiltinSchemas<FieldResolver, GeometryResolver, RootService, OfflineData, ResolverChain>();
 			
 		for(auto node : schemas) {

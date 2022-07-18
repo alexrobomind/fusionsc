@@ -1,0 +1,8 @@
+build*/
+_skbuild/
+gendocs/
+dist/
+*.pyc
+*.so
+*.pyd
+*.egg-info/
