@@ -1,6 +1,6 @@
 if(FSC_WITH_PYTHON)
 	pybind11_add_module(
-		fscpy
+		pybindfsc
 		
 		capnp.cpp
 		kj.cpp
@@ -14,7 +14,7 @@ if(FSC_WITH_PYTHON)
 	)
 
 	target_link_libraries(
-		fscpy
+		pybindfsc
 		PUBLIC
 		fsc
 	)

@@ -85,7 +85,7 @@ py::object simpleObject() {
 
 }
 
-PYBIND11_MODULE(fscpy, m) {
+PYBIND11_MODULE(pybindfsc, m) {
 	// Creating a temporary ClientHook initializes a run-time
 	// link between the capnp library and the capnp-rpc library
 	(void) capnp::newBrokenCap("Don't look at me. I'm shy.");
