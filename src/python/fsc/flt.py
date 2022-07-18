@@ -3,7 +3,7 @@ from . import native
 import numpy as np
 import functools
 
-from typing import Optional
+from typing import Optional, List
 
 def asyncAPI(f):
 	"""
@@ -47,8 +47,8 @@ class FLT:
 	calculator: native.FieldCalculator.Client
 	tracer: native.FLT.Client
 	
-	fieldResolver: list[native.FieldResolver]
-	geoResolver: list[native.GeometryResolver]
+	fieldResolver: List[native.FieldResolver]
+	geoResolver: List[native.GeometryResolver]
 	
 	asyncMode: bool
 	
