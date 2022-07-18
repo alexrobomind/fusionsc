@@ -43,7 +43,7 @@ struct MainCls {
 		KJ_IF_MAYBE(pPort, this -> port)
 			port = *pPort;
 			
-		auto server = fsc::startServer(lt, port, this->address).wait(ws);
+		auto server = fsc::startServer(port, this->address).wait(ws);
 		port = server->getPort();
 		
 		std::cout << port << std::endl;

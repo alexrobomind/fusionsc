@@ -8,6 +8,7 @@
 using TestStruct   = cupnp::test::    TestStruct;
 using CuTestStruct = cupnp::test::cu::TestStruct;
 
+/*
 TEST_CASE("Exporting to GPU") {
 	capnp::MallocMessageBuilder msg;
 	
@@ -57,4 +58,4 @@ TEST_CASE("Exporting to GPU") {
 	}
 	
 	REQUIRE_THROWS(cupnpRoot.mutateLu32Def());
-}
+}*/

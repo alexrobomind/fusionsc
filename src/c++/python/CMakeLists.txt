@@ -18,4 +18,6 @@ if(FSC_WITH_PYTHON)
 		PUBLIC
 		fsc
 	)
+	
+	INSTALL(TARGETS pybindfsc LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/site-packages/fsc)
 endif()

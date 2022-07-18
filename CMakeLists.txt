@@ -237,7 +237,6 @@ include(Catch)
 SET(FSC_GENAPI "")
 
 add_subdirectory(src/c++)
-add_subdirectory(src/python)
 add_subdirectory(docs)
 
 option(FSC_WITH_INSTRUMENTATION "Whether to perform instrumentation")

@@ -5,7 +5,7 @@
 
 #include <kj/exception.h>
 #include <kj/filesystem.h>
-#include <kj/miniposix.h>
+//#include <kj/miniposix.h>
 
 #include <kj/main.h>
 
