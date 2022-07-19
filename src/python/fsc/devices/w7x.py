@@ -1,10 +1,31 @@
 from fsc.native.devices.w7x import (
-	defaultGrid
+	defaultGrid, webserviceCoilsDB, webserviceComponentsDB
 )
 
 from fsc.native import W7XCoilSet
 from fsc.asnc import asyncFunction
 from fsc.flt import Config
+from fsc.resolve import fieldResolvers, geometryResolvers
+
+# Databases
+
+def connectCoilsDB(address: str):
+    global fieldResolvers
+    
+	coilsDB = webserviceCoilsDB(address)
+	coilsDBResolver = cppw7x.coilsDBResolver(coilsDB)
+    fieldResolvers.append(coilsDBResolver)
+    
+    return coilsDB
+
+def connectComponentsDB(address: str):
+    global geometryResolvers
+    
+    componentsDB = webserviceComponentsDB(address)
+    componentsDBResolver = cppw7x.componentsDBResolver(componentsDB)
+    geometryResolvers.append(componentsDBResolver)
+    
+    return componentsDB
 
 # The W7XCoilSet type defaults to the W7-X coils 160 ... 230
 cadCoilPack = W7XCoilSet.newMessage()

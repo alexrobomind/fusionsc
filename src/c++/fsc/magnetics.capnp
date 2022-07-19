@@ -143,6 +143,11 @@ struct MagneticField {
 		invert @9 : MagneticField;
 		nested @10 : MagneticField;
 		
+		cached : group {
+			nested @11 : MagneticField;
+			computed @12 : ComputedField;
+		}
+		
 		# ========================= Device-specific ==========================
 		
 		# ------------------------------ W7-X --------------------------------
@@ -152,28 +157,28 @@ struct MagneticField {
 				configurationDB : group {
 					# The W7-X config specification does not usually include a coil width
 					# Therefore, we have to add this information here
-					biotSavartSettings @11 : BiotSavartSettings;
-					configID  @12 : UInt64;
+					biotSavartSettings @13 : BiotSavartSettings;
+					configID  @14 : UInt64;
 				}
 				
 				coilsAndCurrents : group {
 					# Currents in the non-planar coils
-					nonplanar @ 13 : List(Float64) = [10000, 10000, 10000, 10000, 10000];
+					nonplanar @ 15 : List(Float64) = [10000, 10000, 10000, 10000, 10000];
 					
 					# A list of planar coil currents
-					planar    @ 14 : List(Float64) = [0, 0];
+					planar    @ 16 : List(Float64) = [0, 0];
 					
 					# A list of trim coil currents
-					trim      @ 15 : List(Float64) = [0, 0, 0, 0, 0];
+					trim      @ 17 : List(Float64) = [0, 0, 0, 0, 0];
 					
 					# A list of control coil currents of either
 					# - length 2: Upper and Lower coils
 					# - length 5: Coils in each module
 					# - length 10: All 10 control coils
-					control @16 : List(Float64) = [0, 0];
+					control @18 : List(Float64) = [0, 0];
 					
 					# The coil set to use. Usually the default theory coils
-					coils @17 : W7XCoilSet;
+					coils @19 : W7XCoilSet;
 				}
 			}
 		}

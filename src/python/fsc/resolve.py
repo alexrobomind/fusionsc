@@ -2,6 +2,7 @@ from . import native
 from .asnc import asyncFunction
 
 import native.devices.w7x as cppw7x
+import contextlib
 
 fieldResolvers = []
 geometryResolvers = []
@@ -44,3 +45,17 @@ async def resolveGeometry(geometry, followRefs: bool = False):
 			pass
 		
 	return geometry
+
+@contextlib.contextmanager
+def backupResolvers():
+	global fieldResolvers
+	global geometryResolvers
+	
+	backupFR = fieldResolvers.copy()
+	backupGR = geometryResolvers.copy()
+	
+    try:
+        yield None
+	finally:
+        fieldResolvers = backupFR
+        geometryResolvers = backupGR

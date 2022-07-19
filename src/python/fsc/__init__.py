@@ -3,7 +3,7 @@ from . import devices
 from . import flt
 
 from .asnc import run, asyncFunction, eager
-from .resolve import importOfflineData, fieldResolvers, geometryResolvers
+from .resolve import importOfflineData, fieldResolvers, geometryResolvers, backupResolvers
 
 from typing import Optional
 

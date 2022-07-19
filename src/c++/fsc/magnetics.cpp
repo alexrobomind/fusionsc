@@ -274,6 +274,9 @@ struct CalculationSession : public FieldCalculator::Server {
 				case MagneticField::NESTED: {
 					return processField(calculator, node.getNested(), scale);
 				}
+				case MagneticField::CACHED: {
+					KJ_UNIMPLEMENTED();
+				}
 				default:
 					KJ_FAIL_REQUIRE("Unknown magnetic field node encountered. This either indicates that a device-specific node was not resolved, or a generic node from a future library version was presented");
 			}
@@ -373,6 +376,14 @@ Promise<void> FieldResolverBase::processField(MagneticField::Reader input, Magne
 		}
 		case MagneticField::NESTED: {
 			return processField(input.getNested(), output, context);
+		}
+		case MagneticField::CACHED: {
+			auto cachedIn = input.getCached();
+			auto cachedOut = output.getCached();
+			
+			cachedOut.setComputed(cachedIn.getComputed());
+			
+			return processField(cachedIn.getNested(), cachedOut.getNested(), context);
 		}
 		default: {
 			output.setNested(input);
