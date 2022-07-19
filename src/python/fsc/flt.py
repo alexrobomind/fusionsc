@@ -1,11 +1,12 @@
 from . import native
+from .asnc import asyncFunction
 
 import numpy as np
 import functools
 
 from typing import Optional, List
 
-def asyncAPI(f):
+def optionalAsync(f):
 	"""
 	Wrapper for functions that have switchable behavior based on
 	asyncMode. Will wait on returned promise if asyncMode is False
@@ -82,28 +83,29 @@ class FLT:
 		self.fieldResolvers.append(native.devices.w7x.offlineCoilsDB(offlineData))
 		self.geoResolvers.append(native.devices.w7x.offlineComponentsDB(offlineData))
 	
-	def _resolveField(self, field, followRefs: bool = False):
+	async def _resolveField(self, field, followRefs: bool = False):
 		field = native.readyPromise(field)
 		
 		for r in self.fieldResolvers:
-			field = field.then(lambda x: r.resolve(x, followRefs))
+			try:
+				field = await r.resolve(field, followRefs)
+			except:
+				pass
 			
 		return field
 	
-	@asyncAPI
-	def poincareInPhiPlanes(self, points, phiValues, nTurns, config):
-		def computeField(resolvedField: native.MagneticField):
-			return self.calculator.compute(resolvedField)
-			
-		def doTrace(computedField: native.ComputedField):
-			return self.tracer.trace(
-				startPoints = points,
-				field = resolvedField,
-				poincarePlanes = phiValues,
-				turnLimit = nTurns
-			)
+	@optionalAsync
+	@asyncFunction
+	async def poincareInPhiPlanes(self, points, phiValues, nTurns, config):
+		# Resovle & compute field
+		resolved    = await self._resolveField(config)
+		field       = await self.calculator.compute(resolvedField)
 		
-		def processResponse(fltResponse: native.FLTResponse):
-			return np.asarray(fltResponse.poincareHits)
-			
-		return _resolveField(config.field).then(computeField).then(doTrace).then(processResponse)
+		fltResponse = await self.tracer.trace(
+			startPoints = points,
+			field = resolvedField,
+			poincarePlanes = phiValues,
+			turnLimit = nTurns
+		)
+		
+		return np.asarray(fltResponse.poincareHits)

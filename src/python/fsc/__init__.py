@@ -2,7 +2,10 @@ from . import native
 from . import devices
 from . import flt
 
+from .asnc import run, asyncFunction
+
 from typing import Optional
+
 
 # Initialize event loop
 native.startEventLoop()
