@@ -696,6 +696,14 @@ ComponentsDB::Client newComponentsDBFromOfflineData(DataRef<OfflineData>::Client
 	});
 }
 
+FieldResolver::Client newCoilsDBResolver(CoilsDB::Client coilsDB) {
+	return FieldResolver::Client(kj::heap<CoilsDBResolver>(coilsDB));
+}
+
+GeometryResolver::Client newComponentsDBResolver(ComponentsDB::Client componentsDB) {
+	return GeometryResolver::Client(kj::heap<ComponentsDBResolver>(componentsDB));
+}
+
 kj::Array<Temporary<MagneticField>> preheatFields(W7XCoilSet::Reader coils) {
 	auto resolved = CoilsDBResolver::buildCoilFields(coils);
 	

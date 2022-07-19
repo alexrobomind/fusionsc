@@ -21,6 +21,9 @@ namespace fscpy {
 		~UnknownHolder () noexcept {}
 	};
 	
+	template<typename T>
+	UnknownObject* eraseType(T t) { return new UnknownHolder<T>(mv(t)); }
+	
 	// Init methods for various components
 	void initAsync(py::module_& m);
 	void initCapnp(py::module_& m);

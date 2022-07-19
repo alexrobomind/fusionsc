@@ -11,6 +11,68 @@
 //   kj::StringPtr
 //   template<typename T> kj::ArrayPtr<T>
 
+namespace fscpy {
+
+struct DynamicConstArray {
+	virtual size_t size() = 0;
+	virtual py::object get(size_t i) = 0;
+	virtual ~DynamicConstArray() = 0;
+};
+	
+struct DynamicArray : public DynamicConstArray {
+	virtual void set(size_t i, py::object val) = 0;
+};
+
+template<typename T, typename SFINAE = void>
+struct DynamicArrayImpl : public DynamicArray {
+	kj::ArrayPtr<T> asPtr;
+	
+	Maybe<kj::Array<T>> keepAlive;
+	
+	DynamicArrayImpl(kj::Array<T> newArr) :
+		asPtr(newArr.asPtr()),
+		keepAlive(mv(newArr))
+	{}
+	
+	DynamicArrayImpl(kj::ArrayPtr<T> newArr) :
+		asPtr(newArr.asPtr())
+	{}
+	
+	py::object get(size_t i) override {
+		return py::cast(asPtr[i]);
+	}
+	
+	void set(size_t i, py::object newVal) override {
+		asPtr[i] = py::cast<T>(newVal);
+	}
+	
+	size_t size() override { return asPtr.size(); }
+};
+
+template<typename T>
+struct DynamicArrayImpl<const T> : public DynamicConstArray {
+	kj::ArrayPtr<const T> asPtr;
+	
+	Maybe<kj::Array<const T>> keepAlive;
+	
+	DynamicArrayImpl(kj::Array<const T> newArr) :
+		asPtr(newArr.asPtr()),
+		keepAlive(mv(newArr))
+	{}
+	
+	DynamicArrayImpl(kj::ArrayPtr<const T> newArr) :
+		asPtr(newArr.asPtr())
+	{}
+	
+	py::object get(size_t i) override {
+		return py::cast(asPtr[i]);
+	}
+	
+	size_t size() override { return asPtr.size(); }
+};
+
+}
+
 namespace pybind11 { namespace detail {
 	
 template<>
@@ -104,7 +166,7 @@ struct NameForArray<unsigned char> { static inline constexpr auto name = const_n
 template<>
 struct NameForArray<const unsigned char> { static inline constexpr auto name = const_name("Bytes"); };
 
-template<typename T>
+/*template<typename T>
 struct type_caster<kj::ArrayPtr<T>> {
 	
 	PYBIND11_TYPE_CASTER(kj::ArrayPtr<T>, NameForArray<T>::name);
@@ -136,6 +198,97 @@ struct type_caster<kj::ArrayPtr<T>> {
 	static handle cast(kj::ArrayPtr<T> src, return_value_policy policy, handle parent) {
 		kj::Array<T> result = kj::heapArray(src);
 		return type_caster<kj::Array<T>>::cast(kj::mv(result), policy, parent);
+	}
+};*/
+
+template<typename T>
+struct type_caster<kj::ArrayPtr<T>> {
+	PYBIND11_TYPE_CASTER(kj::ArrayPtr<T>, NameForArray<T>::name);
+	
+	bool load(handle src, bool convert) {
+		// Check if it is an array we returned
+		type_caster<fscpy::DynamicArray> base;
+		if(!base.load(src, convert))
+			return false;
+		
+		// Check if the array is of correct type
+		fscpy::DynamicArrayImpl<T>* ptr = dynamic_cast<fscpy::DynamicArrayImpl<T>*>((fscpy::DynamicArray*) base);
+		if(ptr) {
+			value = ptr->asPtr;
+			return true;
+		}
+		
+		return false;
+	}
+	
+	static handle cast(kj::ArrayPtr<T> src, return_value_policy policy, handle parent) {
+		return type_caster<fscpy::DynamicArray>::cast(fscpy::DynamicArray(kj::heapArray(src)), policy, parent);
+	}
+};
+
+template<typename T>
+struct type_caster<kj::Array<T>> {
+	PYBIND11_TYPE_CASTER(kj::Array<T>, NameForArray<T>::name);
+	
+	// Arrays are owning objects. They can not be passed in via the
+	// standard pybind11 mechanisms.
+	bool load(handle src, bool convert) {
+		return false;
+	}
+	
+	static handle cast(kj::Array<T> src, return_value_policy policy, handle parent) {
+		return type_caster<fscpy::DynamicArray>::cast(fscpy::DynamicArray(kj::mv(src)), policy, parent);
+	}
+};
+
+template<typename T>
+struct type_caster<kj::ArrayPtr<const T>> {
+	PYBIND11_TYPE_CASTER(kj::ArrayPtr<T>, NameForArray<T>::name);
+	
+	bool load(handle src, bool convert) {
+		// Check if it is an array we returned
+		type_caster<fscpy::DynamicArray> base;
+		if(!base.load(src, convert))
+			return false;
+		
+		// Check if the array is of correct type
+		{
+			// Attempt 1: Mutable array
+			fscpy::DynamicArrayImpl<T>* ptr = dynamic_cast<fscpy::DynamicArrayImpl<T>*>((fscpy::DynamicArray*) base);
+			if(ptr) {
+				value = ptr->asPtr;
+				return true;
+			}
+		}
+		{
+			// Attempt 2: Const array
+			fscpy::DynamicArrayImpl<const T>* ptr = dynamic_cast<fscpy::DynamicArrayImpl<const T>*>((fscpy::DynamicArray*) base);
+			if(ptr) {
+				value = ptr->asPtr;
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
+	static handle cast(kj::ArrayPtr<const T> src, return_value_policy policy, handle parent) {
+		return type_caster<fscpy::DynamicConstArray>::cast(fscpy::DynamicArrayImpl(kj::heapArray(src)), policy, parent);
+	}
+};
+
+template<typename T>
+struct type_caster<kj::Array<const T>> {
+	PYBIND11_TYPE_CASTER(kj::Array<T>, NameForArray<T>::name);
+	
+	// Arrays are owning objects. They can not be passed in via the
+	// standard pybind11 mechanisms.
+	bool load(handle src, bool convert) {
+		return false;
+	}
+	
+	static handle cast(kj::Array<const T> src, return_value_policy policy, handle parent) {
+		return type_caster<fscpy::DynamicConstArray>::cast(fscpy::DynamicArrayImpl(kj::mv(src)), policy, parent);
 	}
 };
 

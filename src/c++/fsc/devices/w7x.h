@@ -21,11 +21,13 @@ static constexpr kj::StringPtr DEFAULT_COMPONENTSDB = "http://esb.ipp-hgw.mpg.de
  * Constructs a new client for the W7-X coils DB that connects to the webservice on the given address.
  */
 CoilsDB::Client newCoilsDBFromWebservice(kj::StringPtr addressPrefix);
-
 ComponentsDB::Client newComponentsDBFromWebservice(kj::StringPtr address);
 
 CoilsDB::Client newCoilsDBFromOfflineData(DataRef<OfflineData>::Client offlineData);
 ComponentsDB::Client newComponentsDBFromOfflineData(DataRef<OfflineData>::Client offlineData);
+
+FieldResolver::Client newCoilsDBResolver(CoilsDB::Client coilsDB);
+GeometryResolver::Client newComponentsDBResolver(ComponentsDB::Client componentsDB);
 
 kj::Array<Temporary<MagneticField>> preheatFields(W7XCoilSet::Reader coils);
 

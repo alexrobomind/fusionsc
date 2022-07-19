@@ -9,6 +9,16 @@ fsc::ToroidalGrid::Reader w7xDefaultGrid() {
 	return fsc::devices::w7x::DEFAULT_GRID;
 }
 
+py::list preheatFields(fsc::W7XCoilSet::Reader coils) {
+	py::list result;
+	
+	auto fields = fsc::devices::w7x::preheatFields(coils);
+	for(auto& field : fields)
+		result.append(py::cast(mv(field)));
+	
+	return result;
+}
+
 }
 
 namespace fscpy {
@@ -19,6 +29,10 @@ namespace fscpy {
 		w7x.def("defaultGrid", &w7xDefaultGrid);
 		w7x.def("offlineComponentsDB", &fsc::devices::w7x::newComponentsDBFromOfflineData);
 		w7x.def("offlineCoilsDB", &fsc::devices::w7x::newCoilsDBFromOfflineData);
+		w7x.def("componentsDBResolver", &fsc::devices::w7x::newComponentsDBResolver);
+		w7x.def("coilsDBResolver", &fsc::devices::w7x::newCoilsDBResolver);
+		
+		w7x.def("preheatFields", &preheatFields);
 	}
 	
 	void loadDeviceSchema(py::module_& m) {

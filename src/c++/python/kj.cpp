@@ -6,7 +6,7 @@ using namespace fscpy;
 
 namespace {
 
-template<typename T>
+/*template<typename T>
 struct ArraySetDefinition {
 	template<typename T2>
 	static void def(T2& pyClass) {
@@ -44,7 +44,7 @@ void defArray(kj::StringPtr name, py::module_ m) {
 	
 	ArraySetDefinition<T>::def(pyClass);
 	ArrayPtrSetDefinition<T>::def(pyClass2);
-}
+}*/
 
 }
 
@@ -52,12 +52,20 @@ namespace fscpy {
 	void initKj(py::module_& m) {
 		py::module_ mkj = m.def_submodule("kj");
 		
-		defArray<kj::byte>("ByteArray", mkj);
-		defArray<const kj::byte>("ConstByteArray", mkj);
+		//defArray<kj::byte>("ByteArray", mkj);
+		//defArray<const kj::byte>("ConstByteArray", mkj);
 		
 		py::class_<kj::StringPtr>(mkj, "StringPtr")
 			.def("__str__", [](kj::StringPtr ptr) { return ptr.cStr(); })
 			.def("__repr__", [](kj::StringPtr ptr) { return ptr.cStr(); })
+		;
+		py::class_<DynamicConstArray>(mkj, "ConstArray")
+			.def("__len__", &DynamicConstArray::size)
+			.def("__getitem__", &DynamicConstArray::get)
+		;
+		
+		py::class_<DynamicArray, DynamicConstArray>(mkj, "Array")
+			.def("__setitem__", &DynamicArray::set)
 		;
 	}
 }
