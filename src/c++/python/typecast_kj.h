@@ -47,6 +47,8 @@ struct DynamicArrayImpl : public DynamicArray {
 	}
 	
 	size_t size() override { return asPtr.size(); }
+	
+	~DynamicArrayImpl() noexcept {};
 };
 
 template<typename T>
@@ -69,6 +71,8 @@ struct DynamicArrayImpl<const T> : public DynamicConstArray {
 	}
 	
 	size_t size() override { return asPtr.size(); }
+	
+	~DynamicArrayImpl() noexcept {};
 };
 
 }

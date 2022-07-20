@@ -54,6 +54,7 @@ async def preheat(tracer, grid = defaultGrid(), coilPack: Union[W7XCoilSet.Build
 		
 	for field in fields:
 		field = await resolveField(field)
+		print(field)
 		computed = (await tracer.calculator.compute(field, grid)).computedField
 		
 		cache = newCache(field, computed)

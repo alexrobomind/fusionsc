@@ -23,7 +23,7 @@ if(FSC_WITH_PYTHON)
 		# If we build with scikit-build, this library needs to go into a special path that mirrors the package structure
 		# Scikit will then automatically detect its presence and copy it into the source tree before packaging or creating
 		# editable installs (!!!).
-		INSTALL(TARGETS native LIBRARY DESTINATION src/python/fsc)
+		INSTALL(TARGETS native LIBRARY DESTINATION src/python/fsc COMPONENT SKBUILD)
 	else()
 		INSTALL(TARGETS native LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 	endif()

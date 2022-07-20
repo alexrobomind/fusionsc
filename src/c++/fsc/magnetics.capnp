@@ -69,35 +69,45 @@ struct Filament {
 # --------------------------------- W7-X -----------------------------------
 
 struct W7XCoilSet {
-	invertMainCoils @0 : Bool = true;
-	biotSavartSettings @1 : BiotSavartSettings = (
-		width = 0.01,
-		stepSize = 0.01
-	);
-	
-	nWindMain @8 : List(UInt32) = [108, 108, 108, 108, 108, 36, 36];
-	nWindTrim @9 : List(UInt32) = [48, 72, 48, 48, 48];
-	nWindControl @10 : List(UInt32) = [8, 8, 8, 8, 8, 8, 8, 8, 8, 8];
-	
-	invertControlCoils @11 : List(Bool) = [
-		false, true,
-		false, true,
-		false, true,
-		false, true,
-		false, true
-	];
-	
 	union {
-		coilsDBSet : group {
-			mainCoilOffset    @2 : UInt32 = 160;
-			trimCoilIDs       @3 : List(UInt32) = [350, 241, 351, 352, 353];
-			controlCoilOffset @4 : UInt32 = 230;
+		coils : group {
+			invertMainCoils @0 : Bool = true;
+			biotSavartSettings @1 : BiotSavartSettings = (
+				width = 0.01,
+				stepSize = 0.01
+			);
+			
+			nWindMain @8 : List(UInt32) = [108, 108, 108, 108, 108, 36, 36];
+			nWindTrim @9 : List(UInt32) = [48, 72, 48, 48, 48];
+			nWindControl @10 : List(UInt32) = [8, 8, 8, 8, 8, 8, 8, 8, 8, 8];
+			
+			invertControlCoils @11 : List(Bool) = [
+				false, true,
+				false, true,
+				false, true,
+				false, true,
+				false, true
+			];
+			
+			union {
+				coilsDBSet : group {
+					mainCoilOffset    @2 : UInt32 = 160;
+					trimCoilIDs       @3 : List(UInt32) = [350, 241, 351, 352, 353];
+					controlCoilOffset @4 : UInt32 = 230;
+				}
+				
+				customCoilSet : group {
+					mainCoils @5 : List(DataRef(Filament)); # Must have length 70
+					trimCoils @6 : List(DataRef(Filament)); # Must have length 5
+					controlCoils @7 : List(DataRef(Filament)); # Must have length 10
+				}
+			}
 		}
 		
-		customCoilSet : group {
-			mainCoils @5 : List(DataRef(Filament)); # Must have length 70
-			trimCoils @6 : List(DataRef(Filament)); # Must have length 5
-			controlCoils @7 : List(DataRef(Filament)); # Must have length 10
+		fields : group {
+			mainFields @12 : List(ComputedField);
+			trimFields @13 : List(ComputedField);
+			controlFields @14 : List(ComputedField);
 		}
 	}
 }

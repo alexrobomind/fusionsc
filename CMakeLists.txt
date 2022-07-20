@@ -13,7 +13,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # - pybind11 (https://github.com/pybind/pybind11.git)
 
 set(FSC_FETCH_DEPENDENCIES On CACHE BOOL "Whether the build system is allowed to fetch external dependencies")
-set(FSC_ALWAYS_FETCH Off CACHE BOOL "Whether the build system is must fetch external dependencies")
+set(FSC_ALWAYS_FETCH On CACHE BOOL "Whether the build system must fetch external dependencies")
 
 # Try to enable CUDA
 option(FSC_WITH_CUDA "Whether to use CUDA compilation")
@@ -265,3 +265,13 @@ if(FSC_WITH_INSTRUMENTATION AND (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
 		DEPENDS fsc.profdata
 	)
 endif()
+
+# Scikit-build
+if(SKBUILD)
+	add_custom_target(fsc-install-skbuild
+		${CMAKE_COMMAND}
+		-DCMAKE_INSTALL_COMPONENT=SKBUILD
+		-P "${PROJECT_BINARY_DIR}/cmake_install.cmake"
+		DEPENDS native
+    )
+endif(SKBUILD)

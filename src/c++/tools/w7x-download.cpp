@@ -112,6 +112,17 @@ struct MainCls {
 		for(auto i : range(160, 230))
 			downloadCoil(i);
 		
+		// Control coils
+		for(auto i : range(230, 240))
+			downloadCoil(i);
+		
+		// Trim coils (cross-checked with coilsdb)
+		downloadCoil(350);
+		downloadCoil(241);
+		downloadCoil(351);
+		downloadCoil(352);
+		downloadCoil(353);
+		
 		// W7-X calculation boundary
 		downloadMesh(164);
 		
