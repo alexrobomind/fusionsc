@@ -411,7 +411,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 				py::object pyResponse = py::cast(mv(response));
 				pyReader.attr("_response") = pyResponse;
 				
-				return pyReader;
+				return kj::refcounted<PyObjectHolder>(mv(pyReader));
 			});
 			
 			// Extract pipeline

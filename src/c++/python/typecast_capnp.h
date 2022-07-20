@@ -27,7 +27,7 @@
 //   fscpy::DynamicStructPipeline
 
 namespace pybind11 { namespace detail {
-	
+		
 	template<>
 	struct type_caster<capnp::DynamicCapability::Client> {
 		using DynamicCapability = capnp::DynamicCapability;
@@ -201,6 +201,11 @@ namespace pybind11 { namespace detail {
 				return true;
 			}
 			
+			if(pyType.equal(eval("bool"))) {
+				value = src.cast<bool>();
+				return true;
+			}
+			
 			if(pyType.equal(eval("int"))) {
 				if(src >= eval("0")) {
 					value = src.cast<unsigned long long>();
@@ -213,6 +218,20 @@ namespace pybind11 { namespace detail {
 			if(pyType.equal(eval("str"))) {
 				strCaster.load(src, false);
 				value = capnp::Text::Reader((char*) strCaster);
+				return true;
+			}
+			
+			if(pyType.equal(eval("bytes"))) {
+				// strCaster.load(src, false);
+				// value = capnp::Text::Reader((char*) strCaster);
+				char *buffer = nullptr;
+				ssize_t length = 0;
+				auto asBytes = py::reinterpret_borrow<py::bytes>(src);
+				
+				if(PyBytes_AsStringAndSize(asBytes.ptr(), &buffer, &length) != 0)
+					throw py::error_already_set();
+				
+				value = capnp::Data::Reader((const unsigned char*) buffer, (size_t) length);
 				return true;
 			}
 						
@@ -344,7 +363,7 @@ namespace pybind11 { namespace detail {
 		PYBIND11_TYPE_CASTER(Builder, const_name<Builds>() + const_name(".Builder"));
 		
 		// We need this so libstdc++ can declare tuples involving this class
-		type_caster() = default;
+		type_caster() : value(nullptr) {};
 		type_caster(const type_caster<Builder, typename kj::EnableIf<CAPNP_KIND(capnp::FromBuilder<Builder>) == capnp::Kind::STRUCT && !fsc::isTemporary<Builder>()>>& other) = delete;
 		type_caster(type_caster<Builder, typename kj::EnableIf<CAPNP_KIND(capnp::FromBuilder<Builder>) == capnp::Kind::STRUCT && !fsc::isTemporary<Builder>()>>&& other) = default;
 		
@@ -393,6 +412,13 @@ namespace pybind11 { namespace detail {
 		type_caster(type_caster<Reader, kj::EnableIf<CAPNP_KIND(capnp::FromReader<Reader>) == capnp::Kind::STRUCT>>&& other) = default;
 		
 		bool load(handle src, bool convert) {
+			// Try to load as builder
+			type_caster<typename Reads::Builder> builderCaster;
+			if(builderCaster.load(src, convert)) {
+				value = ((typename Reads::Builder) builderCaster).asReader();
+				return true;
+			}
+			
 			// Try to load as dynamic struct
 			type_caster<DynamicStruct::Reader> subCaster;
 			if(!subCaster.load(src, convert))

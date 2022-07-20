@@ -31,7 +31,7 @@ namespace fscpy {
 		w7x.def("offlineCoilsDB", &fsc::devices::w7x::newCoilsDBFromOfflineData);
 		
 		w7x.def("webserviceCoilsDB", &fsc::devices::w7x::newCoilsDBFromWebservice);
-		w7x.def("webserviceComponentsDB", &fsc::devices::w7x::newComponentsDBFromWebservices);
+		w7x.def("webserviceComponentsDB", &fsc::devices::w7x::newComponentsDBFromWebservice);
 		
 		w7x.def("componentsDBResolver", &fsc::devices::w7x::newComponentsDBResolver);
 		w7x.def("coilsDBResolver", &fsc::devices::w7x::newCoilsDBResolver);

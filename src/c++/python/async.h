@@ -4,6 +4,8 @@
 
 #include <fsc/local.h>
 
+#include <functional>
+
 namespace fscpy {
 
 struct PyContext {
@@ -61,30 +63,96 @@ struct PyObjectHolder : public kj::Refcounted {
 };
 
 struct PyPromise {
-	inline PyPromise(Promise<py::object> input) :
-		holder(input.then([](py::object input) { return kj::refcounted<PyObjectHolder>(mv(input)); }).fork())
+	inline PyPromise(Promise<Own<PyObjectHolder>> input) :
+		holder(input.fork())
 	{}
+	
+	inline PyPromise(py::object obj) :
+		holder(nullptr)
+	{
+		auto holder = kj::refcounted<PyObjectHolder>(mv(obj));
+		Promise<Own<PyObjectHolder>> holderPromise = mv(holder);
+		
+		this -> holder = holderPromise.fork();
+	}
 	
 	inline PyPromise(PyPromise& other) :
 		holder(other.holder.addBranch().fork())
 	{}
 	
-	inline Promise<py::object> get() {
+	inline PyPromise(PyPromise&& other) :
+		holder(mv(other.holder))
+	{}
+	
+	template<typename T>
+	PyPromise(Promise<T> input) :
+		holder(
+			input
+			.then([](T x) {
+				py::gil_scoped_acquire withGIL;
+				return kj::refcounted<PyObjectHolder>(py::cast(x));
+			})
+			.fork()
+		)
+	{
+		static_assert(!kj::isSameType<T, py::object>(), "Promise<py::object> is unsafe");
+	}
+	
+	PyPromise(Promise<void> input) :
+		holder(
+			input
+			.then([]() {
+				py::gil_scoped_acquire withGIL;
+				return kj::refcounted<PyObjectHolder>(py::none());
+			})
+			.fork()
+		)
+	{}
+	
+	// Direct conversion to / from py::object promises is unsafe
+	// The underlying object might get deleted between events,
+	// which would happen outside the GIL.
+	
+	/*inline Promise<py::object> get() {
 		return holder.addBranch().then([](Own<PyObjectHolder> holder) {
 			py::gil_scoped_acquire withGIL;
 			
 			py::object increasedRefcount = holder->content;
 			return increasedRefcount; // Either move-returned or RVO'd, so this doesnt change refcount and therefore doesnt need GIL
 		});
+	
+		inline operator Promise<py::object>() {
+			return get();
+		}
+	}*/
+	
+	template<typename F, typename... Args>
+	auto then(F&& func, Args&&... args) {
+		return holder.addBranch()
+		.then(
+			[func = fwd<F>(func)](Own<PyObjectHolder> holder) mutable {
+				py::gil_scoped_acquire withGIL;
+			
+				return kj::evalNow(std::bind(fwd<F>(func), cp(holder->content)));
+			},
+			fwd<Args>(args)...
+		);
 	}
 	
-	inline operator Promise<py::object>() {
-		return get();
+	template<typename F>
+	auto catch_(F&& func) {
+		return holder.addBranch().catch_(fwd<F>(func));
 	}
 	
 	template<typename T>
 	Promise<T> as() {
-		return get().then([](py::object pyObj) { return py::cast<T>(pyObj); });
+		static_assert(!kj::isSameType<T, py::object>(), "Promise<py::object> is unsafe");
+		
+		return then([](py::object pyObj) { py::gil_scoped_acquire withGIL; return py::cast<T>(pyObj); });
+	}
+	
+	Promise<void> ignoreResult() {
+		return holder.addBranch().ignoreResult();
 	}
 	
 	template<typename T>
@@ -108,11 +176,12 @@ struct PyPromise {
 		return holder.addBranch().poll(PyContext::waitScope());
 	}
 	
-	inline PyPromise then(py::function f) {
+	inline PyPromise pyThen(py::function f) {
 		return holder.addBranch().then([f = mv(f)](Own<PyObjectHolder> holder) {
 			py::gil_scoped_acquire withGIL;
 			
-			return f(holder->content);
+			py::object result = f(holder->content);
+			return kj::refcounted<PyObjectHolder>(mv(result));
 		});
 	}
 	
@@ -121,3 +190,24 @@ private:
 };
 
 }
+
+namespace pybind11 { namespace detail {
+
+template<typename T>
+struct type_caster<kj::Promise<T>> {
+	PYBIND11_TYPE_CASTER(kj::Promise<T>, const_name("Promise"));
+	
+	bool load(handle src, bool convert) {
+		type_caster<fscpy::PyPromise> baseCaster;
+		if(!baseCaster.load(src, convert))
+			return false;
+				
+		value = static_cast<fscpy::PyPromise&>(baseCaster).as<T>();
+	}
+		
+	static handle cast(kj::Promise<T> src, return_value_policy policy, handle parent) {
+		return type_caster<fscpy::PyPromise>::cast(fscpy::PyPromise(mv(src)), policy, parent);
+	}	
+};
+
+}}

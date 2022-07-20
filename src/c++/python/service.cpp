@@ -13,6 +13,7 @@
 #include <pybind11/pybind11.h>
 
 #include <fsc/services.h>
+#include <fsc/magnetics.h>
 #include <fsc/offline.capnp.h>
 
 using capnp::DynamicValue;
@@ -70,12 +71,13 @@ namespace fscpy {
 		m.def("connectLocal", &connectLocal1);
 		m.def("connectSameThread", &connectRemote1, py::arg("address"), py::arg("port") = 0);
 		m.def("newResolverChain", &newResolverChain1);
+		m.def("newCache", &fsc::newCache);
 	}
 
 	void loadDefaultSchema(py::module_& m) {
 		defaultLoader.addBuiltin<
-			ToroidalGrid,
-			MagneticField,
+			//ToroidalGrid,
+			//MagneticField,
 			RootService,
 			OfflineData,
 			ResolverChain

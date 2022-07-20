@@ -14,8 +14,11 @@ struct FieldCalculation {
 	using Field = ::fsc::kernels::Field;
 	using MFilament = ::fsc::kernels::MFilament;
 	
+	constexpr static unsigned int GRID_VERSION = 7;
+	
 	Device& _device;
 	ToroidalGridStruct grid;
+	ToroidalGrid::Reader gridReader;
 	Field field;
 	MapToDevice<Field, Device> mappedField;
 	
@@ -25,9 +28,10 @@ struct FieldCalculation {
 	
 	const Operation& rootOp;
 	
-	FieldCalculation(ToroidalGridStruct in, Device& device, const Operation& rootOp) :
+	FieldCalculation(/*ToroidalGridStruct*/ToroidalGrid::Reader in, Device& device, const Operation& rootOp) :
 		_device(device),
-		grid(in),
+		grid(readGrid(in, GRID_VERSION)),
+		gridReader(in),
 		field(3, grid.nR, grid.nZ, grid.nPhi),
 		mappedField(field, _device),
 		rootOp(rootOp)
@@ -37,7 +41,7 @@ struct FieldCalculation {
 		hostMemSynchronize(device, rootOp);
 	}
 	
-	~FieldCalculation() { KJ_DBG("~FC"); }
+	~FieldCalculation() {}
 	
 	void add(double scale, Float64Tensor::Reader input) {
 		auto shape = input.getShape();
@@ -123,53 +127,51 @@ struct FieldCalculation {
 };
 
 template<typename Device>
-struct CalculationSession : public FieldCalculator::Server {
-	constexpr static unsigned int GRID_VERSION = 7;
-	
+struct CalculationSession : public FieldCalculator::Server {	
 	// Device device;
 	Device& device;
 	
-	ToroidalGridStruct grid;
-	Cache<ID, LocalDataRef<Float64Tensor>> cache;
+	// ToroidalGridStruct grid;
+	// Cache<ID, LocalDataRef<Float64Tensor>> cache;
 	
-	CalculationSession(Device& device, ToroidalGrid::Reader newGrid) :
-		device(device),
-		grid(readGrid(newGrid, GRID_VERSION))
+	CalculationSession(Device& device/*, ToroidalGrid::Reader newGrid*/) :
+		device(device)/*,
+		grid(readGrid(newGrid, GRID_VERSION))*/
 	{}
 	
 	//! Handles compute request
 	Promise<void> compute(ComputeContext context) {
-		KJ_DBG("Compute request");
 		context.allowCancellation();
 		
 		// Copy input field (so that call context can be released)
-		KJ_DBG("Saving field");
 		auto field = heapHeld<Temporary<MagneticField>>(context.getParams().getField());
+		auto grid  = heapHeld<Temporary<ToroidalGrid>>(context.getParams().getGrid());
 		context.releaseParams();
 		
+		// Fill in computed grid struct
+		auto compField = context.initResults().initComputedField();
+		// writeGrid(grid, compField.initGrid());
+		compField.setGrid(*grid);
+		
 		// Start calculation lazily
-		KJ_DBG("Processing root");
-		auto data = processRoot(*field)
-		.then([this, field, context](LocalDataRef<Float64Tensor> tensorRef) mutable {
+		auto data = processRoot(*field, *grid)
+		/*.then([this, field, context, grid](LocalDataRef<Float64Tensor> tensorRef) mutable {
 			// Cache field if not present, use existing if present
 			return ID::fromReaderWithRefs(field->asBuilder())
 			.then([this, tensorRef = mv(tensorRef)](ID id) mutable -> DataRef<Float64Tensor>::Client {
 				auto insertResult = cache.insert(id, mv(tensorRef));
 				return attach(mv(insertResult.element), mv(insertResult.ref));
 			});
-		}).attach(thisCap(), field.x()).eagerlyEvaluate(nullptr);
+		})*/
+		.attach(thisCap(), field.x(), grid.x()).eagerlyEvaluate(nullptr);
 		
-		// Fill in computed grid struct
-		KJ_DBG("Filling in data");
-		auto compField = context.initResults().initComputedField();
-		writeGrid(grid, compField.initGrid());
 		compField.setData(mv(data));
 		
 		return READY_NOW;
 	}
 	
 	//! Processes a root node of a magnetic field (creates calculator)
-	Promise<LocalDataRef<Float64Tensor>> processRoot(MagneticField::Reader node) {		
+	Promise<LocalDataRef<Float64Tensor>> processRoot(MagneticField::Reader node, ToroidalGrid::Reader grid) {		
 		auto rootOp = newOperation();
 		auto newCalculator = heapHeld<FieldCalculation<Device>>(grid, device, *rootOp);
 		
@@ -213,77 +215,121 @@ struct CalculationSession : public FieldCalculator::Server {
 	}
 	
 	Promise<void> processField(FieldCalculation<Device>& calculator, MagneticField::Reader node, double scale) {
-		return ID::fromReaderWithRefs(node).then([this, &calculator, node, scale](ID id) -> Promise<void> {
+		/*return ID::fromReaderWithRefs(node).then([this, &calculator, node, scale](ID id) -> Promise<void> {
 			// Check if the node is in the cache
 			KJ_IF_MAYBE(pFieldRef, cache.find(id)) {
 				calculator.add(scale, pFieldRef->get());
 				return READY_NOW;
-			}
+			}*/
 		
-			switch(node.which()) {
-				case MagneticField::SUM: {
-					auto builder = kj::heapArrayBuilder<Promise<void>>(node.getSum().size());
-					
-					for(auto newNode : node.getSum()) {
-						builder.add(processField(calculator, newNode, scale));
-					}
-					
-					return kj::joinPromises(builder.finish());
+		switch(node.which()) {
+			case MagneticField::SUM: {
+				auto builder = kj::heapArrayBuilder<Promise<void>>(node.getSum().size());
+				
+				for(auto newNode : node.getSum()) {
+					builder.add(processField(calculator, newNode, scale));
 				}
-				case MagneticField::REF: {
-					// First download the ref
-					auto ref = node.getRef();
-					return getActiveThread().dataService().download(ref)
-					.then([&calculator, scale, this](LocalDataRef<MagneticField> local) {
-						// Then process it like usual
-						return processField(calculator, local.get(), scale).attach(cp(local));
-					});
-				}
-				case MagneticField::COMPUTED_FIELD: {
-					// First check grid compatibility
-					auto cField = node.getComputedField();
-					auto grid = cField.getGrid();
-					
-					Temporary<ToroidalGrid> myGrid;
-					writeGrid(this->grid, myGrid);
-					KJ_REQUIRE(ID::fromReader(grid) == ID::fromReader(myGrid.asReader()));
-					
-					// Then download data				
-					return getActiveThread().dataService().download(cField.getData()).
-					then([&calculator, scale](LocalDataRef<Float64Tensor> field) {
+				
+				return kj::joinPromises(builder.finish());
+			}
+			case MagneticField::REF: {
+				// First download the ref
+				auto ref = node.getRef();
+				return getActiveThread().dataService().download(ref)
+				.then([&calculator, scale, this](LocalDataRef<MagneticField> local) {
+					// Then process it like usual
+					return processField(calculator, local.get(), scale).attach(cp(local));
+				});
+			}
+			case MagneticField::COMPUTED_FIELD: {
+				// First check grid compatibility
+				auto cField = node.getComputedField();
+				auto grid = cField.getGrid();
+				
+				KJ_REQUIRE(ID::fromReader(grid) == ID::fromReader(calculator.gridReader));
+				
+				// Then download data				
+				return getActiveThread().dataService().download(cField.getData())
+				.then([&calculator, scale](LocalDataRef<Float64Tensor> field) {
+					return calculator.add(scale, field.get());
+				});
+			}
+			case MagneticField::FILAMENT_FIELD: {
+				// Process Biot-Savart field
+				auto fField = node.getFilamentField();
+				
+				return processFilament(calculator, fField.getFilament(), fField.getBiotSavartSettings(), scale * fField.getCurrent() * fField.getWindingNo());
+			}
+			case MagneticField::SCALE_BY: {
+				auto scaleBy = node.getScaleBy();
+				
+				if(scaleBy.getFactor() == 0)
+					return READY_NOW;
+				
+				return processField(calculator, scaleBy.getField(), scale * scaleBy.getFactor());
+			}
+			case MagneticField::INVERT: {
+				return processField(calculator, node.getInvert(), -scale);
+			}
+			case MagneticField::NESTED: {
+				return processField(calculator, node.getNested(), scale);
+			}
+			case MagneticField::CACHED: {
+				auto cached = node.getCached();
+				
+				auto myGrid = ID::fromReader(calculator.gridReader);
+				auto cachedGrid = ID::fromReader(cached.getComputed().getGrid());
+				
+				if(myGrid == cachedGrid) {
+					return getActiveThread().dataService().download(cached.getComputed().getData())
+					.then([&calculator, scale](LocalDataRef<Float64Tensor> field) {
 						return calculator.add(scale, field.get());
 					});
 				}
-				case MagneticField::FILAMENT_FIELD: {
-					// Process Biot-Savart field
-					auto fField = node.getFilamentField();
-					
-					return processFilament(calculator, fField.getFilament(), fField.getBiotSavartSettings(), scale * fField.getCurrent() * fField.getWindingNo());
-				}
-				case MagneticField::SCALE_BY: {
-					auto scaleBy = node.getScaleBy();
-					
-					if(scaleBy.getFactor() == 0)
-						return READY_NOW;
-					
-					return processField(calculator, scaleBy.getField(), scale * scaleBy.getFactor());
-				}
-				case MagneticField::INVERT: {
-					return processField(calculator, node.getInvert(), -scale);
-				}
-				case MagneticField::NESTED: {
-					return processField(calculator, node.getNested(), scale);
-				}
-				case MagneticField::CACHED: {
-					KJ_UNIMPLEMENTED();
-				}
-				default:
-					KJ_FAIL_REQUIRE("Unknown magnetic field node encountered. This either indicates that a device-specific node was not resolved, or a generic node from a future library version was presented");
+				
+				return processField(calculator, cached.getNested(), scale);
 			}
+			default:
+				KJ_FAIL_REQUIRE("Unknown magnetic field node encountered. This either indicates that a device-specific node was not resolved, or a generic node from a future library version was presented");
+		}
+	//});
+	}
+};
+
+struct FieldCache : public FieldResolverBase {
+	ID target;
+	Temporary<ComputedField> compField;
+	
+	FieldCache(ID target, Temporary<ComputedField> compField) :
+		target(mv(target)),
+		compField(mv(compField))
+	{}
+		
+	Promise<void> processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) override {
+		return ID::fromReaderWithRefs(input)
+		.then([this, input, output, context](ID id) mutable -> Promise<void> {
+			if(id == target) {
+				auto cached = output.initCached();
+				cached.setComputed(compField);
+				cached.setNested(input);
+				
+				return READY_NOW;
+			}
+		
+			return FieldResolverBase::processField(input, output, context);
 		});
 	}
 };
 
+}
+
+FieldResolver::Client newCache(MagneticField::Reader field, ComputedField::Reader computed) {
+	Temporary<ComputedField> cf(computed);
+	auto clientPromise = ID::fromReaderWithRefs(field).then([cf = mv(cf)](ID id) mutable -> FieldResolver::Client {
+		return kj::heap<FieldCache>(mv(id), mv(cf));
+	});
+	
+	return clientPromise;
 }
 	
 ToroidalGridStruct readGrid(ToroidalGrid::Reader in, unsigned int maxOrdinal) {
@@ -424,17 +470,17 @@ Promise<void> FieldResolverBase::processFilament(Filament::Reader input, Filamen
 	}
 }
 
-FieldCalculator::Client newFieldCalculator(ToroidalGrid::Reader grid, Own<Eigen::ThreadPoolDevice> dev) {
+FieldCalculator::Client newFieldCalculator(/*ToroidalGrid::Reader grid, */Own<Eigen::ThreadPoolDevice> dev) {
 	auto& devRef = *dev;
 	return FieldCalculator::Client(
-		kj::heap<CalculationSession<Eigen::ThreadPoolDevice>>(devRef, grid).attach(mv(dev))
+		kj::heap<CalculationSession<Eigen::ThreadPoolDevice>>(devRef/*, grid*/).attach(mv(dev))
 	);
 }
 
-FieldCalculator::Client newFieldCalculator(ToroidalGrid::Reader grid, Own<Eigen::DefaultDevice> dev) {
+FieldCalculator::Client newFieldCalculator(/*ToroidalGrid::Reader grid, */Own<Eigen::DefaultDevice> dev) {
 	auto& devRef = *dev;
 	return FieldCalculator::Client(
-		kj::heap<CalculationSession<Eigen::DefaultDevice>>(devRef, grid).attach(mv(dev))
+		kj::heap<CalculationSession<Eigen::DefaultDevice>>(devRef/*, grid*/).attach(mv(dev))
 	);
 }
 
@@ -442,10 +488,10 @@ FieldCalculator::Client newFieldCalculator(ToroidalGrid::Reader grid, Own<Eigen:
 
 #include <cuda_runtime_api.h>
 
-FieldCalculator::Client newFieldCalculator(ToroidalGrid::Reader grid, Own<Eigen::GpuDevice> dev) {
+FieldCalculator::Client newFieldCalculator(/*ToroidalGrid::Reader grid, */Own<Eigen::GpuDevice> dev) {
 	auto& devRef = *dev;
 	return FieldCalculator::Client(
-		kj::heap<CalculationSession<Eigen::GpuDevice>>(devRef, grid).attach(mv(dev))
+		kj::heap<CalculationSession<Eigen::GpuDevice>>(devRef/*, grid*/).attach(mv(dev))
 	);
 }
 

@@ -4,6 +4,7 @@ from . import flt
 
 from .asnc import run, asyncFunction, eager
 from .resolve import importOfflineData, fieldResolvers, geometryResolvers, backupResolvers
+from .native import delay
 
 from typing import Optional
 
@@ -21,7 +22,7 @@ def local() -> native.RootService:
 	
 	return native.connectSameThread()
 
-def tracer(backend: Optional[native.RootService] = None, grid: Optional[native.ToroidalGrid] = None) -> flt.FLT:
+def tracer(backend: Optional[native.RootService] = None) -> flt.FLT:
 	"""
 	Creates a new field line tracer backed by an FSC service. If
 	no backend is specified, creates a local backend.
@@ -29,8 +30,5 @@ def tracer(backend: Optional[native.RootService] = None, grid: Optional[native.T
 	
 	if backend is None:
 		backend = local()
-	
-	if grid is None:
-		grid = devices.w7x.defaultGrid()
-		
-	return flt.FLT(backend, grid)
+			
+	return flt.FLT(backend)

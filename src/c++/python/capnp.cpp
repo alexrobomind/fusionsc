@@ -85,8 +85,8 @@ void bindBlobClasses(py::module_& m) {
 	using TB = capnp::Text::Builder;
 	using TP = capnp::Text::Pipeline;
 	
-	using AP = kj::ArrayPtr<kj::byte>;
-	using CAP = kj::ArrayPtr<const kj::byte>;
+	// using AP = kj::ArrayPtr<kj::byte>;
+	// using CAP = kj::ArrayPtr<const kj::byte>;
 	
 	py::class_<TR, kj::StringPtr>(m, "TextReader", py::dynamic_attr());
 	py::class_<TB>(m, "TextBuilder", py::dynamic_attr())
@@ -98,8 +98,8 @@ void bindBlobClasses(py::module_& m) {
 	using DB = capnp::Data::Builder;
 	using DP = capnp::Data::Pipeline;
 	
-	py::class_<DR, CAP>(m, "DataReader", py::dynamic_attr());
-	py::class_<DB, AP>(m, "DataBuilder", py::dynamic_attr());
+	py::class_<DR>(m, "DataReader", py::dynamic_attr());
+	py::class_<DB>(m, "DataBuilder", py::dynamic_attr());
 	py::class_<DP>(m, "DataPipeline", py::dynamic_attr());
 }
 

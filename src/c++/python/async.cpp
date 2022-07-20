@@ -1,6 +1,7 @@
 #include "async.h"
 
 #include <capnp/dynamic.h>
+#include <kj/timer.h>
 
 #include <fsc/data.h>
 
@@ -90,7 +91,7 @@ namespace {
 		
 		RunIterator(py::object send, py::object throw_) : send(mv(send)), throw_(mv(throw_)) {}
 		
-		Promise<py::object> doSend(py::object input) {
+		Promise<Own<PyObjectHolder>> doSend(py::object input) {
 			py::object argTuple = py::make_tuple(input);
 			
 			PyObject* sendReturn = PyObject_Call(send.ptr(), argTuple.ptr(), nullptr);
@@ -98,7 +99,7 @@ namespace {
 			return handleReturn(sendReturn);
 		}
 		
-		Promise<py::object> doThrow(kj::Exception e) {
+		Promise<Own<PyObjectHolder>> doThrow(kj::Exception e) {
 			py::object excType = py::reinterpret_borrow<py::object>(PyExc_RuntimeError);
 			
 			py::object argTuple = py::make_tuple(mv(excType), py::cast(kj::str(e)), py::none());
@@ -107,7 +108,7 @@ namespace {
 			return handleReturn(sendReturn);
 		}
 		
-		Promise<py::object> handleReturn(PyObject* sendReturn) {
+		Promise<Own<PyObjectHolder>> handleReturn(PyObject* sendReturn) {
 			// Check for errors
 			if(PyErr_Occurred()) {
 				KJ_REQUIRE(sendReturn == nullptr, "Internal error: Result non-null despite error indicator");
@@ -119,7 +120,7 @@ namespace {
 				if(PyErr_GivenExceptionMatches(error.type().ptr(), PyExc_StopIteration)) {
 					KJ_REQUIRE((bool) error.value(), "Internal error: result null in stop iteration");
 					
-					return (py::object) error.value().attr("value");
+					return kj::refcounted<PyObjectHolder>((py::object) error.value().attr("value"));
 				}
 				
 				throw error;
@@ -134,13 +135,13 @@ namespace {
 			
 			// Wait for yielded promise, then unpack it and forward the result
 			// or error to the coroutine.
-			return pyPromise.get()
+			return pyPromise
 			.then(
-				[this](py::object input) {
+				[this](py::object input) mutable {
 					py::gil_scoped_acquire withGIL;
 					return this->doSend(mv(input));
 				},
-				[this](kj::Exception e) {
+				[this](kj::Exception e) mutable {
 					py::gil_scoped_acquire withGIL;
 					return this->doThrow(mv(e));
 				}
@@ -175,6 +176,13 @@ namespace {
 		
 		return kj::evalLater(mv(delayedRun)).attach(runIt.x());
 	}
+	
+	Promise<void> delay(double seconds) {
+		uint64_t timeInNS = (uint64_t) seconds * 1e9;
+		auto targetPoint = kj::systemPreciseMonotonicClock().now() + timeInNS * kj::NANOSECONDS;
+		
+		return getActiveThread().timer().atTime(targetPoint);
+	}
 }
 
 namespace fscpy {
@@ -184,7 +192,7 @@ void initAsync(py::module_& m) {
 		.def(py::init([](PyPromise& other) { return PyPromise(other); }))
 		.def("wait", &PyPromise::wait)
 		.def("poll", &PyPromise::poll)
-		.def("then", &PyPromise::then)
+		.def("then", &PyPromise::pyThen)
 		
 		.def("__await__", [](PyPromise& self) { return new PyPromiseAwaitContext(self); })
 	;
@@ -200,6 +208,7 @@ void initAsync(py::module_& m) {
 	m.def("cycle", &cycle);
 	m.def("readyPromise", &readyPromise);
 	m.def("run", &run);
+	m.def("delay", &delay);
 	
 	auto atexitModule = py::module_::import("atexit");
 	atexitModule.attr("register")(py::cpp_function(&atExitFunction));

@@ -18,10 +18,11 @@ TEST_CASE("build-field") {
 	auto& ws = lt->waitScope();
 		
 	auto grid = TEST_GRID.get();
-	auto session = newFieldCalculator(grid, newThreadPoolDevice());
+	auto session = newFieldCalculator(newThreadPoolDevice());
 	
 	auto computeRequest = session.computeRequest();
 	computeRequest.setField(WIRE_FIELD.get());
+	computeRequest.setGrid(grid);
 	
 	Temporary<ComputedField> computed(
 		computeRequest.send().wait(ws).getComputedField()
@@ -59,10 +60,11 @@ TEST_CASE("build-field-gpu") {
 	auto& ws = lt->waitScope();
 	
 	auto grid = TEST_GRID.get();
-	auto session = newFieldCalculator(grid, newGpuDevice());
+	auto session = newFieldCalculator(newGpuDevice());
 	
 	auto computeRequest = session.computeRequest();
 	computeRequest.setField(WIRE_FIELD.get());
+	computeRequest.setGrid(grid);
 	
 	Temporary<ComputedField> computed(
 		computeRequest.send().wait(ws).getComputedField()

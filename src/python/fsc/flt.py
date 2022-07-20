@@ -51,30 +51,19 @@ class FLT:
 		
 	asyncMode: bool
 	
-	_grid: native.ToroidalGrid.Reader
-	
-	def __init__(self, backend, grid):
+	def __init__(self, backend):
 		self.backend = backend
+		self.calculator = self.backend.newFieldCalculator().calculator
 		self.tracer  = backend.newTracer().service
 		
 		self.asyncMode = False
-		self.grid = grid
-	
-	@property
-	def grid(self):
-		return self._grid
-	
-	@grid.setter
-	def grid(self, newGrid):
-		self._grid      = newGrid.clone()
-		self.calculator = self.backend.newFieldCalculator(newGrid).calculator
 	
 	@optionalAsync
 	@asyncFunction
-	async def poincareInPhiPlanes(self, points, phiValues, nTurns, config):
+	async def poincareInPhiPlanes(self, points, phiValues, nTurns, config, grid):
 		# Resovle & compute field
 		resolved    = await resolveField(config)
-		field       = await self.calculator.compute(resolvedField)
+		computed    = (await self.calculator.compute(resolvedField, grid)).computedField
 		
 		fltResponse = await self.tracer.trace(
 			startPoints = points,

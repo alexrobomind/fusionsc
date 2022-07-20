@@ -1,13 +1,13 @@
 from . import native
 from .asnc import asyncFunction
 
-import native.devices.w7x as cppw7x
+from .native.devices import w7x as cppw7x
 import contextlib
 
 fieldResolvers = []
 geometryResolvers = []
 
-def importOfflineData(self, filename: str):
+def importOfflineData(filename: str):
 	"""
 	Loads the data contained in the given offline archives and uses them to
 	perform offline resolution.
@@ -30,7 +30,7 @@ def importOfflineData(self, filename: str):
 async def resolveField(field, followRefs: bool = False):		
 	for r in fieldResolvers:
 		try:
-			field = await r.resolve(field, followRefs)
+			field = await r.resolveField(field, followRefs)
 		except:
 			pass
 		
@@ -54,8 +54,8 @@ def backupResolvers():
 	backupFR = fieldResolvers.copy()
 	backupGR = geometryResolvers.copy()
 	
-    try:
-        yield None
+	try:
+		yield None
 	finally:
-        fieldResolvers = backupFR
-        geometryResolvers = backupGR
+		fieldResolvers = backupFR
+		geometryResolvers = backupGR

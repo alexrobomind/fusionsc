@@ -44,7 +44,7 @@ PyPromise download(capnp::DynamicCapability::Client capability) {
 			
 			py::object result = py::cast(localRef.getRaw());
 			result.attr("_ref") = keepAlive;
-			return result;
+			return kj::refcounted<PyObjectHolder>(mv(result));
 		} else {
 			AnyPointer::Reader root = localRef.get();
 			
@@ -54,7 +54,7 @@ PyPromise download(capnp::DynamicCapability::Client capability) {
 				KJ_REQUIRE(localRef.getTypeID() == schema.getProto().getId());
 				DynamicValue::Reader asDynamic = root.getAs<DynamicCapability>(schema);
 				
-				return py::cast(asDynamic);
+				return kj::refcounted<PyObjectHolder>(py::cast(asDynamic));
 			}
 			if(payloadType.isStruct()) {
 				auto schema = payloadType.asStruct();
@@ -64,7 +64,7 @@ PyPromise download(capnp::DynamicCapability::Client capability) {
 				
 				py::object result = py::cast(asDynamic);
 				result.attr("_ref") = keepAlive;
-				return result;
+				return kj::refcounted<PyObjectHolder>(mv(result));
 			}
 		}
 		

@@ -68,4 +68,6 @@ namespace fscpy {
 			.def("__setitem__", &DynamicArray::set)
 		;
 	}
+	
+	DynamicConstArray::~DynamicConstArray() {}
 }

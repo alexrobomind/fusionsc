@@ -32,7 +32,7 @@ struct RootServer : public RootService::Server {
 	
 	Promise<void> newFieldCalculator(NewFieldCalculatorContext context) {
 		auto factory = [this, context](auto device) mutable {
-			return ::fsc::newFieldCalculator(context.getParams().getGrid(), mv(device));
+			return ::fsc::newFieldCalculator(/*context.getParams().getGrid(), */mv(device));
 		};
 		
 		auto selectResult = selectDevice(factory, context.getParams().getPreferredDeviceType());
