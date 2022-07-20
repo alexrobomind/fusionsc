@@ -31,12 +31,12 @@ struct MapToDevice<Tensor<TVal, tRank, tOpts, Index>, Device> : public TensorMap
 			target.dimensions()
 		),
 		_data(device, target.data() /* Host pointer */, this->data() /* Device pointer allocated above */, this->size() /* Same as target.size() */)
-	{ KJ_DBG(target.data(), this->data()); };
+	{};
 
 	void updateHost() { _data.updateHost(); }
 	void updateDevice() { _data.updateDevice(); }
 	
-	Parent get() { KJ_DBG("get()", this->data()); return Parent(*this); }
+	Parent get() { return Parent(*this); }
 };
 
 template<typename TVal, int tRank, int tOpts, typename Index, typename Device>

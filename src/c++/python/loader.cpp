@@ -405,7 +405,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 			PyPromise resultPromise = result.then([resultType](capnp::Response<AnyPointer> response) {
 				py::gil_scoped_acquire withGIL;
 				
-				DynamicStruct::Reader structReader = response.getAs<DynamicStruct>(resultType);
+				DynamicValue::Reader structReader = response.getAs<DynamicStruct>(resultType);
 				py::object pyReader = py::cast(structReader);
 				
 				py::object pyResponse = py::cast(mv(response));

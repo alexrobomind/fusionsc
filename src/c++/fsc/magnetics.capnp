@@ -70,7 +70,10 @@ struct Filament {
 
 struct W7XCoilSet {
 	invertMainCoils @0 : Bool = true;
-	biotSavartSettings @1 : BiotSavartSettings;
+	biotSavartSettings @1 : BiotSavartSettings = (
+		width = 0.01,
+		stepSize = 0.01
+	);
 	
 	nWindMain @8 : List(UInt32) = [108, 108, 108, 108, 108, 36, 36];
 	nWindTrim @9 : List(UInt32) = [48, 72, 48, 48, 48];
@@ -157,7 +160,10 @@ struct MagneticField {
 				configurationDB : group {
 					# The W7-X config specification does not usually include a coil width
 					# Therefore, we have to add this information here
-					biotSavartSettings @13 : BiotSavartSettings;
+					biotSavartSettings @13 : BiotSavartSettings = (
+						width = 0.01,
+						stepSize = 0.01
+					);
 					configID  @14 : UInt64;
 				}
 				

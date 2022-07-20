@@ -3,7 +3,6 @@
 namespace fsc {
 	
 Operation::~Operation() {
-	KJ_DBG("Op deleted", this);
 	fail(KJ_EXCEPTION(FAILED, "Operation cancelled"));
 	clear();
 }
@@ -110,7 +109,6 @@ void Operation::clear() const {
 
 Own<Operation> newOperation() {
 	auto result = kj::atomicRefcounted<Operation>();
-	KJ_DBG("Op created", result.get());
 	return result;
 }
 

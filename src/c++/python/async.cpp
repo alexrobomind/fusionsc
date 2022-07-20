@@ -13,6 +13,7 @@ namespace {
 	}
 
 	void atExitFunction() {
+		fscpy::PyContext::library()->setShutdownMode();
 		fscpy::PyContext::library()->stopSteward();
 	}
 	

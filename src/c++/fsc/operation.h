@@ -123,7 +123,6 @@ void Operation::attachDestroyInThread(const ThreadHandle& thread, T&&... params)
 		void onFailure(kj::Exception&& e) override {};
 		
 		Promise<void> destroy() override {
-			KJ_DBG("AttachmentNode::destroy()");
 			auto result = owningThread -> executor().executeAsync(
 				[contents = mv(contents)]() mutable {
 					// This will move the contents into a local tuple that gets destroyed

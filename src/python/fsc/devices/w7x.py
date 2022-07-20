@@ -2,7 +2,7 @@ from fsc.native.devices.w7x import (
 	defaultGrid, webserviceCoilsDB, webserviceComponentsDB
 )
 
-from fsc.native import W7XCoilSet, newCache
+from fsc.native import W7XCoilSet, newCache, download
 from fsc.asnc import asyncFunction, eager
 from fsc.flt import Config
 from fsc.resolve import fieldResolvers, geometryResolvers, resolveField
@@ -45,7 +45,7 @@ def process_coil_convention(convention):
 	return convention;
 
 @eager
-async def preheat(tracer, grid = defaultGrid(), coilPack: Union[W7XCoilSet.Builder, W7XCoilSet.Reader] = cadCoilPack):
+async def preheat(tracer, grid = defaultGrid(), coilPack: Union[W7XCoilSet.Builder, W7XCoilSet.Reader] = cadCoilPack, check: bool = False):
 	"""
 	Starts a pre-computation for the fields created by the given coil pack
 	"""
@@ -54,10 +54,13 @@ async def preheat(tracer, grid = defaultGrid(), coilPack: Union[W7XCoilSet.Build
 		
 	for field in fields:
 		field = await resolveField(field)
-		computed = (await tracer.calculator.compute(resolvedField, grid)).computedField
+		computed = (await tracer.calculator.compute(field, grid)).computedField
 		
 		cache = newCache(field, computed)
 		fieldResolvers.append(cache)
+		
+		if(check):
+			await download(computed.data)
 
 def cadCoils(i_12345 = [0, 0, 0, 0, 0], i_ab = [0, 0], i_trim = [0, 0, 0, 0, 0], i_cc = [0, 0], convention = '1-AA-R0004.5'):
 	assert len(i_12345) == 5;

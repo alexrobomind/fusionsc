@@ -623,6 +623,7 @@ struct OfflineCoilsDB : public CoilsDB::Server {
 		for(auto coilEntry : offlineData.get().getW7xCoils()) {
 			if(coilEntry.getId() == context.getParams().getId()) {
 				context.setResults(coilEntry.getFilament());
+				
 				return kj::READY_NOW;
 			}
 		}

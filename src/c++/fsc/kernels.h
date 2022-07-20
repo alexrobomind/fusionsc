@@ -289,7 +289,6 @@ namespace fsc {
 		Own<Operation> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {
 			auto result = ownHeld(newOperation());
 			
-			KJ_DBG("Mapping");
 			// Create mappers for input
 			auto mappers = heapHeld<std::tuple<MapToDevice<Decay<Params>, Device>...>>(
 				MapToDevice<Decay<Params>, Device>(fwd<Params>(params), device)...
@@ -298,7 +297,6 @@ namespace fsc {
 			using givemeatype = int[];
 			
 			// Call kernel
-			KJ_DBG("Creating task");
 			Promise<void> task = prerequisite.then([mappers, n, cost, &device, result = result->addRef()]() mutable {
 			// Update device memory
 				// Note: This is an extremely convoluted looking way of calling updateDevice on all tuple members
@@ -309,7 +307,6 @@ namespace fsc {
 				kernelLaunchResult -> attachDestroyAnywhere(mv(result));
 				return kernelLaunchResult -> whenDone();
 			}).then([device, mappers, result = result->addRef()]() mutable {
-				KJ_DBG("Kernel done, copying");
 				(void) (givemeatype { 0, (std::get<i>(*mappers).updateHost(), 0)... });
 				
 				return hostMemSynchronize(device, *result);
@@ -317,10 +314,8 @@ namespace fsc {
 				result->done();
 			});
 			
-			KJ_DBG("Attaching");
 			result -> dependsOn(mv(task));			
 			result -> attachDestroyHere(mappers.x());
-			KJ_DBG("Done");
 			
 			return result.x();
 		}
@@ -631,7 +626,6 @@ MappedData<T, Device>::MappedData(Device& device, T* hostPtr, NonConst* devicePt
 	devicePtr(devicePtr),
 	size(size)
 {
-	KJ_DBG("Mapping", this);
 }
 
 template<typename T, typename Device>
@@ -641,7 +635,6 @@ MappedData<T, Device>::MappedData(Device& device, T* hostPtr, size_t size) :
 	devicePtr(deviceAlloc(device, size)),
 	size(size)
 {
-	KJ_DBG("Mapping", this);
 }
 
 template<typename T, typename Device>
@@ -651,7 +644,6 @@ MappedData<T, Device>::MappedData(Device& device) :
 	devicePtr(nullptr),
 	size(0)
 {
-	KJ_DBG("Mapping", this);
 }
 
 
@@ -682,12 +674,10 @@ MappedData<T, Device>& MappedData<T, Device>::operator=(MappedData&& other)
 template<typename T, typename Device>
 MappedData<T, Device>::~MappedData() {
 	if(devicePtr != nullptr) {
-		KJ_DBG("Unmapping", this);
 		unwindDetector.catchExceptionsIfUnwinding([&, this]() {
 			device.deallocate(devicePtr);
 			// hostMemSynchronizeBlocking(device);
 		});
-		KJ_DBG("OK");
 	}
 }
 

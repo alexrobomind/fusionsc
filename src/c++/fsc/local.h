@@ -86,7 +86,7 @@ public:
 	inline const DaemonRunner& daemonRunner() const { return *_daemonRunner; }
 	
 	inline bool inShutdownMode() const { return *(shutdownMode.lockShared()); }
-	inline void setShutdownMode() { *(shutdownMode.lockExclusive()) = true; }
+	inline void setShutdownMode() const { *(shutdownMode.lockExclusive()) = true; }
 	
 private:
 	inline LibraryHandle() :

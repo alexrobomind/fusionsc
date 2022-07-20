@@ -58,7 +58,6 @@ struct FieldCalculation {
 		}
 		
 		calculation = calculation.then([this, newField = mv(newField), scale]() mutable {
-			KJ_DBG("Start Add");
 			Own<Operation> calcOp = FSC_LAUNCH_KERNEL(
 				kernels::addFieldKernel,
 				_device, 
@@ -68,7 +67,7 @@ struct FieldCalculation {
 			calcOp -> attachDestroyAnywhere(mv(newField), rootOp.addRef());
 		
 			return calcOp -> whenDone();
-		});
+		}).attach(rootOp.addRef());
 	}
 	
 	void biotSavart(double current, Float64Tensor::Reader input, BiotSavartSettings::Reader settings) {
@@ -95,7 +94,6 @@ struct FieldCalculation {
 		KJ_REQUIRE(stepSize != 0, "Please specify a step size in the Biot-Savart settings");
 		
 		calculation = calculation.then([this, filament = mv(filament), coilWidth, stepSize, current]() mutable {
-			KJ_DBG("Start BS");
 			// Launch calculation
 			Own<Operation> calcOp = FSC_LAUNCH_KERNEL(
 				kernels::biotSavartKernel,
@@ -105,22 +103,18 @@ struct FieldCalculation {
 			);
 			calcOp -> attachDestroyAnywhere(mv(filament), rootOp.addRef());
 			return calcOp -> whenDone();
-		});
+		}).attach(rootOp.addRef());
 	}
 	
 	Promise<void> finish(Float64Tensor::Builder out) {
-		KJ_DBG("FC::finish()");
 		calculation = calculation
 		.then([this]() {
-			KJ_DBG("Update host");
 			mappedField.updateHost();
 			return hostMemSynchronize(_device, rootOp);
 		})
 		.then([this, out]() {
-			KJ_DBG("Writing tensor");
 			writeTensor(field, out);
 		});
-		KJ_DBG("calc set up)");
 		
 		return mv(calculation);
 	}
@@ -176,32 +170,28 @@ struct CalculationSession : public FieldCalculator::Server {
 		auto newCalculator = heapHeld<FieldCalculation<Device>>(grid, device, *rootOp);
 		
 		rootOp -> attachDestroyHere(thisCap(), newCalculator.x());
-		KJ_DBG("Calculator created");
 		
 		auto calcDone = processField(*newCalculator, node, 1);
-		KJ_DBG("Field processing initiated");
 		
 		return calcDone.then([newCalculator, this]() mutable {	
-			KJ_DBG("Reading result");
-			
 			auto result = heapHeld<Temporary<Float64Tensor>>();	
 			
 			auto publish = newCalculator->finish(*result).then([result, this]() mutable {
-				KJ_DBG("Publishing");
 				return getActiveThread().dataService().publish(getActiveThread().randomID(), result->asReader());
 			})
 			.eagerlyEvaluate(nullptr)
 			.attach(result.x());
 			
 			return publish;
-		}).attach(mv(rootOp));
+		})
+		.attach(kj::defer([=]() mutable { newCalculator -> calculation = KJ_EXCEPTION(DISCONNECTED, "Calculation stopped"); }))
+		.attach(mv(rootOp));
 	}
 	
 	Promise<void> processFilament(FieldCalculation<Device>& calculator, Filament::Reader node, BiotSavartSettings::Reader settings, double scale) {
 		switch(node.which()) {
 			case Filament::INLINE:
 				// The biot savart operation is chained by the calculator
-				KJ_DBG("Biot-Savart", scale, node.getInline(), settings);
 				calculator.biotSavart(scale, node.getInline(), settings);
 				return READY_NOW;
 				

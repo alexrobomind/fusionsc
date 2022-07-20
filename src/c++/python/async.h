@@ -57,9 +57,14 @@ struct PyObjectHolder : public kj::Refcounted {
 	py::object content;
 	
 	PyObjectHolder(const PyObjectHolder& other) = delete;
-	PyObjectHolder(py::object&& newContent) : content(mv(newContent)) {}
+	inline PyObjectHolder(py::object&& newContent) : content(mv(newContent)) {}
 	
 	Own<PyObjectHolder> addRef() { return kj::addRef(*this); }
+	
+	inline ~PyObjectHolder() {
+		py::gil_scoped_acquire withGIL;
+		content = py::object();
+	}
 };
 
 struct PyPromise {
