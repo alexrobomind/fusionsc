@@ -105,9 +105,9 @@ struct W7XCoilSet {
 		}
 		
 		fields : group {
-			mainFields @12 : List(ComputedField);
-			trimFields @13 : List(ComputedField);
-			controlFields @14 : List(ComputedField);
+			mainFields @12 : List(MagneticField);
+			trimFields @13 : List(MagneticField);
+			controlFields @14 : List(MagneticField);
 		}
 	}
 }

@@ -58,6 +58,8 @@ namespace fscpy {
 		py::class_<kj::StringPtr>(mkj, "StringPtr")
 			.def("__str__", [](kj::StringPtr ptr) { return ptr.cStr(); })
 			.def("__repr__", [](kj::StringPtr ptr) { return ptr.cStr(); })
+			.def("__eq__", [](kj::StringPtr self, kj::StringPtr other) { return self == other; })
+			.def("__eq__", [](kj::StringPtr self, py::object other) { return false; })
 		;
 		py::class_<DynamicConstArray>(mkj, "ConstArray")
 			.def("__len__", &DynamicConstArray::size)

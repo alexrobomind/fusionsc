@@ -4,7 +4,7 @@ from . import flt
 
 from .asnc import run, asyncFunction, eager
 from .resolve import importOfflineData, fieldResolvers, geometryResolvers, backupResolvers
-from .native import delay
+from .native import delay, download, openArchive, Promise
 
 from typing import Optional
 
@@ -32,3 +32,7 @@ def tracer(backend: Optional[native.RootService] = None) -> flt.FLT:
 		backend = local()
 			
 	return flt.FLT(backend)
+
+@asyncFunction
+async def readArchive(filename: str) -> Promise:
+	return download(openArchive(str))

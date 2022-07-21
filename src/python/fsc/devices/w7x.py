@@ -1,90 +1,124 @@
-from fsc.native.devices.w7x import (
-	defaultGrid, webserviceCoilsDB, webserviceComponentsDB
-)
-
-from fsc.native import W7XCoilSet, newCache, download
+import fsc
+import fsc.native.devices.w7x as w7xnative
+from fsc import native, resolve, flt
 from fsc.asnc import asyncFunction, eager
-from fsc.flt import Config
-from fsc.resolve import fieldResolvers, geometryResolvers, resolveField
-
-from fsc import native
 
 from typing import Union
 
 # Databases
 
 def connectCoilsDB(address: str):
-	global fieldResolvers
-	
-	coilsDB = webserviceCoilsDB(address)
-	coilsDBResolver = cppw7x.coilsDBResolver(coilsDB)
-	fieldResolvers.append(coilsDBResolver)
-	
+	"""
+	Connect to the coilsDB webservice at given address and use it to resolve
+	W7-X coil specifications
+	"""
+	coilsDB = w7xnative.webserviceCoilsDB(address)
+	coilsDBResolver = w7xnative.coilsDBResolver(coilsDB)
+	resolve.fieldResolvers.append(coilsDBResolver)
 	return coilsDB
 
 def connectComponentsDB(address: str):
-	global geometryResolvers
-	
-	componentsDB = webserviceComponentsDB(address)
-	componentsDBResolver = cppw7x.componentsDBResolver(componentsDB)
-	geometryResolvers.append(componentsDBResolver)
-	
+	"""
+	Connect to the componentsDB webservice at given address and use it to resolve
+	W7-X geometry specifications
+	"""	
+	componentsDB = w7xnative.webserviceComponentsDB(address)
+	componentsDBResolver = w7xnative.componentsDBResolver(componentsDB)
+	resolve.geometryResolvers.append(componentsDBResolver)
 	return componentsDB
 
-# The W7XCoilSet type defaults to the W7-X coils 160 ... 230
-cadCoilPack = W7XCoilSet.newMessage()
+@eager
+async def computeCoilFields(calculator, coils: Union[native.W7XCoilSet.Builder, native.W7XCoilSet.Reader], grid = None) -> native.W7XCoilSet.Builder:
+	if grid is None:
+		grid = fsc.defaultGrid
+	
+	result = native.W7XCoilSet.newMessage()
+	w7xnative.buildCoilFields(coilPack, result.initFields())
+	
+	async def resolveAndCompute(x):
+		x = await resolveField(x)
+		x = await calculator.compute(x, grid)
+		return x
+	
+	for i in range(7):
+		result.mainFields[i] = await resolveAndCompute(result.mainFields[i])
+	
+	for i in range(5):
+		result.trimFields[i] = await resolveAndCompute(result.trimFields[i])
+	
+	for i in range(10):
+		result.controlFields[i] = await resolveAndCompute(result.controlFields[i])
+	
+	return result
 
-coil_conventions = ['coilsdb', '1-AA-R0004.5', 'archive'];
+def cadCoils(convention = '1-AA-R0004.5') -> native.W7XCoilSet:
+	"""
+	Returns the coil pack for the standard W7-X CAD coils. The winding direction
+	of the main coils is adjusted to the requested convention.
+	"""
+	convention = processCoilConvention(convention)
+	
+	# The native W7X coil set is the CAD coils
+	coilPack = native.W7XCoilSet.newMessage()
+	
+	if convention == '1-AA-R0004.5':
+		coilPack.coils.invertMainCoils = True
+	else:
+		coilPack.coils.invertMainCoils = False
+	
+	return coilPack
 
-def process_coil_convention(convention):
+def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coils = None) -> flt.Config:
+	if coils is None:
+		coils = defaultCoils
+	
+	config = flt.Config()
+	
+	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
+	cnc.coils = coils
+	
+	cnc.nonplanar = i_12345
+	cnc.planar = i_ab
+	
+	return config
+
+def trimCoils(i_trim = [0, 0, 0, 0, 0], coils = None) -> flt.Config:
+	if coils is None:
+		coils = defaultCoils
+	
+	config = flt.Config()
+	
+	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
+	cnc.coils = coils
+	
+	cnc.trim = i_trim
+	
+	return config
+
+def controlCoils(i_cc = [0, 0], coils = None) -> flt.Config:
+	if coils is None:
+		coils = defaultCoils
+	
+	config = flt.Config()
+	
+	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
+	cnc.coils = coils
+	
+	cnc.control = i_cc
+	
+	return config
+
+def standard(bAx = 2.52, coils = None) -> flt.Config:
+	return mainField([15000 * bAx / 2.52] * 5, [0] * 2, coils = coils)
+
+coil_conventions = ['coilsdb', '1-AA-R0004.5', 'archive']
+def processCoilConvention(convention):
 	assert convention in coil_conventions,	'Invalid coil convention {}, must be one of {}'.format(convention, coil_conventions);
 	
 	if convention == 'archive':
 		return '1-AA-R0004.5';
 	
 	return convention;
-
-@eager
-async def preheat(tracer, grid = defaultGrid(), coilPack: Union[W7XCoilSet.Builder, W7XCoilSet.Reader] = cadCoilPack, check: bool = False):
-	"""
-	Starts a pre-computation for the fields created by the given coil pack
-	"""
-	# Compute the fields that we need to pre-calculate for
-	fields = native.devices.w7x.preheatFields(coilPack)
-		
-	for field in fields:
-		field = await resolveField(field)
-		print(field)
-		computed = (await tracer.calculator.compute(field, grid)).computedField
-		
-		cache = newCache(field, computed)
-		fieldResolvers.append(cache)
-		
-		if(check):
-			await download(computed.data)
-
-def cadCoils(i_12345 = [0, 0, 0, 0, 0], i_ab = [0, 0], i_trim = [0, 0, 0, 0, 0], i_cc = [0, 0], convention = '1-AA-R0004.5'):
-	assert len(i_12345) == 5;
-	assert len(i_ab) == 2;
-	assert len(i_trim) == 5;
-	assert len(i_cc) in [2, 5, 10];
 	
-	config = flt.Config()
-	
-	# Declare field as W7-X 'Coils and currents' field-type and 
-	# set coils
-	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
-	cnc.coils = cadCoilPack
-	
-	convention = process_coil_convention(convention)
-	if convention == 'coilsdb':
-		cnc.coils.invertMainCoils = False
-	else:
-		cnc.coils.invertMainCoils = True
-	
-	cnc.nonplanar = i_12345
-	cnc.planar = i_ab
-	cnc.trim = i_trim
-	cnc.control = i_cc
-	
-	return config
+# The W7XCoilSet type defaults to the W7-X coils 160 ... 230
+defaultCoils = cadCoils('archive')

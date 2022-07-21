@@ -163,7 +163,7 @@ public:
 	 *          DataRef::Client.
 	 */
 	template<typename T = capnp::Data>
-	LocalDataRef<T> publish(ArrayPtr<const byte> id, Array<const byte> backingArray, ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable = kj::heapArrayBuilder<Maybe<Own<capnp::Capability::Client>>>(0).finish());
+	LocalDataRef<T> publish(ArrayPtr<const byte> id, uint64_t typeId, Array<const byte> backingArray, ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable = kj::heapArrayBuilder<Maybe<Own<capnp::Capability::Client>>>(0).finish());
 	
 	//! Publishes Cap'n'proto message
 	/**

@@ -74,7 +74,7 @@ PyPromise download(capnp::DynamicCapability::Client capability) {
 	return promise;
 }
 
-capnp::DynamicValue::Reader loadArchive(kj::StringPtr path) {
+capnp::DynamicValue::Reader openArchive(kj::StringPtr path) {
 	using capnp::AnyPointer;
 	using capnp::DynamicCapability;
 	using capnp::DynamicStruct;
@@ -125,6 +125,31 @@ capnp::DynamicValue::Reader loadArchive(kj::StringPtr path) {
 	KJ_FAIL_REQUIRE("Failed to load schema for payload type ID", root.getTypeID());
 }
 
+Promise<void> writeArchive1(capnp::DynamicCapability::Client ref, kj::StringPtr path) {
+	constexpr uint64_t DR_ID = capnp::typeId<DataRef<capnp::AnyPointer>>();
+	KJ_REQUIRE(ref.getSchema().getProto().getId() == DR_ID, "Can only publish capabilities of type DataRef");
+	capnp::Capability::Client asAny = ref;
+	auto asRef = asAny.castAs<DataRef<capnp::AnyPointer>>();
+	
+	auto fs = kj::newDiskFilesystem();
+	
+	auto absPath = fs->getCurrentPath().evalNative(path);
+	auto file = fs->getRoot().openFile(absPath, kj::WriteMode::CREATE | kj::WriteMode::MODIFY);
+	
+	return getActiveThread().dataService().writeArchive(asRef, *file);
+}
+
+Promise<void> writeArchive2(capnp::DynamicStruct::Reader root, kj::StringPtr path) {
+	auto ref = getActiveThread().dataService().publish(getActiveThread().randomID(), root);
+	
+	auto fs = kj::newDiskFilesystem();
+	
+	auto absPath = fs->getCurrentPath().evalNative(path);
+	auto file = fs->getRoot().openFile(absPath, kj::WriteMode::CREATE | kj::WriteMode::MODIFY);
+	
+	return getActiveThread().dataService().writeArchive(ref, *file);
+}
+
 }
 
 namespace fscpy {	
@@ -133,7 +158,10 @@ void initData(py::module_& m) {
 	py::class_<LocalDataService>(m, "LocalDataService");
 	
 	m.def("download", &download);
-	m.def("loadArchive", &loadArchive);
+	m.def("openArchive", &openArchive);
+	
+	m.def("writeArchive", &writeArchive1);
+	m.def("writeArchive", &writeArchive2);
 }
 
 }

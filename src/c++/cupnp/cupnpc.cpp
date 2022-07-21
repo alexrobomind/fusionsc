@@ -984,6 +984,66 @@ StringTree generateNested(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 	return mv(result);
 }*/
 
+StringTree generateForwardDeclarations(kj::String namespaceName, CodeGeneratorRequest::Reader request, uint64_t nodeId) {
+	auto fileNode = getNode(request, nodeId);
+	
+	StringTree result;
+	for(auto child : fileNode.getNestedNodes()) {
+		uint64_t childId = child.getId();
+		
+		auto childNode = getNode(request, childId);
+		
+		if(childNode.isStruct() || childNode.isInterface()) {
+			result = strTree(
+				mv(result), "\n",
+				generateAllTemplateHeaders(request, childId),
+				"struct ", nodeName(childId, request).flatten(), ";"
+			);
+		}
+	}
+	
+	return result;
+}
+
+StringTree generateKindOverrides(kj::String namespaceName, CodeGeneratorRequest::Reader request, uint64_t nodeId) {
+	auto fileNode = getNode(request, nodeId);
+	
+	StringTree result;
+	for(auto child : fileNode.getNestedNodes()) {
+		uint64_t childId = child.getId();
+		
+		auto childNode = getNode(request, childId);
+		
+		if(childNode.isStruct()) {
+			auto specializationTemplateHeader = generateAllTemplateHeaders(request, childId);
+			
+			if(specializationTemplateHeader.size() == 0)
+				specializationTemplateHeader = strTree("template<>\n");
+			
+			result = strTree(
+				mv(result), "\n",
+				mv(specializationTemplateHeader),
+				"struct KindFor_<", cppNodeTypeName(childId, capnp::defaultValue<Brand>(), childId, capnp::defaultValue<Brand>(), request).flatten(), "> { static inline constexpr Kind kind = Kind::STRUCT; };"
+			);
+		}
+		
+		if(childNode.isInterface()) {
+			auto specializationTemplateHeader = generateAllTemplateHeaders(request, childId);
+			
+			if(specializationTemplateHeader.size() == 0)
+				specializationTemplateHeader = strTree("template<>\n");
+			
+			result = strTree(
+				mv(result), "\n",
+				mv(specializationTemplateHeader),
+				"struct KindFor_<", cppNodeTypeName(childId, capnp::defaultValue<Brand>(), childId, capnp::defaultValue<Brand>(), request).flatten(), "> { static inline constexpr Kind kind = Kind::INTERFACE; };"
+			);
+		}
+	}
+	
+	return result;
+}
+
 void generateRequested(CodeGeneratorRequest::Reader request) {
 	auto fs = kj::newDiskFilesystem();
 	auto& cwd = fs->getCurrent();
@@ -1015,6 +1075,9 @@ void generateRequested(CodeGeneratorRequest::Reader request) {
 		//}
 		
 		namespaceName = strTree(mv(namespaceName), "::cu");
+		
+		StringTree forwardDeclarations = generateForwardDeclarations(namespaceName.flatten(), request, fileNode.getId());
+		StringTree kindOverrides = generateKindOverrides(namespaceName.flatten(), request, fileNode.getId());
 		
 		StringTree methodDefinitions;
 		StringTree declarations = generateNested(request, fileNode.getId(), methodDefinitions);
@@ -1064,12 +1127,31 @@ void generateRequested(CodeGeneratorRequest::Reader request) {
 			},
 			"\n",
 			//"namespace ", namespaceName.flatten(), " {\n",
-			mv(openNS),
+			openNS.flatten(), "\n",
+			"\n",
+			"// --- Forward declarations ---\n",
+			"\n",
+			mv(forwardDeclarations),
+			"\n",
+			closeNS.flatten(), "\n",
+			"\n",
+			"namespace cupnp { namespace internal {\n",
+			"\n",
+			"// --- Kind overrides ---\n",
+			"\n",
+			mv(kindOverrides),
+			"\n",
+			"}}\n",
+			"\n",
+			openNS.flatten(), "\n",
+			"\n",
+			"// --- Declarations ---\n",
 			"\n",
 			mv(declarations),
 			"\n",
-			//"} // namespace "	, namespaceName.flatten(), "\n",
-			mv(closeNS),
+			closeNS.flatten(), "\n",
+			"\n",
+			"// --- Method definitions ---\n",
 			"\n",
 			mv(methodDefinitions)
 		);

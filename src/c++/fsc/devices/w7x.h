@@ -29,7 +29,7 @@ ComponentsDB::Client newComponentsDBFromOfflineData(DataRef<OfflineData>::Client
 FieldResolver::Client newCoilsDBResolver(CoilsDB::Client coilsDB);
 GeometryResolver::Client newComponentsDBResolver(ComponentsDB::Client componentsDB);
 
-kj::Array<Temporary<MagneticField>> preheatFields(W7XCoilSet::Reader coils);
+void buildCoilFields(W7XCoilSet::Reader in, W7XCoilSet::Fields::Builder out);
 
 /*
 // NOTE: This will be implemented as soon as the data archiving feature is implemented.

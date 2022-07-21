@@ -37,11 +37,11 @@ interface ComponentsDB {
 
 # Structure that holds instructions on how to compute the field
 # for every main coil.
-struct CoilFields {
-	mainCoils @0 : List(MagneticField); # Length 7
-	trimCoils @1 : List(MagneticField); # Length 5
-	controlCoils @2 : List(MagneticField); # Length 10
-}
+# struct CoilFields {
+#	mainCoils @0 : List(MagneticField); # Length 7
+#	trimCoils @1 : List(MagneticField); # Length 5
+#	controlCoils @2 : List(MagneticField); # Length 10
+#}
 
 # === client-side JSON interface for ComponentsDB ===
 

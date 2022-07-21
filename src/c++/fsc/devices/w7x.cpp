@@ -9,20 +9,20 @@ namespace devices { namespace w7x {
 	
 namespace {
 	
+constexpr static unsigned int N_MAIN_COILS = 7;
+constexpr static unsigned int N_MODULES = 10;
+constexpr static unsigned int N_TRIM_COILS = 5;
+constexpr static unsigned int N_CONTROL_COILS = 10;
+	
 /**
  * Magnetic field resolver that processes W7-X configuration descriptions and
  * CoilsDB references.
  */
 struct CoilsDBResolver : public FieldResolverBase {	
-	constexpr static unsigned int N_MAIN_COILS = 7;
-	constexpr static unsigned int N_MODULES = 10;
-	constexpr static unsigned int N_TRIM_COILS = 5;
-	constexpr static unsigned int N_CONTROL_COILS = 10;
 	
 	CoilsDBResolver(CoilsDB::Client backend);
 	
 	kj::TreeMap<uint64_t, DataRef<Filament>::Client> coils;
-	kj::TreeMap<ID, LocalDataRef<CoilFields>> coilPacks;
 	
 	CoilsDB::Client backend;
 	
@@ -35,7 +35,7 @@ struct CoilsDBResolver : public FieldResolverBase {
 	// Returns a set of magnetic fields required for processing a configuration node.
 	// Caches the field set
 	// Promise<LocalDataRef<CoilFields>> getCoilFields(W7XCoilSet::Reader reader);
-	static Temporary<CoilFields> buildCoilFields(W7XCoilSet::Reader reader);
+	// static Temporary<CoilFields> buildCoilFields(W7XCoilSet::Reader reader);
 	
 	// Loads the coils from the backend coilsDB. Caches the result
 	DataRef<Filament>::Client getCoil(uint64_t cdbID);	
@@ -61,11 +61,6 @@ struct ComponentsDBResolver : public GeometryResolverBase {
 };
 
 // === class CoilsDBResolver ===
-
-constexpr unsigned int CoilsDBResolver::N_MAIN_COILS;
-constexpr unsigned int CoilsDBResolver::N_MODULES ;
-constexpr unsigned int CoilsDBResolver::N_TRIM_COILS;
-constexpr unsigned int CoilsDBResolver::N_CONTROL_COILS ;
 	
 CoilsDBResolver::CoilsDBResolver(CoilsDB::Client backend) :
 	backend(backend)
@@ -135,7 +130,10 @@ Promise<void> CoilsDBResolver::processField(MagneticField::Reader input, Magneti
 void CoilsDBResolver::coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAndCurrents::Reader reader, MagneticField::Builder output, ResolveFieldContext context) {
 	output.initSum(N_MAIN_COILS + N_TRIM_COILS + N_CONTROL_COILS);
 	
-	auto coilFields = buildCoilFields(reader.getCoils());
+	// Transform coil fields into actual fields
+	Temporary<W7XCoilSet> builtSet;
+	auto fields = builtSet.initFields();
+	buildCoilFields(reader.getCoils(), fields);
 	
 	unsigned int offset = 0;
 	
@@ -147,17 +145,17 @@ void CoilsDBResolver::coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAn
 	};
 	
 	for(unsigned int i = 0; i < 5; ++i) {
-		addOutput(coilFields.getMainCoils()[i], reader.getNonplanar()[i]);
+		addOutput(fields.getMainFields()[i], reader.getNonplanar()[i]);
 	}
 	
 	for(unsigned int i = 0; i < 2; ++i) {
-		addOutput(coilFields.getMainCoils()[i + 5], reader.getPlanar()[i]);
+		addOutput(fields.getMainFields()[i + 5], reader.getPlanar()[i]);
 	}
 	
 	KJ_ASSERT(offset == N_MAIN_COILS);
 	
 	for(unsigned int i = 0; i < N_TRIM_COILS; ++i) {
-		addOutput(coilFields.getTrimCoils()[i], reader.getTrim()[i]);
+		addOutput(fields.getTrimFields()[i], reader.getTrim()[i]);
 	}
 	
 	double controlCurrents[10];
@@ -182,28 +180,11 @@ void CoilsDBResolver::coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAn
 	}
 	
 	for(unsigned int i = 0; i < N_CONTROL_COILS; ++i) {
-		addOutput(coilFields.getControlCoils()[i], controlCurrents[i]);
+		addOutput(fields.getControlFields()[i], controlCurrents[i]);
 	}
 	
 	KJ_ASSERT(offset == output.getSum().size());
 }
-
-/*Promise<LocalDataRef<CoilFields>> CoilsDBResolver::getCoilFields(W7XCoilSet::Reader reader) {	
-	return ID::fromReaderWithRefs(reader)
-	.then([this, reader](ID id) {
-		KJ_IF_MAYBE(coilPack, coilPacks.find(id)) {
-			return *coilPack;
-		}
-		
-		capnp::MallocMessageBuilder tmp;
-		auto coilPack = tmp.initRoot<CoilFields>();
-		buildCoilFields(reader, coilPack);
-		
-		auto ref = lt->dataService().publish(lt->randomID(), coilPack);
-		coilPacks.insert(id, ref);
-		return ref;
-	});
-}*/
 
 Promise<void> CoilsDBResolver::processFilament(Filament::Reader input, Filament::Builder output, ResolveFieldContext context) {
 	switch(input.which()) {
@@ -233,76 +214,6 @@ DataRef<Filament>::Client CoilsDBResolver::getCoil(uint64_t cdbID) {
 	coils.insert(cdbID, newCoil);
 	// TODO: Install an error handler that clears the entry if the request fails
 	return newCoil;
-}
-
-Temporary<CoilFields> CoilsDBResolver::buildCoilFields(W7XCoilSet::Reader reader) {	
-	auto getMainCoil = [=](unsigned int i_mod, unsigned int i_coil, Filament::Builder out) {
-		if(reader.isCoilsDBSet()) {
-			unsigned int offset = reader.getCoilsDBSet().getMainCoilOffset();
-			unsigned int coilID = i_coil < 5
-				? offset + 5 * i_mod + i_coil
-				: offset + 2 * i_mod + i_coil + 50;
-			out.setW7xCoilsDB(coilID);
-		} else {
-			KJ_REQUIRE(reader.isCustomCoilSet());
-			out.setRef(reader.getCustomCoilSet().getMainCoils()[N_MAIN_COILS * i_mod + i_coil]);
-		}
-	};
-	
-	auto getTrimCoil = [=](unsigned int i_coil, Filament::Builder out) {
-		if(reader.isCoilsDBSet())
-			out.setW7xCoilsDB(reader.getCoilsDBSet().getTrimCoilIDs()[i_coil]);
-		else {
-			KJ_REQUIRE(reader.isCustomCoilSet());
-			out.setRef(reader.getCustomCoilSet().getTrimCoils()[i_coil]);
-		}
-	};
-	
-	auto getControlCoil = [=](unsigned int i_coil, Filament::Builder out) {
-		if(reader.isCoilsDBSet())
-			out.setW7xCoilsDB(reader.getCoilsDBSet().getControlCoilOffset() + i_coil);
-		else {
-			KJ_REQUIRE(reader.isCustomCoilSet());
-			out.setRef(reader.getCustomCoilSet().getControlCoils()[i_coil]);
-		}
-	};
-	
-	auto initField = [=](MagneticField::Builder out, unsigned int windingNo, bool invert) {
-		auto filField = out.initFilamentField();
-		filField.setCurrent(invert ? 1 : -1);
-		filField.setBiotSavartSettings(reader.getBiotSavartSettings());
-		filField.setWindingNo(windingNo);
-		
-		return filField;
-	};
-	
-	Temporary<CoilFields> output;
-	auto mainCoils = output.initMainCoils(N_MAIN_COILS);
-	auto nWindMain = reader.getNWindMain();
-	for(unsigned int i_coil = 0; i_coil < N_MAIN_COILS; ++i_coil) {
-		auto sum = mainCoils[i_coil].initSum(N_MODULES);
-		
-		for(unsigned int i_mod = 0; i_mod < N_MODULES; ++i_mod) {
-			auto filField = initField(sum[i_mod], nWindMain[i_coil], reader.getInvertMainCoils());
-			getMainCoil(i_mod, i_coil, filField.getFilament());
-		}
-	}
-	
-	auto trimCoils = output.initTrimCoils(N_TRIM_COILS);
-	auto nWindTrim = reader.getNWindTrim();
-	for(unsigned int i_coil = 0; i_coil < N_TRIM_COILS; ++i_coil) {
-		auto filField = initField(trimCoils[i_coil], nWindTrim[i_coil], false);
-		getTrimCoil(i_coil, filField.getFilament());
-	}
-	
-	auto controlCoils = output.initControlCoils(N_CONTROL_COILS);
-	auto nWindControl = reader.getNWindControl();
-	for(unsigned int i_coil = 0; i_coil < N_CONTROL_COILS; ++i_coil) {
-		auto filField = initField(controlCoils[i_coil], nWindControl[i_coil], reader.getInvertControlCoils()[i_coil]);
-		getControlCoil(i_coil, filField.getFilament());
-	}
-	
-	return output;
 }
 
 // === class ComponentsDBResolver ===
@@ -705,21 +616,85 @@ GeometryResolver::Client newComponentsDBResolver(ComponentsDB::Client components
 	return GeometryResolver::Client(kj::heap<ComponentsDBResolver>(componentsDB));
 }
 
-kj::Array<Temporary<MagneticField>> preheatFields(W7XCoilSet::Reader coils) {
-	auto resolved = CoilsDBResolver::buildCoilFields(coils);
+void buildCoilFields(W7XCoilSet::Reader in, W7XCoilSet::Fields::Builder output) {
+	if(in.isFields()) {
+		auto inFields = in.getFields();
+		
+		output.setMainFields(inFields.getMainFields());
+		output.setTrimFields(inFields.getTrimFields());
+		output.setControlFields(inFields.getControlFields());
+		
+		return;
+	}
 	
-	kj::Vector<Temporary<MagneticField>> results;
+	KJ_REQUIRE(in.isCoils());
 	
-	for(auto f : resolved.getMainCoils())
-		results.add(f);
+	auto coils = in.getCoils();
 	
-	for(auto f : resolved.getTrimCoils())
-		results.add(f);
+	auto getMainCoil = [=](unsigned int i_mod, unsigned int i_coil, Filament::Builder out) {
+		if(coils.isCoilsDBSet()) {
+			unsigned int offset = coils.getCoilsDBSet().getMainCoilOffset();
+			unsigned int coilID = i_coil < 5
+				? offset + 5 * i_mod + i_coil
+				: offset + 2 * i_mod + i_coil + 50;
+			out.setW7xCoilsDB(coilID);
+		} else {
+			KJ_REQUIRE(coils.isCustomCoilSet());
+			out.setRef(coils.getCustomCoilSet().getMainCoils()[N_MAIN_COILS * i_mod + i_coil]);
+		}
+	};
 	
-	for(auto f : resolved.getControlCoils())
-		results.add(f);
+	auto getTrimCoil = [=](unsigned int i_coil, Filament::Builder out) {
+		if(coils.isCoilsDBSet())
+			out.setW7xCoilsDB(coils.getCoilsDBSet().getTrimCoilIDs()[i_coil]);
+		else {
+			KJ_REQUIRE(coils.isCustomCoilSet());
+			out.setRef(coils.getCustomCoilSet().getTrimCoils()[i_coil]);
+		}
+	};
 	
-	return results.releaseAsArray();
+	auto getControlCoil = [=](unsigned int i_coil, Filament::Builder out) {
+		if(coils.isCoilsDBSet())
+			out.setW7xCoilsDB(coils.getCoilsDBSet().getControlCoilOffset() + i_coil);
+		else {
+			KJ_REQUIRE(coils.isCustomCoilSet());
+			out.setRef(coils.getCustomCoilSet().getControlCoils()[i_coil]);
+		}
+	};
+	
+	auto initField = [=](MagneticField::Builder out, unsigned int windingNo, bool invert) {
+		auto filField = out.initFilamentField();
+		filField.setCurrent(invert ? 1 : -1);
+		filField.setBiotSavartSettings(coils.getBiotSavartSettings());
+		filField.setWindingNo(windingNo);
+		
+		return filField;
+	};
+	
+	auto mainFields = output.initMainFields(N_MAIN_COILS);
+	auto nWindMain = coils.getNWindMain();
+	for(unsigned int i_coil = 0; i_coil < N_MAIN_COILS; ++i_coil) {
+		auto sum = mainFields[i_coil].initSum(N_MODULES);
+		
+		for(unsigned int i_mod = 0; i_mod < N_MODULES; ++i_mod) {
+			auto filField = initField(sum[i_mod], nWindMain[i_coil], coils.getInvertMainCoils());
+			getMainCoil(i_mod, i_coil, filField.getFilament());
+		}
+	}
+	
+	auto trimFields = output.initTrimFields(N_TRIM_COILS);
+	auto nWindTrim = coils.getNWindTrim();
+	for(unsigned int i_coil = 0; i_coil < N_TRIM_COILS; ++i_coil) {
+		auto filField = initField(trimFields[i_coil], nWindTrim[i_coil], false);
+		getTrimCoil(i_coil, filField.getFilament());
+	}
+	
+	auto controlFields = output.initControlFields(N_CONTROL_COILS);
+	auto nWindControl = coils.getNWindControl();
+	for(unsigned int i_coil = 0; i_coil < N_CONTROL_COILS; ++i_coil) {
+		auto filField = initField(controlFields[i_coil], nWindControl[i_coil], coils.getInvertControlCoils()[i_coil]);
+		getControlCoil(i_coil, filField.getFilament());
+	}
 }
 	
 }}

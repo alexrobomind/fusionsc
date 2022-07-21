@@ -28,7 +28,7 @@ TEST_CASE("local_publish") {
 	SECTION("raw") {
 		auto data = kj::heapArray<const byte>({0, 1, 2, 3, 4});
 		
-		LocalDataRef<capnp::Data> ref = ds.publish(id, kj::heapArray<const byte>(data));
+		LocalDataRef<capnp::Data> ref = ds.publish(id, 0, kj::heapArray<const byte>(data));
 		
 		ArrayPtr<const byte> data2 = ref.getRaw();
 		

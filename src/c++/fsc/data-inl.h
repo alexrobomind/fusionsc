@@ -190,16 +190,19 @@ inline bool checkReader<capnp::Data>(capnp::Data::Reader reader, const Array<con
 // Helper methods to determine type ids.
 
 template<typename T>
-uint64_t constexpr capnpTypeId() { return capnp::typeId<T>(); }
+uint64_t capnpTypeId(typename T::Reader reader) { return capnp::typeId<T>(); }
 
 template<>
-inline uint64_t constexpr capnpTypeId<capnp::Data>() { return 0; }
+inline uint64_t capnpTypeId<capnp::Data>(capnp::Data::Reader reader) { return 0; }
 
 template<>
-inline uint64_t constexpr capnpTypeId<capnp::AnyPointer>() { return 1; }
+inline uint64_t capnpTypeId<capnp::AnyPointer>(capnp::AnyPointer::Reader reader) { return 1; }
 
 template<>
-inline uint64_t constexpr capnpTypeId<capnp::AnyStruct>() { return 1; }
+inline uint64_t capnpTypeId<capnp::AnyStruct>(capnp::AnyStruct::Reader reader) { return 1; }
+
+template<>
+inline uint64_t capnpTypeId<capnp::DynamicStruct>(capnp::DynamicStruct::Reader reader) { return reader.getSchema().getProto().getId(); }
 // Type inference helper that tells what a data ref references
 
 template<typename T>
@@ -225,7 +228,7 @@ LocalDataRef<T> LocalDataService::publish(ArrayPtr<const byte> id, Reader data) 
 		id,
 		mv(byteData),
 		capTable.getTable(),
-		internal::capnpTypeId<T>()
+		internal::capnpTypeId<T>(data)
 	).template as<T>();
 }
 
@@ -233,10 +236,10 @@ template<typename Reader, typename IDReader, typename T, typename T2>
 Promise<LocalDataRef<T>> LocalDataService::publish(IDReader dataForID, Reader data, kj::StringPtr hashFunction) {
 	Promise<ID> id = ID::fromReaderWithRefs(dataForID);
 	
-	return id.then([this, data, hashFunction = kj::heapString(hashFunction)](ID id) {
+	return id.then([this, data, dataForID, hashFunction = kj::heapString(hashFunction)](ID id) {
 		auto hash = Botan::HashFunction::create(hashFunction.cStr());
 		
-		hash->update_le(internal::capnpTypeId<capnp::FromAny<IDReader>>());
+		hash->update_le(internal::capnpTypeId<capnp::FromAny<IDReader>>(dataForID));
 		hash->update(id.data.begin(), id.data.size());
 		
 		auto newId = kj::heapArray<byte>(hash->output_length());
@@ -249,6 +252,7 @@ Promise<LocalDataRef<T>> LocalDataService::publish(IDReader dataForID, Reader da
 template<typename T>
 LocalDataRef<T> LocalDataService::publish(
 	ArrayPtr<const byte> id,
+	uint64_t typeId,
 	Array<const byte> backingArray,
 	ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable
 ) {
@@ -265,7 +269,7 @@ LocalDataRef<T> LocalDataService::publish(
 		id,
 		mv(backingArray),
 		hooks.finish(),
-		internal::capnpTypeId<T>()
+		typeId
 	).template as<T>();
 }
 
