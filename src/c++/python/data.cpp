@@ -136,7 +136,7 @@ Promise<void> writeArchive1(capnp::DynamicCapability::Client ref, kj::StringPtr 
 	auto absPath = fs->getCurrentPath().evalNative(path);
 	auto file = fs->getRoot().openFile(absPath, kj::WriteMode::CREATE | kj::WriteMode::MODIFY);
 	
-	return getActiveThread().dataService().writeArchive(asRef, *file);
+	return getActiveThread().dataService().writeArchive(asRef, *file).attach(mv(file));
 }
 
 Promise<void> writeArchive2(capnp::DynamicStruct::Reader root, kj::StringPtr path) {
@@ -147,7 +147,11 @@ Promise<void> writeArchive2(capnp::DynamicStruct::Reader root, kj::StringPtr pat
 	auto absPath = fs->getCurrentPath().evalNative(path);
 	auto file = fs->getRoot().openFile(absPath, kj::WriteMode::CREATE | kj::WriteMode::MODIFY);
 	
-	return getActiveThread().dataService().writeArchive(ref, *file);
+	return getActiveThread().dataService().writeArchive(ref, *file).attach(mv(file));
+}
+
+Promise<void> writeArchive3(capnp::DynamicStruct::Builder root, kj::StringPtr path) {
+	return writeArchive2(root.asReader(), path);
 }
 
 }
@@ -162,6 +166,7 @@ void initData(py::module_& m) {
 	
 	m.def("writeArchive", &writeArchive1);
 	m.def("writeArchive", &writeArchive2);
+	m.def("writeArchive", &writeArchive3);
 }
 
 }
