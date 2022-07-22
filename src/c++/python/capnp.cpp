@@ -429,10 +429,10 @@ void bindStructClasses(py::module_& m) {
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Reader& val) { dsb.set(name, val); });
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Builder& val) { dsb.set(name, val.asReader()); });
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, capnp::Orphan<DynamicValue>& val) { dsb.adopt(name, mv(val)); });
-	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, py::list list) {
-		auto val = dsb.init(name, list.size()).as<DynamicList>();
-		for(size_t i = 0; i < list.size(); ++i)
-			val.set(i, py::cast<DynamicValue::Reader>(list[i]));
+	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, py::sequence seq) {
+		auto val = dsb.init(name, seq.size()).as<DynamicList>();
+		for(size_t i = 0; i < seq.size(); ++i)
+			val.set(i, py::cast<DynamicValue::Reader>(seq[i]));
 	});
 	cDSB.def("set", [](DSB& dsb, kj::StringPtr name, py::buffer buf) { setTensor(dsb.init(name), buf); });
 	cDSB.def("setAs", [](DSB& dsb, py::buffer buf) { setTensor(dsb, buf); });
@@ -440,10 +440,10 @@ void bindStructClasses(py::module_& m) {
 	cDSB.def("__setitem__", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Reader& val) { dsb.set(name, val); });
 	cDSB.def("__setitem__", [](DSB& dsb, kj::StringPtr name, const DynamicValue::Builder& val) { dsb.set(name, val.asReader()); });
 	cDSB.def("__setitem__", [](DSB& dsb, kj::StringPtr name, capnp::Orphan<DynamicValue>& val) { dsb.adopt(name, mv(val)); });
-	cDSB.def("__setitem__", [](DSB& dsb, kj::StringPtr name, py::list list) {
-		auto val = dsb.init(name, list.size()).as<DynamicList>();
-		for(size_t i = 0; i < list.size(); ++i)
-			val.set(i, py::cast<DynamicValue::Reader>(list[i]));
+	cDSB.def("__setitem__", [](DSB& dsb, kj::StringPtr name, py::sequence seq) {
+		auto val = dsb.init(name, seq.size()).as<DynamicList>();
+		for(size_t i = 0; i < seq.size(); ++i)
+			val.set(i, py::cast<DynamicValue::Reader>(seq[i]));
 	});
 	cDSB.def("__setitem__", [](DSB& dsb, kj::StringPtr name, py::buffer buf) { setTensor(dsb.init(name), buf); });
 		
