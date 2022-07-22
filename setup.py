@@ -9,6 +9,6 @@ setup(
 	cmake_install_target = "fsc-install-skbuild",
 	entry_points = {
 		'console_scripts': [
-			'w7x-download' : 'fsc.w7x.scripts:download'
+			'w7x-downloa = fsc.w7x.scripts:download'
 		]
 )
