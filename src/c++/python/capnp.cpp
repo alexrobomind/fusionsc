@@ -34,6 +34,12 @@ using namespace fscpy;
 
 namespace {
 
+/**
+ *  Retrieves the values of a field and, if neccessary, creates
+ *  a keep-alive reference to the parent (not all python types need
+ *  that, and out of those that don't, some do not support custom
+ *  attributes or weakrefs.
+ */
 py::object getField(py::object self, py::object field) {
 	py::tuple getResult = self.attr("_get")(field);
 	
@@ -46,6 +52,10 @@ py::object getField(py::object self, py::object field) {
 	return fieldValue;
 }
 
+/**
+ * Determines which readers / builders need to store a reference to
+ * their parent to keep their data alive.
+ */
 template<typename T>
 bool needsBackReference(T& t) {
 	switch(t.getType()) {
@@ -62,12 +72,16 @@ bool needsBackReference(T& t) {
 	};
 }
 
-// Pipelines count references themselves
+//! Pipelines have their own keep-alive through PipelineHooks
 template<>
 bool needsBackReference<DynamicValuePipeline>(DynamicValuePipeline& t) {
 	return false;
 }
 
+/**
+ * Implementation for _get used by getField, which determines, based on type
+ * dispatch, whether the returned value needs a back-reference.
+ */
 template<typename T, typename Field>
 py::tuple underscoreGet(T& ds, Field field) {
 	auto cppValue = ds.get(field);
@@ -79,14 +93,13 @@ py::tuple underscoreGet(T& ds, Field field) {
 	);
 };
 
+//TODO: Buffer view for data
 
+//! Binds capnp::Data::{Reader, Builder, Pipeline} and capnp::Text::{Reader, Builder, Pipeline}
 void bindBlobClasses(py::module_& m) {
 	using TR = capnp::Text::Reader;
 	using TB = capnp::Text::Builder;
 	using TP = capnp::Text::Pipeline;
-	
-	// using AP = kj::ArrayPtr<kj::byte>;
-	// using CAP = kj::ArrayPtr<const kj::byte>;
 	
 	py::class_<TR, kj::StringPtr>(m, "TextReader", py::dynamic_attr());
 	py::class_<TB>(m, "TextBuilder", py::dynamic_attr())
@@ -206,6 +219,7 @@ capnp::AnyList::Reader asAnyListReader(capnp::DynamicList::Builder builder) {
 	return asAnyListReader(builder.asReader());
 }
 
+//! Defines the buffer protocol for a type T which must be a capnp::List<...>::{Builder, Reader}
 template<typename T>
 void defListBuffer(py::class_<T>& c, bool readOnly) {
 	c.def_buffer([readOnly](T& list) {	
@@ -234,6 +248,7 @@ void defListBuffer(py::class_<T>& c, bool readOnly) {
 	});
 }
 
+//! Defines the buffer protocol for a capnp::DynamicStruct::{Reader, Builder} that has a "shape" and a "data" field
 template<typename T>
 void defTensorBuffer(py::class_<T>& c, bool readOnly) {
 	c.def_buffer([readOnly](T& tensor) {
@@ -282,6 +297,7 @@ void defTensorBuffer(py::class_<T>& c, bool readOnly) {
 	});
 }
 
+//! Allows assigning tensor types from a buffer
 void setTensor(DynamicStruct::Builder dsb, py::buffer buffer) {	
 	py::buffer_info bufinfo = buffer.request();
 	
@@ -332,6 +348,7 @@ void setTensor(DynamicStruct::Builder dsb, py::buffer buffer) {
 }
 
 void setTensor(DynamicValue::Builder dvb, py::buffer buffer) {
+	//TODO: Derive tensor type from buffer value?
 	setTensor(dvb.as<DynamicStruct>(), buffer);
 }
 
@@ -343,6 +360,7 @@ void defSetItem(py::class_<T>& c) {
 	});
 }
 
+//! Binds capnp::DynamicList::{Builder, Reader}
 void bindListClasses(py::module_& m) {
 	using DLB = DynamicList::Builder;
 	using DLR = DynamicList::Reader;
@@ -357,6 +375,7 @@ void bindListClasses(py::module_& m) {
 	defListBuffer(cDLR, true);
 }
 
+//! Defines the _get methods needed by all accessors, as well as the dynamic "get" and "__getitem__" methods
 template<typename T, typename... Extra>
 void defGet(py::class_<T, Extra...>& c) {
 	c.def("_get", [](T& self, capnp::StructSchema::Field field) { return underscoreGet<T, kj::StringPtr>(self, field.getProto().getName()); });
