@@ -8,9 +8,7 @@ namespace fsc {
 // === class LibraryHandle ===
 
 void LibraryHandle::stopSteward() const {
-	KJ_LOG(WARNING, "LibraryHandle::stopSteward()");
 	_daemonRunner->disconnect();
-	KJ_LOG(WARNING, "DaemonRunner disconnected");
 	storeSteward.stop();
 }
 	
