@@ -6,5 +6,9 @@ setup(
 	version = '0.1',
 	packages = ['fsc'],
 	package_dir = {"" : "src/python"},
-	cmake_install_target = "fsc-install-skbuild"
+	cmake_install_target = "fsc-install-skbuild",
+	entry_points = {
+		'console_scripts': [
+			'w7x-download' : 'fsc.w7x.scripts:download'
+		]
 )

@@ -1,10 +1,5 @@
 cmake_minimum_required(VERSION 3.17)
 
-project(FSC LANGUAGES CXX)
-
-set(CMAKE_CXX_EXTENSIONS On)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
 # Dependencies:
 # - capnproto (https://github.com/capnproto/capnproto)
 # - Botan (https://github.com/randombit/botan)
@@ -12,8 +7,12 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # - Eigen3 (https://gitlab.com/libeigen/eigen.git)
 # - pybind11 (https://github.com/pybind/pybind11.git)
 
-set(FSC_FETCH_DEPENDENCIES On CACHE BOOL "Whether the build system is allowed to fetch external dependencies")
-set(FSC_ALWAYS_FETCH On CACHE BOOL "Whether the build system must fetch external dependencies")
+# Configure project
+
+project(FSC LANGUAGES CXX)
+set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/src/cmake/modules)
+
+# Configure languages
 
 # Try to enable CUDA
 option(FSC_WITH_CUDA "Whether to use CUDA compilation")
@@ -22,29 +21,31 @@ if(FSC_WITH_CUDA)
 	find_package(CUDAToolkit)
 endif()
 
+set(CMAKE_CXX_EXTENSIONS On)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+include(src/cmake/OptimizeForTarget.cmake)
+
 # Prepare CTest
 include(CTest)
 
 # Pre-load python to make sure we have compatible dev environment and interpreter
 find_package(Python COMPONENTS Interpreter Development)
 
+if(SKBUILD AND NOT Python_FOUND)
+	message(FATAL_ERROR "Could not find python in python-driven build")
+endif()
+
 # Try to load dependencies directly
 
+set(FSC_FETCH_DEPENDENCIES On CACHE BOOL "Whether the build system is allowed to fetch external dependencies")
+set(FSC_ALWAYS_FETCH On CACHE BOOL "Whether the build system must fetch external dependencies")
+
 if(NOT FSC_ALWAYS_FETCH)
-	find_package(CapnProto)
-
-	find_library(BOTAN_LIB botan2)
-	find_path   (BOTAN_INC "botan/version.h")
-
-	find_package(Catch2)
-	find_package(Eigen3)
-	find_package(pybind11)
-	
-	if(BOTAN_LIB AND BOTAN_INC)
-		set(Botan-Botan_FOUND TRUE)
-	else()
-		set(BotanBotan_FOUNDFOUND FALSE)
-	endif()
+	find_package(CapnProto CONFIG)
+	find_package(Botan MODULE)
+	find_package(Catch2 CONFIG)
+	find_package(Eigen3 CONFIG)
+	find_package(pybind11 CONFIG)
 else()
 	set(CapnProto_FOUND FALSE)
 	set(Botan_FOUND FALSE)
@@ -101,6 +102,7 @@ FetchContent_Declare(
 	GIT_PROGRESS   On
 )
 
+# Disable BUILD_TESTING while compiling dependencies
 set(BUILD_TESTING_TMP ${BUILD_TESTING})
 set(BUILD_TESTING OFF CACHE BOOL "Temporarily disable testing" FORCE)
 
@@ -131,62 +133,27 @@ if(Python_Development_FOUND)
 endif()
 
 # For Botan, we have to be fancier, as it does not use CMake
-if(Botan_FOUND)
-	add_library(botan INTERFACE)
-	target_include_directories(botan INTERFACE ${BOTAN_INC})
-	target_link_libraries(botan INTERFACE ${BOTAN_LIB})
-else()
+if(NOT Botan_FOUND)
 	if(NOT FSC_FETCH_DEPENDENCIES)
 		message(FATAL_ERROR "Botan could not be found, and dependency fetching was disabled")
 	endif()
-
-	find_package(Python3 REQUIRED COMPONENTS Interpreter)
 	
-	message(STATUS "Botan not found. Fetching and building from repository")
-	message(STATUS "  Step 1: Download")
-	FetchContent_MakeAvailable(Botan)
-	
-	message(STATUS "  Step 2: Amalgamation build")
-	if(MSVC)
-		set(BOTAN_XARGS "--cc" "msvc")
-	elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-		set(BOTAN_XARGS "--cc" "gcc")
-	elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-		set(BOTAN_XARGS "--cc" "clang")
-	else()
-		set(BOTAN_XARGS "")
-	endif()
-
-	add_custom_command(
-		OUTPUT "${botan_SOURCE_DIR}/botan_all.cpp"
-		COMMAND ${Python3_EXECUTABLE}
-		"${botan_SOURCE_DIR}/configure.py"
-		"--minimized-build"
-		"--enable-modules=auto_rng,sha2_32,sha2_64,system_rng"
-		"--amalgamation"
-		"--disable-shared"
-		"--cc-bin" "${CMAKE_CXX_COMPILER}"
-		${BOTAN_XARGS}
-		WORKING_DIRECTORY ${botan_SOURCE_DIR}
-	)
-	
-	add_library(botan "${botan_SOURCE_DIR}/botan_all.cpp")
-	target_include_directories(botan INTERFACE "${botan_SOURCE_DIR}/build/include")
+	include(src/cmake/CompileBotan.cmake)
 endif()
 
+# Re-enable BUILD_TESTING if desired
 set(BUILD_TESTING ${BUILD_TESTING_TMP} CACHE BOOL "" FORCE)
 
 add_library(deps INTERFACE)
 target_link_libraries(
 	deps
 	INTERFACE
-	botan
+	Botan::botan
 	CapnProto::capnp-rpc
 	CapnProto::capnp-json
 	CapnProto::kj-http
 	CapnProto::kj
 	Eigen3::Eigen
-	#eigen
 )
 
 if(TARGET capnpc)
@@ -223,25 +190,21 @@ if(FSC_WITH_PYTHON)
 	)
 endif()
 
-# Try to enable OpenMP
-#find_package(OpenMP 4.5)
-#if(OpenMP_FOUND)
-#	target_link_libraries(deps INTERFACE OpenMP::OpenMP_CXX)
-#endif()##
-
-
 # Set up testing subsystem
 include(Catch)
 
 # Cross-communication variables
 SET(FSC_GENAPI "")
 
+# Build and install the libraries
 add_subdirectory(src/c++)
+
+# Build the documentation
 add_subdirectory(docs)
 
+# Coverage testing
 option(FSC_WITH_INSTRUMENTATION "Whether to perform instrumentation")
 
-# Coverage testing
 if(FSC_WITH_INSTRUMENTATION AND (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
 	target_compile_options(fsc PRIVATE -fprofile-instr-generate -fcoverage-mapping)
 	target_link_options(tests PRIVATE -fprofile-instr-generate -fcoverage-mapping)
@@ -266,7 +229,7 @@ if(FSC_WITH_INSTRUMENTATION AND (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
 	)
 endif()
 
-# Scikit-build
+# Extra target for the python-driven build
 if(SKBUILD)
 	add_custom_target(fsc-install-skbuild
 		${CMAKE_COMMAND}
