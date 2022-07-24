@@ -156,28 +156,6 @@ namespace {
 		}	
 	};
 	
-	PyPromise run(py::object obj) {
-		// Return promises as is
-		try {
-			return py::cast<PyPromise>(obj);
-		} catch(py::cast_error) {
-		}
-		
-		KJ_REQUIRE(py::hasattr(obj, "__await__"), "Object must be awaitable");
-		py::object generator = obj.attr("__await__")();
-		
-		auto runIt = heapHeld<RunIterator>(generator.attr("send"), generator.attr("throw"));
-		
-		// Wrap the run to catch exceptions thrown
-		// on the first send (and defer the execution)
-		auto delayedRun = [runIt]() mutable {
-			py::gil_scoped_acquire withGIL;
-			return runIt->doSend(py::none());
-		};
-		
-		return kj::evalLater(mv(delayedRun)).attach(runIt.x());
-	}
-	
 	Promise<void> delay(double seconds) {
 		uint64_t timeInNS = (uint64_t) seconds * 1e9;
 		auto targetPoint = kj::systemPreciseMonotonicClock().now() + timeInNS * kj::NANOSECONDS;
@@ -187,6 +165,21 @@ namespace {
 }
 
 namespace fscpy {
+	
+PyPromise run(PythonAwaitable obj) {
+	py::object generator = obj.await();
+	
+	auto runIt = heapHeld<RunIterator>(generator.attr("send"), generator.attr("throw"));
+	
+	// Wrap the run to catch exceptions thrown
+	// on the first send (and defer the execution)
+	auto delayedRun = [runIt]() mutable {
+		py::gil_scoped_acquire withGIL;
+		return runIt->doSend(py::none());
+	};
+	
+	return kj::evalLater(mv(delayedRun)).attach(runIt.x());
+}
 
 void initAsync(py::module_& m) {	
 	py::class_<PyPromise>(m, "Promise", py::multiple_inheritance(), py::metaclass(*baseMetaType)/*, py::custom_type_setup(&makePyPromiseAwaitable)*/)
@@ -197,6 +190,8 @@ void initAsync(py::module_& m) {
 		
 		.def("__await__", [](PyPromise& self) { return new PyPromiseAwaitContext(self); })
 	;
+	
+	py::implicitly_convertible<PythonAwaitable, PyPromise>();
 	
 	py::class_<PyPromiseAwaitContext>(m, "_PromiseAwaitCtx")
 		.def("__next__", &PyPromiseAwaitContext::next)

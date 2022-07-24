@@ -194,6 +194,17 @@ private:
 	kj::ForkedPromise<Own<PyObjectHolder>> holder;
 };
 
+struct PythonAwaitable {
+	py::object object;
+	
+	inline py::iterator await() { return object.attr("__await__")(); }
+	inline operator PyPromise();
+};
+
+PyPromise run(PythonAwaitable obj);
+
+PythonAwaitable::operator PyPromise() {	return run(*this); }
+
 }
 
 namespace pybind11 { namespace detail {
@@ -213,6 +224,32 @@ struct type_caster<kj::Promise<T>> {
 	static handle cast(kj::Promise<T> src, return_value_policy policy, handle parent) {
 		return type_caster<fscpy::PyPromise>::cast(fscpy::PyPromise(mv(src)), policy, parent);
 	}	
+};
+
+template<>
+struct type_caster<fscpy::PythonAwaitable> {
+	PYBIND11_TYPE_CASTER(fscpy::PythonAwaitable, const_name("Awaitable"));
+	
+	bool load(handle src, bool convert) {
+		py::type srcType = py::type::of(src);
+		PyTypeObject* pyType = reinterpret_cast<PyTypeObject*>(srcType.ptr());
+		
+		PyAsyncMethods* asyncMethods = pyType -> tp_as_async;
+		
+		// Check if python async struct is present
+		if(asyncMethods == nullptr)
+			return false;
+		
+		if(asyncMethods->am_await == nullptr)
+			return false;
+		
+		value.object = py::reinterpret_borrow<py::object>(src);
+		return true;
+	}
+	
+	static handle cast(fscpy::PythonAwaitable src, return_value_policy policy, handle parent) {
+		return src.object.inc_ref();
+	}
 };
 
 }}

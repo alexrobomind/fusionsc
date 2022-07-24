@@ -472,6 +472,26 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		outerAttrs[name.cStr()] = holder;
 	}
 	
+	// We don't need a method descriptor because we already have the schema
+	auto wrapFunction = py::cpp_function(
+		[schema](PyPromise promise) {
+			auto untypedPromise = promise.as<capnp::DynamicCapability::Client>()
+			.then([](capnp::DynamicCapability::Client typed) mutable -> capnp::Capability::Client {
+				return mv(typed);
+			});
+			
+			capnp::Capability::Client untyped = mv(untypedPromise);
+			
+			return untyped.castAs<capnp::DynamicCapability>(schema);
+		}
+	);
+	
+	// Check for the unlikely possibility that the schema type has a "wrap" function
+	if(outerAttrs.contains("wrap"))
+		outerAttrs["wrap"].attr("__call__") = mv(wrapFunction);
+	else
+		outerAttrs["wrap"] = wrapFunction;
+	
 	/*py::print("Extracting surrounding module");
 	py::module_ module_ = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope;*/
 	

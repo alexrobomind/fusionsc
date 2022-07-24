@@ -76,17 +76,29 @@ namespace fscpy {
 
 	void loadDefaultSchema(py::module_& m) {
 		defaultLoader.addBuiltin<
-			//ToroidalGrid,
-			//MagneticField,
+			capnp::schema::Node,
 			RootService,
 			OfflineData,
 			ResolverChain
 		>();
 		
-		auto schemas = getBuiltinSchemas<FieldResolver, GeometryResolver, RootService, OfflineData, ResolverChain>();
+		// Schema submodule
+		{
+			auto schemas = getBuiltinSchemas<capnp::schema::Node>();
+			py::module_ subM = m.def_submodule("schema");
 			
-		for(auto node : schemas) {
-			defaultLoader.importNodeIfRoot(node.getId(), m);
+			for(auto node : schemas) {
+				defaultLoader.importNodeIfRoot(node.getId(), subM);
+			}
+		}
+		
+		// Root module
+		{		
+			auto schemas = getBuiltinSchemas<FieldResolver, GeometryResolver, RootService, OfflineData, ResolverChain>();
+				
+			for(auto node : schemas) {
+				defaultLoader.importNodeIfRoot(node.getId(), m);
+			}
 		}
 	}
 }
