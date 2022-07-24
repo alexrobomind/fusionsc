@@ -705,6 +705,12 @@ void bindEnumClasses(py::module_& m) {
 	;
 }
 
+void bindSchemaClasses(py::module_& m) {
+	py::class_<capnp::Schema>(m, "Schema");
+	py::class_<capnp::StructSchema, capnp::Schema>(m, "StructSchema");
+	py::class_<capnp::InterfaceSchema, capnp::Schema>(m, "InterfaceSchema");
+}
+
 }
 
 namespace fscpy {
@@ -712,7 +718,7 @@ namespace fscpy {
 // init method
 
 void initCapnp(py::module_& m) {
-	py::module_ mcapnp = m.def_submodule("capnp");
+	py::module_ mcapnp = m.def_submodule("capnp", "Python bindings for Cap'n'proto classes (excluding KJ library)");
 	
 	bindListClasses(mcapnp);
 	bindBlobClasses(mcapnp);
@@ -721,6 +727,7 @@ void initCapnp(py::module_& m) {
 	bindMessageBuilders(mcapnp);
 	bindCapClasses(mcapnp);
 	bindEnumClasses(mcapnp);
+	bindSchemaClasses(mcapnp);
 	
 	m.add_object("void", py::cast(capnp::DynamicValue::Reader(capnp::Void())));
 }

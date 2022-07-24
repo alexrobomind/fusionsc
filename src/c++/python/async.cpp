@@ -21,10 +21,6 @@ namespace {
 		fscpy::PyContext::libraryThread()->waitScope().poll();
 	}
 	
-	PyPromise readyPromise(py::object o) {
-		return fscpy::PyPromise(o);
-	}
-	
 	struct PyPromiseAwaitContext {
 		PyPromise promise;
 		bool consumed = false;
@@ -181,30 +177,48 @@ PyPromise run(PythonAwaitable obj) {
 	return kj::evalLater(mv(delayedRun)).attach(runIt.x());
 }
 
-void initAsync(py::module_& m) {	
-	py::class_<PyPromise>(m, "Promise", py::multiple_inheritance(), py::metaclass(*baseMetaType)/*, py::custom_type_setup(&makePyPromiseAwaitable)*/)
+void initAsync(py::module_& m) {
+	py::module_ asyncModule = m.def_submodule("asnc", "Asynchronous event-loop and promises");
+	
+	py::type pyGeneric = py::module::import("typing").attr("Generic");
+	py::type pyTypeVar = py::module::import("typing").attr("TypeVar");
+	
+	py::object promiseParam = pyTypeVar("T", py::arg("covariant") = true);
+	
+	py::class_<PyPromise>(asyncModule, "Promise", py::multiple_inheritance(), py::metaclass(*baseMetaType))
 		.def(py::init([](PyPromise& other) { return PyPromise(other); }))
+		.def(py::init([](py::object o) { return PyPromise(o); }))
 		.def("wait", &PyPromise::wait)
 		.def("poll", &PyPromise::poll)
 		.def("then", &PyPromise::pyThen)
 		
 		.def("__await__", [](PyPromise& self) { return new PyPromiseAwaitContext(self); })
+		
+		// Allows expressions like "Promise[T]"
+		.def_static("__class_getitem__", [pyGeneric](py::object key) {
+			return pyGeneric.attr("__dict__")["__class_getitem__"].attr("__get__")(py::none(), py::type::of<PyPromise>())(key);
+		})
+		.def_property_readonly_static("__parameters__", [promiseParam](py::object cls) {
+			return py::make_tuple(promiseParam);
+		})
 	;
 	
 	py::implicitly_convertible<PythonAwaitable, PyPromise>();
 	
-	py::class_<PyPromiseAwaitContext>(m, "_PromiseAwaitCtx")
+	py::class_<PyPromiseAwaitContext>(asyncModule, "_PromiseAwaitCtx")
 		.def("__next__", &PyPromiseAwaitContext::next)
 		.def("send", &PyPromiseAwaitContext::send)
 	;
 	
-	m.def("startEventLoop", &PyContext::startEventLoop);
-	m.def("hasEventLoop", &PyContext::hasEventLoop);
-	m.def("dataService", &dataService);
-	m.def("cycle", &cycle);
-	m.def("readyPromise", &readyPromise);
-	m.def("run", &run);
-	m.def("delay", &delay);
+	asyncModule.def("startEventLoop", &PyContext::startEventLoop, "If the active thread has no active event loop, starts a new one");
+	asyncModule.def("stopEventLoop", &PyContext::stopEventLoop, "Stops the event loop on this thread if it is active.");
+	asyncModule.def("hasEventLoop", &PyContext::hasEventLoop, "Checks whether this thread has an active event loop");
+	asyncModule.def("cycle", &cycle, "Cycles this thread's event loop a single time");
+	
+	asyncModule.def("run", &run, "Turns an awaitable (e.g. Promise or Coroutine) into a promise by running it on the active event loop");
+	
+	py::module_ timerModule = m.def_submodule("timer");
+	timerModule.def("delay", &delay, "Creates a promise resolving at a defined delay (in seconds) after this function is called");
 	
 	auto atexitModule = py::module_::import("atexit");
 	atexitModule.attr("register")(py::cpp_function(&atExitFunction));

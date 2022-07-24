@@ -645,9 +645,7 @@ kj::StringTree fscpy::typeName(capnp::Type type) {
 
 // ================== Brand conversion helpers ============================
 
-void extractBrand(capnp::Schema in, capnp::schema::Brand::Builder out);
-
-void extractType(capnp::Type in, capnp::schema::Type::Builder out) {	
+void fscpy::extractType(capnp::Type in, capnp::schema::Type::Builder out) {	
 	switch(in.which()) {
 		#define HANDLE_VALUE(enumVal, name) \
 			case capnp::schema::Type::enumVal: {\
@@ -732,7 +730,7 @@ void extractType(capnp::Type in, capnp::schema::Type::Builder out) {
 	}
 }
 
-void extractBrand(capnp::Schema in, capnp::schema::Brand::Builder out) {
+void fscpy::extractBrand(capnp::Schema in, capnp::schema::Brand::Builder out) {
 	if(!in.getProto().getIsGeneric()) {
 		out.initScopes(0);
 		return;

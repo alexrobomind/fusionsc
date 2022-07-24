@@ -69,7 +69,7 @@ namespace fscpy {
 		m.def("connectSameThread", &connectSameThread1);
 		m.def("connectSameThread", &connectSameThread2);
 		m.def("connectLocal", &connectLocal1);
-		m.def("connectSameThread", &connectRemote1, py::arg("address"), py::arg("port") = 0);
+		m.def("connectRemote", &connectRemote1, py::arg("address"), py::arg("port") = 0);
 		m.def("newResolverChain", &newResolverChain1);
 		m.def("newCache", &fsc::newCache);
 	}

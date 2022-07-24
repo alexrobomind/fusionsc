@@ -39,6 +39,10 @@ struct PyContext {
 		}
 	}
 	
+	static inline void stopEventLoop() {
+		_libraryThread = nullptr;
+	}
+	
 	static inline bool hasEventLoop() {
 		return _libraryThread.get() != nullptr;
 	}
@@ -211,7 +215,8 @@ namespace pybind11 { namespace detail {
 
 template<typename T>
 struct type_caster<kj::Promise<T>> {
-	PYBIND11_TYPE_CASTER(kj::Promise<T>, const_name("Promise"));
+	using ValueConv = make_caster<T>;
+	PYBIND11_TYPE_CASTER(kj::Promise<T>, const_name("fsc.native.asnc.Promise[") + ValueConv::name + const_name("]"));
 	
 	bool load(handle src, bool convert) {
 		type_caster<fscpy::PyPromise> baseCaster;
@@ -222,6 +227,23 @@ struct type_caster<kj::Promise<T>> {
 	}
 		
 	static handle cast(kj::Promise<T> src, return_value_policy policy, handle parent) {
+		return type_caster<fscpy::PyPromise>::cast(fscpy::PyPromise(mv(src)), policy, parent);
+	}	
+};
+
+template<>
+struct type_caster<kj::Promise<void>> {
+	PYBIND11_TYPE_CASTER(kj::Promise<void>, const_name("fsc.native.asnc.Promise[NoneType]"));
+	
+	bool load(handle src, bool convert) {
+		type_caster<fscpy::PyPromise> baseCaster;
+		if(!baseCaster.load(src, convert))
+			return false;
+				
+		value = static_cast<fscpy::PyPromise&>(baseCaster).ignoreResult();
+	}
+		
+	static handle cast(kj::Promise<void> src, return_value_policy policy, handle parent) {
 		return type_caster<fscpy::PyPromise>::cast(fscpy::PyPromise(mv(src)), policy, parent);
 	}	
 };

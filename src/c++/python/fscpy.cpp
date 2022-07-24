@@ -110,6 +110,7 @@ PYBIND11_MODULE(native, m) {
 	helperFunctions(m);
 	
 	// baseMetaType = kj::heap<py::type>(standardMeta, py::type::of(py::type::of<Simple>()));
+	// Retrieve the pybind11 metaclass
 	baseMetaType  = kj::heap<py::type>(py::type::of(py::type::of<Simple>()));
 	
 	// Initialize bindings for all components

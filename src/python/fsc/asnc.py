@@ -1,25 +1,31 @@
-from . import native
+from .native.asnc import (
+	Promise, # This class is untyped in the C++ library, when referring to it in type hints, use Strings
+	
+	startEventLoop,
+    stopEventLoop,
+	hasEventLoop,
+	cycle,
+	
+	run
+)
 
-from typing import Coroutine, Callable, Any, Union
+from typing import Callable, Any, Union, TypeVar, Awaitable
+from typing_extensions import ParamSpec
 
 import functools
 
-def run(coroutine: Union[native.Promise, Coroutine[native.Promise, Any, Any]]) -> native.Promise:
-	"""
-	Transforms a coroutine result (that can in turn await promises)
-	into a promise
-	"""
-	return native.run(coroutine)
+T = TypeVar("T")
+P = ParamSpec("P")
 
-def wait(coroutine: Union[native.Promise, Coroutine[native.Promise, Any, Any]]) -> Any:
+def wait(awaitable: Awaitable[T]) -> T:
 	"""
 	Awaits a coroutine result by running the coroutine on the main event loop.
 	"""
-	return native.run(coroutine).wait()
+	return run(awaitable).wait()
 
-def asyncFunction(f: Callable[..., Union[native.Promise, Coroutine[native.Promise, Any, Any]]]) -> Callable[..., native.Promise]:
+def asyncFunction(f: Callable[P, Awaitable[T]]) -> Callable[P, Promise[T]]:
 	"""
-	Transforms a function returning a coroutine into a function
+	Decorator. Transforms a function returning a coroutine into a function
 	returning a promise.
 	"""
 	@functools.wraps(f)
@@ -28,7 +34,7 @@ def asyncFunction(f: Callable[..., Union[native.Promise, Coroutine[native.Promis
 	
 	return wrapper
 
-def eager(f: Callable[..., Union[native.Promise, Coroutine[native.Promise, Any, Any]]]) -> Callable[..., Any]:
+def eager(f: Callable[P, Awaitable[T]]) -> Callable[P, T]:
 	"""
 	Transforms a function returning a coroutine or promise into
 	one that immediately executes via the main event loop.

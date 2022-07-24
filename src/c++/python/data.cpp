@@ -1,5 +1,6 @@
 #include "fscpy.h"
 #include "async.h"
+#include "loader.h"
 
 #include <fsc/data.h>
 
@@ -74,6 +75,33 @@ PyPromise download(capnp::DynamicCapability::Client capability) {
 	return promise;
 }
 
+capnp::DynamicCapability::Client publish(capnp::DynamicStruct::Reader value) {
+	auto schema = value.getSchema();
+	uint64_t id = schema.getProto().getId();
+	
+	// Retrieve brand of published value
+	Temporary<capnp::schema::Brand> valueBrand;
+	extractBrand(schema, valueBrand);
+	
+	// Create brand for DataRef with single struct binding 
+	constexpr uint64_t DR_ID = capnp::typeId<DataRef<capnp::AnyPointer>>();
+	Temporary<capnp::schema::Brand> brand;
+	auto scope = brand.initScopes(1)[0];
+	scope.setScopeId(DR_ID);
+	auto boundStruct = scope.initBind(1)[0].initType().initStruct();
+	
+	// Bind single binding slot to published type
+	boundStruct.setTypeId(id);
+	boundStruct.setBrand(brand.asReader());
+	
+	// Create branded DataRef schema
+	auto dataRefSchema = defaultLoader.capnpLoader.get(DR_ID, brand.asReader());
+	
+	// Publish DataRef and convert to correct type
+	capnp::Capability::Client asAny = getActiveThread().dataService().publish(getActiveThread().randomID(), value);
+	return asAny.castAs<capnp::DynamicCapability>(dataRefSchema.asInterface());
+}
+
 capnp::DynamicValue::Reader openArchive(kj::StringPtr path) {
 	using capnp::AnyPointer;
 	using capnp::DynamicCapability;
@@ -140,14 +168,15 @@ Promise<void> writeArchive1(capnp::DynamicCapability::Client ref, kj::StringPtr 
 }
 
 Promise<void> writeArchive2(capnp::DynamicStruct::Reader root, kj::StringPtr path) {
-	auto ref = getActiveThread().dataService().publish(getActiveThread().randomID(), root);
+	/*auto ref = getActiveThread().dataService().publish(getActiveThread().randomID(), root);
 	
 	auto fs = kj::newDiskFilesystem();
 	
 	auto absPath = fs->getCurrentPath().evalNative(path);
 	auto file = fs->getRoot().openFile(absPath, kj::WriteMode::CREATE | kj::WriteMode::MODIFY);
 	
-	return getActiveThread().dataService().writeArchive(ref, *file).attach(mv(file));
+	return getActiveThread().dataService().writeArchive(ref, *file).attach(mv(file));*/
+	return writeArchive1(publish(root), path);
 }
 
 Promise<void> writeArchive3(capnp::DynamicStruct::Builder root, kj::StringPtr path) {
@@ -159,14 +188,16 @@ Promise<void> writeArchive3(capnp::DynamicStruct::Builder root, kj::StringPtr pa
 namespace fscpy {	
 	
 void initData(py::module_& m) {
-	py::class_<LocalDataService>(m, "LocalDataService");
+	py::module_ dataModule = m.def_submodule("data", "Distributed data processing");
 	
-	m.def("download", &download);
-	m.def("openArchive", &openArchive);
+	dataModule.def("download", &download, "Starts a download for the given DataRef and returns a promise for its contents");
+	dataModule.def("publish", &publish, "Creates a DataRef containing the given data");
 	
-	m.def("writeArchive", &writeArchive1);
-	m.def("writeArchive", &writeArchive2);
-	m.def("writeArchive", &writeArchive3);
+	dataModule.def("openArchive", &openArchive, "Opens an archive file and returns a DataRef to its root");
+	
+	dataModule.def("writeArchive", &writeArchive1, "Downloads (recursively) the given DataRef and asynchronously waits an Archive containing its contents. Must wait on the returned promise.");
+	dataModule.def("writeArchive", &writeArchive2);
+	dataModule.def("writeArchive", &writeArchive3);
 }
 
 }

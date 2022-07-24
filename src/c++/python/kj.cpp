@@ -50,23 +50,22 @@ void defArray(kj::StringPtr name, py::module_ m) {
 
 namespace fscpy {
 	void initKj(py::module_& m) {
-		py::module_ mkj = m.def_submodule("kj");
+		py::module_ mkj = m.def_submodule("kj", "Python bindings for Cap'n'proto's 'kj' utility library");
 		
 		//defArray<kj::byte>("ByteArray", mkj);
 		//defArray<const kj::byte>("ConstByteArray", mkj);
 		
-		py::class_<kj::StringPtr>(mkj, "StringPtr")
+		py::class_<kj::StringPtr>(mkj, "StringPtr", "C++ string container. Generally not returned, but can be subclassed")
 			.def("__str__", [](kj::StringPtr ptr) { return ptr.cStr(); })
 			.def("__repr__", [](kj::StringPtr ptr) { return ptr.cStr(); })
-			.def("__eq__", [](kj::StringPtr self, kj::StringPtr other) { return self == other; })
-			.def("__eq__", [](kj::StringPtr self, py::object other) { return false; })
+			.def("__eq__", [](kj::StringPtr self, kj::StringPtr other) { return self == other; }, py::is_operator())
 		;
-		py::class_<DynamicConstArray>(mkj, "ConstArray")
+		py::class_<DynamicConstArray>(mkj, "ConstArray", "Immutable array")
 			.def("__len__", &DynamicConstArray::size)
 			.def("__getitem__", &DynamicConstArray::get)
 		;
 		
-		py::class_<DynamicArray, DynamicConstArray>(mkj, "Array")
+		py::class_<DynamicArray, DynamicConstArray>(mkj, "Array", "Mutable array")
 			.def("__setitem__", &DynamicArray::set)
 		;
 	}
