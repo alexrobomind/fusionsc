@@ -141,8 +141,23 @@ struct PyPromise {
 		.then(
 			[func = fwd<F>(func)](Own<PyObjectHolder> holder) mutable {
 				py::gil_scoped_acquire withGIL;
-			
-				return kj::evalNow(std::bind(fwd<F>(func), cp(holder->content)));
+				
+				try {
+					return func(holder -> content);
+				} catch(py::error_already_set& e) {
+					auto formatException = py::module_::import("traceback").attr("format_exception");
+					py::list formatted = formatException(e.type(), e.value(), e.trace());
+					
+					auto pythonException = kj::strTree();
+					for(auto s : formatted) {
+						pythonException = kj::strTree(mv(pythonException), py::cast<kj::StringPtr>(s));
+					}
+					
+					throw KJ_EXCEPTION(
+						FAILED,
+						pythonException
+					);
+				}
 			},
 			fwd<Args>(args)...
 		);
@@ -157,7 +172,7 @@ struct PyPromise {
 	Promise<T> as() {
 		static_assert(!kj::isSameType<T, py::object>(), "Promise<py::object> is unsafe");
 		
-		return then([](py::object pyObj) { py::gil_scoped_acquire withGIL; return py::cast<T>(pyObj); });
+		return then([](py::object pyObj) { return py::cast<T>(pyObj); });
 	}
 	
 	Promise<void> ignoreResult() {
@@ -186,10 +201,8 @@ struct PyPromise {
 	}
 	
 	inline PyPromise pyThen(py::function f) {
-		return holder.addBranch().then([f = mv(f)](Own<PyObjectHolder> holder) {
-			py::gil_scoped_acquire withGIL;
-			
-			py::object result = f(holder->content);
+		return then([f = mv(f)](py::object o) {
+			py::object result = f(o);
 			return kj::refcounted<PyObjectHolder>(mv(result));
 		});
 	}
