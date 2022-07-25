@@ -40,7 +40,7 @@ endif()
 set(FSC_FETCH_DEPENDENCIES On CACHE BOOL "Whether the build system is allowed to fetch external dependencies")
 set(FSC_ALWAYS_FETCH On CACHE BOOL "Whether the build system must fetch external dependencies")
 
-if(NOT FSC_ALWAYS_FETCH)
+if(NOT FSC_ALWAYS_FETCH OR NOT FSC_FETCH_DEPENDENCIES)
 	find_package(CapnProto CONFIG)
 	find_package(Botan MODULE)
 	find_package(Catch2 CONFIG)

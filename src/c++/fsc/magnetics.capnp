@@ -179,7 +179,7 @@ struct MagneticField {
 				
 				coilsAndCurrents : group {
 					# Currents in the non-planar coils
-					nonplanar @ 15 : List(Float64) = [10000, 10000, 10000, 10000, 10000];
+					nonplanar @ 15 : List(Float64) = [0, 0, 0, 0, 0];
 					
 					# A list of planar coil currents
 					planar    @ 16 : List(Float64) = [0, 0];

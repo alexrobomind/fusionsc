@@ -6,7 +6,7 @@ from .native.data import (
 	writeArchive
 )
 
-from .asnc import Promise
+from .asnc import eager
 
 __all__ = [
 	# Imported from native
@@ -16,5 +16,5 @@ __all__ = [
 	'readArchive'
 ]
 
-def readArchive(filename: str) -> Promise:
-	return download(openArchive(str))
+def readArchive(filename: str):
+	return download(openArchive(filename))

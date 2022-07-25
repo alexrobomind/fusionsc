@@ -68,11 +68,11 @@ def cadCoils(convention = '1-AA-R0004.5') -> native.W7XCoilSet:
 	
 	return coilPack
 
-def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coils = None) -> flt.Config:
+def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coils = None) -> "fsc.MagneticConfig":
 	if coils is None:
 		coils = defaultCoils
 	
-	config = flt.Config()
+	config = fsc.MagneticConfig()
 	
 	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
 	cnc.coils = coils
@@ -82,11 +82,11 @@ def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coil
 	
 	return config
 
-def trimCoils(i_trim = [0, 0, 0, 0, 0], coils = None) -> flt.Config:
+def trimCoils(i_trim = [0, 0, 0, 0, 0], coils = None) -> "fsc.MagneticConfig":
 	if coils is None:
 		coils = defaultCoils
 	
-	config = flt.Config()
+	config = fsc.MagneticConfig()
 	
 	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
 	cnc.coils = coils
@@ -95,11 +95,11 @@ def trimCoils(i_trim = [0, 0, 0, 0, 0], coils = None) -> flt.Config:
 	
 	return config
 
-def controlCoils(i_cc = [0, 0], coils = None) -> flt.Config:
+def controlCoils(i_cc = [0, 0], coils = None) -> "fsc.MagneticConfig":
 	if coils is None:
 		coils = defaultCoils
 	
-	config = flt.Config()
+	config = fsc.MagneticConfig()
 	
 	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
 	cnc.coils = coils
@@ -108,7 +108,7 @@ def controlCoils(i_cc = [0, 0], coils = None) -> flt.Config:
 	
 	return config
 
-def standard(bAx = 2.52, coils = None) -> flt.Config:
+def standard(bAx = 2.52, coils = None) -> "fsc.MagneticConfig":
 	return mainField([15000 * bAx / 2.52] * 5, [0] * 2, coils = coils)
 
 coil_conventions = ['coilsdb', '1-AA-R0004.5', 'archive']

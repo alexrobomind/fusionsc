@@ -11,5 +11,9 @@ setup(
 		'console_scripts': [
 			'w7x-download = fsc.devices.w7x.scripts:download'
 		]
-	}
+	},
+	
+	install_requires = [
+		"typing-extensions"
+	]
 )

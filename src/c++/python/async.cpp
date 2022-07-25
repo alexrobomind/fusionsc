@@ -208,6 +208,7 @@ void initAsync(py::module_& m) {
 	py::class_<PyPromiseAwaitContext>(asyncModule, "_PromiseAwaitCtx")
 		.def("__next__", &PyPromiseAwaitContext::next)
 		.def("send", &PyPromiseAwaitContext::send)
+		.def("throw", &PyPromiseAwaitContext::throw_)
 	;
 	
 	asyncModule.def("startEventLoop", &PyContext::startEventLoop, "If the active thread has no active event loop, starts a new one");

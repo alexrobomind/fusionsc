@@ -118,7 +118,7 @@ Promise<void> CoilsDBResolver::processField(MagneticField::Reader input, Magneti
 			
 			// After pre-processing the field, process it with the parent method to resolve the coil references where possible
 			return inner.then([this, tmpField, output, context]() mutable {
-				FieldResolverBase::processField(*tmpField, output, context);
+				return FieldResolverBase::processField(*tmpField, output, context);
 			}).attach(tmpField.x());
 		}
 		
@@ -188,9 +188,14 @@ void CoilsDBResolver::coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAn
 
 Promise<void> CoilsDBResolver::processFilament(Filament::Reader input, Filament::Builder output, ResolveFieldContext context) {
 	switch(input.which()) {
-		case Filament::W7X_COILS_D_B:
-			output.setRef(getCoil(input.getW7xCoilsDB()));
-			return kj::READY_NOW;
+		case Filament::W7X_COILS_D_B: {
+			uint64_t coilId = input.getW7xCoilsDB();
+			auto coil = getCoil(coilId);
+			return coil.whenResolved().then(
+				[output, coil]() mutable { output.setRef(coil);  },
+				[output, coilId](kj::Exception e) mutable { output.setW7xCoilsDB(coilId); }
+			);
+		}
 			
 		default:
 			return FieldResolverBase::processFilament(input, output, context);
@@ -234,15 +239,27 @@ Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geom
 				auto n = ids.size();
 				auto nodes = output.initCombined(ids.size());
 				
+				auto subTasks = kj::heapArrayBuilder<Promise<void>>(n);
 				for(decltype(n) i = 0; i < n; ++i) {
 					auto node = nodes[i];
-					node.setMesh(getComponent(ids[i]));
+					auto component = getComponent(ids[i]);
 					
-					auto tags = node.initTags(1);
-					tags[0].setName(CDB_ID_TAG);
-					tags[0].initValue().setUInt64(ids[i]);
+					subTasks.add(
+						component.whenResolved().then(
+							[node, component, id = ids[i]]() mutable {
+								node.setMesh(component);
+					
+								auto tags = node.initTags(1);
+								tags[0].setName(CDB_ID_TAG);
+								tags[0].initValue().setUInt64(id);
+							},
+							[node, id = ids[i]](kj::Exception e) mutable {
+								node.initComponentsDBMeshes(1).set(0, id);
+							}
+						)
+					);
 				}
-				return READY_NOW;
+				return kj::joinPromises(subTasks.finish());
 			}
 			
 			case Geometry::COMPONENTS_D_B_ASSEMBLIES: {
@@ -254,20 +271,24 @@ Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geom
 				for(decltype(n) i = 0; i < n; ++i) {
 					auto node = nodes[i];
 					
-					auto tags = node.initTags(1);
-					tags[0].setName(CDB_ASID_TAG);
-					tags[0].initValue().setUInt64(ids[i]);
-					
 					subTasks.add(
-						getAssembly(ids[i])
-						.then([=](kj::Array<uint64_t> cids) mutable {
-							Temporary<Geometry> intermediate;
-							auto tmpIds = intermediate.initComponentsDBMeshes(cids.size());
-							for(unsigned int i = 0; i < cids.size(); ++i)
-								tmpIds.set(i, cids[i]);
-							
-							return processGeometry(intermediate, node, context).attach(mv(intermediate));
-						})
+						getAssembly(ids[i]).then(
+							[node, context, id = ids[i], this](kj::Array<uint64_t> cids) mutable {
+								auto tags = node.initTags(1);
+								tags[0].setName(CDB_ASID_TAG);
+								tags[0].initValue().setUInt64(id);
+								
+								Temporary<Geometry> intermediate;
+								auto tmpIds = intermediate.initComponentsDBMeshes(cids.size());
+								for(unsigned int i = 0; i < cids.size(); ++i)
+									tmpIds.set(i, cids[i]);
+								
+								return processGeometry(intermediate, node, context).attach(mv(intermediate), thisCap());
+							},
+							[node, id = ids[i]](kj::Exception e) mutable {
+								node.initComponentsDBAssemblies(1).set(0, id);
+							}
+						)
 					);
 				}
 				return kj::joinPromises(subTasks.finish());

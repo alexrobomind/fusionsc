@@ -1,10 +1,18 @@
-from . import native
-from .asnc import asyncFunction
+from . import native, data
+from .asnc import asyncFunction, startEventLoop
 
 from .native.devices import w7x as cppw7x
 import contextlib
 
-fieldResolvers = []
+# Ensure event loop is running
+startEventLoop()
+
+# Since there is a small regree of work that the W7-X coil resolver can do even
+# without a backing components DB, we add connected to a dummy database.
+fieldResolvers = [
+	cppw7x.coilsDBResolver(cppw7x.CoilsDB.newDisconnected(""))
+]
+
 geometryResolvers = []
 
 def importOfflineData(filename: str):
@@ -12,7 +20,7 @@ def importOfflineData(filename: str):
 	Loads the data contained in the given offline archives and uses them to
 	perform offline resolution.
 	"""
-	offlineData = native.loadArchive(filename)
+	offlineData = data.openArchive(filename)
 	
 	# =============== W7-X specifics ==================
 	

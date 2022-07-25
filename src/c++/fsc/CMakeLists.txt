@@ -130,21 +130,23 @@ target_include_directories(
 	# TODO $<INSTALL_INTERFACE:???>
 )
 
-target_sources(
-	tests
-	PUBLIC
-	local-tests.cpp
-	random-tests.cpp
-	data-tests.cpp
-	geometry-tests.cpp
-	magnetics-tests.cpp
-	http-tests.cpp
-	services-tests.cpp
-	flt-tests.cpp
-	operation-tests.cpp
-	devices/w7x-test.cpp
-)
-target_link_libraries(tests PUBLIC fsc)
+if(BUILD_TESTING)
+	target_sources(
+		tests
+		PUBLIC
+		local-tests.cpp
+		random-tests.cpp
+		data-tests.cpp
+		geometry-tests.cpp
+		magnetics-tests.cpp
+		http-tests.cpp
+		services-tests.cpp
+		flt-tests.cpp
+		operation-tests.cpp
+		devices/w7x-test.cpp
+	)
+	target_link_libraries(tests PUBLIC fsc)
+endif()
 
 if(FSC_WITH_CUDA)
 	target_sources(

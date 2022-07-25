@@ -283,6 +283,12 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 	
 	py::dict outerAttrs;
 	py::dict clientAttrs;
+		
+	py::object methodHolder = simpleObject();
+	methodHolder.attr("__name__") = "methods";
+	methodHolder.attr("__qualname__") = qualName(scope, str(schema.getUnqualifiedName(), ".methods"));
+	methodHolder.attr("__module__") = moduleName;
+	outerAttrs["methods"] = methodHolder;
 	
 	for(size_t i = 0; i < methods.size(); ++i) {
 		auto method = methods[i];
@@ -451,11 +457,10 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		py::object descriptor = methodDescriptor(pyFunction);
 		descriptor.attr("__name__") = name.cStr();
 		descriptor.attr("__module__") = moduleName;
-		
 		clientAttrs[name.cStr()] = descriptor;
 		
 		py::object holder = simpleObject();
-		holder.attr("__qualname__") = qualName(scope, str(schema.getUnqualifiedName(), ".", name));
+		holder.attr("__qualname__") = qualName(scope, str(schema.getUnqualifiedName(), ".methods.", name));
 		holder.attr("__name__") = name;
 		holder.attr("__module__") = moduleName;
 		holder.attr("desc") = str("Auxiliary classes (Params and/or Results) for method ", name);
@@ -469,11 +474,10 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		holder.attr(pyParamType.attr("__name__")) = pyParamType;
 		holder.attr(pyResultType.attr("__name__")) = pyResultType;
 		
-		outerAttrs[name.cStr()] = holder;
+		methodHolder.attr(name.cStr()) = holder;
 	}
 	
-	// We don't need a method descriptor because we already have the schema
-	auto wrapFunction = py::cpp_function(
+	outerAttrs["newDeferred"] = py::cpp_function(
 		[schema](PyPromise promise) {
 			auto untypedPromise = promise.as<capnp::DynamicCapability::Client>()
 			.then([](capnp::DynamicCapability::Client typed) mutable -> capnp::Capability::Client {
@@ -486,11 +490,13 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		}
 	);
 	
-	// Check for the unlikely possibility that the schema type has a "wrap" function
-	if(outerAttrs.contains("wrap"))
-		outerAttrs["wrap"].attr("__call__") = mv(wrapFunction);
-	else
-		outerAttrs["wrap"] = wrapFunction;
+	outerAttrs["newDisconnected"] = py::cpp_function(
+		[schema](kj::StringPtr disconnectReason) {
+			capnp::Capability::Client untyped(capnp::newBrokenCap(disconnectReason));
+			return untyped.castAs<capnp::DynamicCapability>(schema);
+		},
+		py::arg("disconnectReason") = "disconnected"
+	);
 	
 	/*py::print("Extracting surrounding module");
 	py::module_ module_ = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope;*/
@@ -502,7 +508,6 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 	py::object outerCls = metaClass(schema.getUnqualifiedName(), py::make_tuple(), outerAttrs);
 	
 	auto innerName = qualName(outerCls, "Client");
-	
 	clientAttrs["__qualname__"] = innerName;
 	clientAttrs["__module__"] = moduleName;
 	
