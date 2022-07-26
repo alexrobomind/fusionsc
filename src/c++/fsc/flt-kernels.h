@@ -106,7 +106,7 @@ namespace fsc {
 			V3 fieldValue = interpolator(fieldData, x);
 			auto result = fieldValue / fieldValue.norm();
 			
-			/*if(step % 1000 == 0) {
+			/*if(step % 10 == 0) {
 				KJ_DBG(result[0], result[1], result[2], result.norm());
 			}*/
 			return result;
@@ -122,7 +122,7 @@ namespace fsc {
 		// As this involves our return macro, it can't go
 		// into a lambda
 		#define FSC_FLT_LOG_EVENT(x) {\
-			if(eventCount >= myData.getEvents().size()) { \
+			if(eventCount >= myData.getEvents().size() - 1) { \
 				FSC_FLT_RETURN(EVENT_BUFFER_FULL); \
 			} \
 			\
@@ -184,25 +184,11 @@ namespace fsc {
 			Num phi1 = atan2(x[1], x[0]);
 			Num phi2 = atan2(x2[1], x2[0]);
 			
-			/*if(step % 1000 == 0) {
-				KJ_DBG(step, phi1, z, r);
-			}*/
+			if(step % 1000000 == 0) {
+				KJ_DBG(step, distance, phi1, z, r);
+			}
 			
 			Num phi0 = state.getPhi0();
-			
-			if(kmath::crossedPhi(phi1, phi2, phi0)) {
-				auto l = kmath::wrap(phi0 - phi1) / kmath::wrap(phi2 - phi1);
-				V3 xCross = l * x2 + (1. - l) * x;
-				
-				state.setTurnCount(state.getTurnCount() + 1);
-				
-				// printf("New turn\n");
-				
-				// KJ_DBG(idx, state.getTurnCount());
-				
-				currentEvent().setNewTurn(state.getTurnCount());
-				FSC_FLT_LOG_EVENT(xCross);				
-			}
 			
 			const auto phiPlanes = request.getPhiPlanes();
 			for(size_t iPlane = 0; iPlane < phiPlanes.size(); ++iPlane) {
@@ -212,10 +198,24 @@ namespace fsc {
 					auto l = kmath::wrap(planePhi - phi1) / kmath::wrap(phi2 - phi1);
 					V3 xCross = l * x2 + (1. - l) * x;
 					
-					// KJ_DBG(iPlane);
+					KJ_DBG(idx, iPlane, state.getTurnCount());
 					currentEvent().mutatePhiPlaneIntersection().setPlaneNo(iPlane);
 					FSC_FLT_LOG_EVENT(xCross);				
 				}
+			}
+			
+			if(kmath::crossedPhi(phi1, phi2, phi0) && step > 1) {
+				auto l = kmath::wrap(phi0 - phi1) / kmath::wrap(phi2 - phi1);
+				V3 xCross = l * x2 + (1. - l) * x;
+				
+				// printf("New turn\n");
+				
+				KJ_DBG(idx, state.getTurnCount());
+				
+				currentEvent().setNewTurn(state.getTurnCount() + 1);
+				FSC_FLT_LOG_EVENT(xCross);		
+				
+				state.setTurnCount(state.getTurnCount() + 1);		
 			}
 			
 			// KJ_DBG("Phi cross checks passed");
@@ -231,7 +231,7 @@ namespace fsc {
 		// !!! The kernel returns by jumping to this label !!!
 		THE_END:
 		
-		// KJ_DBG("Kernel returned", (int) myData.getStopReason());
+		KJ_DBG("Kernel returned", (int) myData.getStopReason());
 		
 		// Copy state data back from local memory
 		for(int i = 0; i < 3; ++i)

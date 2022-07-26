@@ -41,26 +41,35 @@ class FLT:
 	@optionalAsync
 	@asyncFunction
 	async def computeField(self, config, grid):
+		"""
+		Returns an array of shape [3, grid.nPhi, grid.nZ, grid.nR] containing the magnetic field.
+		The directions along the first coordinate are phi, z, r
+		"""
 		import numpy as np
+		
+		print("Grid:", grid)
 		
 		resolved = await config.resolve()
 		computed = (await self.calculator.compute(resolved.field, grid)).computedField
 		fieldData = await data.download(computed.data)
 		
-		return np.asarray(fieldData)
+		return np.asarray(fieldData).transpose([3, 0, 1, 2])
 	
 	@optionalAsync
 	@asyncFunction
-	async def poincareInPhiPlanes(self, points, phiValues, nTurns, config, grid):
+	async def poincareInPhiPlanes(self, points, phiValues, nTurns, config, grid, distanceLimit = 1e4):
 		# Resovle & compute field
 		resolved    = await config.resolve()
 		computed    = (await self.calculator.compute(resolved.field, grid)).computedField
 		
-		fltResponse = await self.tracer.trace(
-			startPoints = points,
-			field = resolvedField,
-			poincarePlanes = phiValues,
-			turnLimit = nTurns
-		)
+		# This style is neccessary to convert the start points to an FSC tensor
+		request = native.FLTRequest.newMessage()
+		request.startPoints = points
+		request.field = computed
+		request.poincarePlanes = phiValues
+		request.turnLimit = nTurns
+		request.distanceLimit = distanceLimit
+		
+		fltResponse = await self.tracer.trace(request)
 		
 		return np.asarray(fltResponse.poincareHits)

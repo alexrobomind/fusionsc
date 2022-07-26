@@ -16,7 +16,7 @@ using Mesh = Geometry.Mesh;
 
 const defaultGrid : Magnetics.ToroidalGrid = (
 	rMin = 4,
-	rMax = 6,
+	rMax = 7,
 	zMin = -1.5,
 	zMax = 1.5,
 	nR = 256,

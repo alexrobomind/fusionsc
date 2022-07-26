@@ -356,7 +356,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 			
 			bool requestBuilt = false;
 			
-			if(!pyKwargs && py::len(pyArgs) == 1) {
+			if(py::len(pyKwargs) == 0 && py::len(pyArgs) == 1) {
 				// Check whether the first argument has the correct type
 				auto argVal = pyArgs[0].cast<DynamicValue::Reader>();
 				
@@ -364,13 +364,6 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 					DynamicStruct::Reader asStruct = argVal.as<DynamicStruct>();
 					
 					if(asStruct.getSchema() == paramType) {
-						/*for(auto field : paramType.getNonUnionFields()) {
-							request.set(field, asStruct.get(field));
-						}
-						
-						KJ_IF_MAYBE(pField, asStruct.which()) {
-							request.set(*pField, asStruct.get(*pField));
-						}*/
 						request.setAs<DynamicStruct>(asStruct);
 						
 						requestBuilt = true;

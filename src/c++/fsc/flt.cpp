@@ -137,6 +137,7 @@ struct TraceCalculation {
 			
 			entryOut.setState(entryIn.getState());
 			entryOut.getState().setEventCount(0);
+			KJ_DBG("Relaunching", entryOut);
 		}
 		
 		newRound.kernelRequest = request.asReader();
@@ -329,6 +330,8 @@ struct FLTImpl : public FLT::Server {
 				int64_t nSurfs = request.getPoincarePlanes().size();
 				
 				Tensor<double, 4> pcCuts(nTurns, nStartPoints, nSurfs, 3);
+				pcCuts.setConstant(std::numeric_limits<double>::quiet_NaN());
+				
 				for(int64_t iStartPoint = 0; iStartPoint < nStartPoints; ++iStartPoint) {
 					auto entry = kData[iStartPoint].asReader();
 					auto state = entry.getState();
@@ -338,11 +341,14 @@ struct FLTImpl : public FLT::Server {
 					
 					for(auto evt : events) {						
 						KJ_REQUIRE(!evt.isNotSet(), "Internal error");
+						
+						// KJ_DBG(evt);
 												
 						if(evt.isNewTurn()) {
 							iTurn = evt.getNewTurn();
 						} else if(evt.isPhiPlaneIntersection()) {
 							auto ppi = evt.getPhiPlaneIntersection();
+							// KJ_DBG(iTurn, ppi.getPlaneNo());
 							
 							auto loc = evt.getLocation();
 							for(int64_t iDim = 0; iDim < 3; ++iDim) {

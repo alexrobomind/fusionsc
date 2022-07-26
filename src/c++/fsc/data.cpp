@@ -615,7 +615,17 @@ Promise<void> internal::LocalDataServiceImpl::writeArchive(DataRef<capnp::AnyPoi
 		
 		// If not, we will have to allocate a local copy and memcpy it over. Blergh.
 		kj::Array<const byte> data = wordsToBytes(capnp::messageToFlatArray(*msg));
-		out.writeAll(data);
+		
+		out.truncate(data.size());
+		
+		auto mapping = out.mmapWritable(0, data.size());
+		auto mapped = mapping->get();
+		
+		memcpy(mapped.begin(), data.begin(), data.size());
+		
+		// Write the data back to disk
+		mapping->sync(mapped);
+		out.sync();
 	}).attach(mv(nursery));
 }
 

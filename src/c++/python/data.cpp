@@ -92,7 +92,7 @@ capnp::DynamicCapability::Client publish(capnp::DynamicStruct::Reader value) {
 	
 	// Bind single binding slot to published type
 	boundStruct.setTypeId(id);
-	boundStruct.setBrand(brand.asReader());
+	boundStruct.setBrand(valueBrand.asReader());
 	
 	// Create branded DataRef schema
 	auto dataRefSchema = defaultLoader.capnpLoader.get(DR_ID, brand.asReader());

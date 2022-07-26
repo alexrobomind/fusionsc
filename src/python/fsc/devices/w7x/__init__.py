@@ -1,5 +1,6 @@
 import fsc
 import fsc.native.devices.w7x as w7xnative
+
 from fsc import native, resolve, flt
 from fsc.asnc import asyncFunction, eager
 
@@ -30,24 +31,29 @@ def connectComponentsDB(address: str):
 @eager
 async def computeCoilFields(calculator, coils: Union[native.W7XCoilSet.Builder, native.W7XCoilSet.Reader], grid = None) -> native.W7XCoilSet.Builder:
 	if grid is None:
-		grid = fsc.defaultGrid
+		grid = defaultGrid
 	
 	result = native.W7XCoilSet.newMessage()
-	w7xnative.buildCoilFields(coilPack, result.initFields())
+	w7xnative.buildCoilFields(coils, result.initFields())
 	
 	async def resolveAndCompute(x):
-		x = await resolveField(x)
-		x = await calculator.compute(x, grid)
+		x = await resolve.resolveField(x)
+		x = (await calculator.compute(x, grid)).computedField
 		return x
 	
+	fields = result.fields
+	
 	for i in range(7):
-		result.mainFields[i] = await resolveAndCompute(result.mainFields[i])
+		print("Main", i)
+		fields.mainFields[i].computedField = await resolveAndCompute(fields.mainFields[i])
 	
 	for i in range(5):
-		result.trimFields[i] = await resolveAndCompute(result.trimFields[i])
+		print("Trim", i)
+		fields.trimFields[i].computedField = await resolveAndCompute(fields.trimFields[i])
 	
 	for i in range(10):
-		result.controlFields[i] = await resolveAndCompute(result.controlFields[i])
+		print("CC", i)
+		fields.controlFields[i].computedField = await resolveAndCompute(fields.controlFields[i])
 	
 	return result
 
@@ -122,3 +128,5 @@ def processCoilConvention(convention):
 	
 # The W7XCoilSet type defaults to the W7-X coils 160 ... 230
 defaultCoils = cadCoils('archive')
+
+defaultGrid = w7xnative.defaultGrid()

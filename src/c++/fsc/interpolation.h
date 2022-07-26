@@ -119,9 +119,9 @@ struct SlabFieldInterpolator {
 	
 	EIGEN_DEVICE_FUNC SlabFieldInterpolator(const Strategy& strategy, const cu::ToroidalGrid grid) :
 		interpolator(strategy, {
-			Axis(grid.getRMin(), grid.getRMax(), grid.getNR() - 1),
-			Axis(grid.getZMin(), grid.getZMax(), grid.getNZ() - 1),
 			Axis(0, 2 * fsc::pi / grid.getNSym(), grid.getNPhi()),
+			Axis(grid.getZMin(), grid.getZMax(), grid.getNZ() - 1),
+			Axis(grid.getRMin(), grid.getRMax(), grid.getNR() - 1),
 		})
 	{
 	}
