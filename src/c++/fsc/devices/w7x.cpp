@@ -685,7 +685,7 @@ void buildCoilFields(W7XCoilSet::Reader in, W7XCoilSet::Fields::Builder output) 
 	
 	auto initField = [=](MagneticField::Builder out, unsigned int windingNo, bool invert) {
 		auto filField = out.initFilamentField();
-		filField.setCurrent(invert ? 1 : -1);
+		filField.setCurrent(invert ? -1 : 1);
 		filField.setBiotSavartSettings(coils.getBiotSavartSettings());
 		filField.setWindingNo(windingNo);
 		
