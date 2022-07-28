@@ -251,10 +251,10 @@ namespace pybind11 { namespace detail {
 			
 			#undef FSCPY_TRY_CAST
 			
-			try { 
-				value = src.cast<DynamicValue::Builder>().asReader();
-				return true; 
-			} catch(cast_error& e) { 
+			type_caster<DynamicValue::Builder> builderCaster;
+			if(builderCaster.load(src, convert)) {
+				value = static_cast<DynamicValue::Builder&>(builderCaster).asReader();
+				return true;
 			}
 			
 			type_caster_base<DynamicValue::Reader> base;

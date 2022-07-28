@@ -89,14 +89,15 @@ struct type_caster<kj::StringPtr> {
 	bool load(handle src, bool convert) {			
 		object isInstance = eval("isinstance");
 		
-		if(isInstance(src, eval("str"))) {
-			if(strCaster.load(src, convert)) {
-				auto asCharPtr = (char*) strCaster;
-				auto len = strlen(asCharPtr);
-				
-				value = kj::StringPtr(asCharPtr, len);
-				return true;
-			}
+		if(PyUnicode_Check(src.ptr())) {
+			Py_ssize_t bufSize;
+			
+			const char* buf = PyUnicode_AsUTF8AndSize(src.ptr(), &bufSize);
+			if(buf == nullptr)
+				throw py::error_already_set();
+			
+			value = kj::StringPtr(buf, bufSize);
+			return true;
 		}
 				
 		type_caster_base<kj::StringPtr> base;
@@ -126,18 +127,7 @@ struct type_caster<kj::String> {
 	bool load(handle src, bool convert) {			
 		object isInstance = eval("isinstance");
 		
-		if(isInstance(src, eval("str"))) {
-			type_caster<char> strCaster;	
-			
-			if(strCaster.load(src, convert)) {
-				auto asCharPtr = (char*) strCaster;
-				auto len = strlen(asCharPtr);
-				value = kj::heapString(kj::StringPtr(asCharPtr, len));
-				return true;
-			}
-		}
-		
-		type_caster_base<kj::StringPtr> ptrCaster;
+		type_caster<kj::StringPtr> ptrCaster;
 		if(ptrCaster.load(src, convert)) {
 			value = kj::heapString((kj::StringPtr) ptrCaster);
 			return true;

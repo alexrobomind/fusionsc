@@ -11,3 +11,10 @@ add_executable(
 )
 
 target_link_libraries(fsc-server fsc)
+
+add_executable(
+	npytest
+	npytest.cpp
+)
+
+target_link_libraries(npytest fsc pybind11::embed)

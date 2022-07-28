@@ -120,7 +120,11 @@ namespace {
 					return kj::refcounted<PyObjectHolder>((py::object) error.value().attr("value"));
 				}
 				
-				throw error;
+				/*py::print("Exception occurred");
+				py::print(error.type());
+				py::print(error.what());*/
+				
+				kj::throwFatalException(convertPyError(error));
 			}
 			
 			// We have yielded a value
@@ -223,6 +227,20 @@ void initAsync(py::module_& m) {
 	
 	auto atexitModule = py::module_::import("atexit");
 	atexitModule.attr("register")(py::cpp_function(&atExitFunction));
+}
+
+kj::Exception convertPyError(py::error_already_set& e) {	
+	auto formatException = py::module_::import("traceback").attr("format_exception");
+	py::list formatted = formatException(e.type(), e.value(), e.trace());
+	
+	auto pythonException = kj::strTree();
+	for(auto s : formatted) {
+		pythonException = kj::strTree(mv(pythonException), py::cast<kj::StringPtr>(s), "\n");
+	}
+	
+	// KJ_DBG("Formatted an exception as ", pythonException.flatten());
+	
+	return kj::Exception(::kj::Exception::Type::FAILED, __FILE__, __LINE__, str(pythonException));
 }
 	
 }

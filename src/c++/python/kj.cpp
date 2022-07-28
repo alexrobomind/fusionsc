@@ -68,6 +68,21 @@ namespace fscpy {
 		py::class_<DynamicArray, DynamicConstArray>(mkj, "Array", "Mutable array")
 			.def("__setitem__", &DynamicArray::set)
 		;
+	
+		// Translator for KJ exceptions
+		py::register_exception_translator([](std::exception_ptr p) {
+			try {
+				if (p) std::rethrow_exception(p);
+			} catch (kj::Exception& e) {
+				auto description = kj::str(
+					"C++ exception (", e.getType(), ") at ", e.getFile(), " -- line ", e.getLine(), "\n",
+					e.getDescription(), "\n",
+					"Trace: \n",
+					kj::stringifyStackTrace(e.getStackTrace())
+				);
+				PyErr_SetString(PyExc_RuntimeError, description.cStr());
+			}
+		});
 	}
 	
 	DynamicConstArray::~DynamicConstArray() {}

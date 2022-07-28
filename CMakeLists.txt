@@ -29,10 +29,16 @@ include(src/cmake/OptimizeForTarget.cmake)
 include(CTest)
 
 # Pre-load python to make sure we have compatible dev environment and interpreter
-find_package(Python COMPONENTS Interpreter Development)
+find_package(Python COMPONENTS Interpreter Development NumPy)
+
+set(FSC_WITH_PYTHON ${Python_Development_FOUND} AND ${Python_NumPy_FOUND})
 
 if(SKBUILD AND NOT Python_FOUND)
 	message(FATAL_ERROR "Could not find python in python-driven build")
+endif()
+
+if(SKBUILD AND NOT Python_NumPy_FOUND)
+	message(FATAL_ERROR "NumPy missing in SKBUILD build")
 endif()
 
 # Try to load dependencies directly
@@ -128,7 +134,7 @@ endif()
 fetch_dependency(CapnProto)
 fetch_dependency(Eigen3)
 
-if(Python_Development_FOUND)
+if(FSC_WITH_PYTHON)
 	fetch_dependency(pybind11)
 endif()
 
@@ -175,8 +181,6 @@ if(FSC_WITH_CUDA)
 	)
 endif()
 
-set(FSC_WITH_PYTHON ${Python_Development_FOUND})
-
 if(FSC_WITH_PYTHON)
 	target_compile_definitions(
 		deps
@@ -187,6 +191,7 @@ if(FSC_WITH_PYTHON)
 		deps
 		INTERFACE
 		pybind11::pybind11
+		Python::NumPy
 	)
 endif()
 

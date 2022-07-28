@@ -71,6 +71,8 @@ struct PyObjectHolder : public kj::Refcounted {
 	}
 };
 
+kj::Exception convertPyError(py::error_already_set& e);
+
 struct PyPromise {
 	inline PyPromise(Promise<Own<PyObjectHolder>> input) :
 		holder(input.fork())
@@ -145,18 +147,7 @@ struct PyPromise {
 				try {
 					return func(holder -> content);
 				} catch(py::error_already_set& e) {
-					auto formatException = py::module_::import("traceback").attr("format_exception");
-					py::list formatted = formatException(e.type(), e.value(), e.trace());
-					
-					auto pythonException = kj::strTree();
-					for(auto s : formatted) {
-						pythonException = kj::strTree(mv(pythonException), py::cast<kj::StringPtr>(s));
-					}
-					
-					throw KJ_EXCEPTION(
-						FAILED,
-						pythonException
-					);
+					kj::throwFatalException(convertPyError(e));
 				}
 			},
 			fwd<Args>(args)...
