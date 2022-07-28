@@ -8,39 +8,27 @@ import functools
 
 from typing import Optional, List
 
-def optionalAsync(f):
-	"""
-	Wrapper for functions that have switchable behavior based on
-	asyncMode. Will wait on returned promise if asyncMode is False
-	"""
-	@functools.wraps(f)
-	def wrapper(self, *args, **kwargs):
-		if not self.asyncMode:
-			return f(self, *args, **kwargs).wait()
-		
-		return f(self, *args, **kwargs)
-	
-	return wrapper
-
-
 class FLT:
 	# backend: native.RootService.Client
 	
 	calculator: native.FieldCalculator.Client
 	tracer: native.FLT.Client
-		
-	asyncMode: bool
 	
 	def __init__(self, backend):
 		# self.backend = backend
 		self.calculator = backend.newFieldCalculator().calculator
-		self.tracer  = backend.newTracer().service
-		
-		self.asyncMode = False
+		self.tracer	 = backend.newTracer().service
 	
-	@optionalAsync
+	def computeField(self, *args, **kwargs):
+		"""return self.computeFieldAsync(*args, **kwargs).wait()"""
+		return self.computeFieldAsync(*args, **kwargs).wait()
+	
+	def poincareInPhiPlanes(self, *args, **kwargs):
+		"""return self.poincareInPhiPlanesAsync(*args, **kwargs).wait()"""
+		return self.poincareInPhiPlanesAsync(*args, **kwargs).wait()
+	
 	@asyncFunction
-	async def computeField(self, config, grid):
+	async def computeFieldAsync(self, config, grid):
 		"""
 		Returns an array of shape [3, grid.nPhi, grid.nZ, grid.nR] containing the magnetic field.
 		The directions along the first coordinate are phi, z, r
@@ -55,12 +43,11 @@ class FLT:
 		
 		return np.asarray(fieldData).transpose([3, 0, 1, 2])
 	
-	@optionalAsync
 	@asyncFunction
-	async def poincareInPhiPlanes(self, points, phiValues, nTurns, config, grid, distanceLimit = 1e4):
+	async def poincareInPhiPlanesAsync(self, points, phiValues, nTurns, config, grid, distanceLimit = 1e4, stepSize = 1e-3):
 		# Resovle & compute field
-		resolved    = await config.resolve()
-		computed    = (await self.calculator.compute(resolved.field, grid)).computedField
+		resolved	= await config.resolve()
+		computed	= (await self.calculator.compute(resolved.field, grid)).computedField
 		
 		# This style is neccessary to convert the start points to an FSC tensor
 		request = native.FLTRequest.newMessage()
@@ -69,6 +56,7 @@ class FLT:
 		request.poincarePlanes = phiValues
 		request.turnLimit = nTurns
 		request.distanceLimit = distanceLimit
+		request.stepSize = stepSize
 		
 		fltResponse = await self.tracer.trace(request)
 		
