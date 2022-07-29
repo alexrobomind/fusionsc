@@ -105,8 +105,8 @@ private:
 		}			
 	};
 	
-	Promise<void> mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Mat4d transform, GeometryAccumulator& output);
-	Promise<void> mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Mat4d transform, GeometryAccumulator& output);
+	Promise<void> mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, GeometryAccumulator& output);
+	Promise<void> mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, GeometryAccumulator& output);
 	
 	Promise<void> collectTagNames(Geometry::Reader input, kj::HashSet<kj::String>& output);
 	Promise<void> collectTagNames(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& output);
@@ -201,7 +201,7 @@ Promise<void> GeometryLibImpl::collectTagNames(Transformed<Geometry>::Reader inp
 
 using Mat4d = Eigen::Matrix<double, 4, 4>;
 
-Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Mat4d transform, GeometryAccumulator& output) {
+Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, GeometryAccumulator& output) {
 	Temporary<capnp::List<TagValue>> tagValues(tagScope);
 	
 	for(auto tag : input.getTags()) {
@@ -249,27 +249,33 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 				
 				// Copy mesh and make in-place adjustments
 				newEntry.setMesh(inputMesh);
-				auto mesh = newEntry.getMesh();
-				auto vertexData = inputMesh.getVertices().getData();
-				KJ_REQUIRE(vertexData.size() == vertexShape[0] * vertexShape[1]);
 				
-				auto outVertices = mesh.getVertices();
-				auto outVertexData = outVertices.initData(vertexData.size());
-				
-				outVertices.setShape(inputMesh.getVertices().getShape());
-				
-				for(size_t i_vert = 0; i_vert < vertexShape[0]; ++i_vert) {
-					Vec4d vertex { 
-						vertexData[i_vert * 3 + 0],
-						vertexData[i_vert * 3 + 1],
-						vertexData[i_vert * 3 + 2],
-						1
-					};
+				KJ_IF_MAYBE(pTransform, transform) {
+					auto mesh = newEntry.getMesh();
+					auto vertexData = inputMesh.getVertices().getData();
+					KJ_REQUIRE(vertexData.size() == vertexShape[0] * vertexShape[1]);
 					
-					Vec4d newVertex = transform * vertex;
+					auto outVertices = mesh.getVertices();
+					// auto outVertexData = outVertices.initData(vertexData.size());
+					auto outVertexData = outVertices.getData();
 					
-					for(size_t i = 0; i < 3; ++i)
-						outVertexData.set(i_vert * 3 + i, newVertex[i]);
+					// outVertices.setShape(inputMesh.getVertices().getShape());
+				
+					for(size_t i_vert = 0; i_vert < vertexShape[0]; ++i_vert) {
+						Vec4d vertex { 
+							vertexData[i_vert * 3 + 0],
+							vertexData[i_vert * 3 + 1],
+							vertexData[i_vert * 3 + 2],
+							1
+						};
+						
+						Vec4d newVertex = (*pTransform) * vertex;
+						
+						for(size_t i = 0; i < 3; ++i)
+							outVertexData.set(i_vert * 3 + i, newVertex[i]);
+					}
+				} else {
+					// No adjustments needed if transform not specified
 				}
 				
 				output.entries.add(mv(newEntry));
@@ -279,7 +285,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 	}
 }
 
-Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Mat4d transform, GeometryAccumulator& output) {
+Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, GeometryAccumulator& output) {
 	switch(input.which()) {
 		case Transformed<Geometry>::LEAF:
 			return mergeGeometries(input.getLeaf(), tagTable, tagScope, transform, output);
@@ -287,8 +293,17 @@ Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader inp
 			auto shift = input.getShifted().getShift();
 			KJ_REQUIRE(shift.size() == 3);
 			
-			for(int i = 0; i < 3; ++i) {
-				transform(i, 3) += shift[i];
+			KJ_IF_MAYBE(pTransform, transform) {
+				for(int i = 0; i < 3; ++i) {
+					(*pTransform)(i, 3) += shift[i];
+				}
+			} else {
+				transform = Mat4d {
+					{1, 0, 0, shift[0]},
+					{0, 1, 0, shift[1]},
+					{0, 0, 1, shift[2]},
+					{0, 0, 0, 1}
+				};
 			}
 			
 			return mergeGeometries(input.getShifted().getNode(), tagTable, tagScope, transform, output);
@@ -307,7 +322,11 @@ Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader inp
 			
 			auto rotation = rotationAxisAngle(center, axis, angle);
 			
-			return mergeGeometries(turned.getNode(), tagTable, tagScope, transform * rotation, output);
+			KJ_IF_MAYBE(pTransform, transform) {
+				return mergeGeometries(turned.getNode(), tagTable, tagScope, (Mat4d)((*pTransform) * rotation), output);
+			} else {
+				return mergeGeometries(turned.getNode(), tagTable, tagScope, rotation, output);
+			}
 		}
 		default:
 			KJ_FAIL_REQUIRE("Unknown transform type", input.which());
@@ -449,15 +468,8 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 	.then([context, &geomAccum = *geomAccum, &tagNameTable = *tagNameTable, this]() mutable {
 		Temporary<capnp::List<TagValue>> tagScope(tagNameTable.size());
 		
-		Mat4d idTransform {
-			{1, 0, 0, 0},
-			{0, 1, 0, 0},
-			{0, 0, 1, 0},
-			{0, 0, 0, 1}
-		};
-		
 		KJ_LOG(WARNING, "Beginning merge operation");
-		return mergeGeometries(context.getParams(), tagNameTable, tagScope, idTransform, geomAccum);
+		return mergeGeometries(context.getParams(), tagNameTable, tagScope, nullptr, geomAccum);
 	})
 	
 	// Finally, copy the data from the accumulator into the output

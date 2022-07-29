@@ -38,6 +38,57 @@ def tracer(backend: Optional[native.RootService] = None) -> flt.FLT:
 		backend = local()
 			
 	return flt.FLT(backend)
+
+class Geometry:
+	def __init__(self, geo = None):
+		self._holder = native.Geometry.newMessage()
+		
+		if geo is None:
+			self._holder.initNested()
+		else:
+			self._holder.nested = geo
+	
+	@property
+	def geometry(self):
+		return self._holder.nested
+	
+	@geometry.setter
+	def geometry(self, newVal):
+		self._holder.nested = newVal
+	
+	def ptree(self):
+		import printree
+		printree.ptree(self.geometry)
+	
+	def graph(self, **kwargs):
+		return capnp.visualize(self.geometry, **kwargs)
+		
+	def __repr__(self):
+		return str(self.geometry)
+		
+	@asyncFunction
+	async def resolve(self):
+		return Geometry(await resolve.resolveGeometry(self.geometry))
+	
+	def __add__(self, other):
+		if not isinstance(other, Geometry):
+			return NotImplemented()
+			
+		result = Geometry()
+		
+		if self.geometry.which() == 'combined' and other.geometry.which() == 'combined':
+			result.geometry.combined = list(self.geometry.combined) + list(other.geometry.combined)
+			return result
+		
+		if self.field.which() == 'combined':
+			result.geometry.combined = list(self.geometry.combined) + [other.geometry]
+			return result
+		
+		if other.field.which() == 'combined':
+			result.geometry.combined = [self.geometry] + list(other.geometry.combined)
+		
+		result.geometry.combined = [self.geometry, other.geometry]
+	
 	
 class MagneticConfig:
 	"""
@@ -76,6 +127,9 @@ class MagneticConfig:
 	
 	def graph(self, **kwargs):
 		return capnp.visualize(self.field, **kwargs)
+		
+	def __repr__(self):
+		return str(self.field)
 	
 	def __neg__(self):
 		result = MagneticConfig()
@@ -136,5 +190,3 @@ class MagneticConfig:
 	def __truediv__(self, divisor):
 		return self * (1 / divisor)
 	
-	def __repr__(self):
-		return str(self.field)

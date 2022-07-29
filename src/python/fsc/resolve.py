@@ -48,7 +48,7 @@ async def resolveField(field, followRefs: bool = False):
 async def resolveGeometry(geometry, followRefs: bool = False):		
 	for r in geometryResolvers:
 		try:
-			geometry = await r.resolve(geometry, followRefs)
+			geometry = await r.resolveGeometry(geometry, followRefs)
 		except:
 			pass
 		

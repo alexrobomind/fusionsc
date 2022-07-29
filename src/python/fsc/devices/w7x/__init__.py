@@ -119,12 +119,20 @@ def standard(bAx = 2.52, coils = None) -> "fsc.MagneticConfig":
 
 coil_conventions = ['coilsdb', '1-AA-R0004.5', 'archive']
 def processCoilConvention(convention):
-	assert convention in coil_conventions,	'Invalid coil convention {}, must be one of {}'.format(convention, coil_conventions);
+	assert convention in coil_conventions,	'Invalid coil convention {}, must be one of {}'.format(convention, coil_conventions)
 	
 	if convention == 'archive':
-		return '1-AA-R0004.5';
+		return '1-AA-R0004.5'
 	
-	return convention;
+	return convention
+
+def components(ids = []):
+	result = fsc.Geometry()
+	result.geometry.componentsDBMeshes = ids
+	return result
+
+def divertor():
+	return components(range(165, 170))
 	
 # The W7XCoilSet type defaults to the W7-X coils 160 ... 230
 defaultCoils = cadCoils('archive')
