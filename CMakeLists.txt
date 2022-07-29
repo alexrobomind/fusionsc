@@ -31,7 +31,11 @@ include(CTest)
 # Pre-load python to make sure we have compatible dev environment and interpreter
 find_package(Python COMPONENTS Interpreter Development NumPy)
 
-set(FSC_WITH_PYTHON ${Python_Development_FOUND} AND ${Python_NumPy_FOUND})
+if(${Python_Development_FOUND} AND ${Python_NumPy_FOUND})
+	set(FSC_WITH_PYTHON ON)
+else()
+	set(FSC_WITH_PYTHON OFF)
+endif()
 
 if(SKBUILD AND NOT Python_FOUND)
 	message(FATAL_ERROR "Could not find python in python-driven build")
@@ -209,8 +213,8 @@ add_subdirectory(docs)
 
 # Coverage testing
 option(FSC_WITH_INSTRUMENTATION "Whether to perform instrumentation")
-
 if(FSC_WITH_INSTRUMENTATION AND (CMAKE_CXX_COMPILER_ID STREQUAL "Clang") AND BUILD_TESTING)
+
 	target_compile_options(fsc PRIVATE -fprofile-instr-generate -fcoverage-mapping)
 	target_link_options(tests PRIVATE -fprofile-instr-generate -fcoverage-mapping)
 	
