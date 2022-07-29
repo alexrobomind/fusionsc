@@ -184,9 +184,9 @@ namespace fsc {
 			Num phi1 = atan2(x[1], x[0]);
 			Num phi2 = atan2(x2[1], x2[0]);
 			
-			if(step % 1000000 == 0) {
+			/*if(step % 1000000 == 0) {
 				KJ_DBG(step, distance, phi1, z, r);
-			}
+			}*/
 			
 			Num phi0 = state.getPhi0();
 			
@@ -198,7 +198,7 @@ namespace fsc {
 					auto l = kmath::wrap(planePhi - phi1) / kmath::wrap(phi2 - phi1);
 					V3 xCross = l * x2 + (1. - l) * x;
 					
-					KJ_DBG(idx, iPlane, state.getTurnCount());
+					// KJ_DBG(idx, iPlane, state.getTurnCount());
 					currentEvent().mutatePhiPlaneIntersection().setPlaneNo(iPlane);
 					FSC_FLT_LOG_EVENT(xCross);				
 				}
@@ -210,7 +210,7 @@ namespace fsc {
 				
 				// printf("New turn\n");
 				
-				KJ_DBG(idx, state.getTurnCount());
+				// KJ_DBG(idx, state.getTurnCount());
 				
 				currentEvent().setNewTurn(state.getTurnCount() + 1);
 				FSC_FLT_LOG_EVENT(xCross);		
@@ -231,7 +231,7 @@ namespace fsc {
 		// !!! The kernel returns by jumping to this label !!!
 		THE_END:
 		
-		KJ_DBG("Kernel returned", (int) myData.getStopReason());
+		// KJ_DBG("Kernel returned", (int) myData.getStopReason());
 		
 		// Copy state data back from local memory
 		for(int i = 0; i < 3; ++i)

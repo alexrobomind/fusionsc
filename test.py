@@ -19,11 +19,6 @@ grid.nSym = 5
 
 config = w7x.standard(coils = coils)
 
-startPoints = np.asarray([
-	[5.71, 0, 0],
-	[5.8 , 0, 0]
-]).T
-# startPoints = np.ascontiguousarray(startPoints)
 
 pcPoints = tracer.poincareInPhiPlanes(startPoints, [0.0], 100, config, grid, distanceLimit = 1e5)
 print("------------------------ DONE --------------------------")

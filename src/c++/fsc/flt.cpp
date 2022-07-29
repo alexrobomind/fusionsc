@@ -52,6 +52,8 @@ struct TraceCalculation {
 	
 	const Operation& rootOp;
 	
+	uint32_t ROUND_STEP_LIMIT = 1000000;
+	
 	TraceCalculation(Device& device, Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<const Tensor<double, 4>>> newField, Tensor<double, 2> positions, const Operation& rootOp) :
 		device(device),
 		positions(mv(positions)),
@@ -107,6 +109,9 @@ struct TraceCalculation {
 		}
 		
 		round.kernelRequest = request.asReader();
+		round.kernelRequest.setStepLimit(
+			request.getStepLimit() != 0 ? std::min(request.getStepLimit(), ROUND_STEP_LIMIT) : ROUND_STEP_LIMIT
+		);
 		
 		return round;
 	}
@@ -127,6 +132,8 @@ struct TraceCalculation {
 		
 		KJ_REQUIRE(unfinished.size() > 0, "Internal error");
 		
+		uint32_t maxSteps = 0;
+		
 		Round& newRound = prepareRound(unfinished.size());
 		auto kDataOut = newRound.kernelData.getData();
 		for(size_t i = 0; i < unfinished.size(); ++i) {
@@ -137,10 +144,21 @@ struct TraceCalculation {
 			
 			entryOut.setState(entryIn.getState());
 			entryOut.getState().setEventCount(0);
-			KJ_DBG("Relaunching", entryOut);
+			
+			maxSteps = std::max(maxSteps, entryOut.getState().getNumSteps());
+			KJ_DBG(entryOut.getState());
 		}
 		
 		newRound.kernelRequest = request.asReader();
+		if(request.getStepLimit() != 0) {
+			newRound.kernelRequest.setStepLimit(
+				std::min(request.getStepLimit(), maxSteps + ROUND_STEP_LIMIT)
+			);
+		} else {
+			newRound.kernelRequest.setStepLimit(maxSteps + ROUND_STEP_LIMIT);
+		}
+		
+		KJ_DBG("Relaunching", newRound.kernelRequest.asReader());
 		
 		return newRound;
 	}
@@ -177,7 +195,7 @@ struct TraceCalculation {
 		if(stopReason == FLTStopReason::EVENT_BUFFER_FULL)
 			return false;
 		
-		if(stopReason == FLTStopReason::STEP_LIMIT && entry.getState().getNumSteps() < request.getStepLimit())
+		if(stopReason == FLTStopReason::STEP_LIMIT && (request.getStepLimit() == 0 || entry.getState().getNumSteps() < request.getStepLimit()))
 			return false;
 		
 		return true;
