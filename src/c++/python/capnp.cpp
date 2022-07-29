@@ -16,6 +16,9 @@
 #include <fsc/common.h>
 #include <fsc/data.h>
 
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <numpy/ndarrayobject.h>
+
 #include "fscpy.h"
 #include "loader.h"
 
@@ -222,7 +225,6 @@ PyArray_Descr* numpyWireType(capnp::Type type) {
 	
 	switch(type.which()) {
 		case capnp::schema::Type::VOID:
-		case capnp::schema::Type::BOOL:
 		case capnp::schema::Type::TEXT:
 		case capnp::schema::Type::DATA:
 		case capnp::schema::Type::LIST:
@@ -245,55 +247,59 @@ PyArray_Descr* numpyWireType(capnp::Type type) {
 		HANDLE_TYPE(UINT16, NPY_UINT16);
 		HANDLE_TYPE(UINT32, NPY_UINT32);
 		HANDLE_TYPE(UINT64, NPY_UINT64);
+		
 		HANDLE_TYPE(FLOAT32, NPY_FLOAT32);
-
 		HANDLE_TYPE(FLOAT64, NPY_FLOAT64);
+		
+		HANDLE_TYPE(ENUM, NPY_UINT16);
 	}
 	
 	#undef HANDLE_TYPE
+	
+	KJ_UNREACHABLE;
 }
 
-class BuilderSlot {
-	capnp::Type type;
+struct BuilderSlot {
+	mutable capnp::Type type;
 	
-	ValueSlot(capnp::Type type) : type(type) {}
+	BuilderSlot(capnp::Type type) : type(type) {}
 	
-	virtual void set(capnp::DynamicValue::Reader other) = 0;
-	virtual void adopt(Orphan<DynamicValue>&& orphan) = 0;
-	virtual DynamicValue::Builder init() = 0;
-	virtual DynamicValue::Builder init(unsigned int size) = 0;
+	virtual void set(capnp::DynamicValue::Reader other) const = 0;
+	virtual void adopt(capnp::Orphan<DynamicValue>&& orphan) const = 0;
+	virtual DynamicValue::Builder get() const = 0;
+	virtual DynamicValue::Builder init(unsigned int size) const = 0;
 	
-	virtual ~StructSlot();
+	virtual ~BuilderSlot() {};
 };
 
-class FieldSlot : public BuilderSlot {
-	DynamicStruct::Builder builder;
-	capnp::StructSchema::Field field;
+struct FieldSlot : public BuilderSlot {
+	mutable DynamicStruct::Builder builder;
+	mutable capnp::StructSchema::Field field;
 	
-	FieldStructSlot(DynamicStruct::Builder builder, capnp::StructSchema::Field field) :
+	FieldSlot(DynamicStruct::Builder builder, capnp::StructSchema::Field field) :
 		BuilderSlot(field.getType()),
 		builder(builder), field(field)
 	{}
 	
-	void set(DynamicValue::Reader newVal) override { builder.set(field, newVal); }
-	void adopt(Orphan<DynamicValue>&& orphan) override { builder.adopt(field, mv(orphan)); }
-	DynamicValue::Builder init() override { return builder.init(field); }
-	DynamicValue::Builder init(unsigned int size) override { return builder.init(field, size); }
+	void set(DynamicValue::Reader newVal) const override { builder.set(field, newVal); }
+	void adopt(capnp::Orphan<DynamicValue>&& orphan) const override { builder.adopt(field, mv(orphan)); }
+	DynamicValue::Builder get() const override { return builder.get(field); }
+	DynamicValue::Builder init(unsigned int size) const override { return builder.init(field, size); }
 };
 
-class ListItemSlot : public BuilderSlot {
-	DynamicList::Builder list;
-	uint32_t index;
+struct ListItemSlot : public BuilderSlot {
+	mutable DynamicList::Builder list;
+	mutable uint32_t index;
 	
-	FieldStructSlot(DynamicList::Builder list, uint32_t index) :
-		BuilderSlot(field.getType()),
+	ListItemSlot(DynamicList::Builder list, uint32_t index) :
+		BuilderSlot(list.getSchema().getElementType()),
 		list(list), index(index)
 	{}
 	
-	void set(DynamicValue::Reader newVal) override { list.set(index, newVal); }
-	void adopt(Orphan<DynamicValue>&& orphan) override { list.adopt(index, mv(orphan)); }
-	DynamicValue::Builder init() override { return list.init(index); }
-	DynamicValue::Builder init(unsigned int size) override { return list.init(index, size); }
+	void set(DynamicValue::Reader newVal) const override { list.set(index, newVal); }
+	void adopt(capnp::Orphan<DynamicValue>&& orphan) const override { list.adopt(index, mv(orphan)); }
+	DynamicValue::Builder get() const override { return list[index]; }
+	DynamicValue::Builder init(unsigned int size) const override { return list.init(index, size); }
 	
 };
 
@@ -303,12 +309,12 @@ bool isTensor(capnp::Type type) {
 	
 	auto asStruct = type.asStruct();
 	
-	KJ_IF_MAYBE(pDataField, type.findFieldByName("data")) {
-		KJ_IF_MAYBE(pShapeField, type.findFieldByName("shape")) {
-			if(!pDataField.getType().isList())
+	KJ_IF_MAYBE(pDataField, asStruct.findFieldByName("data")) {
+		KJ_IF_MAYBE(pShapeField, asStruct.findFieldByName("shape")) {
+			if(!pDataField->getType().isList())
 				return false;
 			
-			if(!pShapeField.getType().isList())
+			if(!pShapeField->getType().isList())
 				return false;
 			
 			return true;
@@ -322,29 +328,87 @@ py::buffer getAsBufferViaNumpy(py::object input, capnp::Type type, int minDims, 
 	PyArray_Descr* wireType = numpyWireType(type);
 	
 	if(wireType == nullptr) {
-		PyErr_SetString(PyExc_RuntimeError, kj::str("Type ", type, " has no corresponding NumPy equivalent"));
+		PyErr_SetString(PyExc_RuntimeError, kj::str("Requested type has no corresponding NumPy equivalent").cStr());
 		throw py::error_already_set();
 	}
 	
 	// Steals wireType
-	PyObject* arrayObject = PyArray_FromAny(input.ptr(), wireType, minDims, maxDims, NPY_ARRAY_C_CONTIGUOUS);
+	PyObject* arrayObject = PyArray_FromAny(input.ptr(), wireType, minDims, maxDims, NPY_ARRAY_C_CONTIGUOUS, nullptr);
 	if(arrayObject == nullptr)
 		throw py::error_already_set();
 	
 	return py::reinterpret_steal<py::buffer>(arrayObject);
 }
 
-void assign(BuilderSlot& dst, py::object object) {
+//! Allows assigning tensor types from a buffer
+void setTensor(DynamicStruct::Builder dsb, py::buffer buffer) {	
+	py::buffer_info bufinfo = buffer.request();
+	
+	// Check format
+	capnp::ListSchema schema = dsb.getSchema().getFieldByName("data").getType().asList();
+	auto format = pyFormat(schema.getElementType());
+	size_t elementSize = kj::get<0>(format);
+	kj::StringPtr expectedFormat = kj::get<1>(format);
+	
+	kj::String actualFormat = kj::str(bufinfo.format.c_str());
+	
+	if(actualFormat[0] == '!')
+		actualFormat[0] = '>';
+	
+	// If we get a default ordering, check if we are on little endian CPU
+	if(actualFormat[0] != '<' && actualFormat[0] != '>') {
+		#if __BYTE_ORDERING__ == __LITTLE_ENDIAN__
+			actualFormat = str("<", actualFormat);
+		#else
+			actualFormat = str(">", actualFormat);
+		#endif
+	}
+	
+	KJ_REQUIRE(actualFormat == expectedFormat, "Can only assign data of compatible data types", expectedFormat, actualFormat);
+	KJ_REQUIRE(bufinfo.itemsize == elementSize, "Apparently python and I have different ideas about the size of this type");
+	
+	// Check whether array is contiguous
+	size_t expectedStride = elementSize;
+	for(int dimension = bufinfo.shape.size() - 1; dimension >= 0; --dimension) {
+		KJ_REQUIRE(expectedStride == bufinfo.strides[dimension], "Array is not contiguous C-order", dimension);
+		expectedStride *= bufinfo.shape[dimension];
+	}
+	
+	// Check whether size matches expectation
+	{
+		size_t shapeProd = 1;
+		for(uint64_t e : bufinfo.shape) shapeProd *= e;
+		KJ_REQUIRE(shapeProd == bufinfo.size, "prod(shape) must equal data.size()");
+	}
+	
+	capnp::DynamicList::Builder shape = dsb.init("shape", bufinfo.shape.size()).as<DynamicList>();
+	for(size_t i = 0; i < bufinfo.shape.size(); ++i)
+		shape.set(i, bufinfo.shape[i]);
+	
+	capnp::DynamicList::Builder data = dsb.init("data", bufinfo.size).as<DynamicList>();
+	byte* dataPtr = const_cast<byte*>(((capnp::AnyList::Builder) data).asReader().getRawBytes().begin());
+	memcpy(dataPtr, bufinfo.ptr, elementSize * bufinfo.size);
+}
+
+void setTensor(DynamicValue::Builder dvb, py::buffer buffer) {
+	//TODO: Derive tensor type from buffer value?
+	setTensor(dvb.as<DynamicStruct>(), buffer);
+}
+
+void assign(const BuilderSlot& dst, py::object object) {
+	auto assignmentFailureLog = kj::strTree();
+	
 	// Attempt 1: Check if target is orphan that can be adopted
 	pybind11::detail::make_caster<capnp::Orphan<DynamicValue>> orphanCaster;
-	if(orphanCaster.load(object)) {
-		dst.adopt((capnp::Orphan<DynamicValue>&&) dynValCaster);
+	if(orphanCaster.load(object, false)) {
+		capnp::Orphan<DynamicValue>& orphanRef = (capnp::Orphan<DynamicValue>&) orphanCaster;
+		dst.adopt(mv(orphanRef));
 		return;
 	}
 	
 	// Attempt 2: Check if target can be converted into a reader directly
 	pybind11::detail::make_caster<DynamicValue::Reader> dynValCaster;
-	if(dynValCaster.load(object)) {
+	if(dynValCaster.load(object, false)) {
 		dst.set((DynamicValue::Reader&) dynValCaster);
 		return;
 	}
@@ -355,45 +419,51 @@ void assign(BuilderSlot& dst, py::object object) {
 		
 		DynamicList::Builder listDst = dst.init(asSequence.size()).as<DynamicList>();
 		for(unsigned int i = 0; i < listDst.size(); ++i) {
-			assign(ListItemSlot(listDst, i), asSequence[i];
+			assign(ListItemSlot(listDst, i), asSequence[i]);
 		}
 		
 		return;
+	} else {
+		if(!dst.type.isList()) {
+			assignmentFailureLog = strTree(mv(assignmentFailureLog), "Skipped assigning from sequence because slot type is not list\n");
+		}
 	}
 	
 	// Attempt 4: If we are a tensor, try to convert via a numpy array
 	if(isTensor(dst.type)) {
-		auto scalarType = type.getFieldByName("data").getType().asList().getElementType();
+		auto scalarType = dst.type.asStruct().getFieldByName("data").getType().asList().getElementType();
 		
 		py::buffer targetBuffer;
 		try {
 			targetBuffer = getAsBufferViaNumpy(object, scalarType, 0, 100);
 		} catch(py::error_already_set& e) {
-			KJ_DBG(e.what());
+			assignmentFailureLog = strTree(mv(assignmentFailureLog), "Could not obtain buffer from numpy due to following reason: ", e.what(), "\n");
 			goto tensor_conversion_failed;
 		}
 		
 		// From now on, we don't wanna catch exceptions, as this should
 		// always work
-		setTensor(dst.init(), targetBuffer);
+		setTensor(dst.get(), targetBuffer);
 		return;
+	} else {
+		assignmentFailureLog = strTree(mv(assignmentFailureLog), "Skipped assigning from array because slot type is not a tensor\n");
 	}
 	
 	// This label exists in case we add more conversion routines later
 	tensor_conversion_failed:
 	
-	throw std::invalid_argument(kj::str("Could not find a way to assign object of type ", py::str(py::type::of(object))).cStr());
+	throw std::invalid_argument(kj::str("Could not find a way to assign object of type ", py::cast<kj::StringPtr>(py::str(py::type::of(object))), ".\n", assignmentFailureLog.flatten()).cStr());
 }
 
 void setItem(capnp::DynamicList::Builder list, unsigned int index, py::object value) {
 	assign(ListItemSlot(list.as<DynamicList>(), index), mv(value));
 }
 
-void setField(capnp::DynamicStruct::Builder builder, kj::StringPtr fieldName, py::object value) {
+void setFieldByName(capnp::DynamicStruct::Builder builder, kj::StringPtr fieldName, py::object value) {
 	assign(FieldSlot(builder, builder.getSchema().getFieldByName(fieldName)), mv(value));
 }
 
-void setFieldByName(capnp::DynamicStruct::Builder builder, capnp::StructSchema::Field field, py::object value) {
+void setField(capnp::DynamicStruct::Builder builder, capnp::StructSchema::Field field, py::object value) {
 	assign(FieldSlot(builder, field), mv(value));
 }
 
@@ -481,61 +551,6 @@ void defTensorBuffer(py::class_<T>& c, bool readOnly) {
 		
 		return py::buffer_info((byte*) nullptr, 0);
 	});
-}
-
-//! Allows assigning tensor types from a buffer
-void setTensor(DynamicStruct::Builder dsb, py::buffer buffer) {	
-	py::buffer_info bufinfo = buffer.request();
-	
-	// Check format
-	capnp::ListSchema schema = dsb.getSchema().getFieldByName("data").getType().asList();
-	auto format = pyFormat(schema.getElementType());
-	size_t elementSize = kj::get<0>(format);
-	kj::StringPtr expectedFormat = kj::get<1>(format);
-	
-	kj::String actualFormat = kj::str(bufinfo.format.c_str());
-	
-	if(actualFormat[0] == '!')
-		actualFormat[0] = '>';
-	
-	// If we get a default ordering, check if we are on little endian CPU
-	if(actualFormat[0] != '<' && actualFormat[0] != '>') {
-		#if __BYTE_ORDERING__ == __LITTLE_ENDIAN__
-			actualFormat = str("<", actualFormat);
-		#else
-			actualFormat = str(">", actualFormat);
-		#endif
-	}
-	
-	KJ_REQUIRE(actualFormat == expectedFormat, "Can only assign data of compatible data types", expectedFormat, actualFormat);
-	KJ_REQUIRE(bufinfo.itemsize == elementSize, "Apparently python and I have different ideas about the size of this type");
-	
-	// Check whether array is contiguous
-	size_t expectedStride = elementSize;
-	for(int dimension = bufinfo.shape.size() - 1; dimension >= 0; --dimension) {
-		KJ_REQUIRE(expectedStride == bufinfo.strides[dimension], "Array is not contiguous C-order", dimension);
-		expectedStride *= bufinfo.shape[dimension];
-	}
-	
-	// Check whether size matches expectation
-	{
-		size_t shapeProd = 1;
-		for(uint64_t e : bufinfo.shape) shapeProd *= e;
-		KJ_REQUIRE(shapeProd == bufinfo.size, "prod(shape) must equal data.size()");
-	}
-	
-	capnp::DynamicList::Builder shape = dsb.init("shape", bufinfo.shape.size()).as<DynamicList>();
-	for(size_t i = 0; i < bufinfo.shape.size(); ++i)
-		shape.set(i, bufinfo.shape[i]);
-	
-	capnp::DynamicList::Builder data = dsb.init("data", bufinfo.size).as<DynamicList>();
-	byte* dataPtr = const_cast<byte*>(((capnp::AnyList::Builder) data).asReader().getRawBytes().begin());
-	memcpy(dataPtr, bufinfo.ptr, elementSize * bufinfo.size);
-}
-
-void setTensor(DynamicValue::Builder dvb, py::buffer buffer) {
-	//TODO: Derive tensor type from buffer value?
-	setTensor(dvb.as<DynamicStruct>(), buffer);
 }
 
 //! Binds capnp::DynamicList::{Builder, Reader}
@@ -1054,6 +1069,19 @@ namespace fscpy {
 // init method
 
 void initCapnp(py::module_& m) {
+	// Make sure numpy is initialized
+	// import_array can be a macro that contains returns
+	// Wrap it in a lambda
+	auto importer = []() -> void* {
+		import_array();
+		return nullptr;
+	};
+	
+	importer();
+	if(PyErr_Occurred()) {
+		throw py::error_already_set();
+	}
+	
 	py::module_ mcapnp = m.def_submodule("capnp", "Python bindings for Cap'n'proto classes (excluding KJ library)");
 	
 	bindListClasses(mcapnp);

@@ -210,7 +210,7 @@ add_subdirectory(docs)
 # Coverage testing
 option(FSC_WITH_INSTRUMENTATION "Whether to perform instrumentation")
 
-if(FSC_WITH_INSTRUMENTATION AND (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
+if(FSC_WITH_INSTRUMENTATION AND (CMAKE_CXX_COMPILER_ID STREQUAL "Clang") AND BUILD_TESTING)
 	target_compile_options(fsc PRIVATE -fprofile-instr-generate -fcoverage-mapping)
 	target_link_options(tests PRIVATE -fprofile-instr-generate -fcoverage-mapping)
 	
