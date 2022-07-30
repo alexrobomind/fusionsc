@@ -18,6 +18,11 @@ class FLT:
 		# self.backend = backend
 		self.calculator = backend.newFieldCalculator().calculator
 		self.tracer	 = backend.newTracer().service
+		self.geometryLib = backend.newGeometryLib().service
+	
+	def indexGeometry(self, *args, **kwargs):
+		"""return self.indexGeometryAsync(*args, **kwargs).wait()"""
+		return self.indexGeometryAsync(*args, **kwargs).wait()
 	
 	def computeField(self, *args, **kwargs):
 		"""return self.computeFieldAsync(*args, **kwargs).wait()"""
@@ -26,6 +31,14 @@ class FLT:
 	def poincareInPhiPlanes(self, *args, **kwargs):
 		"""return self.poincareInPhiPlanesAsync(*args, **kwargs).wait()"""
 		return self.poincareInPhiPlanesAsync(*args, **kwargs).wait()
+	
+	@asyncFunction
+	async def indexGeometryAsync(self, geometry, grid):
+		resolved  = await geometry.resolve()
+		mergedRef = self.geometryLib.merge(resolved).ref
+		indexed	  = await self.geometryLib.index(mergedRef, grid)
+		
+		return indexed
 	
 	@asyncFunction
 	async def computeFieldAsync(self, config, grid):

@@ -15,7 +15,7 @@ interface GeometryResolver {
 
 interface GeometryLib {
 	merge @0 Geometry -> (ref : DataRef(MergedGeometry));
-	index @1 (geoRef : DataRef(MergedGeometry), grid : CartesianGrid) -> (ref : DataRef(IndexedGeometry));
+	index @1 (geoRef : DataRef(MergedGeometry), grid : CartesianGrid) -> (indexed : IndexedGeometry);
 }
 
 struct TagValue {
@@ -92,11 +92,13 @@ struct Geometry {
 		
 		mesh @5 : DataRef(Mesh);
 		
+		indexed @6 : IndexedGeometry;
+		
 		# ====== Device-specific ======
 		# ----------- W7-X ------------
 		
-		componentsDBMeshes     @6 : List(UInt64);
-		componentsDBAssemblies @7 : List(UInt64);
+		componentsDBMeshes     @7 : List(UInt64);
+		componentsDBAssemblies @8 : List(UInt64);
 	}
 }
 
@@ -136,7 +138,11 @@ struct IndexedGeometry {
 		elements @0 : List(ElementRef);
 	}
 	
+	struct IndexData {
+		gridContents @0 : ShapedList(List(List(ElementRef)));
+	}
+	
 	base @0 : DataRef(MergedGeometry);
 	grid @1 : CartesianGrid;
-	data @2 : ShapedList(List(List(ElementRef))); # Note: StructTensor must take the underlying list type, not the element type
+	data @2 : DataRef(IndexData);
 }

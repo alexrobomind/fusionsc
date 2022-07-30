@@ -87,7 +87,7 @@ struct IntersectResult {
 /**
  * \ingroup geometry
  */
-inline IntersectResult intersectGeometry(const Vec3d p1, const Vec3d p2, const cu::MergedGeometry geometry, const cu::IndexedGeometry index) {
+inline IntersectResult intersectGeometry(const Vec3d p1, const Vec3d p2, const cu::MergedGeometry geometry, const cu::IndexedGeometry index, const cu::IndexedGeometry::IndexData indexData) {
 	constexpr double inf = std::numeric_limits<double>::infinity();
 	double l = inf;
 
@@ -100,7 +100,7 @@ inline IntersectResult intersectGeometry(const Vec3d p1, const Vec3d p2, const c
 	Vec3u imin = i1.array().min(i2.array());
 	Vec3u imax = i1.array().max(i2.array());
 	
-	const auto indexData = index.getData().getData();
+	const auto indexGridData = indexData.getGridContents().getData();
 	
 	size_t iMesh = 0;
 	size_t iElement = 0;
@@ -110,7 +110,7 @@ inline IntersectResult intersectGeometry(const Vec3d p1, const Vec3d p2, const c
 	for(size_t iZ = imin[2]; iZ <= imax[2]; ++iZ) {
 		size_t globalIdx = (iX * gridSize[1] + iY) * gridSize[2] + iZ;
 		
-		const auto indexNode = indexData[globalIdx];
+		const auto indexNode = indexGridData[globalIdx];
 		for(size_t iRef = 0; iRef < indexNode.size(); ++iRef) {
 			auto elementRef = indexNode[iRef];
 			

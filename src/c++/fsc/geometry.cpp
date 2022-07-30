@@ -339,17 +339,21 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 	return getActiveThread().dataService().download(context.getParams().getGeoRef())
 	.then([this, context](LocalDataRef<MergedGeometry> inputRef) mutable {
 		// Create output temporary and read information about input
-		Temporary<IndexedGeometry> output;
+		auto output = context.getResults().initIndexed();
 		MergedGeometry::Reader input = inputRef.get();
+		
+		KJ_DBG("Beginning work on merged geometry");
 			
 		auto grid = context.getParams().getGrid();
 		// auto gridSize = grid.getSize();
 		Vec3u gridSize { grid.getNX(), grid.getNY(), grid.getNZ() };
 		
 		size_t totalSize = gridSize[0] * gridSize[1] * gridSize[2];
+		KJ_DBG(input, grid, totalSize);
 		
 		// Allocate temporary un-aligned storage for grid refs
 		kj::Vector<kj::Vector<Temporary<IndexedGeometry::ElementRef>>> tmpRefs(totalSize);
+		tmpRefs.resize(totalSize);
 		
 		// Iterate through all components of geometry
 		for(size_t iEntry = 0; iEntry < input.getEntries().size(); ++iEntry) {
@@ -357,6 +361,9 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 			auto entry = input.getEntries()[iEntry];
 			auto mesh = entry.getMesh();
 			auto pointData = mesh.getVertices().getData();
+			auto indices = mesh.getIndices();
+			
+			KJ_DBG("Processing entry", iEntry, mesh);
 			
 			// Iterate over all polygons in mesh to assign them to grid boxes
 			// ... Step 1: Count
@@ -371,6 +378,8 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 				default:
 					KJ_FAIL_REQUIRE("Unknown mesh type", mesh.which());
 			}
+			
+			KJ_DBG(nPolygons);
 			
 			// ... Step 2: Iterate
 			for(size_t iPoly = 0; iPoly < nPolygons; ++iPoly) {
@@ -391,6 +400,8 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 					default:
 						KJ_FAIL_REQUIRE("Unknown mesh type", mesh.which());
 				}
+				
+				KJ_DBG(iPoly, iStart, iEnd);
 			
 				// Find bounding box for polygon
 				double inf = std::numeric_limits<double>::infinity();
@@ -399,9 +410,10 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 				Vec3d min { inf, inf, inf };
 				
 				for(size_t iPoint = iStart; iPoint < iEnd; ++iPoint) {
+					uint32_t index = indices[iPoint];
 					Vec3d point;
 					for(size_t i = 0; i < 3; ++i)
-						point[i] = pointData[3 * iPoint + i];
+						point[i] = pointData[3 * index + i];
 					
 					max = max.cwiseMax(point);
 					min = min.cwiseMin(point);
@@ -417,6 +429,7 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 				for(size_t iZ = minCell[2]; iZ <= maxCell[2]; ++iZ) {
 					// ... add a new ref in the corresponding cell
 					size_t globalIdx = (iX * gridSize[1] + iY) * gridSize[2] + iZ;
+					KJ_DBG(iX, iY, iZ, globalIdx);
 					
 					Temporary<IndexedGeometry::ElementRef>& newRef = tmpRefs[globalIdx].add();
 					newRef.setMeshIndex(iEntry);
@@ -425,10 +438,13 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 			}
 		}
 		
+		KJ_DBG("Collected all refs, setting");
+		
 		// Set up output data. This creates a packed representation of the index
 		
 		// Set up output (including shape)
-		auto shapedRefs = output.initData();
+		Temporary<IndexedGeometry::IndexData> indexData;
+		auto shapedRefs = indexData.initGridContents();
 		auto shapedRefsShape = shapedRefs.initShape(3);
 		for(size_t i = 0; i < 3; ++i)
 			shapedRefsShape.set(i, gridSize[i]);
@@ -444,14 +460,11 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 				out.setWithCaveats(iInner, in[iInner]);			
 		}
 		
-		// Set up back-references
+		LocalDataRef<IndexedGeometry::IndexData> indexDataRef = getActiveThread().dataService().publish(getActiveThread().randomID(), indexData.asReader());
+		
 		output.setGrid(grid);
 		output.setBase(context.getParams().getGeoRef());
-		
-		// Publish output into data store and return reference
-		// Derive the ID from the parameters struct
-		DataRef<IndexedGeometry>::Client outputRef = getActiveThread().dataService().publish(context.getParams(), output.asReader());
-		context.getResults().setRef(outputRef);
+		output.setData(mv(indexDataRef));
 	});
 }
 
