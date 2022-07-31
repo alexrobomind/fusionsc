@@ -589,6 +589,29 @@ namespace cupnp {
 			#endif
 		}
 	}
+	
+	//! Computes the size of a struct's data section
+	CUPNP_FUNCTION inline uint32_t getDataSectionSizeInBytes(uint64_t structureWord) {
+		uint16_t dataSectionSizeInWords = structure >> 32;
+		return dataSectionSizeInWords * ((uint32_t) 8);
+	}
+	
+	//! Copies data from struct src to struct dst
+	template<typename T1, typename T2>
+	CUPNP_FUNCTION inline void copyData(T1& dst, const T2& src) {
+		uint32_t dsSize1 = getDataSectionSizeInBytes(dst.structure);
+		uint32_t dsSize2 = getDataSectionSizeInBytes(src.structure);
+		
+		CUPNP_REQUIRE(dsSize1 >= dsSize2) { dsSize2 = dsSize1; }
+		
+		CUPNP_REQUIRE(dst.data.isValid(dsSize1)) { return; }
+		CUPNP_REQUIRE(src.data.isValid(dsSize2)) { return; }
+		
+		if(dsSize1 > dsSize2)
+			memset(dst.data.ptr, 0, dsSize1);
+		
+		memcpy(dst.data.ptr, src.data.ptr, dsSize2);
+	}
 
 	/**
 	 * Reads the in-memory information at the given location and tries
