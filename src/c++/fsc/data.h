@@ -137,6 +137,24 @@ public:
 	template<typename Reference, typename T = References<Reference>>
 	Promise<LocalDataRef<T>> download(Reference src, bool recursive = true);
 	
+	//! Downloads remote DataRef::Client into LocalDataRef if it is not null
+	/**
+	 * Downloads the data contained in the remote reference into the local backing
+	 * store and links the remote capabilities into a local capability table.
+	 *
+	 * \param src The DataRef<T>::Client to download from (can also be a LocalDataRef<T>)
+	 * \param recursive Whether to recursively download all referenced DataRef instances
+	 *        into the local data store as well. If true, all contained DataRef objects will
+	 *        point into local storage after the returned promise resolved, and are therefore
+	 *        guaranteed to instantly resolve in future download attempts.
+	 *
+	 * \returns Promise to a local data ref instance which extends the interface by DataRef
+	 * with direct access to the stored data. The contained Maybe will evaluate to nullptr
+	 * if the given DataRef is unset.
+	 */
+	template<typename Reference, typename T = References<Reference>>
+	Promise<Maybe<LocalDataRef<T>>> downloadIfNotNull(Reference src, bool recursive = true);
+	
 	///@}
 	
 	//! \name Publication methods

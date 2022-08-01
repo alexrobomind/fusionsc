@@ -228,6 +228,7 @@ struct type_caster<kj::Promise<T>> {
 			return false;
 				
 		value = static_cast<fscpy::PyPromise&>(baseCaster).as<T>();
+		return true;
 	}
 		
 	static handle cast(kj::Promise<T> src, return_value_policy policy, handle parent) {
@@ -245,6 +246,7 @@ struct type_caster<kj::Promise<void>> {
 			return false;
 				
 		value = static_cast<fscpy::PyPromise&>(baseCaster).ignoreResult();
+		return true;
 	}
 		
 	static handle cast(kj::Promise<void> src, return_value_policy policy, handle parent) {

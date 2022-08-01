@@ -57,10 +57,25 @@ inline kj::Array<cupnp::SegmentTable::Entry> buildSegmentTable(kj::ArrayPtr<kj::
 	return result.finish();
 }
 
+inline kj::Array<const capnp::word> newEmptyMessage() {
+	auto emptyMessage = kj::heapArray<kj::byte>({
+		// Remember: capnp storage specification is ALWAYS LITTLE ENDIAN
+		// 4-byte segment count (minus one), so 0 since there is one segment
+		0, 0, 0, 0,
+		// 4-byte segment size (in 8-byte words)
+		1, 0, 0, 0,
+		// 8-byte segment
+		0, 0, 0, 0, 0, 0, 0, 0
+	});
+	return bytesToWords(mv(emptyMessage));
+}
+
+inline kj::Array<const capnp::word> EMPTY_MESSAGE = internal::newEmptyMessage();
+
 }
 
 template<typename T>
-struct CupnpMessage {
+struct CupnpMessage {	
 	// kj::Array<kj::ArrayPtr<capnp::word>> segmentTable;
 	kj::Array<cupnp::SegmentTable::Entry> segmentTable;
 	
@@ -99,14 +114,24 @@ struct CupnpMessage {
 		segmentTable(internal::buildSegmentTable(internal::coerceSegmentTableToNonConst(segments)))
 	{}
 	
+	CupnpMessage(std::nullptr_t) :
+		CupnpMessage(internal::EMPTY_MESSAGE.asPtr())
+	{}
+	
+	CupnpMessage(kj::ArrayPtr<const kj::byte> flatData) :
+		CupnpMessage(bytesToWords(flatData))
+	{}
+	
 	CupnpMessage(kj::ArrayPtr<const capnp::word> flatData) :
-		CupnpMessage(internal::extractSegmentTable(flatData))
+		CupnpMessage(internal::extractSegmentTable(flatData.size() > 0 ? flatData : internal::EMPTY_MESSAGE.asPtr()))
 	{}
 	
 	template<typename T2>
 	CupnpMessage(LocalDataRef<T2>& srcData) :
 		CupnpMessage(bytesToWords(srcData.getRaw()))
 	{}
+	
+private:
 };
 
 namespace internal {
@@ -129,7 +154,7 @@ template<typename T, typename Device>
 struct MapToDevice<CupnpMessage<T>, Device> {
 	using Msg = CupnpMessage<T>;
 	
-	Msg& original;
+	// Msg& original;
 	Device& device;
 	
 	kj::Array<MappedData<capnp::word, Device>> deviceSegments;
@@ -138,7 +163,7 @@ struct MapToDevice<CupnpMessage<T>, Device> {
 	MappedData<cupnp::SegmentTable::Entry, Device> deviceSegmentTable;
 	
 	MapToDevice(Msg& original, Device& device) :
-		original(original), device(device), deviceSegmentTable(device)
+		device(device), deviceSegmentTable(device)
 	{
 		size_t nSegments = original.segmentTable.size();
 		

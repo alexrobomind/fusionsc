@@ -280,6 +280,21 @@ Promise<LocalDataRef<T>> LocalDataService::download(Reference src, bool recursiv
 	);
 }
 
+template<typename Reference, typename T>
+Promise<Maybe<LocalDataRef<T>>> LocalDataService::downloadIfNotNull(Reference src, bool recursive) {
+	bool isNull = capnp::ClientHook::from(cp(src))->isNull();
+	
+	if(isNull) {
+		Maybe<LocalDataRef<T>> result = nullptr;
+		return result;
+	}
+	
+	return download(src, recursive)
+	.then([](LocalDataRef<T> result) mutable -> Maybe<LocalDataRef<T>> {
+		return result;
+	});
+}
+
 template<typename Ref, typename T>
 Promise<void> LocalDataService::buildArchive(Ref ref, Archive::Builder out, Maybe<Nursery&> nursery) {
 	return impl -> buildArchive(ref.asGeneric(), out, nursery);

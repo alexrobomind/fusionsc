@@ -57,20 +57,60 @@ class FLT:
 		return np.asarray(fieldData).transpose([3, 0, 1, 2])
 	
 	@asyncFunction
-	async def poincareInPhiPlanesAsync(self, points, phiValues, nTurns, config, grid, distanceLimit = 1e4, stepSize = 1e-3):
+	async def poincareInPhiPlanesAsync(self, points, phiValues, nTurns, config, grid = None, distanceLimit = 1e4, stepSize = 1e-3):
 		# Resovle & compute field
-		resolved	= await config.resolve()
-		computed	= (await self.calculator.compute(resolved.field, grid)).computedField
+		resolvedField = await config.resolve()
+		
+		if grid is None:
+			assert resolvedField.field.which() == 'computed'
+			computedField = resolvedField.field.computed
+		else:
+			computedField = (await self.calculator.compute(resolvedField.field, grid)).computedField
+			
+		print("Assigning")
 		
 		# This style is neccessary to convert the start points to an FSC tensor
 		request = native.FLTRequest.newMessage()
 		request.startPoints = points
-		request.field = computed
+		request.field = computedField
 		request.poincarePlanes = phiValues
 		request.turnLimit = nTurns
 		request.distanceLimit = distanceLimit
 		request.stepSize = stepSize
 		
+		print("Tracing")
 		fltResponse = await self.tracer.trace(request)
+		print("Done")
 		
 		return np.asarray(fltResponse.poincareHits)
+	
+	@asyncFunction
+	async def traceUntilImpact(self, points, phiValues, nTurns, config, geometry, grid = None, geometryGrid = None, distanceLimit = 1e4, stepSize = 1e-3):
+		resolvedField = await config.resolve()
+		
+		if grid is None:
+			assert resolvedField.field.which() == 'computed'
+			computedField = resolvedField.field.computed
+		else:
+			computedField = (await self.calculator.compute(resolved.field, grid)).computedField
+		
+		if geometry is not None:			
+			if geometryGrid is None:
+				assert geometry.geometry.which() == 'indexed'
+				indexedGeometry = geometry.geometry.indexed
+			else:
+				indexedGeometry = await self.indexGeometryAsync(geometry, geometryGrid)
+		
+		request = native.FLTRequest.newMessage()
+		request.startPoints = points
+		request.field = computedField
+		request.distanceLimit = distanceLimit
+		request.stepSize = stepSize
+		
+		if geometry is not None:
+			request.geometry = indexedGeometry
+		
+		fltResponse = await self.tracer.trace(request)
+		
+		
+		

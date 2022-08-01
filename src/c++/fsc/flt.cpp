@@ -50,11 +50,23 @@ struct TraceCalculation {
 	Temporary<FLTKernelRequest> request;
 	kj::Vector<Round> rounds;
 	
-	const Operation& rootOp;
-	
 	uint32_t ROUND_STEP_LIMIT = 1000000;
 	
-	TraceCalculation(Device& device, Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<const Tensor<double, 4>>> newField, Tensor<double, 2> positions, const Operation& rootOp) :
+	Temporary<IndexedGeometry> geometryIndex;
+	Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData;
+	Maybe<LocalDataRef<MergedGeometry>> geometryData;
+	
+	Own<MappedMessage<const cu::IndexedGeometry>> mappedIndex;
+	Own<MappedMessage<const cu::IndexedGeometry::IndexData>> mappedIndexData;
+	Own<MappedMessage<const cu::MergedGeometry>> mappedGeometryData;
+		
+	const Operation& rootOp;
+	
+	TraceCalculation(Device& device,
+		Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<const Tensor<double, 4>>> newField, Tensor<double, 2> positions,
+		IndexedGeometry::Reader geometryIndex, Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData, Maybe<LocalDataRef<MergedGeometry>> geometryData,
+		const Operation& rootOp
+	) :
 		device(device),
 		positions(mv(positions)),
 		
@@ -63,9 +75,38 @@ struct TraceCalculation {
 		
 		request(mv(newRequest)),
 		
+		geometryIndex(geometryIndex),
+		indexData(indexData),
+		geometryData(geometryData),
+		
 		rootOp(rootOp)
 	{
+	
+		CupnpMessage<const cu::IndexedGeometry> geometryIndexMsg(this->geometryIndex);
+		KJ_DBG("Loading empty messages");
+		CupnpMessage<const cu::IndexedGeometry::IndexData> indexDataMsg(nullptr);
+		CupnpMessage<const cu::MergedGeometry> geometryDataMsg(nullptr);
+		KJ_DBG("Done");
+		
+		// Extract message segments for geometry and index data
+		KJ_IF_MAYBE(pIndexData, indexData) {
+			indexDataMsg = CupnpMessage<const cu::IndexedGeometry::IndexData>(*pIndexData);
+		}
+		
+		KJ_IF_MAYBE(pGeometryData, geometryData) {
+			geometryDataMsg = CupnpMessage<const cu::MergedGeometry>(*pGeometryData);
+		}
+		
+		// Perform the actual device mapping for these messages
+		mappedIndex = kj::heap<MappedMessage<const cu::IndexedGeometry>>(geometryIndexMsg, device);
+		mappedIndexData = kj::heap<MappedMessage<const cu::IndexedGeometry::IndexData>>(indexDataMsg, device);
+		mappedGeometryData = kj::heap<MappedMessage<const cu::MergedGeometry>>(geometryDataMsg, device);
+		
+		mappedIndex -> updateDevice();
+		mappedIndexData -> updateDevice();
+		mappedGeometryData -> updateDevice();
 		deviceField.updateDevice();
+		
 		hostMemSynchronize(device, rootOp);
 	}
 	
@@ -179,7 +220,8 @@ struct TraceCalculation {
 			fltKernel, device,
 			r.kernelData.getData().size(),
 			
-			kernelData, FSC_KARG(deviceField, IN), kernelRequest
+			kernelData, FSC_KARG(deviceField, IN), kernelRequest,
+			FSC_KARG(*mappedGeometryData, IN), FSC_KARG(*mappedIndex, IN), FSC_KARG(*mappedIndexData, IN)
 		);
 		calcOp -> attachDestroyAnywhere(rootOp.addRef());
 		return calcOp -> whenDone();
@@ -286,8 +328,30 @@ struct FLTImpl : public FLT::Server {
 		ctx.allowCancellation();
 		auto request = ctx.getParams();
 		
-		return getActiveThread().dataService().download(request.getField().getData())
-		.then([ctx, request, this](LocalDataRef<Float64Tensor> fieldData) mutable {
+		auto& dataService = getActiveThread().dataService();
+		
+		auto isNull = [&](capnp::Capability::Client c) {
+			return capnp::ClientHook::from(mv(c))->isNull();
+		};
+		
+		auto indexDataRef = request.getGeometry().getData();
+		auto geoDataRef = request.getGeometry().getBase();
+			
+		KJ_DBG("Initiating download processes");
+		
+		Promise<LocalDataRef<Float64Tensor>> downloadField = dataService.download(request.getField().getData()).eagerlyEvaluate(nullptr);
+		Promise<Maybe<LocalDataRef<IndexedGeometry::IndexData>>> downloadIndexData = dataService.downloadIfNotNull(indexDataRef);
+		Promise<Maybe<LocalDataRef<MergedGeometry>>> downloadGeometryData =	dataService.downloadIfNotNull(geoDataRef).eagerlyEvaluate(nullptr);
+		KJ_DBG("Waiting download processes");
+		
+		// I WANT COROUTINES -.-
+		
+		return downloadIndexData.then([ctx, request, downloadGeometryData = mv(downloadGeometryData), downloadField = mv(downloadField), this](Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData) mutable {
+		return downloadGeometryData.then([ctx, request, indexData = mv(indexData), downloadField = mv(downloadField), this](Maybe<LocalDataRef<MergedGeometry>> geometryData) mutable {
+		return downloadField.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), this](LocalDataRef<Float64Tensor> fieldData) mutable {
+			
+			KJ_DBG("All required data downloaded");
+			
 			// Extract kernel request
 			Temporary<FLTKernelRequest> kernelRequest;
 			kernelRequest.setPhiPlanes(request.getPoincarePlanes());
@@ -310,6 +374,7 @@ struct FLTImpl : public FLT::Server {
 			for(size_t i = 1; i < startPointShape.size(); ++i)
 				nStartPoints *= startPointShape[i];
 			
+			// Reshape start points into linear shape
 			Temporary<Float64Tensor> reshapedStartPoints;
 			reshapedStartPoints.setData(inStartPoints.getData());
 			{
@@ -317,13 +382,17 @@ struct FLTImpl : public FLT::Server {
 				// shape[0] = 3; shape[1] = nStartPoints;
 			}			
 			
+			// Try to map underlying tensor and load it into memory
 			Tensor<double, 2> positions = mapTensor<Tensor<double, 2>>(reshapedStartPoints.asReader())
 				-> shuffle(Eigen::array<int, 2>{1, 0});
 			
 			auto rootOp = newOperation();
 			
 			auto calc = heapHeld<TraceCalculation<Device>>(
-				*device, mv(kernelRequest), mv(field), mv(positions), *rootOp
+				*device, mv(kernelRequest), mv(field), mv(positions),
+				request.getGeometry(), mv(indexData), mv(geometryData),
+				
+				*rootOp
 			);
 			
 			rootOp -> attachDestroyHere(thisCap(), cp(fieldData), calc.x());
@@ -350,6 +419,8 @@ struct FLTImpl : public FLT::Server {
 				Tensor<double, 4> pcCuts(nTurns, nStartPoints, nSurfs, 3);
 				pcCuts.setConstant(std::numeric_limits<double>::quiet_NaN());
 				
+				Tensor<double, 2> endPoints(nStartPoints, 3);
+				
 				for(int64_t iStartPoint = 0; iStartPoint < nStartPoints; ++iStartPoint) {
 					auto entry = kData[iStartPoint].asReader();
 					auto state = entry.getState();
@@ -374,13 +445,31 @@ struct FLTImpl : public FLT::Server {
 							}
 						}
 					}
+					
+					auto stopLoc = state.getPosition();
+					for(int i = 0; i < 3; ++i) {
+						endPoints(iStartPoint, i) = stopLoc[i];
+					}
 				}
 				
 				auto results = ctx.getResults();
 				results.setNTurns(nTurns);
+				
 				writeTensor(pcCuts, results.getPoincareHits());
+				writeTensor(endPoints, results.getEndPoints());
+				
+				auto pcHitsShape = results.getPoincareHits().initShape(startPointShape.size() + 2);
+				pcHitsShape.set(0, 3);
+				pcHitsShape.set(1, nSurfs);
+				for(int i = 0; i < startPointShape.size() - 1; ++i)
+					pcHitsShape.set(i + 2, startPointShape[i + 1]);
+				pcHitsShape.set(startPointShape.size() + 1, nTurns);
+				
+				results.getEndPoints().setShape(startPointShape);
 				
 			}).attach(mv(rootOp));
+		});
+		});
 		}).attach(thisCap());
 	}
 };
@@ -389,24 +478,7 @@ template struct TraceCalculation<Eigen::ThreadPoolDevice>;
 	
 }
 
-namespace fsc {
-	void calc(Eigen::DefaultDevice& d) {
-		capnp::MallocMessageBuilder mb;
-		CupnpMessage<cu::FLTKernelData> kernelData(mb);
-		Tensor<double, 4> field(3, 1, 1, 1);
-		CupnpMessage<cu::FLTKernelRequest> kernelRequest(mb);
-		auto calculation = FSC_LAUNCH_KERNEL(
-			fltKernel,
-			
-			d, 3,
-			
-			kernelData, field, kernelRequest
-		);
-		
-		Temporary<Float64Tensor> testTensor;
-		mapTensor<const Tensor<double, 3>>(testTensor.asReader());
-	}
-	
+namespace fsc {	
 	// TODO: Make this accept data service instead	
 	FLT::Client newFLT(Own<Eigen::ThreadPoolDevice> device) {
 		return kj::heap<FLTImpl<Eigen::ThreadPoolDevice>>(mv(device));

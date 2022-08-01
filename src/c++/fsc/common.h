@@ -34,6 +34,7 @@ using kj::ForkedPromise;
 using kj::Own;
 using kj::Tuple;
 using kj::Maybe;
+using kj::OneOf;
 using kj::Decay;
 using kj::RemoveConst;
 

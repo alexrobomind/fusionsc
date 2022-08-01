@@ -3,6 +3,7 @@
 #include "tensor.h"
 #include "cudata.h"
 #include "interpolation.h"
+#include "geometry.h"
 
 namespace fsc {
 	
@@ -69,13 +70,20 @@ namespace fsc {
 		unsigned int idx,
 		CuPtr<fsc::cu::FLTKernelData> pKernelData,
 		TensorMap<Tensor<double, 4>> fieldData,
-		CuPtr<fsc::cu::FLTKernelRequest> pRequest
+		CuPtr<fsc::cu::FLTKernelRequest> pRequest,
+		CuPtr<const fsc::cu::MergedGeometry> pGeometry,
+		CuPtr<const fsc::cu::IndexedGeometry> pGeometryIndex,
+		CuPtr<const fsc::cu::IndexedGeometry::IndexData> pGeometryIndexData
 	) {
 		using Num = double;
 		using V3 = Vec3<Num>;
 		
 		auto kernelData = *pKernelData;
 		auto request   = *pRequest;
+		
+		auto geometry = *pGeometry;
+		auto index = *pGeometryIndex;
+		auto indexData = *pGeometryIndexData;
 		
 		// printf("Hello there\n");
 		// KJ_DBG("FLT kernel started");
@@ -203,7 +211,7 @@ namespace fsc {
 					FSC_FLT_LOG_EVENT(xCross);				
 				}
 			}
-			
+						
 			if(kmath::crossedPhi(phi1, phi2, phi0) && step > 1) {
 				auto l = kmath::wrap(phi0 - phi1) / kmath::wrap(phi2 - phi1);
 				V3 xCross = l * x2 + (1. - l) * x;
@@ -218,14 +226,91 @@ namespace fsc {
 				state.setTurnCount(state.getTurnCount() + 1);		
 			}
 			
+			uint32_t numCollisions = 0;
+			
+			if(indexData.getGridContents().getData().size() > 0) {
+				auto eventBuffer = myData.mutateEvents();
+				uint32_t newEventCount = intersectGeometryAllEvents(x, x2, geometry, index, indexData, 1, eventBuffer, eventCount);
+								
+				if(newEventCount == eventBuffer.size()) {
+					FSC_FLT_RETURN(EVENT_BUFFER_FULL);
+				}
+				
+				numCollisions = newEventCount - eventCount;
+				
+				for(auto iEvt = eventCount; iEvt < newEventCount; ++iEvt) {
+					auto curEvt = eventBuffer[iEvt];
+					curEvt.setDistance(distance + curEvt.getDistance());
+					curEvt.setStep(step);
+				}
+				
+				eventCount = newEventCount;
+			}
+			
 			// KJ_DBG("Phi cross checks passed");
+			
+			// Sort events
+			{
+				auto events = myData.mutateEvents();
+				
+				// TODO: This is slow as hell
+				for(auto i1 = state.getEventCount(); i1 < eventCount; ++i1) {
+					for(auto i2 = i1 + 1; i2 < eventCount; ++i2) {
+						auto event1 = events[i1];
+						auto event2 = events[i2];
+						
+						if(event1.getDistance() > event2.getDistance())
+							cupnp::swap(event1, event2);
+					}
+				}
+			}
+			
+			// Check if the field line needs to be interrupted in-between events
+			// Currently, this is only the case for mid-flight final collisions.
+			
+			const uint32_t collisionLimit = request.getCollisionLimit();
+			if(collisionLimit != 0 && state.getCollisionCount() + numCollisions >= collisionLimit) {
+				uint32_t collisionCounter = state.getCollisionCount();
+				uint32_t eventOffset = state.getEventCount();
+				
+				auto events = myData.mutateEvents();
+				
+				while(eventOffset < eventCount) {					
+					auto evt = events[eventOffset];
+					
+					// Note: This would be the point to also check for other termination criteria
+					if(evt.isGeometryHit()) {
+						if(++collisionCounter >= collisionLimit) {
+							// We have found our final event
+							// Copy out distance and location and finish
+							
+							auto loc = evt.getLocation();
+							for(int i = 0; i < 3; ++i)
+								x[i] = loc[i];
+							distance = evt.getDistance();
+							
+							break;
+						}
+					}
+					
+					++eventOffset;
+				}
+				
+				eventCount = eventOffset;
+				state.setEventCount(eventCount);
+				state.setCollisionCount(collisionLimit);
+				
+				FSC_FLT_RETURN(COLLISION_LIMIT);
+			}
 			
 			// --- Advance the step after all events are processed ---
 			
 			x = x2;
 			distance += request.getStepSize();
 			++step;
+			
 			state.setEventCount(eventCount);
+			state.setCollisionCount(state.getCollisionCount() + numCollisions);
 		}
 		
 		// !!! The kernel returns by jumping to this label !!!
@@ -254,5 +339,9 @@ REFERENCE_KERNEL(
 	
 	fsc::CuPtr<fsc::cu::FLTKernelData>,
 	Eigen::TensorMap<Eigen::Tensor<double, 4>>,
-	fsc::CuPtr<fsc::cu::FLTKernelRequest>
+	fsc::CuPtr<fsc::cu::FLTKernelRequest>,
+	
+	CuPtr<const fsc::cu::MergedGeometry>,
+	CuPtr<const fsc::cu::IndexedGeometry>,
+	CuPtr<const fsc::cu::IndexedGeometry::IndexData>
 );

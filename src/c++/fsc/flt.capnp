@@ -4,6 +4,7 @@ using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("fsc");
 
 using Magnetics = import "magnetics.capnp";
+using Geometry = import "geometry.capnp";
 using Data = import "data.capnp";
 using Index = import "index.capnp";
 
@@ -14,14 +15,15 @@ struct FLTRequest {
 	# Tensor of shape [3, ...] indicating tracing start points
 	startPoints @0 : Data.Float64Tensor;
 	field @1 : Magnetics.ComputedField;
+	geometry @2 : Geometry.IndexedGeometry;
 	
-	poincarePlanes @2 : List(Float64);
+	poincarePlanes @3 : List(Float64);
 	
-	turnLimit @3 : UInt32;
-	distanceLimit @4 : Float64;
-	stepLimit @5 : UInt32;
+	turnLimit @4 : UInt32;
+	distanceLimit @5 : Float64;
+	stepLimit @6 : UInt32;
 	
-	stepSize @6 : Float64 = 0.001;
+	stepSize @7 : Float64 = 0.001;
 }
 
 struct FieldlineMappingData {
@@ -47,7 +49,10 @@ struct FLTResponse {
 	nTurns @0 : UInt32;
 	
 	# Tensor of shape [3] + startPoints.shape[1:] + [len(poincarePlanes), nTurns]
-	poincareHits @1 : Data.Float32Tensor;
+	poincareHits @1 : Data.Float64Tensor;
+	
+	# Tensor of shape [3] + startPoints.shape[1:]
+	endPoints @2 : Data.Float64Tensor;
 }
 
 interface FLT {
@@ -68,6 +73,7 @@ enum FLTStopReason {
 	eventBufferFull @4;
 	outOfGrid @5;
 	nanEncountered @6;
+	collisionLimit @7;
 }
 
 struct FLTKernelState {
@@ -77,6 +83,7 @@ struct FLTKernelState {
 	turnCount @3 : UInt32;
 	phi0 @4 : Float64;
 	eventCount @5 : UInt32;
+	collisionCount @6 : UInt32;
 }
 
 struct FLTKernelEvent {
@@ -90,6 +97,10 @@ struct FLTKernelEvent {
 			planeNo @4 : UInt32;
 		}
 		newTurn @5 : UInt32;
+		geometryHit : group {
+			meshIndex @6 : UInt64;
+			elementIndex @7 : UInt64;
+		}
 	}
 }
 
@@ -113,4 +124,6 @@ struct FLTKernelRequest {
 	stepSize @4 : Float64;
 	
 	grid @5 : Magnetics.ToroidalGrid;
+	
+	collisionLimit @6 : UInt32;
 }

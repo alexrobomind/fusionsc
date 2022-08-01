@@ -150,10 +150,7 @@ void defGetItemAndLen(py::class_<T>& c) {
 	);
 }
 
-Tuple<size_t, kj::StringPtr> pyFormat(capnp::Type type) {
-	size_t elementSize = 0;
-	kj::StringPtr formatString;
-	
+bool isPointerType(capnp::Type type) {
 	switch(type.which()) {
 		case capnp::schema::Type::VOID:
 		case capnp::schema::Type::BOOL:
@@ -163,7 +160,29 @@ Tuple<size_t, kj::StringPtr> pyFormat(capnp::Type type) {
 		case capnp::schema::Type::STRUCT:
 		case capnp::schema::Type::INTERFACE:
 		case capnp::schema::Type::ANY_POINTER:
-			KJ_FAIL_REQUIRE("Can not format pointer types (text, data, list, struct, capability / interface, anypointer), void and bool.", type.which());
+			return true;
+		
+		default:
+			return false;
+	}
+}
+	
+
+Tuple<size_t, kj::StringPtr> pyFormat(capnp::Type type) {
+	size_t elementSize = 0;
+	kj::StringPtr formatString;
+	
+	switch(type.which()) {
+		case capnp::schema::Type::VOID:
+		case capnp::schema::Type::TEXT:
+		case capnp::schema::Type::DATA:
+		case capnp::schema::Type::LIST:
+		case capnp::schema::Type::STRUCT:
+		case capnp::schema::Type::INTERFACE:
+		case capnp::schema::Type::ANY_POINTER:
+			formatString = "O";
+			elementSize = sizeof(PyObject*);
+			break;
 		
 		case capnp::schema::Type::INT8:
 			formatString="<b";
@@ -209,6 +228,11 @@ Tuple<size_t, kj::StringPtr> pyFormat(capnp::Type type) {
 			formatString="<d";
 			elementSize = 8;
 			break;
+			
+		case capnp::schema::Type::BOOL:
+			formatString="?";
+			elementSize = 1;
+			break;
 	}
 	
 	return tuple(elementSize, formatString);
@@ -223,21 +247,12 @@ PyArray_Descr* numpyWireType(capnp::Type type) {
 			return littleEndianType; \
 		}
 	
-	switch(type.which()) {
-		case capnp::schema::Type::VOID:
-		case capnp::schema::Type::TEXT:
-		case capnp::schema::Type::DATA:
-		case capnp::schema::Type::LIST:
-		case capnp::schema::Type::STRUCT:
-		case capnp::schema::Type::INTERFACE:
-		case capnp::schema::Type::ANY_POINTER:
-			return nullptr;
-		
-		// Bools are packed in Capnproto, which
-		// makes them incompatible with numpy
-		case capnp::schema::Type::BOOL:
-			return nullptr;
-		
+	#define HANDLE_OBJECT(cap_name) \
+		case capnp::schema::Type::cap_name: { \
+			return PyArray_DescrFromType(NPY_OBJECT); \
+		}
+	
+	switch(type.which()) {				
 		HANDLE_TYPE(INT8,  NPY_INT8);
 		HANDLE_TYPE(INT16, NPY_INT16);
 		HANDLE_TYPE(INT32, NPY_INT32);
@@ -252,6 +267,16 @@ PyArray_Descr* numpyWireType(capnp::Type type) {
 		HANDLE_TYPE(FLOAT64, NPY_FLOAT64);
 		
 		HANDLE_TYPE(ENUM, NPY_UINT16);
+		
+		HANDLE_TYPE(BOOL, NPY_BOOL);
+		
+		HANDLE_OBJECT(VOID);
+		HANDLE_OBJECT(TEXT);
+		HANDLE_OBJECT(DATA);
+		HANDLE_OBJECT(LIST);
+		HANDLE_OBJECT(STRUCT);
+		HANDLE_OBJECT(INTERFACE);
+		HANDLE_OBJECT(ANY_POINTER);
 	}
 	
 	#undef HANDLE_TYPE
@@ -303,6 +328,8 @@ struct ListItemSlot : public BuilderSlot {
 	
 };
 
+void assign(const BuilderSlot& dst, py::object object);
+
 bool isTensor(capnp::Type type) {
 	if(!type.isStruct())
 		return false;
@@ -340,12 +367,65 @@ py::buffer getAsBufferViaNumpy(py::object input, capnp::Type type, int minDims, 
 	return py::reinterpret_steal<py::buffer>(arrayObject);
 }
 
-//! Allows assigning tensor types from a buffer
-void setTensor(DynamicStruct::Builder dsb, py::buffer buffer) {	
-	py::buffer_info bufinfo = buffer.request();
+void setPtrTensor(DynamicStruct::Builder dsb, py::buffer_info& bufinfo) {
+	// Check whether array is contiguous
+	size_t expectedStride = sizeof(PyObject*);
+	for(int dimension = bufinfo.shape.size() - 1; dimension >= 0; --dimension) {
+		KJ_REQUIRE(expectedStride == bufinfo.strides[dimension], "Array is not contiguous C-order", dimension);
+		expectedStride *= bufinfo.shape[dimension];
+	}
 	
+	// Check whether size matches expectation
+	{
+		size_t shapeProd = 1;
+		for(uint64_t e : bufinfo.shape) shapeProd *= e;
+		KJ_REQUIRE(shapeProd == bufinfo.size, "prod(shape) must equal data.size()");
+	}
+	
+	capnp::DynamicList::Builder shape = dsb.init("shape", bufinfo.shape.size()).as<DynamicList>();
+	for(size_t i = 0; i < bufinfo.shape.size(); ++i)
+		shape.set(i, bufinfo.shape[i]);
+	
+	PyObject** bufData = reinterpret_cast<PyObject**>(bufinfo.ptr);
+	capnp::DynamicList::Builder data = dsb.init("data", bufinfo.size).as<DynamicList>();
+	for(size_t i = 0; i < bufinfo.size; ++i) {
+		assign(ListItemSlot(data, i), py::reinterpret_borrow<py::object>(bufData[i]));
+	}
+}
+
+void setBoolTensor(DynamicStruct::Builder dsb, py::buffer_info& bufinfo) {
 	// Check format
 	capnp::ListSchema schema = dsb.getSchema().getFieldByName("data").getType().asList();
+	KJ_REQUIRE(schema.getElementType().isBool());
+	
+	// Check whether array is contiguous
+	size_t expectedStride = 1;
+	for(int dimension = bufinfo.shape.size() - 1; dimension >= 0; --dimension) {
+		KJ_REQUIRE(expectedStride == bufinfo.strides[dimension], "Array is not contiguous C-order", dimension);
+		expectedStride *= bufinfo.shape[dimension];
+	}
+	
+	// Check whether size matches expectation
+	{
+		size_t shapeProd = 1;
+		for(uint64_t e : bufinfo.shape) shapeProd *= e;
+		KJ_REQUIRE(shapeProd == bufinfo.size, "prod(shape) must equal data.size()");
+	}
+	
+	capnp::DynamicList::Builder shape = dsb.init("shape", bufinfo.shape.size()).as<DynamicList>();
+	for(size_t i = 0; i < bufinfo.shape.size(); ++i)
+		shape.set(i, bufinfo.shape[i]);
+	
+	unsigned char* bufData = reinterpret_cast<unsigned char*>(bufinfo.ptr);
+	capnp::DynamicList::Builder data = dsb.init("data", bufinfo.size).as<DynamicList>();
+	for(size_t i = 0; i < bufinfo.size; ++i)
+		data.set(i, bufData[i] != 0);
+}
+
+void setDataTensor(DynamicStruct::Builder dsb, py::buffer_info& bufinfo) {
+	// Check format
+	capnp::ListSchema schema = dsb.getSchema().getFieldByName("data").getType().asList();
+	
 	auto format = pyFormat(schema.getElementType());
 	size_t elementSize = kj::get<0>(format);
 	kj::StringPtr expectedFormat = kj::get<1>(format);
@@ -388,6 +468,26 @@ void setTensor(DynamicStruct::Builder dsb, py::buffer buffer) {
 	capnp::DynamicList::Builder data = dsb.init("data", bufinfo.size).as<DynamicList>();
 	byte* dataPtr = const_cast<byte*>(((capnp::AnyList::Builder) data).asReader().getRawBytes().begin());
 	memcpy(dataPtr, bufinfo.ptr, elementSize * bufinfo.size);
+}
+
+//! Allows assigning tensor types from a buffer
+void setTensor(DynamicStruct::Builder dsb, py::buffer buffer) {	
+	py::buffer_info bufinfo = buffer.request();
+	
+	// Check format
+	capnp::ListSchema schema = dsb.getSchema().getFieldByName("data").getType().asList();
+	
+	if(isPointerType(schema.getElementType())) {
+		setPtrTensor(dsb, bufinfo);
+		return;
+	}
+	
+	if(schema.getElementType().isBool()) {
+		setBoolTensor(dsb, bufinfo);
+		return;
+	}
+	
+	setDataTensor(dsb, bufinfo);
 }
 
 void setTensor(DynamicValue::Builder dvb, py::buffer buffer) {
@@ -475,6 +575,68 @@ capnp::AnyList::Reader asAnyListReader(capnp::DynamicList::Builder builder) {
 	return asAnyListReader(builder.asReader());
 }
 
+template<typename T>
+py::buffer_info getDataTensor(T& tensor, bool readOnly) {
+	try {
+		// Extract shape and dat
+		auto shape = tensor.get("shape").template as<capnp::List<uint64_t>>();
+		auto data  = tensor.get("data").template as<capnp::DynamicList>();
+				
+		// Extract raw data
+		kj::ArrayPtr<const byte> rawBytes = asAnyListReader(data).getRawBytes();
+		byte* bytesPtr = const_cast<byte*>(rawBytes.begin());
+				
+		// Extract format
+		capnp::ListSchema schema = data.getSchema();
+		auto format = pyFormat(schema.getElementType());
+		size_t elementSize = kj::get<0>(format);
+		kj::StringPtr formatString = kj::get<1>(format);
+		
+		// Sanity checks
+		KJ_REQUIRE(elementSize * data.size() == rawBytes.size());
+		
+		{
+			size_t shapeProd = 1;
+			for(uint64_t e : shape) shapeProd *= e;
+			KJ_REQUIRE(shapeProd == data.size(), "prod(shape) must equal data.size()");
+		}
+		
+		std::vector<size_t> outShape(shape.size());
+		std::vector<size_t> strides(shape.size());
+		
+		size_t stride = elementSize;
+		for(int i = shape.size() - 1; i >= 0; --i) {
+			outShape[i] = shape[i];
+			strides[i] = stride;
+			stride *= shape[i];
+		}
+		
+		return py::buffer_info(
+			(void*) bytesPtr, elementSize, std::string(formatString.cStr()), shape.size(), outShape, strides, readOnly
+		);
+	} catch(kj::Exception& error) {
+		KJ_LOG(ERROR, "Failed to create python buffer. See below error\n", error);
+	} 
+	
+	return py::buffer_info((byte*) nullptr, 0);
+}
+
+template<typename T>
+py::buffer_info getTensor(T& tensor, bool readOnly) {
+	auto schema = tensor.getSchema();
+	auto scalarType = schema.getFieldByName("data").getType().asList().getElementType();
+	
+	if(isPointerType(scalarType)) {
+		KJ_UNIMPLEMENTED("Pointer types not yet supported");
+	}
+	
+	if(scalarType.isBool()) {
+		KJ_UNIMPLEMENTED("Bool type not yet supported");
+	}
+	
+	return getDataTensor(tensor, readOnly);
+}
+
 //! Defines the buffer protocol for a type T which must be a capnp::List<...>::{Builder, Reader}
 template<typename T>
 void defListBuffer(py::class_<T>& c, bool readOnly) {
@@ -508,48 +670,7 @@ void defListBuffer(py::class_<T>& c, bool readOnly) {
 template<typename T>
 void defTensorBuffer(py::class_<T>& c, bool readOnly) {
 	c.def_buffer([readOnly](T& tensor) {
-		try {
-			// Extract shape and dat
-			auto shape = tensor.get("shape").template as<capnp::List<uint64_t>>();
-			auto data  = tensor.get("data").template as<capnp::DynamicList>();
-					
-			// Extract raw data
-			kj::ArrayPtr<const byte> rawBytes = asAnyListReader(data).getRawBytes();
-			byte* bytesPtr = const_cast<byte*>(rawBytes.begin());
-					
-			// Extract format
-			capnp::ListSchema schema = data.getSchema();
-			auto format = pyFormat(schema.getElementType());
-			size_t elementSize = kj::get<0>(format);
-			kj::StringPtr formatString = kj::get<1>(format);
-			
-			// Sanity checks
-			KJ_REQUIRE(elementSize * data.size() == rawBytes.size());
-			
-			{
-				size_t shapeProd = 1;
-				for(uint64_t e : shape) shapeProd *= e;
-				KJ_REQUIRE(shapeProd == data.size(), "prod(shape) must equal data.size()");
-			}
-			
-			std::vector<size_t> outShape(shape.size());
-			std::vector<size_t> strides(shape.size());
-			
-			size_t stride = elementSize;
-			for(int i = shape.size() - 1; i >= 0; --i) {
-				outShape[i] = shape[i];
-				strides[i] = stride;
-				stride *= shape[i];
-			}
-			
-			return py::buffer_info(
-				(void*) bytesPtr, elementSize, std::string(formatString.cStr()), shape.size(), outShape, strides, readOnly
-			);
-		} catch(kj::Exception& error) {
-			KJ_LOG(ERROR, "Failed to create python buffer. See below error\n", error);
-		} 
-		
-		return py::buffer_info((byte*) nullptr, 0);
+		return getTensor(tensor, readOnly);
 	});
 }
 

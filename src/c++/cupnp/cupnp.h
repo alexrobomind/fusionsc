@@ -4,6 +4,8 @@
 
 #include <kj/common.h>
 
+#include <algorithm>
+
 #include "gpu_defs.h"
 
 #pragma once
@@ -591,8 +593,20 @@ namespace cupnp {
 	}
 	
 	//! Computes the size of a struct's data section
+	CUPNP_FUNCTION inline uint16_t getDataSectionSizeInWords(uint64_t structureWord) {
+		uint16_t dataSectionSizeInWords = structureWord >> 32;
+		return dataSectionSizeInWords;
+	}
+	
+	//! Computes the size of a struct's data section
+	CUPNP_FUNCTION inline uint16_t getPointerSectionSize(uint64_t structureWord) {
+		uint16_t pointerSectionSize = structureWord >> 48;
+		return pointerSectionSize;
+	}
+	
+	//! Computes the size of a struct's data section
 	CUPNP_FUNCTION inline uint32_t getDataSectionSizeInBytes(uint64_t structureWord) {
-		uint16_t dataSectionSizeInWords = structure >> 32;
+		uint16_t dataSectionSizeInWords = structureWord >> 32;
 		return dataSectionSizeInWords * ((uint32_t) 8);
 	}
 	
@@ -611,6 +625,31 @@ namespace cupnp {
 			memset(dst.data.ptr, 0, dsSize1);
 		
 		memcpy(dst.data.ptr, src.data.ptr, dsSize2);
+	}
+
+	template<typename T>
+	void swap(T& t1, T& t2) {
+		uint16_t dsWords1 = getDataSectionSizeInWords(t1.structure);
+		uint16_t dsWords2 = getDataSectionSizeInWords(t2.structure);
+		
+		CUPNP_REQUIRE(dsWords1 == dsWords2);
+		
+		uint16_t nPtr1 = getPointerSectionSize(t1.structure);
+		uint16_t nPtr2 = getPointerSectionSize(t2.structure);
+		
+		CUPNP_REQUIRE(dsWords1 == dsWords2);
+		
+		uint16_t nWords = std::min(dsWords1, dsWords2);
+		uint16_t nPtrs  = std::min(nPtr1, nPtr2);
+		
+		uint64_t* data1 = (uint64_t*) t1.data.ptr;
+		uint64_t* data2 = (uint64_t*) t2.data.ptr;
+		
+		for(uint16_t i = 0; i < nWords; ++i)
+			std::swap(*(data1 + i), *(data2 + i));
+		
+		for(uint16_t i = 0; i < nPtrs; ++i)
+			std::swap(*(data1 + dsWords1 + i), *(data2 + dsWords2 + i));
 	}
 
 	/**
@@ -765,12 +804,12 @@ namespace cupnp {
 			return ((uint64_t) getElementSize(listEnum)) >> 32;
 		}
 		
-		CUPNP_FUNCTION auto operator[] (unsigned int i) {
+		CUPNP_FUNCTION T operator[] (unsigned int i) {
 			CUPNP_REQUIRE(i < size());
 			return cupnp::ListHelper<T, CPKind>::get(this, i);
 		}
 		
-		CUPNP_FUNCTION const auto operator[] (unsigned int i) const {
+		CUPNP_FUNCTION const T operator[] (unsigned int i) const {
 			CUPNP_REQUIRE(i < size());
 			return cupnp::ListHelper<T, CPKind>::get(this, i);
 		}
@@ -791,6 +830,72 @@ namespace cupnp {
 		CUPNP_FUNCTION const unsigned char* data() const {
 			return listStart.ptr;
 		}
+		
+		struct Iterator {
+			using difference_type = unsigned int;
+			using value_type      = T;
+			using reference       = T;
+			using pointer         = T*;
+			using iterator_category = std::random_access_iterator_tag;
+			
+			List<T>& list;
+			unsigned int i;
+			
+			Iterator(List<T>& list, unsigned int i) : list(list), i(i) {}
+			
+			Iterator& operator++() { ++i; return *this; }
+			Iterator operator++(int) { auto other = *this; ++this; return other; }
+			Iterator& operator--() { --i; return *this; }
+			Iterator operator--(int) { auto other = *this; --this; return other; }
+			
+			Iterator& operator+=(unsigned int i2) { i += i2; return *this; }
+			Iterator& operator-=(unsigned int i2) { i -= i2; return *this; }
+			Iterator operator+(unsigned int i2) { return Iterator(list, i + i2); }
+			Iterator operator-(unsigned int i2) { return Iterator(list, i - i2); }
+			
+			unsigned int operator-(const Iterator& other) { return i - other.i; }
+			
+			bool operator==(const Iterator& other) { return i == other.i; }
+			bool operator!=(const Iterator& other) { return i != other.i; }
+			
+			T operator*() { return list[i]; }
+		};
+		
+		struct ConstIterator {
+			using difference_type = unsigned int;
+			using value_type      = const T;
+			using reference       = const T;
+			using pointer         = T*;
+			using iterator_category = std::random_access_iterator_tag;
+			
+			const List<T>& list;
+			unsigned int i;
+			
+			ConstIterator(const List<T>& list, unsigned int i) : list(list), i(i) {}
+			
+			ConstIterator& operator++() { ++i; return *this; }
+			ConstIterator operator++(int) { auto other = *this; ++this; return other; }
+			ConstIterator& operator--() { --i; return *this; }
+			ConstIterator operator--(int) { auto other = *this; --this; return other; }
+			
+			ConstIterator& operator+=(unsigned int i2) { i += i2; return *this; }
+			ConstIterator& operator-=(unsigned int i2) { i -= i2; return *this; }
+			ConstIterator operator+(unsigned int i2) { return ConstIterator(list, i + i2); }
+			ConstIterator operator-(unsigned int i2) { return ConstIterator(list, i - i2); }
+			
+			unsigned int operator-(const ConstIterator& other) { return i - other.i; }
+			
+			bool operator==(const ConstIterator& other) { return i == other.i; }
+			bool operator!=(const ConstIterator& other) { return i != other.i; }
+			
+			const T operator*() { return list[i]; }
+		};
+		
+		Iterator begin() { return Iterator(*this, 0); }
+		Iterator end() { return iterator(*this, size()); }
+		
+		ConstIterator begin() const { return ConstIterator(*this, 0); }
+		ConstIterator end() const { return ConstIterator(*this, size()); }
 	}; 
 	
 	// Structs are stored in-line in the list, and use a structure tag placed
@@ -959,4 +1064,3 @@ namespace cupnp {
 		CUPNP_FUNCTION uint32_t size() { return backend.size(); }
 	};
 }
-
