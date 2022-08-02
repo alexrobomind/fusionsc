@@ -86,7 +86,7 @@ namespace fsc {
 		auto indexData = *pGeometryIndexData;
 		
 		// printf("Hello there\n");
-		// KJ_DBG("FLT kernel started");
+		KJ_DBG("FLT kernel started", idx);
 		
 		// Extract local scratch space
 		fsc::cu::FLTKernelData::Entry myData = kernelData.mutateData()[idx];
