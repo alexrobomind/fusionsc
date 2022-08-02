@@ -25,6 +25,19 @@ const defaultGrid : Magnetics.ToroidalGrid = (
 	nSym = 5
 );
 
+const defaultGeoGrid : Geometry.CartesianGrid = (
+	xMin = -7,
+	xMax = 7,
+	yMin = -7,
+	yMax = 7,
+	zMin = -1.5,
+	zMax = 1.5,
+	
+	nX = 200,
+	nY = 200,
+	nZ = 60
+);
+
 interface CoilsDB {
 	getCoil @0 (id : UInt64) -> Filament;
 	getConfig @1 (id : UInt64) -> CoilsDBConfig;

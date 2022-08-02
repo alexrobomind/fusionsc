@@ -47,6 +47,14 @@ Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geom
 			output.setMesh(input.getMesh());
 			return READY_NOW;
 		}
+		case Geometry::MERGED: {
+			output.setMerged(input.getMerged());
+			return READY_NOW;
+		}
+		case Geometry::INDEXED: {
+			output.setIndexed(input.getIndexed());
+			return READY_NOW;
+		}
 		default: {
 			output.setNested(input);
 			return READY_NOW;
@@ -92,6 +100,7 @@ Promise<void> GeometryResolverBase::resolveGeometry(ResolveGeometryContext conte
 struct GeometryLibImpl : public GeometryLib::Server {	
 	Promise<void> merge(MergeContext context) override;
 	Promise<void> index(IndexContext context) override;
+	Promise<void> planarCut(PlanarCutContext context) override;
 	
 private:
 	struct GeometryAccumulator {
@@ -202,6 +211,8 @@ Promise<void> GeometryLibImpl::collectTagNames(Transformed<Geometry>::Reader inp
 using Mat4d = Eigen::Matrix<double, 4, 4>;
 
 Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, GeometryAccumulator& output) {
+	// KJ_CONTEXT("Merge Operation", input);
+	
 	Temporary<capnp::List<TagValue>> tagValues(tagScope);
 	
 	for(auto tag : input.getTags()) {
@@ -220,7 +231,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 			auto promises = kj::heapArrayBuilder<Promise<void>>(input.getCombined().size());
 			
 			for(auto child : input.getCombined()) {
-				promises.add(mergeGeometries(input, tagTable, tagValues, transform, output));
+				promises.add(mergeGeometries(child, tagTable, tagValues, transform, output));
 			}
 				
 			return joinPromises(promises.finish());
@@ -341,15 +352,12 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 		// Create output temporary and read information about input
 		auto output = context.getResults().initIndexed();
 		MergedGeometry::Reader input = inputRef.get();
-		
-		KJ_DBG("Beginning work on merged geometry");
 			
 		auto grid = context.getParams().getGrid();
 		// auto gridSize = grid.getSize();
 		Vec3u gridSize { grid.getNX(), grid.getNY(), grid.getNZ() };
 		
 		size_t totalSize = gridSize[0] * gridSize[1] * gridSize[2];
-		KJ_DBG(input, grid, totalSize);
 		
 		// Allocate temporary un-aligned storage for grid refs
 		kj::Vector<kj::Vector<Temporary<IndexedGeometry::ElementRef>>> tmpRefs(totalSize);
@@ -362,8 +370,6 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 			auto mesh = entry.getMesh();
 			auto pointData = mesh.getVertices().getData();
 			auto indices = mesh.getIndices();
-			
-			KJ_DBG("Processing entry", iEntry, mesh);
 			
 			// Iterate over all polygons in mesh to assign them to grid boxes
 			// ... Step 1: Count
@@ -378,8 +384,6 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 				default:
 					KJ_FAIL_REQUIRE("Unknown mesh type", mesh.which());
 			}
-			
-			KJ_DBG(nPolygons);
 			
 			// ... Step 2: Iterate
 			for(size_t iPoly = 0; iPoly < nPolygons; ++iPoly) {
@@ -400,8 +404,6 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 					default:
 						KJ_FAIL_REQUIRE("Unknown mesh type", mesh.which());
 				}
-				
-				KJ_DBG(iPoly, iStart, iEnd);
 			
 				// Find bounding box for polygon
 				double inf = std::numeric_limits<double>::infinity();
@@ -429,7 +431,6 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 				for(size_t iZ = minCell[2]; iZ <= maxCell[2]; ++iZ) {
 					// ... add a new ref in the corresponding cell
 					size_t globalIdx = (iX * gridSize[1] + iY) * gridSize[2] + iZ;
-					KJ_DBG(iX, iY, iZ, globalIdx);
 					
 					Temporary<IndexedGeometry::ElementRef>& newRef = tmpRefs[globalIdx].add();
 					newRef.setMeshIndex(iEntry);
@@ -437,8 +438,6 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 				}}}
 			}
 		}
-		
-		KJ_DBG("Collected all refs, setting");
 		
 		// Set up output data. This creates a packed representation of the index
 		
@@ -470,31 +469,32 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 
 Promise<void> GeometryLibImpl::merge(MergeContext context) {
 	// Prepare scratch pad structures that will hold intermediate data
-	auto tagNameTable = kj::heap<kj::HashSet<kj::String>>();
-	auto geomAccum = kj::heap<GeometryAccumulator>();
+	auto tagNameTable = heapHeld<kj::HashSet<kj::String>>();
+	auto geomAccum = heapHeld<GeometryAccumulator>();
 	
 	// First collect all possible tag names into a table
 	auto promise = collectTagNames(context.getParams(), *tagNameTable)
 	
 	// Then call "mergeGeometries" on the root node with an identity transform and empty tag scope
 	//   This will collect temporary built meshes in geomAccum
-	.then([context, &geomAccum = *geomAccum, &tagNameTable = *tagNameTable, this]() mutable {
-		Temporary<capnp::List<TagValue>> tagScope(tagNameTable.size());
+	.then([context, geomAccum, tagNameTable, this]() mutable {
+		Temporary<capnp::List<TagValue>> tagScope(tagNameTable->size());
 		
 		KJ_LOG(WARNING, "Beginning merge operation");
-		return mergeGeometries(context.getParams(), tagNameTable, tagScope, nullptr, geomAccum);
+		return mergeGeometries(context.getParams(), *tagNameTable, tagScope, nullptr, *geomAccum);
 	})
 	
 	// Finally, copy the data from the accumulator into the output
-	.then([context, &geomAccum = *geomAccum, &tagNameTable = *tagNameTable, this]() mutable {
+	.then([context, geomAccum, tagNameTable, this]() mutable {
+		KJ_LOG(WARNING, "Merge complete");
 		// Copy data over
 		Temporary<MergedGeometry> output;
-		geomAccum.finish(output);
+		geomAccum->finish(output);
 		
 		// Copy tag names from the tag table
-		auto outTagNames = output.initTagNames(tagNameTable.size());
-		for(size_t i = 0; i < tagNameTable.size(); ++i)
-			outTagNames.set(i, *(tagNameTable.begin() + i));
+		auto outTagNames = output.initTagNames(tagNameTable->size());
+		for(size_t i = 0; i < tagNameTable->size(); ++i)
+			outTagNames.set(i, *(tagNameTable->begin() + i));
 		
 		// Publish the merged geometry into the data store
 		// Derive the ID from parameters (is OK as cap table is empty)
@@ -503,10 +503,164 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 		);
 	});
 	
-	return promise.attach(mv(tagNameTable), mv(geomAccum));
+	return promise.attach(tagNameTable.x(), geomAccum.x());
 }
 
-GeometryLib::Client createGeometryLib() {
+Promise<void> GeometryLibImpl::planarCut(PlanarCutContext context) {
+	auto geoRef = context.getParams().getGeoRef();
+	return getActiveThread().dataService().download(geoRef)
+	.then([context](LocalDataRef<MergedGeometry> geoRef) mutable {		
+		auto geo = geoRef.get();
+		auto plane = context.getParams().getPlane();
+		auto orientation = plane.getOrientation();
+		
+		// Build plane equation
+		Vec3d normal;
+		
+		switch(orientation.which()) {
+			case Plane::Orientation::PHI: {
+				double phi = orientation.getPhi();
+				normal[0] = -std::sin(phi);
+				normal[1] = std::cos(phi);
+				normal[2] = 0;
+				break;
+			}
+			
+			case Plane::Orientation::NORMAL: {
+				auto inNormal = orientation.getNormal();
+				KJ_REQUIRE(inNormal.size() == 3, "Can only process 3D planes");
+				
+				for(int i = 0; i < 3; ++i)
+					normal[i] = inNormal[i];
+				
+				break;
+			}
+			
+			default:
+				KJ_FAIL_REQUIRE("Unknown plane orientation type", orientation.which());
+		}
+		
+		Vec3d center(0, 0, 0);
+		if(plane.hasCenter()) {
+			auto inCenter = plane.getCenter();
+			KJ_REQUIRE(inCenter.size() == 3, "Can only process 3D planes");
+			
+			for(int i = 0; i < 3; ++i)
+				center[i] = inCenter[i];
+		}
+		
+		double d = -center.dot(normal);
+		
+		kj::Vector<kj::Tuple<Vec3d, Vec3d>> lines;
+		
+		for(auto entry : geo.getEntries()) {			
+			auto mesh = entry.getMesh();
+			auto indices = mesh.getIndices();
+			auto vertexData = mesh.getVertices().getData();
+			
+			auto meshPoint = [&](uint32_t idx) {
+				idx = indices[idx];
+				Vec3d result;
+				for(int i = 0; i < 3; ++i) {
+					result[i] = vertexData[3 * idx + i];
+				}
+				
+				return result;
+			};
+			
+			auto processLine = [&](Vec3d p1, Vec3d p2) -> Maybe<Vec3d> {
+				double d1 = normal.dot(p1) + d;
+				double d2 = normal.dot(p2) + d;
+				
+				if(d1 * d2 > 0)
+					return nullptr; // No intersection
+				
+				if(d1 == d2) {
+					lines.add(tuple(p1, p2)); // Line intersects coplanar with plane
+					return nullptr;
+				}
+				
+				double l = (0 - d1) / (d2 - d1);
+				Vec3d result = l * p2 + (1 - l) * p1;
+				return result;
+			};
+				
+			auto processTriangle = [&](uint32_t i1, uint32_t i2, uint32_t i3) {
+				auto p1 = meshPoint(i1);
+				auto p2 = meshPoint(i2);
+				auto p3 = meshPoint(i3);
+				
+				Maybe<Vec3d> linePlaneHits[3];
+				linePlaneHits[0] = processLine(p1, p2);
+				linePlaneHits[1] = processLine(p2, p3);
+				linePlaneHits[2] = processLine(p3, p1);
+				
+				uint8_t nHit = 0;
+				Vec3d pair[2];
+				
+				for(int i = 0; i < 3; ++i) {
+					KJ_IF_MAYBE(pHit, linePlaneHits[i]) {
+						KJ_REQUIRE(nHit <= 1, "3 mid-point hits should not be possible");
+						pair[nHit++] = *pHit;
+					}
+				}
+				
+				KJ_REQUIRE(nHit == 0 || nHit == 2, "Invalid mid-point count (should be 0 or 2)", nHit);
+				
+				if(nHit == 2)
+					lines.add(tuple(pair[0], pair[1]));
+			};
+			
+			switch(mesh.which()) {
+				case Mesh::TRI_MESH:
+					for(auto iTri : kj::zeroTo(indices.size() / 3)) {
+						processTriangle(3 * iTri + 0, 3 * iTri + 1, 3 * iTri + 2);
+					}
+					break;
+				
+				case Mesh::POLY_MESH: {
+					auto polys = mesh.getPolyMesh();
+					if(polys.size() < 2)
+						continue;
+					
+					uint32_t nPolys = polys.size() - 1;
+					for(auto iPoly : kj::zeroTo(nPolys)) {
+						auto start = polys[iPoly];
+						auto end = polys[iPoly + 1];
+						
+						for(auto i2 : kj::range(start + 1, end - 1)) {
+							processTriangle(start, i2, i2 + 1);
+						}
+					}
+					break;
+				}
+				
+				default:
+					KJ_FAIL_REQUIRE("Unknown mesh type", mesh.which());
+			};
+		}
+		
+		auto outEdges = context.initResults().initEdges();
+		{
+			auto shape = outEdges.initShape(3);
+			shape.set(0, lines.size());
+			shape.set(1, 2);
+			shape.set(2, 3);
+		
+			auto data = outEdges.initData(2 * 3 * lines.size());
+			for(auto iPair : kj::indices(lines)) {
+				auto& pair = lines[iPair];
+				
+				for(auto iDim : kj::zeroTo(3)) {
+					data.set(6 * iPair + iDim + 0, kj::get<0>(pair)[iDim]);
+					data.set(6 * iPair + iDim + 3, kj::get<1>(pair)[iDim]);
+				}
+			}
+		}
+	});
+}
+
+GeometryLib::Client newGeometryLib() {
 	return GeometryLib::Client(kj::heap<GeometryLibImpl>());
 };
 

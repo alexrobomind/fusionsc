@@ -16,6 +16,7 @@ interface GeometryResolver {
 interface GeometryLib {
 	merge @0 Geometry -> (ref : DataRef(MergedGeometry));
 	index @1 (geoRef : DataRef(MergedGeometry), grid : CartesianGrid) -> (indexed : IndexedGeometry);
+	planarCut @2 (geoRef : DataRef(MergedGeometry), plane : Plane) -> (edges : Float64Tensor); # edges has shape [3, :, 2]
 }
 
 struct TagValue {
@@ -78,6 +79,15 @@ struct Mesh {
 	}
 }
 
+struct Plane {
+	orientation : union {
+		phi @0 : Float64;
+		normal @1 : List(Float64);
+	}
+	
+	center @2 : List(Float64);
+}
+
 struct Geometry {
 	tags @0 : List(Tag);
 	
@@ -92,13 +102,14 @@ struct Geometry {
 		
 		mesh @5 : DataRef(Mesh);
 		
-		indexed @6 : IndexedGeometry;
+		merged @6 : DataRef(MergedGeometry);
+		indexed @7 : IndexedGeometry;
 		
 		# ====== Device-specific ======
 		# ----------- W7-X ------------
 		
-		componentsDBMeshes     @7 : List(UInt64);
-		componentsDBAssemblies @8 : List(UInt64);
+		componentsDBMeshes     @8 : List(UInt64);
+		componentsDBAssemblies @9 : List(UInt64);
 	}
 }
 

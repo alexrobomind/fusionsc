@@ -79,7 +79,8 @@ namespace fscpy {
 			capnp::schema::Node,
 			RootService,
 			OfflineData,
-			ResolverChain
+			ResolverChain,
+			MergedGeometry
 		>();
 		
 		// Schema submodule
@@ -94,7 +95,7 @@ namespace fscpy {
 		
 		// Root module
 		{		
-			auto schemas = getBuiltinSchemas<FieldResolver, GeometryResolver, RootService, OfflineData, ResolverChain>();
+			auto schemas = getBuiltinSchemas<FieldResolver, GeometryResolver, RootService, OfflineData, ResolverChain, MergedGeometry>();
 				
 			for(auto node : schemas) {
 				defaultLoader.importNodeIfRoot(node.getId(), m);

@@ -31,7 +31,7 @@ TEST_CASE("transform-cube") {
 	
 	turned.initNode().initLeaf().setMesh(cube);
 	
-	GeometryLib::Client geoLib = createGeometryLib();
+	GeometryLib::Client geoLib = newGeometryLib();
 	
 	KJ_LOG(WARNING, "Preparing merge request");
 	auto mergeRequest = geoLib.mergeRequest();
@@ -54,7 +54,7 @@ TEST_CASE("index-cube") {
 	auto l  = newLibrary();
 	auto lt = l -> newThread();
 	auto& ws = lt -> waitScope();
-	GeometryLib::Client geoLib = createGeometryLib();
+	GeometryLib::Client geoLib = newGeometryLib();
 	
 	Mesh::Reader geo = TEST_CUBE.get();
 	

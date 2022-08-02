@@ -9,6 +9,10 @@ fsc::ToroidalGrid::Reader w7xDefaultGrid() {
 	return fsc::devices::w7x::DEFAULT_GRID;
 }
 
+fsc::CartesianGrid::Reader w7xDefaultGeometryGrid() {
+	return fsc::devices::w7x::DEFAULT_GEO_GRID;
+}
+
 }
 
 namespace fscpy {
@@ -17,6 +21,7 @@ namespace fscpy {
 		py::module_ w7x = devices.def_submodule("w7x");
 		
 		w7x.def("defaultGrid", &w7xDefaultGrid);
+		w7x.def("defaultGeometryGrid", &w7xDefaultGeometryGrid);
 		w7x.def("offlineComponentsDB", &fsc::devices::w7x::newComponentsDBFromOfflineData);
 		w7x.def("offlineCoilsDB", &fsc::devices::w7x::newCoilsDBFromOfflineData);
 		

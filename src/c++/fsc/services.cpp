@@ -1,6 +1,7 @@
 #include "services.h"
 #include "magnetics.h"
 #include "kernels.h"
+#include "geometry.h"
 #include "flt.h"
 
 #include <kj/list.h>
@@ -30,7 +31,7 @@ auto selectDevice(T t, WorkerType preferredType) {
 struct RootServer : public RootService::Server {
 	RootServer(RootConfig::Reader config) {}
 	
-	Promise<void> newFieldCalculator(NewFieldCalculatorContext context) {
+	Promise<void> newFieldCalculator(NewFieldCalculatorContext context) override {
 		auto factory = [this, context](auto device) mutable {
 			return ::fsc::newFieldCalculator(/*context.getParams().getGrid(), */mv(device));
 		};
@@ -44,8 +45,13 @@ struct RootServer : public RootService::Server {
 		return READY_NOW;
 	}
 	
-	Promise<void> newTracer(NewTracerContext context) {
+	Promise<void> newTracer(NewTracerContext context) override {
 		context.initResults().setService(newFLT(newThreadPoolDevice()));
+		return READY_NOW;
+	}
+	
+	Promise<void> newGeometryLib(NewGeometryLibContext context) override {
+		context.initResults().setService(fsc::newGeometryLib());
 		return READY_NOW;
 	}
 };

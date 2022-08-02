@@ -6,6 +6,8 @@ from .resolve import resolveField
 import numpy as np
 import functools
 
+from types import SimpleNamespace
+
 from typing import Optional, List
 
 class FLT:
@@ -32,13 +34,35 @@ class FLT:
 		"""return self.poincareInPhiPlanesAsync(*args, **kwargs).wait()"""
 		return self.poincareInPhiPlanesAsync(*args, **kwargs).wait()
 	
+	def trace(self, *args, **kwargs):
+		return traceAsync(*arg, **kwargs).wait()
+	
+	def mergeGeometry(self, *args, **kwargs):
+		return self.mergeGeometryAsync(*args, **kwargs).wait()
+	
+	def indexGeometry(self, *args, **kwargs):
+		return self.indexGeometryAsync(*args, **kwargs).wait()
+	
+	def trace(self, *args, **kwargs):
+		return self.traceAsync(*args, **kwargs).wait()
+	
+	@asyncFunction
+	async def mergeGeometryAsync(self, geometry):
+		resolved  = await geometry.resolve()
+		mergedRef = self.geometryLib.merge(resolved.geometry).ref
+		
+		return mergedRef
+	
 	@asyncFunction
 	async def indexGeometryAsync(self, geometry, grid):
-		resolved  = await geometry.resolve()
-		mergedRef = self.geometryLib.merge(resolved).ref
-		indexed	  = await self.geometryLib.index(mergedRef, grid)
+		from . import Geometry
 		
-		return indexed
+		mergedRef = await self.mergeGeometryAsync(geometry)
+		indexed	  = (await self.geometryLib.index(mergedRef, grid)).indexed
+		
+		result = Geometry()
+		result.geometry.indexed = indexed
+		return result
 	
 	@asyncFunction
 	async def computeFieldAsync(self, config, grid):
@@ -85,14 +109,16 @@ class FLT:
 		return np.asarray(fltResponse.poincareHits)
 	
 	@asyncFunction
-	async def traceUntilImpact(self, points, phiValues, nTurns, config, geometry, grid = None, geometryGrid = None, distanceLimit = 1e4, stepSize = 1e-3):
+	async def traceAsync(self, points, config, geometry = None, grid = None, geometryGrid = None, distanceLimit = 1e4, stepSize = 1e-3):
 		resolvedField = await config.resolve()
 		
 		if grid is None:
 			assert resolvedField.field.which() == 'computed'
 			computedField = resolvedField.field.computed
 		else:
-			computedField = (await self.calculator.compute(resolved.field, grid)).computedField
+			computedField = (await self.calculator.compute(resolvedField.field, grid)).computedField
+		
+		print("Computed field obtained")
 		
 		if geometry is not None:			
 			if geometryGrid is None:
@@ -100,6 +126,8 @@ class FLT:
 				indexedGeometry = geometry.geometry.indexed
 			else:
 				indexedGeometry = await self.indexGeometryAsync(geometry, geometryGrid)
+				
+		print("Indexed geometry obtained")
 		
 		request = native.FLTRequest.newMessage()
 		request.startPoints = points
@@ -110,7 +138,11 @@ class FLT:
 		if geometry is not None:
 			request.geometry = indexedGeometry
 		
-		fltResponse = await self.tracer.trace(request)
+		print("Starting trace")
+		response = await self.tracer.trace(request)
 		
-		
+		return SimpleNamespace(
+			endPoints = np.asarray(response.endPoints),
+			stopReasons = np.asarray(response.stopReasons)
+		)
 		

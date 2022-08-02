@@ -3,6 +3,7 @@ from . import devices
 from . import flt
 from . import asnc
 from . import data
+from . import geometry
 
 from .native import kj
 from .native import capnp

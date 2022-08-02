@@ -138,3 +138,4 @@ def divertor():
 defaultCoils = cadCoils('archive')
 
 defaultGrid = w7xnative.defaultGrid()
+defaultGeometryGrid = w7xnative.defaultGeometryGrid()

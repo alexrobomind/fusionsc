@@ -23,7 +23,7 @@ struct GeometryResolverBase : public GeometryResolver::Server {
 /**
  * Creates C++ interface to geometry library.
  */
-GeometryLib::Client createGeometryLib();
+GeometryLib::Client newGeometryLib();
 
 inline Vec3u locationInGrid(Vec3d point, Vec3d min, Vec3d max, Vec3u size) {
 	auto fraction = (point - min).array() / (max - min).array();
