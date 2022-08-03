@@ -156,7 +156,6 @@ inline uint32_t intersectGeometryAllEvents(
 		size_t globalIdx = (iX * gridSize[1] + iY) * gridSize[2] + iZ;
 		
 		const auto indexNode = indexGridData[globalIdx];
-		KJ_DBG("Index node identified", globalIdx, indexNode.size());
 		
 		for(size_t iRef = 0; iRef < indexNode.size(); ++iRef) {
 			auto elementRef = indexNode[iRef];

@@ -8,13 +8,19 @@ def planarCut(*args, **kwargs):
 	return planarCutAsync(*args, **kwargs).wait()
 
 @asyncFunction
-async def planarCutAsync(mergedGeometryRef, geoLib, phi = None, normal = None, center = None):
+async def planarCutAsync(geometry, geoLib, phi = None, normal = None, center = None):
 	assert phi is not None or normal is not None
 	assert phi is None or normal is None
 	
+	assert geometry.geometry.which() in ['indexed', 'merged']
+	
 	print("Creating request")
 	request = native.GeometryLib.methods.planarCut.Params.newMessage()
-	request.geoRef = mergedGeometryRef
+	if geometry.geometry.which() == 'merged':
+		request.geoRef = geometry.geometry.merged
+	
+	if geometry.geometry.which() == 'indexed':
+		request.geoRef = geometry.geometry.indexed.base
 	
 	print("Getting plane")
 	plane = request.plane
