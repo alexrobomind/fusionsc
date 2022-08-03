@@ -1,20 +1,29 @@
 from .native.data import (
-	download,
+	downloadAsync,
 	publish,
 	
 	openArchive,
-	writeArchive
+	writeArchiveAsync
 )
 
 from .asnc import eager
 
 __all__ = [
 	# Imported from native
-	'download', 'publish', 'openArchive', 'writeArchive',
+	'downloadAsync', 'publish', 'openArchive', 'writeArchiveAsync',
 	
 	# Locally defined
-	'readArchive'
+	'readArchive', 'readArchiveAsync', 'download', 'writeArchive'
 ]
 
+def download(ref):
+	return downloadAsync(ref).wait()
+
+def writeArchive(data, filename: str):
+	return writeArchiveAsync(data, filename).wait()
+
 def readArchive(filename: str):
-	return download(openArchive(filename))
+	return readArchiveAsync(filename).wait()
+
+def readArchiveAsync(filename: str):
+	return downloadAsync(openArchive(filename))

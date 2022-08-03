@@ -795,7 +795,7 @@ namespace cupnp {
 		}
 		
 		CUPNP_FUNCTION uint64_t makeContentTag(capnp::ElementSize listEnum) const {
-			CUPNP_REQUIRE(listEnum < capnp::ElementSize::POINTER);
+			CUPNP_REQUIRE(listEnum <= capnp::ElementSize::POINTER);
 			
 			if(listEnum == capnp::ElementSize::POINTER) {
 				return SINGLE_POINTER_TAG;

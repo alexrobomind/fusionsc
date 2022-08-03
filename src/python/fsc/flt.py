@@ -51,14 +51,16 @@ class FLT:
 		resolved  = await geometry.resolve()
 		mergedRef = self.geometryLib.merge(resolved.geometry).ref
 		
-		return mergedRef
+		result = Geometry()
+		result.geometry.merged = mergedRef
+		return result
 	
 	@asyncFunction
 	async def indexGeometryAsync(self, geometry, grid):
 		from . import Geometry
 		
-		mergedRef = await self.mergeGeometryAsync(geometry)
-		indexed	  = (await self.geometryLib.index(mergedRef, grid)).indexed
+		resolved  = await geometry.resolve()
+		indexed	  = (await self.geometryLib.index(resolved.geometry, grid)).indexed
 		
 		result = Geometry()
 		result.geometry.indexed = indexed
@@ -109,7 +111,7 @@ class FLT:
 		return np.asarray(fltResponse.poincareHits)
 	
 	@asyncFunction
-	async def traceAsync(self, points, config, geometry = None, grid = None, geometryGrid = None, distanceLimit = 1e4, stepSize = 1e-3):
+	async def traceAsync(self, points, config, geometry = None, grid = None, geometryGrid = None, distanceLimit = 1e4, stepSize = 1e-3, collisionLimit = 0):
 		resolvedField = await config.resolve()
 		
 		if grid is None:
@@ -125,15 +127,16 @@ class FLT:
 				assert geometry.geometry.which() == 'indexed'
 				indexedGeometry = geometry.geometry.indexed
 			else:
-				indexedGeometry = await self.indexGeometryAsync(geometry, geometryGrid)
+				indexedGeometry = (await self.indexGeometryAsync(geometry, geometryGrid)).geometry.indexed
 				
 		print("Indexed geometry obtained")
 		
 		request = native.FLTRequest.newMessage()
 		request.startPoints = points
 		request.field = computedField
-		request.distanceLimit = distanceLimit
 		request.stepSize = stepSize
+		request.distanceLimit = distanceLimit
+		request.collisionLimit = collisionLimit
 		
 		if geometry is not None:
 			request.geometry = indexedGeometry
@@ -143,6 +146,6 @@ class FLT:
 		
 		return SimpleNamespace(
 			endPoints = np.asarray(response.endPoints),
-			stopReasons = np.asarray(response.stopReasons)
+			# stopReasons = np.asarray(response.stopReasons)
 		)
 		

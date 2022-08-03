@@ -15,7 +15,7 @@ interface GeometryResolver {
 
 interface GeometryLib {
 	merge @0 Geometry -> (ref : DataRef(MergedGeometry));
-	index @1 (geoRef : DataRef(MergedGeometry), grid : CartesianGrid) -> (indexed : IndexedGeometry);
+	index @1 (geometry : Geometry, grid : CartesianGrid) -> (indexed : IndexedGeometry);
 	planarCut @2 (geoRef : DataRef(MergedGeometry), plane : Plane) -> (edges : Float64Tensor); # edges has shape [3, :, 2]
 }
 

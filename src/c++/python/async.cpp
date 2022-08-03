@@ -45,7 +45,7 @@ namespace {
 				return promise;
 			}
 			
-			PyErr_Restore(excType.ptr(), value.ptr(), stackTrace.ptr());
+			PyErr_Restore(excType.inc_ref().ptr(), value.inc_ref().ptr(), stackTrace.inc_ref().ptr());
 			
 			throw py::error_already_set();
 		}
@@ -97,6 +97,7 @@ namespace {
 		}
 		
 		Promise<Own<PyObjectHolder>> doThrow(kj::Exception e) {
+			KJ_DBG("Passing error into awaitable", e);
 			py::object excType = py::reinterpret_borrow<py::object>(PyExc_RuntimeError);
 			
 			py::object argTuple = py::make_tuple(mv(excType), py::cast(kj::str(e)), py::none());
@@ -112,6 +113,7 @@ namespace {
 				
 				// This fetches & clears the python error indicator
 				py::error_already_set error;
+				KJ_DBG("Handling python error", error.what());
 							
 				// Check if we have a StopIteration error (which indicates completion)	
 				if(PyErr_GivenExceptionMatches(error.type().ptr(), PyExc_StopIteration)) {
@@ -240,7 +242,7 @@ kj::Exception convertPyError(py::error_already_set& e) {
 	
 	// KJ_DBG("Formatted an exception as ", pythonException.flatten());
 	
-	return kj::Exception(::kj::Exception::Type::FAILED, __FILE__, __LINE__, str(pythonException));
+	return kj::Exception(::kj::Exception::Type::FAILED, __FILE__, __LINE__, pythonException.flatten());
 }
 	
 }

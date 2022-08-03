@@ -85,7 +85,7 @@ TEST_CASE("index-cube") {
 	grid.setNZ(4);
 	
 	auto indexRequest = geoLib.indexRequest();
-	indexRequest.setGeoRef(mergeResult.getRef());
+	indexRequest.initGeometry().setMerged(mergeResult.getRef());
 	indexRequest.setGrid(grid);
 	
 	KJ_DBG("Indexing");

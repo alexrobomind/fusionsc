@@ -5,6 +5,7 @@
 
 #include <pybind11/pybind11.h>
 #include <kj/common.h>
+#include <kj/exception.h>
 #include <capnp/dynamic.h>
 
 using namespace fscpy;
@@ -89,6 +90,8 @@ PYBIND11_MODULE(native, m) {
 	// Creating a temporary ClientHook initializes a run-time
 	// link between the capnp library and the capnp-rpc library
 	(void) capnp::newBrokenCap("Don't look at me. I'm shy.");
+	
+	kj::printStackTraceOnCrash();
 	
 	// Perform run-time initialization of python-related globals
 	globalClasses = kj::heap<py::dict>();

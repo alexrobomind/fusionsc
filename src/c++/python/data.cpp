@@ -190,14 +190,14 @@ namespace fscpy {
 void initData(py::module_& m) {
 	py::module_ dataModule = m.def_submodule("data", "Distributed data processing");
 	
-	dataModule.def("download", &download, "Starts a download for the given DataRef and returns a promise for its contents");
+	dataModule.def("downloadAsync", &download, "Starts a download for the given DataRef and returns a promise for its contents");
 	dataModule.def("publish", &publish, "Creates a DataRef containing the given data");
 	
 	dataModule.def("openArchive", &openArchive, "Opens an archive file and returns a DataRef to its root");
 	
-	dataModule.def("writeArchive", &writeArchive1, "Downloads (recursively) the given DataRef and asynchronously waits an Archive containing its contents. Must wait on the returned promise.");
-	dataModule.def("writeArchive", &writeArchive2);
-	dataModule.def("writeArchive", &writeArchive3);
+	dataModule.def("writeArchiveAsync", &writeArchive1, "Downloads (recursively) the given DataRef and asynchronously waits an Archive containing its contents. Must wait on the returned promise.");
+	dataModule.def("writeArchiveAsync", &writeArchive2);
+	dataModule.def("writeArchiveAsync", &writeArchive3);
 }
 
 }
