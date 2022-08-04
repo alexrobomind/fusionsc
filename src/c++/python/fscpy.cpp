@@ -70,11 +70,31 @@ void bindHelperClasses(py::module_& m) {
 		//.def("__str__", [](py::object self) { return py::hasattr(self, "desc") ? (py::str) self.attr("desc") : "<Unknown simple object>" ; })
 		.def("__repr__", [](py::object self) { return py::hasattr(self, "desc") ? (py::str) self.attr("desc") : "<Unknown simple object>" ; })
 	;
+	
+	py::class_<ContiguousCArray>(helpersModule, "ContiguousCArray", py::buffer_protocol())
+		.def_buffer(&ContiguousCArray::getBuffer)
+	;
 }
 
 }
 
 namespace fscpy {
+
+py::buffer_info ContiguousCArray::getBuffer() {
+	KJ_REQUIRE(format.size() > 0, "Format string must be specified before requesting buffer");
+	
+	// Compute C strides
+	std::vector<py::ssize_t> strides(shape.size());
+	size_t stride = elementSize;
+	for(int i = shape.size() - 1; i >= 0; --i) {
+		strides[i] = stride;
+		stride *= shape[i];
+	}
+	
+	return py::buffer_info(
+		data.begin(), elementSize, format.cStr(), shape.size(), shape, strides, /* readonly = */ false
+	);
+}
 
 py::object methodDescriptor(py::object method) {
 	return py::cast(MethodDescriptor(method));

@@ -56,14 +56,14 @@ inline double rayCastTriangle(const Vec3d point, const Vec3d direction, const Ve
 	using Eigen::all;
 	
 	Mat3d m;
-	m(0, all) = direction;
-	m(1, all) = triangle[1] - triangle[0];
-	m(2, all) = triangle[2] - triangle[0];
+	m(all, 0) = direction;
+	m(all, 1) = triangle[1] - triangle[0];
+	m(all, 2) = triangle[2] - triangle[0];
 	
 	Vec3d v = point - triangle[0];
 	Vec3d vi = m.partialPivLu().solve(v);
 	
-	double l = -v(0);
+	double l = -vi(0);
 	double inf = std::numeric_limits<double>::infinity();
 	
 	if(l < 0)
@@ -71,6 +71,17 @@ inline double rayCastTriangle(const Vec3d point, const Vec3d direction, const Ve
 	
 	if(vi(1) < 0 || vi(2) < 0 || vi(1) + vi(2) > 1)
 		return inf;
+	
+	/*Vec3d e1(1.0, 0.0, 0.0);
+	Vec3d e2(0.0, 1.0, 0.0);
+	Vec3d e3(0.0, 0.0, 1.0);
+	
+	Vec3d c1 = point + m * (e1 * l - e2 * (vi[1] - 1) - e3 * vi[2]) - triangle[1];
+	Vec3d c2 = point + m * (e1 * l - e2 * vi[1] - e3 * (vi[2] - 1)) - triangle[2];
+	Vec3d c3 = point + m * (e1 * l - e2 * vi[1] - e3 * vi[2]) - triangle[0];
+	Vec3d c4 = m * e1 - direction;
+	
+	KJ_DBG(c1[0], c1[1], c1[2], c2[0], c2[1], c2[2], c3[0], c3[1], c3[2], c4[0], c4[1], c4[2]);*/
 	
 	return l;
 }
@@ -96,10 +107,7 @@ inline uint32_t intersectGeometryAllEvents(
 	double lMax,
 	
 	cupnp::List<cu::FLTKernelEvent> eventBuffer, uint32_t eventCount
-) {
-	constexpr double inf = std::numeric_limits<double>::infinity();
-	double l = inf;
-	
+) {	
 	double distanceP1P2 = (p2 - p1).norm();
 	Vec3d dp = (p2 - p1);
 
@@ -125,7 +133,7 @@ inline uint32_t intersectGeometryAllEvents(
 	// they need to be implemented as macros.
 	
 	#define FSC_NEXT_EVENT() { \
-		if(eventCount == eventBuffer.size() - 1) \
+		if(eventCount >= eventBuffer.size() - 1) \
 			return eventBuffer.size(); \
 		\
 		++eventCount; \
@@ -134,7 +142,7 @@ inline uint32_t intersectGeometryAllEvents(
 	#define FSC_HANDLE_TRIANGLE(p1, p2, triangle, meshIdx, elementIdx) { \
 		double lCast = rayCastTriangle(p1, p2 - p1, triangle); \
 		\
-		if(lCast < inf) { \
+		if(lCast < lMax) { \
 			auto event = currentEvent(); \
 			event.setDistance(distanceP1P2 * lCast); \
 			\
@@ -179,7 +187,7 @@ inline uint32_t intersectGeometryAllEvents(
 						triangle[i][j] = meshVertices[3 * pointIdx + j];
 				}
 				
-				FSC_HANDLE_TRIANGLE(p1, dp, triangle, refMeshIdx, refElementIdx);
+				FSC_HANDLE_TRIANGLE(p1, p2, triangle, refMeshIdx, refElementIdx);
 			} else if(refMesh.hasPolyMesh()) {
 				auto polyList = refMesh.getPolyMesh();
 				
@@ -203,7 +211,7 @@ inline uint32_t intersectGeometryAllEvents(
 					}
 				}
 				
-				FSC_HANDLE_TRIANGLE(p1, dp, triangle, refMeshIdx, refElementIdx);
+				FSC_HANDLE_TRIANGLE(p1, p2, triangle, refMeshIdx, refElementIdx);
 			}
 		}
 	}}}

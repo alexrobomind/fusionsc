@@ -45,10 +45,31 @@ struct FieldlineMappingData {
 }
 
 struct FLTResponse {
+	#struct Event {
+	#	location @0 : List(Float64);
+	#	step @1 : UInt32;
+	#	distance @2 : Float64;
+	#	turnNo @3 : UInt32;
+	#	
+	#	lcForward @4 : Float64:
+	#	lcBackward @5 : Float64;
+	#	
+	#	union {
+	#		planeIntersection : group {
+	#			planeNo @6 : UInt32;
+	#			turnNo @7 : UInt32;
+	#		}
+	#		geometryIntersection : group {
+	#			tags @8 : List(Geometry.Tag);
+	#			elementIdx @9 : UInt64;
+	#		}
+	#	}
+	#};
+	
 	# Maximum number of toroidal turns traversed by the fieldline
 	nTurns @0 : UInt32;
 	
-	# Tensor of shape [3] + startPoints.shape[1:] + [len(poincarePlanes), nTurns]
+	# Tensor of shape [5] (x, y, z, Lc_fwd, Lc_bwd) + startPoints.shape[1:] + [len(poincarePlanes), nTurns]
 	poincareHits @1 : Data.Float64Tensor;
 	
 	# Tensor of shape [3] + startPoints.shape[1:]

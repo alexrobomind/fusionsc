@@ -24,6 +24,32 @@ namespace fscpy {
 	template<typename T>
 	UnknownObject* eraseType(T t) { return new UnknownHolder<T>(mv(t)); }
 	
+	struct ContiguousCArray {
+		kj::Array<unsigned char> data;
+		
+		std::vector<py::ssize_t> shape;
+		size_t elementSize = 0;
+		kj::String format;
+		
+		template<typename T, typename ShapeContainer>
+		ArrayPtr<T> alloc(ShapeContainer& requestedShape) {
+			size_t shapeProd = 1;
+			
+			shape.resize(requestedShape.size());
+			for(auto i : kj::indices(requestedShape)) {
+				shape[i] = requestedShape[i];
+				shapeProd *= shape[i];
+			}
+			
+			elementSize = sizeof(T);
+			
+			data = kj::heapArray<unsigned char>(shapeProd * elementSize);
+			return kj::ArrayPtr<T>((T*) data.begin(), shapeProd);
+		}
+		
+		py::buffer_info getBuffer();
+	};
+	
 	// Init methods for various components
 	void initAsync(py::module_& m);
 	void initCapnp(py::module_& m);

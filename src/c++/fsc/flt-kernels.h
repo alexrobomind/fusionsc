@@ -259,8 +259,18 @@ namespace fsc {
 						auto event1 = events[i1];
 						auto event2 = events[i2];
 						
-						if(event1.getDistance() > event2.getDistance())
-							cupnp::swap(event1, event2);
+						if(event1.getDistance() > event2.getDistance()) {
+							cupnp::swapData(event1, event2);
+							
+							auto loc1 = event1.mutateLocation();
+							auto loc2 = event2.mutateLocation();
+							
+							for(int i = 0; i < 3; ++i) {
+								double tmp = loc1[i];
+								loc1.set(i, loc2[i]);
+								loc2.set(i, tmp);
+							}
+						}
 					}
 				}
 			}

@@ -27,7 +27,7 @@ void validateField(ToroidalGrid::Reader grid, Float64Tensor::Reader data) {
 template<typename Device>
 struct TraceCalculation {
 	constexpr static size_t STEPS_PER_ROUND = 1000;
-	constexpr static size_t EVENTBUF_SIZE = 100;
+	constexpr static size_t EVENTBUF_SIZE = 2500;
 	
 	template<typename T>
 	using MappedMessage = MapToDevice<CupnpMessage<T>, Device>;
@@ -83,10 +83,8 @@ struct TraceCalculation {
 	{
 	
 		CupnpMessage<const cu::IndexedGeometry> geometryIndexMsg(this->geometryIndex);
-		KJ_DBG("Loading empty messages");
 		CupnpMessage<const cu::IndexedGeometry::IndexData> indexDataMsg(nullptr);
 		CupnpMessage<const cu::MergedGeometry> geometryDataMsg(nullptr);
-		KJ_DBG("Done");
 		
 		// Extract message segments for geometry and index data
 		KJ_IF_MAYBE(pIndexData, indexData) {
@@ -220,8 +218,8 @@ struct TraceCalculation {
 			fltKernel, device,
 			r.kernelData.getData().size(),
 			
-			kernelData, FSC_KARG(deviceField, IN), kernelRequest,
-			FSC_KARG(*mappedGeometryData, IN), FSC_KARG(*mappedIndex, IN), FSC_KARG(*mappedIndexData, IN)
+			kernelData, FSC_KARG(deviceField, NOCOPY), kernelRequest,
+			FSC_KARG(*mappedGeometryData, NOCOPY), FSC_KARG(*mappedIndex, NOCOPY), FSC_KARG(*mappedIndexData, NOCOPY)
 		);
 		calcOp -> attachDestroyAnywhere(rootOp.addRef());
 		return calcOp -> whenDone();
@@ -304,10 +302,12 @@ struct TraceCalculation {
 				size_t eventCount = kData.getState().getEventCount();
 				
 				auto eventsIn = kData.getEvents();
-				KJ_ASSERT(eventCount <= eventsIn.size());
+				KJ_REQUIRE(eventCount <= eventsIn.size());
+				KJ_DBG(eventCount);
 				
-				for(size_t iEvtIn = 0; iEvtIn < eventCount; ++iEvtIn)
+				for(size_t iEvtIn = 0; iEvtIn < eventCount; ++iEvtIn) {
 					eventsOut.setWithCaveats(iEvent++, eventsIn[iEvtIn]);
+				}
 				
 				result.setStopReason(kData.getStopReason());
 				result.setState(kData.getState());
@@ -416,7 +416,7 @@ struct FLTImpl : public FLT::Server {
 				
 				int64_t nSurfs = request.getPoincarePlanes().size();
 				
-				Tensor<double, 4> pcCuts(nTurns, nStartPoints, nSurfs, 3);
+				Tensor<double, 4> pcCuts(nTurns, nStartPoints, nSurfs, 5);
 				pcCuts.setConstant(std::numeric_limits<double>::quiet_NaN());
 				
 				Tensor<double, 2> endPoints(nStartPoints, 3);
@@ -428,7 +428,45 @@ struct FLTImpl : public FLT::Server {
 								
 					int64_t iTurn = 0;
 					
-					for(auto evt : events) {						
+					kj::Vector<double> backwardLCs(events.size());
+					{
+						Maybe<FLTKernelEvent::Reader> lastCollision;
+						for(auto evt : events) {
+							if(evt.isGeometryHit()) {
+								lastCollision = evt;
+							}
+							
+							KJ_IF_MAYBE(pLastCollision, lastCollision) {
+								backwardLCs.add(evt.getDistance() - pLastCollision -> getDistance());
+							} else {
+								backwardLCs.add(-evt.getDistance());
+							}
+						}
+					}
+					
+					kj::Vector<double> forwardLCs;
+					forwardLCs.resize(events.size());
+					{
+						Maybe<FLTKernelEvent::Reader> nextCollision;
+						for(auto i : kj::indices(events)) {
+							auto iEvt = events.size() - 1 - i;
+							auto evt = events[iEvt];
+							
+							if(evt.isGeometryHit()) {
+								nextCollision = evt;
+							}
+							
+							KJ_IF_MAYBE(pNextCollision, nextCollision) {
+								forwardLCs[iEvt] = pNextCollision -> getDistance() - evt.getDistance();
+							} else {
+								forwardLCs[iEvt] = -(state.getDistance() - evt.getDistance());
+							}
+						}
+					}
+					
+					for(auto iEvt : kj::indices(events)) {
+						auto evt = events[iEvt];
+						
 						KJ_REQUIRE(!evt.isNotSet(), "Internal error");
 						
 						// KJ_DBG(evt);
@@ -443,6 +481,8 @@ struct FLTImpl : public FLT::Server {
 							for(int64_t iDim = 0; iDim < 3; ++iDim) {
 								pcCuts(iTurn, iStartPoint, ppi.getPlaneNo(), iDim) = loc[iDim];
 							}
+							pcCuts(iTurn, iStartPoint, ppi.getPlaneNo(), 3) = forwardLCs[iEvt];
+							pcCuts(iTurn, iStartPoint, ppi.getPlaneNo(), 4) = backwardLCs[iEvt];
 						}
 					}
 					
@@ -459,7 +499,7 @@ struct FLTImpl : public FLT::Server {
 				writeTensor(endPoints, results.getEndPoints());
 				
 				auto pcHitsShape = results.getPoincareHits().initShape(startPointShape.size() + 2);
-				pcHitsShape.set(0, 3);
+				pcHitsShape.set(0, 5);
 				pcHitsShape.set(1, nSurfs);
 				for(int i = 0; i < startPointShape.size() - 1; ++i)
 					pcHitsShape.set(i + 2, startPointShape[i + 1]);

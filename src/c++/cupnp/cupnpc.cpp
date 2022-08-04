@@ -490,7 +490,7 @@ StringTree generateInterface(CodeGeneratorRequest::Reader request, uint64_t node
 		"	\n",
 		"	inline bool isDefault() { return ptrData == 0; }\n",
 		"	\n",
-		"	friend void cupnp::swap<", name.flatten(), ">(", name.flatten(), "&, ", name.flatten(), "&); \n",
+		"	friend void cupnp::swapData<", name.flatten(), ">(", name.flatten(), "&, ", name.flatten(), "&); \n",
 		"	\n",
 		generateNested(request, nodeId, methodDefinitions),
 		"};\n\n"
@@ -620,7 +620,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 		"	\n",
 		"	inline CUPNP_FUNCTION bool isDefault() { return structure == 0; }\n",
 		"	\n",
-		"	friend void cupnp::swap<", name.flatten(), ">(", name.flatten(), "&, ", name.flatten(), "&); \n",
+		"	friend void cupnp::swapData<", name.flatten(), ">(", name.flatten(), "&, ", name.flatten(), "&); \n",
 		"	\n"
 	);
 	

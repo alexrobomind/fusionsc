@@ -83,7 +83,7 @@ class FLT:
 		return np.asarray(fieldData).transpose([3, 0, 1, 2])
 	
 	@asyncFunction
-	async def poincareInPhiPlanesAsync(self, points, phiValues, nTurns, config, grid = None, distanceLimit = 1e4, stepSize = 1e-3):
+	async def poincareInPhiPlanesAsync(self, points, phiValues, nTurns, config, grid = None, geometry = None, geometryGrid = None, distanceLimit = 1e4, collisionLimit = 0, stepSize = 1e-3):
 		# Resovle & compute field
 		resolvedField = await config.resolve()
 		
@@ -92,17 +92,27 @@ class FLT:
 			computedField = resolvedField.field.computed
 		else:
 			computedField = (await self.calculator.compute(resolvedField.field, grid)).computedField
-			
-		print("Assigning")
+		
+		if geometry is not None:			
+			if geometryGrid is None:
+				assert geometry.geometry.which() == 'indexed'
+				indexedGeometry = geometry.geometry.indexed
+			else:
+				indexedGeometry = (await self.indexGeometryAsync(geometry, geometryGrid)).geometry.indexed
 		
 		# This style is neccessary to convert the start points to an FSC tensor
 		request = native.FLTRequest.newMessage()
 		request.startPoints = points
 		request.field = computedField
 		request.poincarePlanes = phiValues
+		request.stepSize = stepSize
+		
 		request.turnLimit = nTurns
 		request.distanceLimit = distanceLimit
-		request.stepSize = stepSize
+		request.collisionLimit = collisionLimit
+		
+		if geometry is not None:
+			request.geometry = indexedGeometry
 		
 		print("Tracing")
 		fltResponse = await self.tracer.trace(request)

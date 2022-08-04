@@ -628,19 +628,19 @@ namespace cupnp {
 	}
 
 	template<typename T>
-	void swap(T& t1, T& t2) {
+	void swapData(T& t1, T& t2) {
 		uint16_t dsWords1 = getDataSectionSizeInWords(t1.structure);
 		uint16_t dsWords2 = getDataSectionSizeInWords(t2.structure);
 		
 		CUPNP_REQUIRE(dsWords1 == dsWords2);
 		
-		uint16_t nPtr1 = getPointerSectionSize(t1.structure);
-		uint16_t nPtr2 = getPointerSectionSize(t2.structure);
+		// uint16_t nPtr1 = getPointerSectionSize(t1.structure);
+		// uint16_t nPtr2 = getPointerSectionSize(t2.structure);
 		
-		CUPNP_REQUIRE(dsWords1 == dsWords2);
+		// CUPNP_REQUIRE(nPtr1 == nPtr2);
 		
 		uint16_t nWords = std::min(dsWords1, dsWords2);
-		uint16_t nPtrs  = std::min(nPtr1, nPtr2);
+		// uint16_t nPtrs  = std::min(nPtr1, nPtr2);
 		
 		uint64_t* data1 = (uint64_t*) t1.data.ptr;
 		uint64_t* data2 = (uint64_t*) t2.data.ptr;
@@ -648,8 +648,8 @@ namespace cupnp {
 		for(uint16_t i = 0; i < nWords; ++i)
 			std::swap(*(data1 + i), *(data2 + i));
 		
-		for(uint16_t i = 0; i < nPtrs; ++i)
-			std::swap(*(data1 + dsWords1 + i), *(data2 + dsWords2 + i));
+		/*for(uint16_t i = 0; i < nPtrs; ++i)
+			std::swap(*(data1 + dsWords1 + i), *(data2 + dsWords2 + i));*/
 	}
 
 	/**
@@ -816,6 +816,7 @@ namespace cupnp {
 		
 		template<typename T2>
 		CUPNP_FUNCTION void set(unsigned int i, T2 newVal) {
+			CUPNP_REQUIRE(i < size());
 			return cupnp::ListHelper<T, CPKind>::set(this, i, newVal);
 		}
 		
@@ -918,7 +919,8 @@ namespace cupnp {
 		
 		// Primitive lists may be interpreted as struct lists, with the special exception of boolean lists
 		// (which have tag 1)
-		static CUPNP_FUNCTION bool validList(List<T>* list) { return list->sizeEnum != 1; }
+		// TODO: This currently creates incorrect data section sizes, so we have to disable cross-encoding of data-only structs
+		static CUPNP_FUNCTION bool validList(List<T>* list) { return list->sizeEnum == 7 || list->sizeEnum == 6; /*return list->sizeEnum != 1;*/ }
 		static CUPNP_FUNCTION T getDefault() { return T(0, nullptr); }
 	};
 	

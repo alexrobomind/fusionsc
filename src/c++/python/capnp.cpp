@@ -60,7 +60,7 @@ py::object getField(py::object self, py::object field) {
  * their parent to keep their data alive.
  */
 template<typename T>
-bool needsBackReference(T& t) {
+bool needsBackReference(T&& t) {
 	switch(t.getType()) {
 		case DynamicValue::TEXT:
 		case DynamicValue::DATA:
@@ -77,7 +77,13 @@ bool needsBackReference(T& t) {
 
 //! Pipelines have their own keep-alive through PipelineHooks
 template<>
-bool needsBackReference<DynamicValuePipeline>(DynamicValuePipeline& t) {
+bool needsBackReference<DynamicValuePipeline>(DynamicValuePipeline&& t) {
+	return false;
+}
+
+//! Pipelines have their own keep-alive through PipelineHooks
+template<>
+bool needsBackReference<DynamicValuePipeline&>(DynamicValuePipeline& t) {
 	return false;
 }
 
@@ -622,16 +628,61 @@ py::buffer_info getDataTensor(T& tensor, bool readOnly) {
 }
 
 template<typename T>
-py::buffer_info getTensor(T& tensor, bool readOnly) {
+py::buffer_info getBoolTensor(T& tensor) {
+	// Extract shape and dat
+	auto shape = tensor.get("shape").template as<capnp::List<uint64_t>>();
+	auto data  = tensor.get("data").template as<capnp::DynamicList>();
+	
+	auto resultHolder = new ContiguousCArray();
+	
+	auto outData = resultHolder -> alloc<uint8_t>(shape);
+	resultHolder -> format = kj::str("?");
+	
+	for(auto i : kj::indices(data)) {
+		outData[i] = data[i].template as<bool>() ? 1 : 0;
+	}
+	
+	py::buffer asPyBuffer = py::cast(resultHolder);
+	return asPyBuffer.request(true);
+}
+
+template<typename T>
+py::buffer_info getObjectTensor(py::object pySelf, T& tensor) {
+	// Extract shape and dat
+	auto shape = tensor.get("shape").template as<capnp::List<uint64_t>>();
+	auto data  = tensor.get("data").template as<capnp::DynamicList>();
+	
+	auto resultHolder = new ContiguousCArray();
+	
+	auto outData = resultHolder -> alloc<PyObject*>(shape);
+	resultHolder -> format = kj::str("O");
+	
+	for(auto i : kj::indices(data)) {
+		py::object outObject = py::cast(data[i]);
+		
+		if(needsBackReference(data[i]))
+			outObject.attr("_parent") = pySelf;
+		
+		outData[i] = outObject.inc_ref().ptr();
+	}
+	
+	py::buffer asPyBuffer = py::cast(resultHolder);
+	return asPyBuffer.request(true);
+}
+
+template<typename T>
+py::buffer_info getTensor(py::object self, bool readOnly) {
+	T tensor = py::cast<T>(self);
+	
 	auto schema = tensor.getSchema();
 	auto scalarType = schema.getFieldByName("data").getType().asList().getElementType();
 	
 	if(isPointerType(scalarType)) {
-		KJ_UNIMPLEMENTED("Pointer types not yet supported");
+		return getObjectTensor(self, tensor);
 	}
 	
 	if(scalarType.isBool()) {
-		KJ_UNIMPLEMENTED("Bool type not yet supported");
+		return getBoolTensor(tensor);
 	}
 	
 	return getDataTensor(tensor, readOnly);
@@ -669,8 +720,8 @@ void defListBuffer(py::class_<T>& c, bool readOnly) {
 //! Defines the buffer protocol for a capnp::DynamicStruct::{Reader, Builder} that has a "shape" and a "data" field
 template<typename T>
 void defTensorBuffer(py::class_<T>& c, bool readOnly) {
-	c.def_buffer([readOnly](T& tensor) {
-		return getTensor(tensor, readOnly);
+	c.def_buffer([readOnly](py::object tensor) {
+		return getTensor<T>(tensor, readOnly);
 	});
 }
 

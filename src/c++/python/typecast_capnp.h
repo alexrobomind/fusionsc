@@ -27,6 +27,29 @@
 //   fscpy::DynamicStructPipeline
 
 namespace pybind11 { namespace detail {
+	
+	// In def_buffer passes the caster directly as argument to the buffer generator. For DynamicValue::{Reader, Builder},
+	// we need direct access to the underlying py::object. Therefore, we expand the type caster for these two classes
+	// to capture the target object upon loading.
+	
+	#define FSC_BACKREFERENCING_CASTER(T) \
+		template <> \
+		struct type_caster<T> : public type_caster_base<T> { \
+			py::object storedObject; \
+			bool load(handle src, bool convert) { \
+				bool ok = type_caster_base<T>::load(src, convert); \
+				\
+				if(ok) { \
+					storedObject = reinterpret_borrow<object>(src); \
+				}\
+				return ok; \
+			} \
+			\
+			operator object() { return storedObject; } \
+		};
+	
+	FSC_BACKREFERENCING_CASTER(capnp::DynamicStruct::Reader);
+	FSC_BACKREFERENCING_CASTER(capnp::DynamicStruct::Builder);
 		
 	template<>
 	struct type_caster<capnp::DynamicCapability::Client> {
