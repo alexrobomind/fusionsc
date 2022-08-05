@@ -156,7 +156,7 @@ void defGetItemAndLen(py::class_<T>& c) {
 	);
 }
 
-bool isPointerType(capnp::Type type) {
+bool isObjectType(capnp::Type type) {
 	switch(type.which()) {
 		case capnp::schema::Type::VOID:
 		case capnp::schema::Type::BOOL:
@@ -166,6 +166,7 @@ bool isPointerType(capnp::Type type) {
 		case capnp::schema::Type::STRUCT:
 		case capnp::schema::Type::INTERFACE:
 		case capnp::schema::Type::ANY_POINTER:
+		case capnp::schema::Type::ENUM:
 			return true;
 		
 		default:
@@ -186,6 +187,7 @@ Tuple<size_t, kj::StringPtr> pyFormat(capnp::Type type) {
 		case capnp::schema::Type::STRUCT:
 		case capnp::schema::Type::INTERFACE:
 		case capnp::schema::Type::ANY_POINTER:
+		case capnp::schema::Type::ENUM:
 			formatString = "O";
 			elementSize = sizeof(PyObject*);
 			break;
@@ -211,8 +213,6 @@ Tuple<size_t, kj::StringPtr> pyFormat(capnp::Type type) {
 			formatString="<B";
 			elementSize = 1;
 			break;
-		case capnp::schema::Type::ENUM:
-			KJ_LOG(WARNING, "Currently enums are handled as 16bit unsigned integers. This might become more sophisticated in the future");
 		case capnp::schema::Type::UINT16:
 			formatString="<H";
 			elementSize = 2;
@@ -272,8 +272,6 @@ PyArray_Descr* numpyWireType(capnp::Type type) {
 		HANDLE_TYPE(FLOAT32, NPY_FLOAT32);
 		HANDLE_TYPE(FLOAT64, NPY_FLOAT64);
 		
-		HANDLE_TYPE(ENUM, NPY_UINT16);
-		
 		HANDLE_TYPE(BOOL, NPY_BOOL);
 		
 		HANDLE_OBJECT(VOID);
@@ -283,6 +281,8 @@ PyArray_Descr* numpyWireType(capnp::Type type) {
 		HANDLE_OBJECT(STRUCT);
 		HANDLE_OBJECT(INTERFACE);
 		HANDLE_OBJECT(ANY_POINTER);
+		
+		HANDLE_OBJECT(ENUM);
 	}
 	
 	#undef HANDLE_TYPE
@@ -373,7 +373,7 @@ py::buffer getAsBufferViaNumpy(py::object input, capnp::Type type, int minDims, 
 	return py::reinterpret_steal<py::buffer>(arrayObject);
 }
 
-void setPtrTensor(DynamicStruct::Builder dsb, py::buffer_info& bufinfo) {
+void setObjectTensor(DynamicStruct::Builder dsb, py::buffer_info& bufinfo) {
 	// Check whether array is contiguous
 	size_t expectedStride = sizeof(PyObject*);
 	for(int dimension = bufinfo.shape.size() - 1; dimension >= 0; --dimension) {
@@ -483,8 +483,8 @@ void setTensor(DynamicStruct::Builder dsb, py::buffer buffer) {
 	// Check format
 	capnp::ListSchema schema = dsb.getSchema().getFieldByName("data").getType().asList();
 	
-	if(isPointerType(schema.getElementType())) {
-		setPtrTensor(dsb, bufinfo);
+	if(isObjectType(schema.getElementType())) {
+		setObjectTensor(dsb, bufinfo);
 		return;
 	}
 	
@@ -677,7 +677,7 @@ py::buffer_info getTensor(py::object self, bool readOnly) {
 	auto schema = tensor.getSchema();
 	auto scalarType = schema.getFieldByName("data").getType().asList().getElementType();
 	
-	if(isPointerType(scalarType)) {
+	if(isObjectType(scalarType)) {
 		return getObjectTensor(self, tensor);
 	}
 	
@@ -1234,6 +1234,14 @@ void bindSchemaClasses(py::module_& m) {
 	py::class_<capnp::InterfaceSchema, capnp::Schema>(m, "InterfaceSchema");
 }
 
+uint64_t totalSize(capnp::DynamicStruct::Reader reader) {
+	return reader.totalSize().wordCount * 8;
+}
+
+void bindHelpers(py::module_& m) {
+	m.def("totalSize", &totalSize);
+};
+
 }
 
 namespace fscpy {
@@ -1264,6 +1272,7 @@ void initCapnp(py::module_& m) {
 	bindCapClasses(mcapnp);
 	bindEnumClasses(mcapnp);
 	bindSchemaClasses(mcapnp);
+	bindHelpers(mcapnp);
 	
 	m.add_object("void", py::cast(capnp::DynamicValue::Reader(capnp::Void())));
 }

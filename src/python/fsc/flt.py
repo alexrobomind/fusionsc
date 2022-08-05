@@ -35,7 +35,7 @@ class FLT:
 		return self.poincareInPhiPlanesAsync(*args, **kwargs).wait()
 	
 	def trace(self, *args, **kwargs):
-		return traceAsync(*arg, **kwargs).wait()
+		return self.traceAsync(*arg, **kwargs).wait()
 	
 	def mergeGeometry(self, *args, **kwargs):
 		return self.mergeGeometryAsync(*args, **kwargs).wait()
@@ -43,8 +43,8 @@ class FLT:
 	def indexGeometry(self, *args, **kwargs):
 		return self.indexGeometryAsync(*args, **kwargs).wait()
 	
-	def trace(self, *args, **kwargs):
-		return self.traceAsync(*args, **kwargs).wait()
+	def connectionLength(self, *args, **kwargs):
+		return self.connectionLengthAsync(*args, **kwargs).wait()
 	
 	@asyncFunction
 	async def mergeGeometryAsync(self, geometry):
@@ -83,45 +83,18 @@ class FLT:
 		return np.asarray(fieldData).transpose([3, 0, 1, 2])
 	
 	@asyncFunction
-	async def poincareInPhiPlanesAsync(self, points, phiValues, nTurns, config, grid = None, geometry = None, geometryGrid = None, distanceLimit = 1e4, collisionLimit = 0, stepSize = 1e-3):
-		# Resovle & compute field
-		resolvedField = await config.resolve()
-		
-		if grid is None:
-			assert resolvedField.field.which() == 'computed'
-			computedField = resolvedField.field.computed
-		else:
-			computedField = (await self.calculator.compute(resolvedField.field, grid)).computedField
-		
-		if geometry is not None:			
-			if geometryGrid is None:
-				assert geometry.geometry.which() == 'indexed'
-				indexedGeometry = geometry.geometry.indexed
-			else:
-				indexedGeometry = (await self.indexGeometryAsync(geometry, geometryGrid)).geometry.indexed
-		
-		# This style is neccessary to convert the start points to an FSC tensor
-		request = native.FLTRequest.newMessage()
-		request.startPoints = points
-		request.field = computedField
-		request.poincarePlanes = phiValues
-		request.stepSize = stepSize
-		
-		request.turnLimit = nTurns
-		request.distanceLimit = distanceLimit
-		request.collisionLimit = collisionLimit
-		
-		if geometry is not None:
-			request.geometry = indexedGeometry
-		
-		print("Tracing")
-		fltResponse = await self.tracer.trace(request)
-		print("Done")
-		
-		return np.asarray(fltResponse.poincareHits)
+	async def poincareInPhiPlanesAsync(self, points, phiPlanes, turnLimit, config, **kwArgs):
+		result = await self.traceAsync(points, config, turnLimit = turnLimit, phiPlanes = phiPlanes, **kwArgs)
+		return result["poincareHits"]
 	
 	@asyncFunction
-	async def traceAsync(self, points, config, geometry = None, grid = None, geometryGrid = None, distanceLimit = 1e4, stepSize = 1e-3, collisionLimit = 0):
+	async def connectionLengthAsync(self, points, config, geometry, **kwargs):
+		result = await self.traceAsync(points, config, geometry = geometry, collisionLimit = 1, **kwargs)
+		return result["endPoints"][3]
+		
+	
+	@asyncFunction
+	async def traceAsync(self, points, config, geometry = None, grid = None, geometryGrid = None, distanceLimit = 1e4, turnLimit = 0, stepSize = 1e-3, collisionLimit = 0, phiPlanes = []):
 		resolvedField = await config.resolve()
 		
 		if grid is None:
@@ -147,6 +120,8 @@ class FLT:
 		request.stepSize = stepSize
 		request.distanceLimit = distanceLimit
 		request.collisionLimit = collisionLimit
+		request.poincarePlanes = phiPlanes
+		request.turnLimit = turnLimit
 		
 		if geometry is not None:
 			request.geometry = indexedGeometry
@@ -154,8 +129,15 @@ class FLT:
 		print("Starting trace")
 		response = await self.tracer.trace(request)
 		
-		return SimpleNamespace(
-			endPoints = np.asarray(response.endPoints),
-			# stopReasons = np.asarray(response.stopReasons)
-		)
+		endTags = {
+			str(tagName) : tagData
+			for tagName, tagData in zip(response.tagNames, np.asarray(response.endTags))
+		}
 		
+		return {
+			"endPoints" : np.asarray(response.endPoints),
+			"poincareHits" : np.asarray(response.poincareHits),
+			"stopReasons" : np.asarray(response.stopReasons),
+			"endTags" : endTags,
+			"responseSize" : native.capnp.totalSize(response)
+		}

@@ -1004,6 +1004,14 @@ StringTree generateForwardDeclarations(kj::String namespaceName, CodeGeneratorRe
 				"struct ", nodeName(childId, request).flatten(), ";"
 			);
 		}
+		
+		if(childNode.isEnum()) {
+			result = strTree(
+				mv(result), "\n",
+				generateAllTemplateHeaders(request, childId),
+				"enum class ", nodeName(childId, request).flatten(), ";"
+			);
+		}
 	}
 	
 	return result;
@@ -1041,6 +1049,19 @@ StringTree generateKindOverrides(kj::String namespaceName, CodeGeneratorRequest:
 				mv(result), "\n",
 				mv(specializationTemplateHeader),
 				"struct KindFor_<", cppNodeTypeName(childId, capnp::defaultValue<Brand>(), childId, capnp::defaultValue<Brand>(), request).flatten(), "> { static inline constexpr Kind kind = Kind::INTERFACE; };"
+			);
+		}
+		
+		if(childNode.isEnum()) {
+			auto specializationTemplateHeader = generateAllTemplateHeaders(request, childId);
+			
+			if(specializationTemplateHeader.size() == 0)
+				specializationTemplateHeader = strTree("template<>\n");
+			
+			result = strTree(
+				mv(result), "\n",
+				mv(specializationTemplateHeader),
+				"struct KindFor_<", cppNodeTypeName(childId, capnp::defaultValue<Brand>(), childId, capnp::defaultValue<Brand>(), request).flatten(), "> { static inline constexpr Kind kind = Kind::ENUM; };"
 			);
 		}
 	}

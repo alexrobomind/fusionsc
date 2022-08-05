@@ -80,7 +80,8 @@ namespace fscpy {
 			RootService,
 			OfflineData,
 			ResolverChain,
-			MergedGeometry
+			MergedGeometry,
+			FLTStopReason
 		>();
 		
 		// Schema submodule

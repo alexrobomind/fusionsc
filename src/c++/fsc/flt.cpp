@@ -356,6 +356,7 @@ struct FLTImpl : public FLT::Server {
 			Temporary<FLTKernelRequest> kernelRequest;
 			kernelRequest.setPhiPlanes(request.getPoincarePlanes());
 			kernelRequest.setTurnLimit(request.getTurnLimit());
+			kernelRequest.setCollisionLimit(request.getCollisionLimit());
 			kernelRequest.setDistanceLimit(request.getDistanceLimit());
 			kernelRequest.setStepLimit(request.getStepLimit());
 			kernelRequest.setStepSize(request.getStepSize());
@@ -390,7 +391,7 @@ struct FLTImpl : public FLT::Server {
 			
 			auto calc = heapHeld<TraceCalculation<Device>>(
 				*device, mv(kernelRequest), mv(field), mv(positions),
-				request.getGeometry(), mv(indexData), mv(geometryData),
+				request.getGeometry(), mv(indexData), geometryData,
 				
 				*rootOp
 			);
@@ -398,7 +399,7 @@ struct FLTImpl : public FLT::Server {
 			rootOp -> attachDestroyHere(thisCap(), cp(fieldData), calc.x());
 			
 			return calc->run()
-			.then([ctx, calc, request, startPointShape, nStartPoints, rootOp = mv(rootOp)]() mutable {
+			.then([ctx, calc, request, startPointShape, nStartPoints, geometryData = mv(geometryData), rootOp = mv(rootOp)]() mutable {
 				int64_t nTurns = 0;
 				
 				auto resultBuilder = kj::heapArrayBuilder<Temporary<FLTKernelData::Entry>>(nStartPoints);
@@ -416,10 +417,49 @@ struct FLTImpl : public FLT::Server {
 				
 				int64_t nSurfs = request.getPoincarePlanes().size();
 				
+				auto results = ctx.getResults();
+				results.setNTurns(nTurns);
+				
 				Tensor<double, 4> pcCuts(nTurns, nStartPoints, nSurfs, 5);
 				pcCuts.setConstant(std::numeric_limits<double>::quiet_NaN());
 				
-				Tensor<double, 2> endPoints(nStartPoints, 3);
+				Tensor<double, 2> endPoints(nStartPoints, 4);
+					
+				{
+					auto stopReasons = results.initStopReasons();
+					auto shape = stopReasons.initShape(startPointShape.size() - 1);
+					for(auto i : kj::indices(shape))
+						shape.set(i, startPointShape[i+1]);
+				}
+				
+				KJ_IF_MAYBE(pGeometryData, geometryData) {
+					auto geometry = pGeometryData -> get();
+					
+					auto tagNames = geometry.getTagNames();
+					auto outTagNames = results.initTagNames(tagNames.size());
+					for(auto i : kj::indices(outTagNames))
+						outTagNames.set(i, tagNames[i]);
+					
+					{
+						auto endTags = results.initEndTags();
+						auto shape = endTags.initShape(startPointShape.size());
+						
+						shape.set(0, tagNames.size());
+						for(auto i : kj::range(1, startPointShape.size()))
+							shape.set(i, startPointShape[i]);
+					}
+					results.getEndTags().initData(geometry.getTagNames().size() * nStartPoints);
+				} else {
+					auto endTags = results.initEndTags();
+					auto shape = endTags.initShape(startPointShape.size());
+						
+					shape.set(0, 0);
+					for(auto i : kj::range(1, startPointShape.size()))
+						shape.set(i, startPointShape[i]);
+				}
+				
+				auto stopReasonData = results.getStopReasons().initData(nStartPoints);
+				auto endTagData = results.getEndTags().getData();
 				
 				for(int64_t iStartPoint = 0; iStartPoint < nStartPoints; ++iStartPoint) {
 					auto entry = kData[iStartPoint].asReader();
@@ -429,8 +469,8 @@ struct FLTImpl : public FLT::Server {
 					int64_t iTurn = 0;
 					
 					kj::Vector<double> backwardLCs(events.size());
+					Maybe<FLTKernelEvent::Reader> lastCollision;
 					{
-						Maybe<FLTKernelEvent::Reader> lastCollision;
 						for(auto evt : events) {
 							if(evt.isGeometryHit()) {
 								lastCollision = evt;
@@ -467,7 +507,7 @@ struct FLTImpl : public FLT::Server {
 					for(auto iEvt : kj::indices(events)) {
 						auto evt = events[iEvt];
 						
-						KJ_REQUIRE(!evt.isNotSet(), "Internal error");
+						KJ_REQUIRE(!evt.isNotSet(), "Internal error: Event not set", iStartPoint, iEvt);
 						
 						// KJ_DBG(evt);
 												
@@ -490,10 +530,34 @@ struct FLTImpl : public FLT::Server {
 					for(int i = 0; i < 3; ++i) {
 						endPoints(iStartPoint, i) = stopLoc[i];
 					}
+					endPoints(iStartPoint, 3) = state.getDistance();
+					
+					auto stopReason = entry.getStopReason();
+					KJ_REQUIRE(stopReason != FLTStopReason::UNKNOWN, "Internal error: Unknown stop reason encountered", iStartPoint);
+					KJ_REQUIRE(stopReason != FLTStopReason::EVENT_BUFFER_FULL, "Internal error: Invalid stop reason EVENT_BUFFER_FULL", iStartPoint);
+					stopReasonData.set(iStartPoint, stopReason);
+					
+					if(stopReason == FLTStopReason::COLLISION_LIMIT) {
+						KJ_IF_MAYBE(pLastCollision, lastCollision) {
+							auto& lastCollision = *pLastCollision;
+							
+							uint32_t meshIdx = lastCollision.getGeometryHit().getMeshIndex();
+							
+							KJ_IF_MAYBE(pGeometryData, geometryData) {
+								auto geometry = pGeometryData->get();
+								auto tagValues = geometry.getEntries()[meshIdx].getTags();
+								
+								for(auto iTag : kj::indices(tagValues)) {
+									endTagData.setWithCaveats(iTag * nStartPoints + iStartPoint, tagValues[iTag]);
+								}
+							} else {
+								KJ_FAIL_REQUIRE("Internal error: Stop reason was COLLISION_LIMIT but geometry not set");
+							}
+						} else {
+							KJ_FAIL_REQUIRE("Internal error: Stop reason was COLLISION_LIMIT but no collision recorded in event buffer", iStartPoint);
+						}
+					}
 				}
-				
-				auto results = ctx.getResults();
-				results.setNTurns(nTurns);
 				
 				writeTensor(pcCuts, results.getPoincareHits());
 				writeTensor(endPoints, results.getEndPoints());
@@ -504,9 +568,9 @@ struct FLTImpl : public FLT::Server {
 				for(int i = 0; i < startPointShape.size() - 1; ++i)
 					pcHitsShape.set(i + 2, startPointShape[i + 1]);
 				pcHitsShape.set(startPointShape.size() + 1, nTurns);
-				
+
 				results.getEndPoints().setShape(startPointShape);
-				
+				results.getEndPoints().getShape().set(0, 4);
 			}).attach(mv(rootOp));
 		});
 		});

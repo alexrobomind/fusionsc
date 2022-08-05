@@ -11,6 +11,17 @@ using Index = import "index.capnp";
 
 # ============================== Service interface ===================================
 
+enum FLTStopReason {
+	unknown @0;
+	stepLimit @1;
+	distanceLimit @2;
+	turnLimit @3;
+	eventBufferFull @4; # Reserved for internal use. Should not be returned.
+	outOfGrid @5;
+	nanEncountered @6;
+	collisionLimit @7;
+}
+
 struct FLTRequest {
 	# Tensor of shape [3, ...] indicating tracing start points
 	startPoints @0 : Data.Float64Tensor;
@@ -22,8 +33,9 @@ struct FLTRequest {
 	turnLimit @4 : UInt32;
 	distanceLimit @5 : Float64;
 	stepLimit @6 : UInt32;
+	collisionLimit @7 : UInt32;
 	
-	stepSize @7 : Float64 = 0.001;
+	stepSize @8 : Float64 = 0.001;
 }
 
 struct FieldlineMappingData {
@@ -72,8 +84,16 @@ struct FLTResponse {
 	# Tensor of shape [5] (x, y, z, Lc_fwd, Lc_bwd) + startPoints.shape[1:] + [len(poincarePlanes), nTurns]
 	poincareHits @1 : Data.Float64Tensor;
 	
-	# Tensor of shape [3] + startPoints.shape[1:]
+	# Tensor of shape [4] (x, y, z, length) + startPoints.shape[1:]
 	endPoints @2 : Data.Float64Tensor;
+	
+	tagNames @3 : List(Text);
+	
+	# Tensor of shape [len(tagNames)] + startPoints.shape[1:]
+	endTags @4 : Data.ShapedList(List(Geometry.TagValue));
+	
+	# Tensor of shape startPoints.shape[1:]
+	stopReasons @5 : Data.ShapedList(List(FLTStopReason));
 }
 
 interface FLT {
@@ -85,17 +105,6 @@ interface FLT {
 
 # The following structures are internal and not intended to be used in network protocols
 # They might change in incompatible versions throughout the library
-
-enum FLTStopReason {
-	unknown @0;
-	stepLimit @1;
-	distanceLimit @2;
-	turnLimit @3;
-	eventBufferFull @4;
-	outOfGrid @5;
-	nanEncountered @6;
-	collisionLimit @7;
-}
 
 struct FLTKernelState {
 	position @0 : List(Float64);

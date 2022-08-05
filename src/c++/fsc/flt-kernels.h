@@ -299,6 +299,7 @@ namespace fsc {
 								x[i] = loc[i];
 							distance = evt.getDistance();
 							
+							++eventOffset;
 							break;
 						}
 					}
