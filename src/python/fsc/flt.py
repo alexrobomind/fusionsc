@@ -35,7 +35,7 @@ class FLT:
 		return self.poincareInPhiPlanesAsync(*args, **kwargs).wait()
 	
 	def trace(self, *args, **kwargs):
-		return self.traceAsync(*arg, **kwargs).wait()
+		return self.traceAsync(*args, **kwargs).wait()
 	
 	def mergeGeometry(self, *args, **kwargs):
 		return self.mergeGeometryAsync(*args, **kwargs).wait()
@@ -98,21 +98,17 @@ class FLT:
 		resolvedField = await config.resolve()
 		
 		if grid is None:
-			assert resolvedField.field.which() == 'computed'
+			assert resolvedField.field.which() == 'computed', 'Can only omit grid if field is pre-computed'
 			computedField = resolvedField.field.computed
 		else:
 			computedField = (await self.calculator.compute(resolvedField.field, grid)).computedField
 		
-		print("Computed field obtained")
-		
 		if geometry is not None:			
 			if geometryGrid is None:
-				assert geometry.geometry.which() == 'indexed'
+				assert geometry.geometry.which() == 'indexed', 'Can only omit geometry grid if geometry is already indexed'
 				indexedGeometry = geometry.geometry.indexed
 			else:
 				indexedGeometry = (await self.indexGeometryAsync(geometry, geometryGrid)).geometry.indexed
-				
-		print("Indexed geometry obtained")
 		
 		request = native.FLTRequest.newMessage()
 		request.startPoints = points
@@ -126,7 +122,6 @@ class FLT:
 		if geometry is not None:
 			request.geometry = indexedGeometry
 		
-		print("Starting trace")
 		response = await self.tracer.trace(request)
 		
 		endTags = {

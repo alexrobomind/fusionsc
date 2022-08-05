@@ -110,6 +110,7 @@ private:
 			auto outEntries = output.initEntries(entries.size());
 			for(size_t i = 0; i < entries.size(); ++i) {
 				outEntries.setWithCaveats(i, entries[i]);
+				entries[i] = nullptr;
 			}
 		}			
 	};
@@ -439,6 +440,8 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 	// First we need to download the geometry we want to index
 	return getActiveThread().dataService().download(merged)
 	.then([this, context](LocalDataRef<MergedGeometry> inputRef) mutable {
+		KJ_DBG("Beginning indexing operation");
+		
 		// Create output temporary and read information about input
 		auto output = context.getResults().initIndexed();
 		MergedGeometry::Reader input = inputRef.get();
@@ -449,8 +452,13 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 		
 		size_t totalSize = gridSize[0] * gridSize[1] * gridSize[2];
 		
+		struct ElRefStruct {
+			uint64_t meshIdx;
+			uint64_t elementIdx;
+		};
+		
 		// Allocate temporary un-aligned storage for grid refs
-		kj::Vector<kj::Vector<Temporary<IndexedGeometry::ElementRef>>> tmpRefs(totalSize);
+		kj::Vector<kj::Vector<ElRefStruct>> tmpRefs(totalSize);
 		tmpRefs.resize(totalSize);
 		
 		// Iterate through all components of geometry
@@ -522,11 +530,13 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 					// ... add a new ref in the corresponding cell
 					size_t globalIdx = (iX * gridSize[1] + iY) * gridSize[2] + iZ;
 					
-					Temporary<IndexedGeometry::ElementRef>& newRef = tmpRefs[globalIdx].add();
-					newRef.setMeshIndex(iEntry);
-					newRef.setElementIndex(iPoly);
+					ElRefStruct& newRef = tmpRefs[globalIdx].add();
+					newRef.meshIdx = iEntry;
+					newRef.elementIdx = iPoly;
 				}}}
 			}
+			
+			KJ_DBG("Processed mesh", iEntry, input.getEntries().size());
 		}
 		
 		// Set up output data. This creates a packed representation of the index
@@ -545,11 +555,17 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 			auto& in = tmpRefs[i];
 			auto out = refs.init(i, in.size());
 			
-			for(size_t iInner = 0; iInner < in.size(); ++iInner)
-				out.setWithCaveats(iInner, in[iInner]);			
+			for(size_t iInner = 0; iInner < in.size(); ++iInner) {
+				auto outRef = out[iInner];
+				outRef.setMeshIndex(in[iInner].meshIdx);
+				outRef.setElementIndex(in[iInner].elementIdx);
+			}
+			
+			in.clear();
 		}
 		
 		LocalDataRef<IndexedGeometry::IndexData> indexDataRef = getActiveThread().dataService().publish(getActiveThread().randomID(), indexData.asReader());
+		indexData = nullptr;
 		
 		output.setGrid(grid);
 		output.setBase(inputRef);
@@ -558,6 +574,26 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 }
 
 Promise<void> GeometryLibImpl::merge(MergeContext context) {
+	// Check if already merged
+	Geometry::Reader geometry = context.getParams();
+	while(geometry.isNested()) {
+		geometry = geometry.getNested();
+	}
+		
+	switch(geometry.which()) {
+		case Geometry::INDEXED: {
+			context.getResults().setRef(geometry.getIndexed().getBase());
+			return READY_NOW;
+		}
+		case Geometry::MERGED: {
+			context.getResults().setRef(geometry.getMerged());
+			return READY_NOW;
+		}
+		default: {			
+			break;
+		}
+	}	
+		
 	// Prepare scratch pad structures that will hold intermediate data
 	auto tagNameTable = heapHeld<kj::HashSet<kj::String>>();
 	auto geomAccum = heapHeld<GeometryAccumulator>();
@@ -597,7 +633,11 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 }
 
 Promise<void> GeometryLibImpl::planarCut(PlanarCutContext context) {
-	auto geoRef = context.getParams().getGeoRef();
+	auto mergeRequest = thisCap().mergeRequest();
+	mergeRequest.setNested(context.getParams().getGeometry());
+	
+	auto geoRef = mergeRequest.send().getRef();
+	
 	return getActiveThread().dataService().download(geoRef)
 	.then([context](LocalDataRef<MergedGeometry> geoRef) mutable {		
 		auto geo = geoRef.get();
@@ -658,6 +698,18 @@ Promise<void> GeometryLibImpl::planarCut(PlanarCutContext context) {
 				return result;
 			};
 			
+			auto addLine = [&](Vec3d p1, Vec3d p2) {
+				// Phi plane intersections are only for half planes
+				if(orientation.isPhi()) {
+					Vec3d er(std::cos(orientation.getPhi()), std::sin(orientation.getPhi()), 0);
+					
+					if(er.dot(p1) < 0) return;
+					if(er.dot(p2) < 0) return;
+				}
+				
+				lines.add(tuple(p1, p2));
+			};
+			
 			auto processLine = [&](Vec3d p1, Vec3d p2) -> Maybe<Vec3d> {
 				double d1 = normal.dot(p1) + d;
 				double d2 = normal.dot(p2) + d;
@@ -666,7 +718,7 @@ Promise<void> GeometryLibImpl::planarCut(PlanarCutContext context) {
 					return nullptr; // No intersection
 				
 				if(d1 == d2) {
-					lines.add(tuple(p1, p2)); // Line intersects coplanar with plane
+					addLine(p1, p2); // Line intersects coplanar with plane
 					return nullptr;
 				}
 				
@@ -690,7 +742,8 @@ Promise<void> GeometryLibImpl::planarCut(PlanarCutContext context) {
 				
 				for(int i = 0; i < 3; ++i) {
 					KJ_IF_MAYBE(pHit, linePlaneHits[i]) {
-						KJ_REQUIRE(nHit <= 1, "3 mid-point hits should not be possible");
+						if(nHit == 2)
+							break;
 						pair[nHit++] = *pHit;
 					}
 				}
@@ -698,7 +751,7 @@ Promise<void> GeometryLibImpl::planarCut(PlanarCutContext context) {
 				KJ_REQUIRE(nHit == 0 || nHit == 2, "Invalid mid-point count (should be 0 or 2)", nHit);
 				
 				if(nHit == 2)
-					lines.add(tuple(pair[0], pair[1]));
+					addLine(pair[0], pair[1]);
 			};
 			
 			switch(mesh.which()) {

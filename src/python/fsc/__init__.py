@@ -73,7 +73,7 @@ class Geometry:
 	
 	def __add__(self, other):
 		if not isinstance(other, Geometry):
-			return NotImplemented()
+			return NotImplemented
 			
 		result = Geometry()
 		
@@ -81,14 +81,16 @@ class Geometry:
 			result.geometry.combined = list(self.geometry.combined) + list(other.geometry.combined)
 			return result
 		
-		if self.field.which() == 'combined':
+		if self.geometry.which() == 'combined':
 			result.geometry.combined = list(self.geometry.combined) + [other.geometry]
 			return result
 		
-		if other.field.which() == 'combined':
+		if other.geometry.which() == 'combined':
 			result.geometry.combined = [self.geometry] + list(other.geometry.combined)
+			return result
 		
 		result.geometry.combined = [self.geometry, other.geometry]
+		return result
 	
 	
 class MagneticConfig:

@@ -126,13 +126,48 @@ def processCoilConvention(convention):
 	
 	return convention
 
-def components(ids = []):
+def components(ids = [], name = None):
 	result = fsc.Geometry()
 	result.geometry.componentsDBMeshes = ids
+	
+	if name:
+		tag = result.geometry.initTags(1)[0]
+		tag.name = 'name'
+		tag.value.text = name
+		
+	return result
+
+def assemblies(ids = [], name = None):
+	result = fsc.Geometry()
+	result.geometry.componentsDBAssemblies = ids
+	
+	if name:
+		tag = result.geometry.initTags(1)[0]
+		tag.name = 'name'
+		tag.value.text = name
+		
 	return result
 
 def divertor():
-	return components(range(165, 170))
+	return components(range(165, 170), 'Divertor TDU')
+
+def baffles():
+	return components(range(320, 325), 'OP1.2 Baffles') + components(range(325, 330), 'OP1.2 Baffle Covers')
+
+def heatShield():
+	return components(range(330, 335), 'OP1.2 Heat Shield')
+
+def pumpSlits():
+	return components(range(450, 455), 'Pump Slits')
+
+def steelPanels():
+	return assemblies([8], 'Steel Panels')
+	
+def vessel():
+	return assemblies([9], 'Plasma Vessel')
+
+def op12Geometry():
+	return divertor() + baffles() + heatShield() + pumpSlits() + steelPanels() + vessel()
 	
 # The W7XCoilSet type defaults to the W7-X coils 160 ... 230
 defaultCoils = cadCoils('archive')

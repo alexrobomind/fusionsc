@@ -33,8 +33,8 @@ const defaultGeoGrid : Geometry.CartesianGrid = (
 	zMin = -1.5,
 	zMax = 1.5,
 	
-	nX = 200,
-	nY = 200,
+	nX = 280,
+	nY = 280,
 	nZ = 60
 );
 

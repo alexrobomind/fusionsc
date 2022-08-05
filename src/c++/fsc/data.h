@@ -431,6 +431,13 @@ struct Temporary : public T::Builder {
 		return (*this) = Temporary<T>(other);
 	}
 	
+	Temporary<T>& operator=(std::nullptr_t) {
+		holder = kj::heap<capnp::MallocMessageBuilder>();
+		T::Builder::operator=(holder->getRoot<T>());
+		
+		return *this;
+	}
+	
 	typename T::Builder asBuilder() { return *this; }
 	
 	operator capnp::MessageBuilder&() { return *holder; }
