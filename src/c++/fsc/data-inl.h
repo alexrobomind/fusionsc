@@ -79,7 +79,7 @@ public:
 	
 	Promise<LocalDataRef<capnp::AnyPointer>> download(DataRef<capnp::AnyPointer>::Client src, bool recursive);
 	
-	LocalDataRef<capnp::AnyPointer> publish(ArrayPtr<const byte> id, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable, uint64_t cpTypeId);
+	LocalDataRef<capnp::AnyPointer> publish(DataRef<T>::Metadata::Reader metaData, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable);
 	
 	Promise<void> buildArchive(DataRef<capnp::AnyPointer>::Client ref, Archive::Builder out, Maybe<Nursery&> nursery);
 	Promise<void> writeArchive(DataRef<capnp::AnyPointer>::Client ref, const kj::File& out);
@@ -251,8 +251,7 @@ Promise<LocalDataRef<T>> LocalDataService::publish(IDReader dataForID, Reader da
 
 template<typename T>
 LocalDataRef<T> LocalDataService::publish(
-	ArrayPtr<const byte> id,
-	uint64_t typeId,
+	DataRef<T>::Metadata::Reader metaData,
 	Array<const byte> backingArray,
 	ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable
 ) {
@@ -266,10 +265,9 @@ LocalDataRef<T> LocalDataService::publish(
 	}
 	
 	return impl->publish(
-		id,
+		metaData.asDataRefGeneric(),
 		mv(backingArray),
 		hooks.finish(),
-		typeId
 	).template as<T>();
 }
 

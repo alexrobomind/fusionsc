@@ -5,6 +5,8 @@
 #include <kj/filesystem.h>
 #include <kj/map.h>
 
+#include <botan/hash.h>
+
 #include <functional>
 
 #include "data.h"
@@ -119,6 +121,10 @@ Promise<void> internal::LocalDataRefImpl::capTable(CapTableContext context) {
 }
 
 namespace {
+	std::unique_ptr<Botan::HashFunction> defaultHash() {
+		return Botan::HashFunction::create("Blake2b");
+	}
+	
 	struct TransmissionProcess {
 		constexpr static inline size_t CHUNK_SIZE = 1024 * 1024;
 		
@@ -242,17 +248,21 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::downloa
 	});
 }
 
-LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(ArrayPtr<const byte> id, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable, uint64_t cpTypeId) {
+LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRef<capnp::AnyPointer>::Metadata::Reader metaData, /*ArrayPtr<const byte> id, */Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable/*, uint64_t cpTypeId */) {
 	// Check if we have the id already, if not, 
 	Own<const LocalDataStore::Entry> entry;
-		
+	
+	KJ_REQUIRE(data.size() >= metaData.getDataSize(), "Data do not fit inside provided array");
+	KJ_REQUIRE(metaData.getCapTableSize() == capTable.size(), "Specified capability count must match provided table");
+	
 	// Prepare construction of the data
 	{
 		kj::Locked<LocalDataStore> lStore = library -> store.lockExclusive();
-		KJ_IF_MAYBE(ppRow, lStore -> table.find(id)) {
+		auto dataHash = metaData.getDataHash();
+		KJ_IF_MAYBE(ppRow, lStore -> table.find(dataHash)) {
 			entry = (*ppRow) -> addRef();
 		} else {
-			entry = kj::atomicRefcounted<LocalDataStore::Entry>(id, mv(data));
+			entry = kj::atomicRefcounted<LocalDataStore::Entry>(dataHash, mv(data));
 			lStore -> table.insert(entry -> addRef());
 		}
 	}
@@ -277,23 +287,39 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(ArrayPtr
 	backend->capTableClients = clients.finish();
 	backend->entryRef = mv(entry);
 	
-	auto metadata = backend->_metadata.initRoot<DataRef<capnp::AnyPointer>::Metadata>();
+	/*auto metadata = backend->_metadata.initRoot<DataRef<capnp::AnyPointer>::Metadata>();
 	metadata.setId(id);
 	metadata.setTypeId(cpTypeId);
 	metadata.setCapTableSize(capTable.size());
-	metadata.setDataSize(backend -> entryRef -> value.size());
+	metadata.setDataSize(backend -> entryRef -> value.size());*/
+	backend -> _metadata.setRoot(metaData);
+	auto myMetaData = backend -> _metadata.getRoot<DataRef<capnp::AnyPointer>::Metadata>();
+	
+	// Check if hash is nullptr. If yes, construct own.
+	if(metaData.getDataHash().size() == 0) {
+		auto hashFunction = defaultHash();
+		hashFunction -> update(data.begin(), data.size());
+		
+		KJ_STACK_ARRAY(uint8_t, hashOutput, hashFunction -> output_length(), 1, 64);
+		hashFunction -> final(hashOutput.begin());
+		
+		myMetaData.setDataHash(hashOutput);
+	}
 		
 	// Now construct a local data ref from the backend
 	return LocalDataRef<capnp::AnyPointer>(backend->addRef(), this -> serverSet);
 }
 
 namespace {
+	
 	struct TransmissionReceiver : public DataRef<capnp::AnyPointer>::Receiver::Server {
 		kj::ArrayPtr<kj::byte> target;
 		size_t offset;
+		std::unique_ptr<Botan::HashFunction> hashFunction;
+		kj::Array<unsigned char>& hashTarget;
 		
-		TransmissionReceiver(kj::ArrayPtr<kj::byte> target) :
-			target(target), offset(0)
+		TransmissionReceiver(kj::ArrayPtr<kj::byte> target, kj::Array<unsigned char>& hashTarget) :
+			target(target), offset(0), hashFunction(defaultHash()), hashTarget(hashtarget)
 		{}
 		
 		Promise<void> begin(BeginContext context) override {
@@ -311,11 +337,16 @@ namespace {
 			
 			offset += data.size();
 			
+			hashFunction -> update(data.begin(), data.size());
+			
 			return READY_NOW;
 		}
 		
 		Promise<void> done(DoneContext context) override {
 			KJ_REQUIRE(offset == target.size());
+			
+			hashData = kj::heapArray<unsigned char>(hashFunction -> output_length());
+			hashFunction -> final(hashData.begin());
 			
 			return READY_NOW;
 		}
@@ -377,11 +408,16 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownl
 		auto metadata = metadataResponse.getMetadata();
 		backend->_metadata.setRoot(metadata);
 				
-		// Check if we have the ID already
+				
+		// Check if we have the hash already
 		{
-			auto lStore = library -> store.lockShared();
-			KJ_IF_MAYBE(rowPtr, lStore -> table.find(metadata.getId())) {
-				return (*rowPtr) -> addRef();
+			auto dataHash = metadata.getDataHash();
+			if(dataHash.size() > 0) {
+				auto lStore = library -> store.lockShared();
+				
+				KJ_IF_MAYBE(rowPtr, lStore -> table.find(dataHash)) {
+					return (*rowPtr) -> addRef();
+				}
 			}
 		}
 		
@@ -410,7 +446,8 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownl
 		}
 		
 		return kj::joinPromises(processPromises.releaseAsArray())*/
-		DataRef<capnp::AnyPointer>::Receiver::Client receiver = kj::heap<TransmissionReceiver>(buffer);
+		auto hashOutput = heapHeld<Array<unsigned char>>();
+		DataRef<capnp::AnyPointer>::Receiver::Client receiver = kj::heap<TransmissionReceiver>(buffer, *hashOutput).attach(hashOutput.x());
 		
 		auto transmitRequest = src.transmitRequest();
 		transmitRequest.setStart(0);
@@ -418,12 +455,14 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownl
 		transmitRequest.setReceiver(receiver);
 		
 		return transmitRequest.send().ignoreResult()		
-		.then([backend = mv(backend), buffer = mv(buffer), this]() mutable {
+		.then([backend = mv(backend), buffer = mv(buffer), hashOutput, receiver, this]() mutable {
 			// Copy the data into a heap buffer
 			auto metadata = backend->_metadata.getRoot<RemoteRef::Metadata>();
 			
+			metadata.setDataHash(hashOutput->asBytes());
+			
 			auto entry = kj::atomicRefcounted<const LocalDataStore::Entry>(
-				metadata.getId(),
+				metadata.getDataHash(),
 				// kj::heapArray<const byte>(rawBytesResponse.getData())
 				mv(buffer)
 			);
@@ -432,7 +471,7 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownl
 			{
 				auto lStore = library -> store.lockExclusive();
 				
-				KJ_IF_MAYBE(rowPtr, lStore -> table.find(metadata.getId())) {
+				KJ_IF_MAYBE(rowPtr, lStore -> table.find(metadata.getDataHash())) {
 					// If found now, discard current download
 					// Note: This should happen only rarely
 					entry = (*rowPtr) -> addRef();
@@ -482,7 +521,10 @@ Promise<Archive::Entry::Builder> internal::LocalDataServiceImpl::createArchiveEn
 		// Store entry for orphan in entry table
 		entries.insert(id, mv(newOrphan));
 		
+		// Store metadata
 		newEntry.setId(id);
+		newEntry.setDataHash(local.getMetadata().getDataHash());
+		newEntry.setTypeId(local.getTypeID());
 		
 		auto raw = local.getRaw();
 		auto rawSize = raw.size();
@@ -542,7 +584,6 @@ Promise<Archive::Entry::Builder> internal::LocalDataServiceImpl::createArchiveEn
 		for(size_t iChunk = 0; iChunk < nChunks; ++iChunk)
 			outData.adopt(iChunk, mv(chunkData[iChunk]));
 		
-		newEntry.setTypeId(local.getTypeID());
 		newEntry.initCapabilities((unsigned int) capTable.size());
 		
 		auto subDownloads = kj::heapArrayBuilder<Promise<void>>(capTable.size());
@@ -810,12 +851,18 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(c
 			outData = mv(mutableData);
 		}
 		
+		Temporary<DataRef<capnp::AnyPointer>::Metadata> metaData;
+		metaData.setId(entry.getId());
+		metaData.setTypeId(entry.getTypeId());
+		metaData.setCapTableSize(capTableBuilder.size());
+		metaData.setDataSize(outData.size());
+		metaData.setDataHash(entry.getDataHash());
+		
 		// KJ_LOG(WARNING, "Publishing");
 		LocalRef local = publish(
-			entry.getId(),
+			metaData,
 			mv(outData),
-			capTableBuilder.finish(),
-			entry.getTypeId()
+			capTableBuilder.finish()
 		);
 		
 		KJ_IF_MAYBE(target, fulfillers.find(entry.getId())) {

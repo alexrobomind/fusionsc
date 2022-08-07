@@ -9,6 +9,7 @@ interface DataRef (T) {
 		typeId @1 : UInt64;
 		capTableSize @2 : UInt64;
 		dataSize @3 : UInt64;
+		dataHash @4 : Data;
 	}
 	
 	interface Receiver {
@@ -50,6 +51,7 @@ struct Archive {
 		data @1 : List(Data);
 		capabilities @2 : List(CapabilityInfo);
 		typeId @3 : UInt64;
+		dataHash @4 : Data;
 	}
 	root @0 : Entry;
 	extra @1 : List(Entry);
