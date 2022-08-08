@@ -148,8 +148,8 @@ struct TraceCalculation {
 		}
 		
 		round.kernelRequest = request.asReader();
-		round.kernelRequest.setStepLimit(
-			request.getStepLimit() != 0 ? std::min(request.getStepLimit(), ROUND_STEP_LIMIT) : ROUND_STEP_LIMIT
+		round.kernelRequest.getServiceRequest().setStepLimit(
+			request.getServiceRequest().getStepLimit() != 0 ? std::min(request.getServiceRequest().getStepLimit(), ROUND_STEP_LIMIT) : ROUND_STEP_LIMIT
 		);
 		
 		return round;
@@ -189,12 +189,12 @@ struct TraceCalculation {
 		}
 		
 		newRound.kernelRequest = request.asReader();
-		if(request.getStepLimit() != 0) {
-			newRound.kernelRequest.setStepLimit(
-				std::min(request.getStepLimit(), maxSteps + ROUND_STEP_LIMIT)
+		if(request.getServiceRequest().getStepLimit() != 0) {
+			newRound.kernelRequest.getServiceRequest().setStepLimit(
+				std::min(request.getServiceRequest().getStepLimit(), maxSteps + ROUND_STEP_LIMIT)
 			);
 		} else {
-			newRound.kernelRequest.setStepLimit(maxSteps + ROUND_STEP_LIMIT);
+			newRound.kernelRequest.getServiceRequest().setStepLimit(maxSteps + ROUND_STEP_LIMIT);
 		}
 		
 		KJ_DBG("Relaunching", newRound.kernelRequest.asReader());
@@ -235,7 +235,7 @@ struct TraceCalculation {
 		if(stopReason == FLTStopReason::EVENT_BUFFER_FULL)
 			return false;
 		
-		if(stopReason == FLTStopReason::STEP_LIMIT && (request.getStepLimit() == 0 || entry.getState().getNumSteps() < request.getStepLimit()))
+		if(stopReason == FLTStopReason::STEP_LIMIT && (request.getServiceRequest().getStepLimit() == 0 || entry.getState().getNumSteps() < request.getServiceRequest().getStepLimit()))
 			return false;
 		
 		return true;
@@ -328,6 +328,19 @@ struct FLTImpl : public FLT::Server {
 		ctx.allowCancellation();
 		auto request = ctx.getParams();
 		
+		// Request validation
+		for(auto plane : request.getPlanes()) {
+			if(plane.hasCenter()) {
+				KJ_REQUIRE(plane.getCenter().size() == 3, "Centers must be 3-dimensional");
+			}
+			if(plane.getOrientation().isNormal()) {
+				KJ_REQUIRE(plane.getOrientation().getNormal().size() == 3, "Plane normals must be 3D", plane);
+			}
+			if(plane.getOrientation().isPhi()) {
+				KJ_REQUIRE(!plane.hasCenter(), "Unimplemented: Phi planes are only supported when center is not specified (assuming 0, 0, 0)");
+			}
+		}
+		
 		auto& dataService = getActiveThread().dataService();
 		
 		auto isNull = [&](capnp::Capability::Client c) {
@@ -354,13 +367,14 @@ struct FLTImpl : public FLT::Server {
 			
 			// Extract kernel request
 			Temporary<FLTKernelRequest> kernelRequest;
-			kernelRequest.setPhiPlanes(request.getPoincarePlanes());
+			/*kernelRequest.setPhiPlanes(request.getPoincarePlanes());
 			kernelRequest.setTurnLimit(request.getTurnLimit());
 			kernelRequest.setCollisionLimit(request.getCollisionLimit());
 			kernelRequest.setDistanceLimit(request.getDistanceLimit());
 			kernelRequest.setStepLimit(request.getStepLimit());
 			kernelRequest.setStepSize(request.getStepSize());
-			kernelRequest.setGrid(request.getField().getGrid());
+			kernelRequest.setGrid(request.getField().getGrid());*/
+			kernelRequest.setServiceRequest(request);
 			
 			// Extract field data
 			auto field = mapTensor<Tensor<double, 4>>(fieldData.get());
@@ -415,7 +429,7 @@ struct FLTImpl : public FLT::Server {
 				if(request.getTurnLimit() > 0)
 					nTurns = std::min(nTurns, (int64_t) request.getTurnLimit());
 				
-				int64_t nSurfs = request.getPoincarePlanes().size();
+				int64_t nSurfs = request.getPlanes().size();
 				
 				auto results = ctx.getResults();
 				results.setNTurns(nTurns);

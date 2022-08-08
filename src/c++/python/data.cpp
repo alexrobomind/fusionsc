@@ -98,7 +98,7 @@ capnp::DynamicCapability::Client publish(capnp::DynamicStruct::Reader value) {
 	auto dataRefSchema = defaultLoader.capnpLoader.get(DR_ID, brand.asReader());
 	
 	// Publish DataRef and convert to correct type
-	capnp::Capability::Client asAny = getActiveThread().dataService().publish(getActiveThread().randomID(), value);
+	capnp::Capability::Client asAny = getActiveThread().dataService().publish(value);
 	return asAny.castAs<capnp::DynamicCapability>(dataRefSchema.asInterface());
 }
 

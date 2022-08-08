@@ -79,7 +79,8 @@ namespace fsc {
 		using V3 = Vec3<Num>;
 		
 		auto kernelData = *pKernelData;
-		auto request   = *pRequest;
+		auto kernelRequest   = *pRequest;
+		auto request = kernelRequest.getServiceRequest();
 		
 		auto geometry = *pGeometry;
 		auto index = *pGeometryIndex;
@@ -107,12 +108,24 @@ namespace fsc {
 		// Set up the magnetic field
 		using InterpolationStrategy = LinearInterpolation<Num>;
 		
-		auto grid = request.getGrid();
+		auto grid = request.getField().getGrid();
 		SlabFieldInterpolator<InterpolationStrategy> interpolator(InterpolationStrategy(), grid);
+		
+		auto parModel = request.getParallelModel();
+		auto perpModel = request.getPerpendicularModel();
+		
+		bool processDisplacements = perpModel.hasIsotropicDiffusionCoefficient();
+		
+		uint8_t tracingDirection = 1;
+		if(!state.getForward())
+			tracingDirection = -1;
+		
+		double nextDisplacementStep = state.getNextDisplacementAt();
+		double prevDisplacementStep = state.getPrevDisplacementAt();
 		
 		auto rungeKuttaInput = [&](V3 x, Num t) -> V3 {
 			V3 fieldValue = interpolator(fieldData, x);
-			auto result = fieldValue / fieldValue.norm();
+			auto result = fieldValue / fieldValue.norm() * tracingDirection;
 			
 			/*if(step % 10 == 0) {
 				KJ_DBG(result[0], result[1], result[2], result.norm());
@@ -148,6 +161,26 @@ namespace fsc {
 			++eventCount; \
 		}
 		
+		#define FSC_FLT_RANDOM_NORMAL(x) {\
+			auto randomIndex = state.getRandomNormalIndex(); \
+			auto entropyPool = kernelData.getNormalRandoms(); \
+			if(randomIndex == entropyPool.size()) { \
+				FSC_FLT_RETURN(ENTROPY_EXHAUSTED); \
+			} \
+			x = entropyPool[randomIndex]; \
+			state.setRandomNormalIndex(randomIndex + 1); \
+		}
+		
+		#define FSC_FLT_RANDOM_EXPONENTIAL(x) {\
+			auto randomIndex = state.getRandomExponentialIndex(); \
+			auto entropyPool = kernelData.getExponentialRandoms(); \
+			if(randomIndex == entropyPool.size()) { \
+				FSC_FLT_RETURN(ENTROPY_EXHAUSTED); \
+			} \
+			x = entropyPool[randomIndex]; \
+			state.setRandomExponentialIndex(randomIndex + 1); \
+		}
+		
 		auto currentEvent = [&]() {
 			return myData.mutateEvents()[eventCount];
 		};
@@ -181,8 +214,68 @@ namespace fsc {
 			// KJ_DBG("Limits passed");
 			
 			V3 x2 = x;
+			
+			bool displacementStep = false;
+			
+			if(processDisplacements) {
+				if(distance > nextDisplacementStep)
+					displacementStep = true;
+			}
+			
+			if(displacementStep) {
+				double deltaT = 0;
+				
+				double prevFreePath = parModel.getMeanFreePath() + displacementCount * parModel.getMeanFreePathGrowth();
+				double nextFreePath = parModel.getMeanFreePath() + (1 + displacementCount) * parModel.getMeanFreePathGrowth();
+				
+				// We need to store the next displacement step separately until we know for sure that we won't run out of random numbers
+				double projectedNextDisplacementStep = 0;
+				
+				if(parModel.hasConvectiveVelocity()) {
+					deltaT = prevFreePath / parModel.getConvectiveVelocity();
+					
+					double gauss;
+					FSC_FLT_RANDOM_NORMAL(gauss);
+					
+					double freePath = gauss * nextFreePath;
+					if(freePath >= 0) {
+						state.setForward(true);
+						projectedNextDisplacementStep = nextDisplacementStep + freePath;
+					} else {
+						state.setForward(false);
+						projectedNextDisplacementStep = nextDisplacementStep - freePath;
+					}	
+				} else if(parModel.hasDiffusionCoefficient()) {
+					// TODO: Check prefactor
+					deltaT = prevFreePath * prevFreePath / parModel.getDiffusionCoefficient();
+					
+					double expDist;
+					FSC_FLT_RANDOM_EXPONENTIAL(expDist);
+					
+					double freePath = expDist * nextFreePath;
+					
+					// Do not change tracing direction
+					projectedNextDisplacementStep = nextDisplacementStep + freePath;
+				}
+				
+				double isoDisplacement = std::sqrt(deltaT * perpModel.getIsotropicDiffusionCoefficient());
+				
+				for(int i = 0; i < 3; ++i) {
+					double gauss;
+					FSC_FLT_RANDOM_NORMAL(gauss);
+					
+					x2[i] += isoDisplacement * gauss;
+				}
+				
+				prevDisplacementStep = nextDisplacementStep;
+				nextDisplacementStep = projectedNextDisplacementStep;
+				
+				state.setDisplacementIndex(state.getDisplacementIndex() + 1);
+				tracingDirection = state.getForward() ? 1 : -1;
+			} else {
 			// KJ_DBG(request.getStepSize());
-			kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), rungeKuttaInput);
+				kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), rungeKuttaInput);
+			}
 			
 			// KJ_DBG("Step advanced", x[0], x[1], x[2], x2[0], x2[1], x2[2]);
 			// KJ_DBG("|dx|", (x2 - x).norm());
@@ -198,15 +291,52 @@ namespace fsc {
 			
 			Num phi0 = state.getPhi0();
 			
-			const auto phiPlanes = request.getPhiPlanes();
-			for(size_t iPlane = 0; iPlane < phiPlanes.size(); ++iPlane) {
-				Num planePhi = phiPlanes[iPlane];
+			// const auto phiPlanes = request.getPhiPlanes();
+			const auto planes = request.getPlanes();
+			for(auto iPlane : kj::indices(planes)) {
+				const auto plane = planes[iPlane];
+				const auto orientation = plane.getOrientation();
 				
-				if(kmath::crossedPhi(phi1, phi2, planePhi)) {
-					auto l = kmath::wrap(planePhi - phi1) / kmath::wrap(phi2 - phi1);
-					V3 xCross = l * x2 + (1. - l) * x;
+				bool crossed = false;
+				double crossedAt = 0;
+				
+				if(orientation.hasPhi()) {
+					double planePhi = orientation.getPhi();
+				
+					if(kmath::crossedPhi(phi1, phi2, planePhi)) {
+						crossedAt = kmath::wrap(planePhi - phi1) / kmath::wrap(phi2 - phi1);
+						crossed = true;
+					}
+				} else if(orientation.hasNormal()) {
+					Vec3d center(0, 0, 0);
 					
-					// KJ_DBG(idx, iPlane, state.getTurnCount());
+					auto pCenter = plane.getCenter();
+					if(pCenter.size() == 3) {
+						center[0] = pCenter[0];
+						center[1] = pCenter[1];
+						center[2] = pCenter[2];
+					}
+					
+					Vec3d normal(0, 0, 0);
+					auto pNormal = orientation.getNormal();
+					if(pNormal.size() == 3) {
+						normal[0] = pNormal[0];
+						normal[1] = pNormal[1];
+						normal[2] = pNormal[2];
+					}
+					
+					double d1 = (x - center).dot(normal);
+					double d2 = (x2 - center).dot(normal);
+					
+					if(d1 < 0 && d2 >= 0) {
+						crossedAt = (0 - d1) / (d2 - d1);
+						crossed = true;
+					}
+				}
+				
+				if(crossed) {
+					V3 xCross = crossedAt * x2 + (1. - crossedAt) * x;
+					
 					currentEvent().mutatePhiPlaneIntersection().setPlaneNo(iPlane);
 					FSC_FLT_LOG_EVENT(xCross);				
 				}
@@ -317,7 +447,10 @@ namespace fsc {
 			// --- Advance the step after all events are processed ---
 			
 			x = x2;
-			distance += request.getStepSize();
+			
+			if(!displacementStep)
+				distance += std::abs(request.getStepSize());
+			
 			++step;
 			
 			state.setEventCount(eventCount);
@@ -334,6 +467,8 @@ namespace fsc {
 			statePos.set(i, x[i]);
 		state.setNumSteps(step);
 		state.setDistance(distance);
+		state.setNextDisplacementAt(nextDisplacementStep);
+		state.setPrevDisplacementAt(prevDisplacementStep);
 		
 		// Note: The event count is not updated here but at the end of the loop
 		// This ensures that events from unfinished steps do not get added

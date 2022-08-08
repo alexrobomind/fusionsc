@@ -61,7 +61,8 @@ TEST_CASE("flt") {
 		traceReq.getStartPoints().setShape({3});
 		traceReq.getStartPoints().setData({1.0, 0.0, 0.0});
 		
-		traceReq.setPoincarePlanes({3.141592});
+		auto planes = traceReq.initPlanes(1);
+		planes[0].getOrientation().setPhi(3.141592);
 		
 		traceReq.setTurnLimit(10);
 		// traceReq.setStepLimit(10000);

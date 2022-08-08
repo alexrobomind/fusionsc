@@ -20,6 +20,7 @@ enum FLTStopReason {
 	outOfGrid @5;
 	nanEncountered @6;
 	collisionLimit @7;
+	displacementEventsExhausted @8;
 }
 
 struct FLTRequest {
@@ -28,7 +29,7 @@ struct FLTRequest {
 	field @1 : Magnetics.ComputedField;
 	geometry @2 : Geometry.IndexedGeometry;
 	
-	poincarePlanes @3 : List(Float64);
+	planes @3 : List(Geometry.Plane);
 	
 	turnLimit @4 : UInt32;
 	distanceLimit @5 : Float64;
@@ -36,6 +37,21 @@ struct FLTRequest {
 	collisionLimit @7 : UInt32;
 	
 	stepSize @8 : Float64 = 0.001;
+	
+	parallelModel : group {
+		meanFreePath @9 : Float64;
+		meanFreePathGrowth @10 : Float64;
+		
+		union {
+			convectiveVelocity @11 : Float64;
+			diffusionCoefficient @12 : Float64;
+		}
+	}
+	
+	perpendicularModel : union {
+		noDisplacement @13 : Void;
+		isotropicDiffusionCoefficient @14 : Float64;
+	};
 }
 
 struct FieldlineMappingData {
@@ -114,6 +130,13 @@ struct FLTKernelState {
 	phi0 @4 : Float64;
 	eventCount @5 : UInt32;
 	collisionCount @6 : UInt32;
+	
+	forward @7 : Bool = True;
+	
+	prevDisplacementAt @8 : Float64;
+	nextDisplacementAt @9 : Float64;
+	
+	displacementCount @10 : UInt32;
 }
 
 struct FLTKernelEvent {
@@ -145,15 +168,16 @@ struct FLTKernelData {
 }
 
 struct FLTKernelRequest {
-	phiPlanes @0 : List(Float64);
-	
-	turnLimit @1 : UInt32;
-	distanceLimit @2 : Float64;
-	stepLimit @3 : UInt32;
-	
-	stepSize @4 : Float64;
-	
-	grid @5 : Magnetics.ToroidalGrid;
-	
-	collisionLimit @6 : UInt32;
+	#phiPlanes @0 : List(Float64);
+	#
+	#turnLimit @1 : UInt32;
+	#distanceLimit @2 : Float64;
+	#stepLimit @3 : UInt32;
+	#
+	#stepSize @4 : Float64;
+	#
+	#grid @5 : Magnetics.ToroidalGrid;
+	#
+	#collisionLimit @6 : UInt32;
+	serviceRequest @0 : FLTRequest;
 }

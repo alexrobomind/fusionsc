@@ -283,7 +283,7 @@ struct MainCls {
 		
 		LocalDataService& ds = lt->dataService();
 		ds.writeArchive(
-			ds.publish(lt->randomID(), output.asReader()),
+			ds.publish(output.asReader()),
 			*file
 		).wait(ws);
 		

@@ -119,6 +119,12 @@ class FLT:
 		request.poincarePlanes = phiPlanes
 		request.turnLimit = turnLimit
 		
+		if phiPlanes:
+			planes = request.initPlanes(len(phiPlanes))
+			
+			for plane, phi in zip(planes, phiPlanes):
+				plane.orientation.phi = phi
+		
 		if geometry is not None:
 			request.geometry = indexedGeometry
 		

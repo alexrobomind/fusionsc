@@ -1225,6 +1225,18 @@ void bindEnumClasses(py::module_& m) {
 			}
 			return kj::str("<unknown> (", self.getRaw(), ")");
 		})
+		.def("__eq__", [](DynamicEnum& self, DynamicEnum& other) {
+			return self.getSchema() == other.getSchema() && self.getRaw() == other.getRaw();
+		}, py::is_operator())
+		.def("__eq__", [](DynamicEnum& self, uint16_t other) {
+			return self.getRaw() == other;
+		}, py::is_operator())
+		.def("__eq__", [](DynamicEnum& self, kj::StringPtr other) {
+			KJ_IF_MAYBE(pEnumerant, self.getEnumerant()) {
+				return pEnumerant -> getProto().getName() == other;
+			}
+			return false;
+		}, py::is_operator())
 	;
 }
 
