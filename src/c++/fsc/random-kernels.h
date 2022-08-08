@@ -2,6 +2,7 @@
 
 namespace fsc {
 
+//! Implements the popular 32 bit Mersenne twister 19937 pseudo-random number generator
 struct MT19937 {
 	static constexpr int N = 624;
 	static constexpr int M = 397;
@@ -75,6 +76,17 @@ struct MT19937 {
 		n1 = cos(angle) * magnitude;
 		n2 = sin(angle) * magnitude;
 	}
+	
+	static void seed(uint32_t seed, MT19937State::Builder state) {
+		constexpr uint32_t mult = 1812433253ul;
+		
+		state.setIndex(0);
+		auto vector = state.initVector(N);
+		
+		for(auto i : kj::indices(vector)) {
+			vector.set(i, seed);
+			seed = mult * (seed ^ (seed >> 30)) + (i+1);
+		}
 };
 
 }

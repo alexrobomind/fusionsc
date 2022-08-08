@@ -21,7 +21,6 @@ enum FLTStopReason {
 	outOfGrid @5;
 	nanEncountered @6;
 	collisionLimit @7;
-	displacementEventsExhausted @8;
 }
 
 struct FLTRequest {
@@ -53,6 +52,8 @@ struct FLTRequest {
 		noDisplacement @13 : Void;
 		isotropicDiffusionCoefficient @14 : Float64;
 	};
+	
+	rngSeed : UInt64;
 }
 
 struct FieldlineMappingData {
@@ -111,6 +112,8 @@ struct FLTResponse {
 	
 	# Tensor of shape startPoints.shape[1:]
 	stopReasons @5 : Data.ShapedList(List(FLTStopReason));
+	
+	rngSeed @6 : UInt64;
 }
 
 interface FLT {
@@ -137,7 +140,7 @@ struct FLTKernelState {
 	nextDisplacementAt @8 : Float64;
 	
 	displacementCount @9 : UInt32;
-	rNGState @10 : Random.MT19937State;
+	rngState @10 : Random.MT19937State;
 }
 
 struct FLTKernelEvent {

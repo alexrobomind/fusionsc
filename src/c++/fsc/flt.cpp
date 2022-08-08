@@ -106,6 +106,13 @@ struct TraceCalculation {
 		deviceField.updateDevice();
 		
 		hostMemSynchronize(device, rootOp);
+		
+		if(request.getRngSeed() == 0) {
+			uint64_t seed;
+			requeset.setRngSeed(getActiveThread().rng().randomize(kj::ArrayPtr<unsigned char>(&seed, sizeof(decltype(seed)))));
+			
+			request.setRngSeed(seed);
+		}
 	}
 	
 	// Prepares the memory structure for a round
@@ -136,6 +143,8 @@ struct TraceCalculation {
 		
 		round.participants.addAll(kj::range<size_t>(0, nParticipants));	
 		
+		std::mt19937_64 seedGenerator(kernelRequest.getServiceRequest().getRngSeed());
+		
 		auto data = round.kernelData.getData();
 		for(size_t i = 0; i < nParticipants; ++i) {
 			auto state = data[i].initState();
@@ -145,6 +154,8 @@ struct TraceCalculation {
 				pos.set(iDim, positions(iDim, i));
 			
 			state.setPhi0(std::atan2(pos[1], pos[0]));
+			
+			fsc::MT19937::seed((uint32_t) seedGenerator(), state.getRngState());
 		}
 		
 		round.kernelRequest = request.asReader();

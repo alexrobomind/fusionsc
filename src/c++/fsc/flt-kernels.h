@@ -108,8 +108,7 @@ namespace fsc {
 		Num distance = state.getDistance();
 		double nextDisplacementStep = state.getNextDisplacementAt();
 		uint32_t displacementCount = state.getDisplacementCount();
-		
-		MT19937 rng(myData.getRNGState());
+		MT19937 rng(myData.getRngState());
 		
 		// Set up the magnetic field
 		using InterpolationStrategy = LinearInterpolation<Num>;
@@ -119,9 +118,7 @@ namespace fsc {
 		
 		bool processDisplacements = perpModel.hasIsotropicDiffusionCoefficient();
 		
-		uint8_t tracingDirection = 1;
-		if(!state.getForward())
-			tracingDirection = -1;
+		uint8_t tracingDirection = state.getForward() ? 1 : -1;
 		
 		auto rungeKuttaInput = [&](V3 x, Num t) -> V3 {
 			V3 fieldValue = interpolator(fieldData, x);
@@ -161,26 +158,6 @@ namespace fsc {
 			++eventCount; \
 		}
 		
-		#define FSC_FLT_RANDOM_NORMAL(x) {\
-			auto randomIndex = state.getRandomNormalIndex(); \
-			auto entropyPool = kernelData.getNormalRandoms(); \
-			if(randomIndex == entropyPool.size()) { \
-				FSC_FLT_RETURN(ENTROPY_EXHAUSTED); \
-			} \
-			x = entropyPool[randomIndex]; \
-			state.setRandomNormalIndex(randomIndex + 1); \
-		}
-		
-		#define FSC_FLT_RANDOM_EXPONENTIAL(x) {\
-			auto randomIndex = state.getRandomExponentialIndex(); \
-			auto entropyPool = kernelData.getExponentialRandoms(); \
-			if(randomIndex == entropyPool.size()) { \
-				FSC_FLT_RETURN(ENTROPY_EXHAUSTED); \
-			} \
-			x = entropyPool[randomIndex]; \
-			state.setRandomExponentialIndex(randomIndex + 1); \
-		}
-		
 		auto currentEvent = [&]() {
 			return myData.mutateEvents()[eventCount];
 		};
@@ -213,6 +190,8 @@ namespace fsc {
 			
 			// KJ_DBG("Limits passed");
 			
+			V3 x2 = x;
+			
 			bool displacementStep = false;
 			
 			if(processDisplacements) {
@@ -221,8 +200,6 @@ namespace fsc {
 			}
 			
 			if(displacementStep) {
-				double deltaT = 0;
-				
 				double prevFreePath = parModel.getMeanFreePath() + displacementCount * parModel.getMeanFreePathGrowth();
 				double nextFreePath = parModel.getMeanFreePath() + (1 + displacementCount) * parModel.getMeanFreePathGrowth();
 				
@@ -231,45 +208,46 @@ namespace fsc {
 				rng.normalPair(normalDistributed[0], normalDistributed[1]);
 				rng.normalPair(normalDistributed[2], normalDistributed[3]);
 				
+				// To be filled out by transport model
+				double deltaT = 0;
+				double freePath = 0;
+				
 				if(parModel.hasConvectiveVelocity()) {
-					deltaT = prevFreePath / parModel.getConvectiveVelocity();	
-										
-					double freePath = rng.exponential() * nextFreePath;
+					// Convective transport model
+					deltaT = prevFreePath / parModel.getConvectiveVelocity();					
+					freePath = rng.exponential() * nextFreePath;
 					
-					// Do not change tracing direction
-					nextDisplacementStep += freePath;
 				} else if(parModel.hasDiffusionCoefficient()) {
+					// Diffusive transport model
 					// TODO: Check prefactor
 					deltaT = prevFreePath * prevFreePath / parModel.getDiffusionCoefficient();
-					
-					double freePath = normalDistributed[3] * nextFreePath;
-					if(freePath >= 0) {
-						state.setForward(true);
-						nextDisplacementStep += freePath;
-					} else {
-						state.setForward(false);
-						nextDisplacementStep -= freePath;
-					}
+					freePath = normalDistributed[3] * nextFreePath;
 				}
 				
+				if(freePath >= 0) {
+					nextDisplacementStep += freePath;
+				} else {
+					tracingDirection = -tracingDirection;
+					nextDisplacementStep -= freePath;
+				}
+					
+				// Perform displacement
 				double isoDisplacement = std::sqrt(deltaT * perpModel.getIsotropicDiffusionCoefficient());
 								
 				for(int i = 0; i < 3; ++i) {
-					x[i] += isoDisplacement * normalDistributed[i];
+					x2[i] += isoDisplacement * normalDistributed[i];
 				}
 				
 				++displacementCount;
-				tracingDirection = state.getForward() ? 1 : -1;
+			} else {
+				// Regular tracing step
+				kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), rungeKuttaInput);
 			}
-			
-			V3 x2 = x;
-
-			kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), rungeKuttaInput);
 			
 			// KJ_DBG("Step advanced", x[0], x[1], x[2], x2[0], x2[1], x2[2]);
 			// KJ_DBG("|dx|", (x2 - x).norm());
 						
-			// --- Check for phi crossings ---
+			// --- Check for plane crossings ---
 			
 			Num phi1 = atan2(x[1], x[0]);
 			Num phi2 = atan2(x2[1], x2[0]);
@@ -280,7 +258,6 @@ namespace fsc {
 			
 			Num phi0 = state.getPhi0();
 			
-			// const auto phiPlanes = request.getPhiPlanes();
 			const auto planes = request.getPlanes();
 			for(auto iPlane : kj::indices(planes)) {
 				const auto plane = planes[iPlane];
@@ -330,6 +307,8 @@ namespace fsc {
 					FSC_FLT_LOG_EVENT(xCross);				
 				}
 			}
+			
+			// --- Check for new turns ---
 						
 			if(kmath::crossedPhi(phi1, phi2, phi0) && step > 1) {
 				auto l = kmath::wrap(phi0 - phi1) / kmath::wrap(phi2 - phi1);
@@ -344,6 +323,8 @@ namespace fsc {
 				
 				state.setTurnCount(state.getTurnCount() + 1);		
 			}
+			
+			// --- Check for collisions ---
 			
 			uint32_t numCollisions = 0;
 			
@@ -368,7 +349,7 @@ namespace fsc {
 			
 			// KJ_DBG("Phi cross checks passed");
 			
-			// Sort events
+			// --- Sort generated events ---
 			{
 				auto events = myData.mutateEvents();
 				
@@ -435,15 +416,24 @@ namespace fsc {
 			
 			// --- Advance the step after all events are processed ---
 			
-			x = x2;
-			
 			if(!displacementStep)
 				distance += std::abs(request.getStepSize());
+			else
+				distance += (x2 - x1).norm();
 			
-			++step;
+			x = x2;
 			
 			state.setEventCount(eventCount);
 			state.setCollisionCount(state.getCollisionCount() + numCollisions);
+			
+			if(displacementStep) {
+				state.setDisplacementCount(displacementCount);
+				state.setNextDisplacementAt(nextDisplacementStep);
+				state.setForward(tracingDirection == 1);
+				rng.save(state.mutateRngState());
+			}
+			
+			++step;
 		}
 		
 		// !!! The kernel returns by jumping to this label !!!
@@ -456,9 +446,6 @@ namespace fsc {
 			statePos.set(i, x[i]);
 		state.setNumSteps(step);
 		state.setDistance(distance);
-		state.setDisplacementCount(displacementCount);
-		state.setNextDisplacementAt(nextDisplacementStep);
-		rng.save(state.mutateRNGState());
 		
 		// Note: The event count is not updated here but at the end of the loop
 		// This ensures that events from unfinished steps do not get added
