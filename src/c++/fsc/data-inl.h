@@ -79,7 +79,7 @@ public:
 	
 	Promise<LocalDataRef<capnp::AnyPointer>> download(DataRef<capnp::AnyPointer>::Client src, bool recursive);
 	
-	LocalDataRef<capnp::AnyPointer> publish(DataRef<T>::Metadata::Reader metaData, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable);
+	LocalDataRef<capnp::AnyPointer> publish(DataRef<capnp::AnyPointer>::Metadata::Reader metaData, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable);
 	
 	Promise<void> buildArchive(DataRef<capnp::AnyPointer>::Client ref, Archive::Builder out, Maybe<Nursery&> nursery);
 	Promise<void> writeArchive(DataRef<capnp::AnyPointer>::Client ref, const kj::File& out);
@@ -219,20 +219,26 @@ struct References_<LocalDataRef<T>> { using Type = T; };
 // === class LocalDataService ===
 
 template<typename Reader, typename T>
-LocalDataRef<T> LocalDataService::publish(ArrayPtr<const byte> id, Reader data) {
+LocalDataRef<T> LocalDataService::publish(/*ArrayPtr<const byte> id, */Reader data) {
 	capnp::BuilderCapabilityTable capTable;
 	
 	Array<const byte> byteData = internal::buildData<T>(data, capTable);
+	
+	Temporary<DataRef<capnp::AnyPointer>::Metadata> metadata;
+	metadata.setId(getActiveThread().randomID());
+	metadata.setTypeId(internal::capnpTypeId<T>(data));
+	metadata.setCapTableSize(capTable.getTable().size());
+	metadata.setDataSize(byteData.size());
+	// dataHash set by impl->publish()
 			
 	return impl->publish(
-		id,
+		metadata,
 		mv(byteData),
-		capTable.getTable(),
-		internal::capnpTypeId<T>(data)
+		capTable.getTable()
 	).template as<T>();
 }
 
-template<typename Reader, typename IDReader, typename T, typename T2>
+/*template<typename Reader, typename IDReader, typename T, typename T2>
 Promise<LocalDataRef<T>> LocalDataService::publish(IDReader dataForID, Reader data, kj::StringPtr hashFunction) {
 	Promise<ID> id = ID::fromReaderWithRefs(dataForID);
 	
@@ -247,11 +253,11 @@ Promise<LocalDataRef<T>> LocalDataService::publish(IDReader dataForID, Reader da
 		
 		return publish(newId, data);
 	});
-}
+}*/
 
 template<typename T>
 LocalDataRef<T> LocalDataService::publish(
-	DataRef<T>::Metadata::Reader metaData,
+	typename DataRef<T>::Metadata::Reader metaData,
 	Array<const byte> backingArray,
 	ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable
 ) {
@@ -267,7 +273,7 @@ LocalDataRef<T> LocalDataService::publish(
 	return impl->publish(
 		metaData.asDataRefGeneric(),
 		mv(backingArray),
-		hooks.finish(),
+		hooks.finish()
 	).template as<T>();
 }
 
@@ -392,6 +398,11 @@ ArrayPtr<capnp::Capability::Client> LocalDataRef<T>::getCapTable() {
 template<typename T>
 uint64_t LocalDataRef<T>::getTypeID() {
 	return backend -> localMetadata().getTypeId();
+}
+
+template<typename T>
+typename DataRef<T>::Metadata::Reader LocalDataRef<T>::getMetadata() {
+	return backend -> _metadata.getRoot<typename DataRef<T>::Metadata>();
 }
 
 // === function attachToClient ===

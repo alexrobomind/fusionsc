@@ -68,7 +68,7 @@ TEST_CASE("index-cube") {
 	
 	KJ_DBG("Merging");
 	auto mergeRequest = geoLib.mergeRequest();
-	mergeRequest.setMesh(lt->dataService().publish(lt->randomID(), geo));
+	mergeRequest.setMesh(lt->dataService().publish(geo));
 	auto mergeResult = mergeRequest.send();
 	
 	Temporary<CartesianGrid> grid;

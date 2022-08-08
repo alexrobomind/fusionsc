@@ -28,8 +28,7 @@ TEST_CASE("local_publish") {
 	SECTION("raw") {
 		auto data = kj::heapArray<const byte>({0, 1, 2, 3, 4});
 		
-		LocalDataRef<capnp::Data> ref = ds.publish(id, 0, kj::heapArray<const byte>(data));
-		
+		LocalDataRef<capnp::Data> ref = ds.publish(kj::heapArray<const byte>(data));
 		ArrayPtr<const byte> data2 = ref.getRaw();
 		
 		REQUIRE(data == data2);
@@ -43,7 +42,7 @@ TEST_CASE("local_publish") {
 		for(unsigned int i = 0; i < dataSection.size(); ++i)
 			dataSection[i] = i;
 		
-		LocalDataRef<capnp::AnyStruct> ref = ds.publish(id, sb);
+		LocalDataRef<capnp::AnyStruct> ref = ds.publish(sb);
 		capnp::AnyStruct::Reader reader = ref.get();
 		
 		REQUIRE(reader.getDataSection() == sb.getDataSection());
@@ -74,12 +73,12 @@ TEST_CASE("local_publish") {
 		capnp::MallocMessageBuilder mb1;
 		DataHolder::Builder inner = mb1.initRoot<DataHolder>();
 		inner.setData(data1);
-		LocalDataRef<DataHolder> ref1 = ds.publish({0x00}, inner);
+		LocalDataRef<DataHolder> ref1 = ds.publish(inner);
 
 		capnp::MallocMessageBuilder mb2;
 		DDH::Builder refHolder = mb2.initRoot<DDH>();
 		refHolder.setRef(ref1);
-		LocalDataRef<DDH> ref2 = ds.publish({0x01}, refHolder);
+		LocalDataRef<DDH> ref2 = ds.publish(refHolder);
 		
 		SECTION("local") {
 			LocalDataRef<DataHolder> ref12 = ds.download(ref2.get().getRef()).wait(ws);

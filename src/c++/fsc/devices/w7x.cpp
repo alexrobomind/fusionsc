@@ -212,7 +212,7 @@ DataRef<Filament>::Client CoilsDBResolver::getCoil(uint64_t cdbID) {
 	
 	DataRef<Filament>::Client newCoil = coilRequest.send().then([cdbID, this](auto filament) {
 		// auto filament = response.getFilament();
-		auto ref = getActiveThread().dataService().publish(getActiveThread().randomID(), Filament::Reader(filament));
+		auto ref = getActiveThread().dataService().publish(Filament::Reader(filament));
 		
 		return ref;
 	});
@@ -331,7 +331,7 @@ DataRef<Mesh>::Client ComponentsDBResolver::getComponent(uint64_t id) {
 			return *pMesh;
 		}
 		
-		DataRef<Mesh>::Client published = getActiveThread().dataService().publish(getActiveThread().randomID(), (Mesh::Reader&) response);
+		DataRef<Mesh>::Client published = getActiveThread().dataService().publish((Mesh::Reader&) response);
 		meshes.insert(id, published);
 		return published;
 	});

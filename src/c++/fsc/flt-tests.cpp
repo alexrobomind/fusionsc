@@ -31,9 +31,7 @@ void prepareToroidalField(ComputedField::Builder field) {
 			data.set(i, i % 3 == 0 ? 1 : 0);
 	}
 	
-	field.setData(getActiveThread().dataService().publish(
-		getActiveThread().randomID(), fieldData.asReader()
-	));
+	field.setData(getActiveThread().dataService().publish(fieldData.asReader()));
 }
 
 TEST_CASE("flt") {
@@ -72,7 +70,8 @@ TEST_CASE("flt") {
 		KJ_DBG("Sending request");
 		auto response = traceReq.send().wait(ws);
 		
-		KJ_DBG(response);
+		KJ_DBG("Done");
+		//KJ_DBG(response); // This currently can't be printed due to a Capnp bug
 	}
 }
 

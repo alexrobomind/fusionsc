@@ -37,7 +37,7 @@ Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geom
 			.then([tmp = Geometry::Builder(tmp), context, this](LocalDataRef<Geometry> local) mutable {
 				return processGeometry(local.get(), tmp, context);
 			}).then([tmp = tmp.asReader(), output]() mutable {
-				output.setRef(getActiveThread().dataService().publish(getActiveThread().randomID(), tmp));
+				output.setRef(getActiveThread().dataService().publish(tmp));
 			}).attach(mv(tmp), thisCap());
 		}
 		case Geometry::NESTED: {
@@ -564,7 +564,7 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 			in.clear();
 		}
 		
-		LocalDataRef<IndexedGeometry::IndexData> indexDataRef = getActiveThread().dataService().publish(getActiveThread().randomID(), indexData.asReader());
+		LocalDataRef<IndexedGeometry::IndexData> indexDataRef = getActiveThread().dataService().publish(indexData.asReader());
 		indexData = nullptr;
 		
 		output.setGrid(grid);
@@ -623,9 +623,8 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 			outTagNames.set(i, *(tagNameTable->begin() + i));
 		
 		// Publish the merged geometry into the data store
-		// Derive the ID from parameters (is OK as cap table is empty)
 		context.getResults().setRef(
-			getActiveThread().dataService().publish(context.getParams(), output.asReader()).attach(mv(output))
+			getActiveThread().dataService().publish(output.asReader())
 		);
 	});
 	

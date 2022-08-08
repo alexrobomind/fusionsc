@@ -177,7 +177,7 @@ struct CalculationSession : public FieldCalculator::Server {
 			auto result = heapHeld<Temporary<Float64Tensor>>();	
 			
 			auto publish = newCalculator->finish(*result).then([result, this]() mutable {
-				return getActiveThread().dataService().publish(getActiveThread().randomID(), result->asReader());
+				return getActiveThread().dataService().publish(result->asReader());
 			})
 			.eagerlyEvaluate(nullptr)
 			.attach(result.x());
@@ -386,7 +386,7 @@ Promise<void> FieldResolverBase::processField(MagneticField::Reader input, Magne
 			.then([this, newOutput, context] (LocalDataRef<MagneticField> ref) mutable {
 				return processField(ref.get(), newOutput, context);
 			}).then([this, output, newOutput]() mutable {
-				return output.setRef(getActiveThread().dataService().publish(getActiveThread().randomID(), newOutput));
+				return output.setRef(getActiveThread().dataService().publish(newOutput));
 			}).attach(mv(tmpMessage), thisCap());
 		}
 		case MagneticField::COMPUTED_FIELD: {
@@ -447,7 +447,7 @@ Promise<void> FieldResolverBase::processFilament(Filament::Reader input, Filamen
 			.then([this, newOutput, context] (LocalDataRef<Filament> ref) mutable {
 				return processFilament(ref.get(), newOutput, context);
 			}).then([this, output, newOutput]() mutable {
-				return output.setRef(getActiveThread().dataService().publish(getActiveThread().randomID(), newOutput));
+				return output.setRef(getActiveThread().dataService().publish(newOutput));
 			}).attach(mv(tmpMessage), thisCap());
 		}
 		case Filament::NESTED: {

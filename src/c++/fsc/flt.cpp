@@ -558,7 +558,6 @@ struct FLTImpl : public FLT::Server {
 						}
 					}
 				}
-				
 				writeTensor(pcCuts, results.getPoincareHits());
 				writeTensor(endPoints, results.getEndPoints());
 				

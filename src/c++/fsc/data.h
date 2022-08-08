@@ -181,7 +181,7 @@ public:
 	 *          DataRef::Client.
 	 */
 	template<typename T = capnp::Data>
-	LocalDataRef<T> publish(DataRef<T>::Metadata::Reader metaData, Array<const byte> backingArray, ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable = kj::heapArrayBuilder<Maybe<Own<capnp::Capability::Client>>>(0).finish());
+	LocalDataRef<T> publish(typename DataRef<T>::Metadata::Reader metaData, Array<const byte> backingArray, ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable = kj::heapArrayBuilder<Maybe<Own<capnp::Capability::Client>>>(0).finish());
 	
 	//! Publishes Cap'n'proto message
 	/**
@@ -195,7 +195,9 @@ public:
 	 * hosted by the DataRef.
 	 */
 	template<typename Reader, typename T = capnp::FromAny<Reader>>
-	LocalDataRef<T> publish(ArrayPtr<const byte> id, Reader reader);
+	LocalDataRef<T> publish(/*ArrayPtr<const byte> id, */Reader reader);
+	
+	LocalDataRef<capnp::Data> publish(kj::ArrayPtr<const byte> bytes);
 	
 	//! Publishes method with ID derived from first argument
 	/**
@@ -221,8 +223,8 @@ public:
 	 * \returns A promise to a LocalDataRef, which will resolve once the information to compute
 	 *          the ID has been obtained.
 	 */
-	template<typename Reader, typename IDReader, typename T = capnp::FromAny<Reader>, typename T2 = capnp::FromAny<IDReader>>
-	Promise<LocalDataRef<T>> publish(IDReader dataForID, Reader data, kj::StringPtr hashFunction = "SHA-256"_kj) KJ_WARN_UNUSED_RESULT;
+	// template<typename Reader, typename IDReader, typename T = capnp::FromAny<Reader>, typename T2 = capnp::FromAny<IDReader>>
+	// Promise<LocalDataRef<T>> publish(IDReader dataForID, Reader data, kj::StringPtr hashFunction = "SHA-256"_kj) KJ_WARN_UNUSED_RESULT;
 	
 	
 	//! Shorthand for publish(data, data, hashFunction)
@@ -230,10 +232,10 @@ public:
 	 * Creates a local data reference with an ID derived from the contents.
 	 * WARNING: The first argument must be kept alive until the returned promise resolves.
 	 */
-	template<typename Reader, typename T = capnp::FromAny<Reader>>
-	KJ_WARN_UNUSED_RESULT Promise<LocalDataRef<T>> publish(Reader data, kj::StringPtr hashFunction = "SHA-256"_kj) {
-		return publish(data, data, hashFunction);
-	}
+	// template<typename Reader, typename T = capnp::FromAny<Reader>>
+	// KJ_WARN_UNUSED_RESULT Promise<LocalDataRef<T>> publish(Reader data, kj::StringPtr hashFunction = "SHA-256"_kj) {
+	// 	return publish(data, data, hashFunction);
+	// }
 	
 	///@}
 	
@@ -362,6 +364,8 @@ public:
 	ArrayPtr<const byte> getID();
 	ArrayPtr<capnp::Capability::Client> getCapTable();
 	uint64_t getTypeID();
+	
+	typename DataRef<T>::Metadata::Reader getMetadata();
 
 	// Non-const copy constructor
 	LocalDataRef(LocalDataRef<T>& other);

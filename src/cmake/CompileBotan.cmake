@@ -21,7 +21,7 @@ add_custom_command(
 	COMMAND ${Python3_EXECUTABLE}
 	"${botan_SOURCE_DIR}/configure.py"
 	"--minimized-build"
-	"--enable-modules=auto_rng,sha2_32,sha2_64,system_rng"
+	"--enable-modules=auto_rng,blake2,sha2_32,sha2_64,system_rng"
 	"--amalgamation"
 	"--disable-shared"
 	"--cc-bin" "${CMAKE_CXX_COMPILER}"
