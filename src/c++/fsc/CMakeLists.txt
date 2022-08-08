@@ -21,6 +21,7 @@ set(
 	http.capnp
 	offline.capnp
 	
+	random.capnp
 	flt.capnp
 	
 	services.capnp
@@ -94,6 +95,8 @@ add_library(
 	
 	services.h
 	services.cpp
+	
+	random.h
 	
 	
 	${FSC_CP_HEADERS}

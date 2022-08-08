@@ -7,6 +7,7 @@ using Magnetics = import "magnetics.capnp";
 using Geometry = import "geometry.capnp";
 using Data = import "data.capnp";
 using Index = import "index.capnp";
+using Random = import "random.capnp";
 
 
 # ============================== Service interface ===================================
@@ -133,10 +134,10 @@ struct FLTKernelState {
 	
 	forward @7 : Bool = True;
 	
-	prevDisplacementAt @8 : Float64;
-	nextDisplacementAt @9 : Float64;
+	nextDisplacementAt @8 : Float64;
 	
-	displacementCount @10 : UInt32;
+	displacementCount @9 : UInt32;
+	rNGState @10 : Random.MT19937State;
 }
 
 struct FLTKernelEvent {

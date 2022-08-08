@@ -4,6 +4,7 @@
 #include "cudata.h"
 #include "interpolation.h"
 #include "geometry.h"
+#include "random-kernels.h#
 
 namespace fsc {
 	
@@ -82,6 +83,9 @@ namespace fsc {
 		auto kernelRequest   = *pRequest;
 		auto request = kernelRequest.getServiceRequest();
 		
+		auto parModel = request.getParallelModel();
+		auto perpModel = request.getPerpendicularModel();
+		
 		auto geometry = *pGeometry;
 		auto index = *pGeometryIndex;
 		auto indexData = *pGeometryIndexData;
@@ -99,11 +103,13 @@ namespace fsc {
 		for(int i = 0; i < 3; ++i)
 			x[i] = statePos[i];
 		
-		// KJ_DBG("Initial state set up", x[0], x[1], x[2]);
-		
 		uint32_t step = state.getNumSteps();
 		uint32_t eventCount = state.getEventCount();
 		Num distance = state.getDistance();
+		double nextDisplacementStep = state.getNextDisplacementAt();
+		uint32_t displacementCount = state.getDisplacementCount();
+		
+		MT19937 rng(myData.getRNGState());
 		
 		// Set up the magnetic field
 		using InterpolationStrategy = LinearInterpolation<Num>;
@@ -111,17 +117,11 @@ namespace fsc {
 		auto grid = request.getField().getGrid();
 		SlabFieldInterpolator<InterpolationStrategy> interpolator(InterpolationStrategy(), grid);
 		
-		auto parModel = request.getParallelModel();
-		auto perpModel = request.getPerpendicularModel();
-		
 		bool processDisplacements = perpModel.hasIsotropicDiffusionCoefficient();
 		
 		uint8_t tracingDirection = 1;
 		if(!state.getForward())
 			tracingDirection = -1;
-		
-		double nextDisplacementStep = state.getNextDisplacementAt();
-		double prevDisplacementStep = state.getPrevDisplacementAt();
 		
 		auto rungeKuttaInput = [&](V3 x, Num t) -> V3 {
 			V3 fieldValue = interpolator(fieldData, x);
@@ -213,8 +213,6 @@ namespace fsc {
 			
 			// KJ_DBG("Limits passed");
 			
-			V3 x2 = x;
-			
 			bool displacementStep = false;
 			
 			if(processDisplacements) {
@@ -228,54 +226,45 @@ namespace fsc {
 				double prevFreePath = parModel.getMeanFreePath() + displacementCount * parModel.getMeanFreePathGrowth();
 				double nextFreePath = parModel.getMeanFreePath() + (1 + displacementCount) * parModel.getMeanFreePathGrowth();
 				
-				// We need to store the next displacement step separately until we know for sure that we won't run out of random numbers
-				double projectedNextDisplacementStep = 0;
+				// Sample some normal distributed numbers
+				double normalDistributed[4];
+				rng.normalPair(normalDistributed[0], normalDistributed[1]);
+				rng.normalPair(normalDistributed[2], normalDistributed[3]);
 				
 				if(parModel.hasConvectiveVelocity()) {
-					deltaT = prevFreePath / parModel.getConvectiveVelocity();
+					deltaT = prevFreePath / parModel.getConvectiveVelocity();	
+										
+					double freePath = rng.exponential() * nextFreePath;
 					
-					double gauss;
-					FSC_FLT_RANDOM_NORMAL(gauss);
-					
-					double freePath = gauss * nextFreePath;
-					if(freePath >= 0) {
-						state.setForward(true);
-						projectedNextDisplacementStep = nextDisplacementStep + freePath;
-					} else {
-						state.setForward(false);
-						projectedNextDisplacementStep = nextDisplacementStep - freePath;
-					}	
+					// Do not change tracing direction
+					nextDisplacementStep += freePath;
 				} else if(parModel.hasDiffusionCoefficient()) {
 					// TODO: Check prefactor
 					deltaT = prevFreePath * prevFreePath / parModel.getDiffusionCoefficient();
 					
-					double expDist;
-					FSC_FLT_RANDOM_EXPONENTIAL(expDist);
-					
-					double freePath = expDist * nextFreePath;
-					
-					// Do not change tracing direction
-					projectedNextDisplacementStep = nextDisplacementStep + freePath;
+					double freePath = normalDistributed[3] * nextFreePath;
+					if(freePath >= 0) {
+						state.setForward(true);
+						nextDisplacementStep += freePath;
+					} else {
+						state.setForward(false);
+						nextDisplacementStep -= freePath;
+					}
 				}
 				
 				double isoDisplacement = std::sqrt(deltaT * perpModel.getIsotropicDiffusionCoefficient());
-				
+								
 				for(int i = 0; i < 3; ++i) {
-					double gauss;
-					FSC_FLT_RANDOM_NORMAL(gauss);
-					
-					x2[i] += isoDisplacement * gauss;
+					x[i] += isoDisplacement * normalDistributed[i];
 				}
 				
-				prevDisplacementStep = nextDisplacementStep;
-				nextDisplacementStep = projectedNextDisplacementStep;
-				
-				state.setDisplacementIndex(state.getDisplacementIndex() + 1);
+				++displacementCount;
 				tracingDirection = state.getForward() ? 1 : -1;
-			} else {
-			// KJ_DBG(request.getStepSize());
-				kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), rungeKuttaInput);
 			}
+			
+			V3 x2 = x;
+
+			kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), rungeKuttaInput);
 			
 			// KJ_DBG("Step advanced", x[0], x[1], x[2], x2[0], x2[1], x2[2]);
 			// KJ_DBG("|dx|", (x2 - x).norm());
@@ -467,8 +456,9 @@ namespace fsc {
 			statePos.set(i, x[i]);
 		state.setNumSteps(step);
 		state.setDistance(distance);
+		state.setDisplacementCount(displacementCount);
 		state.setNextDisplacementAt(nextDisplacementStep);
-		state.setPrevDisplacementAt(prevDisplacementStep);
+		rng.save(state.mutateRNGState());
 		
 		// Note: The event count is not updated here but at the end of the loop
 		// This ensures that events from unfinished steps do not get added

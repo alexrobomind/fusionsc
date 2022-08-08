@@ -3,8 +3,8 @@
 namespace fsc {
 
 struct MT19937 {
-	static constexpr unsigned int N = 624;
-	static constexpr unsigned int M = 397;
+	static constexpr int N = 624;
+	static constexpr int M = 397;
 	
 	uint32_t state[N];
 	uint16_t index = 0;
@@ -12,14 +12,14 @@ struct MT19937 {
 	CUPNP_FUNCTION MT19937(const cu::MT19937State input) :
 		index(input.getIndex())
 	{
-		for(unsigned int i = 0; i < N; ++i) {
+		for(int i = 0; i < N; ++i) {
 			state[i] = input.getVector()[i];
 		}
 	}
 	
 	CUPNP_FUNCTION void save(cu::MT19937State output) {
 		output.setIndex(index);
-		for(unsigned int i = 0; i < N; ++i)
+		for(int i = 0; i < N; ++i)
 			output.mutateVector().set(i, state[i]);
 	}
 	
@@ -43,7 +43,15 @@ struct MT19937 {
 			index = 0;
 		}
 		
-		return state[index++];
+		uint32_t value = state[index++];
+		
+		// Tempering of the distribution
+		value ^= (value >> 11);
+		value ^= (value <<  7) & 0x9D2C5680;
+		value ^= (value << 15) & 0xEFC60000;
+		value ^= (value >> 18);
+		
+		return value;
 	}
 	
 	CUPNP_FUNCTION double uniform() {
