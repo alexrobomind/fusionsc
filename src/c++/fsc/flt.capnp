@@ -51,9 +51,9 @@ struct FLTRequest {
 	perpendicularModel : union {
 		noDisplacement @13 : Void;
 		isotropicDiffusionCoefficient @14 : Float64;
-	};
+	}
 	
-	rngSeed : UInt64;
+	rngSeed @15 : UInt64;
 }
 
 struct FieldlineMappingData {
@@ -135,7 +135,7 @@ struct FLTKernelState {
 	eventCount @5 : UInt32;
 	collisionCount @6 : UInt32;
 	
-	forward @7 : Bool = True;
+	forward @7 : Bool = true;
 	
 	nextDisplacementAt @8 : Float64;
 	

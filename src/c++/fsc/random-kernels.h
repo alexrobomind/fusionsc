@@ -38,7 +38,7 @@ struct MT19937 {
 		state[N-1] = state[M-1]     ^ (((state[N-1] & 0x80000000) | (state[0  ] & 0x7FFFFFFF)) >> 1) ^ A[state[0  ] & 1];
 	}
 	
-	CUPNP_FUNCTION uint32_t operator() {
+	CUPNP_FUNCTION uint32_t operator()() {
 		if(index >= N) {
 			update();
 			index = 0;
@@ -56,8 +56,8 @@ struct MT19937 {
 	}
 	
 	CUPNP_FUNCTION double uniform() {
-		constexpr double scale = 1 / ( 1 << 32 + 1 );
-		return static_cast<double>(operator() + 1) * scale;
+		constexpr double scale = 1 / ( (1ul << 32) + 1 );
+		return static_cast<double>((*this)() + 1) * scale;
 	}
 	
 	CUPNP_FUNCTION double exponential() {
@@ -87,6 +87,7 @@ struct MT19937 {
 			vector.set(i, seed);
 			seed = mult * (seed ^ (seed >> 30)) + (i+1);
 		}
+	}
 };
 
 }

@@ -468,7 +468,7 @@ namespace fsc {
 	 * GPU devices schedule an asynch memcpy onto their stream. We therefore need to wait until the stream has advanced past it.
 	 */
 	template<>
-	inline Promise<void> hostMemSynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& device, const Operation& op) { auto child = op.newChild(); synchronizeGpuDevice(device, *child); return child.whenDone(); }
+	inline Promise<void> hostMemSynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& device, const Operation& op) { auto child = op.newChild(); synchronizeGpuDevice(device, *child); return child -> whenDone(); }
 	/*template<>
 	inline void hostMemSynchronizeBlocking<Eigen::GpuDevice>(Eigen::GpuDevice& device) { synchronizeGpuDeviceBlocking(device); }*/
 	
@@ -603,7 +603,7 @@ struct KernelLauncher<Eigen::GpuDevice> {
 		KJ_REQUIRE(streamStatus == cudaSuccess || streamStatus == cudaErrorNotReady, "CUDA launch failed", streamStatus, cudaGetErrorName(streamStatus), cudaGetErrorString(streamStatus));
 		
 		auto op = newOperation();
-		synchronizeGpuDevice(*op);
+		synchronizeGpuDevice(device, *op);
 		return op;
 		/*return prerequisite.then([&device, n, cost, params...]() {
 			KJ_LOG(WARNING, "Launching GPU kernel");

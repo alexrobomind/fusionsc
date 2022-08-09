@@ -25,7 +25,7 @@ struct GeometryResolverBase : public GeometryResolver::Server {
  */
 GeometryLib::Client newGeometryLib();
 
-inline Vec3u locationInGrid(Vec3d point, Vec3d min, Vec3d max, Vec3u size) {
+inline EIGEN_DEVICE_FUNC Vec3u locationInGrid(Vec3d point, Vec3d min, Vec3d max, Vec3u size) {
 	auto fraction = (point - min).array() / (max - min).array();
 	auto perCell = fraction * size.array().cast<double>();
 	Vec3i result = perCell.cast<int>();
@@ -41,7 +41,7 @@ inline Vec3u locationInGrid(Vec3d point, Vec3d min, Vec3d max, Vec3u size) {
 	return result.cast<unsigned int>();
 }
 
-inline Vec3u locationInGrid(Vec3d point, const cu::CartesianGrid grid) {
+inline EIGEN_DEVICE_FUNC Vec3u locationInGrid(Vec3d point, const cu::CartesianGrid grid) {
 	Vec3d min { grid.getXMin(), grid.getYMin(), grid.getZMin() };
 	Vec3d max { grid.getXMax(), grid.getYMax(), grid.getZMax() };
 	Vec3u size { grid.getNX(), grid.getNY(), grid.getNZ() };
@@ -51,17 +51,41 @@ inline Vec3u locationInGrid(Vec3d point, const cu::CartesianGrid grid) {
 
 Vec3u locationInGrid(Vec3d point, CartesianGrid::Reader reader);
 
-inline double rayCastTriangle(const Vec3d point, const Vec3d direction, const Vec3d triangle[3]) {
+inline EIGEN_DEVICE_FUNC double vecdet(const Vec3d v0, const Vec3d v1, const Vec3d v2) {
+	return
+		  v0[0] * v1[1] * v2[2]
+		+ v0[1] * v1[2] * v2[0]
+		+ v0[2] * v1[0] * v2[1]
+		- v0[2] * v1[1] * v2[0]
+		- v0[0] * v1[2] * v2[1]
+		- v0[1] * v1[0] * v2[2]
+	;
+}
+
+inline EIGEN_DEVICE_FUNC double rayCastTriangle(const Vec3d point, const Vec3d direction, const Vec3d triangle[3]) {
 	using Eigen::seq;
 	using Eigen::all;
 	
-	Mat3d m;
+	Vec3d v = point - triangle[0];
+	
+	Vec3d v1 = direction;
+	Vec3d v2 = triangle[1] - triangle[0];
+	Vec3d v3 = triangle[2] - triangle[0];
+	
+	// Solve the system [v1, v2, v3] vi = v via Cramer's rule
+	double invDet = 1 / vecdet(v1, v2, v3);
+	Vec3d vi(
+		vecdet(v, v2, v3) * invDet,
+		vecdet(v1, v, v3) * invDet,
+		vecdet(v1, v2, v) * invDet
+	);
+	
+	/* Mat3d m;
 	m(all, 0) = direction;
 	m(all, 1) = triangle[1] - triangle[0];
-	m(all, 2) = triangle[2] - triangle[0];
+	m(all, 2) = triangle[2] - triangle[0]; 
 	
-	Vec3d v = point - triangle[0];
-	Vec3d vi = m.partialPivLu().solve(v);
+	Vec3d vi = m.partialPivLu().solve(v);*/
 	
 	double l = -vi(0);
 	double inf = std::numeric_limits<double>::infinity();
@@ -100,7 +124,7 @@ struct IntersectResult {
  * \ingroup geometry
  * \return The new number of events in the event buffer, or eventBuffer.size() to indicate that we ran out of space.
  */
-inline uint32_t intersectGeometryAllEvents(
+inline EIGEN_DEVICE_FUNC uint32_t intersectGeometryAllEvents(
 	const Vec3d p1, const Vec3d p2,
 	const cu::MergedGeometry geometry, const cu::IndexedGeometry index, const cu::IndexedGeometry::IndexData indexData,
 	
@@ -227,7 +251,7 @@ inline uint32_t intersectGeometryAllEvents(
 /**
  * \ingroup geometry
  */
-inline IntersectResult intersectGeometryFirstHit(
+inline EIGEN_DEVICE_FUNC IntersectResult intersectGeometryFirstHit(
 	const Vec3d p1, const Vec3d p2,
 	const cu::MergedGeometry geometry, const cu::IndexedGeometry index, const cu::IndexedGeometry::IndexData indexData
 ) {

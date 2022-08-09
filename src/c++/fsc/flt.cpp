@@ -107,11 +107,11 @@ struct TraceCalculation {
 		
 		hostMemSynchronize(device, rootOp);
 		
-		if(request.getRngSeed() == 0) {
+		if(request.getServiceRequest().getRngSeed() == 0) {
 			uint64_t seed;
-			requeset.setRngSeed(getActiveThread().rng().randomize(kj::ArrayPtr<unsigned char>(&seed, sizeof(decltype(seed)))));
+			getActiveThread().rng().randomize(kj::ArrayPtr<unsigned char>(reinterpret_cast<unsigned char*>(&seed), sizeof(decltype(seed))));
 			
-			request.setRngSeed(seed);
+			request.getServiceRequest().setRngSeed(seed);
 		}
 	}
 	
@@ -143,7 +143,7 @@ struct TraceCalculation {
 		
 		round.participants.addAll(kj::range<size_t>(0, nParticipants));	
 		
-		std::mt19937_64 seedGenerator(kernelRequest.getServiceRequest().getRngSeed());
+		std::mt19937_64 seedGenerator(request.getServiceRequest().getRngSeed());
 		
 		auto data = round.kernelData.getData();
 		for(size_t i = 0; i < nParticipants; ++i) {

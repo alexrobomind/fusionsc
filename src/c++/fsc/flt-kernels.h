@@ -4,7 +4,7 @@
 #include "cudata.h"
 #include "interpolation.h"
 #include "geometry.h"
-#include "random-kernels.h#
+#include "random-kernels.h"
 
 namespace fsc {
 	
@@ -91,7 +91,7 @@ namespace fsc {
 		auto indexData = *pGeometryIndexData;
 		
 		// printf("Hello there\n");
-		KJ_DBG("FLT kernel started", idx);
+		CUPNP_DBG("FLT kernel started", idx);
 		
 		// Extract local scratch space
 		fsc::cu::FLTKernelData::Entry myData = kernelData.mutateData()[idx];
@@ -108,7 +108,7 @@ namespace fsc {
 		Num distance = state.getDistance();
 		double nextDisplacementStep = state.getNextDisplacementAt();
 		uint32_t displacementCount = state.getDisplacementCount();
-		MT19937 rng(myData.getRngState());
+		MT19937 rng(state.getRngState());
 		
 		// Set up the magnetic field
 		using InterpolationStrategy = LinearInterpolation<Num>;
@@ -259,7 +259,7 @@ namespace fsc {
 			Num phi0 = state.getPhi0();
 			
 			const auto planes = request.getPlanes();
-			for(auto iPlane : kj::indices(planes)) {
+			for(uint32_t iPlane = 0; iPlane < planes.size(); ++iPlane) {
 				const auto plane = planes[iPlane];
 				const auto orientation = plane.getOrientation();
 				
@@ -419,7 +419,7 @@ namespace fsc {
 			if(!displacementStep)
 				distance += std::abs(request.getStepSize());
 			else
-				distance += (x2 - x1).norm();
+				distance += (x2 - x).norm();
 			
 			x = x2;
 			
@@ -464,7 +464,7 @@ REFERENCE_KERNEL(
 	Eigen::TensorMap<Eigen::Tensor<double, 4>>,
 	fsc::CuPtr<fsc::cu::FLTKernelRequest>,
 	
-	CuPtr<const fsc::cu::MergedGeometry>,
-	CuPtr<const fsc::cu::IndexedGeometry>,
-	CuPtr<const fsc::cu::IndexedGeometry::IndexData>
+	fsc::CuPtr<const fsc::cu::MergedGeometry>,
+	fsc::CuPtr<const fsc::cu::IndexedGeometry>,
+	fsc::CuPtr<const fsc::cu::IndexedGeometry::IndexData>
 );

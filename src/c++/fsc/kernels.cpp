@@ -41,9 +41,9 @@ namespace {
  * Internal callback to be passed to a synchronization barrier that fulfilles the given promise.
  */
 inline void gpuSynchCallback(gpuStream_t stream, gpuError_t status, void* userData) {	
-	// Rescue the fulfiller into the stack a.s.a.p.
+	// Rescue the op into the stack a.s.a.p.
 	Own<const Operation>* typedUserData = (Own<const Operation>*) userData;
-	Own<const Operation> fulfiller = mv(*typedUserData);
+	Own<const Operation> op = mv(*typedUserData);
 	delete typedUserData; // new in synchronizeGpuDevice
 	
 	if(status == gpuSuccess) {
@@ -51,7 +51,7 @@ inline void gpuSynchCallback(gpuStream_t stream, gpuError_t status, void* userDa
 		return;
 	}
 	
-	op->fail(KJ_EXCEPTION(FAILED, "GPU computation failed", status);
+	op->fail(KJ_EXCEPTION(FAILED, "GPU computation failed", status));
 }
 
 }

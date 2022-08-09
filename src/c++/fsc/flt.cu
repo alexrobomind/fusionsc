@@ -5,8 +5,12 @@ namespace fsc { namespace internal {
 	INSTANTIATE_KERNEL(
 		fsc::fltKernel,
 	
-		CuPtr<fsc::cu::FLTKernelData>,
+		fsc::CuPtr<fsc::cu::FLTKernelData>,
 		Eigen::TensorMap<Eigen::Tensor<double, 4>>,
-		CuPtr<fsc::cu::FLTKernelRequest>
+		fsc::CuPtr<fsc::cu::FLTKernelRequest>,
+		
+		fsc::CuPtr<const fsc::cu::MergedGeometry>,
+		fsc::CuPtr<const fsc::cu::IndexedGeometry>,
+		fsc::CuPtr<const fsc::cu::IndexedGeometry::IndexData>
 	);
 }}
