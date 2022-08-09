@@ -12,11 +12,13 @@
 	//TODO: Better error handling for device code?
 	# define CUPNP_REQUIRE(expr, ...) if(!(expr)) [[unlikely]]
 	# define CUPNP_FAIL_REQUIRE(...) if(true)
+	# define CUPNP_DBG(...)
 # else
 	# include <kj/debug.h>
 
 	# define CUPNP_REQUIRE(...) KJ_REQUIRE((__VA_ARGS__))
 	# define CUPNP_FAIL_REQUIRE(...) KJ_FAIL_REQUIRE((__VA_ARGS__))
+	# define CUPNP_DBG(...) KJ_DBG(__VA_ARGS__)
 # endif
 
 #ifdef CUPNP_GPUCC

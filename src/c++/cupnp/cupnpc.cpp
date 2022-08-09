@@ -292,8 +292,12 @@ kj::StringTree cppNodeTypeName(uint64_t nodeId, Brand::Reader nodeBrand, uint64_
 		}
 	}
 	
-	if(!capnpType)
-		result = strTree(mv(result), "::cu");
+	if(!capnpType) {
+		if(result.size() != 0)
+			result = strTree(mv(result), "::cu");
+		else
+			result = strTree("cu");
+	}
 	
 	for(unsigned int i = 0; i < nodes.size(); ++i) {
 		auto node = nodes[i];
@@ -484,13 +488,13 @@ StringTree generateInterface(CodeGeneratorRequest::Reader request, uint64_t node
 		"	// Interface pointer that holds the capability table offset\n",
 		"	uint64_t ptrData;\n",
 		"	\n",
-		"	inline ", name.flatten(), "(uint64_t structure, cupnp::Location data) : ptrData(structure) {\n",
+		"	inline CUPNP_FUNCTION ", name.flatten(), "(uint64_t structure, cupnp::Location data) : ptrData(structure) {\n",
 		"		cupnp::validateInterfacePointer(structure, data);\n",
 		"	}\n",
 		"	\n",
-		"	inline bool isDefault() { return ptrData == 0; }\n",
+		"	inline CUPNP_FUNCTION bool isDefault() { return ptrData == 0; }\n",
 		"	\n",
-		"	friend void cupnp::swapData<", name.flatten(), ">(", name.flatten(), "&, ", name.flatten(), "&); \n",
+		"	friend CUPNP_FUNCTION void cupnp::swapData<", name.flatten(), ">(", name.flatten(), "&, ", name.flatten(), "&); \n",
 		"	\n",
 		generateNested(request, nodeId, methodDefinitions),
 		"};\n\n"
@@ -620,7 +624,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 		"	\n",
 		"	inline CUPNP_FUNCTION bool isDefault() { return structure == 0; }\n",
 		"	\n",
-		"	friend void cupnp::swapData<", name.flatten(), ">(", name.flatten(), "&, ", name.flatten(), "&); \n",
+		"	friend CUPNP_FUNCTION void cupnp::swapData<", name.flatten(), ">(", name.flatten(), "&, ", name.flatten(), "&); \n",
 		"	\n"
 	);
 	
@@ -1099,7 +1103,10 @@ void generateRequested(CodeGeneratorRequest::Reader request) {
 		}
 		//}
 		
-		namespaceName = strTree(mv(namespaceName), "::cu");
+		if(namespaceName.size() != 0)
+			namespaceName = strTree(mv(namespaceName), "::cu");
+		else
+			namespaceName = strTree("cu");
 		
 		StringTree forwardDeclarations = generateForwardDeclarations(namespaceName.flatten(), request, fileNode.getId());
 		StringTree kindOverrides = generateKindOverrides(namespaceName.flatten(), request, fileNode.getId());
@@ -1125,6 +1132,7 @@ void generateRequested(CodeGeneratorRequest::Reader request) {
 				} else {
 					openNS = strTree(mv(openNS), "namespace ", nsSubName, "{\n");
 					closeNS = strTree(mv(closeNS), "}");
+					
 					break;
 				}
 			}

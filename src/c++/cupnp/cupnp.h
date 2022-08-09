@@ -628,7 +628,7 @@ namespace cupnp {
 	}
 
 	template<typename T>
-	void swapData(T& t1, T& t2) {
+	CUPNP_FUNCTION void swapData(T& t1, T& t2) {
 		uint16_t dsWords1 = getDataSectionSizeInWords(t1.structure);
 		uint16_t dsWords2 = getDataSectionSizeInWords(t2.structure);
 		
@@ -645,8 +645,11 @@ namespace cupnp {
 		uint64_t* data1 = (uint64_t*) t1.data.ptr;
 		uint64_t* data2 = (uint64_t*) t2.data.ptr;
 		
-		for(uint16_t i = 0; i < nWords; ++i)
-			std::swap(*(data1 + i), *(data2 + i));
+		for(uint16_t i = 0; i < nWords; ++i) {
+			uint64_t tmp = data1[i];
+			data1[i] = data2[i];
+			data2[i] = tmp;
+		}
 		
 		/*for(uint16_t i = 0; i < nPtrs; ++i)
 			std::swap(*(data1 + dsWords1 + i), *(data2 + dsWords2 + i));*/
