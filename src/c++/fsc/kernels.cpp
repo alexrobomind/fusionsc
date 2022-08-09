@@ -59,7 +59,7 @@ inline void gpuSynchCallback(gpuStream_t stream, gpuError_t status, void* userDa
 /**
  * Schedules a promise to be fulfilled when all previous calls on the GPU device's command stream are finished.
  */
-void synchronizeGpuDevice(Eigen::GpuDevice& device, Operation& op) {	
+void synchronizeGpuDevice(Eigen::GpuDevice& device, const Operation& op) {	
 	// POTENTIALLY UNSAFE
 	// Note: We REALLY trust that the callback will always be called, otherwise this is a memory leak
 	auto heapOp = new Own<const Operation>(); // delete in gpuSynchCallback

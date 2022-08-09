@@ -106,7 +106,8 @@ TEST_CASE("flt-gpu") {
 		KJ_DBG("Sending request");
 		auto response = traceReq.send().wait(ws);
 		
-		KJ_DBG(response);
+		KJ_DBG("Done");
+		// KJ_DBG(response);
 	}
 }
 
