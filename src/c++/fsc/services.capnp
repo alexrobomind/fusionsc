@@ -22,5 +22,5 @@ interface ResolverChain extends(Magnetics.FieldResolver, Geometry.GeometryResolv
 interface RootService {
 	newFieldCalculator @0 (preferredDeviceType : WorkerType = gpu) -> (calculator : Magnetics.FieldCalculator, deviceType : WorkerType);
 	newGeometryLib     @1 () -> (service    : Geometry.GeometryLib);
-	newTracer          @2 (preferredDeviceType : WorkerType = gpu) -> (service    : FLT.FLT);
+	newTracer          @2 (preferredDeviceType : WorkerType = gpu) -> (service    : FLT.FLT, deviceType : WorkerType);
 }

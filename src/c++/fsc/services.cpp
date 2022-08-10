@@ -46,7 +46,16 @@ struct RootServer : public RootService::Server {
 	}
 	
 	Promise<void> newTracer(NewTracerContext context) override {
-		context.initResults().setService(newFLT(newThreadPoolDevice()));
+		auto factory = [this, context](auto device) mutable {
+			return ::fsc::newFLT(mv(device));
+		};
+		
+		auto selectResult = selectDevice(factory, context.getParams().getPreferredDeviceType());
+		
+		auto results = context.initResults();
+		results.setService(kj::get<0>(selectResult));
+		results.setDeviceType(kj::get<1>(selectResult));
+		
 		return READY_NOW;
 	}
 	
