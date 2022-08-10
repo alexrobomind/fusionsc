@@ -56,7 +56,7 @@ struct MT19937 {
 	}
 	
 	CUPNP_FUNCTION double uniform() {
-		constexpr double scale = 1 / ( (1ul << 32) + 1 );
+		constexpr double scale = ((double) 1) / ( (((uint64_t) 1) << 32) + 1 );
 		return static_cast<double>((*this)() + 1) * scale;
 	}
 	

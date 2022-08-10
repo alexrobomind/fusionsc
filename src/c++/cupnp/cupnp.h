@@ -526,6 +526,83 @@ namespace cupnp {
 	}
 	
 	template<uint32_t offset>
+	CUPNP_FUNCTION bool getBoolField(uint64_t structure, Location data, bool defaultValue) {
+		constexpr uint32_t byteOffset = offset >> 3;
+		constexpr uint8_t  bitOffset  = offset & 7u;
+		constexpr uint8_t  bitMask    = 1u >> bitOffset;
+		
+		uint16_t dataSectionSizeInWords = structure >> 32;
+		
+		if(byteOffset + 1 > sizeof(capnp::word) * dataSectionSizeInWords)
+			return defaultValue;
+		
+		uint8_t wireData = (data + byteOffset).read<uint8_t>();
+		bool wireBool = wireData & bitMask;
+		
+		return wireBool != defaultValue;
+	}
+		
+	
+	template<uint32_t offset>
+	CUPNP_FUNCTION bool getBoolField(uint64_t structure, Location data) {
+		constexpr uint32_t byteOffset = offset >> 3;
+		constexpr uint8_t  bitOffset  = offset & 7u;
+		constexpr uint8_t  bitMask    = 1u >> bitOffset;
+		
+		uint16_t dataSectionSizeInWords = structure >> 32;
+		
+		if(byteOffset + 1 > sizeof(capnp::word) * dataSectionSizeInWords)
+			return false;
+		
+		uint8_t wireData = (data + byteOffset).read<uint8_t>();
+		bool wireBool = wireData & bitMask;
+		
+		return wireBool;
+	}
+	
+	template<uint32_t offset>
+	CUPNP_FUNCTION void setBoolField(uint64_t structure, Location data, bool defaultValue, bool value) {
+		constexpr uint32_t byteOffset = offset >> 3;
+		constexpr uint8_t  bitOffset  = offset & 7u;
+		constexpr uint8_t  bitMask    = 1u >> bitOffset;
+		
+		uint16_t dataSectionSizeInWords = structure >> 32;
+		
+		CUPNP_REQUIRE(byteOffset + 1 <= sizeof(capnp::word) * dataSectionSizeInWords) { return; }
+		
+		uint8_t wireData = (data + byteOffset).read<uint8_t>();
+		
+		if(value != defaultValue) {
+			wireData |= bitMask;
+		} else {
+			wireData &= ~bitMask;
+		}
+		
+		(data + byteOffset).write(wireData);
+	}
+	
+	template<uint32_t offset>
+	CUPNP_FUNCTION void setBoolField(uint64_t structure, Location data, bool value) {
+		constexpr uint32_t byteOffset = offset >> 3;
+		constexpr uint8_t  bitOffset  = offset & 7u;
+		constexpr uint8_t  bitMask    = 1u >> bitOffset;
+		
+		uint16_t dataSectionSizeInWords = structure >> 32;
+		
+		CUPNP_REQUIRE(byteOffset + 1 <= sizeof(capnp::word) * dataSectionSizeInWords) { return; }
+		
+		uint8_t wireData = (data + byteOffset).read<uint8_t>();
+		
+		if(value) {
+			wireData |= bitMask;
+		} else {
+			wireData &= ~bitMask;
+		}
+		
+		(data + byteOffset).write(wireData);
+	}
+	
+	template<uint32_t offset>
 	CUPNP_FUNCTION const uint16_t getDiscriminant(uint64_t structure, Location data) {
 		return getPrimitiveField<uint16_t, offset>(structure, data);
 	}

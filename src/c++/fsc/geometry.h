@@ -68,17 +68,26 @@ inline EIGEN_DEVICE_FUNC double rayCastTriangle(const Vec3d point, const Vec3d d
 	
 	Vec3d v = point - triangle[0];
 	
-	Vec3d v1 = direction;
-	Vec3d v2 = triangle[1] - triangle[0];
-	Vec3d v3 = triangle[2] - triangle[0];
-	
-	// Solve the system [v1, v2, v3] vi = v via Cramer's rule
-	double invDet = 1 / vecdet(v1, v2, v3);
-	Vec3d vi(
-		vecdet(v, v2, v3) * invDet,
-		vecdet(v1, v, v3) * invDet,
-		vecdet(v1, v2, v) * invDet
-	);
+	#ifdef CUPNP_DEVICE_COMPILATION_PHASE
+		Vec3d v1 = direction;
+		Vec3d v2 = triangle[1] - triangle[0];
+		Vec3d v3 = triangle[2] - triangle[0];
+		
+		// Solve the system [v1, v2, v3] vi = v via Cramer's rule
+		double invDet = 1 / vecdet(v1, v2, v3);
+		Vec3d vi(
+			vecdet(v, v2, v3) * invDet,
+			vecdet(v1, v, v3) * invDet,
+			vecdet(v1, v2, v) * invDet
+		);
+	#else
+		Mat3d m;
+		m(all, 0) = direction;
+		m(all, 1) = triangle[1] - triangle[0];
+		m(all, 2) = triangle[2] - triangle[0];
+		
+		Vec3d vi = m.partialPivLu().solve(v);
+	#endif
 	
 	/* Mat3d m;
 	m(all, 0) = direction;

@@ -1,4 +1,5 @@
 from . import native
+from . import data
 
 from .asnc import asyncFunction
 
@@ -9,6 +10,9 @@ def localGeoLib():
 
 def planarCut(*args, **kwargs):
 	return planarCutAsync(*args, **kwargs).wait()
+
+def asPyvista(*args, **kwargs):
+	return asPyvistaAsync(*args, **kwargs).wait()
 
 @asyncFunction
 async def planarCutAsync(geometry, phi = None, normal = None, center = None):
@@ -50,3 +54,66 @@ def plotCut(geometry, phi = 0, ax = None, plot = True, **kwArgs):
 		ax.add_collection(coll)
 	
 	return coll
+
+@asyncFunction
+async def asPyvistaAsync(geometry):
+	import numpy as np
+	import pyvista as pv
+	
+	geometry = await geometry.resolve()
+	
+	geoLib = localGeoLib()
+	mergedRef = geoLib.merge(geometry.geometry).ref
+	mergedGeometry = await data.downloadAsync(mergedRef)
+	
+	def extractMesh(entry):
+		mesh = entry.mesh
+		
+		vertexArray = np.asarray(mesh.vertices)
+		indexArray  = np.asarray(mesh.indices)
+		
+		faces = []
+		
+		if mesh.which() == 'polyMesh':
+			polyRanges = mesh.polyMesh
+			
+			for iPoly in range(len(polyRanges) - 1):
+				start = polyRanges[iPoly]
+				end   = polyRanges[iPoly + 1]
+				
+				faces.append(end - start)
+				faces.extend(indexArray[start:end])
+		elif mesh.which() == 'triMesh':
+			for offset in range(0, len(indexArray), 3):
+				start = offset
+				end   = start + 3
+				
+				faces.append(end - start)
+				faces.extend(indexArray[start:end])
+		
+		mesh = pv.PolyData(vertexArray, faces)
+		return mesh
+	
+	def extractTags(entry):
+		return {
+			str(name) : entry.tags[iTag]
+			for iTag, name in enumerate(mergedGeometry.tagNames)
+		}
+	
+	def extractEntry(entry):
+		mesh = extractMesh(entry)
+		
+		for tagName, tagValue in extractTags(entry).items():
+			if tagValue.which() == 'text':
+				mesh.field_data[tagName] = [tagValue.text]
+			if tagValue.which() == 'uInt64':
+				mesh.field_data[tagName] = [tagValue.uInt64]
+				
+		return mesh
+	
+	dataSets = [
+		extractEntry(entry)
+		for entry in mergedGeometry.entries
+	]
+	
+	return pv.MultiBlock(dataSets)

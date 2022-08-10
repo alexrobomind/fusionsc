@@ -737,6 +737,11 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 						"static_cast<", mv(targetType), ">(", mv(input), ")"
 					);
 				};
+						
+				kj::String accessorSuffix = type.isBool() ? 
+					kj::str("BoolField<", slot.getOffset(), ">") :
+					kj::str("PrimitiveField<", fieldType, ", ", slot.getOffset(), ">")
+				;
 				
 				switch(type.which()) {
 					case Type::ENUM:
@@ -750,7 +755,8 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 					case Type::UINT32:
 					case Type::UINT64:
 					case Type::FLOAT32:
-					case Type::FLOAT64:{
+					case Type::FLOAT64:
+
 						
 						if(field.getDiscriminantValue() != 0xffff) {
 							// Getters and setters for unionized primitive fields
@@ -763,14 +769,14 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 										"	if(cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data) != ", field.getDiscriminantValue(), ")\n",
 										"		return ", castIfEnum(cppDefaultValue(slot.getDefaultValue()), typeName.flatten()), ";\n",
 										"	\n",
-										"	return ", castIfEnum(strTree("cupnp::getPrimitiveField<", fieldType, ", ", slot.getOffset(), ">(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ")"), typeName.flatten()), ";\n"
+										"	return ", castIfEnum(strTree("cupnp::get", accessorSuffix, "(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ")"), typeName.flatten()), ";\n"
 									)
 								),
 								generateMethod(
 									request, nodeId, methodDefinitions,
 									strTree("void"), strTree("set", subName.asPtr(), "(", typeName.flatten(), " newVal)"),
 									strTree(
-										"	cupnp::setPrimitiveField<", fieldType, ", ", slot.getOffset(), ">(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ", ", castIfEnum(strTree("newVal"), str(fieldType)), ");\n",
+										"	cupnp::set", accessorSuffix, "(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ", ", castIfEnum(strTree("newVal"), str(fieldType)), ");\n",
 										"	cupnp::setDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data, ", field.getDiscriminantValue(), ");\n"
 									)
 								),
@@ -784,14 +790,14 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 									request, nodeId, methodDefinitions,
 									typeName.flatten(), strTree("get", subName.asPtr(), "() const"),
 									strTree(
-										"	return ", castIfEnum(strTree("cupnp::getPrimitiveField<", fieldType, ", ", slot.getOffset(), ">(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ")"), typeName.flatten()), ";\n"
+										"	return ", castIfEnum(strTree("cupnp::get", accessorSuffix, "(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ")"), typeName.flatten()), ";\n"
 									)
 								),
 								generateMethod(
 									request, nodeId, methodDefinitions,
 									strTree("void"), strTree("set", subName.asPtr(), "(", typeName.flatten(), " newVal)"),
 									strTree(
-										"	cupnp::setPrimitiveField<", fieldType, ", ", slot.getOffset(), ">(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ", ", castIfEnum(strTree("newVal"), str(fieldType)), ");\n"
+										"	cupnp::set", accessorSuffix, "(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ", ", castIfEnum(strTree("newVal"), str(fieldType)), ");\n"
 									)
 								),
 								"\n"
@@ -819,7 +825,6 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 						}
 						
 						break;
-					}
 					
 					case Type::TEXT:
 					case Type::DATA:

@@ -205,6 +205,8 @@ namespace fsc {
 				
 				// Sample some normal distributed numbers
 				double normalDistributed[4];
+				
+				// KJ_DBG("Running rng", idx);
 				rng.normalPair(normalDistributed[0], normalDistributed[1]);
 				rng.normalPair(normalDistributed[2], normalDistributed[3]);
 				
@@ -223,6 +225,7 @@ namespace fsc {
 					deltaT = prevFreePath * prevFreePath / parModel.getDiffusionCoefficient();
 					freePath = normalDistributed[3] * nextFreePath;
 				}
+				// KJ_DBG(idx, deltaT, freePath);
 				
 				if(freePath >= 0) {
 					nextDisplacementStep += freePath;
@@ -233,6 +236,7 @@ namespace fsc {
 					
 				// Perform displacement
 				double isoDisplacement = std::sqrt(deltaT * perpModel.getIsotropicDiffusionCoefficient());
+				// KJ_DBG(idx, isoDisplacement);
 								
 				for(int i = 0; i < 3; ++i) {
 					x2[i] += isoDisplacement * normalDistributed[i];
@@ -429,8 +433,12 @@ namespace fsc {
 			if(displacementStep) {
 				state.setDisplacementCount(displacementCount);
 				state.setNextDisplacementAt(nextDisplacementStep);
+				
+				// KJ_DBG("Setting fwd", idx, tracingDirection);
 				state.setForward(tracingDirection == 1);
+				// KJ_DBG("Saving RNG state", idx);
 				rng.save(state.mutateRngState());
+				// KJ_DBG("Displacement step done", idx);
 			}
 			
 			++step;

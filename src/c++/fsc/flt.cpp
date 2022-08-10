@@ -170,24 +170,32 @@ struct TraceCalculation {
 		KJ_REQUIRE(rounds.size() > 0, "Internal error");
 		
 		// Check previous round
-		Round& prevRound = rounds[rounds.size() - 1];
+		Round* prevRound = &(rounds[rounds.size() - 1]);
 		
 		// Count unfinished participants
 		kj::Vector<size_t> unfinished;
-		auto kDataIn = prevRound.kernelData.getData();
+		auto kDataIn = prevRound -> kernelData.getData();
+		
+		KJ_REQUIRE(kDataIn.size() == prevRound -> participants.size());
 		
 		for(size_t i = 0; i < kDataIn.size(); ++i) {
 			if(!isFinished(kDataIn[i])) unfinished.add(i);
 		}
+		
+		KJ_DBG(prevRound -> participants, unfinished);
 		
 		KJ_REQUIRE(unfinished.size() > 0, "Internal error");
 		
 		uint32_t maxSteps = 0;
 		
 		Round& newRound = prepareRound(unfinished.size());
+		prevRound = &(rounds[rounds.size() - 2]);
+		
 		auto kDataOut = newRound.kernelData.getData();
 		for(size_t i = 0; i < unfinished.size(); ++i) {
-			newRound.participants.add(unfinished[i]);
+			// KJ_DBG(i, unfinished[i], prevRound -> participants.size());
+			
+			newRound.participants.add(prevRound -> participants[unfinished[i]]);
 			
 			auto entryOut = kDataOut[i];
 			auto entryIn  = kDataIn[unfinished[i]];
@@ -196,7 +204,7 @@ struct TraceCalculation {
 			entryOut.getState().setEventCount(0);
 			
 			maxSteps = std::max(maxSteps, entryOut.getState().getNumSteps());
-			KJ_DBG(entryOut.getState());
+			// KJ_DBG(entryOut.getState());
 		}
 		
 		newRound.kernelRequest = request.asReader();
@@ -273,8 +281,10 @@ struct TraceCalculation {
 			
 		auto& round = rounds[rounds.size() - 1];
 			
-		if(isFinished(round))
+		if(isFinished(round)) {
+			KJ_DBG("Trace Finished");
 			return READY_NOW;
+		}
 		
 		return runRound().then([this]() { return run(); });
 	}
@@ -292,7 +302,7 @@ struct TraceCalculation {
 			else
 				participantIndices[i] = nullptr;
 		}
-		
+				
 		size_t nEvents = 0;
 		for(size_t i = 0; i < nRounds; ++i) {
 			KJ_IF_MAYBE(pIdx, participantIndices[i]) {
@@ -314,7 +324,6 @@ struct TraceCalculation {
 				
 				auto eventsIn = kData.getEvents();
 				KJ_REQUIRE(eventCount <= eventsIn.size());
-				KJ_DBG(eventCount);
 				
 				for(size_t iEvtIn = 0; iEvtIn < eventCount; ++iEvtIn) {
 					eventsOut.setWithCaveats(iEvent++, eventsIn[iEvtIn]);
@@ -324,6 +333,8 @@ struct TraceCalculation {
 				result.setState(kData.getState());
 			}
 		}
+		
+		KJ_REQUIRE(isFinished(result.asReader()));
 		
 		return result;
 	}

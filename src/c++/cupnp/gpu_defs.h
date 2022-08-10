@@ -4,6 +4,14 @@
 	#define CUPNP_GPUCC
 #endif
 
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
+	#define CUPNP_DEVICE_COMPILATION_PHASE
+#endif
+
+#if defined(CUPNP_GPUCC) && !defined(CUPNP_GPU_COMPILATION_PHASE)
+	#define CUPNP_HOST_COMPILATION_PHASE
+#endif
+
 #ifdef CUPNP_WITH_CUDA
 	#include <cuda.h>
 #endif

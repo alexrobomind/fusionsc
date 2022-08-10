@@ -10,6 +10,27 @@ from types import SimpleNamespace
 
 from typing import Optional, List
 
+def symmetrize(points, nSym = 1, stellaratorSymmetric = False):
+	x, y, z = points
+	phi = np.arctan2(y, x)
+	phi = phi % (2 * np.pi / nSym)
+	
+	r = np.sqrt(x**2 + y**2)
+	
+	phi = np.stack([phi + dPhi for dPhi in np.linspace(0, 2 * np.pi, nSym, endpoint = False)], axis = 0)
+	z = np.stack([z] * nSym, axis = 0)
+	r = np.stack([r] * nSym, axis = 0)
+	
+	if stellaratorSymmetric:
+		phi = np.concatenate([phi, -phi], axis = 0)
+		z   = np.concatenate([z, -z], axis = 0)
+		r   = np.concatenate([r, r], axis = 0)
+	
+	x = r * np.cos(phi)
+	y = r * np.sin(phi)
+	
+	return np.stack([x, y, z], axis = 0)
+
 class FLT:
 	# backend: native.RootService.Client
 	
@@ -94,7 +115,26 @@ class FLT:
 		
 	
 	@asyncFunction
-	async def traceAsync(self, points, config, geometry = None, grid = None, geometryGrid = None, distanceLimit = 1e4, turnLimit = 0, stepSize = 1e-3, collisionLimit = 0, phiPlanes = []):
+	async def traceAsync(self,
+		points, config,
+		geometry = None,
+		grid = None, geometryGrid = None, 
+		
+		# Limits to stop tracing
+		distanceLimit = 1e4, turnLimit = 0, stepLimit = 0, stepSize = 1e-3, collisionLimit = 0,
+		
+		# Plane intersections
+		phiPlanes = [],
+		
+		# Diffusive transport specification
+		isotropicDiffusionCoefficient = None,
+		parallelConvectionVelocity = None, parallelDiffusionCoefficient = None,
+		meanFreePath = 1, meanFreePathGrowth = 0
+	):
+		assert parallelConvectionVelocity is None or parallelDiffusionCoefficient is None
+		if isotropicDiffusionCoefficient is not None: 
+			assert parallelConvectionVelocity is not None or parallelDiffusionCoefficient is not None
+		
 		resolvedField = await config.resolve()
 		
 		if grid is None:
@@ -114,10 +154,23 @@ class FLT:
 		request.startPoints = points
 		request.field = computedField
 		request.stepSize = stepSize
+		
 		request.distanceLimit = distanceLimit
+		request.stepLimit = stepLimit
 		request.collisionLimit = collisionLimit
-		request.poincarePlanes = phiPlanes
 		request.turnLimit = turnLimit
+		
+		# Diffusive transport model
+		if isotropicDiffusionCoefficient is not None:
+			request.perpendicularModel.isotropicDiffusionCoefficient = isotropicDiffusionCoefficient
+			
+			request.parallelModel.meanFreePath = meanFreePath
+			request.parallelModel.meanFreePathGrowth = meanFreePathGrowth
+			
+			if parallelConvectionVelocity is not None:
+				request.parallelModel.convectiveVelocity = parallelConvectionVelocity
+			else:
+				request.parallelModel.diffusionCoefficient = parallelDiffusionCoefficient
 		
 		if phiPlanes:
 			planes = request.initPlanes(len(phiPlanes))
