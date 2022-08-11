@@ -23,6 +23,7 @@ set(
 	
 	random.capnp
 	flt.capnp
+	hfcam.capnp
 	
 	services.capnp
 	
@@ -80,6 +81,9 @@ add_library(
 	
 	kernels.h
 	kernels.cpp
+	
+	hfcam.h
+	hfcam.cpp
 	
 	http.h
 	http.cpp
