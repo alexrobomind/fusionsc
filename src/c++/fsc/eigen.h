@@ -74,6 +74,10 @@ namespace fsc {
 	template<typename T>
 	using Mat3 = Eigen::Matrix<T, 3, 3>;
 
+	template<typename T>
+	using Mat2 = Eigen::Matrix<T, 2, 2>;
+
 	using Mat4d = Mat4<double>;
 	using Mat3d = Mat3<double>;
+	using Mat2d = Mat2<double>;
 }

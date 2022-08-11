@@ -1,4 +1,11 @@
+#import "tensor.h"
+#import "data.h"
 
+#import <fsc/hfcam.capnp.h>
+#import <fsc/geometry.capnp.h>
+
+namespace fsc {
+	
 Temporary<HFCamProjection> createProjection(
 	double w, double h, // Screen space
 	Vec3d ex, Vec3d ey, // Camera alignment
@@ -7,32 +14,34 @@ Temporary<HFCamProjection> createProjection(
 ) {
 	using Eigen::all;
 	using Eigen::seq;
+	auto xyz = seq(0, 2);
 	
 	double d = 1;
+	
 	
 	Vec3d depthVector = (target - origin).normalized();
 	
 	Mat3d screenToObject;
-	m(all, 0) = ex;
-	m(all, 1) = ey;
-	m(all, 2) = ez;
+	screenToObject(all, 0) = ex;
+	screenToObject(all, 1) = ey;
+	screenToObject(all, 2) = depthVector;
 	
 	Mat3d objectToScreen = screenToObject.inverse();
 	
 	// Create homogenous space transform based on depth vector and projectivity
 	Mat4d objectToHomScreen;
-	objectToHomScreen(seq(3), seq(3)) = objectToScreen;
-	objectToHomScreen(3, seq(3)) = projectivity * depthVector;
+	objectToHomScreen(xyz, xyz) = objectToScreen;
+	objectToHomScreen(3, xyz) = projectivity * depthVector;
 	
 	// Adjust shift vector so that (origin, 1) transforms to (0, 0, 0, 1)
 	Vec4d objectOrigin;
-	objectOrigin(seq(3)) = origin;
+	objectOrigin(xyz) = origin;
 	objectOrigin(3) = 1;
 	
 	Vec4d homScreenOrigin = objectToHomScreen * objectOrigin;
 	Vec4d intendedHomScreenOrigin(0, 0, 0, d);
 	
-	objectToHomScreen(all, 3) = intendedHomScreenOrigin - homScreenOrigin;
+	objectToHomScreen(all, xyz) = intendedHomScreenOrigin - homScreenOrigin;
 	
 	Temporary<HFCamProjection> result;
 	result.setWidth(w);
@@ -40,7 +49,7 @@ Temporary<HFCamProjection> createProjection(
 	
 	auto tData = result.initTransform(16);
 	for(auto i : kj::indices(tData))
-		tData.set(i, objectToHomScreen.data[i]);
+		tData.set(i, objectToHomScreen.data()[i]);
 	
 	return result;
 }
@@ -52,30 +61,31 @@ struct HFProjectionStruct {
 	
 	double minDepth = 0;
 	
-	void load(HFProjection::Reader input) {
-		auto tData = result.getTransform();
+	void load(HFCamProjection::Reader input) {
+		auto tData = input.getTransform();
 		for(auto i : kj::indices(tData))
-			transform.data[i] = tData[i];
+			transform.data()[i] = tData[i];
 		
 		width = input.getWidth();
 		height = input.getHeight();
 	}
-}
+};
 
 Vec3d applyProjection(const HFProjectionStruct& projection, Vec3d position) {
 	using Eigen::all;
 	using Eigen::seq;
+	auto xyz = seq(0, 2);
 	
 	Vec4d transformInput;
-	transformInput(seq(3)) = position;
+	transformInput(xyz) = position;
 	transformInput(3) = 1;
 	
 	Vec4d transformResult = projection.transform * transformInput;
 	double divisor = transformResult(3);
 	
-	Vec3 finalResult(
-		0.5 * w * (1 + transformResult(0) / divisor),
-		0.5 * h * (1 + transformResult(1) / divisor),
+	Vec3d finalResult(
+		0.5 * projection.width * (1 + transformResult(0) / divisor),
+		0.5 * projection.height * (1 + transformResult(1) / divisor),
 		transformResult(2)
 	);
 	
@@ -85,35 +95,40 @@ Vec3d applyProjection(const HFProjectionStruct& projection, Vec3d position) {
 Mat3d projectionDerivative(const HFProjectionStruct& projection, Vec3d position) {
 	using Eigen::all;
 	using Eigen::seq;
+	auto xyz = seq(0, 2);
 	
 	Vec4d transformInput;
-	transformInput(seq(3)) = position;
+	transformInput(xyz) = position;
 	transformInput(3) = 1;
 	
 	Vec4d transformResult = projection.transform * transformInput;
 	
 	double divisor = transformResult(3);
 	double inverseDivisorSquared = 1 / (divisor * divisor);
-	Vec4d  divisorDerivative = projection.transform(3, seq(3));
+	Vec3d  divisorDerivative = projection.transform(3, xyz);
 	
 	Mat3d derivative;
 	
-	derivative(0, all) = 0.5 * w * (
-		projection.transform(0, seq(3)) / divisor
-		- transformResult(0) * divisorDerivative * inverseDivisorSquared
+	derivative(0, all) = 0.5 * projection.width * (
+		projection.transform(0, xyz).transpose() / divisor
+		- transformResult[0] * divisorDerivative * inverseDivisorSquared
 	);
 	
-	derivative(1, all) = 0.5 * h * (
-		projection.transform(1, seq(3)) / divisor
-		- transformResult(1) * divisorDerivative * inverseDivisorSquared
+	derivative(1, all) = 0.5 * projection.height * (
+		projection.transform(1, xyz).transpose() / divisor
+		- transformResult[1] * divisorDerivative * inverseDivisorSquared
 	);
 	
-	derivative(2, all) = projection.transform(2, seq(3));
+	derivative(2, all) = projection.transform(2, xyz);
 	
 	return derivative;
 }
 
-void rasterizeTriangle(const HFProjectionStruct& projection, Mat<double>& depthBuffer, Mat<double>& determinantBuffer, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3, double edgeTolerance, double depthTolerance) {
+void rasterizeTriangle(const HFProjectionStruct& projection, Eigen::MatrixXd& depthBuffer, Eigen::MatrixXd& determinantBuffer, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3, double edgeTolerance, double depthTolerance) {
+	using Eigen::all;
+	using Eigen::seq;
+	auto xyz = seq(0, 2);
+	
 	Vec3d tp1 = applyProjection(projection, p1);
 	Vec3d tp2 = applyProjection(projection, p2);
 	Vec3d tp3 = applyProjection(projection, p3);
@@ -123,27 +138,27 @@ void rasterizeTriangle(const HFProjectionStruct& projection, Mat<double>& depthB
 	double yMin = std::min(std::min(tp1[1], tp2[1]), tp3[1]) + edgeTolerance;
 	double yMax = std::max(std::max(tp1[1], tp2[1]), tp3[1]) + edgeTolerance;
 	
-	uint32_t iMin = std::max((uint32_t) floor(xMin), 0);
-	uint32_t jMin = std::max((uint32_t) floor(yMin), 0);
+	uint32_t iMin = std::max((uint32_t) floor(xMin), (uint32_t) 0);
+	uint32_t jMin = std::max((uint32_t) floor(yMin), (uint32_t) 0);
 	// Remember: Eigen has column-major loadout, but on python side it's row major. indexing into buffers is reversed
-	uint32_t iMax = std::min((uint32_t) ceil(xMax), depthBuffer.m - 1);
-	uint32_t jMax = std::min((uint32_t) ceil(yMax), depthBuffer.n - 1);
+	uint32_t iMax = std::min((uint32_t) ceil(xMax), (uint32_t) depthBuffer.cols() - 1);
+	uint32_t jMax = std::min((uint32_t) ceil(yMax), (uint32_t) depthBuffer.rows() - 1);
 	
-	xMin = iMin:
+	xMin = iMin;
 	xMax = iMax;
 	yMin = jMin;
 	yMax = jMax;
 	
 	// Map from triangle- into 3D space
-	Matrix<double, 2, 3> triToObject;
-	triToObject(0, all) = p2 - p1;
-	triToObject(1, all) = p3 - p1;
+	Eigen::Matrix<double, 3, 2> triToObject;
+	triToObject(all, 0) = p2 - p1;
+	triToObject(all, 1) = p3 - p1;
 	
 	double realspaceDet = (p2 - p1).cross(p3 - p1).norm();
 	
 	// Check if triangle partially clips behind camera
 	auto clipsBehindCamera = [&](const Vec3d& p) -> bool {
-		return projection.transform(2, seq(3)) * p + projection.transform(2, 3) <= projection.minDepth;
+		return projection.transform(2, seq(0, 3)) * p + projection.transform(2, 3) <= projection.minDepth;
 	};
 	
 	if(clipsBehindCamera(p1) || clipsBehindCamera(p2) || clipsBehindCamera(p3))
@@ -158,15 +173,15 @@ void rasterizeTriangle(const HFProjectionStruct& projection, Mat<double>& depthB
 			double totalDet = 0;
 			
 			// Do 10 Newton iterations to find screen position on triangle space
-			for(auto iter : kj::range(10)) {
+			for(auto iter : kj::range(0, 10)) {
 				Vec3d pObject = p1 + triToObject * pTriangle;
 				Vec3d pScreen = applyProjection(projection, pObject);
 				
-				Mat2d triToScreenDerivative = projectionDerivative(projection, pObject)(seq(2)) * triToObject;
+				Mat2d triToScreenDerivative = projectionDerivative(projection, pObject)(seq(0,1), all) * triToObject;
 				if(triToScreenDerivative.determinant() < 1e-10)
 					break;
 				
-				Vec2d delta = triToScreenDerivative.inverse() * (screenTarget - pScreen(seq(2)));
+				Vec2d delta = triToScreenDerivative.inverse() * (screenTarget - pScreen(seq(0,1)));
 				
 				pTriangle += delta;
 				
@@ -175,7 +190,7 @@ void rasterizeTriangle(const HFProjectionStruct& projection, Mat<double>& depthB
 				
 				// Prevent excessive movement out of triangle domain
 				
-				for(auto k : kj::range(2)) {
+				for(auto k : kj::range(0, 2)) {
 					if(pTriangle[k] < -9) pTriangle[k] = 0;
 					if(pTriangle[k] >  9) pTriangle[k] = 1;
 				}
@@ -194,7 +209,8 @@ void rasterizeTriangle(const HFProjectionStruct& projection, Mat<double>& depthB
 			double dUp = pTriangle[0] + pTriangle[1];
 			
 			if(dUp > 1) {
-				pTriangle -= 0.5 * (dUp - 1);
+				pTriangle[0] -= 0.5 * (dUp - 1);
+				pTriangle[1] -= 0.5 * (dUp - 1);
 			}
 			
 			pTriangle = pTriangle.cwiseMin(1).cwiseMax(0);
@@ -232,7 +248,7 @@ void rasterizeTriangle(const HFProjectionStruct& projection, Mat<double>& depthB
 	}
 }
 
-void rasterizeGeometry(const HFProjectionStruct& projection, Mat<double>& depthBuffer, Mat<double>& determinantBuffer, MergedGeometry::Reader geometry, double edgeTolerance, double depthTolerance) {
+void rasterizeGeometry(const HFProjectionStruct& projection, Eigen::MatrixXd& depthBuffer, Eigen::MatrixXd& determinantBuffer, MergedGeometry::Reader geometry, double edgeTolerance, double depthTolerance) {
 	for(auto entry : geometry.getEntries()) {
 		auto mesh = entry.getMesh();
 		auto vertices = mesh.getVertices();
@@ -261,7 +277,7 @@ void rasterizeGeometry(const HFProjectionStruct& projection, Mat<double>& depthB
 			case Mesh::POLY_MESH: {
 				auto polys = mesh.getPolyMesh();
 				
-				for(auto iPoly : kj::range(polys.size() - 1)) {
+				for(auto iPoly : kj::range(0, polys.size() - 1)) {
 					uint32_t start = polys[iPoly];
 					uint32_t end   = polys[iPoly + 1];
 					
@@ -283,4 +299,6 @@ void rasterizeGeometry(const HFProjectionStruct& projection, Mat<double>& depthB
 			}
 		}
 	}
+}
+
 }
