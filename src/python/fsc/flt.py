@@ -39,7 +39,7 @@ class FLT:
 	
 	def __init__(self, backend):
 		# self.backend = backend
-		self.calculator = backend.newFieldCalculator().calculator
+		self.calculator = backend.newFieldCalculator().service
 		self.tracer	 = backend.newTracer().service
 		self.geometryLib = backend.newGeometryLib().service
 	
