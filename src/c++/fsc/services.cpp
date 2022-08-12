@@ -3,6 +3,7 @@
 #include "kernels.h"
 #include "geometry.h"
 #include "flt.h"
+#include "hfcam.h"
 
 #include <kj/list.h>
 
@@ -39,7 +40,7 @@ struct RootServer : public RootService::Server {
 		auto selectResult = selectDevice(factory, context.getParams().getPreferredDeviceType());
 		
 		auto results = context.getResults();
-		results.setCalculator(kj::get<0>(selectResult));
+		results.setService(kj::get<0>(selectResult));
 		results.setDeviceType(kj::get<1>(selectResult));
 		
 		return READY_NOW;
@@ -61,6 +62,11 @@ struct RootServer : public RootService::Server {
 	
 	Promise<void> newGeometryLib(NewGeometryLibContext context) override {
 		context.initResults().setService(fsc::newGeometryLib());
+		return READY_NOW;
+	}
+	
+	Promise<void> newHFCamProvider(NewHFCamProviderContext context) override {
+		context.initResults().setService(fsc::newHFCamProvider());
 		return READY_NOW;
 	}
 };

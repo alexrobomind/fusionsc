@@ -6,6 +6,7 @@ $Cxx.namespace("fsc");
 using Magnetics = import "magnetics.capnp";
 using Geometry = import "geometry.capnp";
 using FLT = import "flt.capnp";
+using HFCam = import "hfcam.capnp";
 
 struct RootConfig {
 }
@@ -20,7 +21,8 @@ interface ResolverChain extends(Magnetics.FieldResolver, Geometry.GeometryResolv
 }
 
 interface RootService {
-	newFieldCalculator @0 (preferredDeviceType : WorkerType = gpu) -> (calculator : Magnetics.FieldCalculator, deviceType : WorkerType);
+	newFieldCalculator @0 (preferredDeviceType : WorkerType = gpu) -> (service : Magnetics.FieldCalculator, deviceType : WorkerType);
 	newGeometryLib     @1 () -> (service    : Geometry.GeometryLib);
 	newTracer          @2 (preferredDeviceType : WorkerType = gpu) -> (service    : FLT.FLT, deviceType : WorkerType);
+	newHFCamProvider   @3 () -> (service : HFCam.HFCamProvider);
 }
