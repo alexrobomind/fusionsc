@@ -12,6 +12,12 @@ add_executable(
 
 target_link_libraries(fsc-server fsc)
 
+add_executable(
+	brandedEnums
+	brandedEnums.cpp
+)
+
+target_link_libraries(brandedEnums CapnProto::capnp-rpc)
 #add_executable(
 #	npytest
 #	npytest.cpp
