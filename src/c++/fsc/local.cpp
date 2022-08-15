@@ -603,18 +603,209 @@ namespace {
 			readFrom -> shutdownReadEnd(KJ_EXCEPTION(DISCONNECTED, "Read aborted"));
 		}
 	};
+	
+	struct CrossThreadPipe : public kj::AtomicRefcounted {
+		struct Data {
+			Own<CrossThreadPromiseFulfiller<size_t>> outstandingRead;
+			Own<CrossThreadPromiseFulfiller<void>> outstandingWrite;
+			
+			kj::ArrayPtr<kj::byte> readBuffer = nullptr;
+			kj::ArrayPtr<const kj::byte> writeBuffer = nullptr;
+			
+			size_t bytesRead = 0;
+			size_t bytesWritten = 0;
+			size_t minBytesRead = 0;
+			
+			bool closed = false;
+			
+			kj::Vector<Own<CrossThreadPromiseFulfiller<void>>> shutdownFulfillers;
+						
+			void pump();
+		};
+		
+		struct Stream : public kj::AsyncIoStream, kj::Refcounted {
+			Own<const CrossThreadPipe> readFrom;
+			Own<const CrossThreadPipe> writeTo;
+			
+			Stream(Own<const CrossThreadPipe> readFrom, Own<const CrossThreadPipe> writeTo);
+			~Stream();
+			
+			// AsyncInputStream 
+			Promise<size_t> tryRead(void* dst, size_t minBytesRead, size_t maxBytes) override;
+			void abortRead() override;
+			
+			// AsyncOutputStream
+			Promise<void> write(const void* buffer, size_t size) override;
+			Promise<void> write(ArrayPtr<const ArrayPtr<const kj::byte>> pieces) override;
+			Promise<void> whenWriteDisconnected() override ;
+			void shutdownWrite() override ;
+			
+			Own<Stream> addRef() { return kj::addRef(*this); }
+		};
+		
+		struct WriteQueue {
+			Own<Stream> stream;
+			Array<const ArrayPtr<const byte>> pieces;
+			size_t offset;
+			
+			WriteQueue(ArrayPtr<const ArrayPtr<const byte>>, Stream& stream);
+			Promise<void> run();
+		};
+		
+		kj::MutexGuarded<Data> data;
+		Own<const CrossThreadPipe> addRef() const { return kj::atomicAddRef(*this); }
+	};
+	
+	void CrossThreadPipe::Data::pump() {
+		size_t pumpBytes = std::min(
+			readBuffer.size() - bytesRead,
+			writeBuffer.size() - bytesWritten
+		);
+		
+		if(pumpBytes > 0) {
+			memcpy(readBuffer.begin() + bytesRead, writeBuffer.begin() + bytesWritten, pumpBytes);
+		}
+		
+		bytesRead += pumpBytes;
+		bytesWritten += pumpBytes;
+		
+		if(readBuffer != nullptr && bytesRead >= minBytesRead) {
+			outstandingRead -> fulfill(cp(bytesRead));
+			readBuffer = nullptr;
+			bytesRead = 0;
+			minBytesRead = 0;
+		}
+		
+		if(writeBuffer != nullptr && bytesWritten >= writeBuffer.size()) {
+			outstandingWrite -> fulfill();
+			writeBuffer = nullptr;
+			bytesWritten = 0;
+		}
+		
+		if(closed) {
+			for(auto& fulfiller : shutdownFulfillers) {
+				fulfiller -> fulfill();
+			}
+			shutdownFulfillers.clear();
+			
+			if(writeBuffer != nullptr) {
+				outstandingWrite -> reject(KJ_EXCEPTION(FAILED, "Write end disconnected"));
+				writeBuffer = nullptr;
+				bytesWritten = 0;
+			}
+			
+			if(readBuffer != nullptr) {
+				outstandingRead -> fulfill(cp(bytesRead));
+				readBuffer = nullptr;
+				bytesRead = 0;
+				minBytesRead = 0;
+			}
+		}
+	}
+	
+	CrossThreadPipe::WriteQueue::WriteQueue(ArrayPtr<const ArrayPtr<const byte>> pieces, Stream& stream) :
+		pieces(heapArray(pieces)), stream(stream.addRef())
+	{}
+	
+	Promise<void> CrossThreadPipe::WriteQueue::run() {
+		if(offset == pieces.size())
+			return READY_NOW;
+		
+		Promise<void> writePromise = stream -> write(pieces[offset].begin(), pieces[offset].size());
+		++offset;
+		
+		return writePromise.then([this]() { return run(); });
+	}
+	
+	CrossThreadPipe::Stream::Stream(Own<const CrossThreadPipe> readFrom, Own<const CrossThreadPipe> writeTo) :
+		readFrom(mv(readFrom)),
+		writeTo(mv(writeTo))
+	{}
+	
+	CrossThreadPipe::Stream::~Stream()
+	{
+		abortRead();
+		shutdownWrite();
+	}
+	
+	Promise<size_t> CrossThreadPipe::Stream::tryRead(void* dst, size_t minBytesRead, size_t maxBytes) {
+		auto& data = *(readFrom -> data.lockExclusive());
+		
+		if(data.readBuffer != nullptr)
+			data.outstandingRead -> fulfill(cp(data.bytesRead));
+		
+		data.readBuffer = kj::arrayPtr((byte*) dst, maxBytes);
+		data.minBytesRead = minBytesRead;
+		data.bytesRead = 0;
+		
+		auto paf = kj::newPromiseAndCrossThreadFulfiller<size_t>();
+		data.outstandingRead = mv(paf.fulfiller);
+		
+		data.pump();
+		return mv(paf.promise);
+	}
+	
+	void CrossThreadPipe::Stream::abortRead() {
+		auto& data = *(readFrom -> data.lockExclusive());
+		
+		if(data.readBuffer != nullptr) 
+			data.outstandingRead -> reject(KJ_EXCEPTION(FAILED, "Read aborted"));
+		
+		data.readBuffer = nullptr;
+		data.minBytesRead = 0;
+		data.bytesRead = 0;
+	}
+		
+	Promise<void> CrossThreadPipe::Stream::write(const void* buffer, size_t size) {
+		auto& data = *(writeTo -> data.lockExclusive());
+		
+		if(data.writeBuffer != nullptr)
+			data.outstandingWrite -> reject(KJ_EXCEPTION(FAILED, "Write cancelled by overlapping write"));
+		
+		data.writeBuffer = kj::arrayPtr((const byte*) buffer, size);
+		data.bytesWritten = 0;
+		
+		auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+		data.outstandingWrite = mv(paf.fulfiller);
+		
+		data.pump();
+		return mv(paf.promise);
+	}
+	
+	Promise<void> CrossThreadPipe::Stream::write(ArrayPtr<const ArrayPtr<const kj::byte>> pieces) {
+		auto queue = heapHeld<WriteQueue>(pieces, *this);
+		return queue -> run().attach(queue.x());
+	}
+	
+	Promise<void> CrossThreadPipe::Stream::whenWriteDisconnected() {
+		auto& data = *(writeTo -> data.lockExclusive());
+		
+		auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+		data.shutdownFulfillers.add(mv(paf.fulfiller));
+		
+		data.pump();
+		
+		return mv(paf.promise);
+	}
+	
+	void CrossThreadPipe::Stream::shutdownWrite() {
+		auto& data = *(writeTo -> data.lockExclusive());
+		
+		data.closed = true;
+		data.pump();
+	}
 }
 
 kj::TwoWayPipe newPipe() {
-	auto queue1Read = kj::atomicRefcounted<AsyncMessageQueue>();
-	auto queue2Read = kj::atomicRefcounted<AsyncMessageQueue>();
+	auto queue1Read = kj::atomicRefcounted<CrossThreadPipe>();
+	auto queue2Read = kj::atomicRefcounted<CrossThreadPipe>();
 	
 	auto queue1Write = queue1Read->addRef();
 	auto queue2Write = queue2Read->addRef();
 	
 	kj::TwoWayPipe result;
-	result.ends[0] = kj::heap<MessageQueueIOStream>(mv(queue1Read), mv(queue2Write));
-	result.ends[1] = kj::heap<MessageQueueIOStream>(mv(queue2Read), mv(queue1Write));
+	result.ends[0] = kj::refcounted<CrossThreadPipe::Stream>(mv(queue1Read), mv(queue2Write));
+	result.ends[1] = kj::refcounted<CrossThreadPipe::Stream>(mv(queue2Read), mv(queue1Write));
 	
 	return result;
 }	
