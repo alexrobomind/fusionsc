@@ -366,7 +366,7 @@ namespace pybind11 { namespace detail {
 				// Construct instance of registered class by calling the class
 				// The target class inherits from DynamicStruct::Pipeline, which has a
 				// copy initializer. The target object will be forwarded to it
-				object result = targetClass(dynamicStruct);
+				object result = targetClass(kj::mv(dynamicStruct));
 				return result.inc_ref();
 			}
 			
@@ -374,7 +374,7 @@ namespace pybind11 { namespace detail {
 			
 			// TODO: Just default-construct the target class on-demand?
 			// In principle, this should never be reached anyway
-			return type_caster_base<DynamicStructPipeline>::cast(dynamicStruct, policy, parent);
+			return type_caster_base<DynamicStructPipeline>::cast(kj::mv(dynamicStruct), policy, parent);
 		}
 	};
 		

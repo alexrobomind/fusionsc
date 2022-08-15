@@ -113,7 +113,7 @@ namespace {
 				
 				// This fetches & clears the python error indicator
 				py::error_already_set error;
-				KJ_DBG("Handling python error", error.what());
+				// KJ_DBG("Handling python error", error.what());
 							
 				// Check if we have a StopIteration error (which indicates completion)	
 				if(PyErr_GivenExceptionMatches(error.type().ptr(), PyExc_StopIteration)) {

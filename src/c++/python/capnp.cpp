@@ -96,6 +96,9 @@ py::tuple underscoreGet(T& ds, Field field) {
 	auto cppValue = ds.get(field);
 	bool nbr = needsBackReference(cppValue);
 	
+	// We REALLY don't want pybind11 to try to copy this
+	// auto pCppValue = new decltype(cppValue)(mv(cppValue));
+	
 	return py::make_tuple(
 		py::cast(mv(cppValue)),
 		py::cast(nbr)

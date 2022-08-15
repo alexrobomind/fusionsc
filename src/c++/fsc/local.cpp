@@ -392,7 +392,7 @@ namespace {
 			auto locked = shared.lockExclusive();
 			
 			if(locked -> newInputsReady.get() != nullptr) {
-				KJ_DBG("Clear NIR", this);
+				// KJ_DBG("Clear NIR", this);
 				locked -> newInputsReady -> reject(cp(reason));
 				locked -> newInputsReady = nullptr;
 			}
@@ -427,7 +427,7 @@ namespace {
 		ReaderPrivate readerPrivate;
 		
 		bool pumpLocal() {
-			KJ_DBG("pumpLocal");
+			// KJ_DBG("pumpLocal");
 			auto& mine = readerPrivate;
 			
 			while(true) {
@@ -445,7 +445,7 @@ namespace {
 				
 				size_t rem = std::min(inRem, outRem);
 				
-				KJ_DBG("transfer", rem);
+				// KJ_DBG("transfer", rem);
 				
 				if(rem > 0)
 					memcpy(outBuf.begin() + mine.outConsumed, inBuf.begin() + mine.inConsumed, rem);
@@ -522,7 +522,7 @@ namespace {
 			KJ_IF_MAYBE(pErr, locked->sendError) {
 				mine.newInputsReady = cp(*pErr);
 			} else {
-				KJ_DBG("Set NIR", this);
+				// KJ_DBG("Set NIR", this);
 				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
 				locked -> newInputsReady = mv(paf.fulfiller);
 				mine.newInputsReady = mv(paf.promise);
@@ -646,7 +646,7 @@ namespace {
 		struct WriteQueue {
 			Own<Stream> stream;
 			Array<const ArrayPtr<const byte>> pieces;
-			size_t offset;
+			size_t offset = 0;
 			
 			WriteQueue(ArrayPtr<const ArrayPtr<const byte>>, Stream& stream);
 			Promise<void> run();
@@ -661,6 +661,8 @@ namespace {
 			readBuffer.size() - bytesRead,
 			writeBuffer.size() - bytesWritten
 		);
+		
+		// KJ_DBG("pump()", this, pumpBytes, readBuffer.size(), bytesRead, writeBuffer.size(), bytesWritten);
 		
 		if(pumpBytes > 0) {
 			memcpy(readBuffer.begin() + bytesRead, writeBuffer.begin() + bytesWritten, pumpBytes);
@@ -708,7 +710,7 @@ namespace {
 	{}
 	
 	Promise<void> CrossThreadPipe::WriteQueue::run() {
-		if(offset == pieces.size())
+		if(offset >= pieces.size())
 			return READY_NOW;
 		
 		Promise<void> writePromise = stream -> write(pieces[offset].begin(), pieces[offset].size());
@@ -729,7 +731,9 @@ namespace {
 	}
 	
 	Promise<size_t> CrossThreadPipe::Stream::tryRead(void* dst, size_t minBytesRead, size_t maxBytes) {
-		auto& data = *(readFrom -> data.lockExclusive());
+		auto dataLock = readFrom -> data.lockExclusive();
+		auto& data = *dataLock;
+		// KJ_DBG("Read", &data, minBytesRead, maxBytes);
 		
 		if(data.readBuffer != nullptr)
 			data.outstandingRead -> fulfill(cp(data.bytesRead));
@@ -746,7 +750,9 @@ namespace {
 	}
 	
 	void CrossThreadPipe::Stream::abortRead() {
-		auto& data = *(readFrom -> data.lockExclusive());
+		auto dataLock = readFrom -> data.lockExclusive();
+		auto& data = *dataLock;
+		// KJ_DBG("Read shutdown", &data);
 		
 		if(data.readBuffer != nullptr) 
 			data.outstandingRead -> reject(KJ_EXCEPTION(FAILED, "Read aborted"));
@@ -757,7 +763,9 @@ namespace {
 	}
 		
 	Promise<void> CrossThreadPipe::Stream::write(const void* buffer, size_t size) {
-		auto& data = *(writeTo -> data.lockExclusive());
+		auto dataLock = writeTo -> data.lockExclusive();
+		auto& data = *dataLock;
+		// KJ_DBG("Write", &data, size);
 		
 		if(data.writeBuffer != nullptr)
 			data.outstandingWrite -> reject(KJ_EXCEPTION(FAILED, "Write cancelled by overlapping write"));
@@ -773,12 +781,19 @@ namespace {
 	}
 	
 	Promise<void> CrossThreadPipe::Stream::write(ArrayPtr<const ArrayPtr<const kj::byte>> pieces) {
+		{
+			auto dataLock = writeTo -> data.lockExclusive();
+			auto& data = *dataLock;
+			// KJ_DBG("Write", &data, pieces.size());
+		}
 		auto queue = heapHeld<WriteQueue>(pieces, *this);
 		return queue -> run().attach(queue.x());
 	}
 	
 	Promise<void> CrossThreadPipe::Stream::whenWriteDisconnected() {
-		auto& data = *(writeTo -> data.lockExclusive());
+		auto dataLock = writeTo -> data.lockExclusive();
+		auto& data = *dataLock;
+		// KJ_DBG("WWD", &data);
 		
 		auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
 		data.shutdownFulfillers.add(mv(paf.fulfiller));
@@ -789,7 +804,9 @@ namespace {
 	}
 	
 	void CrossThreadPipe::Stream::shutdownWrite() {
-		auto& data = *(writeTo -> data.lockExclusive());
+		auto dataLock = writeTo -> data.lockExclusive();
+		auto& data = *dataLock;
+		// KJ_DBG("Write shutdown", &data);
 		
 		data.closed = true;
 		data.pump();

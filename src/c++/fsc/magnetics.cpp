@@ -136,6 +136,7 @@ struct CalculationSession : public FieldCalculator::Server {
 	//! Handles compute request
 	Promise<void> compute(ComputeContext context) {
 		context.allowCancellation();
+		KJ_REQUIRE("Processing compute request");
 		
 		// Copy input field (so that call context can be released)
 		auto field = heapHeld<Temporary<MagneticField>>(context.getParams().getField());
@@ -161,6 +162,7 @@ struct CalculationSession : public FieldCalculator::Server {
 		
 		compField.setData(mv(data));
 		
+		KJ_REQUIRE("Compute request finished");
 		return READY_NOW;
 	}
 	

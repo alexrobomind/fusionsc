@@ -196,6 +196,9 @@ struct InProcessServerImpl : public kj::AtomicRefcounted {
 	
 	Library library;
 	mutable Factory factory;
+		
+	// The desctructor of this joins the inner runnable. Everything above
+	// can be safely used from the inside.
 	kj::Thread thread;
 	
 	Own<const kj::Executor> executor;
@@ -214,6 +217,7 @@ struct InProcessServerImpl : public kj::AtomicRefcounted {
 	}
 	
 	~InProcessServerImpl() {
+		KJ_DBG("Disconnecting in-process server");
 		doneFulfiller->fulfill();
 	}
 	
@@ -238,6 +242,7 @@ struct InProcessServerImpl : public kj::AtomicRefcounted {
 		}
 		
 		donePromise.wait(ws);
+		KJ_DBG("In-process server disconnected");
 	}
 	
 	Service::Client connect() const {
@@ -246,7 +251,8 @@ struct InProcessServerImpl : public kj::AtomicRefcounted {
 		using capnp::rpc::twoparty::VatId;
 		using capnp::rpc::twoparty::Side;
 		
-		auto pipe = getActiveThread().ioContext().provider->newTwoWayPipe();
+		// auto pipe = getActiveThread().ioContext().provider->newTwoWayPipe();
+		auto pipe = newPipe();
 				
 		// Create server
 		auto serverRunnable = [stream = mv(pipe.ends[1]), srv = this->addRef()]() mutable -> Promise<void> {

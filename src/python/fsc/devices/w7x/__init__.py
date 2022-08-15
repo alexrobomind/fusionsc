@@ -38,8 +38,18 @@ async def computeCoilFields(calculator, coils: Union[native.W7XCoilSet.Builder, 
 	
 	async def resolveAndCompute(x):
 		x = await resolve.resolveField(x)
-		x = (await calculator.compute(x, grid)).computedField
-		return x
+		
+		#x = (await calculator.compute(x, grid)).computedField
+		
+		# Cheatycheat cheatie
+		# Computed field is two part: Grid and data ref
+		# To hide latency, we extract the reference directly
+		
+		compField = native.ComputedField.newMessage()
+		compField.grid = grid
+		compField.data = calculator.compute(x, grid).computedField.data
+		
+		return compField
 	
 	fields = result.fields
 	

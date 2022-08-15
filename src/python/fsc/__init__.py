@@ -22,12 +22,15 @@ __all__ = [
 # Initialize event loop for main thread
 asnc.startEventLoop()
 
+localServer = native.LocalRootServer()
+localRoot = localServer.connect()
+
 def local() -> native.RootService:
 	"""
 	Creates a local instance of the FSC services
 	"""
 	
-	return native.connectSameThread()
+	return localRoot # localServer.connect() #native.connectSameThread()
 
 def tracer(backend: Optional[native.RootService] = None) -> flt.FLT:
 	"""

@@ -46,7 +46,7 @@ RootService::Client connectRemote1(kj::StringPtr address, unsigned int port) {
 	return connectRemote(address, port);
 }
 
-RootService::Client connectLocal1() {
+/*RootService::Client connectLocal1() {
 	fscpy::PyContext::startEventLoop();
 	auto serverFactory = newInProcessServer<RootService>([]() mutable {
 		Temporary<RootConfig> rootConfig;
@@ -55,12 +55,30 @@ RootService::Client connectLocal1() {
 	
 	auto server = serverFactory();
 	return attach(server, mv(serverFactory));
-}
+}*/
+
 
 ResolverChain::Client newResolverChain1() {
 	fscpy::PyContext::startEventLoop();
 	return newResolverChain();
 }
+
+struct LocalRootServer {
+	kj::Function<capnp::Capability::Client()> clientFactory;
+	
+	LocalRootServer() :
+		clientFactory(
+			newInProcessServer<RootService>([]() mutable {
+				Temporary<RootConfig> rootConfig;
+				return createRoot(rootConfig);
+			})
+		)
+	{}
+	
+	RootService::Client connect() {
+		return clientFactory().castAs<RootService>();
+	}
+};
 
 }
 
@@ -68,10 +86,15 @@ namespace fscpy {
 	void initService(py::module_& m) {	
 		m.def("connectSameThread", &connectSameThread1);
 		m.def("connectSameThread", &connectSameThread2);
-		m.def("connectLocal", &connectLocal1);
+		// m.def("connectLocal", &connectLocal1);
 		m.def("connectRemote", &connectRemote1, py::arg("address"), py::arg("port") = 0);
 		m.def("newResolverChain", &newResolverChain1);
 		m.def("newCache", &fsc::newCache);
+		
+		py::class_<LocalRootServer>(m, "LocalRootServer")
+			.def(py::init<>())
+			.def("connect", &LocalRootServer::connect)
+		;
 	}
 
 	void loadDefaultSchema(py::module_& m) {
