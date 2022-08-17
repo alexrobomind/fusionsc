@@ -23,24 +23,16 @@ def wait(awaitable: Awaitable[T]) -> T:
 	"""
 	return run(awaitable).wait()
 
-def asyncFunction(f: Callable[P, Awaitable[T]]) -> Callable[P, Promise[T]]:
-	"""
-	Decorator. Transforms a function returning a coroutine into a function
-	returning a promise.
-	"""
+def asyncFunction(f: Callable[P, Awaitable[T]]) -> Callable[P, T]:
 	@functools.wraps(f)
 	def wrapper(*args, **kwargs):
-		return run(f(*args, **kwargs))
+		coro = f(*args, **kwargs)
+		return run(coro).wait()
 	
-	return wrapper
-
-def eager(f: Callable[P, Awaitable[T]]) -> Callable[P, T]:
-	"""
-	Transforms a function returning a coroutine or promise into
-	one that immediately executes via the main event loop.
-	"""
-	@functools.wraps(f)
-	def wrapper(*args, **kwargs):
-		return wait(f(*args, **kwargs))
+	@functool.wraps(f)
+	def asnc(*args, **kwargs):
+		coro = f(*args, **kwargs)
+		return run(coro)
 	
+	wrapper.asnc = asnc
 	return wrapper

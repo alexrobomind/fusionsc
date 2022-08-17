@@ -13,17 +13,17 @@ __all__ = [
 	'downloadAsync', 'publish', 'openArchive', 'writeArchiveAsync',
 	
 	# Locally defined
-	'readArchive', 'readArchiveAsync', 'download', 'writeArchive'
+	'readArchive', 'download', 'writeArchive'
 ]
 
+@asyncFunction
 def download(ref):
-	return downloadAsync(ref).wait()
+	return downloadAsync(ref)
 
+@asyncFunction
 def writeArchive(data, filename: str):
-	return writeArchiveAsync(data, filename).wait()
+	return writeArchiveAsync(data, filename)
 
+@asyncFunction
 def readArchive(filename: str):
-	return readArchiveAsync(filename).wait()
-
-def readArchiveAsync(filename: str):
-	return downloadAsync(openArchive(filename))
+	return download.asnc(readArchiveAsync(filename))
