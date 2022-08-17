@@ -15,11 +15,11 @@ def asPyvista(*args, **kwargs):
 	return asPyvistaAsync(*args, **kwargs).wait()
 
 @asyncFunction
-async def planarCutAsync(geometry, phi = None, normal = None, center = None):
+async def planarCut(geometry, phi = None, normal = None, center = None):
 	assert phi is not None or normal is not None
 	assert phi is None or normal is None
 	
-	geometry = await geometry.resolve()
+	geometry = await geometry.resolve.asnc()
 	
 	request = native.GeometryLib.methods.planarCut.Params.newMessage()
 	request.geometry = geometry.geometry
@@ -56,15 +56,15 @@ def plotCut(geometry, phi = 0, ax = None, plot = True, **kwArgs):
 	return coll
 
 @asyncFunction
-async def asPyvistaAsync(geometry):
+async def asPyvista(geometry):
 	import numpy as np
 	import pyvista as pv
 	
-	geometry = await geometry.resolve()
+	geometry = await geometry.resolve.asnc()
 	
 	geoLib = localGeoLib()
 	mergedRef = geoLib.merge(geometry.geometry).ref
-	mergedGeometry = await data.downloadAsync(mergedRef)
+	mergedGeometry = await data.download.asnc(mergedRef)
 	
 	def extractMesh(entry):
 		mesh = entry.mesh

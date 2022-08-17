@@ -6,7 +6,7 @@ from .native.data import (
 	writeArchiveAsync
 )
 
-from .asnc import eager
+from .asnc import asyncFunction
 
 __all__ = [
 	# Imported from native
@@ -26,4 +26,4 @@ def writeArchive(data, filename: str):
 
 @asyncFunction
 def readArchive(filename: str):
-	return download.asnc(readArchiveAsync(filename))
+	return download.asnc(openArchive(filename))

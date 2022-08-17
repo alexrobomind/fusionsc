@@ -393,14 +393,14 @@ namespace fsc {
 	//! Version of launchKernel() without cost
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
 	Own<Operation> launchKernel(Device& device, Promise<void> prerequisite, size_t n, Params&&... params) {
-		Eigen::TensorOpCost expensive(1e12, 1e12, 1e12);
+		Eigen::TensorOpCost expensive(1e22, 1e22, 1e22);
 		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, mv(prerequisite), expensive, std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
 	}
 	
 	//! Version of launchKernel() without prerequisite and cost
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
 	Own<Operation> launchKernel(Device& device, size_t n, Params&&... params) {
-		Eigen::TensorOpCost expensive(1e12, 1e12, 1e12);
+		Eigen::TensorOpCost expensive(1e22, 1e22, 1e22);
 		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, READY_NOW, expensive, std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
 	}
 	

@@ -8,7 +8,7 @@ from . import geometry
 from .native import kj
 from .native import capnp
 
-from .asnc import run, asyncFunction, eager, wait, Promise
+from .asnc import run, asyncFunction, wait, Promise
 from .resolve import importOfflineData
 
 from .native.timer import delay
@@ -16,7 +16,7 @@ from .native.timer import delay
 from typing import Optional
 
 __all__ = [
-	'run', 'asyncFunction', 'eager', 'wait', 'importOfflineData', 'delay', 'Promise', 'MagneticConfig'
+	'run', 'asyncFunction', 'wait', 'importOfflineData', 'delay', 'Promise', 'MagneticConfig'
 ]
 
 # Initialize event loop for main thread
@@ -72,7 +72,7 @@ class Geometry:
 		
 	@asyncFunction
 	async def resolve(self):
-		return Geometry(await resolve.resolveGeometry(self.geometry))
+		return Geometry(await resolve.resolveGeometry.asnc(self.geometry))
 	
 	def __add__(self, other):
 		if not isinstance(other, Geometry):
@@ -125,7 +125,7 @@ class MagneticConfig:
 	
 	@asyncFunction
 	async def resolve(self):
-		return MagneticConfig(await resolve.resolveField(self.field))
+		return MagneticConfig(await resolve.resolveField.asnc(self.field))
 	
 	def ptree(self):
 		import printree
