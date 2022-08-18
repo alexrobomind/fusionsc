@@ -95,6 +95,29 @@ class Geometry:
 		result.geometry.combined = [self.geometry, other.geometry]
 		return result
 	
+	def translate(self, dx):
+		result = Geometry()
+		
+		transformed = result.geometry.initTransformed()
+		shifted = transformed.initShifted()
+		shifted.shift = dx
+		shifted.node.leaf = self.geometry
+		
+		return result
+	
+	def rotate(self, angle, axis, center = [0, 0, 0]):
+		result = Geometry()
+		
+		transformed = result.geometry.initTransformed()
+		turned = transformed.initTurned()
+		turned.axis = axis
+		turned.angle = angle
+		turned.center = center
+		turned.node.leaf = self.geometry
+		
+		return result
+		
+	
 	
 class MagneticConfig:
 	"""

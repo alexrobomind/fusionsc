@@ -21,6 +21,9 @@ if(FSC_WITH_CUDA)
 	find_package(CUDAToolkit)
 endif()
 
+option(BUILD_SHARED_LIBS "Build Shared Libraries" OFF)
+option(BUILD_STATIC_LIBS "Build Static Libraries" ON)
+
 set(CMAKE_CXX_EXTENSIONS On)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 include(src/cmake/OptimizeForTarget.cmake)
@@ -56,12 +59,14 @@ if(NOT FSC_ALWAYS_FETCH OR NOT FSC_FETCH_DEPENDENCIES)
 	find_package(Catch2 CONFIG)
 	find_package(Eigen3 CONFIG)
 	find_package(pybind11 CONFIG)
+	find_package(HDF5 CONFIG)
 else()
 	set(CapnProto_FOUND FALSE)
 	set(Botan_FOUND FALSE)
 	set(Catch2_FOUND FALSE)
 	set(Eigen3_FOUND FALSE)
 	set(pybind11_FOUND FALSE)
+	set(HDF5_FOUND FALSE)
 endif()
 
 # Try to fetch some dependencies if possible
@@ -112,6 +117,15 @@ FetchContent_Declare(
 	GIT_PROGRESS   On
 )
 
+FetchContent_Declare(
+	HDF5
+	GIT_REPOSITORY https://github.com/HDFGroup/hdf5.git
+	GIT_TAG        hdf5-1_13_2
+	GIT_SHALLOW    On
+	GIT_PROGRESS   On
+)
+	
+
 # Disable BUILD_TESTING while compiling dependencies
 set(BUILD_TESTING_TMP ${BUILD_TESTING})
 set(BUILD_TESTING OFF CACHE BOOL "Temporarily disable testing" FORCE)
@@ -137,6 +151,12 @@ endif()
 
 fetch_dependency(CapnProto)
 fetch_dependency(Eigen3)
+
+# HDF5's shared library option messes with other shared library builds
+SET(HDF5_EXTERNALLY_CONFIGURED 1)
+SET(HDF5_BUILD_HL_LIB ON CACHE BOOL "Enable building of HDF5 HL library" FORCE)
+
+fetch_dependency(HDF5)
 
 if(FSC_WITH_PYTHON)
 	fetch_dependency(pybind11)
@@ -171,6 +191,13 @@ if(TARGET capnpc)
 else()
 	target_link_libraries(deps INTERFACE CapnProto::capnpc)
 endif()
+
+if(TARGET hdf5-static)
+	target_link_libraries(deps INTERFACE hdf5-static)
+else()
+	target_link_libraries(deps INTERFACE HDF5::hdf5-static)
+endif()
+
 
 if(FSC_WITH_CUDA)
 	target_compile_definitions(
