@@ -657,7 +657,7 @@ void buildCoilFields(W7XCoilSet::Reader in, W7XCoilSet::Fields::Builder output) 
 			unsigned int offset = coils.getCoilsDBSet().getMainCoilOffset();
 			unsigned int coilID = i_coil < 5
 				? offset + 5 * i_mod + i_coil
-				: offset + 2 * i_mod + i_coil + 50;
+				: offset + 2 * i_mod + (i_coil - 5) + 50;
 			out.setW7xCoilsDB(coilID);
 		} else {
 			KJ_REQUIRE(coils.isCustomCoilSet());

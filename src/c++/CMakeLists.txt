@@ -23,4 +23,4 @@ add_subdirectory(fsc)
 
 # Now we can build tools / bindings
 add_subdirectory(tools)
-add_subdirectory(python)
+add_subdirectory(pybindings)

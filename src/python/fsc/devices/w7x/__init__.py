@@ -2,7 +2,7 @@ import fsc
 import fsc.native.devices.w7x as w7xnative
 
 from fsc import native, resolve, flt
-from fsc.asnc import asyncFunction, eager
+from fsc.asnc import asyncFunction
 
 from typing import Union
 
@@ -28,7 +28,7 @@ def connectComponentsDB(address: str):
 	resolve.geometryResolvers.append(componentsDBResolver)
 	return componentsDB
 
-@eager
+@asyncFunction
 async def computeCoilFields(calculator, coils: Union[native.W7XCoilSet.Builder, native.W7XCoilSet.Reader], grid = None) -> native.W7XCoilSet.Builder:
 	if grid is None:
 		grid = defaultGrid
@@ -37,7 +37,7 @@ async def computeCoilFields(calculator, coils: Union[native.W7XCoilSet.Builder, 
 	w7xnative.buildCoilFields(coils, result.initFields())
 	
 	async def resolveAndCompute(x):
-		x = await resolve.resolveField(x)
+		x = await resolve.resolveField.asnc(x)
 		
 		#x = (await calculator.compute(x, grid)).computedField
 		

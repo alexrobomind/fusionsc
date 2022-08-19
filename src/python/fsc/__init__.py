@@ -8,7 +8,7 @@ from . import geometry
 from .native import kj
 from .native import capnp
 
-from .asnc import run, asyncFunction, eager, wait, Promise
+from .asnc import run, asyncFunction, wait, Promise
 from .resolve import importOfflineData
 
 from .native.timer import delay
@@ -16,7 +16,7 @@ from .native.timer import delay
 from typing import Optional
 
 __all__ = [
-	'run', 'asyncFunction', 'eager', 'wait', 'importOfflineData', 'delay', 'Promise', 'MagneticConfig'
+	'run', 'asyncFunction', 'wait', 'importOfflineData', 'delay', 'Promise', 'MagneticConfig'
 ]
 
 # Initialize event loop for main thread
@@ -72,7 +72,7 @@ class Geometry:
 		
 	@asyncFunction
 	async def resolve(self):
-		return Geometry(await resolve.resolveGeometry(self.geometry))
+		return Geometry(await resolve.resolveGeometry.asnc(self.geometry))
 	
 	def __add__(self, other):
 		if not isinstance(other, Geometry):
@@ -94,6 +94,29 @@ class Geometry:
 		
 		result.geometry.combined = [self.geometry, other.geometry]
 		return result
+	
+	def translate(self, dx):
+		result = Geometry()
+		
+		transformed = result.geometry.initTransformed()
+		shifted = transformed.initShifted()
+		shifted.shift = dx
+		shifted.node.leaf = self.geometry
+		
+		return result
+	
+	def rotate(self, angle, axis, center = [0, 0, 0]):
+		result = Geometry()
+		
+		transformed = result.geometry.initTransformed()
+		turned = transformed.initTurned()
+		turned.axis = axis
+		turned.angle = angle
+		turned.center = center
+		turned.node.leaf = self.geometry
+		
+		return result
+		
 	
 	
 class MagneticConfig:
@@ -125,7 +148,7 @@ class MagneticConfig:
 	
 	@asyncFunction
 	async def resolve(self):
-		return MagneticConfig(await resolve.resolveField(self.field))
+		return MagneticConfig(await resolve.resolveField.asnc(self.field))
 	
 	def ptree(self):
 		import printree
