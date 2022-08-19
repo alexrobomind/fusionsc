@@ -5,6 +5,72 @@ from .asnc import asyncFunction
 
 import numpy as np
 
+def asTagValue(x):
+	result = native.TagValue.newMessage()
+	
+	if x is None:
+		result.notSet = None
+	elif instanceof(x, int) and x >= 0:
+		result.uInt64 = x
+	elif instanceof(x, str):
+		result.text = x
+	else:
+		raise "Tag values can only be None, unsigned integer or string"
+	
+	return result
+
+def cuboid(x1, x2, tags = {}):
+    # Prepare mesh data
+	x1 = np.asarray(x1)
+	x2 = np.asarray(x2)
+	
+	unitCubeVertices = np.asarray([
+		[0, 0, 0],
+		[1, 0, 0],
+		[1, 1, 0],
+		[0, 1, 0],
+		[0, 0, 1],
+		[1, 0, 1],
+		[1, 1, 1],
+		[0, 1, 1]
+	])
+	
+	cubeVertices = x1 + (x2 - x1) * unitCubeVertices
+	
+	indices = [
+		# xy surfaces
+		0, 1, 2, 3,
+		4, 5, 6, 7,
+		# xz surfaces
+		0, 4, 5, 1,
+		2, 6, 7, 3,
+		# yz surfaces
+		0, 3, 7, 4,
+		1, 5, 6, 2
+	]
+	
+    # Put data into mesh struct
+	mesh = native.Mesh.newMessage()
+	mesh.vertices = cubeVertices
+	mesh.indices = indices,
+	mesh.polyMesh = [0, 4, 8, 12, 16, 20, 24]
+	
+    # Publish mesh in distributed data system
+	meshRef = data.publish(mesh)
+	
+    # Put mesh reference & tags into geometry
+	import fsc
+	result = fsc.Geometry()
+	result.geometry.mesh = meshRef
+	
+	outTags = result.geometry.initTags(len(tags))
+	for i, name in enumerate(tags):
+		outTags[i].name = name
+		outTags[i].value = asTagValue(tags[name])
+	
+	return result
+		
+
 def localGeoLib():
 	return native.connectSameThread().newGeometryLib().service
 
@@ -70,7 +136,7 @@ async def asPyvistaAsync(geometry):
 		mesh = entry.mesh
 		
 		vertexArray = np.asarray(mesh.vertices)
-		indexArray  = np.asarray(mesh.indices)
+		indexArray	= np.asarray(mesh.indices)
 		
 		faces = []
 		
@@ -79,14 +145,14 @@ async def asPyvistaAsync(geometry):
 			
 			for iPoly in range(len(polyRanges) - 1):
 				start = polyRanges[iPoly]
-				end   = polyRanges[iPoly + 1]
+				end	  = polyRanges[iPoly + 1]
 				
 				faces.append(end - start)
 				faces.extend(indexArray[start:end])
 		elif mesh.which() == 'triMesh':
 			for offset in range(0, len(indexArray), 3):
 				start = offset
-				end   = start + 3
+				end	  = start + 3
 				
 				faces.append(end - start)
 				faces.extend(indexArray[start:end])
