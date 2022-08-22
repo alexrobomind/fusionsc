@@ -217,15 +217,18 @@ struct InProcessServerImpl : public kj::AtomicRefcounted {
 	}
 	
 	~InProcessServerImpl() {
-		KJ_DBG("Disconnecting in-process server");
 		doneFulfiller->fulfill();
+		
+		if(library -> inShutdownMode()) {
+			thread.detach();
+		}
 	}
 	
 	Own<const InProcessServerImpl> addRef() const { return kj::atomicAddRef(*this); }
 	
 	void run() {
 		// Initialize event loop
-		Library library = mv(this->library);
+		Library library = this->library->addRef();
 		auto lt = library -> newThread();
 		auto& ws = lt -> waitScope();
 		
@@ -234,15 +237,15 @@ struct InProcessServerImpl : public kj::AtomicRefcounted {
 		{
 			auto locked = ready.lockExclusive();
 			executor = kj::getCurrentThreadExecutor().addRef();
-			*locked = true;
 			
 			auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
 			doneFulfiller = mv(paf.fulfiller);
 			donePromise = mv(paf.promise);
+			
+			*locked = true;
 		}
 		
 		donePromise.wait(ws);
-		KJ_DBG("In-process server disconnected");
 	}
 	
 	Service::Client connect() const {
@@ -256,7 +259,6 @@ struct InProcessServerImpl : public kj::AtomicRefcounted {
 				
 		// Create server
 		auto serverRunnable = [stream = mv(pipe.ends[1]), srv = this->addRef()]() mutable -> Promise<void> {
-			KJ_DBG("Creating server");
 			// Create RPC server on stream
 			auto vatNetwork = heapHeld<TwoPartyVatNetwork>(*stream, Side::SERVER);
 			auto rpcSystem  = heapHeld<RpcSystem<VatId>>(capnp::makeRpcServer(*vatNetwork, srv->factory()));

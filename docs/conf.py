@@ -14,9 +14,9 @@ release = '0.1'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = ['myst_nb']
+extensions = ['myst_nb', 'sphinx.ext.autodoc', 'sphinx.ext.coverage', 'sphinx.ext.autosummary']
 
-templates_path = ['_templates']
+templates_path = ['templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 
@@ -31,3 +31,7 @@ html_static_path = ['_static']
 # -- Notebook options --------------------------------------------------------
 
 nb_execution_mode = "off"
+
+import os
+import sys
+sys.path.insert(0, os.path.abspath('../src/python'))

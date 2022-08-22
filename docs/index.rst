@@ -14,6 +14,8 @@ Welcome to FSC's documentation!
    setup
    
    howto/index
+   
+   reference
 
 
 

@@ -106,6 +106,7 @@ class FLT:
 		parallelConvectionVelocity = None, parallelDiffusionCoefficient = None,
 		meanFreePath = 1, meanFreePathGrowth = 0
 	):
+		"""Performs a custom trace with user-supplied parameters"""
 		assert parallelConvectionVelocity is None or parallelDiffusionCoefficient is None
 		if isotropicDiffusionCoefficient is not None: 
 			assert parallelConvectionVelocity is not None or parallelDiffusionCoefficient is not None

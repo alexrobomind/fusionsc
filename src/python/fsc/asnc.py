@@ -30,7 +30,7 @@ class AsyncMethodDescriptor:
 		return run(coro)
 	
 	def __get__(self, obj, objtype = None):
-		if hasattr(self.f, "__get__"):
+		"""if hasattr(self.f, "__get__"):
 			f = self.f.__get__(obj, objtype)
 		else:
 			f = functools.partial(self.f, obj)		
@@ -46,7 +46,21 @@ class AsyncMethodDescriptor:
 			return run(coro)
 		
 		wrapper.asnc = asnc
-		return wrapper
+		return wrapper"""
+		return AsyncMethodDescriptor(self.f.__get__(obj, objtype))
+	
+	@property
+	def __doc__(self):
+		docSuffix = "*Note* Has :ref:`asynchronous variant <Asynchronous Function>`"
+		
+		if(hasattr(self.f, "__doc__") and self.f.__doc__ is not None):
+			return self.f.__doc__ + "\n" + docSuffix
+		
+		return docSuffix
+	
+	@__doc__.setter
+	def __doc__(self, val):
+		pass
 		
 
 def wait(awaitable: Awaitable[T]) -> T:
@@ -56,4 +70,10 @@ def wait(awaitable: Awaitable[T]) -> T:
 	return run(awaitable).wait()
 
 def asyncFunction(f: Callable[P, Awaitable[T]]) -> Callable[P, T]:
-	return AsyncMethodDescriptor(f)
+	"""
+	_`Asynchronous Function`
+	
+	  Wraps a coroutine or promise function as a usual eagerly evaluate function.
+	  The asynchronous function can still be accessed using the *async* property.
+	"""
+	return functools.wraps(f)(AsyncMethodDescriptor(f))
