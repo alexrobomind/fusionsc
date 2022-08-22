@@ -147,11 +147,11 @@ class FLT:
 			else:
 				request.parallelModel.diffusionCoefficient = parallelDiffusionCoefficient
 		
-		if phiPlanes:
+		if len(phiPlanes) > 0:
 			planes = request.initPlanes(len(phiPlanes))
 			
 			for plane, phi in zip(planes, phiPlanes):
-				plane.orientation.phi = phi
+				plane.orientation.phi = float(phi)
 		
 		if geometry is not None:
 			request.geometry = indexedGeometry

@@ -9,6 +9,11 @@ Welcome to FSC's documentation!
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
+   
+   installation
+   setup
+   
+   howto/index
 
 
 

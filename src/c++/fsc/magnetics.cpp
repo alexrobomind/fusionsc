@@ -71,6 +71,7 @@ struct FieldCalculation {
 	}
 	
 	void biotSavart(double current, Float64Tensor::Reader input, BiotSavartSettings::Reader settings) {
+		KJ_DBG("Scheduling Biot-Savart calculation");
 		auto shape = input.getShape();
 		
 		KJ_REQUIRE(shape.size() == 2);
@@ -113,6 +114,7 @@ struct FieldCalculation {
 			return hostMemSynchronize(_device, rootOp);
 		})
 		.then([this, out]() {
+			KJ_DBG("Calculation finished");
 			writeTensor(field, out);
 		});
 		

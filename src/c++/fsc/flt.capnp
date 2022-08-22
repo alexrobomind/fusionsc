@@ -21,6 +21,7 @@ enum FLTStopReason {
 	outOfGrid @5;
 	nanEncountered @6;
 	collisionLimit @7;
+	couldNotStep @8;
 }
 
 struct FLTRequest {

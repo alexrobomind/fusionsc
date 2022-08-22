@@ -47,6 +47,5 @@ add_custom_target(
 
 add_custom_target(
 	docs
-	COMMAND sphinx-build ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}
-	EXCLUDE_FROM_ALL
+	COMMAND sphinx-build -a ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}
 )

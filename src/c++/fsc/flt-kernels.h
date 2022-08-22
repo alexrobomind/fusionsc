@@ -447,6 +447,12 @@ namespace fsc {
 		// !!! The kernel returns by jumping to this label !!!
 		THE_END:
 		
+		if(myData.getStopReason() == ::fsc::cu::FLTStopReason::EVENT_BUFFER_FULL) {
+			if(step == state.getNumSteps()) {
+				myData.setStopReason(::fsc::cu::FLTStopReason::COULD_NOT_STEP);
+			}
+		}
+		
 		// KJ_DBG("Kernel returned", (int) myData.getStopReason());
 		
 		// Copy state data back from local memory
