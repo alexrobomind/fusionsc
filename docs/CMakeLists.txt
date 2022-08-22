@@ -41,6 +41,12 @@ add_custom_target(
 )
 
 add_custom_target(
-	docs
+	doxy-docs
 	DEPENDS main.doxytag
+)
+
+add_custom_target(
+	docs
+	COMMAND sphinx-build ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}
+	EXCLUDE_FROM_ALL
 )
