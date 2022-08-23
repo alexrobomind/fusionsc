@@ -152,7 +152,7 @@ class FLT:
 			planes = request.initPlanes(len(phiPlanes))
 			
 			for plane, phi in zip(planes, phiPlanes):
-				plane.orientation.phi = float(phi)
+				plane.orientation.phi = phi
 		
 		if geometry is not None:
 			request.geometry = indexedGeometry
