@@ -289,6 +289,7 @@ PyArray_Descr* numpyWireType(capnp::Type type) {
 	}
 	
 	#undef HANDLE_TYPE
+	#undef HANDLE_OBJECT
 	
 	KJ_UNREACHABLE;
 }
@@ -1260,6 +1261,59 @@ void bindHelpers(py::module_& m) {
 }
 
 namespace fscpy {
+	
+	
+Maybe<DynamicValue::Reader> dynamicValueFromScalar(py::handle handle) {
+	if(PyArray_CheckScalar(handle.ptr())) {
+		PyArrayObject* scalarPtr = reinterpret_cast<PyArrayObject*>(handle.ptr());
+		
+		switch(PyArray_TYPE(scalarPtr)) {
+			#define HANDLE_NPY_TYPE(npytype, ctype) \
+				case npytype: { \
+					ctype* data = static_cast<ctype*>(PyArray_DATA(scalarPtr)); \
+					return DynamicValue::Reader(*data); \
+				}
+						
+			HANDLE_NPY_TYPE(NPY_INT8,  int8_t);
+			HANDLE_NPY_TYPE(NPY_INT16, int16_t);
+			HANDLE_NPY_TYPE(NPY_INT32, int32_t);
+			HANDLE_NPY_TYPE(NPY_INT64, int64_t);
+			
+			HANDLE_NPY_TYPE(NPY_UINT8,  uint8_t);
+			HANDLE_NPY_TYPE(NPY_UINT16, uint16_t);
+			HANDLE_NPY_TYPE(NPY_UINT32, uint32_t);
+			HANDLE_NPY_TYPE(NPY_UINT64, uint64_t);
+			
+			HANDLE_NPY_TYPE(NPY_FLOAT32, float);
+			HANDLE_NPY_TYPE(NPY_FLOAT64, double);
+			
+			#undef HANDLE_NPY_TYPE
+			
+			case NPY_BOOL: {
+				unsigned char* data = static_cast<unsigned char*>(PyArray_DATA(scalarPtr)); 
+				return DynamicValue::Reader((*data) != 0);
+			}
+				
+			default:
+				break;
+		}
+	}
+	
+	#define HANDLE_TYPE(ctype, pytype) \
+		if(py::isinstance<pytype>(handle)) { \
+			pytype typed = py::reinterpret_borrow<pytype>(handle); \
+			ctype cTyped = static_cast<ctype>(typed); \
+			return DynamicValue::Reader(cTyped); \
+		}
+	
+	HANDLE_TYPE(signed long long, py::int_);
+	HANDLE_TYPE(double, py::float_);
+	HANDLE_TYPE(bool, py::bool_);
+	
+	#undef HANDLE_TYPE
+	
+	return nullptr;
+}
 	
 // init method
 

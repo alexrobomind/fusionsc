@@ -8,6 +8,9 @@
 
 namespace fscpy {
 
+//! Conversion helper to obtain DynamicValue from Python and NumPy scalar types
+Maybe<capnp::DynamicValue::Reader> dynamicValueFromScalar(py::handle handle);
+
 struct DynamicStructPipeline;
 
 struct DynamicValuePipeline {
