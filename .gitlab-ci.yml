@@ -133,7 +133,7 @@ pages:
   needs: []
   
   script:
-  - pip3 install sphinx myst_nb sphinx_rtd_template
+  - pip3 install sphinx myst_nb sphinx_rtd_theme
   - mkdir build
   - cd build
   - cmake ..
