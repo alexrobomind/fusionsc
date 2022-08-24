@@ -45,7 +45,25 @@ add_custom_target(
 	DEPENDS main.doxytag
 )
 
+set(DOC_FSCPATH ${CMAKE_CURRENT_BINARY_DIR}/docfsc)
+file(MAKE_DIRECTORY ${DOC_FSCPATH}/fsc)
+
+
+set(DOC_SPHINXPATH ${CMAKE_CURRENT_BINARY_DIR}/sphinx_docs)
+
+add_custom_target(
+	docs-setup1
+	COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_SOURCE_DIR}/src/python ${DOC_FSCPATH}
+)
+
+add_custom_target(
+	docs-setup2
+	COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:native> ${DOC_FSCPATH}/fsc
+)
+
 add_custom_target(
 	docs
-	COMMAND sphinx-build -a ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}
+	COMMAND ${CMAKE_COMMAND} -E env DOC_FSCPATH=${DOC_FSCPATH} sphinx-build -a ${CMAKE_CURRENT_SOURCE_DIR} ${DOC_SPHINXPATH}
 )
+
+add_dependencies(docs docs-setup1 docs-setup2)
