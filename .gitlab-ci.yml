@@ -141,3 +141,7 @@ pages:
   - cd ..
   - mkdir public
   - cp -R build/docs/sphinx_docs public
+  
+  artifacts:
+    paths:
+      - public
