@@ -157,6 +157,16 @@ class Geometry:
 		
 		return result
 	
+	@asyncFunction
+	@staticmethod
+	async def load(filename):
+		geo = await data.readArchive.asnc(filename)
+		return Geometry(geo)
+	
+	@asyncFunction
+	async def save(self, filename):
+		await data.writeArchive.asnc(self.geometry, filename)
+	
 	
 class MagneticConfig:
 	"""
@@ -257,4 +267,14 @@ class MagneticConfig:
 	
 	def __truediv__(self, divisor):
 		return self * (1 / divisor)
+	
+	@asyncFunction
+	@staticmethod
+	async def load(filename):
+		field = data.readArchive.asnc(filename)
+		return MagneticConfig(field)
+	
+	@asyncFunction
+	async def save(self, filename):
+		await data.writeArchive.asnc(self.field, filename)
 	
