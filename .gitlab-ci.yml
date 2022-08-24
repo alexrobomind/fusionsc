@@ -130,6 +130,8 @@ pages:
   <<: *job
   stage: pages
   
+  needs: []
+  
   script:
   - pip3 install sphinx myst_nb sphinx_rtd_template
   - mkdir build
