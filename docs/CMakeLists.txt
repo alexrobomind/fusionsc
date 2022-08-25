@@ -48,7 +48,6 @@ add_custom_target(
 set(DOC_FSCPATH ${CMAKE_CURRENT_BINARY_DIR}/docfsc)
 file(MAKE_DIRECTORY ${DOC_FSCPATH}/fsc)
 
-
 set(DOC_SPHINXPATH ${CMAKE_CURRENT_BINARY_DIR}/sphinx_docs)
 
 add_custom_target(
@@ -61,9 +60,18 @@ add_custom_target(
 	COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:native> ${DOC_FSCPATH}/fsc
 )
 
+set(DOC_JAVADOCS ${CMAKE_CURRENT_SOURCE_DIR}/javadocs)
+file(MAKE_DIRECTORY ${DOC_JAVADOCS})
+
+add_custom_target(
+	docs-prepare-java
+	COMMAND Python::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/javadoc.py $<TARGET_PROPERTY:java-classes,FSC_JAVA_SOURCES> ${DOC_JAVADOCS}
+	DEPENDS java-classes
+)
+
 add_custom_target(
 	docs
 	COMMAND ${CMAKE_COMMAND} -E env DOC_FSCPATH=${DOC_FSCPATH} sphinx-build -a ${CMAKE_CURRENT_SOURCE_DIR} ${DOC_SPHINXPATH}
 )
 
-add_dependencies(docs docs-setup1 docs-setup2)
+add_dependencies(docs docs-setup1 docs-setup2 docs-prepare-java)

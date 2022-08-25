@@ -18,6 +18,7 @@ add_executable(
 )
 
 target_link_libraries(brandedEnums CapnProto::capnp-rpc)
+
 #add_executable(
 #	npytest
 #	npytest.cpp
