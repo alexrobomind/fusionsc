@@ -47,6 +47,7 @@ void Operation::dependsOn(Promise<void> promise) const {
 	struct DependencyNode : public Node {
 		Own<Promise<void>> dependency;
 		Operation& owner;
+		Own<const Executor> deleteExecutor;
 		
 		// Only accessed in clear()
 		Link* propagatorLink = nullptr;
@@ -59,7 +60,7 @@ void Operation::dependsOn(Promise<void> promise) const {
 		}
 		
 		Promise<void> destroy() override {
-			return getActiveThread().executor().executeAsync(
+			return deleteExecutor -> executeAsync(
 				[ownPromise = mv(dependency)]() mutable {
 					// Destroys promise
 					ownPromise = nullptr;
@@ -130,7 +131,7 @@ void Operation::dependsOn(Promise<void> promise) const {
 	;
 	
 	// Create dependency node
-	auto node = new DependencyNode { mv(promise), *this };
+	auto node = new DependencyNode { mv(promise), *this, getActiveThread().executor().addRef() };
 	
 	// Link propagator and dependency node
 	auto link = new Link();
