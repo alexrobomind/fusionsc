@@ -4,6 +4,20 @@
 
 namespace fsc {
 
+/**
+ * In several places, FSC calls external asynchronous operations that share resources with Cap'n'Proto
+ * This presents two complications:
+ * - Completion information has to pass through distinct threads, and the completing thread might not
+ *   even have an active event loop.
+ * - Associated resources need to be released in owning threads, but potentially in correct order.
+ *
+ * Operations provide a link between Cap'n'proto's rather strict lifetime requirements and the looser behavior
+ * of other libraries. Attached resources are freed in reverse order upon deletion of the last reference to the
+ * op. Individual threads can register dependency promises (whose failure will result in failure of the operation
+ * ) or acquire the op state as a promise. The API is completely thread-safe, except the usual restriction that
+ * promise objects may not be passed between threads (but can be registered or obtained from any potential event loop
+ * thread).
+ */
 struct Operation : kj::AtomicRefcounted {
 	~Operation();
 	
@@ -27,12 +41,15 @@ struct Operation : kj::AtomicRefcounted {
 	
 	/**
 	 * Registers the given promise as a dependency of this operation. If the given
-	 * promise fails, the operation will fail with the same exception. If it is can-
-	 * celled, the operation will continue.
+	 * promise fails, the operation will fail with the same exception. Note that this
+	 * will only chain the failure state of the op, not cancel whatever work is
+	 * associated with this operation. Since operations represent already-running
+	 * work, it will be impossible to cancel the passed promise.
+	 * The lifetime of the promise is extended to the lifetime of the operation object.
+	 * Even if the op fails (which might also indicate a promise the op depends on failing),
+	 * the promise will still be kept running.
 	 */
 	void dependsOn(Promise<void> promise) const;
-	
-	Promise<void> destroy() const;
 	
 	/**
 	 * Attaches the given objects to the promise, so that their lifetime is extended
@@ -47,18 +64,22 @@ struct Operation : kj::AtomicRefcounted {
 	
 	/**
 	 * Attaches the target objects to live with the operation and be destroyed in this
-	 * event loop. See above for details.
+	 * event loop. See attachDestroyInThread for details.
 	 */
 	template<typename... T>
 	void attachDestroyHere(T&&... params) const;
 	
 	/**
 	 * Attaches a thread-safe object to be kept during the lifetime of this object. Will
-	 * be destroyed in the thread that calls done() / failed() or the last destructor.
+	 * be destroyed in the daemon thread.
 	 */
 	template<typename... T>
 	void attachDestroyAnywhere(T&&... params) const;
 	
+	/**
+	 * Creates a new operation that holds a keep-alive reference to the current operation
+	 * during its lifetime.
+	 */
 	Own<Operation> newChild() const;
 
 private:
@@ -97,8 +118,7 @@ private:
 	
 	void clear() const;
 	
-	template<typename T>
-	void attachNode(T* node) const;
+	void attachNode(Node* node) const;
 	
 	friend Own<Operation> kj::atomicRefcounted<Operation>();
 };
@@ -166,19 +186,6 @@ void Operation::attachDestroyAnywhere(T&&... params) const {
 	};
 	
 	attachNode(new AttachmentNode(fwd<T>(params)...));
-}
-	
-template<typename T>
-void Operation::attachNode(T* node) const {
-	auto locked = data.lockExclusive();
-	
-	locked -> nodes.addFront(*node);
-	
-	if(locked -> state == SUCCESS) {
-		node -> onFinish();
-	} else if(locked -> state == ERROR) {
-		node -> onFailure(cp(* locked -> exception));
-	}
 }
 
 
