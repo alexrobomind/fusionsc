@@ -2,7 +2,7 @@ from skbuild import setup
 from setuptools import find_packages
 
 setup(
-	name = 'fsc',
+	name = 'fusionsc',
 	version = '0.1',
 	packages = ['fsc', 'fsc.devices', 'fsc.devices.w7x'],
 	package_dir = {"" : "src/python"},
