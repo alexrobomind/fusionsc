@@ -39,15 +39,21 @@ void Operation::dependsOn(Promise<void> promise) const {
 			bool shouldDelete() {
 				return node == nullptr && propagator == nullptr;
 			}
-		}
+		};
 		
-		MuxedGuarded<Data> data;
+		kj::MutexGuarded<Data> data;
 	};
 	
 	struct DependencyNode : public Node {
 		Own<Promise<void>> dependency;
-		Operation& owner;
-		Own<const Executor> deleteExecutor;
+		const Operation& owner;
+		Own<const kj::Executor> deleteExecutor;
+		
+		DependencyNode(Promise<void> dependency, const Operation& owner) :
+			dependency(kj::heap(mv(dependency))),
+			owner(owner),
+			deleteExecutor(getActiveThread().executor().addRef())
+		{}
 		
 		// Only accessed in clear()
 		Link* propagatorLink = nullptr;
@@ -67,7 +73,7 @@ void Operation::dependsOn(Promise<void> promise) const {
 				}
 			);
 			
-			return result.attach(mv(owningThread));
+			// return result.attach(mv(owningThread));
 		}
 		
 		// Clear only gets called once, so this is guaranteed to be safe
@@ -105,15 +111,15 @@ void Operation::dependsOn(Promise<void> promise) const {
 			// to get the op.
 			// Therefore, we need to acquire a reference to the op first (to prevent
 			// its deletion) and then call fail() outside the lock.
-			Own<Operation> op;
+			Own<const Operation> op;
 			
 			{
 				auto locked = link -> data.lockShared();
 			
-				if(locked.node == nullptr)
+				if(locked -> node == nullptr)
 					return;
 				
-				op = locked.node -> owner.addRef();
+				op = locked -> node -> owner.addRef();
 			}
 			
 			op -> fail(mv(e));
@@ -131,12 +137,12 @@ void Operation::dependsOn(Promise<void> promise) const {
 	;
 	
 	// Create dependency node
-	auto node = new DependencyNode { mv(promise), *this, getActiveThread().executor().addRef() };
+	auto node = new DependencyNode(mv(promise), *this);
 	
 	// Link propagator and dependency node
 	auto link = new Link();
 	{
-		auto locked = link.data.lockExclusive();
+		auto locked = link -> data.lockExclusive();
 		locked -> node = node;
 		locked -> propagator = propagator.get();
 	}

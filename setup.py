@@ -4,7 +4,7 @@ from setuptools import find_packages
 setup(
 	name = 'fsc',
 	version = '0.1',
-	packages = ['fsc'],
+	packages = ['fsc', 'fsc.devices', 'fsc.devices.w7x'],
 	package_dir = {"" : "src/python"},
 	cmake_install_target = "fsc-install-skbuild",
 	entry_points = {

@@ -67,7 +67,10 @@ else()
 	set(Eigen3_FOUND FALSE)
 	set(pybind11_FOUND FALSE)
 	set(HDF5_FOUND FALSE)
+	set(SSH2_FOUND FALSE)
 endif()
+
+find_package(OpenSSL COMPONENTS Crypto SSL)
 
 # Try to fetch some dependencies if possible
 
@@ -124,6 +127,14 @@ FetchContent_Declare(
 	GIT_SHALLOW    On
 	GIT_PROGRESS   On
 )
+
+FetchContent_Declare(
+	SSH2
+	GIT_REPOSITORY https://github.com/libssh2/libssh2
+	GIT_TAG        libssh2-1.10.0
+	GIT_SHALLOW    On
+	GIT_PROGRESS   On
+)
 	
 
 # Disable BUILD_TESTING while compiling dependencies
@@ -157,6 +168,7 @@ SET(HDF5_EXTERNALLY_CONFIGURED 1)
 SET(HDF5_BUILD_HL_LIB ON CACHE BOOL "Enable building of HDF5 HL library" FORCE)
 
 fetch_dependency(HDF5)
+fetch_dependency(SSH2)
 
 if(FSC_WITH_PYTHON)
 	fetch_dependency(pybind11)
@@ -186,6 +198,12 @@ target_link_libraries(
 	Eigen3::Eigen
 )
 
+if(TARGET libssh2)
+	target_link_libraries(deps INTERFACE libssh2)
+else()
+	target_link_libraries(deps INTERFACE libssh2::libssh2)
+endif()
+
 if(TARGET capnpc)
 	target_link_libraries(deps INTERFACE capnpc)
 else()
@@ -197,7 +215,6 @@ if(TARGET hdf5-static)
 else()
 	target_link_libraries(deps INTERFACE HDF5::hdf5-static)
 endif()
-
 
 if(FSC_WITH_CUDA)
 	target_compile_definitions(
