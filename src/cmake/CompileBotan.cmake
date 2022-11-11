@@ -1,10 +1,6 @@
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
-message(STATUS "Botan not found. Fetching and building from repository")
-message(STATUS "  Step 1: Download")
-FetchContent_MakeAvailable(Botan)
-
-message(STATUS "  Step 2: Amalgamation build")
+message(STATUS "  Building botan from source")
 if(MSVC)
 	set(BOTAN_XARGS "--cc" "msvc")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

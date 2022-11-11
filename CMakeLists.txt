@@ -1,12 +1,5 @@
 cmake_minimum_required(VERSION 3.17)
 
-# Dependencies:
-# - capnproto (https://github.com/capnproto/capnproto)
-# - Botan (https://github.com/randombit/botan)
-# - Catch2 (https://github.com/catchorg/Catch2)
-# - Eigen3 (https://gitlab.com/libeigen/eigen.git)
-# - pybind11 (https://github.com/pybind/pybind11.git)
-
 # Configure project
 
 project(FSC LANGUAGES CXX)
@@ -48,138 +41,127 @@ if(SKBUILD AND NOT Python_NumPy_FOUND)
 	message(FATAL_ERROR "NumPy missing in SKBUILD build")
 endif()
 
-# Try to load dependencies directly
-
-set(FSC_FETCH_DEPENDENCIES On CACHE BOOL "Whether the build system is allowed to fetch external dependencies")
-set(FSC_ALWAYS_FETCH On CACHE BOOL "Whether the build system must fetch external dependencies")
-
-if(NOT FSC_ALWAYS_FETCH OR NOT FSC_FETCH_DEPENDENCIES)
-	find_package(CapnProto CONFIG)
-	find_package(Botan MODULE)
-	find_package(Catch2 CONFIG)
-	find_package(Eigen3 CONFIG)
-	find_package(pybind11 CONFIG)
-	find_package(HDF5 CONFIG)
-else()
-	set(CapnProto_FOUND FALSE)
-	set(Botan_FOUND FALSE)
-	set(Catch2_FOUND FALSE)
-	set(Eigen3_FOUND FALSE)
-	set(pybind11_FOUND FALSE)
-	set(HDF5_FOUND FALSE)
-	set(SSH2_FOUND FALSE)
-endif()
+# Get dependencies via CPM
+include(CPM.cmake)
 
 find_package(OpenSSL COMPONENTS Crypto SSL)
-
-# Try to fetch some dependencies if possible
-
-include(FetchContent)
-
-FetchContent_Declare(
-  Catch2
-  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-  GIT_TAG        devel
-  GIT_SHALLOW    On
-  GIT_PROGRESS   On
-)
-
-FetchContent_Declare(
-  CapnProto
-  #GIT_REPOSITORY https://github.com/capnproto/capnproto.git
-  #GIT_TAG        v0.9.1
-  GIT_REPOSITORY https://github.com/alexrobomind/capnproto.git
-  GIT_TAG        schema_list_scope_bindings
-  GIT_SHALLOW    On
-  GIT_PROGRESS   On
-)
-
-FetchContent_Declare(
-  Botan
-  GIT_REPOSITORY https://github.com/randombit/botan.git
-  GIT_TAG        2.18.2
-  GIT_SHALLOW    On
-  GIT_PROGRESS   On
-)
-
-FetchContent_Declare(
-  Eigen3
-  GIT_REPOSITORY https://github.com/alexrobomind/eigen34.git
-  GIT_TAG        3.4
-  #GIT_REPOSITORY https://github.com/alexrobomind/eigen.git
-  #GIT_TAG        cudafix
-  GIT_SHALLOW    On
-  GIT_PROGRESS   On
-)
-
-FetchContent_Declare(
-	pybind11
-	GIT_REPOSITORY https://github.com/pybind/pybind11.git
-	GIT_TAG        v2.9.1
-	GIT_SHALLOW    On
-	GIT_PROGRESS   On
-)
-
-FetchContent_Declare(
-	HDF5
-	GIT_REPOSITORY https://github.com/HDFGroup/hdf5.git
-	GIT_TAG        hdf5-1_13_2
-	GIT_SHALLOW    On
-	GIT_PROGRESS   On
-)
-
-FetchContent_Declare(
-	SSH2
-	GIT_REPOSITORY https://github.com/libssh2/libssh2
-	GIT_TAG        libssh2-1.10.0
-	GIT_SHALLOW    On
-	GIT_PROGRESS   On
-)
-	
 
 # Disable BUILD_TESTING while compiling dependencies
 set(BUILD_TESTING_TMP ${BUILD_TESTING})
 set(BUILD_TESTING OFF CACHE BOOL "Temporarily disable testing" FORCE)
 
-macro(fetch_dependency DEPNAME)
-	if(NOT ${DEPNAME}_FOUND)
-		if(NOT FSC_FETCH_DEPENDENCIES)
-			message(FATAL_ERROR "${DEPNAME} could not be found, and dependencies fetching was disabled")
-		endif()
-		
-		message(STATUS "${DEPNAME} not found. Fetching from repository")
-		FetchContent_MakeAvailable(${DEPNAME})
-	endif()
-endmacro()
-
 # Standard fetching for Catch2, capnproto and eigen
-fetch_dependency(Catch2)
+CPMAddPackage(
+  Catch2
+  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+  GIT_TAG        devel
+)
 
 # We need to include the test scan macro manually if we downloaded it manually
 if(NOT Catch2_FOUND)
 	list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 endif()
 
-fetch_dependency(CapnProto)
-fetch_dependency(Eigen3)
+CPMAddPackage(
+	zlib
+	GIT_REPOSITORY https://github.com/madler/zlib.git
+	GIT_TAG        v1.2.13
+)
+
+if(NOT TARGET zlib::zlibstatic)
+	add_library(zlib::zlibstatic ALIAS zlibstatic)
+	add_library(zlib::zlib ALIAS zlib)
+endif()
+
+set(ZLIB_STATIC_LIBRARY zlib::zlibstatic)
+set(ZLIB_LIBRARY zlib::zlibstatic)
+set(ZLIB_INCLUDE_DIRECTORIES "")
+set(ZLIB_INCLUDE_DIR "")
+
+CPMAddPackage(
+  CapnProto
+  GIT_REPOSITORY https://github.com/alexrobomind/capnproto.git
+  GIT_TAG        schema_list_scope_bindings
+)
+
+#if(NOT TARGET CapnProto::capnpc)
+#	add_executable(CapnProto::capnpc ALIAS capnpc)
+#endif()
+
+CPMAddPackage(
+  Eigen3
+  GIT_REPOSITORY https://github.com/alexrobomind/eigen34.git
+  GIT_TAG        3.4
+)
 
 # HDF5's shared library option messes with other shared library builds
 SET(HDF5_EXTERNALLY_CONFIGURED 1)
 SET(HDF5_BUILD_HL_LIB ON CACHE BOOL "Enable building of HDF5 HL library" FORCE)
+set(HDF5_ENABLE_Z_LIB_SUPPORT ON CACHE BOOL "Enable Hdf5 Zlib support" FORCE)
 
-fetch_dependency(HDF5)
-fetch_dependency(SSH2)
+set(H5_ZLIB_HEADER "zlib.h")
+
+CPMAddPackage(
+	HDF5
+	GIT_REPOSITORY https://github.com/HDFGroup/hdf5.git
+	GIT_TAG        hdf5-1_13_2
+)
+
+if(NOT TARGET HDF5::hdf5-static)
+	add_library(HDF5::hdf5-static ALIAS hdf5-static)
+	add_library(HDF5::hdf5_hl-static ALIAS hdf5_hl-static)
+endif()
+
+set(HDF5_C_LIBRARY HDF5::hdf5-static)
+set(HDF5_HL_LIBRARY HDF5::hdf5_hl-static)
+get_target_property(HDF5_INCDIRS HDF5::hdf5-static INCLUDE_DIRECTORIES)
+
+find_file (HDF5_PUBCONF NAMES H5pubconf.h PATHS ${HDF5_INCDIRS} NO_DEFAULT_PATH REQUIRED)
+file(READ ${HDF5_PUBCONF} _hdf5_version_lines REGEX "#define[ \t]+H5_VERSION")
+string(REGEX REPLACE ".*H5_VERSION .*\"\(.*\)\".*" "\\1" _hdf5_version "${_hdf5_version_lines}")
+set(HDF5_VERSION "${_hdf5_version}" CACHE STRING "")
+unset(_hdf5_version)
+unset(_hdf5_version_lines)
+MESSAGE(STATUS "Found HDF5 libraries version ${HDF5_VERSION}")
+
+#find_path(HDF5_INCLUDE_DIR "hdf5.h" ${HDF5_INCDIRS} NO_DEFAULT_PATH REQUIRED)
+set(HDF5_INCLUDE_DIR ${HDF5_INCDIRS})
+message(STATUS "Using HDF5 include dir: ${HDF5_INCLUDE_DIR}")
+
+# NetCDF requires a pre-built HDF5 to work, so we can't package it in here :/
+#CPMAddPackage(
+#	NAME netCDF
+#	GIT_REPOSITORY https://github.com/Unidata/netcdf-c
+#	GIT_TAG        v4.9.0
+#)
+
+CPMAddPackage(
+	NAME SSH2
+	GIT_REPOSITORY https://github.com/libssh2/libssh2
+	GIT_TAG        libssh2-1.10.0
+)
+
+if(NOT TARGET libssh2::libssh2)
+	add_library(libssh2::libssh2 ALIAS libssh2)
+endif()
 
 if(FSC_WITH_PYTHON)
-	fetch_dependency(pybind11)
+	CPMAddPackage(
+		NAME pybind11
+		GIT_REPOSITORY https://github.com/pybind/pybind11.git
+		GIT_TAG        v2.9.1
+	)
 endif()
 
 # For Botan, we have to be fancier, as it does not use CMake
-if(NOT Botan_FOUND)
-	if(NOT FSC_FETCH_DEPENDENCIES)
-		message(FATAL_ERROR "Botan could not be found, and dependency fetching was disabled")
-	endif()
-	
+CPMAddPackage(
+	NAME Botan
+	GIT_REPOSITORY https://github.com/randombit/botan.git
+	GIT_TAG        2.18.2
+	DOWNLOAD_ONLY
+)
+
+if(NOT TARGET Botan::botan)	
 	include(src/cmake/CompileBotan.cmake)
 endif()
 
@@ -196,25 +178,9 @@ target_link_libraries(
 	CapnProto::kj-http
 	CapnProto::kj
 	Eigen3::Eigen
+	HDF5::hdf5-static
+	libssh2::libssh2
 )
-
-if(TARGET libssh2)
-	target_link_libraries(deps INTERFACE libssh2)
-else()
-	target_link_libraries(deps INTERFACE libssh2::libssh2)
-endif()
-
-if(TARGET capnpc)
-	target_link_libraries(deps INTERFACE capnpc)
-else()
-	target_link_libraries(deps INTERFACE CapnProto::capnpc)
-endif()
-
-if(TARGET hdf5-static)
-	target_link_libraries(deps INTERFACE hdf5-static)
-else()
-	target_link_libraries(deps INTERFACE HDF5::hdf5-static)
-endif()
 
 if(FSC_WITH_CUDA)
 	target_compile_definitions(
