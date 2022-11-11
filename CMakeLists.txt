@@ -59,7 +59,7 @@ CPMAddPackage(
 
 # We need to include the test scan macro manually if we downloaded it manually
 if(NOT Catch2_FOUND)
-	list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
+	list(APPEND CMAKE_MODULE_PATH ${Catch2_SOURCE_DIR}/extras)
 endif()
 
 CPMAddPackage(
@@ -67,6 +67,11 @@ CPMAddPackage(
 	GIT_REPOSITORY https://github.com/madler/zlib.git
 	GIT_TAG        v1.2.13
 )
+
+if(NOT zlib_FOUND)
+	target_include_directories(zlib PUBLIC ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
+	target_include_directories(zlibstatic PUBLIC ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
+endif()
 
 if(NOT TARGET zlib::zlibstatic)
 	add_library(zlib::zlibstatic ALIAS zlibstatic)

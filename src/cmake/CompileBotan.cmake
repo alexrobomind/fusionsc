@@ -13,19 +13,19 @@ endif()
 
 # Note: FetchContent explicitly creates lower-case named variables
 add_custom_command(
-	OUTPUT "${botan_SOURCE_DIR}/botan_all.cpp"
+	OUTPUT "${Botan_SOURCE_DIR}/botan_all.cpp"
 	COMMAND ${Python3_EXECUTABLE}
-	"${botan_SOURCE_DIR}/configure.py"
+	"${Botan_SOURCE_DIR}/configure.py"
 	"--minimized-build"
 	"--enable-modules=auto_rng,blake2,sha2_32,sha2_64,system_rng"
 	"--amalgamation"
 	"--disable-shared"
 	"--cc-bin" "${CMAKE_CXX_COMPILER}"
 	${BOTAN_XARGS}
-	WORKING_DIRECTORY ${botan_SOURCE_DIR}
+	WORKING_DIRECTORY ${Botan_SOURCE_DIR}
 )
 
-add_library(botan_selfbuilt "${botan_SOURCE_DIR}/botan_all.cpp")
-target_include_directories(botan_selfbuilt INTERFACE "${botan_SOURCE_DIR}/build/include")
+add_library(botan_selfbuilt "${Botan_SOURCE_DIR}/botan_all.cpp")
+target_include_directories(botan_selfbuilt INTERFACE "${Botan_SOURCE_DIR}/build/include")
 
 add_library(Botan::botan ALIAS botan_selfbuilt)
