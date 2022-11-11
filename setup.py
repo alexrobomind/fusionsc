@@ -14,6 +14,8 @@ setup(
 	},
 	
 	install_requires = [
-		"typing-extensions"
+		"typing-extensions",
+		"numpy>=1.19.5 ; python_version < '3.10'",
+		"numpy>=1.23.4 ; python_version >= '3.10'",
 	]
 )
