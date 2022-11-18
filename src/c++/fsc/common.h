@@ -17,8 +17,8 @@ namespace kj {
 	template<typename T>
 	class Promise;
 	
-	template<typename T>
-	class Own;
+	/*template<typename T, typename StaticDisposer>
+	class Own;*/
 }
 
 /**

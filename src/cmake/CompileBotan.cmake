@@ -26,6 +26,9 @@ add_custom_command(
 )
 
 add_library(botan_selfbuilt "${Botan_SOURCE_DIR}/botan_all.cpp")
-target_include_directories(botan_selfbuilt INTERFACE "${Botan_SOURCE_DIR}/build/include")
+target_include_directories(botan_selfbuilt INTERFACE "$<BUILD_INTERFACE:${Botan_SOURCE_DIR}/build/include>")
+target_include_directories(botan_selfbuilt INTERFACE "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
+set_property(TARGET botan_selfbuilt PROPERTY BUILT_HEADERS "${Botan_SOURCE_DIR}/build/include")
+
 
 add_library(Botan::botan ALIAS botan_selfbuilt)
