@@ -1,8 +1,12 @@
+"""
+Asynchronous processing (promises, coroutines)
+"""
+
 from .native.asnc import (
 	Promise, # This class is untyped in the C++ library, when referring to it in type hints, use Strings
 	
 	startEventLoop,
-    stopEventLoop,
+	stopEventLoop,
 	hasEventLoop,
 	cycle,
 	

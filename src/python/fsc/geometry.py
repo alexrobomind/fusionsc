@@ -1,3 +1,6 @@
+"""Geometry processing
+"""
+
 from . import native
 from . import data
 
@@ -6,6 +9,7 @@ from .asnc import asyncFunction
 import numpy as np
 
 def asTagValue(x):
+	"""Convert a possible tag value into an instance of fsc.native.TagValue"""
 	result = native.TagValue.newMessage()
 	
 	if x is None:
@@ -20,7 +24,8 @@ def asTagValue(x):
 	return result
 
 def cuboid(x1, x2, tags = {}):
-    # Prepare mesh data
+	"""Creates a cuboid between x1 and x2"""
+	# Prepare mesh data
 	x1 = np.asarray(x1)
 	x2 = np.asarray(x2)
 	
@@ -49,16 +54,16 @@ def cuboid(x1, x2, tags = {}):
 		1, 5, 6, 2
 	]
 	
-    # Put data into mesh struct
+	# Put data into mesh struct
 	mesh = native.Mesh.newMessage()
 	mesh.vertices = cubeVertices
 	mesh.indices = indices,
 	mesh.polyMesh = [0, 4, 8, 12, 16, 20, 24]
 	
-    # Publish mesh in distributed data system
+	# Publish mesh in distributed data system
 	meshRef = data.publish(mesh)
 	
-    # Put mesh reference & tags into geometry
+	# Put mesh reference & tags into geometry
 	import fsc
 	result = fsc.Geometry()
 	result.geometry.mesh = meshRef
@@ -72,16 +77,12 @@ def cuboid(x1, x2, tags = {}):
 		
 
 def localGeoLib():
+	"""Creates an in-thread GeometryLib instance"""
 	return native.connectSameThread().newGeometryLib().service
-
-def planarCut(*args, **kwargs):
-	return planarCutAsync(*args, **kwargs).wait()
-
-def asPyvista(*args, **kwargs):
-	return asPyvistaAsync(*args, **kwargs).wait()
 
 @asyncFunction
 async def planarCut(geometry, phi = None, normal = None, center = None):
+	"""Computes a planar cut of the geometry along either a given plane or a given phi plane"""
 	assert phi is not None or normal is not None
 	assert phi is None or normal is None
 	
@@ -103,6 +104,7 @@ async def planarCut(geometry, phi = None, normal = None, center = None):
 	return np.asarray(response.edges).transpose([2, 0, 1])
 
 def plotCut(geometry, phi = 0, ax = None, plot = True, **kwArgs):
+	"""Plot the phi cut of a given geometry in either the given axes or the current active matplotlib axes"""
 	import matplotlib.pyplot as plt
 	import matplotlib
 	
@@ -123,6 +125,7 @@ def plotCut(geometry, phi = 0, ax = None, plot = True, **kwArgs):
 
 @asyncFunction
 async def asPyvista(geometry):
+	"""Convert the given geometry into a PyVista / VTK mesh"""
 	import numpy as np
 	import pyvista as pv
 	

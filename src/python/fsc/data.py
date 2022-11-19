@@ -1,3 +1,7 @@
+"""
+Data publishing, downloading and archive handling
+"""
+
 from .native.data import (
 	downloadAsync,
 	publish,

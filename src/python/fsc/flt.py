@@ -1,3 +1,7 @@
+"""
+Root service frontend
+"""
+
 from . import native
 from . import data
 from .asnc import asyncFunction
@@ -23,8 +27,8 @@ def symmetrize(points, nSym = 1, stellaratorSymmetric = False):
 	
 	if stellaratorSymmetric:
 		phi = np.concatenate([phi, -phi], axis = 0)
-		z   = np.concatenate([z, -z], axis = 0)
-		r   = np.concatenate([r, r], axis = 0)
+		z	= np.concatenate([z, -z], axis = 0)
+		r	= np.concatenate([r, r], axis = 0)
 	
 	x = r * np.cos(phi)
 	y = r * np.sin(phi)
