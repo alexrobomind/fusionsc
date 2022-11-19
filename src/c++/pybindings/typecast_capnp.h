@@ -211,40 +211,24 @@ namespace pybind11 { namespace detail {
 		// If we get a string, we need to store it temporarily
 		type_caster<char> strCaster;		
 		
-		bool load(handle src, bool convert) {
-			object pyType = eval("type")(src);
-						
+		bool load(handle src, bool convert) {						
 			if(src.is_none()) {
 				value = capnp::Void();
 				return true;
 			}
 			
-			if(pyType.equal(eval("float"))) {
-				value = src.cast<double>();
+			KJ_IF_MAYBE(pReader, fscpy::dynamicValueFromScalar(src)) {
+				value = *pReader;
 				return true;
 			}
 			
-			if(pyType.equal(eval("bool"))) {
-				value = src.cast<bool>();
-				return true;
-			}
-			
-			if(pyType.equal(eval("int"))) {
-				if(src >= eval("0")) {
-					value = src.cast<unsigned long long>();
-				} else {
-					value = src.cast<signed long long>();
-				}
-				return true;
-			}
-			
-			if(pyType.equal(eval("str"))) {
+			if(py::isinstance<py::str>(src)) {
 				strCaster.load(src, false);
 				value = capnp::Text::Reader((char*) strCaster);
 				return true;
 			}
 			
-			if(pyType.equal(eval("bytes"))) {
+			if(py::isinstance<py::bytes>(src)) {
 				// strCaster.load(src, false);
 				// value = capnp::Text::Reader((char*) strCaster);
 				char *buffer = nullptr;

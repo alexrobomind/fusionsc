@@ -2,6 +2,7 @@ stages:
   - build
   - test
   - doc
+  - pages
 
 # Build stage
 
@@ -51,7 +52,7 @@ stages:
 .linux: &linux
   before_script:
     - apt-get update --yes
-    - apt-get install --yes cmake python3
+    - apt-get install --yes cmake python3 python3-pip
 
 .msvc: &msvc
   tags:
@@ -123,3 +124,24 @@ doc:
   artifacts:
     paths:
       - gendocs
+
+pages:
+  <<: *clang
+  <<: *job
+  stage: pages
+  
+  needs: []
+  
+  script:
+  - pip3 install sphinx myst_nb sphinx_rtd_theme numpy
+  - mkdir build
+  - cd build
+  - cmake ..
+  - cmake --build . --target docs
+  - cd ..
+  - mkdir public
+  - cp -R build/docs/sphinx_docs public
+  
+  artifacts:
+    paths:
+      - public

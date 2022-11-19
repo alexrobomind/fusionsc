@@ -1,33 +1,18 @@
-"""
-Data publishing, downloading and archive handling
-"""
-
-from .native.data import (
-	downloadAsync,
-	publish,
-	
-	openArchive,
-	writeArchiveAsync
-)
-
+from . import native
 from .asnc import asyncFunction
 
-#__all__ = [
-#	# Imported from native
-#	'downloadAsync', 'publish', 'openArchive', 'writeArchiveAsync',
-#	
-#	# Locally defined
-#	'readArchive', 'download', 'writeArchive'
-#]
+@asyncFunction
+def publish(data):
+	return native.data.publish(ref)
 
 @asyncFunction
 def download(ref):
-	return downloadAsync(ref)
+	return native.data.downloadAsync(ref)
 
 @asyncFunction
 def writeArchive(data, filename: str):
-	return writeArchiveAsync(data, filename)
+	return native.data.writeArchiveAsync(data, filename)
 
 @asyncFunction
 def readArchive(filename: str):
-	return download.asnc(openArchive(filename))
+	return download.asnc(native.data.openArchive(filename))

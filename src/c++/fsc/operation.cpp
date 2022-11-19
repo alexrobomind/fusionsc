@@ -18,19 +18,138 @@ Own<Operation> Operation::newChild() const {
 }
 
 void Operation::dependsOn(Promise<void> promise) const {
-	// Note: This creates a recursive ownership loop by attaching the op to the promise
-	// and vice versa. This is only safe because eventually the incoming promise will eventually
-	// resolve (in fact, we expect it to resolve fairly fast), and then the reference to the
-	// operation will be deleted.
+	// Registering the dependency requires connection of two different objects
+	// A dependency node on the Op side that also owns the promise, and a failure
+	// propagator. Because the objects might die in distinct threads, their lifetimes
+	// need to be decoupled. Maintaining a cross-link between these different objects
+	// requires a third struct that holds the link between the two under a mutex.
+	
+	// A double-deletion of the link won't happen, because it is only locked exclusively
+	// twice. Only the second lock will see both node and propagator as nullptr, and therefore
+	// delete the link.
+	
+	struct DependencyNode;
+	struct FailPropagator;
+	
+	struct Link {
+		struct Data {
+			DependencyNode* node = nullptr;
+			FailPropagator* propagator = nullptr;
+		
+			bool shouldDelete() {
+				return node == nullptr && propagator == nullptr;
+			}
+		};
+		
+		kj::MutexGuarded<Data> data;
+	};
+	
+	struct DependencyNode : public Node {
+		Own<Promise<void>> dependency;
+		const Operation& owner;
+		Own<const kj::Executor> deleteExecutor;
+		
+		DependencyNode(Promise<void> dependency, const Operation& owner) :
+			dependency(kj::heap(mv(dependency))),
+			owner(owner),
+			deleteExecutor(getActiveThread().executor().addRef())
+		{}
+		
+		// Only accessed in clear()
+		Link* propagatorLink = nullptr;
+		
+		void onFinish() override {
+			clear();
+		}
+		void onFailure(kj::Exception&& e) override {
+			clear();
+		}
+		
+		Promise<void> destroy() override {
+			return deleteExecutor -> executeAsync(
+				[ownPromise = mv(dependency)]() mutable {
+					// Destroys promise
+					ownPromise = nullptr;
+				}
+			);
+			
+			// return result.attach(mv(owningThread));
+		}
+		
+		// Clear only gets called once, so this is guaranteed to be safe
+		void clear() {
+			bool deleteLink = false;
+			{
+				auto locked = propagatorLink -> data.lockExclusive();
+				locked -> node = nullptr;
+				
+				deleteLink = locked -> shouldDelete();
+			}
+			
+			if(deleteLink) delete propagatorLink;
+		}
+	};
+	
+	struct FailPropagator {
+		Link* link = nullptr;
+		
+		~FailPropagator() {
+			bool deleteLink = false;
+			{
+				auto locked = link -> data.lockExclusive();
+				locked -> propagator = nullptr;
+				
+				deleteLink = locked -> shouldDelete();
+			}
+			
+			if(deleteLink) delete link;
+		}
+		
+		void propagate(kj::Exception&& e) {
+			// Calling the owning operation's fail() method will unlink that
+			// side of the link. This enters the link's mutex, which we also need
+			// to get the op.
+			// Therefore, we need to acquire a reference to the op first (to prevent
+			// its deletion) and then call fail() outside the lock.
+			Own<const Operation> op;
+			
+			{
+				auto locked = link -> data.lockShared();
+			
+				if(locked -> node == nullptr)
+					return;
+				
+				op = locked -> node -> owner.addRef();
+			}
+			
+			op -> fail(mv(e));
+		}
+	};
+	
+	// Create failure propagator and attach it to the promise
+	auto propagator = heapHeld<FailPropagator>();
 	promise = promise
-		.eagerlyEvaluate([this](kj::Exception&& e) mutable {
-			this->fail(cp(e));
+		.eagerlyEvaluate([propagator](kj::Exception&& e) mutable {
+			propagator->propagate(mv(e));
 		})
-		.attach(this->addRef())
+		.attach(propagator.x())
 		.eagerlyEvaluate(nullptr);
 	;
 	
-	attachDestroyHere(mv(promise));
+	// Create dependency node
+	auto node = new DependencyNode(mv(promise), *this);
+	
+	// Link propagator and dependency node
+	auto link = new Link();
+	{
+		auto locked = link -> data.lockExclusive();
+		locked -> node = node;
+		locked -> propagator = propagator.get();
+	}
+	propagator -> link = link;
+	node -> propagatorLink = link;
+	
+	attachNode(node);
 }
 
 Promise<void> Operation::whenDone() const {
@@ -56,6 +175,18 @@ Promise<void> Operation::whenDone() const {
 	
 	attachNode(new PromiseNode(mv(paf.fulfiller)));		
 	return paf.promise.attach(this->addRef());
+}
+	
+void Operation::attachNode(Node* node) const {
+	auto locked = data.lockExclusive();
+	
+	locked -> nodes.addFront(*node);
+	
+	if(locked -> state == SUCCESS) {
+		node -> onFinish();
+	} else if(locked -> state == ERROR) {
+		node -> onFailure(cp(* locked -> exception));
+	}
 }
 
 void Operation::done() const {

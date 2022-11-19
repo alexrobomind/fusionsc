@@ -3,6 +3,10 @@
 using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("fsc");
 
+using Java = import "java.capnp";
+$Java.package("org.fsc");
+$Java.outerClassname("Index");
+
 using Data = import "data.capnp";
 
 # Note: There is currently a bug in MSVC that prevents me from laying out the fields as I want

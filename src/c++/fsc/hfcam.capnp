@@ -3,6 +3,10 @@
 using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("fsc");
 
+using Java = import "java.capnp";
+$Java.package("org.fsc");
+$Java.outerClassname("HFCam");
+
 using Geometry = import "geometry.capnp";
 using Data = import "data.capnp";
 

@@ -6,6 +6,12 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+import os
+import sys
+
+if 'DOC_FSCPATH' not in os.environ:
+	raise 'Use the CMake target "docs" to build the documentation'
+
 project = 'FSC'
 copyright = '2022, Forschungszentrum Juelich GmbH, Germany'
 author = 'Alexander Knieps'
@@ -32,6 +38,4 @@ html_static_path = ['_static']
 
 nb_execution_mode = "off"
 
-import os
-import sys
-sys.path.insert(0, os.path.abspath('../src/python'))
+sys.path.insert(0, os.path.abspath(os.environ['DOC_FSCPATH']))

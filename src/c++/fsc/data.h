@@ -274,6 +274,9 @@ public:
 	template<typename T>
 	LocalDataRef<T> publishArchive(Archive::Reader in);
 	
+	//! Publish the contents of a file as a data ref via mmap
+	LocalDataRef<capnp::Data> publishFile(const kj::ReadableFile& in, kj::ArrayPtr<const kj::byte> fileHash = nullptr);
+	
 	///@}
 	
 	//! \name Limit configuration

@@ -62,6 +62,20 @@ LocalDataRef<capnp::Data> LocalDataService::publish(kj::ArrayPtr<const byte> byt
 	return publish<capnp::Data::Reader>(bytes);
 }
 
+LocalDataRef<capnp::Data> LocalDataService::publishFile(const kj::ReadableFile& file, kj::ArrayPtr<const kj::byte> fileHash) {
+	auto fileData = file.stat();
+	kj::Array<const kj::byte> data = file.mmap(0, fileData.size);
+	
+	Temporary<DataRef<capnp::Data>::Metadata> metaData;
+	metaData.setId(getActiveThread().randomID());
+	metaData.setTypeId(0);
+	metaData.setCapTableSize(0);
+	metaData.setDataSize(data.size());
+	metaData.setDataHash(fileHash);
+	
+	return publish(metaData, mv(data));
+}
+
 void LocalDataService::setLimits(Limits newLimits) { impl->setLimits(newLimits); }
 
 void LocalDataService::setChunkDebugMode() {

@@ -3,6 +3,10 @@
 using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("fsc::devices::w7x");
 
+using Java = import "../java.capnp";
+$Java.package("org.fsc.devices");
+$Java.outerClassname("W7X");
+
 using Data = import "../data.capnp";
 using DataRef = Data.DataRef;
 

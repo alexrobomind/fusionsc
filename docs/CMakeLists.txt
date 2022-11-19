@@ -45,7 +45,35 @@ add_custom_target(
 	DEPENDS main.doxytag
 )
 
-add_custom_target(
-	docs
-	COMMAND sphinx-build -a ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}
-)
+if(FSC_WITH_PYTHON)
+	set(DOC_FSCPATH ${CMAKE_CURRENT_BINARY_DIR}/docfsc)
+	file(MAKE_DIRECTORY ${DOC_FSCPATH}/fsc)
+
+	set(DOC_SPHINXPATH ${CMAKE_CURRENT_BINARY_DIR}/sphinx_docs)
+
+	add_custom_target(
+		docs-setup1
+		COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_SOURCE_DIR}/src/python ${DOC_FSCPATH}
+	)
+
+	add_custom_target(
+		docs-setup2
+		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:fsc-python-bindings> ${DOC_FSCPATH}/fsc
+	)
+
+	set(DOC_JAVADOCS ${CMAKE_CURRENT_SOURCE_DIR}/javadocs)
+	file(MAKE_DIRECTORY ${DOC_JAVADOCS})
+
+	add_custom_target(
+		docs-prepare-java
+		COMMAND Python::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/javadoc.py $<TARGET_PROPERTY:java-classes,FSC_JAVA_SOURCES> ${DOC_JAVADOCS}
+		DEPENDS java-classes
+	)
+
+	add_custom_target(
+		docs
+		COMMAND ${CMAKE_COMMAND} -E env DOC_FSCPATH=${DOC_FSCPATH} sphinx-build -a ${CMAKE_CURRENT_SOURCE_DIR} ${DOC_SPHINXPATH}
+	)
+
+	add_dependencies(docs docs-setup1 docs-setup2 docs-prepare-java)
+endif()

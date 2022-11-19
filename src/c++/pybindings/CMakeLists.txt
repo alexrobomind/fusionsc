@@ -1,6 +1,6 @@
 if(FSC_WITH_PYTHON)
 	pybind11_add_module(
-		native
+		fsc-python-bindings
 		
 		capnp.cpp
 		kj.cpp
@@ -14,17 +14,10 @@ if(FSC_WITH_PYTHON)
 	)
 
 	target_link_libraries(
-		native
+		fsc-python-bindings
 		PUBLIC
 		fsc
 	)
-	
-	if(SKBUILD)
-		# If we build with scikit-build, this library needs to go into a special path that mirrors the package structure
-		# Scikit will then automatically detect its presence and copy it into the source tree before packaging or creating
-		# editable installs (!!!).
-		INSTALL(TARGETS native LIBRARY DESTINATION src/python/fsc COMPONENT SKBUILD)
-	else()
-		INSTALL(TARGETS native LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
-	endif()
+
+	set_target_properties(fsc-python-bindings PROPERTIES OUTPUT_NAME "native")
 endif()

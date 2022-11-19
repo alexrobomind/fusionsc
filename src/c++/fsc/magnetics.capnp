@@ -3,6 +3,10 @@
 using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("fsc");
 
+using Java = import "java.capnp";
+$Java.package("org.fsc");
+$Java.outerClassname("Magnetics");
+
 using Data = import "data.capnp";
 
 using DataRef = Data.DataRef;

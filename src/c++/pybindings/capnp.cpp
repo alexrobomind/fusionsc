@@ -18,6 +18,7 @@
 
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/ndarrayobject.h>
+#include <numpy/arrayscalars.h>
 
 #include "fscpy.h"
 #include "loader.h"
@@ -289,6 +290,7 @@ PyArray_Descr* numpyWireType(capnp::Type type) {
 	}
 	
 	#undef HANDLE_TYPE
+	#undef HANDLE_OBJECT
 	
 	KJ_UNREACHABLE;
 }
@@ -1260,6 +1262,89 @@ void bindHelpers(py::module_& m) {
 }
 
 namespace fscpy {
+	
+	
+Maybe<DynamicValue::Reader> dynamicValueFromScalar(py::handle handle) {
+	// 0D arrays
+	if(PyArray_IsZeroDim(handle.ptr())) {
+		PyArrayObject* scalarPtr = reinterpret_cast<PyArrayObject*>(handle.ptr());
+		
+		switch(PyArray_TYPE(scalarPtr)) {
+			#define HANDLE_NPY_TYPE(npytype, ctype) \
+				case npytype: { \
+					ctype* data = static_cast<ctype*>(PyArray_DATA(scalarPtr)); \
+					return DynamicValue::Reader(*data); \
+				}
+						
+			HANDLE_NPY_TYPE(NPY_INT8,  int8_t);
+			HANDLE_NPY_TYPE(NPY_INT16, int16_t);
+			HANDLE_NPY_TYPE(NPY_INT32, int32_t);
+			HANDLE_NPY_TYPE(NPY_INT64, int64_t);
+			
+			HANDLE_NPY_TYPE(NPY_UINT8,  uint8_t);
+			HANDLE_NPY_TYPE(NPY_UINT16, uint16_t);
+			HANDLE_NPY_TYPE(NPY_UINT32, uint32_t);
+			HANDLE_NPY_TYPE(NPY_UINT64, uint64_t);
+			
+			HANDLE_NPY_TYPE(NPY_FLOAT32, float);
+			HANDLE_NPY_TYPE(NPY_FLOAT64, double);
+			
+			#undef HANDLE_NPY_TYPE
+			
+			case NPY_BOOL: {
+				unsigned char* data = static_cast<unsigned char*>(PyArray_DATA(scalarPtr)); 
+				return DynamicValue::Reader((*data) != 0);
+			}
+				
+			default:
+				break;
+		}
+	}
+	
+	// NumPy scalars
+	if(PyArray_IsScalar(handle.ptr(), Bool)) { \
+		return DynamicValue::Reader(PyArrayScalar_VAL(handle.ptr(), Bool) != 0); \
+	}
+	
+	#define HANDLE_TYPE(cls) \
+		if(PyArray_IsScalar(handle.ptr(), cls)) { \
+			return DynamicValue::Reader(PyArrayScalar_VAL(handle.ptr(), cls)); \
+		}
+	
+	HANDLE_TYPE(Byte);
+	HANDLE_TYPE(Short);
+	HANDLE_TYPE(Int);
+	HANDLE_TYPE(Long);
+	HANDLE_TYPE(LongLong);
+	
+	HANDLE_TYPE(UByte);
+	HANDLE_TYPE(UShort);
+	HANDLE_TYPE(UInt);
+	HANDLE_TYPE(ULong);
+	HANDLE_TYPE(ULongLong);
+	
+	HANDLE_TYPE(Float);
+	HANDLE_TYPE(Double);
+	
+	#undef HANDLE_TYPE		
+	
+	// Python builtins
+	#define HANDLE_TYPE(ctype, pytype) \
+		if(py::isinstance<pytype>(handle)) { \
+			pytype typed = py::reinterpret_borrow<pytype>(handle); \
+			ctype cTyped = static_cast<ctype>(typed); \
+			return DynamicValue::Reader(cTyped); \
+		}
+		
+	// Bool is a subtype of int, so this has to go first
+	HANDLE_TYPE(bool, py::bool_);
+	HANDLE_TYPE(signed long long, py::int_);
+	HANDLE_TYPE(double, py::float_);
+	
+	#undef HANDLE_TYPE
+	
+	return nullptr;
+}
 	
 // init method
 

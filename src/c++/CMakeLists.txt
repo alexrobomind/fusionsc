@@ -17,6 +17,7 @@ endif()
 
 # First build the cupnp library / compiler
 add_subdirectory(cupnp)
+add_subdirectory(capnpc-java)
 
 # Then build the fsc library
 add_subdirectory(fsc)
@@ -24,3 +25,9 @@ add_subdirectory(fsc)
 # Now we can build tools / bindings
 add_subdirectory(tools)
 add_subdirectory(pybindings)
+
+# Some fun extra targets
+add_custom_target(
+	capnp-id
+	COMMAND capnp_tool id
+)

@@ -116,7 +116,56 @@ class Geometry:
 		turned.node.leaf = self.geometry
 		
 		return result
+	
+	@staticmethod
+	def polyMesh(vertices, polyIndices):
+		"""
+		Creates a polygon mesh from a [N, 3] array-like of vertices and a list of polygins (which is each a list of vertex indices)
+		"""
+		vertices = np.asarray(vertices)
+		assert len(vertices.shape) == 2
+		assert vertices.shape[1] == 3
 		
+		meshIndices = np.concatenate(polygons)
+		
+		polyBoundaries = [0]
+		offset = 0
+		isTrimesh = True
+		
+		for poly in polygons:
+			offset += len(poly)
+			polyBoundaries.append(offset)
+			
+			if len(poly) != 3:
+				isTrimesh = False
+		
+		
+		mesh = native.Mesh.initMessage()
+		mesh.vertices = vertices
+		mesh.indices = meshIndices
+		
+		if isTrimesh:
+			mesh.triMesh = None
+		else:
+			mesh.polyMesh = polyBoundaries
+		
+		meshRef = data.publish(mesh)
+		del mesh
+		
+		result = Geometry()
+		result.geometry.mesh = meshRef
+		
+		return result
+	
+	@asyncFunction
+	@staticmethod
+	async def load(filename):
+		geo = await data.readArchive.asnc(filename)
+		return Geometry(geo)
+	
+	@asyncFunction
+	async def save(self, filename):
+		await data.writeArchive.asnc(self.geometry, filename)
 	
 	
 class MagneticConfig:
@@ -218,4 +267,14 @@ class MagneticConfig:
 	
 	def __truediv__(self, divisor):
 		return self * (1 / divisor)
+	
+	@asyncFunction
+	@staticmethod
+	async def load(filename):
+		field = data.readArchive.asnc(filename)
+		return MagneticConfig(field)
+	
+	@asyncFunction
+	async def save(self, filename):
+		await data.writeArchive.asnc(self.field, filename)
 	

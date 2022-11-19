@@ -8,15 +8,10 @@ set(
 	FSC_CAPNP_SOURCES
 	
 	data.capnp
-	data-test.capnp
-	
 	index.capnp
 	
 	magnetics.capnp
-	magnetics-test.capnp
-	
 	geometry.capnp
-	geometry-test.capnp
 	
 	http.capnp
 	offline.capnp
@@ -27,9 +22,20 @@ set(
 	
 	services.capnp
 	
+	java.capnp
+	
 	devices/w7x.capnp
+)
+
+set(
+	FSC_CAPNP_TEST_SOURCES
+	
+	data-test.capnp
+	magnetics-test.capnp
+	geometry-test.capnp
 	devices/w7x-test.capnp
 )
+	
 	
 
 CAPNP_GENERATE_CPP(
@@ -37,14 +43,28 @@ CAPNP_GENERATE_CPP(
 	FSC_CP_HEADERS
 	
 	${FSC_CAPNP_SOURCES}
+	${FSC_CAPNP_TEST_SOURCES}
 )
 
 CUPNP_GEN(
 	FSC_CP_CUHEADERS
 	
 	${FSC_CAPNP_SOURCES}
+	${FSC_CAPNP_TEST_SOURCES}
 )
 
+set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/java-classes/org/fsc) # Set output dir
+file(MAKE_DIRECTORY ${CAPNPC_OUTPUT_DIR})
+
+CAPNP_GEN_JAVA(
+	java-classes
+	
+	${FSC_CAPNP_SOURCES}
+)
+
+set_property(TARGET java-classes PROPERTY FSC_JAVA_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/java-classes)
+set_property(TARGET java-classes APPEND PROPERTY EXPORT_PROPERTIES FSC_JAVA_SOURCES)
+	
 # Unset capnpc options
 unset(CAPNPC_OUTPUT_DIR)
 unset(CAPNPC_FLAGS)
@@ -134,8 +154,10 @@ target_include_directories(
 	PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/genapi>
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
-	# TODO $<INSTALL_INTERFACE:???>
+	$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
+
+set_property(TARGET fsc PROPERTY GENAPI_DIR "${CMAKE_CURRENT_BINARY_DIR}/genapi")
 
 if(BUILD_TESTING)
 	target_sources(
@@ -181,5 +203,3 @@ if(FSC_WITH_CUDA)
 	
 	set_target_properties(tests PROPERTIES LINKER_LANGUAGE CUDA)
 endif()
-
-INSTALL(TARGETS fsc LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
