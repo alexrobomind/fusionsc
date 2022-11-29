@@ -25,6 +25,7 @@ set(
 	java.capnp
 	
 	devices/w7x.capnp
+	devices/w7x-geometry.capnp
 )
 
 set(
