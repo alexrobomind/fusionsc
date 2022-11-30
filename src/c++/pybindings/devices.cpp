@@ -1,4 +1,5 @@
 #include <fsc/devices/w7x.capnp.h>
+#include <fsc/devices/w7x-geometry.capnp.h>
 #include <fsc/devices/w7x.h>
 
 #include "fscpy.h"
@@ -13,6 +14,18 @@ fsc::CartesianGrid::Reader w7xDefaultGeometryGrid() {
 	return fsc::devices::w7x::DEFAULT_GEO_GRID;
 }
 
+fsc::Geometry::Reader w7xOp21BafflesNoHoles() {
+	return fsc::devices::w7x::W7X_OP21_BAFFLES_NO_HOLES;
+}
+
+fsc::Geometry::Reader w7xOp21HeatShieldNoHoles() {
+	return fsc::devices::w7x::W7X_OP21_HEAT_SHIELD_NO_HOLES;
+}
+
+fsc::Geometry::Reader w7xOp21Divertor() {
+	return fsc::devices::w7x::W7X_OP21_DIVERTOR;
+}
+
 }
 
 namespace fscpy {
@@ -22,6 +35,13 @@ namespace fscpy {
 		
 		w7x.def("defaultGrid", &w7xDefaultGrid);
 		w7x.def("defaultGeometryGrid", &w7xDefaultGeometryGrid);
+		
+		w7x.def("op21BafflesNoHoles", &w7xOp21BafflesNoHoles);
+		w7x.def("op21HeatShieldNoHoles", &w7xOp21HeatShieldNoHoles);
+		w7x.def("op21Divertor", &w7xOp21Divertor);
+		
+		
+		
 		w7x.def("offlineComponentsDB", &fsc::devices::w7x::newComponentsDBFromOfflineData);
 		w7x.def("offlineCoilsDB", &fsc::devices::w7x::newCoilsDBFromOfflineData);
 		

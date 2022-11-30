@@ -66,6 +66,14 @@ async def download(args = None):
 		
 		return assembly
 	
+	async def getGeometry(reader):
+		if reader.which() == 'combined':
+			for piece in reader.combined:
+				getGeometry(piece)
+		
+		else if reader.which() == 'componentsDBMeshes':
+			meshes.extend(reader.componentsDBMeshes)
+	
 	configs = {
 		id : await getConfig(id)
 		for id in tqdm(set(configs), "Downloading configurations")

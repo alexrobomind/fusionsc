@@ -81,7 +81,7 @@ def asPyvista(*args, **kwargs):
 	return asPyvistaAsync(*args, **kwargs).wait()
 
 @asyncFunction
-async def planarCut(geometry, phi = None, normal = None, center = None):
+async def planarCutAsync(geometry, phi = None, normal = None, center = None):
 	assert phi is not None or normal is not None
 	assert phi is None or normal is None
 	
@@ -122,7 +122,7 @@ def plotCut(geometry, phi = 0, ax = None, plot = True, **kwArgs):
 	return coll
 
 @asyncFunction
-async def asPyvista(geometry):
+async def asPyvistaAsync(geometry):
 	import numpy as np
 	import pyvista as pv
 	
