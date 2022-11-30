@@ -41,6 +41,17 @@ if(SKBUILD AND NOT Python_NumPy_FOUND)
 	message(FATAL_ERROR "NumPy missing in SKBUILD build")
 endif()
 
+# Configure CCache if available
+#find_program(CCACHE_LOC ccache)
+#if(CCACHE_LOC)
+#	message(STATUS "ccache found at ${CCACHE_LOC}")
+#	
+#	set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_LOC})
+#	set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_LOC})
+#else()
+#	message(STATUS "ccache not found")
+#endif()
+
 # Get dependencies via CPM
 include(CPM.cmake)
 
@@ -49,6 +60,9 @@ find_package(OpenSSL COMPONENTS Crypto SSL)
 # Disable BUILD_TESTING while compiling dependencies
 set(BUILD_TESTING_TMP ${BUILD_TESTING})
 set(BUILD_TESTING OFF CACHE BOOL "Temporarily disable testing" FORCE)
+
+set(BUILD_EXAMPLES_TMP ${BUILD_EXAMPLES})
+set(BUILD_EXAMPLES OFF CACHE BOOL "Temporarily disable examples" FORCE)
 
 # Standard fetching for Catch2, capnproto and eigen
 CPMAddPackage(
@@ -140,6 +154,8 @@ CPMAddPackage(
 SET(HDF5_EXTERNALLY_CONFIGURED 1)
 SET(HDF5_BUILD_HL_LIB ON CACHE BOOL "Enable building of HDF5 HL library" FORCE)
 set(HDF5_ENABLE_Z_LIB_SUPPORT ON CACHE BOOL "Enable Hdf5 Zlib support" FORCE)
+set(HDF5_BUILD_TOOLS OFF CACHE BOOL "Enable HDF5 tools" FORCE)
+set(HDF5_BUILD_EXAMPLES OFF CACHE BOOL "Enable HDF5 examples" FORCE)
 
 set(H5_ZLIB_HEADER "zlib.h")
 
@@ -215,6 +231,7 @@ endif()
 
 # Re-enable BUILD_TESTING if desired
 set(BUILD_TESTING ${BUILD_TESTING_TMP} CACHE BOOL "" FORCE)
+set(BUILD_EXAMPLES ${BUILD_EXAMPLES_TMP} CACHE BOOL "" FORCE)
 
 add_library(deps INTERFACE)
 target_link_libraries(
