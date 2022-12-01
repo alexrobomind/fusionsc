@@ -578,6 +578,22 @@ void setField(capnp::DynamicStruct::Builder builder, capnp::StructSchema::Field 
 	assign(FieldSlot(builder, field), mv(value));
 }
 
+DynamicValue::Builder initField(capnp::DynamicStruct::Builder builder, capnp::StructSchema::Field field) {
+	return builder.init(field);
+}
+
+DynamicValue::Builder initFieldByName(capnp::DynamicStruct::Builder, kj::StringPtr fieldName) {
+	return builder.init(fieldName);
+}
+
+DynamicValue::Builder initList(capnp::DynamicStruct::Builder builder, capnp::StructSchema::Field field, size_t size) {
+	return builder.init(field, size);
+}
+
+DynamicValue::Builder initListByName(capnp::DynamicStruct::Builder builder, kj::StringPtr listName, size_t size) {
+	return builder.init(listName, size);
+}
+
 capnp::AnyList::Reader asAnyListReader(capnp::DynamicList::Reader reader) {
 	return reader;
 }
@@ -966,6 +982,11 @@ void bindStructClasses(py::module_& m) {
 	
 	cDSB.def("set", &setField);
 	cDSB.def("set", &setFieldByName);
+	
+	cDSB.def("init", &initField);
+	cDSB.def("init", &initFieldByName);
+	cDSB.def("init", &initList);
+	cDSB.def("init", &initListByName);
 		
 	cDSB.def("__setitem__", &setField);
 	cDSB.def("__setitem__", &setFieldByName);
