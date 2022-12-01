@@ -16,6 +16,8 @@
 #include <cstdint>
 #include <cctype>
 
+#include <set>
+
 using capnp::RemotePromise;
 using capnp::Response;
 using capnp::DynamicCapability;
@@ -69,8 +71,8 @@ kj::String memberName(kj::StringPtr name) {
 		"get", "set", "adopt", "disown", "clone", "pretty", "totalSize", "visualize", "items"
 	});
 	
-	if(newName.endsWidth("_") || newName.startsWith("init") || reserved.count(newName) > 0) {
-		newName = kj::str(fieldName, "_");
+	if(newName.endsWith("_") || newName.startsWith("init") || reserved.count(newName) > 0)
+		newName = kj::str(newName, "_");
 	
 	return newName;
 }
@@ -125,7 +127,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		
 		py::dict attributes;
 		for(StructSchema::Field field : schema.getFields()) {
-			kj::StringPtr rawName = field.getProto().getName()
+			kj::StringPtr rawName = field.getProto().getName();
 			kj::String name = memberName(rawName);
 			
 			using Field = capnp::schema::Field;
@@ -151,7 +153,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		}
 		
 		for(StructSchema::Field field : schema.getUnionFields()) {
-			kj::StringPtr rawName = field.getProto().getName()
+			kj::StringPtr rawName = field.getProto().getName();
 			kj::String name = memberName(rawName);
 			
 			using Field = capnp::schema::Field;
@@ -269,7 +271,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 	);
 	
 	for(StructSchema::Field field : schema.getFields()) {
-		kj::StringPtr rawName = field.getProto().getName()
+		kj::StringPtr rawName = field.getProto().getName();
 		kj::String name = memberName(rawName);
 		
 		using Field = capnp::schema::Field;
@@ -316,7 +318,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		// auto name = method.getProto().getName();
 		auto method = methods[i];
 		
-		kj::StringPtr rawName = method.getProto().getName()
+		kj::StringPtr rawName = method.getProto().getName();
 		kj::String name = memberName(rawName);
 		
 		auto paramType = method.getParamType();

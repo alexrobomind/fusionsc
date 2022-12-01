@@ -582,7 +582,7 @@ DynamicValue::Builder initField(capnp::DynamicStruct::Builder builder, capnp::St
 	return builder.init(field);
 }
 
-DynamicValue::Builder initFieldByName(capnp::DynamicStruct::Builder, kj::StringPtr fieldName) {
+DynamicValue::Builder initFieldByName(capnp::DynamicStruct::Builder builder, kj::StringPtr fieldName) {
 	return builder.init(fieldName);
 }
 
