@@ -3,9 +3,12 @@ from tqdm import tqdm
 
 from fsc.asnc import asyncFunction
 
+import fsc
 import fsc.native as native
 import fsc.data as data
 import fsc.native.devices.w7x as w7xnative
+
+from . import divertor, baffles, heatShield, pumpSlits, vessel
 
 def downloadArgs(parser):
 	# Declare arguments	
@@ -14,7 +17,10 @@ def downloadArgs(parser):
 	parser.add_argument("--assembly", type=int, action='append', default = [])
 	parser.add_argument("--mesh", type=int, action='append', default = [])
 	
-	parser.add_argument("--op1", action = "store_true")
+	#parser.add_argument("--op1", action = "store_true")
+	#parser.add_argument("--op2", action = "store_true")
+	parser.add_argument("--campaign", default="OP12")
+	parser.add_argument("--default", action = "store_true")
 	
 	parser.add_argument("--coilsdb", default = "http://esb.ipp-hgw.mpg.de:8280/services/CoilsDBRest")
 	parser.add_argument("--componentsdb", default = "http://esb.ipp-hgw.mpg.de:8280/services/ComponentsDbRest")
@@ -32,20 +38,43 @@ async def download(args = None):
 	coils = args.coil
 	assemblies = args.assembly
 	meshes = args.mesh
+		
+	def addParts(reader):
+		if isinstance(reader, fsc.Geometry):
+			addParts(reader.geometry)
+			
+		if reader.which() == 'combined':
+			for el in reader.combined:
+				addParts(el)
+		
+		if reader.which() == 'componentsDBMeshes':
+			meshes.extend(reader.componentsDBMeshes)
+		
+		if reader.which() == 'componentsDBAssemblies':
+			assemblies.extend(reader.componentsDBAssemblies)
+	
+	c = args.campaign
 	
 	# Add default components
-	if args.op1:
+	if args.default:
 		coils.extend(range(160, 230)) # CAD main coils
 		coils.extend(range(230, 240)) # CAD control coils
 		coils.extend([350, 241, 351, 352, 535]) # CAD trim coils
 		
 		meshes.append(164) # Boundary
-		meshes.extend(range(165, 170)) # OP1.2 test divertor unit
-		meshes.extend(range(320, 335)) # OP1.2 baffles, baffle covers, heat shield
-		meshes.extend(range(450, 455)) # Pump splits
 		
-		assemblies.append(8) # OP1.2 steel panels
-		assemblies.append(9) # OP1.2 heat shield
+		#meshes.extend(range(165, 170)) # OP1.2 test divertor unit
+		#meshes.extend(range(320, 335)) # OP1.2 baffles, baffle covers, heat shield
+		#meshes.extend(range(450, 455)) # Pump splits
+		
+		addParts(divertor(c))
+		addParts(baffles(c))
+		addParts(heatShield(c))
+		addParts(pumpSlits())
+		addParts(vessel())
+		
+		#assemblies.append(8) # OP1.2 steel panels
+		#assemblies.append(9) # OP1.2 vessel
 	
 	# Connect to webservices
 	coilsDB = w7xnative.webserviceCoilsDB(args.coilsdb)
