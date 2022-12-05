@@ -25,7 +25,9 @@ include(src/cmake/OptimizeForTarget.cmake)
 include(CTest)
 
 # Pre-load python to make sure we have compatible dev environment and interpreter
+#set(CMAKE_FIND_DEBUG_MODE On)
 find_package(Python COMPONENTS Interpreter Development NumPy)
+#set(CMAKE_FIND_DEBUG_MODE Off)
 
 if(${Python_Development_FOUND} AND ${Python_NumPy_FOUND})
 	set(FSC_WITH_PYTHON ON)
@@ -84,6 +86,7 @@ CPMAddPackage(
 	NAME ZLIB
 	GIT_REPOSITORY https://github.com/madler/zlib.git
 	GIT_TAG        v1.2.13
+	VERSION        1.2.0
 )
 
 message(STATUS "ZLIB added, ${ZLIB_DIR}")
@@ -121,7 +124,7 @@ CPMAddPackage(
   NAME CapnProto
   GIT_REPOSITORY https://github.com/capnproto/capnproto.git
   GIT_TAG        master
-  VERSION        REQUIRED
+  VERSION        0.11
   OPTIONS
     "WITH_ZLIB OFF"
 )
@@ -163,6 +166,7 @@ CPMAddPackage(
 	HDF5
 	GIT_REPOSITORY https://github.com/HDFGroup/hdf5.git
 	GIT_TAG        hdf5-1_13_2
+	VERSION        1.12.0
 )
 
 if(NOT TARGET HDF5::hdf5-static)
@@ -202,6 +206,7 @@ CPMAddPackage(
 	NAME Libssh2
 	GIT_REPOSITORY https://github.com/libssh2/libssh2
 	GIT_TAG        libssh2-1.10.0
+	VERSION        1.10.0
 )
 
 if(TARGET libssh2)
@@ -213,6 +218,7 @@ if(FSC_WITH_PYTHON)
 		NAME pybind11
 		GIT_REPOSITORY https://github.com/pybind/pybind11.git
 		GIT_TAG        v2.9.1
+		VERSION        2.9.1
 	)
 endif()
 
@@ -324,6 +330,7 @@ if(SKBUILD)
 endif(SKBUILD)
 
 # Install procedure
+include(GNUInstallDirs)
 
 # Built in src/c++/fsc
 INSTALL(TARGETS fsc cupnp deps EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
@@ -335,7 +342,7 @@ if(TARGET botan_selfbuilt)
 	INSTALL(DIRECTORY "${BOTAN_HEADERS}/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
 
-if(TARGET hdf5-static)
+if(HDF5_SOURCE_DIR)
 	target_include_directories(hdf5-static INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 	INSTALL(TARGETS hdf5-static EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 	INSTALL(DIRECTORY "${HDF5_SOURCE_DIR}/src/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
