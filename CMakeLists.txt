@@ -27,6 +27,8 @@ include(CTest)
 # Pre-load python to make sure we have compatible dev environment and interpreter
 #set(CMAKE_FIND_DEBUG_MODE On)
 find_package(Python COMPONENTS Interpreter Development NumPy)
+
+message(STATUS "Python sitearch dir: ${Python_SITEARCH}")
 #set(CMAKE_FIND_DEBUG_MODE Off)
 
 if(${Python_Development_FOUND} AND ${Python_NumPy_FOUND})
@@ -370,9 +372,9 @@ if(FSC_WITH_PYTHON)
 		INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION src/python/fsc COMPONENT SKBUILD)
 	else()
 		include(GNUInstallDirs)
-		INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/site-packages/fsc)
+		INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION ${Python_SITEARCH}/fsc)
 
-		INSTALL(DIRECTORY src/python/ DESTINATION ${CMAKE_INSTALL_LIBDIR}/site-packages)
+		INSTALL(DIRECTORY src/python/ DESTINATION ${Python_SITEARCH})
 	endif()
 endif()
 
