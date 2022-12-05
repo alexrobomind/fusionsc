@@ -1,9 +1,10 @@
 import argparse
 from tqdm import tqdm
 
-from fsc.asnc import eager
+from fsc.asnc import asyncFunction
 
 import fsc.native as native
+import fsc.data as data
 import fsc.native.devices.w7x as w7xnative
 
 def downloadArgs(parser):
@@ -13,7 +14,7 @@ def downloadArgs(parser):
 	parser.add_argument("--assembly", type=int, action='append', default = [])
 	parser.add_argument("--mesh", type=int, action='append', default = [])
 	
-	parser.add_argument("--default", action = "store_true")
+	parser.add_argument("--op1", action = "store_true")
 	
 	parser.add_argument("--coilsdb", default = "http://esb.ipp-hgw.mpg.de:8280/services/CoilsDBRest")
 	parser.add_argument("--componentsdb", default = "http://esb.ipp-hgw.mpg.de:8280/services/ComponentsDbRest")
@@ -22,7 +23,7 @@ def downloadArgs(parser):
 	
 	return parser
 	
-@eager
+@asyncFunction
 async def download(args = None):
 	if args is None:
 		args = downloadArgs(argparse.ArgumentParser()).parse_args()
@@ -33,7 +34,7 @@ async def download(args = None):
 	meshes = args.mesh
 	
 	# Add default components
-	if args.default:
+	if args.op1:
 		coils.extend(range(160, 230)) # CAD main coils
 		coils.extend(range(230, 240)) # CAD control coils
 		coils.extend([350, 241, 351, 352, 535]) # CAD trim coils
@@ -71,7 +72,7 @@ async def download(args = None):
 			for piece in reader.combined:
 				getGeometry(piece)
 		
-		else if reader.which() == 'componentsDBMeshes':
+		elif reader.which() == 'componentsDBMeshes':
 			meshes.extend(reader.componentsDBMeshes)
 	
 	configs = {
@@ -125,7 +126,7 @@ async def download(args = None):
 	del meshes
 	
 	# Write output
-	await native.writeArchive(output, args.output)
+	await data.writeArchive.asnc(output, args.output)
 	print("Done")
 	
 	return 0
