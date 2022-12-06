@@ -31,7 +31,7 @@ find_package(Python COMPONENTS Interpreter Development.Module NumPy)
 message(STATUS "Python sitearch dir: ${Python_SITEARCH}")
 #set(CMAKE_FIND_DEBUG_MODE Off)
 
-if(${Python_Development_FOUND} AND ${Python_NumPy_FOUND})
+if(${Python_Development.Module_FOUND} AND ${Python_NumPy_FOUND})
 	set(FSC_WITH_PYTHON ON)
 else()
 	set(FSC_WITH_PYTHON OFF)
