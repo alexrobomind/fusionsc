@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.17)
+cmake_minimum_required(VERSION 3.18)
 
 # Configure project
 
@@ -26,7 +26,7 @@ include(CTest)
 
 # Pre-load python to make sure we have compatible dev environment and interpreter
 #set(CMAKE_FIND_DEBUG_MODE On)
-find_package(Python COMPONENTS Interpreter Development NumPy)
+find_package(Python COMPONENTS Interpreter Development.Module NumPy)
 
 message(STATUS "Python sitearch dir: ${Python_SITEARCH}")
 #set(CMAKE_FIND_DEBUG_MODE Off)
