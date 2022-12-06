@@ -137,7 +137,7 @@ struct CalculationSession : public FieldCalculator::Server {
 	
 	//! Handles compute request
 	Promise<void> compute(ComputeContext context) {
-		context.allowCancellation();
+		// context.allowCancellation(); // NOTE: In capnproto 0.11, this has gone away
 		KJ_REQUIRE("Processing compute request");
 		
 		// Copy input field (so that call context can be released)
