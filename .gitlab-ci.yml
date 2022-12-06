@@ -122,10 +122,18 @@ pybuild:pybuild-linux:
   
   before_script:
     - /opt/python/$PYTHON/bin/pip install build
+    
+    - mkdir _openssl
+    - cd _openssl
+    - ./Configure --no-shared
+    - make -j 8
+    - make install
+    - cd ..
+    - rm -r _openssl
   script:
-    - export OPENSSL_ROOT_DIR=/usr/local/ssl
-    - echo $OPENSSL_ROOT_DIR
-    - ls -R $OPENSSL_ROOT_DIR
+    #- export OPENSSL_ROOT_DIR=/usr/local/ssl
+    #- echo $OPENSSL_ROOT_DIR
+    #- ls -R $OPENSSL_ROOT_DIR
     - /opt/python/$PYTHON/bin/python -m build
   
 
