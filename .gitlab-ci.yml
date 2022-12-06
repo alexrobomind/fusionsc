@@ -125,10 +125,12 @@ pybuild:pybuild-linux:
     
     - mkdir _openssl
     - cd _openssl
+    - git clone git://git.openssl.org/openssl.git
+    - cd openssl
     - ./Configure --no-shared
     - make -j 8
     - make install
-    - cd ..
+    - cd ../..
     - rm -r _openssl
   script:
     #- export OPENSSL_ROOT_DIR=/usr/local/ssl
