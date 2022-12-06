@@ -122,17 +122,18 @@ pybuild:pybuild-linux:
   
   before_script:
     - /opt/python/$PYTHON/bin/pip install build
-    - yum install -y perl-IPC-Cmd
-    
-    - mkdir _openssl
-    - cd _openssl
-    - git clone git://git.openssl.org/openssl.git
-    - cd openssl
-    - ./Configure no-shared
-    - make -j 8
-    - make install
-    - cd ../..
-    - rm -r _openssl
+    #- yum install -y perl-IPC-Cmd
+    #
+    #- mkdir _openssl
+    #- cd _openssl
+    #- git clone git://git.openssl.org/openssl.git
+    #- cd openssl
+    #- ./Configure no-shared
+    #- make -j 8
+    #- make install
+    #- cd ../..
+    #- rm -r _openssl
+    - yum install -y openssl-static
   script:
     #- export OPENSSL_ROOT_DIR=/usr/local/ssl
     #- echo $OPENSSL_ROOT_DIR
