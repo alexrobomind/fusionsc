@@ -84,12 +84,14 @@ endif()
 
 message(STATUS "Module path: ${CMAKE_MODULE_PATH}")
 
+set(SKIP_INSTALL_ALL On)
 CPMAddPackage(
 	NAME ZLIB
 	GIT_REPOSITORY https://github.com/madler/zlib.git
 	GIT_TAG        v1.2.13
 	VERSION        1.2.0
 )
+unset(SKIP_INSTALL_ALL)
 
 message(STATUS "ZLIB added, ${ZLIB_DIR}")
 
