@@ -122,6 +122,7 @@ pybuild:pybuild-linux:
   
   before_script:
     - /opt/python/$PYTHON/bin/pip install build
+    - yum install -y perl-IPC-Cmd
     
     - mkdir _openssl
     - cd _openssl
