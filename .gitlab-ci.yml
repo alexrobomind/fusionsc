@@ -1,6 +1,7 @@
 stages:
   - build
   - test
+  - pybuild
   - doc
   - pages
 
@@ -105,7 +106,21 @@ test:msvc:
   <<: *msvc
   needs:
     - build:msvc
+    
+# Python build
 
+pybuild:pybuild-linux:
+  image: quay.io/pypa/manylinux2014_x86_64
+  parallel:
+    matrix:
+      - PYTHON: [cp37-c37, cp38-c38]
+  
+  before_script:
+    - /opt/python/$PYTHON -m pip install build
+  
+  script:
+    - /opt/python/$PYTHON -m build
+  
 
 # Documentation (stands separate from the compilation-related jobs)
 
