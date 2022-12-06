@@ -995,11 +995,11 @@ struct Proxy : public capnp::Capability::Server {
 		uint16_t methodId,
         capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> context
 	) {
-		auto request = backend.typelessRequest(interfaceId, methodId, context.getParams().targetSize());
+		auto request = backend.typelessRequest(interfaceId, methodId, context.getParams().targetSize(), capnp::CallHints());
 		request.set(context.getParams());
 		context.releaseParams();
 		
-		return { context.tailCall(mv(request)), false };
+		return { context.tailCall(mv(request)), false, false };
 	}
 };
 
