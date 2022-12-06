@@ -375,7 +375,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		auto function = [paramType, resultType, method, types = mv(types), argFields = mv(argFields), nArgs](capnp::DynamicCapability::Client self, py::args pyArgs, py::kwargs pyKwargs) mutable {			
 			// auto request = self.newRequest(method);
 			capnp::Request<AnyPointer, AnyPointer> request = self.typelessRequest(
-				method.getContainingInterface().getProto().getId(), method.getOrdinal(), nullptr
+				method.getContainingInterface().getProto().getId(), method.getOrdinal(), nullptr, capnp::Capability::Client::CallHints()
 			);
 			
 			// Check whether we got the argument structure passed
