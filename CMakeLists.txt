@@ -334,6 +334,9 @@ endif(SKBUILD)
 # Install procedure
 include(GNUInstallDirs)
 
+# Built in src/c++/fsc
+INSTALL(TARGETS fsc cupnp deps EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
 if(TARGET botan_selfbuilt)
 	INSTALL(TARGETS botan_selfbuilt EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
@@ -348,13 +351,11 @@ if(HDF5_SOURCE_DIR)
 endif()
 
 if(TARGET zlibstatic)
+	message(STATUS "Setting up target export for zlibstatic")
 	target_include_directories(zlibstatic INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 	INSTALL(TARGETS zlibstatic EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 	INSTALL(DIRECTORY "${ZLIB_SOURCE_DIR}/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
 endif()
-
-# Built in src/c++/fsc
-INSTALL(TARGETS fsc cupnp deps EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # FSC headers
 # - Source headers
