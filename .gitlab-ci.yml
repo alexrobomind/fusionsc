@@ -121,9 +121,9 @@ pybuild:pybuild-linux:
       - PYTHON: [cp37-cp37, cp38-cp38]
   
   before_script:
-    - /opt/python/$PYTHON/pip install build
+    - /opt/python/$PYTHON/bin/pip install build
   script:
-    - /opt/python/$PYTHON/python -m build
+    - /opt/python/$PYTHON/bin/python -m build
   
 
 # Documentation (stands separate from the compilation-related jobs)
