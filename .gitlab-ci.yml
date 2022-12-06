@@ -110,7 +110,11 @@ test:msvc:
 # Python build
 
 pybuild:pybuild-linux:
+  <<: *job
+  
   stage: pybuild
+  needs: []
+  
   image: quay.io/pypa/manylinux2014_x86_64
   parallel:
     matrix:
@@ -118,7 +122,6 @@ pybuild:pybuild-linux:
   
   before_script:
     - /opt/python/$PYTHON -m pip install build
-  
   script:
     - /opt/python/$PYTHON -m build
   
