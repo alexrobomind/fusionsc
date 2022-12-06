@@ -132,7 +132,7 @@ struct ResolverChainImpl : public virtual capnp::Capability::Server, public virt
 					auto params = (**paramMsg).getRoot<AnyPointer>();
 					
 					auto request = e.typelessRequest(
-						interfaceId, methodId, params.targetSize()
+						interfaceId, methodId, params.targetSize(), capnp::Capability::Client::CallHints()
 					);
 					request.set(params);
 					

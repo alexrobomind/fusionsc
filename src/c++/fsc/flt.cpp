@@ -347,7 +347,7 @@ struct FLTImpl : public FLT::Server {
 	FLTImpl(Own<Device> device) : device(mv(device)) {}
 	
 	Promise<void> trace(TraceContext ctx) override {
-		ctx.allowCancellation();
+		// ctx.allowCancellation();
 		auto request = ctx.getParams();
 		
 		// Request validation
