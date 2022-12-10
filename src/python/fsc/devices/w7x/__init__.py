@@ -172,14 +172,32 @@ def assemblies(ids = [], name = None):
 		
 	return result
 
-def divertor():
-	return components(range(165, 170), 'Divertor TDU')
+def divertor(campaign = 'OP21'):
+    if campaign == 'OP12':
+        return components(range(165, 170), 'Divertor TDU')
+    
+    if campaign == 'OP21':
+        return fsc.Geometry(w7xnative.op21Divertor())
+    
+    raise "Unknown campaign " + campaign
 
-def baffles():
-	return components(range(320, 325), 'OP1.2 Baffles') + components(range(325, 330), 'OP1.2 Baffle Covers')
+def baffles(campaign = 'OP21'):
+    if campaign == 'OP12':
+        return components(range(320, 325), 'OP1.2 Baffles') + components(range(325, 330), 'OP1.2 Baffle Covers')
+    
+    if campaign == 'OP21':
+        return fsc.Geometry(w7xnative.op21BafflesNoHoles())
+    
+    raise "Unknown campaign " + campaign
 
-def heatShield():
-	return components(range(330, 335), 'OP1.2 Heat Shield')
+def heatShield(campaign = 'OP21'):
+    if campaign == 'OP12':
+        return components(range(330, 335), 'OP1.2 Heat Shield')
+    
+    if campaign == 'OP21':
+        return fsc.Geometry(w7xnative.op21HeatShieldNoHoles())
+    
+    raise "Unknown campaign " + campaign
 
 def pumpSlits():
 	return components(range(450, 455), 'Pump Slits')
@@ -192,6 +210,9 @@ def vessel():
 
 def op12Geometry():
 	return divertor() + baffles() + heatShield() + pumpSlits() + steelPanels() + vessel()
+
+def op21Geometry():
+    return divertor('OP21') + baffles('OP21') + heatShield('OP21') + pumpSlits() + steelPanels() + vessel()
 	
 # The W7XCoilSet type defaults to the W7-X coils 160 ... 230
 defaultCoils = cadCoils('archive')

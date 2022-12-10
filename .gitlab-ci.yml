@@ -1,6 +1,7 @@
 stages:
   - build
   - test
+  - pybuild
   - doc
   - pages
 
@@ -52,7 +53,7 @@ stages:
 .linux: &linux
   before_script:
     - apt-get update --yes
-    - apt-get install --yes cmake python3 python3-pip
+    - apt-get install --yes cmake python3 python3-pip libssl-dev
 
 .msvc: &msvc
   tags:
@@ -105,7 +106,40 @@ test:msvc:
   <<: *msvc
   needs:
     - build:msvc
+    
+# Python build
 
+pybuild:pybuild-linux:
+  <<: *job
+  
+  stage: pybuild
+  needs: []
+  
+  image: quay.io/pypa/manylinux2014_x86_64
+  parallel:
+    matrix:
+      - PYTHON: [cp37-cp37, cp38-cp38]
+  
+  before_script:
+    - /opt/python/$PYTHON/bin/pip install build
+    #- yum install -y perl-IPC-Cmd
+    #
+    #- mkdir _openssl
+    #- cd _openssl
+    #- git clone git://git.openssl.org/openssl.git
+    #- cd openssl
+    #- ./Configure no-shared
+    #- make -j 8
+    #- make install
+    #- cd ../..
+    #- rm -r _openssl
+    - yum install -y openssl-static
+  script:
+    #- export OPENSSL_ROOT_DIR=/usr/local/ssl
+    #- echo $OPENSSL_ROOT_DIR
+    #- ls -R $OPENSSL_ROOT_DIR
+    - /opt/python/$PYTHON/bin/python -m build
+  
 
 # Documentation (stands separate from the compilation-related jobs)
 

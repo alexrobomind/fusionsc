@@ -16,6 +16,8 @@
 #include <cstdint>
 #include <cctype>
 
+#include <set>
+
 using capnp::RemotePromise;
 using capnp::Response;
 using capnp::DynamicCapability;
@@ -55,6 +57,25 @@ namespace pybind11 { namespace detail {
 }}
 
 namespace {
+	
+kj::String memberName(kj::StringPtr name) {
+	auto newName = kj::str(name);
+	
+	static const std::set<kj::StringPtr> reserved({
+		// Python keywords
+		"False", "None", "True", "and", "as", "assert", "break", "class", "continue", "def", "del", "elif", "else", "except",
+		"finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise",
+		"return", "try", "while", "witdh", "yield", "async",
+		
+		// Special member names
+		"get", "set", "adopt", "disown", "clone", "pretty", "totalSize", "visualize", "items"
+	});
+	
+	if(newName.endsWith("_") || newName.startsWith("init") || reserved.count(newName) > 0)
+		newName = kj::str(newName, "_");
+	
+	return newName;
+}
 
 enum class FSCPyClassType {
 	BUILDER, READER, PIPELINE
@@ -106,7 +127,8 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		
 		py::dict attributes;
 		for(StructSchema::Field field : schema.getFields()) {
-			kj::StringPtr name = field.getProto().getName();
+			kj::StringPtr rawName = field.getProto().getName();
+			kj::String name = memberName(rawName);
 			
 			using Field = capnp::schema::Field;
 			
@@ -117,7 +139,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 				break;
 			
 			if(classType == FSCPyClassType::BUILDER) {
-				kj::String nameUpper = kj::heapString(name);
+				kj::String nameUpper = kj::heapString(rawName);
 				nameUpper[0] = toupper(name[0]);
 				
 				if(type.isList() || type.isData() || type.isText()) {
@@ -131,14 +153,15 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		}
 		
 		for(StructSchema::Field field : schema.getUnionFields()) {
-			kj::StringPtr name = field.getProto().getName();
+			kj::StringPtr rawName = field.getProto().getName();
+			kj::String name = memberName(rawName);
 			
 			using Field = capnp::schema::Field;
 			
 			auto type = field.getType();
-			
 			if(classType == FSCPyClassType::BUILDER) {
-				kj::String nameUpper = kj::heapString(name);
+			
+				kj::String nameUpper = kj::heapString(rawName);
 				nameUpper[0] = toupper(name[0]);
 				
 				if(type.isStruct()) {
@@ -248,7 +271,8 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 	);
 	
 	for(StructSchema::Field field : schema.getFields()) {
-		kj::StringPtr name = field.getProto().getName();
+		kj::StringPtr rawName = field.getProto().getName();
+		kj::String name = memberName(rawName);
 		
 		using Field = capnp::schema::Field;
 		
@@ -291,8 +315,11 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 	outerAttrs["methods"] = methodHolder;
 	
 	for(size_t i = 0; i < methods.size(); ++i) {
+		// auto name = method.getProto().getName();
 		auto method = methods[i];
-		auto name = method.getProto().getName();
+		
+		kj::StringPtr rawName = method.getProto().getName();
+		kj::String name = memberName(rawName);
 		
 		auto paramType = method.getParamType();
 		auto resultType = method.getResultType();
@@ -313,7 +340,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 			auto slot = field.getProto().getSlot();
 			
 			auto name = field.getProto().getName();
-			auto type = field.getType();;
+			auto type = field.getType();
 			
 			argumentDescs.add(strTree(typeName(type), " ", name));
 			types.add(type);
@@ -348,7 +375,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		auto function = [paramType, resultType, method, types = mv(types), argFields = mv(argFields), nArgs](capnp::DynamicCapability::Client self, py::args pyArgs, py::kwargs pyKwargs) mutable {			
 			// auto request = self.newRequest(method);
 			capnp::Request<AnyPointer, AnyPointer> request = self.typelessRequest(
-				method.getContainingInterface().getProto().getId(), method.getOrdinal(), nullptr
+				method.getContainingInterface().getProto().getId(), method.getOrdinal(), nullptr, capnp::Capability::Client::CallHints()
 			);
 			
 			// Check whether we got the argument structure passed

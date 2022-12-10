@@ -28,6 +28,35 @@ struct TagValue {
 		notSet @0 : Void;
 		uInt64 @1 : UInt64;
 		text   @2 : Text;
+		
+		#w7xComponent : group {
+		#	union {
+		#		baffle : group {
+		#			module @4 : UInt8;
+		#			upper @5 : Bool;
+		#			row @6 : Text;
+		#			tileNo @7 : UInt8;
+		#		}
+		#		
+		#		heatShieldTile : group {
+		#			halfModule @8 : UInt8;
+		#			section @9 : Text;
+		#			tileNo @10 : UInt8;
+		#		}
+		#		
+		#		divertorPart : group {
+		#			module @11 : UInt8;
+		#			upper @12 : Bool;
+		#			section @13 : Text;
+		#			partNo @14 : UInt8;
+		#			
+		#			type : union {
+		#				finger @15 : Void;
+		#				fingerProtector @16 : Void;
+		#				toroidalClosure @17 : Void;
+		#				
+		#	}
+		#}
 	}
 }
 

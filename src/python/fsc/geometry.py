@@ -81,7 +81,7 @@ def localGeoLib():
 	return native.connectSameThread().newGeometryLib().service
 
 @asyncFunction
-async def planarCut(geometry, phi = None, normal = None, center = None):
+async def planarCutAsync(geometry, phi = None, normal = None, center = None):
 	"""Computes a planar cut of the geometry along either a given plane or a given phi plane"""
 	assert phi is not None or normal is not None
 	assert phi is None or normal is None
@@ -124,7 +124,7 @@ def plotCut(geometry, phi = 0, ax = None, plot = True, **kwArgs):
 	return coll
 
 @asyncFunction
-async def asPyvista(geometry):
+async def asPyvistaAsync(geometry):
 	"""Convert the given geometry into a PyVista / VTK mesh"""
 	import numpy as np
 	import pyvista as pv

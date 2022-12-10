@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.17)
+cmake_minimum_required(VERSION 3.18)
 
 # Configure project
 
@@ -25,9 +25,13 @@ include(src/cmake/OptimizeForTarget.cmake)
 include(CTest)
 
 # Pre-load python to make sure we have compatible dev environment and interpreter
-find_package(Python COMPONENTS Interpreter Development NumPy)
+#set(CMAKE_FIND_DEBUG_MODE On)
+find_package(Python COMPONENTS Interpreter Development.Module NumPy)
 
-if(${Python_Development_FOUND} AND ${Python_NumPy_FOUND})
+message(STATUS "Python sitearch dir: ${Python_SITEARCH}")
+#set(CMAKE_FIND_DEBUG_MODE Off)
+
+if(${Python_Development.Module_FOUND} AND ${Python_NumPy_FOUND})
 	set(FSC_WITH_PYTHON ON)
 else()
 	set(FSC_WITH_PYTHON OFF)
@@ -41,6 +45,17 @@ if(SKBUILD AND NOT Python_NumPy_FOUND)
 	message(FATAL_ERROR "NumPy missing in SKBUILD build")
 endif()
 
+# Configure CCache if available
+#find_program(CCACHE_LOC ccache)
+#if(CCACHE_LOC)
+#	message(STATUS "ccache found at ${CCACHE_LOC}")
+#	
+#	set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_LOC})
+#	set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_LOC})
+#else()
+#	message(STATUS "ccache not found")
+#endif()
+
 # Get dependencies via CPM
 include(CPM.cmake)
 
@@ -49,6 +64,9 @@ find_package(OpenSSL COMPONENTS Crypto SSL)
 # Disable BUILD_TESTING while compiling dependencies
 set(BUILD_TESTING_TMP ${BUILD_TESTING})
 set(BUILD_TESTING OFF CACHE BOOL "Temporarily disable testing" FORCE)
+
+set(BUILD_EXAMPLES_TMP ${BUILD_EXAMPLES})
+set(BUILD_EXAMPLES OFF CACHE BOOL "Temporarily disable examples" FORCE)
 
 # Standard fetching for Catch2, capnproto and eigen
 CPMAddPackage(
@@ -66,11 +84,14 @@ endif()
 
 message(STATUS "Module path: ${CMAKE_MODULE_PATH}")
 
+set(SKIP_INSTALL_ALL On)
 CPMAddPackage(
 	NAME ZLIB
 	GIT_REPOSITORY https://github.com/madler/zlib.git
 	GIT_TAG        v1.2.13
+	VERSION        1.2.0
 )
+unset(SKIP_INSTALL_ALL)
 
 message(STATUS "ZLIB added, ${ZLIB_DIR}")
 
@@ -107,7 +128,7 @@ CPMAddPackage(
   NAME CapnProto
   GIT_REPOSITORY https://github.com/capnproto/capnproto.git
   GIT_TAG        master
-  VERSION        REQUIRED
+  VERSION        0.11
   OPTIONS
     "WITH_ZLIB OFF"
 )
@@ -140,6 +161,8 @@ CPMAddPackage(
 SET(HDF5_EXTERNALLY_CONFIGURED 1)
 SET(HDF5_BUILD_HL_LIB ON CACHE BOOL "Enable building of HDF5 HL library" FORCE)
 set(HDF5_ENABLE_Z_LIB_SUPPORT ON CACHE BOOL "Enable Hdf5 Zlib support" FORCE)
+set(HDF5_BUILD_TOOLS OFF CACHE BOOL "Enable HDF5 tools" FORCE)
+set(HDF5_BUILD_EXAMPLES OFF CACHE BOOL "Enable HDF5 examples" FORCE)
 
 set(H5_ZLIB_HEADER "zlib.h")
 
@@ -147,6 +170,7 @@ CPMAddPackage(
 	HDF5
 	GIT_REPOSITORY https://github.com/HDFGroup/hdf5.git
 	GIT_TAG        hdf5-1_13_2
+	VERSION        1.12.0
 )
 
 if(NOT TARGET HDF5::hdf5-static)
@@ -186,6 +210,7 @@ CPMAddPackage(
 	NAME Libssh2
 	GIT_REPOSITORY https://github.com/libssh2/libssh2
 	GIT_TAG        libssh2-1.10.0
+	VERSION        1.10.0
 )
 
 if(TARGET libssh2)
@@ -197,6 +222,7 @@ if(FSC_WITH_PYTHON)
 		NAME pybind11
 		GIT_REPOSITORY https://github.com/pybind/pybind11.git
 		GIT_TAG        v2.9.1
+		VERSION        2.9.1
 	)
 endif()
 
@@ -215,6 +241,7 @@ endif()
 
 # Re-enable BUILD_TESTING if desired
 set(BUILD_TESTING ${BUILD_TESTING_TMP} CACHE BOOL "" FORCE)
+set(BUILD_EXAMPLES ${BUILD_EXAMPLES_TMP} CACHE BOOL "" FORCE)
 
 add_library(deps INTERFACE)
 target_link_libraries(
@@ -307,6 +334,7 @@ if(SKBUILD)
 endif(SKBUILD)
 
 # Install procedure
+include(GNUInstallDirs)
 
 # Built in src/c++/fsc
 INSTALL(TARGETS fsc cupnp deps EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
@@ -318,13 +346,14 @@ if(TARGET botan_selfbuilt)
 	INSTALL(DIRECTORY "${BOTAN_HEADERS}/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
 
-if(TARGET hdf5-static)
+if(HDF5_SOURCE_DIR)
 	target_include_directories(hdf5-static INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 	INSTALL(TARGETS hdf5-static EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 	INSTALL(DIRECTORY "${HDF5_SOURCE_DIR}/src/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
 endif()
 
 if(TARGET zlibstatic)
+	message(STATUS "Setting up target export for zlibstatic")
 	target_include_directories(zlibstatic INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 	INSTALL(TARGETS zlibstatic EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 	INSTALL(DIRECTORY "${ZLIB_SOURCE_DIR}/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
@@ -346,10 +375,11 @@ if(FSC_WITH_PYTHON)
 		INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION src/python/fsc COMPONENT SKBUILD)
 	else()
 		include(GNUInstallDirs)
-		INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/site-packages/fsc)
+		INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION ${Python_SITEARCH}/fsc)
 
-		INSTALL(DIRECTORY src/python/ DESTINATION ${CMAKE_INSTALL_LIBDIR}/site-packages)
+		INSTALL(DIRECTORY src/python/ DESTINATION ${Python_SITEARCH})
 	endif()
 endif()
 
 INSTALL(EXPORT FSCTargets DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake NAMESPACE FSC::)
+export(EXPORT FSCTargets NAMESPACE fsc FILE FSCExports.cmake)

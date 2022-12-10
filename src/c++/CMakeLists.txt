@@ -13,6 +13,17 @@ if(BUILD_TESTING)
 		OUTPUT_DIR ${SFC_TEST_DIR}
 		OUTPUT_SUFFIX ".xml"
 	)
+	
+	# If we build ZLIB ourselves, we need to make sure that its test targets are also built
+	if(ZLIB_SOURCE_DIR)
+		# These two targets come from ZLIB (bleh, we're lucky there are no conflicts)
+		if(TARGET example)
+			add_dependencies(tests example)
+		endif()
+		if(TARGET example64)
+			add_dependencies(tests example64)
+		endif()
+	endif()
 endif()
 
 # First build the cupnp library / compiler
