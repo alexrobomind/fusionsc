@@ -84,19 +84,19 @@ endif()
 
 message(STATUS "Module path: ${CMAKE_MODULE_PATH}")
 
-set(SKIP_INSTALL_ALL On)
-CPMAddPackage(
-	NAME ZLIB
-	GIT_REPOSITORY https://github.com/madler/zlib.git
-	GIT_TAG        v1.2.13
-	VERSION        1.2.0
-)
-unset(SKIP_INSTALL_ALL)
-
-message(STATUS "ZLIB added, ${ZLIB_DIR}")
-
-if(TARGET zlib)
-	message(STATUS "Local zlib")
+# Because it is so commonly used, we do not build our own zlib
+find_package(ZLIB)
+if(NOT ZLIB_FOUND)
+	message(STATUS "Building ZLib from source")
+	
+	set(SKIP_INSTALL_ALL On)
+	CPMAddPackage(
+		NAME ZLIB
+		GIT_REPOSITORY https://github.com/madler/zlib.git
+		GIT_TAG        v1.2.13
+		VERSION        1.2.0
+	)
+	unset(SKIP_INSTALL_ALL)
 
 	set(ZLIB_CUSTOM_INCLUDES $<BUILD_INTERFACE:${ZLIB_SOURCE_DIR}> $<BUILD_INTERFACE:${ZLIB_BINARY_DIR}>)
 	target_include_directories(zlib PUBLIC ${ZLIB_CUSTOM_INCLUDES})
@@ -108,14 +108,21 @@ if(TARGET zlib)
 	if(NOT TARGET ZLIB::ZLIB)
 		add_library(ZLIB::ZLIB ALIAS zlibstatic)
 	endif()
-
-	# CapnProto needs this... Jesus ...
-	# install(TARGETS zlibstatic EXPORT CapnProtoTargets)
+	
+	target_include_directories(zlibstatic INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+	INSTALL(TARGETS zlibstatic EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+	INSTALL(DIRECTORY "${ZLIB_SOURCE_DIR}/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
 else()
-	find_package(ZLIB REQUIRED)
-
+	message(STATUS "Using system ZLIB")
 	add_library(ZLIB::zlib ALIAS ZLIB::ZLIB)
 	add_library(ZLIB::zlibstatic ALIAS ZLIB::ZLIB)
+endif()
+
+find_package(SQLite3)
+if(NOT SQLite3_FOUND)
+	add_subdirectory(vendor/sqlite3)
+	
+	# INSTALL rules are also in vendor/sqlite3/CMakeLists.txt
 endif()
 
 set(ZLIB_STATIC_LIBRARY ZLIB::zlibstatic)
@@ -123,7 +130,6 @@ set(ZLIB_LIBRARY ZLIB::zlib)
 set(ZLIB_INCLUDE_DIRECTORIES "")
 set(ZLIB_INCLUDE_DIR "")
 
-# set(CMAKE_FIND_DEBUG_MODE TRUE)
 CPMAddPackage(
   NAME CapnProto
   GIT_REPOSITORY https://github.com/capnproto/capnproto.git
@@ -133,23 +139,17 @@ CPMAddPackage(
     "WITH_ZLIB OFF"
 )
 
-# A hack to extract the include directory
-#if(CapnProto_DIR)
-#	# Re-run find_package at global scope if found this way
-#	find_package(CapnProto REQUIRED)
-#endif()
+# We use Capn'n'protos builtin install rules
 
-#include(CMakePrintHelpers)
-#cmake_print_properties(TARGETS CapnProto::capnp PROPERTIES LOCATION INTERFACE_INCLUDE_DIRECTORIES)
-
+# Cap'n'proto provides a great macro to configure compilation of its interface files
+# This macro either uses the target capnp_tool (for self-build) or the CAPNP_INCLUDE_DIRECTORY
+# variable (when configured by find_package) to define its reference directories.
+# However, when using a find_package call through CPMAddPackage, the CAPNP_INCLUDE_DIRECTORY
+# does not get propagated to this scope. Therefore, we have to extract it manually.
 if(CapnProto_DIR)
 	get_property(CAPNP_INCLUDE_DIRECTORY TARGET CapnProto::capnp PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
 endif()
-	
 
-#if(NOT TARGET CapnProto::capnpc)
-#	add_executable(CapnProto::capnpc ALIAS capnpc)
-#endif()
 
 CPMAddPackage(
   NAME Eigen3
@@ -157,47 +157,62 @@ CPMAddPackage(
   GIT_TAG        3.4
 )
 
-# HDF5's shared library option messes with other shared library builds
-SET(HDF5_EXTERNALLY_CONFIGURED 1)
-SET(HDF5_BUILD_HL_LIB ON CACHE BOOL "Enable building of HDF5 HL library" FORCE)
-set(HDF5_ENABLE_Z_LIB_SUPPORT ON CACHE BOOL "Enable Hdf5 Zlib support" FORCE)
-set(HDF5_BUILD_TOOLS OFF CACHE BOOL "Enable HDF5 tools" FORCE)
-set(HDF5_BUILD_EXAMPLES OFF CACHE BOOL "Enable HDF5 examples" FORCE)
+# I think I can kick off HDF5 for the internal build
+# We need it for VMEC drive, but if vmec is installed, hdf5 will be too
+if(Off)
+	# HDF5's shared library option messes with other shared library builds
+	SET(HDF5_EXTERNALLY_CONFIGURED 1)
+	SET(HDF5_BUILD_HL_LIB ON CACHE BOOL "Enable building of HDF5 HL library" FORCE)
+	set(HDF5_ENABLE_Z_LIB_SUPPORT ON CACHE BOOL "Enable Hdf5 Zlib support" FORCE)
+	set(HDF5_BUILD_TOOLS OFF CACHE BOOL "Enable HDF5 tools" FORCE)
+	set(HDF5_BUILD_EXAMPLES OFF CACHE BOOL "Enable HDF5 examples" FORCE)
 
-set(H5_ZLIB_HEADER "zlib.h")
+	set(H5_ZLIB_HEADER "zlib.h")
 
-CPMAddPackage(
-	HDF5
-	GIT_REPOSITORY https://github.com/HDFGroup/hdf5.git
-	GIT_TAG        hdf5-1_13_2
-	VERSION        1.12.0
-)
+	CPMAddPackage(
+		HDF5
+		GIT_REPOSITORY https://github.com/HDFGroup/hdf5.git
+		GIT_TAG        hdf5-1_13_2
+		VERSION        1.12.0
+	)
 
-if(NOT TARGET HDF5::hdf5-static)
-	add_library(HDF5::hdf5-static ALIAS hdf5-static)
-	add_library(HDF5::hdf5_hl-static ALIAS hdf5_hl-static)
+	if(NOT TARGET HDF5::hdf5-static)
+		add_library(HDF5::hdf5-static ALIAS hdf5-static)
+		add_library(HDF5::hdf5_hl-static ALIAS hdf5_hl-static)
+		
+		target_include_directories(hdf5-static INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+		INSTALL(TARGETS hdf5-static EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+		INSTALL(DIRECTORY "${HDF5_SOURCE_DIR}/src/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
+	endif()
+
+	#set(HDF5_C_LIBRARY HDF5::hdf5-static)
+	#set(HDF5_HL_LIBRARY HDF5::hdf5_hl-static)
+
+	CPMGetPackageVersion(HDF5 HDF5_VERSION)
+
+	#if(NOT HDF5_VERSION)
+	#	get_target_property(HDF5_INCDIRS HDF5::hdf5-static INCLUDE_DIRECTORIES)
+	#	
+	#	find_file (HDF5_PUBCONF NAMES H5pubconf.h PATHS ${HDF5_INCDIRS} NO_DEFAULT_PATH REQUIRED)
+	#	file(READ ${HDF5_PUBCONF} _hdf5_version_lines REGEX "#define[ \t]+H5_VERSION")
+	#	string(REGEX REPLACE ".*H5_VERSION .*\"\(.*\)\".*" "\\1" _hdf5_version "${_hdf5_version_lines}")
+	#	set(HDF5_VERSION "${_hdf5_version}" CACHE STRING "")
+	#	unset(_hdf5_version)
+	#	unset(_hdf5_version_lines)
+	#endif()
+	MESSAGE(STATUS "Found HDF5 libraries version ${HDF5_VERSION}")
+
+	#find_path(HDF5_INCLUDE_DIR "hdf5.h" ${HDF5_INCDIRS} NO_DEFAULT_PATH REQUIRED)
+	set(HDF5_INCLUDE_DIR ${HDF5_INCDIRS})
+	message(STATUS "Using HDF5 include dir: ${HDF5_INCLUDE_DIR}")
 endif()
 
-#set(HDF5_C_LIBRARY HDF5::hdf5-static)
-#set(HDF5_HL_LIBRARY HDF5::hdf5_hl-static)
-
-CPMGetPackageVersion(HDF5 HDF5_VERSION)
-
-#if(NOT HDF5_VERSION)
-#	get_target_property(HDF5_INCDIRS HDF5::hdf5-static INCLUDE_DIRECTORIES)
-#	
-#	find_file (HDF5_PUBCONF NAMES H5pubconf.h PATHS ${HDF5_INCDIRS} NO_DEFAULT_PATH REQUIRED)
-#	file(READ ${HDF5_PUBCONF} _hdf5_version_lines REGEX "#define[ \t]+H5_VERSION")
-#	string(REGEX REPLACE ".*H5_VERSION .*\"\(.*\)\".*" "\\1" _hdf5_version "${_hdf5_version_lines}")
-#	set(HDF5_VERSION "${_hdf5_version}" CACHE STRING "")
-#	unset(_hdf5_version)
-#	unset(_hdf5_version_lines)
-#endif()
-MESSAGE(STATUS "Found HDF5 libraries version ${HDF5_VERSION}")
-
-#find_path(HDF5_INCLUDE_DIR "hdf5.h" ${HDF5_INCDIRS} NO_DEFAULT_PATH REQUIRED)
-set(HDF5_INCLUDE_DIR ${HDF5_INCDIRS})
-message(STATUS "Using HDF5 include dir: ${HDF5_INCLUDE_DIR}")
+find_package(HDF5)
+if(HDF5_FOUND)
+	set(FSC_WITH_HDF5 On)
+else()
+	set(FSC_WITH_HDF5 Off)
+endif()
 
 # NetCDF requires a pre-built HDF5 to work, so we can't package it in here :/
 #CPMAddPackage(
@@ -215,6 +230,8 @@ CPMAddPackage(
 
 if(TARGET libssh2)
 	add_library(Libssh2::libssh2 ALIAS libssh2)
+	
+	# TODO: Install rules?
 endif()
 
 if(FSC_WITH_PYTHON)
@@ -237,6 +254,11 @@ CPMAddPackage(
 
 if(NOT TARGET Botan::botan)	
 	include(src/cmake/CompileBotan.cmake)
+	
+	INSTALL(TARGETS botan_selfbuilt EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+	get_property(BOTAN_HEADERS TARGET botan_selfbuilt PROPERTY BUILT_HEADERS)
+	INSTALL(DIRECTORY "${BOTAN_HEADERS}/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
 
 # Re-enable BUILD_TESTING if desired
@@ -253,8 +275,9 @@ target_link_libraries(
 	CapnProto::kj-http
 	CapnProto::kj
 	Eigen3::Eigen
-	HDF5::hdf5-static
+	#HDF5::hdf5-static
 	Libssh2::libssh2
+	SQLite::SQLite3
 )
 
 if(FSC_WITH_CUDA)
@@ -281,6 +304,19 @@ if(FSC_WITH_PYTHON)
 		INTERFACE
 		pybind11::pybind11
 		Python::NumPy
+	)
+endif()
+
+if(FSC_WITH_HDF5)
+	target_compile_definitions(
+		deps
+		INTERFACE
+		FSC_WITH_HDF5
+	)
+	target_link_libraries(
+		deps
+		INTERFACE
+		HDF5::hdf5
 	)
 endif()
 
@@ -338,26 +374,6 @@ include(GNUInstallDirs)
 
 # Built in src/c++/fsc
 INSTALL(TARGETS fsc cupnp deps EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
-
-if(TARGET botan_selfbuilt)
-	INSTALL(TARGETS botan_selfbuilt EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
-
-	get_property(BOTAN_HEADERS TARGET botan_selfbuilt PROPERTY BUILT_HEADERS)
-	INSTALL(DIRECTORY "${BOTAN_HEADERS}/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-endif()
-
-if(HDF5_SOURCE_DIR)
-	target_include_directories(hdf5-static INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-	INSTALL(TARGETS hdf5-static EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
-	INSTALL(DIRECTORY "${HDF5_SOURCE_DIR}/src/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
-endif()
-
-if(TARGET zlibstatic)
-	message(STATUS "Setting up target export for zlibstatic")
-	target_include_directories(zlibstatic INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-	INSTALL(TARGETS zlibstatic EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
-	INSTALL(DIRECTORY "${ZLIB_SOURCE_DIR}/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
-endif()
 
 # FSC headers
 # - Source headers
