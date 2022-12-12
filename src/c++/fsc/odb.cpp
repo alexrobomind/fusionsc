@@ -42,6 +42,21 @@ BlobStore::BlobStore(sqlite::Connection& connRef, kj::StringPtr tablePrefix) :
 	createChunk = conn->prepare(str("INSERT INTO ", tablePrefix, "_chunks (id, chunkNo, data) VALUES (?, ?, ?)"));
 }
 
+Maybe<Blob> BlobStore::find(kj::ArrayPtr<const byte> hash) {
+	findBlob.bind(hash);
+	KJ_DEFER({ findBlob.reset(); });
+	
+	if(findBlob.step()) {
+		return Blob(*this, findBlob[0]);
+	}
+	
+	return nullptr;
+}
+
+BlobBuilder BlobStore::create(size_t chunkSize) {
+	return BlobBuilder(*this, chunkSize);
+}
+
 // =================================== class Blob ===================================
 
 Blob::Blob(BlobStore& parent, int64_t id) :
@@ -128,12 +143,8 @@ Blob BlobBuilder::finish() {
 	
 	auto& findBlob = parent -> findBlob;
 	
-	findBlob.reset();
-	findBlob.param(1) = hashOutput;
-	if(findBlob.step()) {
-		int64_t id = findBlob[0];
-		
-		return Blob(*parent, id);
+	KJ_IF_MAYBE(pBlob, parent -> find(hashOutput)) {
+		return mv(*pBlob);
 	}
 	
 	parent -> setBlobHash(id, hashOutput);

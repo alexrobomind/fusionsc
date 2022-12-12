@@ -10,7 +10,7 @@ namespace fsc {
 struct BlobStore;
 struct Blob;
 struct BlobReader;
-struct BlobWriter;
+struct BlobBuilder;
 
 struct BlobStore : public kj::Refcounted {
 	using Statement = sqlite::Statement;
@@ -34,6 +34,9 @@ struct BlobStore : public kj::Refcounted {
 	Own<sqlite::Connection> conn;	
 
 	inline Own<BlobStore> addRef() { return kj::addRef(*this); }
+	
+	Maybe<Blob> find(kj::ArrayPtr<const byte> hash);
+	BlobBuilder create(size_t chunkSize);
 		
 private:
 	BlobStore(sqlite::Connection& conn, kj::StringPtr tablePrefix);

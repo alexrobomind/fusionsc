@@ -86,9 +86,7 @@ SQLite3PreparedStatement SQLite3Connection::prepare(kj::StringPtr statement) {
 SQLite3PreparedStatement::SQLite3PreparedStatement(SQLite3Connection& conn, kj::StringPtr statement) :
 	parent(conn.addRef()), handle(nullptr)
 {
-	KJ_DBG("Preparing statement", statement);
 	check(sqlite3_prepare_v2(conn.handle, statement.begin(), statement.size(), &handle, nullptr));
-	KJ_DBG("Done");
 }
 
 SQLite3PreparedStatement::~SQLite3PreparedStatement() {
