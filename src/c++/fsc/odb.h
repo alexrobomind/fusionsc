@@ -1,58 +1,108 @@
+#pragma once
+
+#include <botan/hash.h>
+
 #include "db.h"
+#include "compression.h"
 
 namespace fsc {
+	
+struct BlobStore;
+struct Blob;
+struct BlobReader;
+struct BlobWriter;
 
-struct BlobStore {
-	template<kj::StringPtr stmt>
-	using Statement = sqlite3::Statement;
+struct BlobStore : public kj::Refcounted {
+	using Statement = sqlite::Statement;
 	
-	BlobStore(sqlite3::Connection& conn, kj::StringPtr tablePrefix) :
-		beginTransaction(conn, "BEGIN TRANSACTION"),
-		commit(conn, "COMMIT"),
-		
-		createBlob(conn, str("INSERT INTO ", tablePrefix, "_blobs")),
-		setBlobHash(conn, str("UPDATE ", tablePrefix, "_blobs WHERE id = ? SET hash = ?")),
-		findBlob(conn, str("SELECT id FROM ", tablePrefix, "_blobs WHERE hash = ?")),
-		
-		incRefExternal(conn, str("UPDATE ", tablePrefix, "_blobs WHERE id = ? SET externalRefcount = externalRefcount + 1")),
-		decRefExternal(conn, str("UPDATE ", tablePrefix, "_blobs WHERE id = ? SET externalRefcount = externalRefcount - 1")),
-		incRefInternal(conn, str("UPDATE ", tablePrefix, "_blobs WHERE id = ? SET internalRefcount = internalRefcount + 1")),
-		decRefInternal(conn, str("UPDATE ", tablePrefix, "_blobs WHERE id = ? SET internalRefcount = internalRefcount - 1")),
-		
-		deleteIfOrphan(conn, str("DELETE FROM ", tablePrefix, "_blobs WHERE id = ? AND externalRefcount = 0 AND internalRefcount = 0")),
-		
-		createChunk(conn, str("INSERT INTO ", tablePrefix, "_chunks (id, chunkNo) VALUES (?, ?)"))
-	{
-		interpretSchema(tablePrefix);
-	}
+	Statement createBlob;
+	Statement setBlobHash;
+	Statement findBlob;
 	
+	Statement incRefExternal;
+	Statement decRefExternal;
+	Statement incRefInternal;
+	Statement decRefInternal;
+	
+	Statement deleteIfOrphan;
+	Statement createChunk;
+	
+	Statement savepoint;
+	Statement release;
+	
+	kj::String tablePrefix;
+	Own<sqlite::Connection> conn;	
+
+	inline Own<BlobStore> addRef() { return kj::addRef(*this); }
+		
 private:
-	inline kj::Array<kj::String> schema(kj::StringPtr tableName);
+	BlobStore(sqlite::Connection& conn, kj::StringPtr tablePrefix);
+	
+	friend kj::Refcounted;
+	
+	template<typename T, typename... Params>
+	friend Own<T> kj::refcounted(Params&&... params);
+	
+	template <typename T>
+	friend Own<T> kj::addRef(T& object);	
 };
 
-kj::Array<kj::String> BlobStore::schema(kj::StringPtr tablePrefix) {
-	return {
-		str(
-			"CREATE TABLE ", tablePrefix, "_blobs IF NOT EXISTS ("
-			"  id INTEGER PRIMARY KEY,"
-			"  hash BLOB UNIQUE," // SQLite UNIQUE allows multiple NULL values
-			"  externalRefcount INTEGER,"
-			"  internalRefcount INTEGER"
-			")"
-		),
-		str(
-			"CREATE TABLE ", tablePrefix, "_chunks IF NOT EXISTS ("
-			"  id INTEGER,"
-			"  chunkNo INTEGER,"
-			"  data BLOB,"
-			""
-			"  FOREIGN KEY(id) REFERENCES ", tablePrefix, "_blobs(id) ON UPDATE CASCADE ON DELETE CASCADE"
-			")"
-		),
-		
-		str("CREATE INDEX IF NOT EXISTS ON ", tablePrefix, "_blobs (hash)"),
-		str("CREATE INDEX IF NOT EXISTS ON ", tablePrefix, "_chunks (id, chunkNo)")
-	};
-}
+struct Blob {
+	mutable Own<BlobStore> parent;
+	const int64_t id;
+	
+	Blob(BlobStore& parent, int64_t id);
+	
+	inline Blob(const Blob& other) : Blob(*(other.parent), other.id) {}
+	inline Blob(Blob&& other) = default;
+	
+	inline BlobReader open();
+	~Blob();
+	
+private:
+	kj::UnwindDetector ud;
+};
+
+struct BlobBuilder {
+	BlobBuilder(BlobStore& parent, size_t chunkSize = 8 * 1024 * 1024);
+	~BlobBuilder();
+	
+	void write(kj::ArrayPtr<const byte> bytes);
+	Blob finish();
+	
+private:
+	int64_t id;
+	int64_t currentChunkNo = 0;
+	
+	Own<BlobStore> parent;
+	kj::Array<byte> buffer;
+	
+	void flushBuffer();
+	
+	Compressor compressor;
+	std::unique_ptr<Botan::HashFunction> hashFunction;
+	
+	kj::UnwindDetector ud;
+};
+
+struct BlobReader {
+	BlobReader(Blob& blob);
+	
+	bool read(kj::ArrayPtr<byte> output);
+	inline size_t remainingOut() { return decompressor.remainingOut(); }
+	
+private:
+	int64_t id;
+	int64_t currentChunkNo = 0;
+	
+	Blob blob;
+	
+	Decompressor decompressor;
+	sqlite::Statement readStatement;
+};
+
+// ==================================== Inline implementation ===================================
+
+BlobReader Blob::open() { return BlobReader(*this); }
 
 }

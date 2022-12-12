@@ -87,6 +87,15 @@ add_library(
 	data.h
 	data.cpp
 	
+	compression.h
+	compression.cpp
+	
+	db.h
+	db.cpp
+	
+	odb.h
+	odb.cpp
+	
 	index.cpp
 	
 	geometry.h
@@ -167,6 +176,7 @@ if(BUILD_TESTING)
 		local-tests.cpp
 		random-tests.cpp
 		data-tests.cpp
+		odb-tests.cpp
 		geometry-tests.cpp
 		magnetics-tests.cpp
 		http-tests.cpp

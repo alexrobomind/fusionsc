@@ -1,3 +1,9 @@
+#pragma once
+
+#include "common.h"
+
+#include <kj/refcount.h>
+
 #include <utility>
 
 // SQLite3 structs
@@ -9,11 +15,15 @@ namespace fsc {
 struct SQLite3Connection;
 struct SQLite3PreparedStatement;
 struct SQLite3Blob;
+struct SQLite3Savepoint;
+struct SQLite3Transaction;
 
-namespace sqlite3 {
+namespace sqlite {
 	using Connection = SQLite3Connection;
 	using Statement = SQLite3PreparedStatement;
 	using Blob = SQLite3Blob;
+	using Savepoint = SQLite3Savepoint;
+	using Transaction = SQLite3Transaction;
 }
 
 Own<SQLite3Connection> openSQLite3(kj::StringPtr filename);
@@ -23,17 +33,31 @@ struct SQLite3Connection : private kj::Refcounted {
 	
 	~SQLite3Connection();
 	
-	void check();
+	void check(int retCode);
 	Own<SQLite3Connection> addRef();
 	
 	SQLite3PreparedStatement prepare(kj::StringPtr statement);
 	
+	int64_t exec(kj::StringPtr statement);
+	int64_t execInsert(kj::StringPtr statement);
+	
 	int64_t lastInsertRowid();
 	int64_t nRowsModified();
 	
+	bool inTransaction();
+	SQLite3Transaction beginTransaction(kj::StringPtr name = nullptr);
+	
 private:
+	uint64_t transactionUID = 0; //< Unique ID counter for transactions
 	SQLite3Connection(kj::StringPtr filename);
-	friend Own<SQLite3Connection> openSQLite3(kj::StringPtr filename);
+	
+	friend kj::Refcounted;
+	
+	template<typename T, typename... Params>
+	friend Own<T> kj::refcounted(Params&&... params);
+	
+	template <typename T>
+	friend Own<T> kj::addRef(T& object);
 };
 
 struct SQLite3PreparedStatement {
@@ -64,7 +88,7 @@ struct SQLite3PreparedStatement {
 		inline Column& operator++() { ++idx; return *this; }
 		
 		inline Column* operator ->() { return this; }
-		inline Column& operator  *() { return this; }
+		inline Column& operator  *() { return *this; }
 	};
 	
 	/** Parameter accessor helper.
@@ -77,6 +101,7 @@ struct SQLite3PreparedStatement {
 		
 		Param& operator=(kj::ArrayPtr<const byte> blob);
 		Param& operator=(kj::StringPtr text);
+		Param& operator=(int intVal);
 		Param& operator=(int64_t int64);
 		Param& operator=(double doubleVal);
 		Param& operator=(decltype(nullptr) nPtr);
@@ -85,6 +110,8 @@ struct SQLite3PreparedStatement {
 	};
 	
 	SQLite3PreparedStatement(SQLite3Connection& conn, kj::StringPtr statement);
+	
+	inline SQLite3PreparedStatement() : handle(nullptr) {}
 	~SQLite3PreparedStatement();
 	
 	SQLite3PreparedStatement(SQLite3PreparedStatement&&) = default;
@@ -100,7 +127,7 @@ struct SQLite3PreparedStatement {
 	
 	template<typename... Params>
 	void bind(Params... params) {
-		bindInternal(params..., std::index_sequence_for(params...));
+		bindInternal(std::index_sequence_for<Params...>(), params...);
 	}
 	
 	template<typename... Params>
@@ -110,7 +137,7 @@ struct SQLite3PreparedStatement {
 	}
 	
 	template<typename... Params>
-	int64_t insert()(Params... params) {
+	int64_t insert(Params... params) {
 		bind(params...);
 		return execInsert();
 	}
@@ -123,7 +150,8 @@ struct SQLite3PreparedStatement {
 	inline Column column(int i) { return Column {*this, i}; }
 	
 	sqlite3_stmt * handle;
-	Own<SQLite3Connection> parent;	
+	Own<SQLite3Connection> parent;
+	
 private:
 	enum {
 		ACTIVE,
@@ -133,11 +161,50 @@ private:
 	void check(int retCode);
 	
 	template<typename... Params, size_t... indices>
-	bindAll(Params... params, std::integer_sequence<indices...>) {
+	void bindInternal(std::integer_sequence<size_t, indices...> pIndices, Params... params) {
 		int unused[] = {
-			(this->operator[](indices) = params, 1)...
+			0, (this->param(indices + 1) = params, 1)...
 		};
 	}
+};
+
+/** Creates and maintains a savepoint. The savepoint is released without rollback on destruction.
+ */
+struct SQLite3Savepoint {
+	SQLite3Savepoint(SQLite3Connection& conn, kj::StringPtr name);
+	SQLite3Savepoint(const SQLite3Savepoint&) = delete;
+	SQLite3Savepoint(SQLite3Savepoint&&) = default;
+	
+	~SQLite3Savepoint();
+	
+	void rollback();
+	void release();
+	
+	bool isReleased() { return released; }
+	
+private:
+	Own<SQLite3Connection> conn;
+	kj::String name;
+	bool released = false;
+	
+	kj::UnwindDetector ud;
+};
+
+/** Transaction class.
+ *
+ * Creates and maintains a savepoint that records all sql statements. Upon destruction, the savepoint
+ * will be released if the object is destroyed normally, but will be rolled back upon an exception. 
+ */
+struct SQLite3Transaction {
+	inline SQLite3Transaction(SQLite3Connection& conn, kj::StringPtr name) : savepoint(conn, name) {}
+	~SQLite3Transaction();
+	
+	inline void commit() { savepoint.release(); }
+	inline void rollback() { savepoint.rollback(); }
+	
+private:
+	SQLite3Savepoint savepoint;
+	kj::UnwindDetector ud;
 };
 
 }

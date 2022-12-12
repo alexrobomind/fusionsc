@@ -34,7 +34,7 @@ SQLite3Connection::SQLite3Connection(kj::StringPtr filename) :
 	handle(nullptr)
 {
 	try {
-		check(sqlite3_open(filename, &handle));
+		check(sqlite3_open(filename.cStr(), &handle));
 	} catch(kj::Exception& e) {
 		sqlite3_close_v2(handle);
 		throw e;
@@ -53,16 +53,48 @@ int64_t SQLite3Connection::nRowsModified() {
 	return sqlite3_changes64(handle);
 }
 
+bool SQLite3Connection::inTransaction() {
+	return sqlite3_get_autocommit(handle) == 0;
+}
+	
+int64_t SQLite3Connection::exec(kj::StringPtr statement) {
+	KJ_DBG("Executing statement", statement);
+	return prepare(statement).exec();
+}
+
+int64_t SQLite3Connection::execInsert(kj::StringPtr statement) {
+	return prepare(statement).execInsert();
+}
+
+SQLite3Transaction SQLite3Connection::beginTransaction(kj::StringPtr name) {
+	kj::String privateName;
+	
+	if(name.size() == 0) {
+		privateName = kj::str("fsc_unique_transaction_", transactionUID++);
+		name = privateName;
+	}
+	
+	return SQLite3Transaction(*this, name);
+}
+
+SQLite3PreparedStatement SQLite3Connection::prepare(kj::StringPtr statement) {
+	return SQLite3PreparedStatement(*this, statement);
+}
+
 // ============= struct SQLite3PreparedStatement ==============
 
 SQLite3PreparedStatement::SQLite3PreparedStatement(SQLite3Connection& conn, kj::StringPtr statement) :
 	parent(conn.addRef()), handle(nullptr)
 {
-	check(sqlite3_prepare_v2(conn.handle, statement.begin(), statement.size()));
+	KJ_DBG("Preparing statement", statement);
+	check(sqlite3_prepare_v2(conn.handle, statement.begin(), statement.size(), &handle, nullptr));
+	KJ_DBG("Done");
 }
 
 SQLite3PreparedStatement::~SQLite3PreparedStatement() {
-	sqlite3_finalize(handle);
+	if(parent.get() != nullptr) {
+		sqlite3_finalize(handle);
+	}
 }
 
 bool SQLite3PreparedStatement::step() {
@@ -83,12 +115,12 @@ void SQLite3PreparedStatement::reset() {
 	state = ACTIVE;
 }
 
-void SQLite3PreparedStatement::size() {
+int SQLite3PreparedStatement::size() {
 	return sqlite3_column_count(handle);
 }
 
 int64_t SQLite3PreparedStatement::execInsert() {
-	KJ_REQUIRE(state == DONE, "Statement must be done");
+	KJ_REQUIRE(state == ACTIVE, "Statement must be active");
 	
 	step();
 	reset();
@@ -97,7 +129,7 @@ int64_t SQLite3PreparedStatement::execInsert() {
 }
 
 int64_t SQLite3PreparedStatement::exec() {
-	KJ_REQUIRE(state == DONE, "Statement must be done");
+	KJ_REQUIRE(state == ACTIVE, "Statement must be active");
 	
 	step();
 	reset();
@@ -124,7 +156,7 @@ SQLite3PreparedStatement::Column::operator kj::StringPtr() {
 	KJ_REQUIRE(parent.state == ACTIVE, "Statement must be active");
 	
 	return kj::StringPtr(
-		(const byte*) sqlite3_column_text(parent.handle, idx),
+		(const char*) sqlite3_column_text(parent.handle, idx),
 		sqlite3_column_bytes(parent.handle, idx)
 	);
 }
@@ -154,27 +186,69 @@ kj::String SQLite3PreparedStatement::Column::name() {
 // --- Parameter accessors ---
 
 SQLite3PreparedStatement::Param& SQLite3PreparedStatement::Param::operator=(kj::ArrayPtr<const byte> blob) {
-	check(sqlite3_bind_blob(parent.handle, idx, blob.begin(), blob.size(), SQLITE_TRANSIENT));
+	parent.check(sqlite3_bind_blob(parent.handle, idx, blob.begin(), blob.size(), SQLITE_TRANSIENT));
+	return *this;
 }
 
 SQLite3PreparedStatement::Param& SQLite3PreparedStatement::Param::operator=(kj::StringPtr text) {
-	check(sqlite3_bind_text(parent.handle, idx, text.begin(), text.size(), SQLITE_TRANSIENT));
+	parent.check(sqlite3_bind_text(parent.handle, idx, text.begin(), text.size(), SQLITE_TRANSIENT));
+	return *this;
 }
 
 SQLite3PreparedStatement::Param& SQLite3PreparedStatement::Param::operator=(double d) {
-	check(sqlite3_bind_double(parent.handle, idx, d));
+	parent.check(sqlite3_bind_double(parent.handle, idx, d));
+	return *this;
 }
 
 SQLite3PreparedStatement::Param& SQLite3PreparedStatement::Param::operator=(int i) {
-	check(sqlite3_bind_int(parent.handle, idx, i));
+	parent.check(sqlite3_bind_int(parent.handle, idx, i));
+	return *this;
 }
 
 SQLite3PreparedStatement::Param& SQLite3PreparedStatement::Param::operator=(int64_t i) {
-	check(sqlite3_bind_int64(parent.handle, idx, i));
+	parent.check(sqlite3_bind_int64(parent.handle, idx, i));
+	return *this;
 }
 
 SQLite3PreparedStatement::Param& SQLite3PreparedStatement::Param::operator=(decltype(nullptr)) {
-	check(sqlite3_bind_null(parent.handle));
+	parent.check(sqlite3_bind_null(parent.handle, idx));
+	return *this;
+}
+
+// ============================== SQLite3Savepoint =============================
+
+SQLite3Savepoint::SQLite3Savepoint(SQLite3Connection& conn, kj::StringPtr name) :
+	conn(conn.addRef()),
+	name(kj::heapString(name))
+{
+	conn.exec(str("SAVEPOINT ", name));
+}
+
+SQLite3Savepoint::~SQLite3Savepoint() {
+	ud.catchExceptionsIfUnwinding([this]{ release(); });
+}
+
+void SQLite3Savepoint::rollback() {
+	KJ_REQUIRE(!released, "Trying to roll back released savepoint");
+	
+	conn -> exec(str("ROLLBACK TO ", name));
+}
+
+void SQLite3Savepoint::release() {
+	if(!released) {
+		conn -> exec(str("RELEASE SAVEPOINT ", name));
+		released  = true;
+	}
+}
+
+// =========================== SQLite3Transaction =======================
+
+SQLite3Transaction::~SQLite3Transaction() {
+	if(ud.isUnwinding()) {
+		if(!savepoint.isReleased()) {
+			ud.catchExceptionsIfUnwinding([this] { savepoint.rollback(); });
+		}
+	}
 }
 
 }

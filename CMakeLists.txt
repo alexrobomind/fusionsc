@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.18)
 
 # Configure project
 
-project(FSC LANGUAGES CXX)
+project(FSC LANGUAGES C CXX)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/src/cmake/modules)
 
 # Configure languages
@@ -101,6 +101,8 @@ if(NOT ZLIB_FOUND)
 	set(ZLIB_CUSTOM_INCLUDES $<BUILD_INTERFACE:${ZLIB_SOURCE_DIR}> $<BUILD_INTERFACE:${ZLIB_BINARY_DIR}>)
 	target_include_directories(zlib PUBLIC ${ZLIB_CUSTOM_INCLUDES})
 	target_include_directories(zlibstatic PUBLIC ${ZLIB_CUSTOM_INCLUDES})
+	
+	message(STATUS "ZLib includes: ${ZLIB_CUSTOM_INCLUDES}")
 
 	add_library(ZLIB::zlibstatic ALIAS zlibstatic)
 	add_library(ZLIB::zlib ALIAS zlib)
@@ -278,6 +280,7 @@ target_link_libraries(
 	#HDF5::hdf5-static
 	Libssh2::libssh2
 	SQLite::SQLite3
+	ZLIB::ZLIB
 )
 
 if(FSC_WITH_CUDA)
@@ -316,7 +319,7 @@ if(FSC_WITH_HDF5)
 	target_link_libraries(
 		deps
 		INTERFACE
-		HDF5::hdf5
+		hdf5::hdf5
 	)
 endif()
 
