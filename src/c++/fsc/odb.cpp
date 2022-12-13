@@ -200,7 +200,8 @@ DBObject ObjectDB::exportObject(Capability::Client object) {
 	// Own<DBObject> dbObject = createObject(object);
 	Maybe<sqlite::Transaction> transaction = conn -> beginTransaction();
 	// auto dbObject = kj::heapHeld<DBObject>(createObject());
-	DBObjectBuilder object = createObject();
+	
+	DBObject object = createObject();
 	
 	// Initialize the object to an unresolved state
 	dbObject -> data.setUnresolved();
@@ -223,7 +224,7 @@ DBObject ObjectDB::exportObject(Capability::Client object) {
 			dbObject -> save();
 			
 			// Initiate download
-			return dbObject.downloadDataref()
+			return downloadObject(dbObject, 
 			.catch_([this, object, dbObject](kj::Exception& e) {
 				// Download failed
 				dbObject -> data.setDownloadFailed(toProto(e));
@@ -260,5 +261,166 @@ DBObject ObjectDB::exportObject(Capability::Client object) {
 	
 	whenResolved.put(dbObject -> id, exportTask.fork());
 }
+
+namespace {
+	struct TransmissionProcess {
+		constexpr static inline size_t CHUNK_SIZE = 1024 * 1024;
+		
+		BlobReader reader;
+		
+		DataRef<capnp::AnyPointer>::Receiver::Client receiver;
+		size_t start;
+		size_t end;
+		
+		Array<byte> buffer;
+		
+		TransmissionProcess(DataRef<capnp::AnyPointer>::Receiver::Client receiver, size_t start, size_t end) :
+			receiver(mv(receiver)),
+			buffer(kj::heapArray<byte>(CHUNK_SIZE)),
+			start(start), end(end)
+		{
+			KJ_REQUIRE(end >= start);
+		}
+		
+		Promise<void> run() {
+			auto request = receiver.beginRequest();
+			request.setNumBytes(end - start);
+			return request.send().ignoreResult().then([this, start]() { return transmit(start); });
+		}
+		
+		Promise<void> transmit(size_t chunkStart) {			
+			// Check if we are done transmitting
+			if(chunkStart >= end)
+				return receiver.doneRequest().send().ignoreResult();
+			
+			auto slice = chunkStart + CHUNK_SIZE <= end ? : buffer.asPtr() : buffer.slice(0, end - chunkStart);
+			reader.read(slice);
+			KJ_REQUIRE(reader.remainingOut() == 0, "Buffer should be filled completely");
+			
+			// Do a transmission
+			auto request = receiver.receiveRequest();
+			
+			if(slice.size() % 8 == 0) {
+				// Note: This is safe because we keep this object alive until the transmission
+				// succeeds or fails
+				auto orphanage = capnp::Orphanage::getForMessageContaining((DataRef<capnp::AnyPointer>::Receiver::ReceiveParams::Builder) request);
+				auto externalData = orphanage.referenceExternalData(slice);
+				request.adoptData(mv(externalData));
+			} else {
+				request.setData(slice);
+			}
+			
+			return request.send().then([this, chunkEnd = chunkStart + slice.size()]() { return transmit(chunkEnd); });
+		}
+	};
+}
+
+struct DBObjectRef : public DataRef<capnp::AnyPointer>::Server {
+	Own<DBObject> object;
+	
+	using RealObject = DBEntry::Resolved::DownloadSucceeded;
+	
+	Promise<RealObject::Reader> whenReady() {
+		auto unresolved = [this]() {
+			return object.whenUpdated().then([this]() { return whenReady(); });
+		};
+		
+		auto exception = [this](capnp::rpc::Exception::Reader e) -> kj::Exception {
+			return fromProto(e);
+		};
+		
+		auto entry = object -> data;
+		switch(entry.which()) {
+			case DBEntry::UNRESOLVED:
+				return unresolved();
+			case DBEntry::EXCEPTION:
+				return exception(entry.getException);
+			case DBEntry::RESOLVED: {
+				auto resolved = entry.getResolved();
+				switch(resolved.which()) {
+					case DBEntry::Resolved::NOT_A_REF:
+						KJ_UNIMPLEMENTED("Not a DataRef");
+					case DBEntry::Resolved::DOWNLOADING:
+						return unresolved();
+					case DBEntry::Resolved::DOWNLOAD_FAILED:
+						return exception(resolved.getDownloadFailed());
+					case DBEntry::Resolved::DOWNLOAD_SUCCEEDED:
+						return READY_NOW;
+					default:
+						KJ_FAIL_REQUIRE("Unknown download state");
+				}
+			}
+			default:
+				KJ_FAIL_REQUIRE("Unknown object type");
+		}
+	}
+	
+	Promise<void> metadata(MetadataContext ctx) override {
+		return whenReady()
+		.then([ctx](RealObject::Reader obj) {
+			ctx.initResults().setMetadata(obj.getMetadata());
+		});
+	}
+	
+	Promise<void> rawBytes(RawBytesContext ctx) override {
+		return whenReady()
+		.then([ctx](RealObject::Reader obj) {
+			KJ_REQUIRE(end < obj.getMetadata().getDataSize());
+			
+			auto hash = obj.getMetadata().getHash();
+			KJ_IF_MAYBE(pBlob, object -> parent -> blobDB.find(hash) {
+				auto buffer = kj::heapArray<byte>(8 * 1024 * 1024);
+				reader = obj.read();
+				
+				const uint64_t start = ctx.getParams().getStart();
+				const uint64_t end = ctx.getParams().getEnd();
+				KJ_REQUIRE(end >= start);
+				
+				// Wind forward the stream until we hit the target point
+				uint64_t windRemaining = start;
+				while(true) {
+					if(remaing >= buffer.size()) {
+						reader.read(buffer);
+						windRemaining -= buffer.size();
+					} else {
+						reader.read(buffer.slice(0, windRemaining));
+						break;
+					}
+				}
+				
+				auto data = ctx.getResults().initData(end - start);
+				obj.read(data);
+			} else {
+				KJ_FAIL_REQUIRE("No associated blob in blob DB");
+			}
+		}
+	}
+	
+	Promise<void> capTable(CapTableContext) override {
+		return whenReady()
+		.then([ctx](RealObject::Reader obj) {
+			auto tableIn = obj.getCapTable();
+			auto tableOut = ctx.initTable(tableIn.size());
+			
+			for(auto i : kj::indices(tableIn)) {
+				if(tableIn[i] < 0) {
+					tableOut[i] = nullptr;
+					continue;
+				}
+				
+				KJ_IF_MAYBE(pObj, object -> parent -> getObjectInternal(tableIn[i])) {
+					tableOut = pObj -> asCapability();
+				} else {
+					tableOut = kj::Exception("Object not found in database");
+				}
+			}
+		});
+	}
+	Promise<void> transmit(TransmitContext) override ;
+	
+	
+	
+	Promise<void> transmitPiece(
+};
 
 }

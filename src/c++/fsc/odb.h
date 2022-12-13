@@ -132,10 +132,18 @@ private:
 
 //! Represents an object in the object database, as well as the permission to access it
 struct DBObject : public kj::Refcounted {
+	void load();
+	void save();
+	
+	ODBEntry::Builder data;
+	
+	Promise<void> whenUpdated();
+	
+private:
 	const int64_t id;
+	Own<ObjectDB> parent;
 	
-	// Manages the object inside the object database
-	
+	friend class ObjectDB;
 };
 
 struct DBExport : public DataRef<capnp::AnyPointer>::Server {
