@@ -175,7 +175,7 @@ namespace {
 			if(chunkEnd == start)
 				return receiver.doneRequest().send().ignoreResult();
 			
-			auto slice = data.slice(start, end);
+			auto slice = data.slice(start, chunkEnd);
 			
 			// Do a transmission
 			auto request = receiver.receiveRequest();
