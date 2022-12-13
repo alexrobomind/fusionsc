@@ -9,6 +9,7 @@ set(
 	
 	data.capnp
 	index.capnp
+	odb.capnp
 	
 	magnetics.capnp
 	geometry.capnp

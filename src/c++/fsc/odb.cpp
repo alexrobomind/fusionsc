@@ -181,4 +181,84 @@ bool BlobReader::read(kj::ArrayPtr<byte> output) {
 	}
 }
 
+// ========================= ObjectDB ==============================
+
+DBObject ObjectDB::exportObject(Capability::Client object) {
+	// Resolve to innermost hook
+	Own<capnp::ClientHook> hook = capnp::ClientHook::from(kj::cp(object));
+	while(true) {
+		KJ_IF_MAYBE(pHook, hook -> getResolved()) {
+			hook = mv(*pHook);
+		} else {
+			break;
+		}
+	}
+	
+	static_assert(false, "Reuse object id");
+	
+	// int64_t exportId = createObject();
+	// Own<DBObject> dbObject = createObject(object);
+	Maybe<sqlite::Transaction> transaction = conn -> beginTransaction();
+	// auto dbObject = kj::heapHeld<DBObject>(createObject());
+	DBObjectBuilder object = createObject();
+	
+	// Initialize the object to an unresolved state
+	dbObject -> data.setUnresolved();
+	dbObject -> save();
+	
+	// From now on, this will keep the database object alive
+	Capability::Client importClient = kj::heap<ObjectDBClient>(dbObject.x());
+	
+	exports.put(hook.get(), dbObject -> id);
+	
+	Promise<void> exportTask = object.whenResolved()
+	.then([this, object, dbObject]() {
+		// Resolution succeeded
+		// Check if object is a dataref
+		auto asRef = object.as<DataRef>();
+		return asRef.getMetadata().ignoreResult()
+		.then([this, object, dbObject]() {
+			// Object is a dataref
+			dbObject -> data.initDataRef().setDownloading();
+			dbObject -> save();
+			
+			// Initiate download
+			return dbObject.downloadDataref()
+			.catch_([this, object, dbObject](kj::Exception& e) {
+				// Download failed
+				dbObject -> data.setDownloadFailed(toProto(e));
+				dbObject -> save();
+			});
+		}, [this, object, dbObject](kj::Exception& e) {
+			if(e.getType() == kj::Exception::UNIMPLEMENTED) {
+				// Object is not a DataRef
+				dbObject -> data.setUnknownObject();
+				dbObject -> save();
+			} else {
+				// Querying the object failed
+				// Throw to outer loop to indicate exception
+				throw e;
+			}
+		});
+	})
+	.catch_([this, object, dbObject](kj::Exception& e) {
+		// Object resolution or download failed, 
+		dbObject -> data.setException(toProto(e));
+		try {
+			dbObject -> save();
+		} catch(kj::Exception& e) {
+			// Oh well, we tried, object will now likely have to stay in limbo
+			// Fortunately, this case is ridiculously unlikely
+		}
+	})
+	.then([this, object, id = dbObject -> id]() {
+		// When the export task concludes, remove the
+		// exported hook
+		exports.remove(pHook);
+		imports.remove(dbObject -> id);
+	}).eagerlyEvaluate(nullptr);
+	
+	whenResolved.put(dbObject -> id, exportTask.fork());
+}
+
 }

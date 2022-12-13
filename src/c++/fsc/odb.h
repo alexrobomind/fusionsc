@@ -104,8 +104,62 @@ private:
 	sqlite::Statement readStatement;
 };
 
+struct ObjectDB : public kj::Refcounted {
+	using capnp::Capability;
+	using capnp::AnyPointer;
+	
+	//! Checks whether the given capability has been exported (but not yet finished processing)
+	template<typename T>
+	Maybe<T> findExport(T original);
+	
+	void exportObject(kj::StringPtr path, Capability::Client object);
+	DataRef<Capability>::Client loadObject(kj::StringPtr path);
+	
+private:
+	Maybe<Capability::Client> findExportInternal(Capability::Client cap);
+	
+	int64_t exportObject(Capability::Client cap);
+	
+	//! Clients that are currently in the process of being exported
+	std::unordered_map<ClientHook*, int64_t> exports;
+	
+	//! These promises tell us when the object we have might be worth
+	// looking into again.
+	std::unordered_map<int64_t, ForkedPromise<void>> whenResolved;
+	
+	kj::TaskSet exportTasks;
+};
+
+//! Represents an object in the object database, as well as the permission to access it
+struct DBObject : public kj::Refcounted {
+	const int64_t id;
+	
+	// Manages the object inside the object database
+	
+};
+
+struct DBExport : public DataRef<capnp::AnyPointer>::Server {
+public:
+	
+private:
+	//! Where to pass a reference to the import object 
+	Own<PromiseFulfiller<Capability::Client>> forwardFulfiller;
+	
+	void fulfill(Capability::Client target);
+	void reject(kj::Exception& exception);
+	
+	Own<ObjectDB> parent;
+};
+
 // ==================================== Inline implementation ===================================
 
 BlobReader Blob::open() { return BlobReader(*this); }
 
+template<typename T>
+Maybe<T> ObjectDB::findExport(T original) {
+	KJ_IF_MAYBE(pExp, findExportInternal(original)) {
+		return pExp.as<capnp::FromClient<T>>();
+	}
+	
+	return nullptr;
 }
