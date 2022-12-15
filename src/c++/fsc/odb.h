@@ -5,7 +5,7 @@
 #include "db.h"
 #include "compression.h"
 
-namespace fsc {
+namespace fsc { namespace odb {
 	
 struct BlobStore;
 struct Blob;
@@ -115,48 +115,49 @@ struct ObjectDB : public kj::Refcounted {
 	void exportObject(kj::StringPtr path, Capability::Client object);
 	DataRef<Capability>::Client loadObject(kj::StringPtr path);
 	
+	Object store(AnyPointer ptr);
+	
+	// If the given capability maps to an object exported (or being currently exported)
+	// by this database, return the target object
+	Maybe<DBObject> unwrap(Capability::Client cap);
+	
 private:
+	DBObject storeInternal();
+	Object wrap(DBObject);
 	Maybe<Capability::Client> findExportInternal(Capability::Client cap);
 	
 	int64_t exportObject(Capability::Client cap);
 	
 	//! Clients that are currently in the process of being exported
 	std::unordered_map<ClientHook*, int64_t> exports;
+	static_assert(false, "I think this is a bad idea given that DB objects might be mutable");
 	
 	//! These promises tell us when the object we have might be worth
 	// looking into again.
 	std::unordered_map<int64_t, ForkedPromise<void>> whenResolved;
 	
 	kj::TaskSet exportTasks;
+	
+	CapabilityServerSet<Object> wrapper;
 };
 
 //! Represents an object in the object database, as well as the permission to access it
 struct DBObject : public kj::Refcounted {
+	~DBObject();
+	
 	void load();
 	void save();
 	
-	ODBEntry::Builder data;
+	ObjectInfo::Builder info;
 	
 	Promise<void> whenUpdated();
 	
 private:
+	DBObject(ObjectDB& parent, int64_t id);
 	const int64_t id;
 	Own<ObjectDB> parent;
 	
 	friend class ObjectDB;
-};
-
-struct DBExport : public DataRef<capnp::AnyPointer>::Server {
-public:
-	
-private:
-	//! Where to pass a reference to the import object 
-	Own<PromiseFulfiller<Capability::Client>> forwardFulfiller;
-	
-	void fulfill(Capability::Client target);
-	void reject(kj::Exception& exception);
-	
-	Own<ObjectDB> parent;
 };
 
 // ==================================== Inline implementation ===================================
@@ -171,3 +172,5 @@ Maybe<T> ObjectDB::findExport(T original) {
 	
 	return nullptr;
 }
+
+}}

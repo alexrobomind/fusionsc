@@ -2,7 +2,9 @@
 
 using kj::str;
 
-namespace fsc {
+using namespace capnp;
+
+namespace fsc { namespace odb {
 	
 BlobStore::BlobStore(sqlite::Connection& connRef, kj::StringPtr tablePrefix) :
 	tablePrefix(kj::heapString(tablePrefix)),
@@ -183,10 +185,30 @@ bool BlobReader::read(kj::ArrayPtr<byte> output) {
 
 // ========================= ObjectDB ==============================
 
-DBObject ObjectDB::exportObject(Capability::Client object) {
+Object ObjectDB::store(AnyPointer ptr) {
+	static_assert(false, "Store non-capability pointers in DataRefs");
+	
+	DBObject dbObject = storeInternal(object);
+	return wrap(mv(dbObject));
+}
+
+Maybe<Own<DBObject>> ObjectDB::unwrap(Capability::Client object) {
 	// Resolve to innermost hook
+	// If any of the hooks encountered is an object hook, use that
 	Own<capnp::ClientHook> hook = capnp::ClientHook::from(kj::cp(object));
+	
+	ClientHook* inner = hook.get();
 	while(true) {
+		if(inner -> getBrand() == ObjectHook::BRAND) {
+			auto asObjectHook = static_cast<ObjectHook*>(inner);
+			return asObjectHook -> object.addRef();
+		}
+	
+		KJ_IF_MAYBE(pId, exports.find(inner)) {
+			static_assert(false, "Do we want objects to be allowed to be re-exported? Think about mutability");
+			return DBObject(*this, *pId);
+		}
+		
 		KJ_IF_MAYBE(pHook, hook -> getResolved()) {
 			hook = mv(*pHook);
 		} else {
@@ -194,53 +216,103 @@ DBObject ObjectDB::exportObject(Capability::Client object) {
 		}
 	}
 	
-	static_assert(false, "Reuse object id");
+	return nullptr;
+}
+
+static_assert(false, "Maybe I should handle folders separately?. Mixing mutable and immutable objects seems like a recipe for disaster");
+
+enum class ObjectType {
+	UNKNOWN, DATA, FOLDER
+};
+
+Promise<ObjectType> determineType(Capability::Client cap) {
+	// Check whether ObjectDB interface is supported
+	auto asObject = cap.as<Object>();
+	return asObject.getInfoRequest().send()
+	.then([](Object::GetInfoResults results) { return results.getType(); })
 	
-	// int64_t exportId = createObject();
-	// Own<DBObject> dbObject = createObject(object);
-	Maybe<sqlite::Transaction> transaction = conn -> beginTransaction();
-	// auto dbObject = kj::heapHeld<DBObject>(createObject());
+	.catch_([cap](kj::Exception& e) {
+		// If the object db interface is not supported, try to see whether the
+		// DataRef interface is
+		if(e.getType() == kj::Exception::UNIMPLEMENTED) {
+			auto asRef = cap.as<DataRef>();
+			
+			return asRef.getMetadata().ignoreResult()
+			.then([]() {
+				return Object::Type::DATA;
+			});
+		}
+		throw e;
+	}
 	
-	DBObject object = createObject();
+	// Check first if we are a DataRef
+	.then([](Object::Type t) {
+		switch(t) {
+			case Object::Type::DATA: return ObjectType::DATA;
+			case Object::Type::FOLDER: return ObjectType::FOLDER;
+			default: return ObjectType::UNKNOWN;
+		}
+	})
+	.catch_([cap](kj::Exception& e) {
+		// If any UNIMPLEMENTED exception made it through, we don't know
+		// what this is.
+		if(e.getType() == kj::Exception::UNIMPLEMENTED) {
+			return ObjectType::UNKNOWN;
+		}
+		throw e;
+	}
+}
+
+Own<DBObject> ObjectDB::storeInternal(Capability::Client object) {
+	// Check if we are trying to store one of our own objects
+	// or a running export
+	KJ_IF_MAYBE(pDBObj, unwrap(object)) {
+		return mv(*pDBObj);
+	}
 	
 	// Initialize the object to an unresolved state
-	dbObject -> data.setUnresolved();
-	dbObject -> save();
+	Own<DBObject> dbObject;
+	{
+		auto transaction = conn -> beginTransaction();
+		dbObject = createObject();
+		dbObject -> data.setUnresolved();
+		dbObject -> save();
+	}
 	
 	// From now on, this will keep the database object alive
 	Capability::Client importClient = kj::heap<ObjectDBClient>(dbObject.x());
 	
-	exports.put(hook.get(), dbObject -> id);
+	//TODO: It would probably be better to attach the export to the inner most
+	// client id.
+	exports.put(ClientHook::from(cp(object)).get(), dbObject -> id);
 	
-	Promise<void> exportTask = object.whenResolved()
-	.then([this, object, dbObject]() {
-		// Resolution succeeded
-		// Check if object is a dataref
-		auto asRef = object.as<DataRef>();
-		return asRef.getMetadata().ignoreResult()
-		.then([this, object, dbObject]() {
-			// Object is a dataref
-			dbObject -> data.initDataRef().setDownloading();
-			dbObject -> save();
-			
-			// Initiate download
-			return downloadObject(dbObject, 
-			.catch_([this, object, dbObject](kj::Exception& e) {
-				// Download failed
-				dbObject -> data.setDownloadFailed(toProto(e));
-				dbObject -> save();
-			});
-		}, [this, object, dbObject](kj::Exception& e) {
-			if(e.getType() == kj::Exception::UNIMPLEMENTED) {
-				// Object is not a DataRef
+	Promise<void> exportTask = determineType(object)
+	.then([this, object, dbObject](ObjectType type) {
+		switch(type) {
+			case ObjectType::UNKNOWN {
 				dbObject -> data.setUnknownObject();
 				dbObject -> save();
-			} else {
-				// Querying the object failed
-				// Throw to outer loop to indicate exception
-				throw e;
+				return;
 			}
-		});
+			
+			case ObjectType::DATA {
+				dbObject -> data.initDataRef().setDownloading();
+				dbObject -> save();
+				
+				// Initiate download
+				return downloadObject(dbObject, object.as<DataRef>());
+				.catch_([this, object, dbObject](kj::Exception& e) {
+					// Download failed
+					static_assert("Should this not just set the global exception?");
+					dbObject -> data.setDownloadFailed(toProto(e));
+					dbObject -> save();
+				});
+			}
+			
+			case ObjectType::FOLDER {
+				return downloadFolder(dbObject, object.as<Folder>());
+			}
+		}
 	})
 	.catch_([this, object, dbObject](kj::Exception& e) {
 		// Object resolution or download failed, 
@@ -315,56 +387,132 @@ namespace {
 	};
 }
 
-struct DBObjectRef : public DataRef<capnp::AnyPointer>::Server {
+
+//! Marker hook to indicate that a capability is derived from a database object or being exported as such
+struct ObjectHook : public ClientHook, public kj::Refcounted {
+	Own<ClientHook> inner;
+	static const uint BRAND;
+	DBObject& object;
+	
+	ObjectHook(Own<DBObject> objectIn) :
+		inner(ClientHook::from(Capability::Client(kj::heap<ObjectImpl>(*objectIn)))),
+		object(*objectIn)
+	{}
+
+	Request<AnyPointer, AnyPointer> newCall(
+		uint64_t interfaceId,
+		uint16_t methodId,
+		kj::Maybe<MessageSize> sizeHint,
+		CallHints hints
+	) override {
+		return inner -> newCall(interfaceId, methodId, mv(sizeHint), mv(hints));
+	}
+
+	VoidPromiseAndPipeline call(
+		uint64_t interfaceId,
+		uint16_t methodId,
+		kj::Own<CallContextHook>&& context,
+		CallHints hints
+	) override {
+		return inner -> newCall(interfaceId, methodId, mv(context), mv(hints));
+	}
+
+	kj::Maybe<ClientHook&> getResolved() override {
+		return *inner;
+	}
+
+	kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
+		return nullptr;
+	}
+
+	virtual kj::Own<ClientHook> addRef() override { return kj::addRef(*this); }
+
+	const void* getBrand() override { return OBJECT_CAPABILITY_BRAND; }
+
+	kj::Maybe<int> getFd() override { return nullptr; }
+}
+
+struct ObjectImpl : public Object::Server {
 	Own<DBObject> object;
 	
-	using RealObject = DBEntry::Resolved::DownloadSucceeded;
+	using StoredData = ObjectInfo::Resolved::DownloadSucceeded;
 	
-	Promise<RealObject::Reader> whenReady() {
-		auto unresolved = [this]() {
-			return object.whenUpdated().then([this]() { return whenReady(); });
-		};
-		
+	Promise<ObjectInfo::Resolved::Builder> whenReady() {		
 		auto exception = [this](capnp::rpc::Exception::Reader e) -> kj::Exception {
 			return fromProto(e);
 		};
 		
+		object -> load();
 		auto entry = object -> data;
 		switch(entry.which()) {
 			case DBEntry::UNRESOLVED:
-				return unresolved();
+				return object -> whenUpdated().then([this]() { return whenReady(); });
 			case DBEntry::EXCEPTION:
 				return exception(entry.getException);
 			case DBEntry::RESOLVED: {
-				auto resolved = entry.getResolved();
-				switch(resolved.which()) {
-					case DBEntry::Resolved::NOT_A_REF:
-						KJ_UNIMPLEMENTED("Not a DataRef");
-					case DBEntry::Resolved::DOWNLOADING:
-						return unresolved();
-					case DBEntry::Resolved::DOWNLOAD_FAILED:
-						return exception(resolved.getDownloadFailed());
-					case DBEntry::Resolved::DOWNLOAD_SUCCEEDED:
-						return READY_NOW;
-					default:
-						KJ_FAIL_REQUIRE("Unknown download state");
-				}
+				return entry.getResolved();
 			}
 			default:
 				KJ_FAIL_REQUIRE("Unknown object type");
 		}
 	}
 	
-	Promise<void> metadata(MetadataContext ctx) override {
+	Promise<Folder::Builder> whenFolder() {
+		return whenReady().then([this](ObjectInfo::Resolved::Builder resolved) {
+			if(resolved.which() != ObjectInfo::Resolved::FOLDER)
+				KJ_UNIMPLEMENTED("Not a folder");
+			
+			return resolved.getFolder();
+		});
+	}
+	
+	Promise<StoredData::Builder> whenData() {
+		return whenReady().then([this](ObjectInfo::Resolved::Builder resolved) {
+			switch(resolved.which()) {
+				case DBEntry::Resolved::DOWNLOADING:
+					return object.whenUpdated().then([this]() { return whenData(); });
+				case DBEntry::Resolved::DOWNLOAD_FAILED:
+					return exception(resolved.getDownloadFailed());
+				case DBEntry::Resolved::DOWNLOAD_SUCCEEDED:
+					return READY_NOW;
+				default:
+					KJ_UNIMPLEMENTED("Not a DataRef");
+			}
+			
+		});
+	}
+	
+	Promise<void> getType(GetTypeContext ctx) override {
 		return whenReady()
-		.then([ctx](RealObject::Reader obj) {
+		.then([this](ObjectInfo::Resolved::Reader resolved) {
+			Type type;
+			switch(resolved.which()) {
+				case ObjectInfo::Resolved::FOLDER:
+					type = Type::FOLDER;
+					break;
+				case DBEntry::Resolved::DOWNLOADING:
+				case DBEntry::Resolved::DOWNLOAD_FAILED:
+				case DBEntry::Resolved::DOWNLOAD_SUCCEEDED:
+					type = Type::DATA;
+					break;
+				default:
+					KJ_FAIL_REQUIRE("Unknown self type");
+			}
+			
+			ctx.getResults().setType(type);
+		});
+	}
+	
+	Promise<void> metadata(MetadataContext ctx) override {
+		return whenData()
+		.then([ctx](StoredData::Reader obj) {
 			ctx.initResults().setMetadata(obj.getMetadata());
 		});
 	}
 	
 	Promise<void> rawBytes(RawBytesContext ctx) override {
-		return whenReady()
-		.then([ctx](RealObject::Reader obj) {
+		return whenData()
+		.then([ctx](StoredData::Reader obj) {
 			KJ_REQUIRE(end < obj.getMetadata().getDataSize());
 			
 			auto hash = obj.getMetadata().getHash();
@@ -396,9 +544,13 @@ struct DBObjectRef : public DataRef<capnp::AnyPointer>::Server {
 		}
 	}
 	
+	Promise<void> transmit(TransmitContext) override {
+		static_assert(false, "Unimplemented");
+	}
+	
 	Promise<void> capTable(CapTableContext) override {
-		return whenReady()
-		.then([ctx](RealObject::Reader obj) {
+		return whenData()
+		.then([ctx](StoredData::Reader obj) {
 			auto tableIn = obj.getCapTable();
 			auto tableOut = ctx.initTable(tableIn.size());
 			
@@ -416,11 +568,60 @@ struct DBObjectRef : public DataRef<capnp::AnyPointer>::Server {
 			}
 		});
 	}
-	Promise<void> transmit(TransmitContext) override ;
 	
+	Promise<void> ls(LsContext ctx) override {
+		return whenFolder()
+		.then([ctx](Folder::Reader f) {
+			auto in = f.getEntries();
+			auto out = ctx.getResults().initEntries(in.size());
+			for(auto i : kj::indices(in)) {
+				out[i] = in[i].getName();
+			}
+		});
+	}
 	
+	Promise<void> getAll(GetAllContext ctx) override {
+		return whenFolder()
+		.then([ctx](Folder::Reader f) {
+			ctx.getResults().setEntries(f.getEntries);
+		});
+	}
 	
-	Promise<void> transmitPiece(
+	Promise<void> getObject(GetObjectContext ctx) override {
+		return whenFolder()
+		.then([ctx](Folder::Reader f) {
+			auto name = ctx.getParams().getName();
+			for(auto e : f.getEntries()) {
+				if(e.getName() == name) {
+					ctx.getResults().setObject(e.getRef());
+					break;
+				}
+			}
+		});
+	}
+	
+	Promise<void> setObject(GetObjectContext ctx) override {
+		return whenFolder()
+		.then([ctx](Folder::Builder f) {
+			auto name = ctx.getParams().getName();
+			auto ref = ctx.getParams().getObject();
+			
+			for(auto e : f.getEntries()) {
+				if(e.getName() == name) {
+					e.setRef(ref);
+					return;
+				}
+			}
+			
+			auto orphanage = Orphanage::getForMessageContaining(f);
+			auto newList = orphanage.newOrphan<Folder::Entry>(1);
+			newList[0].setName(name);
+			newList[1].setRef(ref);
+			
+			f.adoptEntries(orphanage.newOrphanConcat<Folder::Entry>({f.getEntries(), newList}));
+			object -> save();
+		})
+	}
 };
 
-}
+}}
