@@ -14,8 +14,8 @@ BlobStore::BlobStore(sqlite::Connection& connRef, kj::StringPtr tablePrefix) :
 		"CREATE TABLE IF NOT EXISTS ", tablePrefix, "_blobs ("
 		"  id INTEGER PRIMARY KEY,"
 		"  hash BLOB UNIQUE," // SQLite UNIQUE allows multiple NULL values
-		"  externalRefcount INTEGER,"
-		"  internalRefcount INTEGER"
+		"  externalRefcount INTEGER"
+		// "  internalRefcount INTEGER"
 		")"
 	));
 	connRef.exec(str(
@@ -36,10 +36,10 @@ BlobStore::BlobStore(sqlite::Connection& connRef, kj::StringPtr tablePrefix) :
 	
 	incRefExternal = conn->prepare(str("UPDATE ", tablePrefix, "_blobs SET externalRefcount = externalRefcount + 1 WHERE id = ?"));
 	decRefExternal = conn->prepare(str("UPDATE ", tablePrefix, "_blobs SET externalRefcount = externalRefcount - 1 WHERE id = ?"));
-	incRefInternal = conn->prepare(str("UPDATE ", tablePrefix, "_blobs SET internalRefcount = internalRefcount + 1 WHERE id = ?"));
-	decRefInternal = conn->prepare(str("UPDATE ", tablePrefix, "_blobs SET internalRefcount = internalRefcount - 1 WHERE id = ?"));
+	//incRefInternal = conn->prepare(str("UPDATE ", tablePrefix, "_blobs SET internalRefcount = internalRefcount + 1 WHERE id = ?"));
+	//decRefInternal = conn->prepare(str("UPDATE ", tablePrefix, "_blobs SET internalRefcount = internalRefcount - 1 WHERE id = ?"));
 	
-	deleteIfOrphan = conn->prepare(str("DELETE FROM ", tablePrefix, "_blobs WHERE id = ? AND externalRefcount = 0 AND internalRefcount = 0"));
+	deleteIfOrphan = conn->prepare(str("DELETE FROM ", tablePrefix, "_blobs WHERE id = ? AND externalRefcount = 0")); // AND internalRefcount = 0
 	
 	createChunk = conn->prepare(str("INSERT INTO ", tablePrefix, "_chunks (id, chunkNo, data) VALUES (?, ?, ?)"));
 }
@@ -65,7 +65,7 @@ Blob::Blob(BlobStore& parent, int64_t id) :
 	parent(parent.addRef()),
 	id(id)
 {
-	parent.incRefInternal(id);
+	KJ_REQUIRE(parent.conn -> inTransaction(), "Must be inside a transaction");
 }
 
 Blob::~Blob() {
@@ -73,8 +73,8 @@ Blob::~Blob() {
 		return;
 	
 	ud.catchExceptionsIfUnwinding([this]() {
-		parent -> decRefInternal(id);
-		parent -> deleteIfOrphan(id);
+		// parent -> decRefInternal(id);
+		// parent -> deleteIfOrphan(id);
 	});
 }
 
@@ -126,6 +126,7 @@ void BlobBuilder::write(kj::ArrayPtr<const byte> data) {
 }
 
 Blob BlobBuilder::finish() {
+	KJ_REQUIRE(parent -> conn.inTransaction(), "Must be inside transaction");
 	KJ_REQUIRE(buffer != nullptr, "Can only call BlobBuilder::finish() once");
 	
 	compressor.setInput(nullptr);
@@ -141,7 +142,7 @@ Blob BlobBuilder::finish() {
 	hashFunction -> final(hashOutput.begin());
 	
 	// We need to check for uniqueness of the target object. If the hash already exists, we return that object instead (this one will be deleted when the blob builder gets destroyed)
-	auto transaction = parent -> conn -> beginTransaction();
+	// auto transaction = parent -> conn -> beginTransaction();
 	
 	auto& findBlob = parent -> findBlob;
 	
@@ -201,16 +202,17 @@ Maybe<Own<DBObject>> ObjectDB::unwrap(Capability::Client object) {
 	while(true) {
 		if(inner -> getBrand() == ObjectHook::BRAND) {
 			auto asObjectHook = static_cast<ObjectHook*>(inner);
-			return asObjectHook -> object.addRef();
+			
+			if(asObjectHook -> object -> parent.get() == this)
+				return asObjectHook -> object.addRef();
 		}
 	
 		KJ_IF_MAYBE(pId, exports.find(inner)) {
-			static_assert(false, "Do we want objects to be allowed to be re-exported? Think about mutability");
 			return DBObject(*this, *pId);
 		}
 		
-		KJ_IF_MAYBE(pHook, hook -> getResolved()) {
-			hook = mv(*pHook);
+		KJ_IF_MAYBE(pHook, inner -> getResolved()) {
+			inner = pHook;
 		} else {
 			break;
 		}
@@ -219,51 +221,81 @@ Maybe<Own<DBObject>> ObjectDB::unwrap(Capability::Client object) {
 	return nullptr;
 }
 
-static_assert(false, "Maybe I should handle folders separately?. Mixing mutable and immutable objects seems like a recipe for disaster");
-
-enum class ObjectType {
-	UNKNOWN, DATA, FOLDER
-};
-
-Promise<ObjectType> determineType(Capability::Client cap) {
-	// Check whether ObjectDB interface is supported
-	auto asObject = cap.as<Object>();
-	return asObject.getInfoRequest().send()
-	.then([](Object::GetInfoResults results) { return results.getType(); })
+Capability::Client ObjectDB::internalize(Capability::Client object) {
+	Own<capnp::ClientHook> hook = capnp::ClientHook::from(kj::cp(object));
 	
-	.catch_([cap](kj::Exception& e) {
-		// If the object db interface is not supported, try to see whether the
-		// DataRef interface is
-		if(e.getType() == kj::Exception::UNIMPLEMENTED) {
-			auto asRef = cap.as<DataRef>();
-			
-			return asRef.getMetadata().ignoreResult()
-			.then([]() {
-				return Object::Type::DATA;
-			});
+	ClientHook* inner = hook.get();
+	while(true) {			
+		KJ_IF_MAYBE(pHook, inner -> getResolved()) {
+			inner = pHook;
+		} else {
+			break;
 		}
-		throw e;
 	}
 	
-	// Check first if we are a DataRef
-	.then([](Object::Type t) {
-		switch(t) {
-			case Object::Type::DATA: return ObjectType::DATA;
-			case Object::Type::FOLDER: return ObjectType::FOLDER;
-			default: return ObjectType::UNKNOWN;
-		}
-	})
-	.catch_([cap](kj::Exception& e) {
-		// If any UNIMPLEMENTED exception made it through, we don't know
-		// what this is.
-		if(e.getType() == kj::Exception::UNIMPLEMENTED) {
-			return ObjectType::UNKNOWN;
-		}
-		throw e;
+	if(inner -> isNull() || inner -> isError()) {
+		return mv(object);
 	}
+	
+	return download(object.as<DataRef<AnyPointer>>());
 }
 
-Own<DBObject> ObjectDB::storeInternal(Capability::Client object) {
+Promise<void> ObjectDB::downloadDatarefIntoDBObject(DataRef<AnyPointer>::Client src, DBObject& dst) {
+	using RemoteRef = DataRef<AnyPointer>;
+	using MetadataResponse = Response<RemoteRef::MetadataResults>;
+	using CapTableResponse = Response<RemoteRef::CapTableResults>;
+	
+	auto metadataPromise = src.metadataRequest().send().eagerlyEvaluate(nullptr);
+	auto capTablePromise = src.capTableRequest().send().eagerlyEvaluate(nullptr);
+	
+	// I really need coroutines
+	return metadataPromise
+	.then([src, &dst, capTablePromise = mv(capTablePromise)](MetadataResponse metadataResponse) {
+		return capTablePromise.then([src, &dst, metadataResponse = mv(metadataResponse)](CapTableResponse capTableResponse) -> Promise<void> {
+			auto refData = dst.initResolved().initDataRef();
+			
+			refData.setMetadata(metadataResponse.getMetadata());
+			
+			// Copy cap table over, wrap child objects in their own download processes
+			auto capTableIn = capTableResponse.getCapTable();
+			auto capTableOut = refData.initCapTable(capTableIn.size());
+			for(auto i : kj::indices(capTableIn)) {
+				capTableOut.set(i, downloadChildObject(*(dst.parent), capTableIn[i]);
+			}
+			
+			auto dataSize = metadataResponse.getMetadata().getDataSize();
+			
+			// Check if the data already exist in the blob db
+			{
+				auto t = db.connection -> beginTransaction();
+				
+				KJ_IF_MAYBE(pBlob, db.blobStore.find(metadataResponse.getMetadata().getDatahash())) {
+					refData.getDownloadStatus().setFinished();
+					pBlob -> incRefExternal();
+					dst.save();
+					return READY_NOW;
+				}
+			}
+			
+			refData.getDownloadStatus().setDownloading();
+				
+			auto downloadRequest = refData.transmitRequest();
+			downloadRequest.setStart(0);
+			downloadRequest.setEnd(dataSize);
+			downloadRequest.setReceiver(kj::heap<ObjectRefReceiver>(dst));
+			
+			dst.save();
+			
+			return downloadRequest.send().ignoreResult()
+			.then([this, refData, DBObject& dst]() {
+				refData.getDownloadStatus().setFinished();
+				dst.save();
+			});
+		});
+	});
+}
+
+Own<DBObject> ObjectDB::downloadInternal(Capability::Client object) {
 	// Check if we are trying to store one of our own objects
 	// or a running export
 	KJ_IF_MAYBE(pDBObj, unwrap(object)) {
@@ -279,44 +311,17 @@ Own<DBObject> ObjectDB::storeInternal(Capability::Client object) {
 		dbObject -> save();
 	}
 	
-	// From now on, this will keep the database object alive
-	Capability::Client importClient = kj::heap<ObjectDBClient>(dbObject.x());
-	
 	//TODO: It would probably be better to attach the export to the inner most
 	// client id.
 	exports.put(ClientHook::from(cp(object)).get(), dbObject -> id);
 	
-	Promise<void> exportTask = determineType(object)
-	.then([this, object, dbObject](ObjectType type) {
-		switch(type) {
-			case ObjectType::UNKNOWN {
-				dbObject -> data.setUnknownObject();
-				dbObject -> save();
-				return;
-			}
-			
-			case ObjectType::DATA {
-				dbObject -> data.initDataRef().setDownloading();
-				dbObject -> save();
-				
-				// Initiate download
-				return downloadObject(dbObject, object.as<DataRef>());
-				.catch_([this, object, dbObject](kj::Exception& e) {
-					// Download failed
-					static_assert("Should this not just set the global exception?");
-					dbObject -> data.setDownloadFailed(toProto(e));
-					dbObject -> save();
-				});
-			}
-			
-			case ObjectType::FOLDER {
-				return downloadFolder(dbObject, object.as<Folder>());
-			}
-		}
-	})
+	Promise<void> exportTask = downloadDatarefIntoDBObject(object.as<DataRef>(), *dbObject)
 	.catch_([this, object, dbObject](kj::Exception& e) {
-		// Object resolution or download failed, 
-		dbObject -> data.setException(toProto(e));
+		if(e.getType() == kj::Exception::UNIMPLEMENTED)
+			dbObject -> data.setUnknownObject();
+		else
+			dbObject -> data.setException(toProto(e));
+		
 		try {
 			dbObject -> save();
 		} catch(kj::Exception& e) {

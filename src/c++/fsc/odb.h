@@ -59,6 +59,9 @@ struct Blob {
 	inline Blob(const Blob& other) : Blob(*(other.parent), other.id) {}
 	inline Blob(Blob&& other) = default;
 	
+	void incRefExternal();
+	void decRefExternal();
+	
 	inline BlobReader open();
 	~Blob();
 	
@@ -115,22 +118,32 @@ struct ObjectDB : public kj::Refcounted {
 	void exportObject(kj::StringPtr path, Capability::Client object);
 	DataRef<Capability>::Client loadObject(kj::StringPtr path);
 	
-	Object store(AnyPointer ptr);
+	// Object store(AnyPointer ptr);
+	DataRef<AnyPointer>::Client storeGeneric(DataRef<AnyPointer>::Client);
 	
-	// If the given capability maps to an object exported (or being currently exported)
-	// by this database, return the target object
+	/** If the given capability maps to an object exported (or being currently exported)
+	  * by this database, return the target object.
+	  */
 	Maybe<DBObject> unwrap(Capability::Client cap);
+	
+	//! Initiates the download of a child object, bypassing null- and error-clients for speedup
+	Capability::Client ObjectDB::internalize(Capability::Client object);
 	
 private:
 	DBObject storeInternal();
 	Object wrap(DBObject);
 	Maybe<Capability::Client> findExportInternal(Capability::Client cap);
 	
+	//! Downloads and stores DataRef objects
+	Own<DBObject> ObjectDB::downloadInternal(Capability::Client object);
+	
+	//! Performs the download operations required to store the DataRef
+	Promise<void> downloadDatarefIntoDBObject(DataRef<AnyPointer>::Client src, DBObject& dst);
+	
 	int64_t exportObject(Capability::Client cap);
 	
 	//! Clients that are currently in the process of being exported
 	std::unordered_map<ClientHook*, int64_t> exports;
-	static_assert(false, "I think this is a bad idea given that DB objects might be mutable");
 	
 	//! These promises tell us when the object we have might be worth
 	// looking into again.

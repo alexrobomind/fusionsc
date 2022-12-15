@@ -25,23 +25,29 @@ struct ObjectInfo {
 	union {
 		unresolved @0 : Void;
 		exception @1 : Rpc.Exception;
-		
-		resolved : union {
-			downloading @2 : Void;
-			downloadFailed @3 : Rpc.Exception;
-			downloadSucceeded : group {
-				metadata @4 : Data.DataRef(AnyPointer).Metadata;
-				capTable @5 : List(ODBObject(AnyPointer));
+		dataRef : union {
+			downloadStatus : union {
+				downloading @2 : Void;
+				finished @3 : Void;
 			}
-			folder  @6 : FolderData;
-			
+			metadata @4 : Data.DataRef(AnyPointer).Metadata;
+			capTable @5 : List(ODBObject(AnyPointer));
 		}
+		folder @6 : FolderData;
 	}
 }
 
 struct ObjectEntry {
+	struct RefInfo {
+		union {
+			null @0 : Void;
+			error @1 : Rpc.Exception;
+			link @2 : Int64;
+		}
+	}
+}
 	info @0 : ObjectInfo;
-	refs @1 : List(Int64);
+	refs @1 : List(RefInfo);
 }
 
 interface Folder {
