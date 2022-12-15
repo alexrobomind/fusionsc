@@ -126,8 +126,7 @@ struct ObjectDB : public kj::Refcounted {
 	  */
 	Maybe<DBObject> unwrap(Capability::Client cap);
 	
-	//! Initiates the download of a child object, bypassing null- and error-clients for speedup
-	Capability::Client ObjectDB::internalize(Capability::Client object);
+	DataRef<AnyPointer>::Client ObjectDB::download(DataRef<AnyPointer>::Client object);
 	
 private:
 	DBObject storeInternal();

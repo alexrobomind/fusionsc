@@ -37,19 +37,6 @@ struct ObjectInfo {
 	}
 }
 
-struct ObjectEntry {
-	struct RefInfo {
-		union {
-			null @0 : Void;
-			error @1 : Rpc.Exception;
-			link @2 : Int64;
-		}
-	}
-}
-	info @0 : ObjectInfo;
-	refs @1 : List(RefInfo);
-}
-
 interface Folder {
 	ls @0 () -> (entries : List(Text));
 	getAll @1 () -> (entries : List(FolderData.Entry));

@@ -142,6 +142,13 @@ struct SQLite3PreparedStatement {
 		return execInsert();
 	}
 	
+	template<typename... Params>
+	bool query(Params... params) {
+		reset();
+		bind(params...);
+		return step();
+	]
+	
 	inline Column operator[](int i) { return column(i); }
 	inline Column begin() { return column(0); }
 	inline Column end() { return column(size()); }

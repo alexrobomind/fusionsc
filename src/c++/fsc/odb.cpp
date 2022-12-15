@@ -193,7 +193,7 @@ Object ObjectDB::store(AnyPointer ptr) {
 	return wrap(mv(dbObject));
 }
 
-Maybe<Own<DBObject>> ObjectDB::unwrap(Capability::Client object) {
+OneOf<Capability::Client, Own<DBObject>, decltype(nullptr)> ObjectDB::unwrap(Capability::Client object) {
 	// Resolve to innermost hook
 	// If any of the hooks encountered is an object hook, use that
 	Own<capnp::ClientHook> hook = capnp::ClientHook::from(kj::cp(object));
@@ -208,7 +208,7 @@ Maybe<Own<DBObject>> ObjectDB::unwrap(Capability::Client object) {
 		}
 	
 		KJ_IF_MAYBE(pId, exports.find(inner)) {
-			return DBObject(*this, *pId);
+			return kj::refcounted<DBObject>(*this, *pId);
 		}
 		
 		KJ_IF_MAYBE(pHook, inner -> getResolved()) {
@@ -218,26 +218,64 @@ Maybe<Own<DBObject>> ObjectDB::unwrap(Capability::Client object) {
 		}
 	}
 	
-	return nullptr;
+	if(inner -> isNull())
+		return nullptr;
+	}
+	
+	return mv(object);
 }
 
-Capability::Client ObjectDB::internalize(Capability::Client object) {
-	Own<capnp::ClientHook> hook = capnp::ClientHook::from(kj::cp(object));
+DataRef<AnyPointer>::Client ObjectDB::download(DataRef<AnyPointer>::Client object) {
+	auto unwrapped = unwrap(object);
 	
-	ClientHook* inner = hook.get();
-	while(true) {			
-		KJ_IF_MAYBE(pHook, inner -> getResolved()) {
-			inner = pHook;
-		} else {
-			break;
+	if(unwrapped.is<decltype(nullptr)>()) {
+		return nullptr;
+	}
+	
+	if(unwrapped.is<Own<DBObject>>()) {
+		return wrap(mv(unwrapped.get<Own<DBObject>>()));
+	}
+	
+	auto asCap = unwrapped.get<Capability::Client>();
+	Own<DBObject> dbObject = downloadInternal(asCap.as<DataRef<AnyPointer>>());
+	return wrap(mv(dbObject));
+}
+
+Own<DBObject> ObjectDB::downloadInternal(Capability::Client object) {	
+	// Initialize the object to an unresolved state
+	Own<DBObject> dbObject;
+	{
+		auto transaction = conn -> beginTransaction();
+		dbObject = createObject();
+		dbObject -> data.setUnresolved();
+		dbObject -> save();
+	}
+	
+	exports.put(ClientHook::from(cp(object)).get(), dbObject -> id);
+	
+	Promise<void> exportTask = downloadDatarefIntoDBObject(object.as<DataRef>(), *dbObject)
+	.catch_([this, object, dbObject](kj::Exception& e) {
+		if(e.getType() == kj::Exception::UNIMPLEMENTED)
+			dbObject -> data.setUnknownObject();
+		else
+			dbObject -> data.setException(toProto(e));
+		
+		try {
+			dbObject -> save();
+		} catch(kj::Exception& e) {
+			// Oh well, we tried, object will now likely have to stay in limbo
+			// Fortunately, this case is ridiculously unlikely
 		}
-	}
+	})
+	.then([this, object, id = dbObject -> id]() {
+		// When the export task concludes, remove the
+		// exported hook
+		exports.remove(pHook);
+		imports.remove(dbObject -> id);
+	}).eagerlyEvaluate(nullptr);
 	
-	if(inner -> isNull() || inner -> isError()) {
-		return mv(object);
-	}
-	
-	return download(object.as<DataRef<AnyPointer>>());
+	whenResolved.put(dbObject -> id, exportTask.fork());
+	return dbObject;
 }
 
 Promise<void> ObjectDB::downloadDatarefIntoDBObject(DataRef<AnyPointer>::Client src, DBObject& dst) {
@@ -260,7 +298,7 @@ Promise<void> ObjectDB::downloadDatarefIntoDBObject(DataRef<AnyPointer>::Client 
 			auto capTableIn = capTableResponse.getCapTable();
 			auto capTableOut = refData.initCapTable(capTableIn.size());
 			for(auto i : kj::indices(capTableIn)) {
-				capTableOut.set(i, downloadChildObject(*(dst.parent), capTableIn[i]);
+				capTableOut.set(i, download(capTableIn[i]));
 			}
 			
 			auto dataSize = metadataResponse.getMetadata().getDataSize();
@@ -295,48 +333,96 @@ Promise<void> ObjectDB::downloadDatarefIntoDBObject(DataRef<AnyPointer>::Client 
 	});
 }
 
-Own<DBObject> ObjectDB::downloadInternal(Capability::Client object) {
-	// Check if we are trying to store one of our own objects
-	// or a running export
-	KJ_IF_MAYBE(pDBObj, unwrap(object)) {
-		return mv(*pDBObj);
+void ObjectDB::deleteIfOrphan(int64_t id) {
+	KJ_REQUIRE(parent -> getRefcountAndHash.query(id), "Internal error, refcount not found");
+	if(parent -> getRefcountAndHash[0] > 0)
+		return;
+	
+	auto hash = parent -> getRefcountAndHash[1];
+	
+	// Decrease refcount on blob
+	KJ_IF_MAYBE(pBlob, blobStore -> find(hash)) {
+		pBlob -> decRefExternal();
 	}
 	
-	// Initialize the object to an unresolved state
-	Own<DBObject> dbObject;
+	// Scan outgoing refs
+	std::set<int64_t> idsToCheck;
 	{
-		auto transaction = conn -> beginTransaction();
-		dbObject = createObject();
-		dbObject -> data.setUnresolved();
-		dbObject -> save();
+		auto& getOutgoingRefs = parent -> getOutgoingRefs;
+		getOutgoingRefs.bind(id);
+		getOutgoingRefs.reset();
+		while(getOutgoingRefs.step()) {
+			auto target = getOutgoingRefs[0].asInt64();
+			parent -> decRefcount(target);
+			idsToCheck.insert(id);
+		}
 	}
 	
-	//TODO: It would probably be better to attach the export to the inner most
-	// client id.
-	exports.put(ClientHook::from(cp(object)).get(), dbObject -> id);
+	parent -> deleteObject(id);
 	
-	Promise<void> exportTask = downloadDatarefIntoDBObject(object.as<DataRef>(), *dbObject)
-	.catch_([this, object, dbObject](kj::Exception& e) {
-		if(e.getType() == kj::Exception::UNIMPLEMENTED)
-			dbObject -> data.setUnknownObject();
-		else
-			dbObject -> data.setException(toProto(e));
-		
-		try {
-			dbObject -> save();
-		} catch(kj::Exception& e) {
-			// Oh well, we tried, object will now likely have to stay in limbo
-			// Fortunately, this case is ridiculously unlikely
+	// Check if we have capabilities without refs
+	for(int64_t id : idsToCheck) {
+		deleteIfOrphan(id);
+	}
+}
+
+void DBObject::save() {
+	// All work here has to be done inside a DB transaction
+	auto t = parent -> conn.beginTransaction();
+	
+	// Clear existing references
+	parent -> clearOutgoingRefs(id);
+	
+	getInfo.reset();
+	
+	// Now we need to figure out how to serialize references. This means we need to make a new message builder
+	MallocMessageBuilder outputBuilder(info.totalSize().sizeInWords() + 1);
+	
+	// Decrease refcount of all outgoing references
+	std::set<int64_t> idsToCheck;
+	{
+		auto& getOutgoingRefs = parent -> getOutgoingRefs;
+		getOutgoingRefs.bind(id);
+		getOutgoingRefs.reset();
+		while(getOutgoingRefs.step()) {
+			auto target = getOutgoingRefs[0].asInt64();
+			parent -> decRefcount(target);
+			idsToCheck.insert(id);
 		}
-	})
-	.then([this, object, id = dbObject -> id]() {
-		// When the export task concludes, remove the
-		// exported hook
-		exports.remove(pHook);
-		imports.remove(dbObject -> id);
-	}).eagerlyEvaluate(nullptr);
+	}
 	
-	whenResolved.put(dbObject -> id, exportTask.fork());
+	// Compact info into a correctly sized message and capture the used capabilities
+	BuilderCapabilityTable capTable;
+	AnyPointer::Builder outputRoot = capTable.imbue(outputBuilder.initRoot<AnyPointer>());
+	outputRoot.setAs(info);
+	
+	// Serialize the message into the database
+	kj::Array<byte> flatInfo = messageToflatArray(outputBuilder).asBytes();
+	parent -> setInfo(id, flatInfo);
+	
+	// Iterate through the captured capabilities and store the links in the appropriate DB table
+	kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> capTableData = capTable.getTable();
+	for(auto i : kj::indices(capTableData)) {
+		KJ_IF_MAYBE(pHook, capTableData[i]) {
+			Capability::Client client(pHook -> addRef());
+			auto unwrapped = unwrap(client);
+			
+			KJ_REQUIRE(!unwrapped.is<Capability::Client>(), "Only immediate DB references and null capabilities may be used inside DBObject.");
+			if(unwrapped.is<Own<DBObject>>()) {
+				auto& target = unwrapped.as<Own<DBObject>>();
+				parent -> insertRef(id, i, target.id);
+				parent -> incRefcount(target.id);
+				continue;
+			}
+		}
+		
+		parent -> insertRef(id, i, nullptr);
+	}
+	
+	// Check if we have capabilities without refs
+	for(int64_t id : idsToCheck) {
+		parent -> deleteIfOrphan(id);
+	}		
 }
 
 namespace {
