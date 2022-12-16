@@ -12,6 +12,14 @@ $Java.outerClassname("ODB");
 using Geometry = import "geometry.capnp";
 using Data = import "data.capnp";
 
+FolderEntry {
+	name @0 : Text;
+	union {
+		ref @1 : DataRef<AnyPointer>();
+		folder @2 : Folder;
+	}
+};
+
 struct FolderData {
 	struct Entry {
 		name @0 : Text;
@@ -39,12 +47,15 @@ struct ObjectInfo {
 
 interface Folder {
 	ls @0 () -> (entries : List(Text));
-	getAll @1 () -> (entries : List(FolderData.Entry));
-	getObject @2 (name : Text) -> (object : Object(AnyPointer));
-	setObject @3 (name : Text, object : AnyPointer) -> ();
+	getAll @1 () -> (entries : List(FolderEntry));
+	getEntry @2 (name : Text) -> FolderEntry;
+	putEntry @3 FolderEntry -> ();
+	
+	mkdir @4 (name : Text) -> (folder : Folder);
+	store @5 (name : Text, ref : DataRef<AnyPointer>) -> ();
 }
 
-interface Object extends(Data.DataRef(AnyPointer), Folder {
+interface Object extends(Data.DataRef(AnyPointer), Folder) {
 	enum Type { data @0; folder @1; }
 	
 	getInfo @0 : () -> (type : Type);

@@ -18,12 +18,24 @@ struct SQLite3Blob;
 struct SQLite3Savepoint;
 struct SQLite3Transaction;
 
+enum class SQLite3Type;
+
 namespace sqlite {
 	using Connection = SQLite3Connection;
 	using Statement = SQLite3PreparedStatement;
 	using Blob = SQLite3Blob;
 	using Savepoint = SQLite3Savepoint;
 	using Transaction = SQLite3Transaction;
+	using RootTransaction = SQLite3RootTransaction;
+	using Type = SQLite3Type;
+}
+
+enum class SQLite3Type {
+	INTEGER = 1,
+	FLOAT = 2,
+	TEXT = 3,
+	BLOB = 4,
+	NULLTYPE = 5
 }
 
 Own<SQLite3Connection> openSQLite3(kj::StringPtr filename);
@@ -45,7 +57,9 @@ struct SQLite3Connection : private kj::Refcounted {
 	int64_t nRowsModified();
 	
 	bool inTransaction();
+	
 	SQLite3Transaction beginTransaction(kj::StringPtr name = nullptr);
+	SQLite3RootTransaction beginRootTransaction(bool immediate);
 	
 private:
 	uint64_t transactionUID = 0; //< Unique ID counter for transactions
@@ -74,6 +88,8 @@ struct SQLite3PreparedStatement {
 		operator double();
 		operator int();
 		operator int64_t();
+		
+		SQLite3Type type();
 		
 		inline kj::ArrayPtr<const byte> asBlob() { return operator kj::ArrayPtr<const byte>(); }
 		inline double asDouble() { return operator double(); }
@@ -117,7 +133,23 @@ struct SQLite3PreparedStatement {
 	SQLite3PreparedStatement(SQLite3PreparedStatement&&) = default;
 	SQLite3PreparedStatement& operator=(SQLite3PreparedStatement&&) = default;
 	
-	bool step();
+	inline Param param(int i) { return Param {*this, i}; }
+	inline Column column(int i) { KJ_REQUIRE(state == ACTIVE); return Column {*this, i}; }
+	
+	inline Param operator[](int i) { return param(i); }
+	
+	struct Query {
+		SQLite3PreparedStatement& parent;
+		bool next();
+		
+		Query(SQLite3PreparedStatement& parent);
+		~Query();
+	
+		inline Column operator[](int i) { return parent.column(i); }
+		inline Column begin() { return parent.column(0); }
+		inline Column end() { return parent.column(parent.size()); }
+	};
+	
 	void reset();
 	
 	int size();
@@ -143,18 +175,10 @@ struct SQLite3PreparedStatement {
 	}
 	
 	template<typename... Params>
-	bool query(Params... params) {
-		reset();
+	Query query(Params... params) {
 		bind(params...);
-		return step();
+		return Query(*this);
 	]
-	
-	inline Column operator[](int i) { return column(i); }
-	inline Column begin() { return column(0); }
-	inline Column end() { return column(size()); }
-	
-	inline Param param(int i) { return Param {*this, i}; }
-	inline Column column(int i) { return Column {*this, i}; }
 	
 	sqlite3_stmt * handle;
 	Own<SQLite3Connection> parent;
@@ -162,8 +186,9 @@ struct SQLite3PreparedStatement {
 private:
 	enum {
 		ACTIVE,
-		DONE
-	} state = ACTIVE;
+		DONE,
+		READY
+	} state = READY;
 	
 	void check(int retCode);
 	
@@ -173,6 +198,8 @@ private:
 			0, (this->param(indices + 1) = params, 1)...
 		};
 	}
+	
+	private bool step();
 };
 
 /** Creates and maintains a savepoint. The savepoint is released without rollback on destruction.
@@ -212,6 +239,24 @@ struct SQLite3Transaction {
 private:
 	SQLite3Savepoint savepoint;
 	kj::UnwindDetector ud;
+};
+
+/** Transaction class.
+ *
+ * Creates and maintains a savepoint that records all sql statements. Upon destruction, the savepoint
+ * will be released if the object is destroyed normally, but will be rolled back upon an exception. 
+ */
+struct SQLite3RootTransaction {
+	inline SQLite3RootTransaction(SQLite3Connection& conn);
+	~SQLite3RootTransaction();
+	
+	void commit();
+	void rollback();
+	
+private:
+	Own<SQLite3Connection> conn;
+	kj::UnwindDetector ud;
+	bool active = true;
 };
 
 }

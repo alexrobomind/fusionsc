@@ -12,6 +12,9 @@ struct Blob;
 struct BlobReader;
 struct BlobBuilder;
 
+struct ObjectDB;
+struct DBObject;
+
 struct BlobStore : public kj::Refcounted {
 	using Statement = sqlite::Statement;
 	
@@ -62,6 +65,8 @@ struct Blob {
 	void incRefExternal();
 	void decRefExternal();
 	
+	kj::Array<const byte> hash();
+	
 	inline BlobReader open();
 	~Blob();
 	
@@ -111,50 +116,46 @@ struct ObjectDB : public kj::Refcounted {
 	using capnp::Capability;
 	using capnp::AnyPointer;
 	
-	//! Checks whether the given capability has been exported (but not yet finished processing)
-	template<typename T>
-	Maybe<T> findExport(T original);
+	//! Determines whether the given capability is outside the database, pointing to a DB object, or null
+	OneOf<Capability::Client, Own<DBObject>, decltype(nullptr)> unwrap(Capability::Client cap);
 	
-	void exportObject(kj::StringPtr path, Capability::Client object);
-	DataRef<Capability>::Client loadObject(kj::StringPtr path);
+	//! Wraps a DB object in a capability exposing its functionality.
+	Object::Client wrap(Own<DBObject> obj);
 	
-	// Object store(AnyPointer ptr);
-	DataRef<AnyPointer>::Client storeGeneric(DataRef<AnyPointer>::Client);
-	
-	/** If the given capability maps to an object exported (or being currently exported)
-	  * by this database, return the target object.
-	  */
-	Maybe<DBObject> unwrap(Capability::Client cap);
-	
-	DataRef<AnyPointer>::Client ObjectDB::download(DataRef<AnyPointer>::Client object);
+	//! Checks the reference count of an object and deletes it is 0.
+	void deleteIfOrphan(int64_t id);
 	
 private:
-	DBObject storeInternal();
-	Object wrap(DBObject);
-	Maybe<Capability::Client> findExportInternal(Capability::Client cap);
+	//! Replaces a DataRef with a variant pointing into the database
+	// Note: This method is private because the database does not support dangling objects. Therefore, any creation of such pointers
+	// must be put in a transaction with their integration into the file hierarchy. 
+	DataRef<AnyPointer>::Client download(DataRef<AnyPointer>::Client object);
 	
-	//! Downloads and stores DataRef objects
-	Own<DBObject> ObjectDB::downloadInternal(Capability::Client object);
+	//! Creates a new slot for a DataRef and initiates a download task
+	Own<DBObject> startDownloadTask(DataRef<AnyPointer>::Client object);
 	
 	//! Performs the download operations required to store the DataRef
-	Promise<void> downloadDatarefIntoDBObject(DataRef<AnyPointer>::Client src, DBObject& dst);
-	
-	int64_t exportObject(Capability::Client cap);
+	Promise<void> downloadTask(DataRef<AnyPointer>::Client src, DBObject& dst);
 	
 	//! Clients that are currently in the process of being exported
-	std::unordered_map<ClientHook*, int64_t> exports;
+	std::unordered_map<ClientHook*, int64_t> activeDownloads;
 	
 	//! These promises tell us when the object we have might be worth
 	// looking into again.
 	std::unordered_map<int64_t, ForkedPromise<void>> whenResolved;
 	
-	kj::TaskSet exportTasks;
+	//! Creates a new connection to the same database
+	Own<sqlite::Connection> forkConnection(bool readOnly = true);
+		
+	kj::TaskSet downloadTasks;
 	
-	CapabilityServerSet<Object> wrapper;
+	Own<BlobStore> blobStore;
+	Own<sqlite::Connection> conn;
 };
 
 //! Represents an object in the object database, as well as the permission to access it
 struct DBObject : public kj::Refcounted {
+	DBObject(ObjectDB& parent, int64_t id, const CreationToken&);
 	~DBObject();
 	
 	void load();
@@ -165,10 +166,12 @@ struct DBObject : public kj::Refcounted {
 	Promise<void> whenUpdated();
 	
 private:
-	DBObject(ObjectDB& parent, int64_t id);
 	const int64_t id;
 	Own<ObjectDB> parent;
 	
+	Own<MallocMessageBuilder> infoHolder;
+	
+	struct CreationToken {};
 	friend class ObjectDB;
 };
 

@@ -186,11 +186,368 @@ bool BlobReader::read(kj::ArrayPtr<byte> output) {
 
 // ========================= ObjectDB ==============================
 
+namespace {
+	template<typename T>
+	auto withODBBackoff(T func) {
+		return withBackoff(10 * kj::MILLISECONDS, 5 * kj::MINUTES, 2, mv(func));
+	}
+	
+	KJ_NORETURN void objectDeleted() {
+		kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "Object was deleted from database"));
+	}
+	
+	struct TransmissionProcess {
+		constexpr static inline size_t CHUNK_SIZE = 1024 * 1024;
+		
+		BlobReader reader;
+		
+		DataRef<capnp::AnyPointer>::Receiver::Client receiver;
+		size_t start;
+		size_t end;
+		
+		Array<byte> buffer;
+		
+		TransmissionProcess(BlobReader&& reader, DataRef<capnp::AnyPointer>::Receiver::Client receiver, size_t start, size_t end) :
+			reader(mv(reader)),
+			receiver(mv(receiver)),
+			buffer(kj::heapArray<byte>(CHUNK_SIZE)),
+			start(start), end(end)
+		{
+			KJ_REQUIRE(end >= start);
+		}
+		
+		Promise<void> run() {
+			auto request = receiver.beginRequest();
+			request.setNumBytes(end - start);
+			return request.send().ignoreResult().then([this, start]() { return transmit(start); });
+		}
+		
+		Promise<void> transmit(size_t chunkStart) {			
+			// Check if we are done transmitting
+			if(chunkStart >= end)
+				return receiver.doneRequest().send().ignoreResult();
+			
+			auto slice = chunkStart + CHUNK_SIZE <= end ? : buffer.asPtr() : buffer.slice(0, end - chunkStart);
+			reader.read(slice);
+			KJ_REQUIRE(reader.remainingOut() == 0, "Buffer should be filled completely");
+			
+			// Do a transmission
+			auto request = receiver.receiveRequest();
+			
+			if(slice.size() % 8 == 0) {
+				// Note: This is safe because we keep this object alive until the transmission
+				// succeeds or fails
+				auto orphanage = capnp::Orphanage::getForMessageContaining((DataRef<capnp::AnyPointer>::Receiver::ReceiveParams::Builder) request);
+				auto externalData = orphanage.referenceExternalData(slice);
+				request.adoptData(mv(externalData));
+			} else {
+				request.setData(slice);
+			}
+			
+			return request.send().then([this, chunkEnd = chunkStart + slice.size()]() { return transmit(chunkEnd); });
+		}
+	};
+	
+	struct TransmissionReceiver : public DataRef<AnyPointer>::Receiver::Server {
+		Own<BlobBuilder> builder;
+		Own<DBObject> parent;
+		
+		TransmissionReceiver(DBObject& obj) :
+			parent(obj.addRef())
+		{}
+		
+		void begin(BeginContext ctx) {
+			return withODBBackoff([this]() {
+				// Always grab the write lock before doing anything to fail fast
+				auto t = parent -> parent -> conn -> beginRootTransaction(true);
+			
+				builder = kj::heap<BlobBuilder>(parent -> parent -> blobStore);
+			});
+		}
+		
+		void receive(ReceiveContext ctx) {
+			return withODBBackoff([this, ctx]() {
+				// Always grab the write lock before doing anything to fail fast
+				auto t = parent -> parent -> conn -> beginRootTransaction(true);
+				builder -> write(ctx.getParams().getData());
+			});
+		}
+		
+		void done(DoneContext ctx) {
+			return withODBBackoff([this]() {
+				// Always grab the write lock before doing anything to fail fast
+				auto t = parent -> parent -> conn -> beginRootTransaction(true);
+				
+				Blob blob = builder -> finish();
+				
+				obj.load();
+				obj.getDataref().getMetadata().setDataHash(blob.hash());
+				obj.save();
+				blob.incRefExternal();
+			});
+		}
+	};
+	
+	//! Marker hook to indicate that a capability is derived from a database object or being exported as such
+	struct ObjectHook : public ClientHook, public kj::Refcounted {
+		Own<ClientHook> inner;
+		static const uint BRAND;
+		DBObject& object;
+		
+		ObjectHook(Own<DBObject> objectIn) :
+			inner(ClientHook::from(Capability::Client(kj::heap<ObjectImpl>(*objectIn)))),
+			object(*objectIn)
+		{}
+
+		Request<AnyPointer, AnyPointer> newCall(
+			uint64_t interfaceId,
+			uint16_t methodId,
+			kj::Maybe<MessageSize> sizeHint,
+			CallHints hints
+		) override {
+			return inner -> newCall(interfaceId, methodId, mv(sizeHint), mv(hints));
+		}
+
+		VoidPromiseAndPipeline call(
+			uint64_t interfaceId,
+			uint16_t methodId,
+			kj::Own<CallContextHook>&& context,
+			CallHints hints
+		) override {
+			return inner -> newCall(interfaceId, methodId, mv(context), mv(hints));
+		}
+
+		kj::Maybe<ClientHook&> getResolved() override {
+			return *inner;
+		}
+
+		kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
+			return nullptr;
+		}
+
+		virtual kj::Own<ClientHook> addRef() override { return kj::addRef(*this); }
+
+		const void* getBrand() override { return OBJECT_CAPABILITY_BRAND; }
+
+		kj::Maybe<int> getFd() override { return nullptr; }
+	}
+
+	struct ObjectImpl : public Object::Server {
+		Own<DBObject> object;
+		
+		using StoredData = ObjectInfo::Resolved::DownloadSucceeded;
+		
+		//! Waits until this object has settled into a usable state
+		Promise<void> whenReady() {
+			return withODBackoff([this]() {
+				object -> load(); 
+				auto info = object -> info;
+				switch(info.which()) {
+					case ObjectInfo::UNRESOLVED:
+						return object -> whenUpdated().then([this]() { return whenReady(); });
+					case ObjectInfo::EXCEPTION:
+						return fromProto(info.getException());
+						
+					default:
+						return READY_NOW;
+				});
+				
+				return info.getFolder();
+			})
+		}
+		
+		Promise<void> whenDownloadReady() {
+			return whenReady()
+			.then([this}() {
+				return withODBBackoff([this]() {		
+					switch(checkRef().getDownloadStatus()) {
+						case ObjectInfo::DataRef::DOWNLOADING:
+							return object -> whenUpdated().then([this]() { return whenDownloadReady(); });
+						case ObjectInfo::DataRef::FINISHED:
+							return READY_NOW;
+					}
+				});
+			});
+		}
+		
+		ObjectInfo::Folder::Builder checkFolder() {
+			if(object -> info.which() != ObjectInfo::FOLDER)
+				KJ_UNIMPLEMENTED("This database object is not a folder");
+		}
+		
+		ObjectInfo::DataRef::Builder checkRef() {
+			if(object -> info.which() != ObjectInfo::DATA_REF)
+				KJ_UNIMPLEMENTED("This database object is not a DataRef");
+		}
+		
+		Promise<void> getType(GetTypeContext ctx) override {
+			return whenReady()
+			.then([this](ObjectInfo::Resolved::Reader resolved) {
+				Type type;
+				auto info = object -> info;
+				
+				switch(info.which()) {
+					case ObjectInfo::FOLDER:
+						type = Type::FOLDER;
+						break;
+					case ObjectInfo::DATA_REF:
+						type = Type::DATA;
+						break;
+					default:
+						KJ_FAIL_REQUIRE("Internal error");
+				});
+				
+				ctx.getResults().setType(type);
+			});
+		}
+		
+		Promise<void> metadata(MetadataContext ctx) override {
+			// The metadata table is only ready once the hash is verified
+			return whenDownloadReady()
+			.then([this, ctx]() {
+				ctx.initResults().setMetadata(checkRef().getMetadata());
+			});
+		}
+		
+		Promise<void> capTable(CapTableContext) override {
+			return whenReady()
+			.then([this, ctx]() {
+				return withODBBackoff([this, ctx]() {
+					auto t = object -> parent -> conn -> beginTransaction();
+					ctx.getResults().setCapTable(checkRef().getCapTable());
+				});
+			});
+		}
+		
+		Promise<void> rawBytes(RawBytesContext ctx) override {
+			return whenDownloadReady()
+			.then([this, ctx]() {
+				return withODBBackoff([this, ctx]() {
+					auto t = object -> parent -> readConn -> beginTransaction();
+					
+					auto refInfo = checkRef();
+					KJ_REQUIRE(end < refInfo.getMetadata().getDataSize());
+					
+					auto hash = refInfo.getMetadata().getDataHash();
+					KJ_IF_MAYBE(pBlob, object -> parent -> blobDB.find(hash)) {
+						auto buffer = kj::heapArray<byte>(8 * 1024 * 1024);
+						reader = obj.read();
+						
+						const uint64_t start = ctx.getParams().getStart();
+						const uint64_t end = ctx.getParams().getEnd();
+						KJ_REQUIRE(end >= start);
+						
+						// Wind forward the stream until we hit the target point
+						uint64_t windRemaining = start;
+						while(true) {
+							if(remaing >= buffer.size()) {
+								reader.read(buffer);
+								windRemaining -= buffer.size();
+							} else {
+								reader.read(buffer.slice(0, windRemaining));
+								break;
+							}
+						}
+						
+						auto data = ctx.getResults().initData(end - start);
+						obj.read(data);
+					} else {
+						objectDeleted();
+					}
+				});
+			}
+		}
+		
+		Promise<void> transmit(TransmitContext) override {
+			return whenDownloadReady()
+			.then([this, ctx]() {
+				return withODBBackoff([this, ctx]() {
+					auto params = ctx.getParams();
+					
+					// Since we preparing a long-running op, fork the blob store so that our main connection doesn't get blocked
+					auto forkedStore = kj::refcounted<BlobStore>(forkConnection(true), tablePrefix);
+					auto forkedTransaction = forkedStore -> conn -> beginTransaction();
+					
+					// Note: Read operations can still fail					
+					KJ_IF_MAYBE(pBlob, object -> parent -> blobStore.find(checkRef().getMetadata().getDataHash())) {
+						auto reader = pBlob -> open();
+						auto transProc = heapHeld<TransmissionProcess>(params.getReceiver(), params.getBegin(), params.getEnd());
+						return transProc.run().attach(mv(forkedStore), mv(forkedTransaction));
+					} else {
+						objectDeleted();
+					}
+				});
+			});
+		}
+		
+		Promise<void> ls(LsContext ctx) override {
+			return whenFolder()
+			.then([ctx](Folder::Reader f) {
+				auto in = f.getEntries();
+				auto out = ctx.getResults().initEntries(in.size());
+				for(auto i : kj::indices(in)) {
+					out[i] = in[i].getName();
+				}
+			});
+		}
+		
+		Promise<void> getAll(GetAllContext ctx) override {
+			return whenFolder()
+			.then([ctx](Folder::Reader f) {
+				ctx.getResults().setEntries(f.getEntries);
+			});
+		}
+		
+		Promise<void> getObject(GetObjectContext ctx) override {
+			return whenFolder()
+			.then([ctx](Folder::Reader f) {
+				auto name = ctx.getParams().getName();
+				for(auto e : f.getEntries()) {
+					if(e.getName() == name) {
+						ctx.getResults().setObject(e.getRef());
+						break;
+					}
+				}
+			});
+		}
+		
+		Promise<void> setObject(GetObjectContext ctx) override {
+			return whenFolder()
+			.then([ctx](Folder::Builder f) {
+				auto name = ctx.getParams().getName();
+				auto ref = ctx.getParams().getObject();
+				
+				for(auto e : f.getEntries()) {
+					if(e.getName() == name) {
+						e.setRef(ref);
+						return;
+					}
+				}
+				
+				auto orphanage = Orphanage::getForMessageContaining(f);
+				auto newList = orphanage.newOrphan<Folder::Entry>(1);
+				newList[0].setName(name);
+				newList[1].setRef(ref);
+				
+				f.adoptEntries(orphanage.newOrphanConcat<Folder::Entry>({f.getEntries(), newList}));
+				object -> save();
+			})
+		}
+	};
+}
+
 Object ObjectDB::store(AnyPointer ptr) {
 	static_assert(false, "Store non-capability pointers in DataRefs");
 	
 	DBObject dbObject = storeInternal(object);
 	return wrap(mv(dbObject));
+}
+
+Capability::Client wrap(Own<DBObject> object) {
+	Capability::Client innerClient(kj::heap<ObjectImpl>(mv(object)));
+	
+	Own<ClientHook> wrapper = kj::heap<ObjectHook>(ClientHook::from(mv(innerClient)));
+	return Capability::Client(mv(wrapper));
 }
 
 OneOf<Capability::Client, Own<DBObject>, decltype(nullptr)> ObjectDB::unwrap(Capability::Client object) {
@@ -236,14 +593,14 @@ DataRef<AnyPointer>::Client ObjectDB::download(DataRef<AnyPointer>::Client objec
 		return wrap(mv(unwrapped.get<Own<DBObject>>()));
 	}
 	
-	return withBackoff(10 * kj::MILLISECONDS, 5 * kj::MINUTES, 2, [unwrapped = mv(unwrapped), this]() {
+	return withODBBackoff([unwrapped = mv(unwrapped), this]() {
 		auto asCap = unwrapped.get<Capability::Client>();
-		Own<DBObject> dbObject = downloadInternal(asCap.as<DataRef<AnyPointer>>());
+		Own<DBObject> dbObject = startDownloadTask(asCap.as<DataRef<AnyPointer>>());
 		return wrap(mv(dbObject));
 	}).attach(thisCap());
 }
 
-Own<DBObject> ObjectDB::downloadInternal(Capability::Client object) {	
+Own<DBObject> ObjectDB::startDownloadTask(DataRef<AnyPointer>::Client object) {	
 	// Initialize the object to an unresolved state
 	Own<DBObject> dbObject;
 	{
@@ -256,14 +613,14 @@ Own<DBObject> ObjectDB::downloadInternal(Capability::Client object) {
 	// Remember that we are downloading this capability into the given address
 	// This will prevent starting double-downloads until the hash is actually
 	// present in our blob db.
-	exports.put(ClientHook::from(cp(object)).get(), dbObject -> id);
+	activeDownloads.put(ClientHook::from(cp(object)).get(), dbObject -> id);
 	
 	// Start the download task
-	ForkedPromise<void> exportTask = downloadDatarefIntoDBObject(object.as<DataRef>(), *dbObject)
+	ForkedPromise<void> exportTask = downloadTask(object.as<DataRef>(), *dbObject)
 	
 	// If the download fails, store the failure
 	.catch_([this, object, dbObject](kj::Exception& e) {
-		return withBackoff(10 * kj::MILLISECONDS, 5 * kj::MINUTES, 2, [this, e]() {
+		return withODBBackoff([this, e]() {
 			if(e.getType() == kj::Exception::UNIMPLEMENTED)
 				dbObject -> data.setUnknownObject();
 			else
@@ -278,18 +635,18 @@ Own<DBObject> ObjectDB::downloadInternal(Capability::Client object) {
 	
 	// Remove exported hook after conclusion
 	.then([this, object, id = dbObject -> id]() {
-		exports.remove(pHook);
+		activeDownloads.remove(pHook);
 		whenResolved.remove(dbObject -> id);
 	})
 	.fork();
 	
 	whenResolved.put(dbObject -> id, exportTask.addBranch());
-	exportTasks.add(exportTask.addBranch());
+	downloadTasks.add(exportTask.addBranch());
 	
 	return dbObject;
 }
 
-Promise<void> ObjectDB::downloadDatarefIntoDBObject(DataRef<AnyPointer>::Client src, DBObject& dst) {
+Promise<void> ObjectDB::downloadTask(DataRef<AnyPointer>::Client src, DBObject& dst) {
 	using RemoteRef = DataRef<AnyPointer>;
 	using MetadataResponse = Response<RemoteRef::MetadataResults>;
 	using CapTableResponse = Response<RemoteRef::CapTableResults>;
@@ -302,12 +659,13 @@ Promise<void> ObjectDB::downloadDatarefIntoDBObject(DataRef<AnyPointer>::Client 
 	return metadataPromise
 	.then([src, &dst, capTablePromise = mv(capTablePromise)](MetadataResponse metadataResponse) {
 	return capTablePromise.then([src, &dst, metadataResponse = mv(metadataResponse)](CapTableResponse capTableResponse) {
-	return withBackoff(10 * kj::MILLISECONDS, 5 * kj::MINUTES, 2, [src, &dst, metadataResponse = mv(metadataResponse), capTableResponse = mv(capTableResponse)]() -> Promise<void> {
+	return withBackoff([src, &dst, metadataResponse = mv(metadataResponse), capTableResponse = mv(capTableResponse)]() -> Promise<void> {
 		auto t = db.connection -> beginTransaction();
 		
 		auto refData = dst.initResolved().initDataRef();
 		
 		refData.setMetadata(metadataResponse.getMetadata());
+		refData.getMetadata().setDataHash(nullptr);
 		
 		// Copy cap table over, wrap child objects in their own download processes
 		auto capTableIn = capTableResponse.getCapTable();
@@ -333,13 +691,13 @@ Promise<void> ObjectDB::downloadDatarefIntoDBObject(DataRef<AnyPointer>::Client 
 		auto downloadRequest = refData.transmitRequest();
 		downloadRequest.setStart(0);
 		downloadRequest.setEnd(dataSize);
-		downloadRequest.setReceiver(kj::heap<ObjectRefReceiver>(dst));
+		downloadRequest.setReceiver(kj::heap<TransmissionReceiver>(dst));
 		
 		dst.save();
 		
 		return downloadRequest.send().ignoreResult()
 		.then([this, refData, &dst]() {
-			return withBackoff(10 * kj::MILLISECONDS, 5 * kj::MINUTES, 2, [this, refData, &dst]() {
+			return withBackoff([this, refData, &dst]() {
 				refData.getDownloadStatus().setFinished();
 				dst.save();
 			});
@@ -386,12 +744,10 @@ void DBObject::save() {
 	// All work here has to be done inside a DB transaction
 	auto t = parent -> conn.beginTransaction();
 	
-	getInfo.reset();
-	
 	// Now we need to figure out how to serialize references. This means we need to make a new message builder
 	MallocMessageBuilder outputBuilder(info.totalSize().sizeInWords() + 1);
 	
-	// Decrease refcount of all outgoing references
+	// Decrease refcount of all previous outgoing references
 	std::set<int64_t> idsToCheck;
 	{
 		auto& getOutgoingRefs = parent -> getOutgoingRefs;
@@ -441,294 +797,39 @@ void DBObject::save() {
 	}		
 }
 
-namespace {
-	struct TransmissionProcess {
-		constexpr static inline size_t CHUNK_SIZE = 1024 * 1024;
+void DBObject::load() {
+	// All work here has to be done inside a DB transaction
+	auto t = parent -> conn.beginTransaction();
+	
+	KJ_REQUIRE(getInfo.query(id), "Object not present in database");
+	
+	auto heapBuffer = bytesToWords(kj::heapArray<const byte>(getInfo[0].asBlob()));
+	FlatArrayMessageReader reader(heapBuffer);
+	
+	kj::Vector<Maybe<Own<ClientHook>>> rawCapTable;
+	
+	parent -> getRefs.reset();
+	parent -> getRefs.bind(id);
+	while(parent -> getRefs.step()) {
+		auto col = parent -> getRefs[0];
 		
-		BlobReader reader;
-		
-		DataRef<capnp::AnyPointer>::Receiver::Client receiver;
-		size_t start;
-		size_t end;
-		
-		Array<byte> buffer;
-		
-		TransmissionProcess(DataRef<capnp::AnyPointer>::Receiver::Client receiver, size_t start, size_t end) :
-			receiver(mv(receiver)),
-			buffer(kj::heapArray<byte>(CHUNK_SIZE)),
-			start(start), end(end)
-		{
-			KJ_REQUIRE(end >= start);
+		if(col.type() == sqlite::Type::NULLTYPE) {
+			rawCapTable.add(nullptr);
+			continue;
 		}
 		
-		Promise<void> run() {
-			auto request = receiver.beginRequest();
-			request.setNumBytes(end - start);
-			return request.send().ignoreResult().then([this, start]() { return transmit(start); });
-		}
-		
-		Promise<void> transmit(size_t chunkStart) {			
-			// Check if we are done transmitting
-			if(chunkStart >= end)
-				return receiver.doneRequest().send().ignoreResult();
-			
-			auto slice = chunkStart + CHUNK_SIZE <= end ? : buffer.asPtr() : buffer.slice(0, end - chunkStart);
-			reader.read(slice);
-			KJ_REQUIRE(reader.remainingOut() == 0, "Buffer should be filled completely");
-			
-			// Do a transmission
-			auto request = receiver.receiveRequest();
-			
-			if(slice.size() % 8 == 0) {
-				// Note: This is safe because we keep this object alive until the transmission
-				// succeeds or fails
-				auto orphanage = capnp::Orphanage::getForMessageContaining((DataRef<capnp::AnyPointer>::Receiver::ReceiveParams::Builder) request);
-				auto externalData = orphanage.referenceExternalData(slice);
-				request.adoptData(mv(externalData));
-			} else {
-				request.setData(slice);
-			}
-			
-			return request.send().then([this, chunkEnd = chunkStart + slice.size()]() { return transmit(chunkEnd); });
-		}
-	};
+		int64_t id = parent -> getRefs[0];
+		auto dbObject = kj::heap<DBObject>(*parent, id, CreationToken());
+		rawCapTable.add(ClientHook::from(wrap(mv(dbObject))));
+	}
+	
+	ReaderCapabilityTable capTable(rawCapTable.releaseAsArray());
+	auto root = capTable.imbue(reader.getRoot<ObjectInfo>());
+	
+	infoHolder = kj::heap<MallocMessageBuilder>(root.totalSize().sizeInWords() + 1);
+	infoHolder.setRoot(root);
+	
+	info = infoHolder.getRoot<ObjectInfo>();
 }
-
-
-//! Marker hook to indicate that a capability is derived from a database object or being exported as such
-struct ObjectHook : public ClientHook, public kj::Refcounted {
-	Own<ClientHook> inner;
-	static const uint BRAND;
-	DBObject& object;
-	
-	ObjectHook(Own<DBObject> objectIn) :
-		inner(ClientHook::from(Capability::Client(kj::heap<ObjectImpl>(*objectIn)))),
-		object(*objectIn)
-	{}
-
-	Request<AnyPointer, AnyPointer> newCall(
-		uint64_t interfaceId,
-		uint16_t methodId,
-		kj::Maybe<MessageSize> sizeHint,
-		CallHints hints
-	) override {
-		return inner -> newCall(interfaceId, methodId, mv(sizeHint), mv(hints));
-	}
-
-	VoidPromiseAndPipeline call(
-		uint64_t interfaceId,
-		uint16_t methodId,
-		kj::Own<CallContextHook>&& context,
-		CallHints hints
-	) override {
-		return inner -> newCall(interfaceId, methodId, mv(context), mv(hints));
-	}
-
-	kj::Maybe<ClientHook&> getResolved() override {
-		return *inner;
-	}
-
-	kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
-		return nullptr;
-	}
-
-	virtual kj::Own<ClientHook> addRef() override { return kj::addRef(*this); }
-
-	const void* getBrand() override { return OBJECT_CAPABILITY_BRAND; }
-
-	kj::Maybe<int> getFd() override { return nullptr; }
-}
-
-struct ObjectImpl : public Object::Server {
-	Own<DBObject> object;
-	
-	using StoredData = ObjectInfo::Resolved::DownloadSucceeded;
-	
-	Promise<ObjectInfo::Resolved::Builder> whenReady() {		
-		auto exception = [this](capnp::rpc::Exception::Reader e) -> kj::Exception {
-			return fromProto(e);
-		};
-		
-		object -> load();
-		auto entry = object -> data;
-		switch(entry.which()) {
-			case DBEntry::UNRESOLVED:
-				return object -> whenUpdated().then([this]() { return whenReady(); });
-			case DBEntry::EXCEPTION:
-				return exception(entry.getException);
-			case DBEntry::RESOLVED: {
-				return entry.getResolved();
-			}
-			default:
-				KJ_FAIL_REQUIRE("Unknown object type");
-		}
-	}
-	
-	Promise<Folder::Builder> whenFolder() {
-		return whenReady().then([this](ObjectInfo::Resolved::Builder resolved) {
-			if(resolved.which() != ObjectInfo::Resolved::FOLDER)
-				KJ_UNIMPLEMENTED("Not a folder");
-			
-			return resolved.getFolder();
-		});
-	}
-	
-	Promise<StoredData::Builder> whenData() {
-		return whenReady().then([this](ObjectInfo::Resolved::Builder resolved) {
-			switch(resolved.which()) {
-				case DBEntry::Resolved::DOWNLOADING:
-					return object.whenUpdated().then([this]() { return whenData(); });
-				case DBEntry::Resolved::DOWNLOAD_FAILED:
-					return exception(resolved.getDownloadFailed());
-				case DBEntry::Resolved::DOWNLOAD_SUCCEEDED:
-					return READY_NOW;
-				default:
-					KJ_UNIMPLEMENTED("Not a DataRef");
-			}
-			
-		});
-	}
-	
-	Promise<void> getType(GetTypeContext ctx) override {
-		return whenReady()
-		.then([this](ObjectInfo::Resolved::Reader resolved) {
-			Type type;
-			switch(resolved.which()) {
-				case ObjectInfo::Resolved::FOLDER:
-					type = Type::FOLDER;
-					break;
-				case DBEntry::Resolved::DOWNLOADING:
-				case DBEntry::Resolved::DOWNLOAD_FAILED:
-				case DBEntry::Resolved::DOWNLOAD_SUCCEEDED:
-					type = Type::DATA;
-					break;
-				default:
-					KJ_FAIL_REQUIRE("Unknown self type");
-			}
-			
-			ctx.getResults().setType(type);
-		});
-	}
-	
-	Promise<void> metadata(MetadataContext ctx) override {
-		return whenData()
-		.then([ctx](StoredData::Reader obj) {
-			ctx.initResults().setMetadata(obj.getMetadata());
-		});
-	}
-	
-	Promise<void> rawBytes(RawBytesContext ctx) override {
-		return whenData()
-		.then([ctx](StoredData::Reader obj) {
-			KJ_REQUIRE(end < obj.getMetadata().getDataSize());
-			
-			auto hash = obj.getMetadata().getHash();
-			KJ_IF_MAYBE(pBlob, object -> parent -> blobDB.find(hash) {
-				auto buffer = kj::heapArray<byte>(8 * 1024 * 1024);
-				reader = obj.read();
-				
-				const uint64_t start = ctx.getParams().getStart();
-				const uint64_t end = ctx.getParams().getEnd();
-				KJ_REQUIRE(end >= start);
-				
-				// Wind forward the stream until we hit the target point
-				uint64_t windRemaining = start;
-				while(true) {
-					if(remaing >= buffer.size()) {
-						reader.read(buffer);
-						windRemaining -= buffer.size();
-					} else {
-						reader.read(buffer.slice(0, windRemaining));
-						break;
-					}
-				}
-				
-				auto data = ctx.getResults().initData(end - start);
-				obj.read(data);
-			} else {
-				KJ_FAIL_REQUIRE("No associated blob in blob DB");
-			}
-		}
-	}
-	
-	Promise<void> transmit(TransmitContext) override {
-		static_assert(false, "Unimplemented");
-	}
-	
-	Promise<void> capTable(CapTableContext) override {
-		return whenData()
-		.then([ctx](StoredData::Reader obj) {
-			auto tableIn = obj.getCapTable();
-			auto tableOut = ctx.initTable(tableIn.size());
-			
-			for(auto i : kj::indices(tableIn)) {
-				if(tableIn[i] < 0) {
-					tableOut[i] = nullptr;
-					continue;
-				}
-				
-				KJ_IF_MAYBE(pObj, object -> parent -> getObjectInternal(tableIn[i])) {
-					tableOut = pObj -> asCapability();
-				} else {
-					tableOut = kj::Exception("Object not found in database");
-				}
-			}
-		});
-	}
-	
-	Promise<void> ls(LsContext ctx) override {
-		return whenFolder()
-		.then([ctx](Folder::Reader f) {
-			auto in = f.getEntries();
-			auto out = ctx.getResults().initEntries(in.size());
-			for(auto i : kj::indices(in)) {
-				out[i] = in[i].getName();
-			}
-		});
-	}
-	
-	Promise<void> getAll(GetAllContext ctx) override {
-		return whenFolder()
-		.then([ctx](Folder::Reader f) {
-			ctx.getResults().setEntries(f.getEntries);
-		});
-	}
-	
-	Promise<void> getObject(GetObjectContext ctx) override {
-		return whenFolder()
-		.then([ctx](Folder::Reader f) {
-			auto name = ctx.getParams().getName();
-			for(auto e : f.getEntries()) {
-				if(e.getName() == name) {
-					ctx.getResults().setObject(e.getRef());
-					break;
-				}
-			}
-		});
-	}
-	
-	Promise<void> setObject(GetObjectContext ctx) override {
-		return whenFolder()
-		.then([ctx](Folder::Builder f) {
-			auto name = ctx.getParams().getName();
-			auto ref = ctx.getParams().getObject();
-			
-			for(auto e : f.getEntries()) {
-				if(e.getName() == name) {
-					e.setRef(ref);
-					return;
-				}
-			}
-			
-			auto orphanage = Orphanage::getForMessageContaining(f);
-			auto newList = orphanage.newOrphan<Folder::Entry>(1);
-			newList[0].setName(name);
-			newList[1].setRef(ref);
-			
-			f.adoptEntries(orphanage.newOrphanConcat<Folder::Entry>({f.getEntries(), newList}));
-			object -> save();
-		})
-	}
-};
 
 }}

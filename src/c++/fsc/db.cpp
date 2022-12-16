@@ -19,9 +19,17 @@ void SQLite3Connection::check(int result) {
 	if(result == SQLITE_DONE)
 		return;
 	
+	if(result == SQLITE_BUSY) {
+		kj::throwFatalException(KJ_EXCEPTION(OVERLOADED, "Database busy"));
+	}
+	
 	int errorCode = sqlite3_errcode(handle);
 	int extendedErrorCode = sqlite3_extended_errcode(handle);
 	kj::String errorMessage = kj::str(sqlite3_errmsg(handle));
+	
+	if(result == SQLITE_BUSY) {
+		kj::throwFatalException(KJ_EXCEPTION(OVERLOADED, "Database is busy"));
+	}
 	
 	KJ_FAIL_REQUIRE("SQL error in sqlite", errorCode, extendedErrorCode, errorMessage);
 }
@@ -77,6 +85,10 @@ SQLite3Transaction SQLite3Connection::beginTransaction(kj::StringPtr name) {
 	return SQLite3Transaction(*this, name);
 }
 
+SQLite3RootTransaction SQLite3Connection::beginRootTransaction (bool immediate) {
+	return SQLite3RootTransaction(*this, immediate);
+}
+
 SQLite3PreparedStatement SQLite3Connection::prepare(kj::StringPtr statement) {
 	return SQLite3PreparedStatement(*this, statement);
 }
@@ -96,13 +108,15 @@ SQLite3PreparedStatement::~SQLite3PreparedStatement() {
 }
 
 bool SQLite3PreparedStatement::step() {
-	KJ_REQUIRE(state == ACTIVE, "Statement must be active, reinit using reset()");
+	KJ_REQUIRE(state == ACTIVE || state == READY, "Statement must be ready or active");
 	
 	int retCode = sqlite3_step(handle);
 	check(retCode);
 	
-	if(retCode == SQLITE_ROW)
+	if(retCode == SQLITE_ROW) {
+		state = ACTIVE;
 		return true;
+	}
 	
 	state = DONE;
 	return false;
@@ -110,7 +124,7 @@ bool SQLite3PreparedStatement::step() {
 
 void SQLite3PreparedStatement::reset() {
 	check(sqlite3_reset(handle));
-	state = ACTIVE;
+	state = READY;
 }
 
 int SQLite3PreparedStatement::size() {
@@ -118,7 +132,7 @@ int SQLite3PreparedStatement::size() {
 }
 
 int64_t SQLite3PreparedStatement::execInsert() {
-	KJ_REQUIRE(state == ACTIVE, "Statement must be active");
+	KJ_REQUIRE(state == READY, "Statement must be ready");
 	
 	step();
 	reset();
@@ -127,7 +141,7 @@ int64_t SQLite3PreparedStatement::execInsert() {
 }
 
 int64_t SQLite3PreparedStatement::exec() {
-	KJ_REQUIRE(state == ACTIVE, "Statement must be active");
+	KJ_REQUIRE(state == READY, "Statement must be ready");
 	
 	step();
 	reset();
@@ -181,6 +195,10 @@ kj::String SQLite3PreparedStatement::Column::name() {
 	return kj::heapString(sqlite3_column_name(parent.handle, idx));
 }
 
+SQLite3Type SQLite3PreparedStatement::Column::type() {	
+	return sqlite3_column_type(parent.handle, idx);
+}
+
 // --- Parameter accessors ---
 
 SQLite3PreparedStatement::Param& SQLite3PreparedStatement::Param::operator=(kj::ArrayPtr<const byte> blob) {
@@ -213,6 +231,21 @@ SQLite3PreparedStatement::Param& SQLite3PreparedStatement::Param::operator=(decl
 	return *this;
 }
 
+SQLite3PreparedStatement::Query::Query(SQLite3PreparedStatement& parent) :
+	parent(parent)
+{
+	KJ_REQUIRE(parent.state == READY);
+	parent.state = ACTIVE;
+}
+
+SQLite3PreparedStatement::Query::~Query() {
+	parent.reset();
+}
+
+bool SQLite3PreparedStatement::Query::next() {
+	return parent.step();
+}
+
 // ============================== SQLite3Savepoint =============================
 
 SQLite3Savepoint::SQLite3Savepoint(SQLite3Connection& conn, kj::StringPtr name) :
@@ -232,7 +265,7 @@ void SQLite3Savepoint::rollback() {
 	conn -> exec(str("ROLLBACK TO ", name));
 }
 
-void SQLite3Savepoint::release() {
+void SQLite3Savepoint::release() {	
 	if(!released) {
 		conn -> exec(str("RELEASE SAVEPOINT ", name));
 		released  = true;
@@ -242,11 +275,45 @@ void SQLite3Savepoint::release() {
 // =========================== SQLite3Transaction =======================
 
 SQLite3Transaction::~SQLite3Transaction() {
+	if(conn.get() == nullptr)
+		return;
+	
 	if(ud.isUnwinding()) {
 		if(!savepoint.isReleased()) {
 			ud.catchExceptionsIfUnwinding([this] { savepoint.rollback(); });
 		}
 	}
+}
+
+// =========================== SQLite3RootTransaction =======================
+
+SQLite3RootTransaction::SQLite3RootTransaction(SQLite3Connection& conn, bool imediate) :
+	conn(conn.addRef())
+{
+	KJ_REQUIRE(!conn -> inTransaction(), "Root transactions can only be started outside any transaction");
+	if(immediate)
+		conn.exec("BEGIN IMMEDIATE TRANSACTION");
+	else
+		conn.exec("BEGIN TRANSACTION");
+}
+
+SQLite3RootTransaction::~SQLite3RootTransaction() {	
+	if(conn.get() == nullptr)
+		return;
+	
+	if(ud.isUnwinding()) {
+		kj::runCatchingException([this]() { rollback() });
+	} else {
+		commit();
+	}
+}
+
+SQLite3RootTransaction::commit() {
+	conn -> exec("COMMIT");
+}
+
+SQLite3RootTransaction::rollback() {
+	conn -> exec("ROLLBACK");
 }
 
 }
