@@ -236,9 +236,11 @@ DataRef<AnyPointer>::Client ObjectDB::download(DataRef<AnyPointer>::Client objec
 		return wrap(mv(unwrapped.get<Own<DBObject>>()));
 	}
 	
-	auto asCap = unwrapped.get<Capability::Client>();
-	Own<DBObject> dbObject = downloadInternal(asCap.as<DataRef<AnyPointer>>());
-	return wrap(mv(dbObject));
+	return withBackoff(10 * kj::MILLISECONDS, 5 * kj::MINUTES, 2, [unwrapped = mv(unwrapped), this]() {
+		auto asCap = unwrapped.get<Capability::Client>();
+		Own<DBObject> dbObject = downloadInternal(asCap.as<DataRef<AnyPointer>>());
+		return wrap(mv(dbObject));
+	}).attach(thisCap());
 }
 
 Own<DBObject> ObjectDB::downloadInternal(Capability::Client object) {	
@@ -251,30 +253,39 @@ Own<DBObject> ObjectDB::downloadInternal(Capability::Client object) {
 		dbObject -> save();
 	}
 	
+	// Remember that we are downloading this capability into the given address
+	// This will prevent starting double-downloads until the hash is actually
+	// present in our blob db.
 	exports.put(ClientHook::from(cp(object)).get(), dbObject -> id);
 	
-	Promise<void> exportTask = downloadDatarefIntoDBObject(object.as<DataRef>(), *dbObject)
-	.catch_([this, object, dbObject](kj::Exception& e) {
-		if(e.getType() == kj::Exception::UNIMPLEMENTED)
-			dbObject -> data.setUnknownObject();
-		else
-			dbObject -> data.setException(toProto(e));
-		
-		try {
-			dbObject -> save();
-		} catch(kj::Exception& e) {
-			// Oh well, we tried, object will now likely have to stay in limbo
-			// Fortunately, this case is ridiculously unlikely
-		}
-	})
-	.then([this, object, id = dbObject -> id]() {
-		// When the export task concludes, remove the
-		// exported hook
-		exports.remove(pHook);
-		imports.remove(dbObject -> id);
-	}).eagerlyEvaluate(nullptr);
+	// Start the download task
+	ForkedPromise<void> exportTask = downloadDatarefIntoDBObject(object.as<DataRef>(), *dbObject)
 	
-	whenResolved.put(dbObject -> id, exportTask.fork());
+	// If the download fails, store the failure
+	.catch_([this, object, dbObject](kj::Exception& e) {
+		return withBackoff(10 * kj::MILLISECONDS, 5 * kj::MINUTES, 2, [this, e]() {
+			if(e.getType() == kj::Exception::UNIMPLEMENTED)
+				dbObject -> data.setUnknownObject();
+			else
+				dbObject -> data.setException(toProto(e));
+			
+			dbObject -> save();
+		});
+	})
+	// If the failure storage also fails, discard the error, database is probably
+	// having larger issues right now anyway
+	.catch_([](kj::Exception& e) {})
+	
+	// Remove exported hook after conclusion
+	.then([this, object, id = dbObject -> id]() {
+		exports.remove(pHook);
+		whenResolved.remove(dbObject -> id);
+	})
+	.fork();
+	
+	whenResolved.put(dbObject -> id, exportTask.addBranch());
+	exportTasks.add(exportTask.addBranch());
+	
 	return dbObject;
 }
 
@@ -283,53 +294,58 @@ Promise<void> ObjectDB::downloadDatarefIntoDBObject(DataRef<AnyPointer>::Client 
 	using MetadataResponse = Response<RemoteRef::MetadataResults>;
 	using CapTableResponse = Response<RemoteRef::CapTableResults>;
 	
+	// Download metadata and capability table
 	auto metadataPromise = src.metadataRequest().send().eagerlyEvaluate(nullptr);
 	auto capTablePromise = src.capTableRequest().send().eagerlyEvaluate(nullptr);
 	
-	// I really need coroutines
+	// Wait for both to be downloaded
 	return metadataPromise
 	.then([src, &dst, capTablePromise = mv(capTablePromise)](MetadataResponse metadataResponse) {
-		return capTablePromise.then([src, &dst, metadataResponse = mv(metadataResponse)](CapTableResponse capTableResponse) -> Promise<void> {
-			auto refData = dst.initResolved().initDataRef();
-			
-			refData.setMetadata(metadataResponse.getMetadata());
-			
-			// Copy cap table over, wrap child objects in their own download processes
-			auto capTableIn = capTableResponse.getCapTable();
-			auto capTableOut = refData.initCapTable(capTableIn.size());
-			for(auto i : kj::indices(capTableIn)) {
-				capTableOut.set(i, download(capTableIn[i]));
+	return capTablePromise.then([src, &dst, metadataResponse = mv(metadataResponse)](CapTableResponse capTableResponse) {
+	return withBackoff(10 * kj::MILLISECONDS, 5 * kj::MINUTES, 2, [src, &dst, metadataResponse = mv(metadataResponse), capTableResponse = mv(capTableResponse)]() -> Promise<void> {
+		auto t = db.connection -> beginTransaction();
+		
+		auto refData = dst.initResolved().initDataRef();
+		
+		refData.setMetadata(metadataResponse.getMetadata());
+		
+		// Copy cap table over, wrap child objects in their own download processes
+		auto capTableIn = capTableResponse.getCapTable();
+		auto capTableOut = refData.initCapTable(capTableIn.size());
+		for(auto i : kj::indices(capTableIn)) {
+			capTableOut.set(i, download(capTableIn[i]));
+		}
+		
+		auto dataSize = metadataResponse.getMetadata().getDataSize();
+		
+		// Check if the data already exist in the blob db
+		{
+			KJ_IF_MAYBE(pBlob, db.blobStore.find(metadataResponse.getMetadata().getDatahash())) {
+				refData.getDownloadStatus().setFinished();
+				pBlob -> incRefExternal();
+				dst.save();
+				return READY_NOW;
 			}
+		}
+		
+		refData.getDownloadStatus().setDownloading();
 			
-			auto dataSize = metadataResponse.getMetadata().getDataSize();
-			
-			// Check if the data already exist in the blob db
-			{
-				auto t = db.connection -> beginTransaction();
-				
-				KJ_IF_MAYBE(pBlob, db.blobStore.find(metadataResponse.getMetadata().getDatahash())) {
-					refData.getDownloadStatus().setFinished();
-					pBlob -> incRefExternal();
-					dst.save();
-					return READY_NOW;
-				}
-			}
-			
-			refData.getDownloadStatus().setDownloading();
-				
-			auto downloadRequest = refData.transmitRequest();
-			downloadRequest.setStart(0);
-			downloadRequest.setEnd(dataSize);
-			downloadRequest.setReceiver(kj::heap<ObjectRefReceiver>(dst));
-			
-			dst.save();
-			
-			return downloadRequest.send().ignoreResult()
-			.then([this, refData, DBObject& dst]() {
+		auto downloadRequest = refData.transmitRequest();
+		downloadRequest.setStart(0);
+		downloadRequest.setEnd(dataSize);
+		downloadRequest.setReceiver(kj::heap<ObjectRefReceiver>(dst));
+		
+		dst.save();
+		
+		return downloadRequest.send().ignoreResult()
+		.then([this, refData, &dst]() {
+			return withBackoff(10 * kj::MILLISECONDS, 5 * kj::MINUTES, 2, [this, refData, &dst]() {
 				refData.getDownloadStatus().setFinished();
 				dst.save();
 			});
 		});
+	});
+	});
 	});
 }
 
@@ -370,9 +386,6 @@ void DBObject::save() {
 	// All work here has to be done inside a DB transaction
 	auto t = parent -> conn.beginTransaction();
 	
-	// Clear existing references
-	parent -> clearOutgoingRefs(id);
-	
 	getInfo.reset();
 	
 	// Now we need to figure out how to serialize references. This means we need to make a new message builder
@@ -390,6 +403,9 @@ void DBObject::save() {
 			idsToCheck.insert(id);
 		}
 	}
+	
+	// Clear existing references
+	parent -> clearOutgoingRefs(id);
 	
 	// Compact info into a correctly sized message and capture the used capabilities
 	BuilderCapabilityTable capTable;

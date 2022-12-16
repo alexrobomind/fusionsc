@@ -501,6 +501,9 @@ bool hasMaximumOrdinal(T in, unsigned int maxOrdinal) {
 Promise<void> removeDatarefs(capnp::AnyPointer::Reader in, capnp::AnyPointer::Builder out);
 Promise<void> removeDatarefs(capnp::AnyStruct::Reader in, capnp::AnyStruct::Builder out);
 
+template<typename F>
+kj::PromiseForResult<F, void> withBackoff(kj::Duration min, kj::Duration max, uint64_t growth, F func);
+
 template<typename Key, typename T, template<typename, typename> typename Map = kj::TreeMap>
 struct Cache {
 	struct Holder;

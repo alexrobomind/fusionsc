@@ -518,6 +518,49 @@ Maybe<T&> Cache<Key, T, Map>::find(Key key) {
 	return nullptr;
 }
 
+namespace internal {
+	template<typename F>
+	struct BackoffRunner {
+		using ResultPromise = kj::PromiseForResult<F, void>;
+		
+		kj::Duration current;
+		const kj::Duration max
+		const uint64_t growth;
+		F f;
+		
+		BackoffRunner(kj::Duration min, kj::Duration max, uint64_t growth, F func) :
+			current(min),
+			max(max),
+			growth(growth),
+			f(mv(func))
+		{}
+		
+		ResultPromise step() {
+			return kj::evalLater(func)
+			.catch_([this](kj::Exception& e) {
+				if(e.getType() == kj::Exception::OVERLOADED) {
+					ResultPromise result = getActiveThread().timer().afterDelay(current)
+					.then([this]() { step(); });
+					
+					duration *= growth;
+					if(duration > max) duration = max;
+					
+					return result;
+				}
+				
+				kj::throwFatalException(e);
+			});
+		}
+	};
+}
+
+template<typename F>
+kj::PromiseForResult<F, void> withBackoff(kj::Duration min, kj::Duration max, uint64_t growth, F func) {
+	auto runner = heapHeld<BackoffRunner<F>>(min, max, growth, mv(f));
+	return runner -> step().attach(runner.x());
+}
+
+
 // === Helper methods ===
 
 template<typename T>
