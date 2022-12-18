@@ -26,8 +26,8 @@ struct BlobStore : public kj::Refcounted {
 	Statement setBlobHash;
 	Statement findBlob;
 	
-	Statement incRef;
-	Statement decRef;
+	Statement incRefcount;
+	Statement decRefcount;
 	
 	Statement deleteIfOrphan;
 	Statement createChunk;
@@ -114,8 +114,8 @@ struct ObjectDB : public kj::Refcounted {
 	using Statement = sqlite::Statement;
 	
 	const kj::String filename;
-	const bool readOnly;
 	const kj::String tablePrefix;
+	const bool readOnly;
 	
 	Statement createObject;
 	Statement getInfo;
@@ -131,12 +131,13 @@ struct ObjectDB : public kj::Refcounted {
 	Statement getRefcountAndHash;
 	
 	ObjectDB(kj::StringPtr filename, kj::StringPtr tablePrefix, bool readOnly = false);
+	inline Own<ObjectDB> addRef() { return kj::addRef(*this); }
 	
 	//! Determines whether the given capability is outside the database, pointing to a DB object, or null
 	OneOf<Capability::Client, Own<DBObject>, decltype(nullptr)> unwrap(Capability::Client cap);
 	
 	//! Wraps a DB object in a capability exposing its functionality.
-	Object::Client wrap(Own<DBObject> obj);
+	Object::Client wrap(Maybe<Own<DBObject>> obj);
 	
 	//! Checks the reference count of an object and deletes it is 0.
 	void deleteIfOrphan(int64_t id);
@@ -145,7 +146,7 @@ private:
 	//! Replaces a DataRef with a variant pointing into the database
 	// Note: This method is private because the database does not support dangling objects. Therefore, any creation of such pointers
 	// must be put in a transaction with their integration into the file hierarchy. 
-	DataRef<AnyPointer>::Client download(DataRef<AnyPointer>::Client object);
+	Object::Client download(DataRef<AnyPointer>::Client object);
 	
 	//! Creates a new slot for a DataRef and initiates a download task
 	Own<DBObject> startDownloadTask(DataRef<AnyPointer>::Client object);
@@ -169,6 +170,14 @@ private:
 	Own<sqlite::Connection> conn;
 	
 	bool shared;
+	
+	struct TransmissionProcess;
+	struct TransmissionReceiver;
+	
+	struct ObjectImpl;
+	struct ObjectHook;
+	
+	friend class DBObject;
 };
 
 //! Represents an object in the object database, as well as the permission to access it
@@ -186,6 +195,9 @@ public:
 	ObjectInfo::Builder info;
 	
 	Promise<void> whenUpdated();
+	
+	inline ObjectDB& getParent() { return *parent; }
+	inline Own<DBObject> addRef() { return kj::addRef(*this); }
 	
 private:
 	const int64_t id;

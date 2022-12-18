@@ -20,13 +20,8 @@ struct FolderEntry {
 	}
 }
 
-struct FolderData {
-	struct Entry {
-		name @0 : Text;
-		ref @1 : Object;
-	}
-	
-	entries @0 : List(Entry);
+struct FolderData {	
+	entries @0 : List(FolderEntry);
 }
 
 struct ObjectInfo {
