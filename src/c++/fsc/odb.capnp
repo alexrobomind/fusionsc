@@ -36,11 +36,6 @@ interface Object extends(Data.DataRef, Folder) {
 	getInfo @0 () -> (type : Type);
 }
 
-
-# Internal, do not use
-struct FolderData {	
-}
-
 # Internal, do not use
 struct ObjectInfo {
 	union {
