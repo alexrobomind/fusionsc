@@ -321,14 +321,16 @@ struct ObjectDB::ObjectImpl : public Object::Server {
 		});
 	}
 	
-	FolderData::Builder checkFolder() {
+	ObjectInfo::Folder::Builder checkFolder() {
 		if(object -> info.which() != ObjectInfo::FOLDER)
 			KJ_UNIMPLEMENTED("This database object is not a folder");
+		return object -> info.getFolder();
 	}
 	
 	ObjectInfo::DataRef::Builder checkRef() {
 		if(object -> info.which() != ObjectInfo::DATA_REF)
 			KJ_UNIMPLEMENTED("This database object is not a DataRef");
+		return object -> info.getDataRef();
 	}
 	
 	Promise<void> getInfo(GetInfoContext ctx) override {

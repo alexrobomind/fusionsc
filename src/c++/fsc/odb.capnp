@@ -20,26 +20,6 @@ struct FolderEntry {
 	}
 }
 
-struct FolderData {	
-	entries @0 : List(FolderEntry);
-}
-
-struct ObjectInfo {
-	union {
-		unresolved @0 : Void;
-		exception @1 : Rpc.Exception;
-		dataRef : union {
-			downloadStatus : union {
-				downloading @2 : Void;
-				finished @3 : Void;
-			}
-			metadata @4 : Data.DataRef.Metadata;
-			capTable @5 : List(Object);
-		}
-		folder @6 : FolderData;
-	}
-}
-
 interface Folder {
 	ls @0 () -> (entries : List(Text));
 	getAll @1 () -> (entries : List(FolderEntry));
@@ -54,4 +34,28 @@ interface Object extends(Data.DataRef, Folder) {
 	enum Type { data @0; folder @1; }
 	
 	getInfo @0 () -> (type : Type);
+}
+
+
+# Internal, do not use
+struct FolderData {	
+}
+
+# Internal, do not use
+struct ObjectInfo {
+	union {
+		unresolved @0 : Void;
+		exception @1 : Rpc.Exception;
+		dataRef : union {
+			downloadStatus : union {
+				downloading @2 : Void;
+				finished @3 : Void;
+			}
+			metadata @4 : Data.DataRef.Metadata;
+			capTable @5 : List(Object);
+		}
+		folder : group {
+			entries @6 : List(FolderEntry);
+		}
+	}
 }
