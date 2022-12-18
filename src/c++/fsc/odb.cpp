@@ -468,8 +468,7 @@ struct ObjectDB::ObjectImpl : public Object::Server {
 
 			for(auto e : f.getEntries()) {
 				if(e.getName().asString() == name) {
-					ctx.getResults().setRef(e.getRef());
-					break;
+					ctx.setResults(e);
 				}
 			}
 		});
@@ -480,25 +479,47 @@ struct ObjectDB::ObjectImpl : public Object::Server {
 		.then([this, ctx]() mutable {
 			auto f = checkFolder();
 			
-			auto name = ctx.getParams().getName();
+			auto params = ctx.getParams();
+			auto name = params.getName();
 			
 			auto entries = f.getEntries();
+			
+			FolderEntry::Builder entry = nullptr;
+			bool entryPresent = false;
+			
 			for(auto i : kj::indices(entries)) {
 				auto e = entries[i];
 				
 				if(e.getName().asString() == name) {
-					entries.setWithCaveats(i, ctx.getParams());
-					return;
+					entry = e;
+					entryPresent = true;
+					break;
 				}
 			}
 			
-			auto orphanage = Orphanage::getForMessageContaining(f);
-			auto newList = orphanage.newOrphan<List<FolderEntry>>(1);
-			newList.get().setWithCaveats(0, ctx.getParams());
+			if(!entryPresent) {
+				auto orphanage = Orphanage::getForMessageContaining(f);
+				auto newList = orphanage.newOrphan<List<FolderEntry>>(1);
 			
-			auto listRefs = kj::heapArray<List<FolderEntry>::Reader>({f.getEntries(), newList.get()});
+				auto listRefs = kj::heapArray<List<FolderEntry>::Reader>({newList.get(), f.getEntries()});
+				f.adoptEntries(orphanage.newOrphanConcat(listRefs.asPtr()));
+				
+				entry = f.getEntries()[0];
+				entry.setName(name);
+			}
 			
-			f.adoptEntries(orphanage.newOrphanConcat(listRefs.asPtr()));
+			auto t = object -> parent -> conn -> beginTransaction();
+			
+			switch(params.which()) {
+				case FolderEntry::REF:
+					entry.setRef(object -> parent -> download(params.getRef()));
+					break;
+				
+				case FolderEntry::FOLDER:
+					entry.setFolder(params.getFolder());
+					break;
+			}
+			
 			object -> save();
 		});
 	}
