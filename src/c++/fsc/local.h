@@ -1,4 +1,4 @@
-af#pragma once
+#pragma once
 
 #include <kj/memory.h>
 #include <kj/async-io.h>

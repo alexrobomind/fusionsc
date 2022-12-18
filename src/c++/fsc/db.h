@@ -17,6 +17,7 @@ struct SQLite3PreparedStatement;
 struct SQLite3Blob;
 struct SQLite3Savepoint;
 struct SQLite3Transaction;
+struct SQLite3RootTransaction;
 
 enum class SQLite3Type;
 
@@ -36,7 +37,7 @@ enum class SQLite3Type {
 	TEXT = 3,
 	BLOB = 4,
 	NULLTYPE = 5
-}
+};
 
 Own<SQLite3Connection> openSQLite3(kj::StringPtr filename);
 	
@@ -178,7 +179,7 @@ struct SQLite3PreparedStatement {
 	Query query(Params... params) {
 		bind(params...);
 		return Query(*this);
-	]
+	}
 	
 	sqlite3_stmt * handle;
 	Own<SQLite3Connection> parent;
@@ -199,7 +200,7 @@ private:
 		};
 	}
 	
-	private bool step();
+	bool step();
 };
 
 /** Creates and maintains a savepoint. The savepoint is released without rollback on destruction.
@@ -247,7 +248,7 @@ private:
  * will be released if the object is destroyed normally, but will be rolled back upon an exception. 
  */
 struct SQLite3RootTransaction {
-	inline SQLite3RootTransaction(SQLite3Connection& conn);
+	inline SQLite3RootTransaction(SQLite3Connection& conn, bool immediate);
 	~SQLite3RootTransaction();
 	
 	void commit();

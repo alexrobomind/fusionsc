@@ -12,18 +12,18 @@ $Java.outerClassname("ODB");
 using Geometry = import "geometry.capnp";
 using Data = import "data.capnp";
 
-FolderEntry {
+struct FolderEntry {
 	name @0 : Text;
 	union {
-		ref @1 : DataRef<AnyPointer>();
+		ref @1 : Data.DataRef;
 		folder @2 : Folder;
 	}
-};
+}
 
 struct FolderData {
 	struct Entry {
 		name @0 : Text;
-		ref @1 : Object(AnyPointer);
+		ref @1 : Object;
 	}
 	
 	entries @0 : List(Entry);
@@ -38,8 +38,8 @@ struct ObjectInfo {
 				downloading @2 : Void;
 				finished @3 : Void;
 			}
-			metadata @4 : Data.DataRef(AnyPointer).Metadata;
-			capTable @5 : List(ODBObject(AnyPointer));
+			metadata @4 : Data.DataRef.Metadata;
+			capTable @5 : List(Object);
 		}
 		folder @6 : FolderData;
 	}
@@ -52,11 +52,11 @@ interface Folder {
 	putEntry @3 FolderEntry -> ();
 	
 	mkdir @4 (name : Text) -> (folder : Folder);
-	store @5 (name : Text, ref : DataRef<AnyPointer>) -> ();
+	store @5 (name : Text, ref : Data.DataRef) -> ();
 }
 
-interface Object extends(Data.DataRef(AnyPointer), Folder) {
+interface Object extends(Data.DataRef, Folder) {
 	enum Type { data @0; folder @1; }
 	
-	getInfo @0 : () -> (type : Type);
+	getInfo @0 () -> (type : Type);
 }

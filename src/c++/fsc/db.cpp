@@ -196,7 +196,7 @@ kj::String SQLite3PreparedStatement::Column::name() {
 }
 
 SQLite3Type SQLite3PreparedStatement::Column::type() {	
-	return sqlite3_column_type(parent.handle, idx);
+	return (SQLite3Type) sqlite3_column_type(parent.handle, idx);
 }
 
 // --- Parameter accessors ---
@@ -262,12 +262,17 @@ SQLite3Savepoint::~SQLite3Savepoint() {
 void SQLite3Savepoint::rollback() {
 	KJ_REQUIRE(!released, "Trying to roll back released savepoint");
 	
+	if(conn.get() == nullptr)
+		return;
+	
 	conn -> exec(str("ROLLBACK TO ", name));
 }
 
-void SQLite3Savepoint::release() {	
+void SQLite3Savepoint::release() {		
 	if(!released) {
-		conn -> exec(str("RELEASE SAVEPOINT ", name));
+		if(conn.get() != nullptr)
+			conn -> exec(str("RELEASE SAVEPOINT ", name));
+		
 		released  = true;
 	}
 }
@@ -275,9 +280,6 @@ void SQLite3Savepoint::release() {
 // =========================== SQLite3Transaction =======================
 
 SQLite3Transaction::~SQLite3Transaction() {
-	if(conn.get() == nullptr)
-		return;
-	
 	if(ud.isUnwinding()) {
 		if(!savepoint.isReleased()) {
 			ud.catchExceptionsIfUnwinding([this] { savepoint.rollback(); });
@@ -287,10 +289,10 @@ SQLite3Transaction::~SQLite3Transaction() {
 
 // =========================== SQLite3RootTransaction =======================
 
-SQLite3RootTransaction::SQLite3RootTransaction(SQLite3Connection& conn, bool imediate) :
+SQLite3RootTransaction::SQLite3RootTransaction(SQLite3Connection& conn, bool immediate) :
 	conn(conn.addRef())
 {
-	KJ_REQUIRE(!conn -> inTransaction(), "Root transactions can only be started outside any transaction");
+	KJ_REQUIRE(!conn.inTransaction(), "Root transactions can only be started outside any transaction");
 	if(immediate)
 		conn.exec("BEGIN IMMEDIATE TRANSACTION");
 	else
@@ -302,17 +304,17 @@ SQLite3RootTransaction::~SQLite3RootTransaction() {
 		return;
 	
 	if(ud.isUnwinding()) {
-		kj::runCatchingException([this]() { rollback() });
+		kj::runCatchingExceptions([this]() { rollback(); });
 	} else {
 		commit();
 	}
 }
 
-SQLite3RootTransaction::commit() {
+void SQLite3RootTransaction::commit() {
 	conn -> exec("COMMIT");
 }
 
-SQLite3RootTransaction::rollback() {
+void SQLite3RootTransaction::rollback() {
 	conn -> exec("ROLLBACK");
 }
 

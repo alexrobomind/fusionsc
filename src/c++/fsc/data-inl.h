@@ -524,7 +524,7 @@ namespace internal {
 		using ResultPromise = kj::PromiseForResult<F, void>;
 		
 		kj::Duration current;
-		const kj::Duration max
+		const kj::Duration max;
 		const uint64_t growth;
 		F f;
 		

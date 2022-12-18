@@ -177,7 +177,7 @@ if(BUILD_TESTING)
 		local-tests.cpp
 		random-tests.cpp
 		data-tests.cpp
-		odb-tests.cpp
+		#odb-tests.cpp
 		geometry-tests.cpp
 		magnetics-tests.cpp
 		http-tests.cpp

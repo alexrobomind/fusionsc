@@ -1,6 +1,10 @@
 #pragma once
 
+#include <unordered_map>
 #include <botan/hash.h>
+#include <capnp/capability.h>
+
+#include <fsc/odb.capnp.h>
 
 #include "db.h"
 #include "compression.h"
@@ -92,6 +96,8 @@ struct BlobReader {
 	bool read(kj::ArrayPtr<byte> output);
 	inline size_t remainingOut() { return decompressor.remainingOut(); }
 	
+	BlobReader(Blob& blob);
+	
 private:	
 	Blob blob;
 	
@@ -101,8 +107,9 @@ private:
 };
 
 struct ObjectDB : public kj::Refcounted {
-	using capnp::Capability;
-	using capnp::AnyPointer;
+	using Capability = capnp::Capability;
+	using AnyPointer = capnp::AnyPointer;
+	using ClientHook = capnp::ClientHook;
 	
 	using Statement = sqlite::Statement;
 	
@@ -115,7 +122,7 @@ struct ObjectDB : public kj::Refcounted {
 	Statement setInfo;
 	Statement incRefcount;
 	Statement decRefcount;
-	Statement deleteIfOrphan;
+	Statement deleteObject;
 	
 	Statement insertRef;
 	Statement listOutgoingRefs;
@@ -166,6 +173,10 @@ private:
 
 //! Represents an object in the object database, as well as the permission to access it
 struct DBObject : public kj::Refcounted {
+private:
+	struct CreationToken {};
+
+public:
 	DBObject(ObjectDB& parent, int64_t id, const CreationToken&);
 	~DBObject();
 	
@@ -180,23 +191,13 @@ private:
 	const int64_t id;
 	Own<ObjectDB> parent;
 	
-	Own<MallocMessageBuilder> infoHolder;
+	Own<capnp::MallocMessageBuilder> infoHolder;
 	
-	struct CreationToken {};
 	friend class ObjectDB;
 };
 
 // ==================================== Inline implementation ===================================
 
 BlobReader Blob::open() { return BlobReader(*this); }
-
-template<typename T>
-Maybe<T> ObjectDB::findExport(T original) {
-	KJ_IF_MAYBE(pExp, findExportInternal(original)) {
-		return pExp.as<capnp::FromClient<T>>();
-	}
-	
-	return nullptr;
-}
 
 }}
