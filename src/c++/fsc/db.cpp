@@ -242,7 +242,7 @@ SQLite3PreparedStatement::Query::~Query() {
 	parent.reset();
 }
 
-bool SQLite3PreparedStatement::Query::next() {
+bool SQLite3PreparedStatement::Query::step() {
 	return parent.step();
 }
 

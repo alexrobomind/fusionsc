@@ -6,50 +6,49 @@ using namespace capnp;
 
 namespace fsc { namespace odb {
 	
-BlobStore::BlobStore(sqlite::Connection& connRef, kj::StringPtr tablePrefix) :
+BlobStore::BlobStore(sqlite::Connection& conn, kj::StringPtr tablePrefix, bool readOnly) :
 	tablePrefix(kj::heapString(tablePrefix)),
-	conn(connRef.addRef())
+	conn(connRef.addRef()),
+	readOnly(readOnly)
 {
-	connRef.exec(str(
-		"CREATE TABLE IF NOT EXISTS ", tablePrefix, "_blobs ("
-		"  id INTEGER PRIMARY KEY,"
-		"  hash BLOB UNIQUE," // SQLite UNIQUE allows multiple NULL values
-		"  externalRefcount INTEGER"
-		// "  internalRefcount INTEGER"
-		")"
-	));
-	connRef.exec(str(
-		"CREATE TABLE IF NOT EXISTS ", tablePrefix, "_chunks ("
-		"  id INTEGER REFERENCES ", tablePrefix, "_blobs(id) ON UPDATE CASCADE ON DELETE CASCADE,"
-		"  chunkNo INTEGER,"
-		"  data BLOB,"
-		""
-		"  PRIMARY KEY(id, chunkNo)"
-		")"
-	));
-	connRef.exec(str("CREATE INDEX IF NOT EXISTS ", tablePrefix, "_blobs_hash_idx ON ", tablePrefix, "_blobs (hash)"));
-	connRef.exec(str("CREATE UNIQUE INDEX IF NOT EXISTS ", tablePrefix, "_blobs_chunks_idx ON ", tablePrefix, "_chunks (id, chunkNo)"));
+	if(!readOnly) {
+		conn.exec(str(
+			"CREATE TABLE IF NOT EXISTS ", tablePrefix, "_blobs ("
+			"  id INTEGER PRIMARY KEY,"
+			"  hash BLOB UNIQUE," // SQLite UNIQUE allows multiple NULL values
+			"  refcount INTEGER"
+			")"
+		));
+		conn.exec(str(
+			"CREATE TABLE IF NOT EXISTS ", tablePrefix, "_chunks ("
+			"  id INTEGER REFERENCES ", tablePrefix, "_blobs(id) ON UPDATE CASCADE ON DELETE CASCADE,"
+			"  chunkNo INTEGER,"
+			"  data BLOB,"
+			""
+			"  PRIMARY KEY(id, chunkNo)"
+			")"
+		));
+		conn.exec(str("CREATE INDEX IF NOT EXISTS ", tablePrefix, "_blobs_hash_idx ON ", tablePrefix, "_blobs (hash)"));
+		conn.exec(str("CREATE UNIQUE INDEX IF NOT EXISTS ", tablePrefix, "_blobs_chunks_idx ON ", tablePrefix, "_chunks (id, chunkNo)"));
 		
-	createBlob = conn->prepare(str("INSERT INTO ", tablePrefix, "_blobs DEFAULT VALUES"));
-	setBlobHash = conn->prepare(str("UPDATE ", tablePrefix, "_blobs SET hash = ?2 WHERE id = ?1"));
-	findBlob = conn->prepare(str("SELECT id FROM ", tablePrefix, "_blobs WHERE hash = ?"));
+		createBlob = conn.prepare(str("INSERT INTO ", tablePrefix, "_blobs DEFAULT VALUES"));
+		setBlobHash = conn.prepare(str("UPDATE ", tablePrefix, "_blobs SET hash = ?2 WHERE id = ?1"));
+		
+		incRefExternal = conn.prepare(str("UPDATE ", tablePrefix, "_blobs SET refcount = refcount + 1 WHERE id = ?"));
+		decRefExternal = conn.prepare(str("UPDATE ", tablePrefix, "_blobs SET refcount = refcount - 1 WHERE id = ?"));
+		
+		deleteIfOrphan = conn->prepare(str("DELETE FROM ", tablePrefix, "_blobs WHERE id = ? AND refcount <= 0"));
+		
+		createChunk = conn->prepare(str("INSERT INTO ", tablePrefix, "_chunks (id, chunkNo, data) VALUES (?, ?, ?)"));
+	}
 	
-	incRefExternal = conn->prepare(str("UPDATE ", tablePrefix, "_blobs SET externalRefcount = externalRefcount + 1 WHERE id = ?"));
-	decRefExternal = conn->prepare(str("UPDATE ", tablePrefix, "_blobs SET externalRefcount = externalRefcount - 1 WHERE id = ?"));
-	//incRefInternal = conn->prepare(str("UPDATE ", tablePrefix, "_blobs SET internalRefcount = internalRefcount + 1 WHERE id = ?"));
-	//decRefInternal = conn->prepare(str("UPDATE ", tablePrefix, "_blobs SET internalRefcount = internalRefcount - 1 WHERE id = ?"));
-	
-	deleteIfOrphan = conn->prepare(str("DELETE FROM ", tablePrefix, "_blobs WHERE id = ? AND externalRefcount = 0")); // AND internalRefcount = 0
-	
-	createChunk = conn->prepare(str("INSERT INTO ", tablePrefix, "_chunks (id, chunkNo, data) VALUES (?, ?, ?)"));
+	findBlob = conn.>prepare(str("SELECT id FROM ", tablePrefix, "_blobs WHERE hash = ?"));
 }
 
-Maybe<Blob> BlobStore::find(kj::ArrayPtr<const byte> hash) {
-	findBlob.bind(hash);
-	KJ_DEFER({ findBlob.reset(); });
-	
-	if(findBlob.step()) {
-		return Blob(*this, findBlob[0]);
+Maybe<Blob> BlobStore::find(kj::ArrayPtr<const byte> hash) {	
+	auto q = findBlob.query(hash);
+	if(q.next) {
+		return Blob(*this, q[0]);
 	}
 	
 	return nullptr;
@@ -64,19 +63,10 @@ BlobBuilder BlobStore::create(size_t chunkSize) {
 Blob::Blob(BlobStore& parent, int64_t id) :
 	parent(parent.addRef()),
 	id(id)
-{
-	KJ_REQUIRE(parent.conn -> inTransaction(), "Must be inside a transaction");
-}
+{}
 
-Blob::~Blob() {
-	if(parent.get() == nullptr)
-		return;
-	
-	ud.catchExceptionsIfUnwinding([this]() {
-		// parent -> decRefInternal(id);
-		// parent -> deleteIfOrphan(id);
-	});
-}
+void Blob::incRef() { KJ_REQUIRE(!parent -> readOnly); parent -> incRef(id); }
+void Blob::decRef() { KJ_REQUIRE(!parent -> readOnly); parent -> decRef(id); parent -> deleteIfOrphan(id); }
 
 // ============================== class BlobBuilder =================================
 
@@ -88,6 +78,7 @@ BlobBuilder::BlobBuilder(BlobStore& parent, size_t chunkSize) :
 	compressor(9),
 	hashFunction(Botan::HashFunction::create("Blake2b"))
 {
+	KJ_REQUIRE(!parent.readOnly);
 	KJ_REQUIRE(chunkSize > 0);
 	compressor.setOutput(buffer);
 }
@@ -99,7 +90,6 @@ BlobBuilder::~BlobBuilder() {
 }
 
 void BlobBuilder::flushBuffer() {
-	KJ_DBG("Flushing buffer");
 	auto chunkData = buffer.slice(0, buffer.size() - compressor.remainingOut());
 	
 	if(chunkData.size() > 0) {
@@ -158,10 +148,9 @@ Blob BlobBuilder::finish() {
 
 BlobReader::BlobReader(Blob& blob) :
 	blob(blob),
-	readStatement(sqlite::Statement(blob.parent -> conn -> prepare(str("SELECT data FROM ", blob.parent -> tablePrefix, "_chunks WHERE id = ? ORDER BY chunkNo"))))
-{
-	readStatement.bind(blob.id);
-}
+	readStatement(sqlite::Statement(blob.parent -> conn -> prepare(str("SELECT data FROM ", blob.parent -> tablePrefix, "_chunks WHERE id = ? ORDER BY chunkNo")))),
+	readQuery(readStatement.query(blob.id))
+{}
 
 bool BlobReader::read(kj::ArrayPtr<byte> output) {
 	decompressor.setOutput(output);
@@ -465,11 +454,12 @@ namespace {
 					auto params = ctx.getParams();
 					
 					// Since we preparing a long-running op, fork the blob store so that our main connection doesn't get blocked
-					auto forkedStore = kj::refcounted<BlobStore>(forkConnection(true), tablePrefix);
+					// If the database isn't shared, we can use the main connection (though we have to hope the object doesn't get deleted
+					auto forkedStore = kj::refcounted<BlobStore>(shared ? *forkConnection(true) : *conn, tablePrefix, true);
 					auto forkedTransaction = forkedStore -> conn -> beginTransaction();
 					
 					// Note: Read operations can still fail					
-					KJ_IF_MAYBE(pBlob, object -> parent -> blobStore.find(checkRef().getMetadata().getDataHash())) {
+					KJ_IF_MAYBE(pBlob, forkedStore -> find(checkRef().getMetadata().getDataHash())) {
 						auto reader = pBlob -> open();
 						auto transProc = heapHeld<TransmissionProcess>(params.getReceiver(), params.getBegin(), params.getEnd());
 						return transProc.run().attach(mv(forkedStore), mv(forkedTransaction));
@@ -536,18 +526,66 @@ namespace {
 	};
 }
 
-Object ObjectDB::store(AnyPointer ptr) {
-	static_assert(false, "Store non-capability pointers in DataRefs");
+// ========================= class ObjectDB =============================
+
+ObjectDB::ObjectDB(kj::StringPtr filename, kj::StringPtr tablePrefix, bool readOnly) :
+	filename(str(filename)), tablePrefix(str(tablePrefix)), readOnly(readOnly)
+{
+	shared = true;
+	if(filename == ":memory:" ||filename == "")
+		shared = false;
 	
-	DBObject dbObject = storeInternal(object);
-	return wrap(mv(dbObject));
+	KJ_LOG(WARNING, "Unshared ObjectDB usage is not tested");
+	
+	conn = sqlite3Open(filename);
+	
+	auto objectsTable = str(tablePrefix, "_objects");
+	auto refsTable = str(tablePrefix, "_object_refs");
+	
+	if(!readOnly) {
+		conn -> exec(str(
+			"CREATE TABLE IF NOT EXISTS ", objectsTable, " ("
+			  "id INTEGER PRIMARY KEY,"
+			  "info BLOB,"
+			  "refcount INTEGER"
+			")"
+		));
+		conn -> exec(str(
+			"CREATE TABLE IF NOT EXISTS ", refsTable, " ("
+			  "parent INTEGER REFERENCES ", objectsTable, "(id) ON DELETE CASCADE ON UPDATE CASCADE,"
+			  "slot INTEGER,"
+			  "child INTEGER REFERENCES ", objectsTable, "(id)"
+			")"
+		));
+		conn -> exec(str(
+			"CREATE UNIQUE INDEX IF NOT EXISTS ", tablePrefix, "_index_refs_by_parent ON ", refsTable, "(parent, slot)"
+		));
+		
+		createObject = conn -> prepare("INSERT INTO ", objectsTable, " DEFAULT VALUES");
+		setInfo = conn -> prepare("UPDATE ", objectsTable, " SET info = ?2 WHERE id = ?1");
+		incRef = conn -> prepare("UPDATE ", objectsTable, " SET refcount = refcount + 1 WHERE ID = ?");
+		decRef = conn -> prepare("UPDATE ", objectsTable, " SET refcount = refcount - 1 WHERE ID = ?");
+		deleteObject = conn -> prepare("DELETE FROM ", objectsTable, " WHERE ID = ?");
+		
+		insertRef = conn -> prepare("INSERT INTO ", refsTable, " (parent, slot, child) VALUES (?, ?, ?");
+		clearOutgoingRefs = conn -> prepare("DELETE FROM ", refsTable, " WHERE parent = ?");
+	}
+	
+	getInfo = conn -> prepare("SELECT info FROM ", objectsTable, " WHERE id = ?");
+	getRefcountAndHash = conn -> prepare("SELECT refcount, hash FROM ", objectsTable, " WHERE ID = ?");
+	
+	listOutgoingRefs = conn -> prepare("SELECT child FROM ", refsTable, " WHERE parent = ?");
 }
 
-Capability::Client wrap(Own<DBObject> object) {
-	Capability::Client innerClient(kj::heap<ObjectImpl>(mv(object)));
+Object::Client wrap(Maybe<Own<DBObject>> object) {
+	KJ_IF_MAYBE(pObject, object) {
+		Capability::Client innerClient(kj::heap<ObjectImpl>(mv(*pObject)));
+		
+		Own<ClientHook> wrapper = kj::heap<ObjectHook>(ClientHook::from(mv(innerClient)));
+		return Capability::Client(mv(wrapper));
+	}
 	
-	Own<ClientHook> wrapper = kj::heap<ObjectHook>(ClientHook::from(mv(innerClient)));
-	return Capability::Client(mv(wrapper));
+	return nullptr;
 }
 
 OneOf<Capability::Client, Own<DBObject>, decltype(nullptr)> ObjectDB::unwrap(Capability::Client object) {
@@ -555,6 +593,7 @@ OneOf<Capability::Client, Own<DBObject>, decltype(nullptr)> ObjectDB::unwrap(Cap
 	// If any of the hooks encountered is an object hook, use that
 	Own<capnp::ClientHook> hook = capnp::ClientHook::from(kj::cp(object));
 	
+	// First check whether this is a DB object in our database ...
 	ClientHook* inner = hook.get();
 	while(true) {
 		if(inner -> getBrand() == ObjectHook::BRAND) {
@@ -563,8 +602,19 @@ OneOf<Capability::Client, Own<DBObject>, decltype(nullptr)> ObjectDB::unwrap(Cap
 			if(asObjectHook -> object -> parent.get() == this)
 				return asObjectHook -> object.addRef();
 		}
+		
+		KJ_IF_MAYBE(pHook, inner -> getResolved()) {
+			inner = pHook;
+		} else {
+			break;
+		}
+	}
 	
-		KJ_IF_MAYBE(pId, exports.find(inner)) {
+	// ... only then (for security reasons) check whether we are downloading it ...
+	inner = hook.get();
+	while(true) {
+		// We are downloading this thing already
+		KJ_IF_MAYBE(pId, activeDownloads.find(inner)) {
 			return kj::refcounted<DBObject>(*this, *pId);
 		}
 		
@@ -575,10 +625,12 @@ OneOf<Capability::Client, Own<DBObject>, decltype(nullptr)> ObjectDB::unwrap(Cap
 		}
 	}
 	
+	// ... otherwise check whether it is a null cap ... 
 	if(inner -> isNull())
 		return nullptr;
 	}
 	
+	// ... turns out we can't unwrap this.
 	return mv(object);
 }
 
@@ -708,11 +760,14 @@ Promise<void> ObjectDB::downloadTask(DataRef<AnyPointer>::Client src, DBObject& 
 }
 
 void ObjectDB::deleteIfOrphan(int64_t id) {
-	KJ_REQUIRE(parent -> getRefcountAndHash.query(id), "Internal error, refcount not found");
-	if(parent -> getRefcountAndHash[0] > 0)
+	KJ_REQUIRE(!readOnly);
+	
+	auto rcAndHash = parent -> getRefcountAndHash.query(id);
+	KJ_REQUIRE(rcAndHash.step(), "Internal error, refcount not found");
+	if(rcAndHash[0] > 0)
 		return;
 	
-	auto hash = parent -> getRefcountAndHash[1];
+	auto hash = acAndHash[1].asBlob();
 	
 	// Decrease refcount on blob
 	KJ_IF_MAYBE(pBlob, blobStore -> find(hash)) {
@@ -722,11 +777,9 @@ void ObjectDB::deleteIfOrphan(int64_t id) {
 	// Scan outgoing refs
 	std::set<int64_t> idsToCheck;
 	{
-		auto& getOutgoingRefs = parent -> getOutgoingRefs;
-		getOutgoingRefs.bind(id);
-		getOutgoingRefs.reset();
-		while(getOutgoingRefs.step()) {
-			auto target = getOutgoingRefs[0].asInt64();
+		auto outgoingRefs = parent -> getOutgoingRefs.query(id);
+		while(outgoingRefs.step()) {
+			auto target = outgoingRefs[0].asInt64();
 			parent -> decRefcount(target);
 			idsToCheck.insert(id);
 		}
@@ -741,6 +794,7 @@ void ObjectDB::deleteIfOrphan(int64_t id) {
 }
 
 void DBObject::save() {
+	KJ_REQUIRE(!parent -> readOnly);
 	// All work here has to be done inside a DB transaction
 	auto t = parent -> conn.beginTransaction();
 	
@@ -750,11 +804,9 @@ void DBObject::save() {
 	// Decrease refcount of all previous outgoing references
 	std::set<int64_t> idsToCheck;
 	{
-		auto& getOutgoingRefs = parent -> getOutgoingRefs;
-		getOutgoingRefs.bind(id);
-		getOutgoingRefs.reset();
-		while(getOutgoingRefs.step()) {
-			auto target = getOutgoingRefs[0].asInt64();
+		auto outgoingRefs = parent -> getOutgoingRefs.query(id);
+		while(outgoingRefs.step()) {
+			auto target = outgoingRefs[0].asInt64();
 			parent -> decRefcount(target);
 			idsToCheck.insert(id);
 		}
@@ -782,8 +834,10 @@ void DBObject::save() {
 			KJ_REQUIRE(!unwrapped.is<Capability::Client>(), "Only immediate DB references and null capabilities may be used inside DBObject.");
 			if(unwrapped.is<Own<DBObject>>()) {
 				auto& target = unwrapped.as<Own<DBObject>>();
+				
 				parent -> insertRef(id, i, target.id);
 				parent -> incRefcount(target.id);
+				
 				continue;
 			}
 		}
@@ -791,7 +845,7 @@ void DBObject::save() {
 		parent -> insertRef(id, i, nullptr);
 	}
 	
-	// Check if we have capabilities without refs
+	// Check if we have capabilities without incoming refs
 	for(int64_t id : idsToCheck) {
 		parent -> deleteIfOrphan(id);
 	}		
@@ -808,18 +862,16 @@ void DBObject::load() {
 	
 	kj::Vector<Maybe<Own<ClientHook>>> rawCapTable;
 	
-	parent -> getRefs.reset();
-	parent -> getRefs.bind(id);
-	while(parent -> getRefs.step()) {
-		auto col = parent -> getRefs[0];
+	auto refs = parent -> getOutgoingRefs.query(id);
+	while(refs.step()) {
+		auto col = refs[0];
 		
 		if(col.type() == sqlite::Type::NULLTYPE) {
 			rawCapTable.add(nullptr);
 			continue;
 		}
 		
-		int64_t id = parent -> getRefs[0];
-		auto dbObject = kj::heap<DBObject>(*parent, id, CreationToken());
+		auto dbObject = kj::heap<DBObject>(*parent, col, CreationToken());
 		rawCapTable.add(ClientHook::from(wrap(mv(dbObject))));
 	}
 	

@@ -22,19 +22,15 @@ struct BlobStore : public kj::Refcounted {
 	Statement setBlobHash;
 	Statement findBlob;
 	
-	Statement incRefExternal;
-	Statement decRefExternal;
-	Statement incRefInternal;
-	Statement decRefInternal;
+	Statement incRef;
+	Statement decRef;
 	
 	Statement deleteIfOrphan;
 	Statement createChunk;
 	
-	Statement savepoint;
-	Statement release;
-	
 	kj::String tablePrefix;
 	Own<sqlite::Connection> conn;	
+	const bool readOnly;
 
 	inline Own<BlobStore> addRef() { return kj::addRef(*this); }
 	
@@ -42,7 +38,7 @@ struct BlobStore : public kj::Refcounted {
 	BlobBuilder create(size_t chunkSize);
 		
 private:
-	BlobStore(sqlite::Connection& conn, kj::StringPtr tablePrefix);
+	BlobStore(sqlite::Connection& conn, kj::StringPtr tablePrefix, bool readOnly = false);
 	
 	friend kj::Refcounted;
 	
@@ -62,16 +58,12 @@ struct Blob {
 	inline Blob(const Blob& other) : Blob(*(other.parent), other.id) {}
 	inline Blob(Blob&& other) = default;
 	
-	void incRefExternal();
-	void decRefExternal();
+	void incRef();
+	void decRef();
 	
 	kj::Array<const byte> hash();
 	
 	inline BlobReader open();
-	~Blob();
-	
-private:
-	kj::UnwindDetector ud;
 };
 
 struct BlobBuilder {
@@ -96,25 +88,42 @@ private:
 	kj::UnwindDetector ud;
 };
 
-struct BlobReader {
-	BlobReader(Blob& blob);
-	
+struct BlobReader {	
 	bool read(kj::ArrayPtr<byte> output);
 	inline size_t remainingOut() { return decompressor.remainingOut(); }
 	
-private:
-	int64_t id;
-	int64_t currentChunkNo = 0;
-	
+private:	
 	Blob blob;
 	
 	Decompressor decompressor;
 	sqlite::Statement readStatement;
+	sqlite::Statement::Query readQuery;
 };
 
 struct ObjectDB : public kj::Refcounted {
 	using capnp::Capability;
 	using capnp::AnyPointer;
+	
+	using Statement = sqlite::Statement;
+	
+	const kj::String filename;
+	const bool readOnly;
+	const kj::String tablePrefix;
+	
+	Statement createObject;
+	Statement getInfo;
+	Statement setInfo;
+	Statement incRefcount;
+	Statement decRefcount;
+	Statement deleteIfOrphan;
+	
+	Statement insertRef;
+	Statement listOutgoingRefs;
+	Statement clearOutgoingRefs;
+	
+	Statement getRefcountAndHash;
+	
+	ObjectDB(kj::StringPtr filename, kj::StringPtr tablePrefix, bool readOnly = false);
 	
 	//! Determines whether the given capability is outside the database, pointing to a DB object, or null
 	OneOf<Capability::Client, Own<DBObject>, decltype(nullptr)> unwrap(Capability::Client cap);
@@ -151,6 +160,8 @@ private:
 	
 	Own<BlobStore> blobStore;
 	Own<sqlite::Connection> conn;
+	
+	bool shared;
 };
 
 //! Represents an object in the object database, as well as the permission to access it

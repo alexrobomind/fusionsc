@@ -140,7 +140,7 @@ struct SQLite3PreparedStatement {
 	
 	struct Query {
 		SQLite3PreparedStatement& parent;
-		bool next();
+		bool step();
 		
 		Query(SQLite3PreparedStatement& parent);
 		~Query();
