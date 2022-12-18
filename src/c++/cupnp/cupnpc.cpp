@@ -355,11 +355,13 @@ kj::StringTree cppNodeTypeName(uint64_t nodeId, Brand::Reader nodeBrand, uint64_
 			inDependentScope = true;
 			
 			// Check that we are in a place where this is valid
-			bool foundInScope = false;
+			// Note: This is actually an invalid check because imported
+			// nodes are not in the same global scope.
+			/*bool foundInScope = false;
 			for(auto scopeNode : scopeNodes)
 				if(scopeNode.getId() == node.getId())
 					foundInScope = true;
-			KJ_REQUIRE(foundInScope);
+			KJ_REQUIRE(foundInScope, result);*/
 			
 			// Refer to type parameter for all templates
 			auto nameBuilder = kj::heapArrayBuilder<kj::StringTree>(node.getParameters().size());
