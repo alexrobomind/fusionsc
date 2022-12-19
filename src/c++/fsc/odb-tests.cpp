@@ -3,7 +3,8 @@
 #include "odb.h"
 #include "local.h"
 
-namespace fsc {
+using namespace fsc;
+using namespace fsc::odb;
 	
 TEST_CASE("ODB write-read") {
 	Library l = newLibrary();
@@ -36,4 +37,12 @@ TEST_CASE("ODB write-read") {
 	KJ_REQUIRE(data1 == data2);
 }
 
+TEST_CASE("open") {
+	SECTION("temporary") {
+		openObjectDB("");
+	}
+	
+	SECTION("memory") {
+		openObjectDB(":memory:");
+	}
 }

@@ -232,6 +232,7 @@ private:
  */
 struct SQLite3Transaction {
 	inline SQLite3Transaction(SQLite3Connection& conn, kj::StringPtr name) : savepoint(conn, name) {}
+	SQLite3Transaction(SQLite3Transaction&&) = default;
 	~SQLite3Transaction();
 	
 	inline void commit() { savepoint.release(); }
@@ -249,6 +250,7 @@ private:
  */
 struct SQLite3RootTransaction {
 	inline SQLite3RootTransaction(SQLite3Connection& conn, bool immediate);
+	SQLite3RootTransaction(SQLite3RootTransaction&&) = default;
 	~SQLite3RootTransaction();
 	
 	void commit();

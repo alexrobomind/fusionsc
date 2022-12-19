@@ -25,12 +25,14 @@ struct BlobStore : public kj::Refcounted {
 	Statement createBlob;
 	Statement setBlobHash;
 	Statement findBlob;
+	Statement getBlobHash;
 	
 	Statement incRefcount;
 	Statement decRefcount;
 	
 	Statement deleteIfOrphan;
 	Statement createChunk;
+	
 	
 	kj::String tablePrefix;
 	Own<sqlite::Connection> conn;	
@@ -128,7 +130,7 @@ struct ObjectDB : public kj::Refcounted {
 	Statement listOutgoingRefs;
 	Statement clearOutgoingRefs;
 	
-	Statement getRefcountAndHash;
+	Statement getRefcount;
 	
 	ObjectDB(kj::StringPtr filename, kj::StringPtr tablePrefix, bool readOnly = false);
 	inline Own<ObjectDB> addRef() { return kj::addRef(*this); }
@@ -141,6 +143,8 @@ struct ObjectDB : public kj::Refcounted {
 	
 	//! Checks the reference count of an object and deletes it is 0.
 	void deleteIfOrphan(int64_t id);
+	
+	Folder::Client getRoot();
 	
 private:
 	//! Replaces a DataRef with a variant pointing into the database
@@ -163,6 +167,8 @@ private:
 	
 	//! Creates a new connection to the same database
 	Own<sqlite::Connection> forkConnection(bool readOnly = true);
+	
+	void createRoot();
 		
 	kj::TaskSet downloadTasks;
 	
@@ -207,6 +213,8 @@ private:
 	
 	friend class ObjectDB;
 };
+
+Folder::Client openObjectDB(kj::StringPtr folder);
 
 // ==================================== Inline implementation ===================================
 

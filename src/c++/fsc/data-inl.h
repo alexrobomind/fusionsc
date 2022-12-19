@@ -536,19 +536,19 @@ namespace internal {
 		{}
 		
 		ResultPromise step() {
-			return kj::evalLater(func)
-			.catch_([this](kj::Exception& e) {
-				if(e.getType() == kj::Exception::OVERLOADED) {
+			return kj::evalLater(f)
+			.catch_([this](kj::Exception&& e) -> ResultPromise {
+				if(e.getType() == kj::Exception::Type::OVERLOADED) {
 					ResultPromise result = getActiveThread().timer().afterDelay(current)
-					.then([this]() { step(); });
+					.then([this]() { return step(); });
 					
-					duration *= growth;
-					if(duration > max) duration = max;
+					current *= growth;
+					if(current > max) current = max;
 					
 					return result;
 				}
 				
-				kj::throwFatalException(e);
+				kj::throwFatalException(mv(e));
 			});
 		}
 	};
@@ -556,7 +556,7 @@ namespace internal {
 
 template<typename F>
 kj::PromiseForResult<F, void> withBackoff(kj::Duration min, kj::Duration max, uint64_t growth, F func) {
-	auto runner = heapHeld<BackoffRunner<F>>(min, max, growth, mv(f));
+	auto runner = heapHeld<internal::BackoffRunner<F>>(min, max, growth, mv(func));
 	return runner -> step().attach(runner.x());
 }
 

@@ -54,6 +54,7 @@ void Operation::dependsOn(Promise<void> promise) const {
 			owner(owner),
 			deleteExecutor(getActiveThread().executor().addRef())
 		{}
+		~DependencyNode() noexcept {};
 		
 		// Only accessed in clear()
 		Link* propagatorLink = nullptr;

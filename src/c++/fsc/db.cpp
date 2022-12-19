@@ -66,7 +66,6 @@ bool SQLite3Connection::inTransaction() {
 }
 	
 int64_t SQLite3Connection::exec(kj::StringPtr statement) {
-	KJ_DBG("Executing statement", statement);
 	return prepare(statement).exec();
 }
 
@@ -90,6 +89,7 @@ SQLite3RootTransaction SQLite3Connection::beginRootTransaction (bool immediate) 
 }
 
 SQLite3PreparedStatement SQLite3Connection::prepare(kj::StringPtr statement) {
+	KJ_DBG("Preparing statement statement", statement);
 	return SQLite3PreparedStatement(*this, statement);
 }
 
