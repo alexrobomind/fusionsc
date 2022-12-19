@@ -833,10 +833,13 @@ void ObjectDB::createRoot() {
 	if(q.step())
 		return;
 	
-	conn -> execInsert(str("INSERT INTO ", tablePrefix, "_objects (id, info, refcount) VALUES (1, NULL, 1)"));
-	auto dbObject = kj::refcounted<DBObject>(*this, 1, DBObject::CreationToken());
-	dbObject -> info.initFolder();
-	dbObject -> save();
+	Temporary<ObjectInfo> oInfo;
+	oInfo.initFolder();
+	
+	auto asBytes = wordsToBytes(messageToFlatArray(oInfo));
+	
+	auto insertStatement = conn -> prepare(str("INSERT INTO ", tablePrefix, "_objects (id, info, refcount) VALUES (1, ?, 1)"));
+	insertStatement.insert(asBytes.asPtr());
 }
 
 Folder::Client ObjectDB::getRoot() {

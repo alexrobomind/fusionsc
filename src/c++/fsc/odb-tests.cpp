@@ -12,6 +12,7 @@ TEST_CASE("ODB write-read") {
 	
 	KJ_DBG("Opening DB");
 	auto conn = openSQLite3(":memory:");
+	auto t = conn -> beginTransaction();
 	KJ_DBG("Connected");
 	
 	auto store = kj::refcounted<BlobStore>(*conn, "blobs");
@@ -37,12 +38,16 @@ TEST_CASE("ODB write-read") {
 	KJ_REQUIRE(data1 == data2);
 }
 
-TEST_CASE("open") {
+TEST_CASE("ODB open") {
 	SECTION("temporary") {
 		openObjectDB("");
 	}
 	
 	SECTION("memory") {
 		openObjectDB(":memory:");
+	}
+	
+	SECTION("testDB") {
+		openObjectDB("testDB");
 	}
 }
