@@ -22,22 +22,23 @@ BlobStore::BlobStore(sqlite::Connection& conn, kj::StringPtr tablePrefix, bool r
 	tablePrefix(kj::heapString(tablePrefix)),
 	conn(conn.addRef()),
 	readOnly(readOnly)
-{
+{	
 	if(!readOnly) {
 		conn.exec(str(
 			"CREATE TABLE IF NOT EXISTS ", tablePrefix, "_blobs ("
 			"  id INTEGER PRIMARY KEY,"
 			"  hash BLOB UNIQUE," // SQLite UNIQUE allows multiple NULL values
-			"  refcount INTEGER"
+			"  refcount INTEGER DEFAULT 0"
 			")"
 		));
 		conn.exec(str(
 			"CREATE TABLE IF NOT EXISTS ", tablePrefix, "_chunks ("
-			"  id INTEGER REFERENCES ", tablePrefix, "_blobs(id) ON UPDATE CASCADE ON DELETE CASCADE,"
+			"  id INTEGER,"
 			"  chunkNo INTEGER,"
 			"  data BLOB,"
 			""
-			"  PRIMARY KEY(id, chunkNo)"
+			"  PRIMARY KEY(id, chunkNo),"
+			"  FOREIGN KEY(id) REFERENCES ", tablePrefix, "_blobs(id) ON UPDATE CASCADE ON DELETE CASCADE"
 			")"
 		));
 		conn.exec(str("CREATE INDEX IF NOT EXISTS ", tablePrefix, "_blobs_hash_idx ON ", tablePrefix, "_blobs (hash)"));
@@ -56,6 +57,7 @@ BlobStore::BlobStore(sqlite::Connection& conn, kj::StringPtr tablePrefix, bool r
 	
 	findBlob = conn.prepare(str("SELECT id FROM ", tablePrefix, "_blobs WHERE hash = ?"));
 	getBlobHash = conn.prepare(str("SELECT hash FROM ", tablePrefix, "_blobs WHERE id = ?"));
+	getRefcount = conn.prepare(str("SELECT refcount FROM ", tablePrefix, "_blobs WHERE id = ?"));
 }
 
 Maybe<Blob> BlobStore::find(kj::ArrayPtr<const byte> hash) {	
@@ -80,6 +82,14 @@ Blob::Blob(BlobStore& parent, int64_t id) :
 
 void Blob::incRef() { KJ_REQUIRE(!parent -> readOnly); parent -> incRefcount(id); }
 void Blob::decRef() { KJ_REQUIRE(!parent -> readOnly); parent -> decRefcount(id); parent -> deleteIfOrphan(id); }
+
+int64_t Blob::refcount() {
+	auto q = parent -> getRefcount.query(id);
+	KJ_REQUIRE(q.step());
+	
+	return q[0].asInt64();
+}
+
 
 kj::Array<const byte> Blob::hash() {
 	auto q = parent -> getBlobHash.query(id);

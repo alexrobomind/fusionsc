@@ -26,17 +26,39 @@ TEST_CASE("ODB blobstore") {
 	auto data2 = kj::heapArray<byte>(1024);
 	{
 		auto reader = blob.open();
-		KJ_REQUIRE(reader.read(data2));
-		KJ_REQUIRE(reader.remainingOut() == 0);
-	}
-	
-	KJ_IF_MAYBE(pResult, store -> find(blob.hash())) {
-	} else {
-		KJ_FAIL_REQUIRE("Blob hash not stored");
+		REQUIRE(reader.read(data2));
+		REQUIRE(reader.remainingOut() == 0);
 	}
 		
+	REQUIRE(data1 == data2);
 	
-	KJ_REQUIRE(data1 == data2);
+	KJ_IF_MAYBE(pResult, store -> find(blob.hash())) {
+		REQUIRE(true);
+	} else {
+		REQUIRE(false);
+	}
+	
+	REQUIRE(blob.refcount() == 0);
+	blob.incRef();
+	REQUIRE(blob.refcount() == 1);
+	blob.incRef();
+	REQUIRE(blob.refcount() == 2);
+	blob.decRef();
+	REQUIRE(blob.refcount() == 1);
+	blob.decRef();
+	REQUIRE_THROWS([&]() {
+		blob.refcount();
+	}());
+	
+	REQUIRE_THROWS([&]() {
+		blob.open().read(data2);
+	}());
+	
+	KJ_IF_MAYBE(pResult, store -> find(blob.hash())) {
+		REQUIRE(false);
+	} else {
+		REQUIRE(true);
+	}
 }
 
 TEST_CASE("ODB open") {

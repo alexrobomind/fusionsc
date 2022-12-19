@@ -29,6 +29,7 @@ struct BlobStore : public kj::Refcounted {
 	
 	Statement incRefcount;
 	Statement decRefcount;
+	Statement getRefcount;
 	
 	Statement deleteIfOrphan;
 	Statement createChunk;
@@ -66,6 +67,8 @@ struct Blob {
 	
 	void incRef();
 	void decRef();
+	
+	int64_t refcount();
 	
 	kj::Array<const byte> hash();
 	

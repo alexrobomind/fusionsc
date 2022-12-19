@@ -4,7 +4,9 @@
 namespace fsc {
 
 Own<SQLite3Connection> openSQLite3(kj::StringPtr filename) {
-	return kj::refcounted<SQLite3Connection>(filename);
+	auto result = kj::refcounted<SQLite3Connection>(filename);
+	result -> exec("PRAGMA foreign_keys = ON");
+	return result;
 }
 	
 // ================= struct SQLite3Connection =================
