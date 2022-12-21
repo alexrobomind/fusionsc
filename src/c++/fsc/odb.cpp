@@ -688,32 +688,40 @@ struct ObjectDB::ObjectHook : public ClientHook, public kj::Refcounted {
 	Own<DBObject> object;
 			
 	//! Waits until this object has settled into a usable state
-	Promise<void> whenReady() {
-		return withODBBackoff([this]() -> Promise<void> {
-			object -> load(); 
-			auto info = object -> info;
-			KJ_DBG("Checking readyness", info);
-			switch(info.which()) {
-				case ObjectInfo::UNRESOLVED:
-					return object -> whenUpdated().then([this]() { return whenReady(); });
-				case ObjectInfo::EXCEPTION:
-					return fromProto(info.getException());
-					
-				case ObjectInfo::FOLDER:
-					return READY_NOW;
-					
-				case ObjectInfo::DATA_REF: {	
-					switch(info.getDataRef().getDownloadStatus().which()) {
-						case ObjectInfo::DataRef::DownloadStatus::DOWNLOADING:
-							return object -> whenUpdated().then([this]() { return whenReady(); });
-						case ObjectInfo::DataRef::DownloadStatus::FINISHED:
-							return READY_NOW;
-					}
+	Promise<void> whenReady() {		
+		// return withODBBackoff([this]() -> Promise<void> {
+		object -> load(); 
+		auto info = object -> info;
+		KJ_DBG("Checking readyness", info);
+		switch(info.which()) {
+			case ObjectInfo::UNRESOLVED:
+				return object -> whenUpdated().then([this]() { return whenReady(); });
+			case ObjectInfo::EXCEPTION: {
+				Temporary<rpc::Exception> eProto = info.getException();
+				
+				// If the stored exception is OVERLOADED, we trigger the
+				// outer backoff loop. Therefore, we need to change that type
+				// to FAILED.
+				//if(eProto.getType() == rpc::Exception::Type::OVERLOADED)
+				//	eProto.setType(rpc::Exception::Type::FAILED);
+				
+				return fromProto(eProto);
+			}	
+			case ObjectInfo::FOLDER:
+				return READY_NOW;
+				
+			case ObjectInfo::DATA_REF: {	
+				switch(info.getDataRef().getDownloadStatus().which()) {
+					case ObjectInfo::DataRef::DownloadStatus::DOWNLOADING:
+						return object -> whenUpdated().then([this]() { return whenReady(); });
+					case ObjectInfo::DataRef::DownloadStatus::FINISHED:
+						return READY_NOW;
 				}
 			}
-			
-			KJ_FAIL_REQUIRE("Unknown object entry in database");
-		});
+		}
+		
+		KJ_FAIL_REQUIRE("Unknown object entry in database");
+		// });
 	}
 	
 	ObjectHook(Own<DBObject> objectIn) :
@@ -751,7 +759,7 @@ struct ObjectDB::ObjectHook : public ClientHook, public kj::Refcounted {
 	}
 
 	kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
-		return nullptr;
+		return inner -> whenMoreResolved();
 	}
 
 	virtual kj::Own<ClientHook> addRef() override { return kj::addRef(*this); }
@@ -1116,14 +1124,16 @@ DBObject::DBObject(ObjectDB& parent, int64_t id) :
 DBObject::~DBObject() {	KJ_DBG("DBObject::~DBObject()", this);}
 
 Promise<void> DBObject::whenUpdated() {	
+	KJ_DBG("DBObject::whenUpdated()");
 	// Check we have an active download task
 	auto pDLT = parent -> whenResolved.find(id);
 	if(pDLT != parent -> whenResolved.end()) {
+		KJ_DBG("Redirected", id);
 		return pDLT -> second.addBranch();
 	}
 	
 	// Wait a fixed time
-	auto t = parent -> conn -> beginTransaction();
+	KJ_DBG("Resolved to wait");
 	return getActiveThread().timer().afterDelay(5 * kj::SECONDS);
 }
 	

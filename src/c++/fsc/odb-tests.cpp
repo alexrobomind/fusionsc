@@ -133,12 +133,59 @@ TEST_CASE("ODB rw") {
 		paf.fulfiller -> reject(mv(exc));
 		
 		try {
-			storedObject.whenResolved().wait(ws);
-			KJ_DBG("Metadata", storedObject.metadataRequest().send().wait(ws));
-			
+			storedObject.whenResolved().wait(ws);			
 			FAIL("We should never get here");
 		} catch(kj::Exception& e) {
 			REQUIRE(e.getDescription() == msg);
+			REQUIRE(e.getType() == kj::Exception::Type::FAILED);
+		}
+	}
+	
+	SECTION("disconnect") {
+		auto msg = "Injected failure message"_kj;
+		auto exc = KJ_EXCEPTION(DISCONNECTED);
+		exc.setDescription(str(msg));
+		
+		paf.fulfiller -> reject(mv(exc));
+		
+		try {
+			storedObject.whenResolved().wait(ws);			
+			FAIL("We should never get here");
+		} catch(kj::Exception& e) {
+			REQUIRE(e.getDescription() == msg);
+			REQUIRE(e.getType() == kj::Exception::Type::DISCONNECTED);
+		}
+	}
+	
+	SECTION("overloaded") {
+		auto msg = "Injected failure message"_kj;
+		auto exc = KJ_EXCEPTION(OVERLOADED);
+		exc.setDescription(str(msg));
+		
+		paf.fulfiller -> reject(mv(exc));
+		
+		try {
+			storedObject.whenResolved().wait(ws);			
+			FAIL("We should never get here");
+		} catch(kj::Exception& e) {
+			REQUIRE(e.getDescription() == msg);
+			REQUIRE(e.getType() == kj::Exception::Type::OVERLOADED);
+		}
+	}
+	
+	SECTION("unimplemented") {
+		auto msg = "Injected failure message"_kj;
+		auto exc = KJ_EXCEPTION(UNIMPLEMENTED);
+		exc.setDescription(str(msg));
+		
+		paf.fulfiller -> reject(mv(exc));
+		
+		try {
+			storedObject.whenResolved().wait(ws);			
+			FAIL("We should never get here");
+		} catch(kj::Exception& e) {
+			REQUIRE(e.getDescription() == msg);
+			REQUIRE(e.getType() == kj::Exception::Type::UNIMPLEMENTED);
 		}
 	}
 }
