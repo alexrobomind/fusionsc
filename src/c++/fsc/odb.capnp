@@ -26,8 +26,10 @@ interface Folder {
 	getEntry @2 (name : Text) -> FolderEntry;
 	putEntry @3 FolderEntry -> FolderEntry;
 	
-	mkdir @4 (name : Text) -> (folder : Folder);
-	store @5 (name : Text, ref : Data.DataRef) -> ();
+	rm @4 (name : Text) -> ();
+	
+	mkdir @5 (name : Text) -> (folder : Folder);
+	store @6 (name : Text, ref : Data.DataRef) -> ();
 }
 
 interface Object extends(Data.DataRef, Folder) {
@@ -41,7 +43,7 @@ struct ObjectInfo {
 	union {
 		unresolved @0 : Void;
 		exception @1 : Rpc.Exception;
-		dataRef : union {
+		dataRef : group {
 			downloadStatus : union {
 				downloading @2 : Void;
 				finished @3 : Void;

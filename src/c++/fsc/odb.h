@@ -136,7 +136,7 @@ struct ObjectDB : public kj::Refcounted {
 	Statement getRefcount;
 	
 	ObjectDB(kj::StringPtr filename, kj::StringPtr tablePrefix, bool readOnly = false);
-	inline ~ObjectDB() { KJ_DBG("ObjectDB::~ObjectDB()"); }
+	inline ~ObjectDB() {}
 	inline Own<ObjectDB> addRef() { return kj::addRef(*this); }
 	
 	//! Determines whether the given capability is outside the database, pointing to a DB object, or null

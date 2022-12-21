@@ -254,7 +254,7 @@ SQLite3Savepoint::SQLite3Savepoint(SQLite3Connection& conn, kj::StringPtr name) 
 	conn(conn.addRef()),
 	name(kj::heapString(name))
 {
-	KJ_DBG("Creating savepoint", name);
+	// KJ_DBG("Creating savepoint", name);
 	conn.exec(str("SAVEPOINT ", name));
 }
 
@@ -264,7 +264,7 @@ SQLite3Savepoint::~SQLite3Savepoint() {
 
 void SQLite3Savepoint::rollback() {
 	KJ_REQUIRE(!released, "Trying to roll back released savepoint");
-	KJ_DBG("Rolling back savepoint", name);
+	// KJ_DBG("Rolling back savepoint", name);
 	
 	if(conn.get() == nullptr)
 		return;
@@ -278,7 +278,7 @@ void SQLite3Savepoint::release() {
 			conn -> exec(str("RELEASE SAVEPOINT ", name));
 		
 		released  = true;
-		KJ_DBG("Releasing savepoint", name);
+		// KJ_DBG("Releasing savepoint", name);
 	}
 }
 

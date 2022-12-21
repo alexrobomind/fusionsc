@@ -4,6 +4,7 @@
 
 #include "odb.h"
 #include "local.h"
+#include "data.h"
 
 using namespace fsc;
 using namespace fsc::odb;
@@ -108,84 +109,118 @@ TEST_CASE("ODB rw") {
 	auto paf = kj::newPromiseAndFulfiller<HolderRef::Client>();
 	HolderRef::Client promiseRef(mv(paf.promise));
 	
-	KJ_DBG("Opening");
 	Folder::Client dbRoot = openObjectDB(":memory:");
 	
 	auto putRequest = dbRoot.putEntryRequest();
 	putRequest.setName("obj");
 	putRequest.setRef(promiseRef.asGeneric());
 	
-	KJ_DBG("Storing");
 	auto putResponse = putRequest.send().wait(ws);
-	KJ_DBG("Getting ref");
-	auto storedObject = putResponse.getRef();
-	KJ_DBG("Done");
+	auto storedObject = putResponse.getRef().asGeneric<test::DataRefHolder<capnp::Data>>();
 	
 	SECTION("fast termination") {
 		// Checks for memory leaks in case download process gets into limbo
 	}
 	
 	SECTION("failure") {
-		auto msg = "Injected failure message"_kj;
-		auto exc = KJ_EXCEPTION(FAILED);
-		exc.setDescription(str(msg));
+		kj::Exception errors[4] = {
+			KJ_EXCEPTION(FAILED),
+			KJ_EXCEPTION(DISCONNECTED),
+			KJ_EXCEPTION(OVERLOADED),
+			KJ_EXCEPTION(UNIMPLEMENTED)
+		};
 		
-		paf.fulfiller -> reject(mv(exc));
-		
-		try {
-			storedObject.whenResolved().wait(ws);			
-			FAIL("We should never get here");
-		} catch(kj::Exception& e) {
-			REQUIRE(e.getDescription() == msg);
-			REQUIRE(e.getType() == kj::Exception::Type::FAILED);
+		for(auto exc : errors) {
+			auto paf = kj::newPromiseAndFulfiller<HolderRef::Client>();
+			HolderRef::Client promiseRef(mv(paf.promise));
+			
+			auto putRequest = dbRoot.putEntryRequest();
+			putRequest.setName("obj");
+			putRequest.setRef(promiseRef.asGeneric());
+			
+			auto putResponse = putRequest.send().wait(ws);
+			auto storedObject = putResponse.getRef();
+			
+			auto msg = "Injected failure message"_kj;
+			exc.setDescription(str(msg));
+			paf.fulfiller -> reject(mv(exc));
+			
+			try {
+				storedObject.whenResolved().wait(ws);			
+				FAIL("We should never get here");
+			} catch(kj::Exception& e) {
+				REQUIRE(e.getDescription() == msg);
+				REQUIRE(e.getType() == exc.getType());
+			}
 		}
 	}
 	
-	SECTION("disconnect") {
-		auto msg = "Injected failure message"_kj;
-		auto exc = KJ_EXCEPTION(DISCONNECTED);
-		exc.setDescription(str(msg));
+	SECTION("ref") {
+		Temporary<test::DataRefHolder<capnp::Data>> refHolder;
 		
-		paf.fulfiller -> reject(mv(exc));
+		auto data = kj::heapArray<byte>(12);
+		th -> rng().randomize(data);
 		
-		try {
-			storedObject.whenResolved().wait(ws);			
-			FAIL("We should never get here");
-		} catch(kj::Exception& e) {
-			REQUIRE(e.getDescription() == msg);
-			REQUIRE(e.getType() == kj::Exception::Type::DISCONNECTED);
+		SECTION("nestedRefs") {
+			refHolder.setRef(th -> dataService().publish(data));
 		}
+		SECTION("null") {}
+		
+		paf.fulfiller -> fulfill(th -> dataService().publish(refHolder.asReader()));
+		storedObject.whenResolved().wait(ws);
+		
+		auto outerCopy = th -> dataService().download(storedObject).wait(ws);
+		REQUIRE(outerCopy.get().hasRef() == refHolder.hasRef());
+		
+		if(refHolder.hasRef()) {
+			auto innerCopy = th -> dataService().download(refHolder.getRef()).wait(ws);
+			REQUIRE(innerCopy.get() == data);
+		}
+	}
+}
+
+TEST_CASE("ODB rw main") {
+	Library l = newLibrary();
+	LibraryThread th = l -> newThread();
+	
+	auto& ws = th -> waitScope();
+	
+	using HolderRef = DataRef<test::DataRefHolder<capnp::Data>>;
+	
+	auto paf = kj::newPromiseAndFulfiller<HolderRef::Client>();
+	HolderRef::Client promiseRef(mv(paf.promise));
+	
+	Folder::Client dbRoot = openObjectDB(":memory:");
+	
+	auto putRequest = dbRoot.putEntryRequest();
+	putRequest.setName("obj");
+	putRequest.setRef(promiseRef.asGeneric());
+	
+	auto putResponse = putRequest.send().wait(ws);
+	auto storedObject = putResponse.getRef().asGeneric<test::DataRefHolder<capnp::Data>>();
+	
+	Temporary<test::DataRefHolder<capnp::Data>> refHolder;
+	
+	auto data = kj::heapArray<byte>(12);
+	th -> rng().randomize(data);
+	
+	SECTION("nestedRefs") {
+		refHolder.setRef(th -> dataService().publish(data));
+	}
+	SECTION("null") {}
+	
+	paf.fulfiller -> fulfill(th -> dataService().publish(refHolder.asReader()));
+	storedObject.whenResolved().wait(ws);
+	
+	auto outerCopy = th -> dataService().download(storedObject).wait(ws);
+	REQUIRE(outerCopy.get().hasRef() == refHolder.hasRef());
+	
+	if(refHolder.hasRef()) {
+		auto innerCopy = th -> dataService().download(refHolder.getRef()).wait(ws);
+		REQUIRE(innerCopy.get() == data);
 	}
 	
-	SECTION("overloaded") {
-		auto msg = "Injected failure message"_kj;
-		auto exc = KJ_EXCEPTION(OVERLOADED);
-		exc.setDescription(str(msg));
-		
-		paf.fulfiller -> reject(mv(exc));
-		
-		try {
-			storedObject.whenResolved().wait(ws);			
-			FAIL("We should never get here");
-		} catch(kj::Exception& e) {
-			REQUIRE(e.getDescription() == msg);
-			REQUIRE(e.getType() == kj::Exception::Type::OVERLOADED);
-		}
-	}
-	
-	SECTION("unimplemented") {
-		auto msg = "Injected failure message"_kj;
-		auto exc = KJ_EXCEPTION(UNIMPLEMENTED);
-		exc.setDescription(str(msg));
-		
-		paf.fulfiller -> reject(mv(exc));
-		
-		try {
-			storedObject.whenResolved().wait(ws);			
-			FAIL("We should never get here");
-		} catch(kj::Exception& e) {
-			REQUIRE(e.getDescription() == msg);
-			REQUIRE(e.getType() == kj::Exception::Type::UNIMPLEMENTED);
-		}
-	}
+	auto rmreq = dbRoot.rmRequest();
+	rmreq.setName("obj");
+	rmreq.send().wait(ws);
 }
