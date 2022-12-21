@@ -136,6 +136,7 @@ struct ObjectDB : public kj::Refcounted {
 	Statement getRefcount;
 	
 	ObjectDB(kj::StringPtr filename, kj::StringPtr tablePrefix, bool readOnly = false);
+	inline ~ObjectDB() { KJ_DBG("ObjectDB::~ObjectDB()"); }
 	inline Own<ObjectDB> addRef() { return kj::addRef(*this); }
 	
 	//! Determines whether the given capability is outside the database, pointing to a DB object, or null
@@ -159,7 +160,7 @@ private:
 	Own<DBObject> startDownloadTask(DataRef<AnyPointer>::Client object);
 	
 	//! Performs the download operations required to store the DataRef
-	Promise<void> downloadTask(DataRef<AnyPointer>::Client src, DBObject& dst);
+	Promise<void> downloadTask(DataRef<AnyPointer>::Client src, int64_t id);
 	
 	//! Clients that are currently in the process of being exported
 	std::unordered_map<ClientHook*, int64_t> activeDownloads;
@@ -170,6 +171,8 @@ private:
 	
 	//! Creates a new connection to the same database
 	Own<sqlite::Connection> forkConnection(bool readOnly = true);
+	
+	Own<DBObject> open(int64_t id);
 	
 	void createRoot();
 		
@@ -191,11 +194,8 @@ private:
 
 //! Represents an object in the object database, as well as the permission to access it
 struct DBObject : public kj::Refcounted {
-private:
-	struct CreationToken {};
-
 public:
-	DBObject(ObjectDB& parent, int64_t id, const CreationToken&);
+	DBObject(ObjectDB& parent, int64_t id);
 	~DBObject();
 	
 	void load();

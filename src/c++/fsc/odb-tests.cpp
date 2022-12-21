@@ -108,14 +108,37 @@ TEST_CASE("ODB rw") {
 	auto paf = kj::newPromiseAndFulfiller<HolderRef::Client>();
 	HolderRef::Client promiseRef(mv(paf.promise));
 	
+	KJ_DBG("Opening");
 	Folder::Client dbRoot = openObjectDB(":memory:");
 	
 	auto putRequest = dbRoot.putEntryRequest();
 	putRequest.setName("obj");
 	putRequest.setRef(promiseRef.asGeneric());
 	
+	KJ_DBG("Storing");
 	auto putResponse = putRequest.send().wait(ws);
+	KJ_DBG("Getting ref");
 	auto storedObject = putResponse.getRef();
+	KJ_DBG("Done");
 	
+	SECTION("fast termination") {
+		// Checks for memory leaks in case download process gets into limbo
+	}
 	
+	SECTION("failure") {
+		auto msg = "Injected failure message"_kj;
+		auto exc = KJ_EXCEPTION(FAILED);
+		exc.setDescription(str(msg));
+		
+		paf.fulfiller -> reject(mv(exc));
+		
+		try {
+			storedObject.whenResolved().wait(ws);
+			KJ_DBG("Metadata", storedObject.metadataRequest().send().wait(ws));
+			
+			FAIL("We should never get here");
+		} catch(kj::Exception& e) {
+			REQUIRE(e.getDescription() == msg);
+		}
+	}
 }
