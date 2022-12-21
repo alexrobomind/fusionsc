@@ -1,5 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <fsc/data-test.capnp.h>
+
 #include "odb.h"
 #include "local.h"
 
@@ -79,6 +81,9 @@ TEST_CASE("ODB blobstore") {
 }
 
 TEST_CASE("ODB open") {
+	Library l = newLibrary();
+	LibraryThread th = l -> newThread();
+	
 	SECTION("temporary") {
 		openObjectDB("");
 	}
@@ -90,4 +95,27 @@ TEST_CASE("ODB open") {
 	SECTION("testDB") {
 		openObjectDB("testDB");
 	}
+}
+
+TEST_CASE("ODB rw") {
+	Library l = newLibrary();
+	LibraryThread th = l -> newThread();
+	
+	auto& ws = th -> waitScope();
+	
+	using HolderRef = DataRef<test::DataRefHolder<capnp::Data>>;
+	
+	auto paf = kj::newPromiseAndFulfiller<HolderRef::Client>();
+	HolderRef::Client promiseRef(mv(paf.promise));
+	
+	Folder::Client dbRoot = openObjectDB(":memory:");
+	
+	auto putRequest = dbRoot.putEntryRequest();
+	putRequest.setName("obj");
+	putRequest.setRef(promiseRef.asGeneric());
+	
+	auto putResponse = putRequest.send().wait(ws);
+	auto storedObject = putResponse.getRef();
+	
+	
 }

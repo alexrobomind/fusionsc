@@ -630,9 +630,14 @@ struct ObjectDB::ObjectImpl : public Object::Server {
 					entry.setName(name);
 				}
 				
+				auto retEntry = ctx.initResults();
+				retEntry.setName(entry.getName());
+				
 				switch(params.which()) {
 					case FolderEntry::REF:
 						entry.setRef(object -> parent -> download(params.getRef()));
+						
+						retEntry.setRef(entry.getRef());
 						break;
 					
 					case FolderEntry::FOLDER:
@@ -640,6 +645,8 @@ struct ObjectDB::ObjectImpl : public Object::Server {
 						
 						KJ_REQUIRE(unwrapped.is<Own<DBObject>>(), "Only resolved folders from this database may be passed to putEntry");
 						entry.setFolder(params.getFolder());
+						
+						retEntry.setFolder(entry.getFolder());
 						break;
 				}
 				

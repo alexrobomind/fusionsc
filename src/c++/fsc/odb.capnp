@@ -24,7 +24,7 @@ interface Folder {
 	ls @0 () -> (entries : List(Text));
 	getAll @1 () -> (entries : List(FolderEntry));
 	getEntry @2 (name : Text) -> FolderEntry;
-	putEntry @3 FolderEntry -> ();
+	putEntry @3 FolderEntry -> FolderEntry;
 	
 	mkdir @4 (name : Text) -> (folder : Folder);
 	store @5 (name : Text, ref : Data.DataRef) -> ();
