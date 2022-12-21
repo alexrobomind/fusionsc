@@ -1208,11 +1208,8 @@ void DBObject::save() {
 			if(outgoingRefs[0].type() == sqlite::Type::NULLTYPE) {
 				continue;
 			}
+			
 			auto target = outgoingRefs[0].asInt64();
-			
-			if(target == 0)
-				continue;
-			
 			parent -> decRefcount(target);
 			idsToCheck.insert(target);
 		}
