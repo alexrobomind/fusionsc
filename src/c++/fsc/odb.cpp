@@ -180,9 +180,10 @@ Blob BlobBuilder::finish() {
 
 BlobReader::BlobReader(Blob& blob) :
 	blob(blob),
-	readStatement(sqlite::Statement(blob.parent -> conn -> prepare(str("SELECT data FROM ", blob.parent -> tablePrefix, "_chunks WHERE id = ? ORDER BY chunkNo")))),
+	readStatement(blob.parent -> conn -> prepare(str("SELECT data FROM ", blob.parent -> tablePrefix, "_chunks WHERE id = ? ORDER BY chunkNo"))),
 	readQuery(readStatement.query(blob.id))
-{}
+{
+}
 
 bool BlobReader::read(kj::ArrayPtr<byte> output) {
 	decompressor.setOutput(output);
@@ -273,7 +274,7 @@ namespace {
 struct ObjectDB::TransmissionProcess {
 	constexpr static inline size_t CHUNK_SIZE = 1024 * 1024;
 	
-	BlobReader reader;
+	Own<BlobReader> reader;
 	
 	DataRef<capnp::AnyPointer>::Receiver::Client receiver;
 	size_t start;
@@ -281,7 +282,7 @@ struct ObjectDB::TransmissionProcess {
 	
 	Array<byte> buffer;
 	
-	TransmissionProcess(BlobReader&& reader, DataRef<capnp::AnyPointer>::Receiver::Client receiver, size_t start, size_t end) :
+	TransmissionProcess(Own<BlobReader>&& reader, DataRef<capnp::AnyPointer>::Receiver::Client receiver, size_t start, size_t end) :
 		reader(mv(reader)),
 		receiver(mv(receiver)),
 		buffer(kj::heapArray<byte>(CHUNK_SIZE)),
@@ -295,10 +296,10 @@ struct ObjectDB::TransmissionProcess {
 		uint64_t windRemaining = start;
 		while(true) {
 			if(windRemaining >= buffer.size()) {
-				reader.read(buffer);
+				reader -> read(buffer);
 				windRemaining -= buffer.size();
 			} else {
-				reader.read(buffer.slice(0, windRemaining));
+				reader -> read(buffer.slice(0, windRemaining));
 				break;
 			}
 		}
@@ -314,8 +315,8 @@ struct ObjectDB::TransmissionProcess {
 			return receiver.doneRequest().send().ignoreResult();
 		
 		auto slice = chunkStart + CHUNK_SIZE <= end ? buffer.asPtr() : buffer.slice(0, end - chunkStart);
-		reader.read(slice);
-		KJ_REQUIRE(reader.remainingOut() == 0, "Buffer should be filled completely");
+		reader -> read(slice);
+		KJ_REQUIRE(reader -> remainingOut() == 0, "Buffer should be filled completely");
 		
 		// Do a transmission
 		auto request = receiver.receiveRequest();
@@ -449,16 +450,16 @@ struct ObjectDB::ObjectImpl : public Object::Server {
 				uint64_t windRemaining = start;
 				while(true) {
 					if(windRemaining >= buffer.size()) {
-						reader.read(buffer);
+						reader -> read(buffer);
 						windRemaining -= buffer.size();
 					} else {
-						reader.read(buffer.slice(0, windRemaining));
+						reader -> read(buffer.slice(0, windRemaining));
 						break;
 					}
 				}
 				
 				auto data = ctx.getResults().initData(end - start);
-				reader.read(data);
+				reader -> read(data);
 			} else {
 				objectDeleted();
 			}
@@ -482,7 +483,9 @@ struct ObjectDB::ObjectImpl : public Object::Server {
 			KJ_IF_MAYBE(pBlob, forkedStore -> find(checkRef().getMetadata().getDataHash())) {
 				auto reader = pBlob -> open();
 				auto transProc = heapHeld<TransmissionProcess>(mv(reader), params.getReceiver(), params.getStart(), params.getEnd());
-				return transProc -> run().attach(mv(forkedStore), mv(forkedTransaction), transProc.x());
+				
+				auto transmission = kj::evalNow([=]() mutable { return transProc -> run(); });
+				return transmission.attach(mv(forkedStore), mv(forkedTransaction), transProc.x());
 			} else {
 				objectDeleted();
 			}

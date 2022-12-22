@@ -72,7 +72,7 @@ struct Blob {
 	
 	kj::Array<const byte> hash();
 	
-	inline BlobReader open();
+	inline Own<BlobReader> open();
 };
 
 struct BlobBuilder {
@@ -102,6 +102,9 @@ struct BlobReader {
 	inline size_t remainingOut() { return decompressor.remainingOut(); }
 	
 	BlobReader(Blob& blob);
+	
+	// The readQuery can not track the readStatement during move
+	BlobReader(BlobReader&&) = delete;
 	
 private:	
 	Blob blob;
@@ -221,6 +224,6 @@ Folder::Client openObjectDB(kj::StringPtr folder);
 
 // ==================================== Inline implementation ===================================
 
-BlobReader Blob::open() { return BlobReader(*this); }
+Own<BlobReader> Blob::open() { return kj::heap<BlobReader>(*this); }
 
 }}

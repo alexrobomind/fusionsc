@@ -30,16 +30,16 @@ TEST_CASE("ODB blobstore") {
 	auto data2 = kj::heapArray<byte>(1024);
 	{
 		auto reader = blob.open();
-		REQUIRE(reader.read(data2));
-		REQUIRE(reader.remainingOut() == 0);
+		REQUIRE(reader -> read(data2));
+		REQUIRE(reader -> remainingOut() == 0);
 		REQUIRE(data1 == data2);
 	}
 	
 	{
 		auto reader = blob.open();
-		REQUIRE_FALSE(reader.read(data2.slice(0, 512)));
-		REQUIRE(reader.read(data2.slice(512, 1024)));
-		REQUIRE(reader.remainingOut() == 0);
+		REQUIRE_FALSE(reader -> read(data2.slice(0, 512)));
+		REQUIRE(reader -> read(data2.slice(512, 1024)));
+		REQUIRE(reader -> remainingOut() == 0);
 		REQUIRE(data1 == data2);
 	}
 		
@@ -71,7 +71,7 @@ TEST_CASE("ODB blobstore") {
 	}());
 	
 	REQUIRE_THROWS([&]() {
-		blob.open().read(data2);
+		blob.open() -> read(data2);
 	}());
 	
 	KJ_IF_MAYBE(pResult, store -> find(blob.hash())) {
@@ -223,4 +223,46 @@ TEST_CASE("ODB rw main") {
 	auto rmreq = dbRoot.rmRequest();
 	rmreq.setName("obj");
 	rmreq.send().wait(ws);
+}
+
+TEST_CASE("ODB rw persistent") {
+	auto data = kj::heapArray<byte>(12);
+	
+	using HolderRef = DataRef<capnp::Data>;
+	
+	{
+		Library l = newLibrary();
+		LibraryThread th = l -> newThread();
+		auto& ws = th -> waitScope();	
+		
+		th -> rng().randomize(data);	
+		
+		Folder::Client dbRoot = openObjectDB("testdb.sqlite");
+		
+		auto putRequest = dbRoot.putEntryRequest();
+		putRequest.setName("obj");
+		putRequest.setRef(th -> dataService().publish(data).asGeneric());
+		auto putResponse = putRequest.send().wait(ws);
+		
+		auto storedObject = putResponse.getRef().asGeneric<test::DataRefHolder<capnp::Data>>();
+		
+		storedObject.whenResolved().wait(ws);
+	}
+	
+	{
+		Library l = newLibrary();
+		LibraryThread th = l -> newThread();
+		auto& ws = th -> waitScope();		
+		
+		Folder::Client dbRoot = openObjectDB("testdb.sqlite");
+		
+		auto getRequest = dbRoot.getEntryRequest();
+		getRequest.setName("obj");
+		
+		auto getResponse = getRequest.send().wait(ws);
+		auto remoteData = getResponse.getRef().asGeneric<capnp::Data>();
+		auto localData = th -> dataService().download(remoteData).wait(ws);
+		
+		REQUIRE(localData.get() == data);
+	}
 }

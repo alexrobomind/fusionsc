@@ -29,10 +29,6 @@ void SQLite3Connection::check(int result) {
 	int extendedErrorCode = sqlite3_extended_errcode(handle);
 	kj::String errorMessage = kj::str(sqlite3_errmsg(handle));
 	
-	if(result == SQLITE_BUSY) {
-		kj::throwFatalException(KJ_EXCEPTION(OVERLOADED, "Database is busy"));
-	}
-	
 	KJ_FAIL_REQUIRE("SQL error in sqlite", errorCode, extendedErrorCode, errorMessage);
 }
 
@@ -100,6 +96,7 @@ SQLite3PreparedStatement SQLite3Connection::prepare(kj::StringPtr statement) {
 SQLite3PreparedStatement::SQLite3PreparedStatement(SQLite3Connection& conn, kj::StringPtr statement) :
 	parent(conn.addRef()), handle(nullptr)
 {
+	KJ_ASSERT(&conn != nullptr);
 	check(sqlite3_prepare_v2(conn.handle, statement.begin(), statement.size(), &handle, nullptr));
 }
 
@@ -240,8 +237,19 @@ SQLite3PreparedStatement::Query::Query(SQLite3PreparedStatement& parent) :
 	parent.state = ACTIVE;
 }
 
+SQLite3PreparedStatement::Query::Query(Query&& other) :
+	parent(other.parent)
+{
+	other.movedFrom = true;
+}
+
 SQLite3PreparedStatement::Query::~Query() {
-	parent.reset();
+	if(movedFrom)
+		return;
+	
+	ud.catchExceptionsIfUnwinding([this]() {
+		parent.reset();
+	});
 }
 
 bool SQLite3PreparedStatement::Query::step() {

@@ -144,11 +144,16 @@ struct SQLite3PreparedStatement {
 		bool step();
 		
 		Query(SQLite3PreparedStatement& parent);
+		Query(Query&& other);
 		~Query();
 	
 		inline Column operator[](int i) { return parent.column(i); }
 		inline Column begin() { return parent.column(0); }
 		inline Column end() { return parent.column(parent.size()); }
+		
+	private:
+		kj::UnwindDetector ud;
+		bool movedFrom = false;
 	};
 	
 	void reset();
