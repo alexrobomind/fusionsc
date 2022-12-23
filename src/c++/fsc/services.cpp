@@ -4,6 +4,7 @@
 #include "geometry.h"
 #include "flt.h"
 #include "hfcam.h"
+#include "index.h"
 
 #include <kj/list.h>
 
@@ -67,6 +68,11 @@ struct RootServer : public RootService::Server {
 	
 	Promise<void> newHFCamProvider(NewHFCamProviderContext context) override {
 		context.initResults().setService(fsc::newHFCamProvider());
+		return READY_NOW;
+	}
+	
+	Promise<void> newKDTreeService(NewKDTreeServiceContext context) override {
+		context.initResults().setService(fsc::newKDTreeService());
 		return READY_NOW;
 	}
 };

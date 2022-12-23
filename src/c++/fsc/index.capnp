@@ -45,5 +45,5 @@ struct KDTree {
 }
 
 interface KDTreeService {
-	build @0 (boxes : List(Data.Float64Tensor)) -> KDTree;
+	build @0 (boxes : List(Data.Float64Tensor), leafSize : UInt32) -> KDTree;
 }

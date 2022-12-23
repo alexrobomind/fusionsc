@@ -11,6 +11,7 @@ using Magnetics = import "magnetics.capnp";
 using Geometry = import "geometry.capnp";
 using FLT = import "flt.capnp";
 using HFCam = import "hfcam.capnp";
+using Index = import "index.capnp";
 
 struct RootConfig {
 }
@@ -29,4 +30,5 @@ interface RootService {
 	newGeometryLib     @1 () -> (service    : Geometry.GeometryLib);
 	newTracer          @2 (preferredDeviceType : WorkerType = gpu) -> (service    : FLT.FLT, deviceType : WorkerType);
 	newHFCamProvider   @3 () -> (service : HFCam.HFCamProvider);
+	newKDTreeService   @4 () -> (service : Index.KDTreeService);
 }

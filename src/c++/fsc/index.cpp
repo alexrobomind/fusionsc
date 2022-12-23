@@ -87,7 +87,7 @@ namespace {
 				
 		// Packing factor per dimensions
 		double dFactor = pow(((double) nodes.size()) / desiredLeafSize, 1.0 / nDims);
-		size_t factor = (size_t) factor;
+		size_t factor = (size_t) dFactor;
 		
 		if(factor == 0) factor = 1;
 		
@@ -168,27 +168,19 @@ namespace {
 		return outputBuilder.finish();
 	}
 	
-	kj::Array<PackNode> pack(kj::Array<PackNode> nodes, size_t desiredLeafSize) {
+	PackNode pack(kj::Array<PackNode> nodes, size_t desiredLeafSize) {
 		while(nodes.size() > 1) {
 			nodes = packStep(mv(nodes), desiredLeafSize);
 		}
-		return nodes;
+		return mv(nodes[0]);
 	}
 	
 	struct KDTreeWriter {
 		constexpr static inline size_t MAX_NODES_PER_DIM = (1 << 28) / 3;
 		
-		kj::Tuple<KDTree::Chunk::Builder, int32_t> findSlot(size_t idx) {
-			int32_t csb = out.getChunkSizeBase();
-			int32_t rem = out.getChunkRemainder();
-			
-			if(idx < (csb + 1) * rem) {
-				return kj::tuple(out.getChunks()[idx / (csb + 1)], idx % (csb + 1));
-			}
-			
-			idx -= (csb + 1) * rem;
-			return kj::tuple(out.getChunks()[rem + idx / csb], idx % csb);
-		}
+		KDTreeWriter() :
+			out(nullptr)
+		{}
 		
 		void write(const PackNode& root, KDTree::Builder out) {
 			this -> out = out;
@@ -227,6 +219,19 @@ namespace {
 			allocOffset = 1;
 			
 			writeNode(root, 0);
+		}
+	
+	private:		
+		kj::Tuple<KDTree::Chunk::Builder, int32_t> findSlot(size_t idx) {
+			int32_t csb = out.getChunkSizeBase();
+			int32_t rem = out.getChunkRemainder();
+			
+			if(idx < (csb + 1) * rem) {
+				return kj::tuple(out.getChunks()[idx / (csb + 1)], idx % (csb + 1));
+			}
+			
+			idx -= (csb + 1) * rem;
+			return kj::tuple(out.getChunks()[rem + idx / csb], idx % csb);
 		}
 		
 		void writeNode(const PackNode& node, size_t slot) {
@@ -269,10 +274,64 @@ namespace {
 			}
 		}
 		
-	private:
 		KDTree::Builder out;
 		
 		size_t allocOffset = 0;
 		size_t nDims = 0;
 	};
+	
+	struct KDServiceImpl : public KDTreeService::Server {
+		Promise<void> build(BuildContext ctx) {
+			kj::Vector<PackNode> nodes;
+			
+			uint64_t i = 0;
+			size_t nDims = 0;
+			bool first = true;
+			
+			for(auto tensor : ctx.getParams().getBoxes()) {
+				auto shape = tensor.getShape();
+				KJ_REQUIRE(shape.size() == 3);
+				
+				size_t n = shape[0];
+				size_t tNDims = shape[1];
+				KJ_REQUIRE(shape[2] == 3);
+				
+				if(first) {
+					nDims = tNDims;
+				} else {
+					KJ_REQUIRE(tNDims == nDims);
+				}
+				
+				first = false;
+				
+				auto data = tensor.getData();
+				KJ_REQUIRE(data.size() == 3 * nDims * n);
+				
+				for(auto i : kj::range(0, n)) {
+					auto bounds = kj::heapArrayBuilder<PackNode::Bound>(nDims);
+					
+					for(auto iDim : kj::range(0, nDims)) {
+						size_t offset = 3 * (i * nDims + iDim);
+						bounds.add(tuple(
+							data[offset], data[offset + 1], data[offset + 2]
+						));
+					}
+					
+					nodes.add(i++, bounds.finish());
+				}
+			}
+			
+			PackNode packedData = pack(nodes.releaseAsArray(), ctx.getParams().getLeafSize());
+			
+			KDTreeWriter().write(packedData, ctx.initResults());
+			
+			return READY_NOW;
+		}
+	};
+}
+
+namespace fsc {
+	KDTreeService::Client newKDTreeService() {
+		return kj::heap<KDServiceImpl>();
+	}
 }
