@@ -40,8 +40,8 @@ struct KDTree {
 	
 	chunks @0 : List(Chunk);
 	
-	chunkSizeBase @1 : UInt32;
-	chunkRemainder @2 : UInt32;
+	nTotal @1 : UInt32;
+	chunkSize @2 : UInt32;
 }
 
 interface KDTreeService {

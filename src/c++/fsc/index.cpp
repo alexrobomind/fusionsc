@@ -6,6 +6,7 @@
 #include <fsc/index.capnp.h>
 
 #include "eigen.h"
+#include "intervals.h"
 
 using namespace fsc;
 using namespace kj;
@@ -179,7 +180,8 @@ namespace {
 		constexpr static inline size_t MAX_NODES_PER_DIM = (1 << 28) / 3;
 		
 		KDTreeWriter() :
-			out(nullptr)
+			out(nullptr),
+			split(1, 1)
 		{}
 		
 		void write(const PackNode& root, KDTree::Builder out) {
@@ -188,24 +190,21 @@ namespace {
 			size_t nDims = root.bounds.size();
 			
 			const size_t nNodes = root.totalCount();
-			
-			// Compute how many chunks we need
-			const size_t nChunks = (nNodes * nDims / MAX_NODES_PER_DIM) + 1;
-			
+			const size_t maxChunkSize = MAX_NODES_PER_DIM / nDims;
+			split = UnbalancedIntervalSplit(nNodes, maxChunkSize);
+						
 			// Compute chunk sizes
-			const size_t chunkSizeBase = nNodes / nChunks;
-			const size_t remaining = nNodes - (nChunks * chunkSizeBase);
 			
-			out.setChunkSizeBase(chunkSizeBase);
-			out.setChunkRemainder(remaining);
+			out.setNTotal(nNodes);
+			out.setChunkSize(maxChunkSize);
 			
-			auto chunks = out.initChunks(nChunks);
+			auto chunks = out.initChunks(split.blockCount());
 			for(auto iChunk : kj::indices(chunks)) {
 				auto chunk = chunks[iChunk];
 				auto bbs = chunk.initBoundingBoxes();
 				auto shape = bbs.initShape(3);
 				
-				size_t chunkSize = iChunk < remaining ? chunkSizeBase + 1 : chunkSizeBase;
+				size_t chunkSize = split.edge(iChunk + 1) - split.edge(iChunk);
 				
 				bbs.initData(3 * nDims * chunkSize);
 				shape.set(0, chunkSize);
@@ -221,37 +220,25 @@ namespace {
 			writeNode(root, 0);
 		}
 	
-	private:		
-		kj::Tuple<KDTree::Chunk::Builder, int32_t> findSlot(size_t idx) {
-			int32_t csb = out.getChunkSizeBase();
-			int32_t rem = out.getChunkRemainder();
-			
-			if(idx < (csb + 1) * rem) {
-				return kj::tuple(out.getChunks()[idx / (csb + 1)], idx % (csb + 1));
-			}
-			
-			idx -= (csb + 1) * rem;
-			return kj::tuple(out.getChunks()[rem + idx / csb], idx % csb);
-		}
-		
+	private:				
 		void writeNode(const PackNode& node, size_t slot) {
-			auto slotLoc = findSlot(slot);
-			KDTree::Chunk::Builder chunk = get<0>(slotLoc);
+			int32_t chunkNo = (int32_t) split.interval(slot);
+			int32_t offset = slot - split.edge(chunkNo);
 			
-			size_t slotInChunk = get<1>(slotLoc);
+			KDTree::Chunk::Builder chunk = out.getChunks()[chunkNo];
 			
 			// Write bounding box information of node
 			auto bbData = chunk.getBoundingBoxes().getData();
 			
 			for(auto iDim : kj::range(0, nDims)) {
-				size_t bbOffset = 3 * (nDims * slotInChunk + iDim);
+				size_t bbOffset = 3 * (nDims * offset + iDim);
 				
 				bbData.set(bbOffset + 0, get<0>(node.bounds[iDim]));
 				bbData.set(bbOffset + 1, get<1>(node.bounds[iDim]));
 				bbData.set(bbOffset + 2, get<2>(node.bounds[iDim]));
 			}
 			
-			auto outNode = chunk.getNodes()[slotInChunk];
+			auto outNode = chunk.getNodes()[offset];
 			
 			KJ_IF_MAYBE(pLeaf, node.leaf) {
 				KJ_ASSERT(node.children.size() == 0);
@@ -275,6 +262,7 @@ namespace {
 		}
 		
 		KDTree::Builder out;
+		UnbalancedIntervalSplit split;
 		
 		size_t allocOffset = 0;
 		size_t nDims = 0;
