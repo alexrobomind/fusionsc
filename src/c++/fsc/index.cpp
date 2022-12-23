@@ -140,7 +140,7 @@ namespace {
 				return c1 < c2;
 			};
 			
-			for(size_t iRange = 0; iRange < ranges.size() - 1; ++iRange) {
+			for(auto iRange : kj::range(0, ranges.size() - 1)) {
 				auto itBegin = indirections.begin() + ranges[iRange];
 				auto itEnd = indirections.end() + ranges[iRange + 1];
 				
