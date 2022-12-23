@@ -9,49 +9,41 @@ $Java.outerClassname("Index");
 
 using Data = import "data.capnp";
 
-# Note: There is currently a bug in MSVC that prevents me from laying out the fields as I want
-# inside a parametrized struct. Until that bug is fixed, I will have to do without type
-# parameters.
-
-struct TreeNode(Data, Leaf) {
-	data @0 : Data;
+struct KDTree {
+	struct Node {
+		union {
+			leaf @0 : UInt64;
+			# Pointer into the list of leaves
+			
+			interior : group {
+				# Range of child nodes
+				start @1 : UInt64;
+				end @2 : UInt64;
+			}
+		}
+	}
 	
-	union {
-		leaf @1 : Leaf;
-		children @2 : List(TreeNode(Data, Leaf));
+	struct Chunk {
+		# A chunk of data in the KD-tree.
+		# Every chunk holds data for 'chunkSize' tree nodes,
+		# where chunkSize = iChunk < chunkRemainder ?
+		#   chunkSizeBase + 1 : chunkSizeBase
+		
+		boundingBoxes @0 : Data.Float64Tensor;
+		# A [chunkSize, nDims, 3] array holding, for each node and dimension,
+		# minimum extent (0), maximum extent (1) and weighted center estimate (2)
+		# along that dimension.
+		
+		nodes @1 : List(Node);
+		# Structural information for nodes (interior pointer or leaf ID)
 	}
+	
+	chunks @0 : List(Chunk);
+	
+	chunkSizeBase @1 : UInt32;
+	chunkRemainder @2 : UInt32;
 }
 
-struct Box2D {
-	min : group {
-		x @0 : Float64;
-		y @1 : Float64;
-	}
-	max : group {
-		x @2 : Float64;
-		y @3 : Float64;
-	}
-}
-
-struct Box3D {
-	min : group {
-		x @0 : Float64;
-		y @1 : Float64;
-		z @2 : Float64;
-	}
-	max : group {
-		x @3 : Float64;
-		y @4 : Float64;
-		z @5 : Float64;
-	}
-}
-
-struct BoxND {
-	min @0 : List(Float64);
-	max @1 : List(Float64);
-}
-
-interface TreeBuilder {
-	buildKDTree2 @0 [Leaf] (nodes : TreeNode(Box2D, Leaf), leafSize : UInt32) -> (ref : Data.DataRef(TreeNode(Box2D, Leaf)));
-	buildKDTree3 @1 [Leaf] (nodes : TreeNode(Box3D, Leaf), leafSize : UInt32) -> (ref : Data.DataRef(TreeNode(Box3D, Leaf)));
+interface KDTreeService {
+	build @0 (boxes : List(Data.Float64Tensor)) -> KDTree;
 }

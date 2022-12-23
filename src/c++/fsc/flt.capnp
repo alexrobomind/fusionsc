@@ -61,7 +61,7 @@ struct FLTRequest {
 	rngSeed @15 : UInt64;
 }
 
-struct FieldlineMappingData {
+struct FieldlineMapping {
 	struct MappingFilament {
 		# Tensor of shape [N, 3]
 		points @0 : Data.Float64Tensor;
@@ -75,8 +75,9 @@ struct FieldlineMappingData {
 		pointIndex @1 : UInt32;
 	}
 	
-	indexRoot @0 : Index.TreeNode(Index.Box3D, FilamentPoint);
-	filaments @1 : List(MappingFilament);
+	index @0 : Index.KDTree;
+	points @1 : List(FilamentPoint);
+	filaments @2 : List(MappingFilament);
 }
 
 struct FLTResponse {

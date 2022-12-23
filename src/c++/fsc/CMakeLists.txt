@@ -97,6 +97,7 @@ add_library(
 	odb.h
 	odb.cpp
 	
+	index.h
 	index.cpp
 	
 	geometry.h
