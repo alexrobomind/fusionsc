@@ -831,6 +831,10 @@ namespace cupnp {
 		uint8_t tag = structure & 3u;
 		CUPNP_REQUIRE(tag == 3);
 	}
+	
+	struct AnyData {
+		inline AnyData(uint64_t structure, cupnp::Location data) {}
+	};
 
 	template<typename T, Kind CPKind = kindFor<T>>
 	struct List {
