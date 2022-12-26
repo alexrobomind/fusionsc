@@ -155,11 +155,11 @@ struct CupnpMessage {
 	{}
 	
 	template<typename Builder, typename Builds = capnp::FromBuilder<Builder>>
-	static CupnpMessage<AnyData> forMessageContaining(Builder b) {
+	static CupnpMessage<cupnp::AnyData> forMessageContaining(Builder b) {
 		capnp::_::StructBuilder& cpBuilder = b.builder;
 		capnp::_::BuilderArena* arena = cpBuilder.getArena();
 		
-		return CupnpMessage<AnyData>(internal::extractSegmentTable(arena));
+		return CupnpMessage<cupnp::AnyData>(internal::extractSegmentTable(arena));
 	}
 	
 	Maybe<uint32_t> locateSegment(const char* ptr) {
@@ -172,7 +172,7 @@ struct CupnpMessage {
 	}
 	
 	template<typename T2, typename Builder, typename Builds = capnp::FromBuilder<Builder>>
-	T2 translate(Builder b) {
+	T2 translateBuilder(Builder b) {
 		KJ_REQUIRE(!std::is_const<T>::value, "Const messages can not translate builders");
 		
 		capnp::_::StructBuilder& cpBuilder = b.builder;
@@ -191,7 +191,7 @@ struct CupnpMessage {
 	}
 	
 	template<typename T2, typename Reader, typename Reads = capnp::FromReader<Reader>>
-	const T2 translate(Reader r2) {
+	const T2 translateReader(Reader r2) {
 		capnp::_::StructReader& cpReader = b.reader;
 		auto dataSection = cpReader.getDataSectionAsBlob();
 		int16_t ptrSectionSize = cpReader.getPointerSectionSize();

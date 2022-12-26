@@ -202,14 +202,14 @@ namespace {
 			for(auto iChunk : kj::indices(chunks)) {
 				auto chunk = chunks[iChunk];
 				auto bbs = chunk.initBoundingBoxes();
-				auto shape = bbs.initShape(3);
+				auto shape = bbs.initShape(2);
 				
 				size_t chunkSize = split.edge(iChunk + 1) - split.edge(iChunk);
 				
-				bbs.initData(3 * nDims * chunkSize);
+				bbs.initData(2 * nDims * chunkSize);
 				shape.set(0, chunkSize);
 				shape.set(1, nDims);
-				shape.set(2, 3);
+				shape.set(2, 2);
 			
 				chunk.initNodes(chunkSize);
 			}
@@ -231,11 +231,11 @@ namespace {
 			auto bbData = chunk.getBoundingBoxes().getData();
 			
 			for(auto iDim : kj::range(0, nDims)) {
-				size_t bbOffset = 3 * (nDims * offset + iDim);
+				size_t bbOffset = 2 * (nDims * offset + iDim);
 				
 				bbData.set(bbOffset + 0, get<0>(node.bounds[iDim]));
 				bbData.set(bbOffset + 1, get<1>(node.bounds[iDim]));
-				bbData.set(bbOffset + 2, get<2>(node.bounds[iDim]));
+				// bbData.set(bbOffset + 2, get<2>(node.bounds[iDim]));
 			}
 			
 			auto outNode = chunk.getNodes()[offset];
