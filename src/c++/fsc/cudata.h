@@ -6,6 +6,10 @@
 
 #include <capnp/serialize.h>
 
+#define CAPNP_PRIVATE
+#include <capnp/arena.h>
+#undef CAPNP_PRIVATE
+
 namespace fsc {
 	
 template<typename T>
@@ -48,6 +52,25 @@ inline kj::Array<kj::ArrayPtr<const capnp::word>> extractSegmentTable(kj::ArrayP
 	}
 	
 	return segments.releaseAsArray();
+}
+
+inline kj::Array<kj::ArrayPtr<capnp::word>> extractSegmentTable(capnp::_::BuilderArena* builderArena) {
+	return coerceSegmentTableToNonConst(builderArena -> getSegmentsForOutput());
+}
+
+inline kj::Array<kj::ArrayPtr<const capnp::word>> extractSegmentTable(capnp::_::ReaderArena* readerArena) {
+	kj::Vector<kj::ArrayPtr<const capnp::word>> table;
+	
+	size_t i = 0;
+	while(true) {
+		auto reader = readerArena -> tryGetSegment(capnp::_::SegmentId(i));
+		if(reader != nullptr)
+			table.add(reader -> getStartPtr(), reader -> getSize() / capnp::WORDS);
+		else
+			break;
+	}
+	
+	return table.releaseAsArray();
 }
 
 inline kj::Array<cupnp::SegmentTable::Entry> buildSegmentTable(kj::ArrayPtr<kj::ArrayPtr<capnp::word>> input) {
@@ -131,7 +154,15 @@ struct CupnpMessage {
 		CupnpMessage(bytesToWords(srcData.getRaw()))
 	{}
 	
+	template<typename T, typename Builder>
+	T translateStructBuilder(Builder builder) {
+		capnp::_::StructBuilder cpBuilder = builder.builder;
+	}
+	
 private:
+	inline uint64_t makeStructTag(uint64_t dataSizeInWords, uint64_t pointerSectionSize) {
+		
+	}
 };
 
 namespace internal {

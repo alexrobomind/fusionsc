@@ -272,17 +272,23 @@ namespace {
 		Promise<void> build(BuildContext ctx) {
 			kj::Vector<PackNode> nodes;
 			
-			uint64_t i = 0;
 			size_t nDims = 0;
 			bool first = true;
 			
-			for(auto tensor : ctx.getParams().getBoxes()) {
+			for(auto chunk : ctx.getParams().getChunks()) {
+				auto tensor = chunk.getBoxes();
+				auto keys = chunk.getKeys();
+				
 				auto shape = tensor.getShape();
-				KJ_REQUIRE(shape.size() == 3);
+				
+				KJ_REQUIRE(shape.size() == 3 || shape.size() == 2, shape.size());
+				bool pointMode = shape.size() == 2;
 				
 				size_t n = shape[0];
 				size_t tNDims = shape[1];
-				KJ_REQUIRE(shape[2] == 3);
+				
+				if(!pointMode)
+					KJ_REQUIRE(shape[2] == 3);
 				
 				if(first) {
 					nDims = tNDims;
@@ -293,19 +299,28 @@ namespace {
 				first = false;
 				
 				auto data = tensor.getData();
-				KJ_REQUIRE(data.size() == 3 * nDims * n);
+				KJ_REQUIRE(data.size() == pointMode ? nDims * n : 3 * nDims * n);
+				KJ_REQUIRE(keys.size() == n);
 				
 				for(auto i : kj::range(0, n)) {
 					auto bounds = kj::heapArrayBuilder<PackNode::Bound>(nDims);
 					
 					for(auto iDim : kj::range(0, nDims)) {
-						size_t offset = 3 * (i * nDims + iDim);
-						bounds.add(tuple(
-							data[offset], data[offset + 1], data[offset + 2]
-						));
+						size_t offset = i * nDims + iDim;
+						
+						if(pointMode) {
+							bounds.add(tuple(
+								data[offset], data[offset], data[offset]
+							));
+						} else {
+							offset *= 3;
+							bounds.add(tuple(
+								data[offset], data[offset + 1], data[offset + 2]
+							));
+						}
 					}
 					
-					nodes.add(i++, bounds.finish());
+					nodes.add(keys[i], bounds.finish());
 				}
 			}
 			

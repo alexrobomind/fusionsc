@@ -45,5 +45,9 @@ struct KDTree {
 }
 
 interface KDTreeService {
-	build @0 (boxes : List(Data.Float64Tensor), leafSize : UInt32) -> KDTree;
+	struct Chunk {
+		boxes @0 : Data.Float64Tensor;
+		keys @1 : List(UInt64);
+	}
+	build @0 (chunks : List(Chunk), leafSize : UInt32) -> KDTree;
 }

@@ -66,8 +66,8 @@ struct FieldlineMapping {
 		# Tensor of shape [N, 3]
 		points @0 : Data.Float64Tensor;
 		
-		# Tensor of shape [N, 3, 3]
-		jacobians @1 : Data.Float64Tensor;
+		# Tensor of shape [N, 2, 2]
+		toroidalJacobians @1 : Data.Float64Tensor;
 	}
 	
 	struct FilamentPoint {

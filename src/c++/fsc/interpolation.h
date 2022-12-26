@@ -1,5 +1,7 @@
 #pragma once
 
+#include <fsc/magnetics.capnp.cu.h>
+
 #include "tensor.h"
 
 namespace fsc {
@@ -164,6 +166,63 @@ struct SlabFieldInterpolator {
 			bR * eR[1] + bPhi * ePhi[1],
 			bZ
 		};
+	}
+};
+
+template<typename Scalar>
+struct C1Cubic {
+	// Cubic interpolation based on Hermite polynomials
+	// Performs polynomial interpolation on [0, 1] with constraints on f(0), f'(0), f(1), and f'(1)
+	//
+	// Implementation notes:
+	// The Hermite polynomial is given as P(x) = SUM_i:0 -> n f[x0, ..., xi] PROD_j:0 -> i-1 (x - xj)
+	//
+	// We have (x0, x1, x2, x3) = (0, 0, 1, 1)
+	//
+	// This gives us:
+	//
+	// f[x0] = f(0)
+	// f[x0, x1] = f'(0)
+	//
+	// f[x0, x1, x2] = f[x1, x2] - f[x0, x1]
+	//               = f[x2] - f[x1] - f[x0, x1]
+    //               = f(1) - f(0) - f'(0)
+	//
+	// f[x0, x1, x2, x3] = f[x1, x2, x3] - f[x0, x1, x2]
+	//                   = f[x2, x3] - f[x1, x2] - f[x0, x1, x2]
+	//                   = f[x2, x3] - (f[x2] - f[x1]) - f[x0, x1, x2]
+	//                   = f'(1) - f(1) + f(0) - f[x0, x1, x2]
+	
+	
+	const Scalar f0;
+	const Scalar df0;
+	const Scalar df1;
+	const Scalar f1_minus_f0;
+	const Scalar f_x0_x1_x2;
+	
+	C1Cubic(Scalar f0, Scalar df0, Scalar f1, Scalar df1) :
+		f0(f0), df0(df0), df1(df1), f1_minus_f0(f1 - f0), f_x0_x1_x2(f1 - f0 - df0)
+	{}
+	
+	Scalar operator()(Scalar x) {
+		return
+		  f0
+		+ df0 * x
+		+ f_x0_x1_x2 * x * x
+		+ (df1 - f1_minus_f0 - f_x0_x1_x2) * x * x * (x - 1);
+	}
+	
+	Scalar d(Scalar x) {
+		return
+		  df0
+		+ f_x0_x1_x2 * 2 * x
+		+ (df1 - f1_minus_f0 - f_x0_x1_x2) * (2 * x * (x - 1) + x * x);
+	}
+	
+	Scalar dd(Scalar x) {
+		return
+		  f_x0_x1_x2 * 2
+		+ (df1 - f1_minus_f0 - f_x0_x1_x2) * (2 * x + 2 * (x - 1) + 2 * x);
 	}
 };
 
