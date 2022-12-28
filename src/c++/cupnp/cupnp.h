@@ -849,14 +849,13 @@ namespace cupnp {
 		uint32_t dataSectionSize;
 		uint16_t pointerSectionSize;
 		
-		uint64_t structure;
+		// uint64_t structure;
 		cupnp::Location listStart;
 		
 		constexpr inline static uint64_t SINGLE_POINTER_TAG = ((uint64_t) 1) >> 48;
 		constexpr inline static uint64_t SINGLE_BYTE_TAG = ((uint64_t) 1) >> 32;
 		
-		CUPNP_FUNCTION List(uint64_t structure, cupnp::Location data) :
-			structure(structure)
+		CUPNP_FUNCTION List(uint64_t structure, cupnp::Location data)
 		{
 			uint8_t ptrTag = structure & 3u;
 			CUPNP_REQUIRE(ptrTag == 1 || structure == 0);
@@ -948,6 +947,14 @@ namespace cupnp {
 			return listStart.ptr;
 		}
 		
+		CUPNP_FUNCTION const List<T> slice(size_t begin, size_t end) const {
+			return List<T>(*this, begin, end);
+		}
+		
+		CUPNP_FUNCTION List<T> slice(size_t begin, size_t end) {
+			return List<T>(*this, begin, end);
+		}
+		
 		struct Iterator {
 			using difference_type = unsigned int;
 			using value_type      = T;
@@ -1013,6 +1020,22 @@ namespace cupnp {
 		
 		ConstIterator begin() const { return ConstIterator(*this, 0); }
 		ConstIterator end() const { return ConstIterator(*this, size()); }
+	
+	private:
+		
+		CUPNP_FUNCTION List(const List<T>& other, uint32_t begin, uint32_t end) {
+			CUPNP_REQUIRE(begin < other.listSize);
+			CUPNP_REQUIRE(end <= other.listSize);
+			
+			sizeEnum = other.sizeEnum;
+			listSize = end - begin;
+			dataSectionSize = other.dataSectionSize;
+			pointerSectionSize = other.pointerSectionSize;
+			elementSize = other.elementSize;
+			
+			listStart = other.listStart + elementSize * begin;
+		}
+	
 	}; 
 	
 	// Structs are stored in-line in the list, and use a structure tag placed
