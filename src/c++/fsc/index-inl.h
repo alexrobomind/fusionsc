@@ -9,14 +9,14 @@
 namespace fsc {
 
 template<int dims>
-inline CUPNP_FUNCTION typename KDTreeIndex<dims>::FindResult KDTreeIndex<dims>::findNearest(Vec<double, dims> x) {
+inline CUPNP_FUNCTION typename KDTreeIndex<dims>::FindResult KDTreeIndex<dims>::findNearest(const Vec<double, dims>& x) {
 	auto rootNode = tree.getChunks()[0].getNodes()[0];
 	
 	FindResult result;
 	result.distance = std::numeric_limits<double>::infinity();
 	
-	if(rootNode.isLeaf()) {
-		auto p = closestPoint(x, tree.getChunks()[0].getBounds().getData());
+	if(rootNode.hasLeaf()) {
+		auto p = closestPoint(x, tree.getChunks()[0].getBoundingBoxes().getData());
 		result.distance = distance(x, p);
 		result.key = rootNode.getLeaf();
 		
@@ -29,12 +29,12 @@ inline CUPNP_FUNCTION typename KDTreeIndex<dims>::FindResult KDTreeIndex<dims>::
 
 template<int dims>
 inline CUPNP_FUNCTION void KDTreeIndex<dims>::findNearest(const Vec<double, dims>& x, FindResult& currentClosest, cu::KDTree::Node node) {
-	CUPNP_REQUIRE(!node.isLeaf());
+	CUPNP_REQUIRE(!node.hasLeaf());
 	
 	// Cut down the scan range to the lowest maximum possible distance over all children.
 	// There must be a matching leaf within that distance
-	auto childStart = node.getChildren().getBegin();
-	auto childEnd = node.getChildren().getEnd();
+	auto childStart = node.getInterior().getStart();
+	auto childEnd = node.getInterior().getEnd();
 	
 	for(auto child = childStart; child < childEnd; ++child) {
 		auto chunkId = chunkSplit.interval(child);
@@ -43,7 +43,7 @@ inline CUPNP_FUNCTION void KDTreeIndex<dims>::findNearest(const Vec<double, dims
 		auto chunk = tree.getChunks()[chunkId];
 		
 		auto distanceMax = distance(x, furthestPoint(x,
-			chunk.getBounds().getData().slice(dims * 2 * offset, dims * 2 * (offset + 1))
+			chunk.getBoundingBoxes().getData().slice(dims * 2 * offset, dims * 2 * (offset + 1))
 		));
 		
 		if(distanceMax < currentClosest.distance)
@@ -58,12 +58,12 @@ inline CUPNP_FUNCTION void KDTreeIndex<dims>::findNearest(const Vec<double, dims
 		auto chunk = tree.getChunks()[chunkId];
 		
 		auto distanceMin = distance(x, closestPoint(x,
-			chunk.getBounds().getData().slice(dims * 2 * offset, dims * 2 * (offset + 1))
+			chunk.getBoundingBoxes().getData().slice(dims * 2 * offset, dims * 2 * (offset + 1))
 		));
 		
 		if(distanceMin <= currentClosest.distance) {
 			auto childNode = chunk.getNodes()[offset];
-			if(childNode.isLeaf()) {
+			if(childNode.hasLeaf()) {
 				currentClosest.key = childNode.getLeaf();
 				currentClosest.distance = distanceMin;
 			} else {
@@ -71,12 +71,10 @@ inline CUPNP_FUNCTION void KDTreeIndex<dims>::findNearest(const Vec<double, dims
 			}
 		}
 	}
-	
-	return false;
 }
 
 template<int dims>
-static Vec<double, dims> KDTreeIndex<dims>::closestPoint(Vec<double, dims> x, cupnp::List<double> bounds) {
+Vec<double, dims> KDTreeIndex<dims>::closestPoint(Vec<double, dims> x, cupnp::List<double> bounds) {
 	for(int i = 0; i < dims; ++i) {
 		double min = bounds[2 * i];
 		double max = bounds[2 * i + 1];
@@ -92,7 +90,7 @@ static Vec<double, dims> KDTreeIndex<dims>::closestPoint(Vec<double, dims> x, cu
 }
 
 template<int dims>
-static Vec<double, dims> KDTreeIndex<dims>::furthestPoint(Vec<double, dims> x, cupnp::List<double> bounds) {
+Vec<double, dims> KDTreeIndex<dims>::furthestPoint(Vec<double, dims> x, cupnp::List<double> bounds) {
 	for(int i = 0; i < dims; ++i) {
 		double min = bounds[2 * i];
 		double max = bounds[2 * i + 1];

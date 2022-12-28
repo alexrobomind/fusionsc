@@ -15,7 +15,7 @@ namespace fsc {
 			uint64_t key;
 		};
 		
-		inline CUPNP_FUNCTION FindResult findNearest(Vec<double, dims> x);
+		inline CUPNP_FUNCTION FindResult findNearest(const Vec<double, dims>& x);
 		
 		inline CUPNP_FUNCTION KDTreeIndex(cu::KDTree tree) :
 			tree(tree),

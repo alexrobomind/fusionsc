@@ -14,10 +14,10 @@ struct LinearInterpolation {
 	using Scalar = Num;
 	
 	constexpr EIGEN_DEVICE_FUNC size_t nPoints() { return 2; }
-	constexpr std::array<Scalar, 2> coefficients(Num x) {
+	constexpr EIGEN_DEVICE_FUNC std::array<Scalar, 2> coefficients(Num x) {
 		return {1 - x, x};
 	}
-	constexpr std::array<int, 2> offsets() {
+	constexpr EIGEN_DEVICE_FUNC std::array<int, 2> offsets() {
 		return {0, 1};
 	}
 };
@@ -81,7 +81,7 @@ struct C1CubicInterpolation {
 	using Scalar = Num;
 	
 	constexpr EIGEN_DEVICE_FUNC size_t nPoints() { return 4; }
-	constexpr std::array<Scalar, 4> coefficients(Num x) {		
+	constexpr EIGEN_DEVICE_FUNC std::array<Scalar, 4> coefficients(Num x) {		
 		Num pf0 = 1 - x*x + 2 * (x*x) * (x-1);
 		Num pf1 = x*x - 2 * x*x * (x-1);
 		Num pdf0 = x - (x*x) + x*x * (x-1);
@@ -89,7 +89,7 @@ struct C1CubicInterpolation {
 		
 		return {-0.5 * pdf0, pf0 - 0.5 * pdf1, pf1 + 0.5 * pdf0, 0.5 * pdf1};
 	}
-	constexpr std::array<int, 4> offsets() {
+	constexpr EIGEN_DEVICE_FUNC std::array<int, 4> offsets() {
 		return {-1, 0, 1, 2};
 	}
 };
@@ -102,7 +102,7 @@ struct NDInterpEvaluator {
 	static_assert(iDim >= 0);
 	
 	template<typename F, typename... Indices>
-	static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, Vec<int, nDims>& base, Vec<Scalar, nDims> lx, Indices... indices) {
+	static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, const Vec<int, nDims>& base, const Vec<Scalar, nDims>& lx, Indices... indices) {
 		static_assert(sizeof...(indices) == iDim);
 		
 		Scalar result = 0;
@@ -123,7 +123,7 @@ struct NDInterpEvaluator<nDims, Strategy, nDims> {
 	using Scalar = typename Strategy::Scalar;
 	
 	template<typename F, typename... Indices>
-	static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, Vec<int, nDims>& base, Vec<Scalar, nDims> lx, Indices... indices) {
+	static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, const Vec<int, nDims>& base, const Vec<Scalar, nDims>& lx, Indices... indices) {
 		static_assert(sizeof...(indices) == nDims);
 		
 		return f(indices...);
@@ -170,7 +170,7 @@ struct NDInterpolator {
 	}
 	
 	template<typename F>
-	EIGEN_DEVICE_FUNC Scalar operator()(const F& f, Vec<Scalar, nDims> x) {
+	EIGEN_DEVICE_FUNC Scalar operator()(const F& f, const Vec<Scalar, nDims>& x) {
 		Vec<int, nDims> base;
 		Vec<Scalar, nDims> lx;
 		

@@ -63,21 +63,23 @@ struct FLTRequest {
 
 struct FieldlineMapping {
 	struct MappingFilament {
-		# Tensor of shape [N, 3]
-		points @0 : Data.Float64Tensor;
+		data @0 : List(Float64);
+		# Numerical data of the mapping filament.
+		# Contains, per phi plane, six numbers.
+		# - Numbers 1 and 2 are the r and z coordinates of the
+		#   associated mapping point.
+		# - Numbers 3 to 6 are, in column-major order, a transformation
+		#   matrix from a local UV coordinate system to the RZ coordinates.
+		#   which tracks the orientation and shear of the magnetic planes.
 		
-		# Tensor of shape [N, 2, 2]
-		toroidalJacobians @1 : Data.Float64Tensor;
-	}
-	
-	struct FilamentPoint {
-		filamentIndex @0 : UInt32;
-		pointIndex @1 : UInt32;
+		# Phi grid information
+		phiMin @1 : Float64;
+		phiMax @2 : Float64;
+		nPhi @3 : UInt64;
 	}
 	
 	index @0 : Index.KDTree;
-	points @1 : List(FilamentPoint);
-	filaments @2 : List(MappingFilament);
+	filaments @1 : List(MappingFilament);
 }
 
 struct FLTResponse {
