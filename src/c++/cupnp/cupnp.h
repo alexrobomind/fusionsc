@@ -137,7 +137,7 @@ namespace cupnp {
 		
 		inline CUPNP_FUNCTION bool isValid(size_t size) {
 			if(ptr == nullptr)
-				return false;
+				return size == 0;
 			
 			if(segments == nullptr)
 				return true;
@@ -589,7 +589,7 @@ namespace cupnp {
 		
 		// uint16_t dataSectionSizeInWords = structure >> 32;
 		
-		CUPNP_REQUIRE(byteOffset + 1 <= dataSectionSizeIn) { return; }
+		CUPNP_REQUIRE(byteOffset + 1 <= dataSectionSize) { return; }
 		
 		uint8_t wireData = (data + byteOffset).read<uint8_t>();
 		

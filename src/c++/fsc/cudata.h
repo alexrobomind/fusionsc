@@ -163,9 +163,9 @@ struct CupnpMessage {
 	}
 	
 	Maybe<uint32_t> locateSegment(const char* ptr) {
-		for(auto segment : segmentTable) {
-			if(dataSection.begin() >= segment -> begin() && dataSection.begin() < segment.end()) {
-				return segment - segmentTable.begin();
+		for(auto& segment : segmentTable) {
+			if(ptr >= reinterpret_cast<const char*>(segment.begin()) && ptr < reinterpret_cast<const char*>(segment.end())) {
+				return &segment - segmentTable.begin();
 			}
 		}
 		return nullptr;
@@ -192,7 +192,7 @@ struct CupnpMessage {
 	
 	template<typename T2, typename Reader, typename Reads = capnp::FromReader<Reader>>
 	const T2 translateReader(Reader r2) {
-		capnp::_::StructReader& cpReader = b.reader;
+		capnp::_::StructReader& cpReader = r2.reader;
 		auto dataSection = cpReader.getDataSectionAsBlob();
 		int16_t ptrSectionSize = cpReader.getPointerSectionSize();
 		

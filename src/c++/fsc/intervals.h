@@ -58,7 +58,7 @@ private:
 	size_t blockSize;
 	size_t remainder;
 	
-	inline size_t compute() {
+	inline void compute() {
 		remainder = blockCount() - (blockSize * blockCount() - nTotal);
 	}
 };
