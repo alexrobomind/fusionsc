@@ -7,79 +7,128 @@
 
 namespace fsc {
 
-inline EIGEN_DEVICE_FUNC Vec<double, 2> mappedPosition(const cu::FieldlineMapping::MappingFilament filament, double phi, const Vec<double, 2>& rz) {
+struct FLM {
+	
+	//! Computes the real-space coordinates of the last-mapped position projected to the given phi plane
+	inline EIGEN_DEVICE_FUNC Vec3d unmap(double phi);
+	
+	//! Captures a position for mapping using the closest mapping filament
+	inline EIGEN_DEVICE_FUNC void map(const Vec3d& x);
+	
+	//! Advances to a new phi position, remapping if neccessary. Returns new real-space position
+	// Note: No guarantees that flm.phi == newPhi
+	inline EIGEN_DEVICE_FUNC Vec3d advance(double newPhi);
+	
+	//! Unwraps the given phi value to be near the currently stored position.
+	inline EIGEN_DEVICE_FUNC double unwrap(double phiIn);
+	
+	inline EIGEN_DEVICE_FUNC FLM(cu::FieldlineMapping mapping);
+	
+	cu::FieldlineMapping mapping;
+	Vec2d uv;
+	cu::FieldlineMapping::MappingFilament activeFilament;
+	double phi;
+
+private:
+	inline EIGEN_DEVICE_FUNC void interpolate(double phi, Vec2d& rz, Mat2d& jacobian);
+};
+
+EIGEN_DEVICE_FUNC FLM::FLM(cu::FieldlineMapping mapping) :
+	mapping(mapping),
+	uv(0, 0),
+	activeFilament(0, nullptr),
+	phi(0)
+{}
+
+EIGEN_DEVICE_FUNC void FLM::interpolate(double phi, Vec2d& rz, Mat2d& jacobian) {
 	using Strategy = C1CubicInterpolation<double>;
 	using Interpolator = NDInterpolator<1, Strategy>;
 	
-	double phiMin = filament.getPhiMin();
-	Interpolator::Axis ax1(0, fmod(filament.getPhiMax() + 2 * pi - phiMin, 2 * pi), filament.getNPhi());
+	Interpolator::Axis ax1(activeFilament.getPhiMin(), activeFilament.getPhiMax(), activeFilament.getNIntervals());
 	Interpolator interp(Strategy(), {ax1});
 	
-	double dPhi = phi - phiMin;
-	dPhi += 2 * pi;
-	dPhi = fmod(dPhi, 2 * pi);
-	auto data = filament.getData();
+	auto data = activeFilament.getData();
 	
-	Vec2d rzFilament;
 	for(int dim = 0; dim < 2; ++dim) {
 		auto filamentPos = [&](int i) {
 			i += 1;
 			return data[6 * i + dim];
 		};
-		rzFilament(dim) = interp(filamentPos, Vec1d {dPhi});
+		rz(dim) = interp(filamentPos, Vec1d {phi});
 	}
 	
-	Mat2d jacobian;
 	for(int idx = 0; idx < 4; ++idx) {
 		auto filamentJacobian = [&](int i) {
 			i += 1;
 			return data[6 * i + idx + 2];
 		};
-		jacobian.data()[idx] = interp(filamentJacobian, Vec1d {dPhi});
+		jacobian.data()[idx] = interp(filamentJacobian, Vec1d {phi});
 	}
-	
-	return jacobian.inverse() * (rz - rzFilament);
 }
 
-inline EIGEN_DEVICE_FUNC Vec<double, 2> unmappedPosition(const cu::FieldlineMapping::MappingFilament filament, double phi, const Vec<double, 2>& uv) {
-	using Strategy = C1CubicInterpolation<double>;
-	using Interpolator = NDInterpolator<1, Strategy>;
+EIGEN_DEVICE_FUNC Vec3d FLM::unmap(double phi) {
+	Vec2d filRZ;
+	Mat2d filJacobian;
+	interpolate(phi, filRZ, filJacobian);
 	
-	double phiMin = filament.getPhiMin();
-	Interpolator::Axis ax1(0, fmod(filament.getPhiMax() + 2 * pi - phiMin, 2 * pi), filament.getNPhi());
-	Interpolator interp(Strategy(), {ax1});
+	Vec2d rz = filRZ + filJacobian * uv;
 	
-	double dPhi = phi - phiMin;
-	dPhi += 2 * pi;
-	dPhi = fmod(dPhi, 2 * pi);
-	auto data = filament.getData();
-	
-	Vec2d rzFilament;
-	for(int dim = 0; dim < 2; ++dim) {
-		auto filamentPos = [&](int i) {
-			i += 1;
-			return data[6 * i + dim];
-		};
-		rzFilament(dim) = interp(filamentPos, Vec1d {dPhi});
-	}
-	
-	Mat2d jacobian;
-	for(int idx = 0; idx < 4; ++idx) {
-		auto filamentJacobian = [&](int i) {
-			i += 1;
-			return data[6 * i + idx + 2];
-		};
-		jacobian.data()[idx] = interp(filamentJacobian, Vec1d {dPhi});
-	}
-	
-	return rzFilament + jacobian * uv;
+	return { cos(phi) * rz[0], sin(phi) * rz[0], rz[1] };
 }
 
-inline EIGEN_DEVICE_FUNC cu::FieldlineMapping::MappingFilament findNearestFilament(const cu::FieldlineMapping mapping, const Vec<double, 3>& xyz) {
+EIGEN_DEVICE_FUNC void FLM::map(const Vec3d& x) {
+	double newPhi = atan2(x[1], x[0]);
+	
+	// Locate nearest filament point
 	KDTreeIndex<3> index(mapping.getIndex());
+	auto findResult = index.findNearest(x);
 	
-	auto findResult = index.findNearest(xyz);
-	return mapping.getFilaments()[findResult.key];
+	// Decode key, high 32 bits are filament, low 32 bits are point for phi assignment
+	uint32_t filamentIdx = static_cast<uint32_t>(findResult.key >> 32);
+	uint32_t pointIdx    = static_cast<uint32_t>(findResult.key);
+	
+	activeFilament = mapping.getFilaments()[filamentIdx];
+	
+	// Compute phi baseline
+	double phiBase = activeFilament.getPhiMin() + ((activeFilament.getPhiMax() - activeFilament.getPhiMin()) / activeFilament.getNIntervals()) * pointIdx;
+	
+	// Unwrap phi using phiBase
+	phi = phiBase;
+	phi = unwrap(newPhi);
+	
+	// Interpolate mapping to active plane
+	Vec2d filRZ;
+	Mat2d filJacobian;
+	interpolate(phi, filRZ, filJacobian);
+	
+	// Compute mapped position
+	double r = sqrt(x[0] * x[0] + x[1] * x[1]);
+	double z = x[2];
+	
+	uv = filJacobian.inverse() * (Vec2d { r, z } - filRZ);
+}
+
+EIGEN_DEVICE_FUNC Vec3d FLM::advance(double newPhi) {
+	double relToRange = (newPhi - activeFilament.getPhiMin()) / (activeFilament.getPhiMax() - activeFilament.getPhiMin());
+	
+	if(relToRange < 0 || relToRange > 1) {
+		// Advancement would put us out of range. We need to re-map position
+		Vec3d tmp = unmap(phi);
+		map(tmp);
+	}
+	
+	phi = newPhi;
+	return unmap(newPhi);
+}
+
+EIGEN_DEVICE_FUNC double FLM::unwrap(double phiIn) {
+	double dPhi = phiIn - phi;
+	dPhi = fmod(dPhi, 2 * pi);
+	dPhi += 3 * pi;
+	dPhi = fmod(dPhi, 2 * pi);
+	dPhi -= pi;
+	
+	return phi + dPhi;
 }
 
 }

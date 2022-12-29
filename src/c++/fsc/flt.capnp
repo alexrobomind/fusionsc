@@ -75,7 +75,7 @@ struct FieldlineMapping {
 		# Phi grid information
 		phiMin @1 : Float64;
 		phiMax @2 : Float64;
-		nPhi @3 : UInt64;
+		nIntervals @3 : UInt64;
 	}
 	
 	index @0 : Index.KDTree;

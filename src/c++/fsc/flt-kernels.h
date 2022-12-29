@@ -181,27 +181,11 @@ namespace fsc {
 			return myData.mutateEvents()[eventCount];
 		};
 		
-		// Fieldline mapping
-		V2 uv;
-		cu::FieldlineMapping::MappingFilament activeFilament(0, nullptr);
-		double mappedPhi;
-		
-		auto flmMap = [&](const V3& src) {
-			mappedPhi = atan2(src[1], src[0]);
-			activeFilament = findNearestFilament(flmData, src);
-			uv = mappedPosition(activeFilament, mappedPhi, V2 { sqrtf(src[0] * src[0] + src[1] * src[1]), src[2] });
-		};
-		
-		auto flmUnmap = [&](V3& dst, double phi) {
-			auto rz = unmappedPosition(activeFilament, phi, uv);
-			dst[0] = cos(mappedPhi) * rz[0];
-			dst[1] = sin(mappedPhi) * rz[0];
-			dst[2] = rz[1];
-		};
+		FLM flm(flmData);
 		
 		// Initialize mapped position
 		if(useFLM) {
-			flmMap(x);
+			flm.map(x);
 		}
 		
 		// ... do the work ...
@@ -287,23 +271,12 @@ namespace fsc {
 				++displacementCount;
 				
 				if(useFLM) {
-					flmMap(x2);
+					flm.map(x2);
 				}				
 			} else {				
 				if(useFLM) {					
-					double newPhi = mappedPhi + fieldOrientation * tracingDirection * request.getStepSize() / (2 * pi * r);
-					
-					// If moving to the new filament would cause us to fall off either end, we need to re-map
-					if(kmath::wrap(newPhi - activeFilament.getPhiMin()) < 0 || kmath::wrap(newPhi - activeFilament.getPhiMax()) > 0) {
-						// Re-map and then advance phi
-						flmUnmap(x2, mappedPhi);
-						flmMap(x2);
-						mappedPhi = newPhi;
-					} else {
-						// We are within bounds. Just record the new position (for collision checks etc.)
-						mappedPhi = newPhi;
-						flmUnmap(x2, mappedPhi);
-					}
+					double newPhi = flm.phi + fieldOrientation * tracingDirection * request.getStepSize() / (2 * pi * r);
+					x2 = flm.advance(newPhi);
 				} else {
 					// Regular tracing step
 					kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), rungeKuttaInput);
@@ -373,7 +346,7 @@ namespace fsc {
 					// due to large step sizes. Instead, use the mapping's spline interpolation
 					if(useFLM) {
 						double phiCross = crossedAt * kmath::wrap(phi2 - phi1) + phi1;
-						flmUnmap(xCross, phiCross);
+						xCross = flm.unmap(flm.unwrap(phiCross));
 					}
 					
 					currentEvent().mutatePhiPlaneIntersection().setPlaneNo(iPlane);
@@ -389,7 +362,7 @@ namespace fsc {
 				
 				// Same as above with the usual planes, interpolate if we are using the mapping
 				if(useFLM) {
-					flmUnmap(xCross, phi0);
+					xCross = flm.unmap(flm.unwrap(phi0));
 				}
 				
 				// printf("New turn\n");
