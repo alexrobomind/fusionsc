@@ -439,7 +439,7 @@ struct FLTImpl : public FLT::Server {
 			
 			auto rootOp = newOperation();
 			
-			KJ_UNIMPLEMENTED("Load mapping data");
+			// KJ_UNIMPLEMENTED("Load mapping data");
 			
 			auto calc = heapHeld<TraceCalculation<Device>>(
 				*device, mv(kernelRequest), mv(field), mv(positions),
