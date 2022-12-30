@@ -6,6 +6,8 @@
 #include "index.h"
 
 namespace fsc {
+	
+Mapper::Client newMapper(FLT::Client flt, KDTreeService::Client indexer);
 
 struct FLM {
 	

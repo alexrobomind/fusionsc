@@ -79,15 +79,19 @@ namespace {
 	};
 		
 	kj::Array<PackNode> packStep(kj::Array<PackNode> nodes, size_t desiredLeafSize) {
+		if(desiredLeafSize < 2)
+			desiredLeafSize = 2;
+		
 		KJ_ASSERT(nodes.size() > 0);
 		const size_t nDims = nodes[0].bounds.size();
 		
-		Vector<size_t> indirections;
-		for(auto i : kj::indices(indirections))
-			indirections[i] = i;
+		Vector<size_t> indirections(nodes.size());
+		for(auto i : kj::indices(nodes))
+			indirections.add(i);
 				
 		// Packing factor per dimensions
 		double dFactor = pow(((double) nodes.size()) / desiredLeafSize, 1.0 / nDims);
+		KJ_DBG(dFactor);
 		size_t factor = (size_t) dFactor;
 		
 		if(factor == 0) factor = 1;
@@ -95,12 +99,15 @@ namespace {
 		// Compute subdivision indices for all dimensions
 		auto indices = kj::heapArray<kj::Vector<size_t>>(nDims + 1);
 		
+		KJ_DBG("Setting up dim 0");
+		
 		// First dimension is whole range
 		indices[0].resize(2);
 		indices[0][0] = 0;
 		indices[0][1] = nodes.size();
 		
 		for(size_t iDim = 1; iDim <= nDims; ++iDim) {
+			KJ_DBG("Setting up dim", iDim, factor);
 			const auto& in = indices[iDim - 1];
 			auto& out = indices[iDim];
 			
@@ -130,24 +137,34 @@ namespace {
 			}
 		}
 		
+		KJ_DBG("Dimensions computed");
+		for(auto i : kj::indices(indices))
+			KJ_DBG(i, indices[i]);
+		
+		KJ_DBG(indirections);
+		
 		// For all dimensions we need to sort the sub-ranges
-		for(auto iDim : kj::range(0, nDims + 1)) {
+		for(auto iDim : kj::range(0, nDims)) {
+			KJ_DBG(iDim);
 			auto& ranges = indices[iDim];
 			
 			auto comparator = [iDim, &nodes](size_t i1, size_t i2) {
 				double c1 = get<2>(nodes[i1].bounds[iDim]);
-				double c2 = get<2>(nodes[i1].bounds[iDim]);
+				double c2 = get<2>(nodes[i2].bounds[iDim]);
 				
 				return c1 < c2;
 			};
 			
 			for(auto iRange : kj::range(0, ranges.size() - 1)) {
+				KJ_DBG(iRange, ranges[iRange], ranges[iRange + 1], indirections.size());
 				auto itBegin = indirections.begin() + ranges[iRange];
-				auto itEnd = indirections.end() + ranges[iRange + 1];
+				auto itEnd = indirections.begin() + ranges[iRange + 1];
 				
 				std::sort(itBegin, itEnd, comparator);
 			}
 		}
+		
+		KJ_DBG("Sort complete", indirections);
 		
 		const kj::Vector<size_t>& lastStage = indices[nDims];
 		const size_t nNodesOut = lastStage.size() - 1;
@@ -157,9 +174,12 @@ namespace {
 			size_t start = lastStage[i];
 			size_t stop  = lastStage[i + 1];
 			
+			KJ_DBG(i, start, stop);
+			
 			auto children = kj::heapArrayBuilder<PackNode>(stop - start);
 			for(auto iChild : kj::range(start, stop)) {
-				size_t targetIndex = indirections[i];
+				size_t targetIndex = indirections[iChild];
+				KJ_DBG(iChild, targetIndex);
 				children.add(mv(nodes[targetIndex]));
 			}
 			
@@ -171,8 +191,10 @@ namespace {
 	
 	PackNode pack(kj::Array<PackNode> nodes, size_t desiredLeafSize) {
 		while(nodes.size() > 1) {
+			KJ_DBG("Beginning pack step", nodes.size());
 			nodes = packStep(mv(nodes), desiredLeafSize);
 		}
+		KJ_DBG("Pack finished");
 		return mv(nodes[0]);
 	}
 	
@@ -187,7 +209,7 @@ namespace {
 		void write(const PackNode& root, KDTree::Builder out) {
 			this -> out = out;
 			
-			size_t nDims = root.bounds.size();
+			nDims = root.bounds.size();
 			
 			const size_t nNodes = root.totalCount();
 			const size_t maxChunkSize = MAX_NODES_PER_DIM / nDims;
@@ -202,7 +224,7 @@ namespace {
 			for(auto iChunk : kj::indices(chunks)) {
 				auto chunk = chunks[iChunk];
 				auto bbs = chunk.initBoundingBoxes();
-				auto shape = bbs.initShape(2);
+				auto shape = bbs.initShape(3);
 				
 				size_t chunkSize = split.edge(iChunk + 1) - split.edge(iChunk);
 				
@@ -327,6 +349,7 @@ namespace {
 			PackNode packedData = pack(nodes.releaseAsArray(), ctx.getParams().getLeafSize());
 			
 			KDTreeWriter().write(packedData, ctx.initResults());
+			// KJ_DBG(ctx.getResults());
 			
 			return READY_NOW;
 		}

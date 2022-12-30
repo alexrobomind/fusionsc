@@ -110,7 +110,7 @@ struct FLTResponse {
 	# Maximum number of toroidal turns traversed by the fieldline
 	nTurns @0 : UInt32;
 	
-	# Tensor of shape [5] (x, y, z, Lc_fwd, Lc_bwd) + startPoints.shape[1:] + [len(poincarePlanes), nTurns]
+	# Tensor of shape [5] (x, y, z, Lc_fwd, Lc_bwd) + [len(poincarePlanes)] + startPoints.shape[1:] + [nTurns]
 	poincareHits @1 : Data.Float64Tensor;
 	
 	# Tensor of shape [4] (x, y, z, length) + startPoints.shape[1:]

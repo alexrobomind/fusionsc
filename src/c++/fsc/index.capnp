@@ -49,5 +49,5 @@ interface KDTreeService {
 		boxes @0 : Data.Float64Tensor;
 		keys @1 : List(UInt64);
 	}
-	build @0 (chunks : List(Chunk), leafSize : UInt32) -> KDTree;
+	build @0 (chunks : List(Chunk), leafSize : UInt32 = 1) -> KDTree;
 }

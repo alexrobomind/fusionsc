@@ -28,6 +28,9 @@ struct BalancedIntervalSplit {
 	inline BalancedIntervalSplit(size_t nTotal, size_t blockSize) :
 		nTotal(nTotal), blockSize(blockSize)
 	{
+		if(blockSize > nTotal)
+			this -> blockSize = nTotal;
+		
 		compute();
 	}
 	

@@ -34,7 +34,7 @@ struct MapperImpl : public Mapper::Server {
 		// Check that startPoints has right shape
 		auto spShape = params.getStartPoints().getShape();
 		KJ_REQUIRE(spShape.size() >= 1);
-		KJ_REQUIRE(spShape[spShape.size() - 1] == 3);
+		KJ_REQUIRE(spShape[0] == 3);
 		
 		size_t shapeProd = 1;
 		for(auto e : spShape)
@@ -77,11 +77,17 @@ struct MapperImpl : public Mapper::Server {
 		
 		// Set other properties for tracing requests
 		pcRequest.setDistanceLimit(params.getFilamentLength());
+		pcRequest.setField(params.getField());
+		
+		KJ_DBG(pcRequest.asReader());
 		
 		// Perform tracing
 		return pcRequest.send()
 		.then([ctx, params, nFilaments, nPhi, this](capnp::Response<FLTResponse> traceResponse) mutable {
 			auto nTurns = traceResponse.getNTurns();
+			
+			KJ_DBG("Tracing successful");
+			KJ_DBG(traceResponse.getPoincareHits());
 			
 			// Shape nTurns, nPhi, nFilaments, 3, (x, y, z, lc_bwd, lc_fwd)
 			Tensor<double, 5> pcPoints;
@@ -92,6 +98,7 @@ struct MapperImpl : public Mapper::Server {
 				uint32_t iStartPoint;
 				Vec3d x;
 			};
+			
 			kj::Vector<IndexEntry> indexEntries;
 			
 			Temporary<FieldlineMapping> result;
@@ -104,22 +111,23 @@ struct MapperImpl : public Mapper::Server {
 					uint32_t iTurn;
 					uint32_t iPhi;
 				};
+				
 				kj::Vector<Entry> entries;
 				
 				// Copy out all potential hits
-				for(auto iPhi : kj::range(0, nPhi)) {
-					for(auto iTurn : kj::range(0, nTurns)) {
+				for(uint32_t iPhi : kj::range(0, nPhi)) {
+					for(uint32_t iTurn : kj::range(0, nTurns)) {
 						// Check whether point is valid
 						bool isValid = true;
 						for(auto i : kj::range(0, 3)) {
-							if(pcPoints(iTurn, iPhi, iFilament, i, 0) != pcPoints(iTurn, iPhi, iFilament, i, 0))
+							if(pcPoints(iTurn, iFilament, i, iPhi, 0) != pcPoints(iTurn, iFilament, i, iPhi, 0))
 								isValid = false;
 						}
 						
 						if(!isValid)
 							continue;
 						
-						entries.add(Entry { fabs(pcPoints(iTurn, iPhi, iFilament, 0, 3)), (uint32_t) iTurn, (uint32_t) iPhi });
+						entries.add(Entry { fabs(pcPoints(iTurn, iFilament, 0, iPhi, 4)), (uint32_t) iTurn, (uint32_t) iPhi });
 					}
 				}
 				
@@ -139,12 +147,14 @@ struct MapperImpl : public Mapper::Server {
 				for(auto iEntry : kj::indices(entries)) {
 					auto& e = entries[iEntry];
 					
+					KJ_DBG(e.lBwd, e.iTurn, e.iPhi);
+					
 					auto iTurn = e.iTurn;
 					auto iPhi = e.iPhi;
 					
-					Vec3d x1(pcPoints(iTurn, iPhi, iFilament, 0, 0), pcPoints(iTurn, iPhi, iFilament, 0, 1), pcPoints(iTurn, iPhi, iFilament, 0, 2));
-					Vec3d x2(pcPoints(iTurn, iPhi, iFilament, 1, 0), pcPoints(iTurn, iPhi, iFilament, 1, 1), pcPoints(iTurn, iPhi, iFilament, 1, 2));
-					Vec3d x3(pcPoints(iTurn, iPhi, iFilament, 2, 0), pcPoints(iTurn, iPhi, iFilament, 2, 1), pcPoints(iTurn, iPhi, iFilament, 2, 2));
+					Vec3d x1(pcPoints(iTurn, iFilament, 0, iPhi, 0), pcPoints(iTurn, iFilament, 0, iPhi, 1), pcPoints(iTurn, iFilament, 0, iPhi, 2));
+					Vec3d x2(pcPoints(iTurn, iFilament, 1, iPhi, 0), pcPoints(iTurn, iFilament, 1, iPhi, 1), pcPoints(iTurn, iFilament, 1, iPhi, 2));
+					Vec3d x3(pcPoints(iTurn, iFilament, 2, iPhi, 0), pcPoints(iTurn, iFilament, 2, iPhi, 1), pcPoints(iTurn, iFilament, 2, iPhi, 2));
 					
 					double r1 = sqrt(x1[0] * x1[0] + x1[1] * x1[1]);
 					double r2 = sqrt(x2[0] * x2[0] + x2[1] * x2[1]);
@@ -183,15 +193,21 @@ struct MapperImpl : public Mapper::Server {
 				filament.setPhiStart(phiStart);
 				filament.setPhiEnd(currentPhi);
 				filament.setNIntervals(entries.size() - 1);
+				KJ_DBG(filament);
 			}
+			
+			KJ_DBG(indexEntries.size());
 			
 			// Create indexing request
 			size_t MAX_CHUNK_SIZE = 500000000 / 3;
 			auto indexRequest = indexer.buildRequest();
 			
 			BalancedIntervalSplit split(indexEntries.size(), MAX_CHUNK_SIZE);
+			KJ_DBG(split.blockCount());
+			
 			auto chunks = indexRequest.initChunks(split.blockCount());
 			for(auto i : kj::range(0, split.blockCount())) {
+				KJ_DBG(i, split.edge(i + 1), split.edge(i));
 				auto chunkSize = split.edge(i + 1) - split.edge(i);
 				
 				auto chunk = chunks[i];
@@ -215,12 +231,15 @@ struct MapperImpl : public Mapper::Server {
 				uint64_t key = e.iFilament;
 				key = key << 32;
 				key |= e.iStartPoint;
+				KJ_DBG(key, e.iFilament, e.iStartPoint);
 				
 				for(auto i : kj::range(0, 3)) {
 					chunk.getBoxes().getData().set(3 * offset + i, e.x[i]);
 				}
 				chunk.getKeys().set(offset, key);
 			}
+			
+			KJ_DBG(indexRequest);
 			
 			return indexRequest.send()
 			.then([ctx, result = mv(result)](capnp::Response<KDTree> tree) mutable {
@@ -232,5 +251,9 @@ struct MapperImpl : public Mapper::Server {
 		});
 	}
 };
+
+Mapper::Client newMapper(FLT::Client flt, KDTreeService::Client indexer) {
+	return kj::heap<MapperImpl>(mv(flt), mv(indexer));
+}
 
 }

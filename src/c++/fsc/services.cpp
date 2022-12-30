@@ -5,6 +5,7 @@
 #include "flt.h"
 #include "hfcam.h"
 #include "index.h"
+#include "fieldline-mapping.h"
 
 #include <kj/list.h>
 
@@ -73,6 +74,13 @@ struct RootServer : public RootService::Server {
 	
 	Promise<void> newKDTreeService(NewKDTreeServiceContext context) override {
 		context.initResults().setService(fsc::newKDTreeService());
+		return READY_NOW;
+	}
+	
+	Promise<void> newMapper(NewMapperContext ctx) override {
+		auto flt = thisCap().newTracerRequest().send().getService();
+		auto idx = thisCap().newKDTreeServiceRequest().send().getService();
+		ctx.initResults().setService(fsc::newMapper(mv(flt), mv(idx)));
 		return READY_NOW;
 	}
 };

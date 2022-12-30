@@ -190,6 +190,7 @@ if(BUILD_TESTING)
 		flt-tests.cpp
 		operation-tests.cpp
 		interpolation-tests.cpp
+		fieldline-mapping-tests.cpp
 		devices/w7x-test.cpp
 	)
 	target_link_libraries(tests PUBLIC fsc)
