@@ -28,6 +28,27 @@ enum FLTStopReason {
 	couldNotStep @8;
 }
 
+struct FieldlineMapping {
+	struct MappingFilament {
+		data @0 : List(Float64);
+		# Numerical data of the mapping filament.
+		# Contains, per phi plane, six numbers.
+		# - Numbers 1 and 2 are the r and z coordinates of the
+		#   associated mapping point.
+		# - Numbers 3 to 6 are, in column-major order, a transformation
+		#   matrix from a local UV coordinate system to the RZ coordinates.
+		#   which tracks the orientation and shear of the magnetic planes.
+		
+		# Phi grid information
+		phiStart @1 : Float64;
+		phiEnd @2 : Float64;
+		nIntervals @3 : UInt64;
+	}
+	
+	index @0 : Index.KDTree;
+	filaments @1 : List(MappingFilament);
+}
+
 struct FLTRequest {
 	# Tensor of shape [3, ...] indicating tracing start points
 	startPoints @0 : Data.Float64Tensor;
@@ -59,28 +80,10 @@ struct FLTRequest {
 	}
 	
 	rngSeed @15 : UInt64;
+	
+	mapping @16 : Data.DataRef(FieldlineMapping);
 }
 
-struct FieldlineMapping {
-	struct MappingFilament {
-		data @0 : List(Float64);
-		# Numerical data of the mapping filament.
-		# Contains, per phi plane, six numbers.
-		# - Numbers 1 and 2 are the r and z coordinates of the
-		#   associated mapping point.
-		# - Numbers 3 to 6 are, in column-major order, a transformation
-		#   matrix from a local UV coordinate system to the RZ coordinates.
-		#   which tracks the orientation and shear of the magnetic planes.
-		
-		# Phi grid information
-		phiMin @1 : Float64;
-		phiMax @2 : Float64;
-		nIntervals @3 : UInt64;
-	}
-	
-	index @0 : Index.KDTree;
-	filaments @1 : List(MappingFilament);
-}
 
 struct FLTResponse {
 	#struct Event {
@@ -126,6 +129,22 @@ struct FLTResponse {
 
 interface FLT {
 	trace @0 FLTRequest -> FLTResponse;
+}
+
+struct MappingRequest {
+	startPoints @0 : Data.Float64Tensor;
+	field @1 : Magnetics.ComputedField;
+	
+	nPhi @2 : UInt64;
+	
+	filamentLength @3 : Float64 = 5;
+	cutoff @4 : Float64 = 1;
+	
+	dx @5 : Float64 = 0.001;
+}
+
+interface Mapper {
+	computeMapping @0 MappingRequest -> (mapping : Data.DataRef(FieldlineMapping));
 }
 
 

@@ -385,19 +385,22 @@ struct FLTImpl : public FLT::Server {
 		
 		auto indexDataRef = request.getGeometry().getData();
 		auto geoDataRef = request.getGeometry().getBase();
+		auto mappingDataRef = request.getMapping();
 			
 		KJ_DBG("Initiating download processes");
 		
 		Promise<LocalDataRef<Float64Tensor>> downloadField = dataService.download(request.getField().getData()).eagerlyEvaluate(nullptr);
 		Promise<Maybe<LocalDataRef<IndexedGeometry::IndexData>>> downloadIndexData = dataService.downloadIfNotNull(indexDataRef);
 		Promise<Maybe<LocalDataRef<MergedGeometry>>> downloadGeometryData =	dataService.downloadIfNotNull(geoDataRef).eagerlyEvaluate(nullptr);
+		Promise<Maybe<LocalDataRef<FieldlineMapping>>> downloadMappingData = dataService.downloadIfNotNull(mappingDataRef).eagerlyEvaluate(nullptr);
 		KJ_DBG("Waiting download processes");
 		
 		// I WANT COROUTINES -.-
 		
-		return downloadIndexData.then([ctx, request, downloadGeometryData = mv(downloadGeometryData), downloadField = mv(downloadField), this](Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData) mutable {
-		return downloadGeometryData.then([ctx, request, indexData = mv(indexData), downloadField = mv(downloadField), this](Maybe<LocalDataRef<MergedGeometry>> geometryData) mutable {
-		return downloadField.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), this](LocalDataRef<Float64Tensor> fieldData) mutable {
+		return downloadIndexData.then([ctx, request, downloadGeometryData = mv(downloadGeometryData), downloadField = mv(downloadField), downloadMappingData = mv(downloadMappingData), this](Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData) mutable {
+		return downloadGeometryData.then([ctx, request, indexData = mv(indexData), downloadField = mv(downloadField), downloadMappingData = mv(downloadMappingData), this](Maybe<LocalDataRef<MergedGeometry>> geometryData) mutable {
+		return downloadField.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), downloadMappingData = mv(downloadMappingData), this](LocalDataRef<Float64Tensor> fieldData) mutable {
+		return downloadMappingData.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), fieldData = mv(fieldData), this](Maybe<LocalDataRef<FieldlineMapping>> mappingData) mutable {
 			
 			KJ_DBG("All required data downloaded");
 			
@@ -444,7 +447,7 @@ struct FLTImpl : public FLT::Server {
 			auto calc = heapHeld<TraceCalculation<Device>>(
 				*device, mv(kernelRequest), mv(field), mv(positions),
 				request.getGeometry(), mv(indexData), geometryData,
-				nullptr,
+				mappingData,
 				
 				*rootOp
 			);
@@ -624,6 +627,7 @@ struct FLTImpl : public FLT::Server {
 				results.getEndPoints().setShape(startPointShape);
 				results.getEndPoints().getShape().set(0, 4);
 			}).attach(mv(rootOp));
+		});
 		});
 		});
 		}).attach(thisCap());

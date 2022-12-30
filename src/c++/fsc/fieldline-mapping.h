@@ -44,7 +44,7 @@ EIGEN_DEVICE_FUNC void FLM::interpolate(double phi, Vec2d& rz, Mat2d& jacobian) 
 	using Strategy = C1CubicInterpolation<double>;
 	using Interpolator = NDInterpolator<1, Strategy>;
 	
-	Interpolator::Axis ax1(activeFilament.getPhiMin(), activeFilament.getPhiMax(), activeFilament.getNIntervals());
+	Interpolator::Axis ax1(activeFilament.getPhiStart(), activeFilament.getPhiEnd(), activeFilament.getNIntervals());
 	Interpolator interp(Strategy(), {ax1});
 	
 	auto data = activeFilament.getData();
@@ -90,7 +90,7 @@ EIGEN_DEVICE_FUNC void FLM::map(const Vec3d& x) {
 	activeFilament = mapping.getFilaments()[filamentIdx];
 	
 	// Compute phi baseline
-	double phiBase = activeFilament.getPhiMin() + ((activeFilament.getPhiMax() - activeFilament.getPhiMin()) / activeFilament.getNIntervals()) * pointIdx;
+	double phiBase = activeFilament.getPhiStart() + ((activeFilament.getPhiEnd() - activeFilament.getPhiStart()) / activeFilament.getNIntervals()) * pointIdx;
 	
 	// Unwrap phi using phiBase
 	phi = phiBase;
@@ -109,7 +109,7 @@ EIGEN_DEVICE_FUNC void FLM::map(const Vec3d& x) {
 }
 
 EIGEN_DEVICE_FUNC Vec3d FLM::advance(double newPhi) {
-	double relToRange = (newPhi - activeFilament.getPhiMin()) / (activeFilament.getPhiMax() - activeFilament.getPhiMin());
+	double relToRange = (newPhi - activeFilament.getPhiStart()) / (activeFilament.getPhiEnd() - activeFilament.getPhiStart());
 	
 	if(relToRange < 0 || relToRange > 1) {
 		// Advancement would put us out of range. We need to re-map position

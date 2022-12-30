@@ -31,4 +31,5 @@ interface RootService {
 	newTracer          @2 (preferredDeviceType : WorkerType = gpu) -> (service    : FLT.FLT, deviceType : WorkerType);
 	newHFCamProvider   @3 () -> (service : HFCam.HFCamProvider);
 	newKDTreeService   @4 () -> (service : Index.KDTreeService);
+	newMapper          @5 () -> (service : FLT.Mapper);
 }

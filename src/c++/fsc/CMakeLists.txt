@@ -134,7 +134,10 @@ add_library(
 	
 	random.h
 	
-	interpolation.h	
+	interpolation.h
+	
+	fieldline-mapping.h
+	fieldline-mapping.cpp
 	
 	${FSC_CP_HEADERS}
 	${FSC_CP_SRC}
