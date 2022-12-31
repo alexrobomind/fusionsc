@@ -15,11 +15,11 @@ struct FLM {
 	inline EIGEN_DEVICE_FUNC Vec3d unmap(double phi);
 	
 	//! Captures a position for mapping using the closest mapping filament
-	inline EIGEN_DEVICE_FUNC void map(const Vec3d& x);
+	inline EIGEN_DEVICE_FUNC void map(const Vec3d& x, bool fwd);
 	
 	//! Advances to a new phi position, remapping if neccessary. Returns new real-space position
 	// Note: No guarantees that flm.phi == newPhi
-	inline EIGEN_DEVICE_FUNC Vec3d advance(double newPhi);
+	inline EIGEN_DEVICE_FUNC Vec3d advance(double newPhi, bool fwd);
 	
 	//! Unwraps the given phi value to be near the currently stored position.
 	inline EIGEN_DEVICE_FUNC double unwrap(double phiIn);
@@ -80,18 +80,20 @@ EIGEN_DEVICE_FUNC Vec3d FLM::unmap(double phi) {
 	return { cos(phi) * rz[0], sin(phi) * rz[0], rz[1] };
 }
 
-EIGEN_DEVICE_FUNC void FLM::map(const Vec3d& x) {
+EIGEN_DEVICE_FUNC void FLM::map(const Vec3d& x, bool fwd) {
 	double newPhi = atan2(x[1], x[0]);
 	
+	auto dir = fwd ? mapping.getFwd() : mapping.getBwd();
+	
 	// Locate nearest filament point
-	KDTreeIndex<3> index(mapping.getIndex());
+	KDTreeIndex<3> index(dir.getIndex());
 	auto findResult = index.findNearest(x);
 	
 	// Decode key, high 32 bits are filament, low 32 bits are point for phi assignment
 	uint32_t filamentIdx = static_cast<uint32_t>(findResult.key >> 32);
 	uint32_t pointIdx    = static_cast<uint32_t>(findResult.key);
 	
-	activeFilament = mapping.getFilaments()[filamentIdx];
+	activeFilament = dir.getFilaments()[filamentIdx];
 	
 	// Compute phi baseline
 	double phiBase = activeFilament.getPhiStart() + ((activeFilament.getPhiEnd() - activeFilament.getPhiStart()) / activeFilament.getNIntervals()) * pointIdx;
@@ -114,7 +116,7 @@ EIGEN_DEVICE_FUNC void FLM::map(const Vec3d& x) {
 	uv = filJacobian.inverse() * (Vec2d { r, z } - filRZ);
 }
 
-EIGEN_DEVICE_FUNC Vec3d FLM::advance(double newPhi) {
+EIGEN_DEVICE_FUNC Vec3d FLM::advance(double newPhi, bool fwd) {
 	double relToRange = (newPhi - activeFilament.getPhiStart()) / (activeFilament.getPhiEnd() - activeFilament.getPhiStart()) * activeFilament.getNIntervals();
 	
 	// KJ_DBG(relToRange, activeFilament.getNIntervals());
@@ -123,7 +125,7 @@ EIGEN_DEVICE_FUNC Vec3d FLM::advance(double newPhi) {
 	if(relToRange < 1 || relToRange >= activeFilament.getNIntervals() - 2) {
 		// Advancement would put us out of range. We need to re-map position
 		Vec3d tmp = unmap(phi);
-		map(tmp);
+		map(tmp, fwd);
 		newPhi = unwrap(newPhi);
 	}
 	

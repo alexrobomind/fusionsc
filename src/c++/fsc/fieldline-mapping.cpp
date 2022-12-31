@@ -17,7 +17,7 @@ struct MapperImpl : public Mapper::Server {
 	
 	MapperImpl(FLT::Client flt, KDTreeService::Client indexer) : flt(mv(flt)), indexer(mv(indexer)) {}
 	
-	Promise<void> computeMapping(ComputeMappingContext ctx) {
+	Promise<void> computeDirection(MappingRequest::Reader params, bool forward, FieldlineMapping::Direction::Builder result) {
 		// Implementation notes:
 		// The mapping points are computed by making Poincaré tracing requests
 		// These requests do not arrive in order of the field hit, but are primarily sorted
@@ -28,8 +28,6 @@ struct MapperImpl : public Mapper::Server {
 		// The requests are made for triplets of fieldlines starting at identical phi points, but at
 		// positions (r, z), (r + dx, z) and (r, z + dx). The differences are then used to compute the
 		// mapping transforms in the r-z plane.
-		
-		auto params = ctx.getParams();
 		
 		// Check that startPoints has right shape
 		auto spShape = params.getStartPoints().getShape();
@@ -78,12 +76,13 @@ struct MapperImpl : public Mapper::Server {
 		// Set other properties for tracing requests
 		pcRequest.setDistanceLimit(params.getFilamentLength());
 		pcRequest.setField(params.getField());
+		pcRequest.setForward(forward);
 		
 		// KJ_DBG(pcRequest.asReader());
 		
 		// Perform tracing
 		return pcRequest.send()
-		.then([ctx, params, nFilaments, nPhi, this](capnp::Response<FLTResponse> traceResponse) mutable {
+		.then([result, params, nFilaments, nPhi, this](capnp::Response<FLTResponse> traceResponse) mutable {
 			auto nTurns = traceResponse.getNTurns();
 			
 			// KJ_DBG("Tracing successful");
@@ -101,7 +100,6 @@ struct MapperImpl : public Mapper::Server {
 			
 			kj::Vector<IndexEntry> indexEntries;
 			
-			Temporary<FieldlineMapping> result;
 			auto filaments = result.initFilaments(nFilaments);
 			
 			for(uint32_t iFilament : kj::range(0, nFilaments)) {
@@ -265,13 +263,28 @@ struct MapperImpl : public Mapper::Server {
 			// KJ_DBG(indexRequest);
 			
 			return indexRequest.send()
-			.then([ctx, result = mv(result)](capnp::Response<KDTree> tree) mutable {
+			.then([result](capnp::Response<KDTree> tree) mutable {
 				result.setIndex(tree);
-				
-				auto published = getActiveThread().dataService().publish(mv(result));
-				ctx.getResults().setMapping(published);
 			});
 		});
+	}
+	
+	Promise<void> computeMapping(ComputeMappingContext ctx) {		
+		auto params = ctx.getParams();
+		
+		Temporary<FieldlineMapping> result;
+
+		auto promise = computeDirection(params, true, result.getFwd())
+		.then([this, bwd = result.getBwd(), params]() mutable {
+			computeDirection(params, false, bwd);
+		});
+		
+		promise = promise.then([this, ctx, result = mv(result)]() mutable {
+			auto published = getActiveThread().dataService().publish(mv(result));
+			ctx.getResults().setMapping(published);
+		});
+		
+		return promise;
 	}
 };
 

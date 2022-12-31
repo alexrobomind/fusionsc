@@ -45,8 +45,13 @@ struct FieldlineMapping {
 		nIntervals @3 : UInt64;
 	}
 	
-	index @0 : Index.KDTree;
-	filaments @1 : List(MappingFilament);
+	struct Direction {
+		filaments @0 : List(MappingFilament);
+		index @1 : Index.KDTree;
+	}
+	
+	fwd @0 : Direction;
+	bwd @1 : Direction;
 }
 
 struct FLTRequest {
@@ -82,6 +87,7 @@ struct FLTRequest {
 	rngSeed @15 : UInt64;
 	
 	mapping @16 : Data.DataRef(FieldlineMapping);
+	forward @17 : Bool = true;
 }
 
 

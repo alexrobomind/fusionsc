@@ -167,6 +167,7 @@ struct TraceCalculation {
 				pos.set(iDim, positions(iDim, i));
 			
 			state.setPhi0(std::atan2(pos[1], pos[0]));
+			state.setForward(request.getServiceRequest().getForward());
 			
 			fsc::MT19937::seed((uint32_t) seedGenerator(), state.getRngState());
 		}

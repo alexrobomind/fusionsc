@@ -97,7 +97,7 @@ namespace fsc {
 		auto indexData = *pGeometryIndexData;
 		
 		auto flmData = *pFLMData;
-		bool useFLM = flmData.getFilaments().size() > 0;
+		bool useFLM = flmData.getFwd().getFilaments().size() > 0;
 		
 		// printf("Hello there\n");
 		CUPNP_DBG("FLT kernel started", idx, useFLM);
@@ -186,7 +186,7 @@ namespace fsc {
 		
 		// Initialize mapped position
 		if(useFLM) {
-			flm.map(x);
+			flm.map(x, state.getForward());
 		}
 		
 		// ... do the work ...
@@ -272,12 +272,12 @@ namespace fsc {
 				++displacementCount;
 				
 				if(useFLM) {
-					flm.map(x2);
+					flm.map(x2, tracingDirection > 0);
 				}				
 			} else {				
 				if(useFLM) {					
 					double newPhi = flm.phi + fieldOrientation * tracingDirection * request.getStepSize() / (2 * pi * r);
-					x2 = flm.advance(newPhi);
+					x2 = flm.advance(newPhi, tracingDirection == 1);
 				} else {
 					// Regular tracing step
 					kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), rungeKuttaInput);
