@@ -54,6 +54,7 @@ EIGEN_DEVICE_FUNC void FLM::interpolate(double phi, Vec2d& rz, Mat2d& jacobian) 
 	for(int dim = 0; dim < 2; ++dim) {
 		auto filamentPos = [&](int i) {
 			i += 1;
+			// KJ_DBG(i, 6 * i + dim, data.size());
 			return data[6 * i + dim];
 		};
 		rz(dim) = interp(filamentPos, Vec1d {phi});
@@ -62,6 +63,7 @@ EIGEN_DEVICE_FUNC void FLM::interpolate(double phi, Vec2d& rz, Mat2d& jacobian) 
 	for(int idx = 0; idx < 4; ++idx) {
 		auto filamentJacobian = [&](int i) {
 			i += 1;
+			// KJ_DBG(i, 6 * i + idx + 2, data.size());
 			return data[6 * i + idx + 2];
 		};
 		jacobian.data()[idx] = interp(filamentJacobian, Vec1d {phi});
@@ -107,16 +109,22 @@ EIGEN_DEVICE_FUNC void FLM::map(const Vec3d& x) {
 	double r = sqrt(x[0] * x[0] + x[1] * x[1]);
 	double z = x[2];
 	
+	// KJ_DBG(r, z);
+	
 	uv = filJacobian.inverse() * (Vec2d { r, z } - filRZ);
 }
 
 EIGEN_DEVICE_FUNC Vec3d FLM::advance(double newPhi) {
-	double relToRange = (newPhi - activeFilament.getPhiStart()) / (activeFilament.getPhiEnd() - activeFilament.getPhiStart());
+	double relToRange = (newPhi - activeFilament.getPhiStart()) / (activeFilament.getPhiEnd() - activeFilament.getPhiStart()) * activeFilament.getNIntervals();
 	
-	if(relToRange < 0 || relToRange > 1) {
+	// KJ_DBG(relToRange, activeFilament.getNIntervals());
+	
+	// Remember that we need one element up and down for the 2nd order interpolation
+	if(relToRange < 1 || relToRange >= activeFilament.getNIntervals() - 2) {
 		// Advancement would put us out of range. We need to re-map position
 		Vec3d tmp = unmap(phi);
 		map(tmp);
+		newPhi = unwrap(newPhi);
 	}
 	
 	phi = newPhi;

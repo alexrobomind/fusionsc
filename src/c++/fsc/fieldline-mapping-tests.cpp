@@ -51,12 +51,37 @@ TEST_CASE("flm") {
 	writeTensor(startPoints, mappingRequest.getStartPoints());
 	
 	prepareToroidalField(mappingRequest.getField());
-	mappingRequest.setNPhi(4);
-	mappingRequest.setFilamentLength(40);
+	mappingRequest.setNPhi(100);
+	mappingRequest.setFilamentLength(10);
+	mappingRequest.setCutoff(1);
 	
 	auto result = mappingRequest.send().wait(ws);
-	KJ_DBG(result);
+	// KJ_DBG(result);
 	
 	auto resultData = lt -> dataService().download(result.getMapping()).wait(ws);
-	KJ_DBG(resultData.get());
+	// KJ_DBG(resultData.get());
+	
+	auto fltReq = createRoot(config).newTracerRequest();
+	fltReq.setPreferredDeviceType(WorkerType::CPU);
+	auto flt = fltReq.send().getService();
+	
+	auto traceReq = flt.traceRequest();
+	prepareToroidalField(traceReq.getField());
+	
+	traceReq.getStartPoints().setShape({3});
+	traceReq.getStartPoints().setData({1.0, 0.0, 0.0});
+	
+	traceReq.setMapping(resultData);
+	
+	auto planes = traceReq.initPlanes(1);
+	planes[0].getOrientation().setPhi(3.141592);
+	
+	traceReq.setTurnLimit(10000);
+	// traceReq.setStepLimit(10000);
+	traceReq.setStepSize(0.1);
+	
+	KJ_DBG("Sending request");
+	auto response = traceReq.send().wait(ws);
+	
+	// KJ_DBG(response.getPoincareHits());
 }

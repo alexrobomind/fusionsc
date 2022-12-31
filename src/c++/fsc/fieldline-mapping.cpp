@@ -79,15 +79,15 @@ struct MapperImpl : public Mapper::Server {
 		pcRequest.setDistanceLimit(params.getFilamentLength());
 		pcRequest.setField(params.getField());
 		
-		KJ_DBG(pcRequest.asReader());
+		// KJ_DBG(pcRequest.asReader());
 		
 		// Perform tracing
 		return pcRequest.send()
 		.then([ctx, params, nFilaments, nPhi, this](capnp::Response<FLTResponse> traceResponse) mutable {
 			auto nTurns = traceResponse.getNTurns();
 			
-			KJ_DBG("Tracing successful");
-			KJ_DBG(traceResponse.getPoincareHits());
+			// KJ_DBG("Tracing successful");
+			// KJ_DBG(traceResponse.getPoincareHits());
 			
 			// Shape nTurns, nPhi, nFilaments, 3, (x, y, z, lc_bwd, lc_fwd)
 			Tensor<double, 5> pcPoints;
@@ -114,6 +114,9 @@ struct MapperImpl : public Mapper::Server {
 				
 				kj::Vector<Entry> entries;
 				
+				double lBwdMin = std::numeric_limits<double>::infinity();
+				double lFwdMin = std::numeric_limits<double>::infinity();
+				
 				// Copy out all potential hits
 				for(uint32_t iPhi : kj::range(0, nPhi)) {
 					for(uint32_t iTurn : kj::range(0, nTurns)) {
@@ -126,6 +129,14 @@ struct MapperImpl : public Mapper::Server {
 						
 						if(!isValid)
 							continue;
+						
+						// KJ_DBG(iFilament, iPhi, iTurn);
+						
+						double lcFwd = fabs(pcPoints(iTurn, iFilament, 0, iPhi, 3));
+						double lcBwd = fabs(pcPoints(iTurn, iFilament, 0, iPhi, 4));
+						
+						lBwdMin = std::min(lBwdMin, lcBwd);
+						lFwdMin = std::min(lFwdMin, lcFwd);
 						
 						entries.add(Entry { fabs(pcPoints(iTurn, iFilament, 0, iPhi, 4)), (uint32_t) iTurn, (uint32_t) iPhi });
 					}
@@ -147,7 +158,7 @@ struct MapperImpl : public Mapper::Server {
 				for(auto iEntry : kj::indices(entries)) {
 					auto& e = entries[iEntry];
 					
-					KJ_DBG(e.lBwd, e.iTurn, e.iPhi);
+					// KJ_DBG(e.lBwd, e.iTurn, e.iPhi);
 					
 					auto iTurn = e.iTurn;
 					auto iPhi = e.iPhi;
@@ -181,10 +192,22 @@ struct MapperImpl : public Mapper::Server {
 					currentPhi += kmath::wrap(phi1 - currentPhi);
 					
 					phiValues.add(currentPhi);
+						
+					double lcFwd = fabs(pcPoints(iTurn, iFilament, 0, iPhi, 3));
+					double lcBwd = fabs(pcPoints(iTurn, iFilament, 0, iPhi, 4));
 					
-					indexEntries.add(IndexEntry {
-						(uint32_t) iFilament, (uint32_t) iEntry, x1
-					});
+					bool addToIndex = true;
+					if(lcFwd < lFwdMin + params.getCutoff())
+						addToIndex = false;
+					
+					if(lcBwd < lBwdMin + params.getCutoff())
+						addToIndex = false;
+					
+					if(addToIndex) {
+						indexEntries.add(IndexEntry {
+							(uint32_t) iFilament, (uint32_t) iEntry, x1
+						});
+					}
 					
 					if(iEntry == 0)
 						phiStart = currentPhi;
@@ -193,21 +216,21 @@ struct MapperImpl : public Mapper::Server {
 				filament.setPhiStart(phiStart);
 				filament.setPhiEnd(currentPhi);
 				filament.setNIntervals(entries.size() - 1);
-				KJ_DBG(filament);
+				// KJ_DBG(filament);
 			}
 			
-			KJ_DBG(indexEntries.size());
+			// KJ_DBG(indexEntries.size());
 			
 			// Create indexing request
 			size_t MAX_CHUNK_SIZE = 500000000 / 3;
 			auto indexRequest = indexer.buildRequest();
 			
 			BalancedIntervalSplit split(indexEntries.size(), MAX_CHUNK_SIZE);
-			KJ_DBG(split.blockCount());
+			// KJ_DBG(split.blockCount());
 			
 			auto chunks = indexRequest.initChunks(split.blockCount());
 			for(auto i : kj::range(0, split.blockCount())) {
-				KJ_DBG(i, split.edge(i + 1), split.edge(i));
+				// KJ_DBG(i, split.edge(i + 1), split.edge(i));
 				auto chunkSize = split.edge(i + 1) - split.edge(i);
 				
 				auto chunk = chunks[i];
@@ -231,7 +254,7 @@ struct MapperImpl : public Mapper::Server {
 				uint64_t key = e.iFilament;
 				key = key << 32;
 				key |= e.iStartPoint;
-				KJ_DBG(key, e.iFilament, e.iStartPoint);
+				// KJ_DBG(key, e.iFilament, e.iStartPoint);
 				
 				for(auto i : kj::range(0, 3)) {
 					chunk.getBoxes().getData().set(3 * offset + i, e.x[i]);
@@ -239,7 +262,7 @@ struct MapperImpl : public Mapper::Server {
 				chunk.getKeys().set(offset, key);
 			}
 			
-			KJ_DBG(indexRequest);
+			// KJ_DBG(indexRequest);
 			
 			return indexRequest.send()
 			.then([ctx, result = mv(result)](capnp::Response<KDTree> tree) mutable {

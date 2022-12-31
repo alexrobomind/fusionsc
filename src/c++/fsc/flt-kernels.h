@@ -121,6 +121,7 @@ namespace fsc {
 		
 		// Set up the magnetic field
 		using InterpolationStrategy = LinearInterpolation<Num>;
+		// using InterpolationStrategy = C1CubicInterpolation<Num>;
 		
 		auto grid = request.getField().getGrid();
 		SlabFieldInterpolator<InterpolationStrategy> interpolator(InterpolationStrategy(), grid);
