@@ -30,6 +30,7 @@ struct MapperImpl : public Mapper::Server {
 		// mapping transforms in the r-z plane.
 		
 		// Check that startPoints has right shape
+		KJ_DBG("cd", forward);
 		auto spShape = params.getStartPoints().getShape();
 		KJ_REQUIRE(spShape.size() >= 1);
 		KJ_REQUIRE(spShape[0] == 3);
@@ -65,6 +66,7 @@ struct MapperImpl : public Mapper::Server {
 			}
 		}
 		writeTensor(reqSP, pcRequest.getStartPoints());
+		KJ_DBG(pcRequest.getStartPoints());
 		
 		// Set phi planes
 		auto nPhi = params.getNPhi();
@@ -81,6 +83,7 @@ struct MapperImpl : public Mapper::Server {
 		// KJ_DBG(pcRequest.asReader());
 		
 		// Perform tracing
+		KJ_DBG("Sending", forward);
 		return pcRequest.send()
 		.then([result, params, nFilaments, nPhi, this](capnp::Response<FLTResponse> traceResponse) mutable {
 			auto nTurns = traceResponse.getNTurns();
@@ -88,7 +91,7 @@ struct MapperImpl : public Mapper::Server {
 			// KJ_DBG("Tracing successful");
 			// KJ_DBG(traceResponse.getPoincareHits());
 			
-			// Shape nTurns, nPhi, nFilaments, 3, (x, y, z, lc_bwd, lc_fwd)
+			// Shape nTurns, nFilaments, 3, nPHi, (x, y, z, lc_fwd, lc_bwd)
 			Tensor<double, 5> pcPoints;
 			readTensor(traceResponse.getPoincareHits(), pcPoints);
 			
@@ -276,7 +279,7 @@ struct MapperImpl : public Mapper::Server {
 
 		auto promise = computeDirection(params, true, result.getFwd())
 		.then([this, bwd = result.getBwd(), params]() mutable {
-			computeDirection(params, false, bwd);
+			return computeDirection(params, false, bwd);
 		});
 		
 		promise = promise.then([this, ctx, result = mv(result)]() mutable {

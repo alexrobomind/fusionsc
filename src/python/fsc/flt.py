@@ -40,36 +40,56 @@ async def visualizeMapping(mapping, nPoints = 50):
 	import numpy as np
 	import pyvista as pv
 	
-	mapping = await data.download(mapping)
+	mapping = await data.download.asnc(mapping)
 	
 	def vizFilament(filament):
-		filData = np.asarray(filament.data).reshape([:, 6])
+		filData = np.asarray(filament.data).reshape([-1, 6])
+				
+		if len(filData) == 0:
+			return pv.MultiBlock([])
+			
 		
 		phi = np.linspace(filament.phiStart, filament.phiEnd, filament.nIntervals + 1)
 		r = filData[:, 0]
 		z = filData[:, 1]
 		
-		x = np.cos(phi) * rs
-		y = np.sin(phi) * rs
+		x = np.cos(phi) * r
+		y = np.sin(phi) * r
 		
 		xyz = np.stack([x, y, z], axis = 1)
-		splint = pv.Spline(xyz, nPoints)
 		
-		for i in [-1, 0]:
+		objects = []
+		
+		spline = pv.Spline(xyz, nPoints)
+		objects.append(spline)
+		
+		for i in range(0, filament.nIntervals):
+			phi0 = phi[i]
+			r0 = filData[i, 0]
+			z0 = filData[i, 1]
+			
 			for j in [0, 1]:
-				r0 = filData[i, 0]
-				z0 = filData[i, 1]
-				
 				dr = filData[i, 2 + 2 * j]
-				dz = filData[i, 2 + j * j + 1]
+				dz = filData[i, 2 + 2 * j + 1]
 				
+				print(dr, dz)
 				
-		dr11 = filData[0, 3]
+				x0 = r0 * np.cos(phi0)
+				y0 = r0 * np.sin(phi0)
+				
+				dx = dr * np.cos(phi0)
+				dy = dr * np.sin(phi0)
+				
+				arrow = pv.Arrow(start = [x0, y0, z0], direction = [dx, dy, dz], scale = 'auto')
+				objects.append(arrow)
+		
+		return pv.MultiBlock(objects)
 	
-	for filament in mapping.filaments:
-		# spline = pv.Spline(xyz, nPoints)
-		
-		
+	return pv.MultiBlock([
+		vizFilament(f)
+		for filArray in [mapping.fwd.filaments, mapping.bwd.filaments]
+		for f in filArray
+	])
 
 class FLT:
 	# backend: native.RootService.Client
@@ -107,20 +127,29 @@ class FLT:
 		return result
 	
 	@asyncFunction
-	async def computeField(self, config, grid):
+	async def fieldValues(self, config, grid):
 		"""
 		Returns an array of shape [3, grid.nPhi, grid.nZ, grid.nR] containing the magnetic field.
 		The directions along the first coordinate are phi, z, r
 		"""
 		import numpy as np
 		
-		print("Grid:", grid)
+		field = await self.computeField.asnc(config, grid)
+		fieldData = await data.download.asnc(field.field.computedField.data)
+		
+		return np.asarray(fieldData).transpose([3, 0, 1, 2])
+	
+	@asyncFunction
+	async def computeField(self, config, grid):
+		from . import MagneticConfig
 		
 		resolved = await config.resolve.asnc()
 		computed = (await self.calculator.compute(resolved.field, grid)).computedField
-		fieldData = await data.download.asnc(computed.data)
 		
-		return np.asarray(fieldData).transpose([3, 0, 1, 2])
+		result = MagneticConfig()
+		result.field.computedField = computed
+		
+		return result
 	
 	@asyncFunction
 	async def poincareInPhiPlanes(self, points, phiPlanes, turnLimit, config, **kwArgs):
@@ -147,14 +176,16 @@ class FLT:
 		else:
 			computedField = (await self.calculator.compute(resolvedField.field, grid)).computedField
 		
-		response = mapper.computeMapping(
-			startPoints = startPoints,
-			field = computedField,
-			dx = dx,
-			filamentLength = filamentLength,
-			cutoff = cutoff,
-			nPhi = nPhi
-		)
+		# We use the request based API because tensor values are not yet supported for fields
+		request = native.MappingRequest.newMessage()
+		request.startPoints = startPoints
+		request.field = computedField
+		request.dx = dx
+		request.filamentLength = filamentLength
+		request.cutoff = cutoff
+		request.nPhi = nPhi
+		
+		response = self.mapper.computeMapping(request)
 		
 		return response.mapping
 		

@@ -1,6 +1,9 @@
 from . import native
 from .asnc import asyncFunction
 
+def openArchive(filename: str):
+	return native.data.openArchive(filename)
+
 @asyncFunction
 def publish(data):
 	return native.data.publish(ref)
@@ -15,4 +18,4 @@ def writeArchive(data, filename: str):
 
 @asyncFunction
 def readArchive(filename: str):
-	return download.asnc(native.data.openArchive(filename))
+	return download.asnc(openArchive(filename))
