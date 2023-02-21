@@ -614,17 +614,30 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 		"struct ", name.flatten(), "{\n",
 		"	static constexpr cupnp::Kind kind = cupnp::Kind::STRUCT;\n",
 		"	\n",
-		"	uint64_t structure;\n",
+		"	// uint64_t structure;\n",
+		"	uint32_t dataSectionSize;\n",
+		"	uint16_t pointerSectionSize;\n",
 		"	cupnp::Location data;\n",
 		"	\n",
 		"	inline CUPNP_FUNCTION ", name.flatten(), "(uint64_t structure, cupnp::Location data) :\n",
-		"		structure(structure),\n",
+		"		// structure(structure),\n",
+		"		dataSectionSize(cupnp::getDataSectionSizeInBytes(structure)),\n",
+		"		pointerSectionSize(cupnp::getPointerSectionSize(structure)),\n",
 		"		data(data)\n",
 		"	{\n",
 		"		cupnp::validateStructPointer(structure, data);\n",
 		"	}\n",
 		"	\n",
-		"	inline CUPNP_FUNCTION bool isDefault() { return structure == 0; }\n",
+		"	inline CUPNP_FUNCTION ", name.flatten(), "(uint32_t dataSectionSize, uint16_t pointerSectionSize, cupnp::Location data) :\n",
+		"		// structure(structure),\n",
+		"		dataSectionSize(dataSectionSize),\n",
+		"		pointerSectionSize(pointerSectionSize),\n",
+		"		data(data)\n",
+		"	{\n",
+		"		cupnp::validateStructPointer(dataSectionSize, pointerSectionSize, data);\n",
+		"	}\n",
+		"	\n",
+		"	inline CUPNP_FUNCTION bool isDefault() { return dataSectionSize == 0 && pointerSectionSize == 0; }\n",
 		"	\n",
 		"	friend CUPNP_FUNCTION void cupnp::swapData<", name.flatten(), ">(", name.flatten(), "&, ", name.flatten(), "&); \n",
 		"	\n"
@@ -675,7 +688,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 							request, nodeId, methodDefinitions,
 							strTree("bool"), strTree("is", camelCase(field.getName(), true), "() const"),
 							strTree(
-							"	return cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data) == ", field.getDiscriminantValue(), ";\n"
+							"	return cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(dataSectionSize, data) == ", field.getDiscriminantValue(), ";\n"
 							)
 						),
 						"	\n"
@@ -687,8 +700,8 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 							request, nodeId, methodDefinitions,
 							typeName.flatten(), strTree("mutate", camelCase(field.getName(), true), "()"),
 							strTree(
-							"	cupnp::setDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data, ", field.getDiscriminantValue(), ");\n",
-							"	return ", typeName.flatten(), "(structure, data);\n"
+							"	cupnp::setDiscriminant<", asStruct.getDiscriminantOffset(), ">(dataSectionSize, data, ", field.getDiscriminantValue(), ");\n",
+							"	return ", typeName.flatten(), "(dataSectionSize, pointerSectionSize, data);\n"
 							)
 						)
 					);
@@ -699,7 +712,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 							request, nodeId, methodDefinitions,
 							typeName.flatten(), strTree("mutate", camelCase(field.getName(), true), "()"),
 							strTree(
-							"	return ", typeName.flatten(), "(structure, data);\n"
+							"	return ", typeName.flatten(), "(dataSectionSize, pointerSectionSize, data);\n"
 							)
 						)
 					);
@@ -711,7 +724,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 						request, nodeId, methodDefinitions,
 						strTree("const ", typeName.flatten()), strTree("get", camelCase(field.getName(), true), "() const"),
 						strTree(
-						"	return ", typeName.flatten(), "(structure, data);\n"
+						"	return ", typeName.flatten(), "(dataSectionSize, pointerSectionSize, data);\n"
 						)
 					),
 					"\n"
@@ -768,18 +781,18 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 									request, nodeId, methodDefinitions,
 									typeName.flatten(), strTree("get", subName.asPtr(), "() const"),
 									strTree(
-										"	if(cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data) != ", field.getDiscriminantValue(), ")\n",
+										"	if(cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(dataSectionSize, data) != ", field.getDiscriminantValue(), ")\n",
 										"		return ", castIfEnum(cppDefaultValue(slot.getDefaultValue()), typeName.flatten()), ";\n",
 										"	\n",
-										"	return ", castIfEnum(strTree("cupnp::get", accessorSuffix, "(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ")"), typeName.flatten()), ";\n"
+										"	return ", castIfEnum(strTree("cupnp::get", accessorSuffix, "(dataSectionSize, data, ", cppDefaultValue(slot.getDefaultValue()), ")"), typeName.flatten()), ";\n"
 									)
 								),
 								generateMethod(
 									request, nodeId, methodDefinitions,
 									strTree("void"), strTree("set", subName.asPtr(), "(", typeName.flatten(), " newVal)"),
 									strTree(
-										"	cupnp::set", accessorSuffix, "(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ", ", castIfEnum(strTree("newVal"), str(fieldType)), ");\n",
-										"	cupnp::setDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data, ", field.getDiscriminantValue(), ");\n"
+										"	cupnp::set", accessorSuffix, "(dataSectionSize, data, ", cppDefaultValue(slot.getDefaultValue()), ", ", castIfEnum(strTree("newVal"), str(fieldType)), ");\n",
+										"	cupnp::setDiscriminant<", asStruct.getDiscriminantOffset(), ">(dataSectionSize, data, ", field.getDiscriminantValue(), ");\n"
 									)
 								),
 								"\n"
@@ -792,14 +805,14 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 									request, nodeId, methodDefinitions,
 									typeName.flatten(), strTree("get", subName.asPtr(), "() const"),
 									strTree(
-										"	return ", castIfEnum(strTree("cupnp::get", accessorSuffix, "(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ")"), typeName.flatten()), ";\n"
+										"	return ", castIfEnum(strTree("cupnp::get", accessorSuffix, "(dataSectionSize, data, ", cppDefaultValue(slot.getDefaultValue()), ")"), typeName.flatten()), ";\n"
 									)
 								),
 								generateMethod(
 									request, nodeId, methodDefinitions,
 									strTree("void"), strTree("set", subName.asPtr(), "(", typeName.flatten(), " newVal)"),
 									strTree(
-										"	cupnp::set", accessorSuffix, "(structure, data, ", cppDefaultValue(slot.getDefaultValue()), ", ", castIfEnum(strTree("newVal"), str(fieldType)), ");\n"
+										"	cupnp::set", accessorSuffix, "(dataSectionSize, data, ", cppDefaultValue(slot.getDefaultValue()), ", ", castIfEnum(strTree("newVal"), str(fieldType)), ");\n"
 									)
 								),
 								"\n"
@@ -820,7 +833,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 									request, nodeId, methodDefinitions,
 									strTree("bool"), strTree("has", subName.asPtr(), "() const"),
 									strTree(
-										"	return cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data) == ", field.getDiscriminantValue(), ";\n"
+										"	return cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(dataSectionSize, data) == ", field.getDiscriminantValue(), ";\n"
 									)
 								)
 							);
@@ -846,7 +859,7 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 								typeName.flatten(), strTree("mutate", subName.asPtr(), "()"),
 								strTree(
 									"	CUPNP_REQUIRE(nonDefault", subName.asPtr(), "());\n",
-									"	return cupnp::mutatePointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data);\n"
+									"	return cupnp::mutatePointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(dataSectionSize, pointerSectionSize, data);\n"
 								)
 							),
 							"\n"
@@ -863,24 +876,24 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 									request, nodeId, methodDefinitions,
 									strTree("const ", typeName.flatten()), strTree("get", subName.asPtr(), "() const"),
 									strTree(
-										"	if(cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data) != ", field.getDiscriminantValue(), ")\n",
+										"	if(cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(dataSectionSize, data) != ", field.getDiscriminantValue(), ")\n",
 										"		return cupnp::getPointer<", typeName.flatten(), ">(reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n",
 										"	\n",
-										"	return cupnp::getPointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data, reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n"
+										"	return cupnp::getPointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(dataSectionSize, pointerSectionSize, data, reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n"
 									)
 								),
 								generateMethod(
 									request, nodeId, methodDefinitions,
 									strTree("bool"), strTree("nonDefault", subName.asPtr(), "() const"),
 									strTree(
-										"	return cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data) == ", field.getDiscriminantValue(), " && cupnp::hasPointerField<", slot.getOffset(), ">(structure, data);\n"
+										"	return cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(dataSectionSize, data) == ", field.getDiscriminantValue(), " && cupnp::hasPointerField<", slot.getOffset(), ">(dataSectionSize, pointerSectionSize, data);\n"
 									)
 								),
 								generateMethod(
 									request, nodeId, methodDefinitions,
 									strTree("bool"), strTree("has", subName.asPtr(), "() const"),
 									strTree(
-										"	return cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(structure, data) == ", field.getDiscriminantValue(), ";\n"
+										"	return cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(dataSectionSize, data) == ", field.getDiscriminantValue(), ";\n"
 									)
 								),
 								"\n"
@@ -893,14 +906,14 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 									request, nodeId, methodDefinitions,
 									strTree("const ", typeName.flatten()), strTree("get", subName.asPtr(), "() const"),
 									strTree(
-										"	return cupnp::getPointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(structure, data, reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n"
+										"	return cupnp::getPointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(dataSectionSize, pointerSectionSize, data, reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n"
 									)
 								),
 								generateMethod(
 									request, nodeId, methodDefinitions,
 									strTree("bool"), strTree("nonDefault", subName.asPtr(), "() const"),
 									strTree(
-										"	return cupnp::hasPointerField<", slot.getOffset(), ">(structure, data);\n"
+										"	return cupnp::hasPointerField<", slot.getOffset(), ">(dataSectionSize, pointerSectionSize, data);\n"
 									)
 								),
 								"\n"

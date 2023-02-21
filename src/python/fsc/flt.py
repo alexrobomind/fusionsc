@@ -35,17 +35,76 @@ def symmetrize(points, nSym = 1, stellaratorSymmetric = False):
 	
 	return np.stack([x, y, z], axis = 0)
 
+@asyncFunction
+async def visualizeMapping(mapping, nPoints = 50):
+	import numpy as np
+	import pyvista as pv
+	
+	mapping = await data.download.asnc(mapping)
+	
+	def vizFilament(filament):
+		filData = np.asarray(filament.data).reshape([-1, 6])
+				
+		if len(filData) == 0:
+			return pv.MultiBlock([])
+			
+		
+		phi = np.linspace(filament.phiStart, filament.phiEnd, filament.nIntervals + 1)
+		r = filData[:, 0]
+		z = filData[:, 1]
+		
+		x = np.cos(phi) * r
+		y = np.sin(phi) * r
+		
+		xyz = np.stack([x, y, z], axis = 1)
+		
+		objects = []
+		
+		spline = pv.Spline(xyz, nPoints)
+		objects.append(spline)
+		
+		for i in range(0, filament.nIntervals):
+			phi0 = phi[i]
+			r0 = filData[i, 0]
+			z0 = filData[i, 1]
+			
+			for j in [0, 1]:
+				dr = filData[i, 2 + 2 * j]
+				dz = filData[i, 2 + 2 * j + 1]
+				
+				print(dr, dz)
+				
+				x0 = r0 * np.cos(phi0)
+				y0 = r0 * np.sin(phi0)
+				
+				dx = dr * np.cos(phi0)
+				dy = dr * np.sin(phi0)
+				
+				arrow = pv.Arrow(start = [x0, y0, z0], direction = [dx, dy, dz], scale = 'auto')
+				objects.append(arrow)
+		
+		return pv.MultiBlock(objects)
+	
+	return pv.MultiBlock([
+		vizFilament(f)
+		for filArray in [mapping.fwd.filaments, mapping.bwd.filaments]
+		for f in filArray
+	])
+
 class FLT:
 	# backend: native.RootService.Client
 	
 	calculator: native.FieldCalculator.Client
 	tracer: native.FLT.Client
+	geometryLib : native.GeometryLib.Client
+	mapper : native.Mapper.Client
 	
 	def __init__(self, backend):
 		# self.backend = backend
 		self.calculator = backend.newFieldCalculator().service
 		self.tracer	 = backend.newTracer().service
 		self.geometryLib = backend.newGeometryLib().service
+		self.mapper = backend.newMapper().service
 	
 	@asyncFunction
 	async def mergeGeometry(self, geometry):
@@ -68,20 +127,29 @@ class FLT:
 		return result
 	
 	@asyncFunction
-	async def computeField(self, config, grid):
+	async def fieldValues(self, config, grid):
 		"""
 		Returns an array of shape [3, grid.nPhi, grid.nZ, grid.nR] containing the magnetic field.
 		The directions along the first coordinate are phi, z, r
 		"""
 		import numpy as np
 		
-		print("Grid:", grid)
+		field = await self.computeField.asnc(config, grid)
+		fieldData = await data.download.asnc(field.field.computedField.data)
+		
+		return np.asarray(fieldData).transpose([3, 0, 1, 2])
+	
+	@asyncFunction
+	async def computeField(self, config, grid):
+		from . import MagneticConfig
 		
 		resolved = await config.resolve.asnc()
 		computed = (await self.calculator.compute(resolved.field, grid)).computedField
-		fieldData = await data.download.asnc(computed.data)
 		
-		return np.asarray(fieldData).transpose([3, 0, 1, 2])
+		result = MagneticConfig()
+		result.field.computedField = computed
+		
+		return result
 	
 	@asyncFunction
 	async def poincareInPhiPlanes(self, points, phiPlanes, turnLimit, config, **kwArgs):
@@ -92,12 +160,41 @@ class FLT:
 	async def connectionLength(self, points, config, geometry, **kwargs):
 		result = await self.trace.asnc(points, config, geometry = geometry, collisionLimit = 1, **kwargs)
 		return result["endPoints"][3]
+	
+	
+	@asyncFunction
+	async def computeMapping(self,
+		startPoints, config, grid = None, 
+		nPhi = 30, filamentLength = 5, cutoff = 1,
+		dx = 0.001
+	):
+		resolvedField = await config.resolve.asnc()
+		
+		if grid is None:
+			assert resolvedField.field.which() == 'computed', 'Can only omit grid if field is pre-computed'
+			computedField = resolvedField.field.computed
+		else:
+			computedField = (await self.calculator.compute(resolvedField.field, grid)).computedField
+		
+		# We use the request based API because tensor values are not yet supported for fields
+		request = native.MappingRequest.newMessage()
+		request.startPoints = startPoints
+		request.field = computedField
+		request.dx = dx
+		request.filamentLength = filamentLength
+		request.cutoff = cutoff
+		request.nPhi = nPhi
+		
+		response = self.mapper.computeMapping(request)
+		
+		return response.mapping
 		
 	@asyncFunction
 	async def trace(self,
 		points, config,
 		geometry = None,
-		grid = None, geometryGrid = None, 
+		grid = None, geometryGrid = None,
+		mapping = None,
 		
 		# Limits to stop tracing
 		distanceLimit = 1e4, turnLimit = 0, stepLimit = 0, stepSize = 1e-3, collisionLimit = 0,
@@ -139,7 +236,7 @@ class FLT:
 		request.stepLimit = stepLimit
 		request.collisionLimit = collisionLimit
 		request.turnLimit = turnLimit
-		
+				
 		# Diffusive transport model
 		if isotropicDiffusionCoefficient is not None:
 			request.perpendicularModel.isotropicDiffusionCoefficient = isotropicDiffusionCoefficient
@@ -161,6 +258,9 @@ class FLT:
 		if geometry is not None:
 			request.geometry = indexedGeometry
 		
+		if mapping is not None:
+			request.mapping = mapping
+		
 		response = await self.tracer.trace(request)
 		
 		endTags = {
@@ -175,3 +275,4 @@ class FLT:
 			"endTags" : endTags,
 			"responseSize" : native.capnp.totalSize(response)
 		}
+	

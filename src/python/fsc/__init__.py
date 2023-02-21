@@ -271,7 +271,7 @@ class MagneticConfig:
 	@asyncFunction
 	@staticmethod
 	async def load(filename):
-		field = data.readArchive.asnc(filename)
+		field = await data.readArchive.asnc(filename)
 		return MagneticConfig(field)
 	
 	@asyncFunction

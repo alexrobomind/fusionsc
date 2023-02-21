@@ -5,6 +5,7 @@
 #include "interpolation.h"
 #include "geometry.h"
 #include "random-kernels.h"
+#include "fieldline-mapping.h"
 
 namespace fsc {
 	
@@ -69,15 +70,20 @@ namespace fsc {
 	 */
 	inline EIGEN_DEVICE_FUNC void fltKernel(
 		unsigned int idx,
+		
 		CuPtr<fsc::cu::FLTKernelData> pKernelData,
 		TensorMap<Tensor<double, 4>> fieldData,
 		CuPtr<fsc::cu::FLTKernelRequest> pRequest,
+		
 		CuPtr<const fsc::cu::MergedGeometry> pGeometry,
 		CuPtr<const fsc::cu::IndexedGeometry> pGeometryIndex,
-		CuPtr<const fsc::cu::IndexedGeometry::IndexData> pGeometryIndexData
+		CuPtr<const fsc::cu::IndexedGeometry::IndexData> pGeometryIndexData,
+		
+		CuPtr<const fsc::cu::FieldlineMapping> pFLMData
 	) {
 		using Num = double;
 		using V3 = Vec3<Num>;
+		using V2 = Vec2<Num>;
 		
 		auto kernelData = *pKernelData;
 		auto kernelRequest   = *pRequest;
@@ -90,8 +96,11 @@ namespace fsc {
 		auto index = *pGeometryIndex;
 		auto indexData = *pGeometryIndexData;
 		
+		auto flmData = *pFLMData;
+		bool useFLM = flmData.getFwd().getFilaments().size() > 0;
+		
 		// printf("Hello there\n");
-		CUPNP_DBG("FLT kernel started", idx);
+		CUPNP_DBG("FLT kernel started", idx, useFLM);
 		
 		// Extract local scratch space
 		fsc::cu::FLTKernelData::Entry myData = kernelData.mutateData()[idx];
@@ -112,13 +121,24 @@ namespace fsc {
 		
 		// Set up the magnetic field
 		using InterpolationStrategy = LinearInterpolation<Num>;
+		// using InterpolationStrategy = C1CubicInterpolation<Num>;
 		
 		auto grid = request.getField().getGrid();
 		SlabFieldInterpolator<InterpolationStrategy> interpolator(InterpolationStrategy(), grid);
 		
 		bool processDisplacements = perpModel.hasIsotropicDiffusionCoefficient();
 		
-		uint8_t tracingDirection = state.getForward() ? 1 : -1;
+		// Compute tracing and field orientation
+		// Do we trace forward (+1) or backward (-1) ?
+		int8_t tracingDirection = state.getForward() ? 1 : -1;
+		
+		// Does the field point in CCW (+1) or CW (-1) direction ?
+		int8_t fieldOrientation;
+		{
+			double phi = atan2(x[1], x[0]);
+			V3 fieldValue = interpolator(fieldData, x);
+			fieldOrientation = (fieldValue[1] * cos(phi) - fieldValue[0] * sin(phi)) > 0 ? 1 : -1;
+		}
 		
 		auto rungeKuttaInput = [&](V3 x, Num t) -> V3 {
 			V3 fieldValue = interpolator(fieldData, x);
@@ -162,6 +182,13 @@ namespace fsc {
 			return myData.mutateEvents()[eventCount];
 		};
 		
+		FLM flm(flmData);
+		
+		// Initialize mapped position
+		if(useFLM) {
+			flm.map(x, state.getForward());
+		}
+		
 		// ... do the work ...
 		
 		while(true) {		
@@ -179,7 +206,7 @@ namespace fsc {
 			
 			if(x != x)
 				FSC_FLT_RETURN(NAN_ENCOUNTERED);
-			
+						
 			Num r = std::sqrt(x[0] * x[0] + x[1] * x[1]);
 			Num z = x[2];
 			
@@ -243,9 +270,18 @@ namespace fsc {
 				}
 				
 				++displacementCount;
-			} else {
-				// Regular tracing step
-				kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), rungeKuttaInput);
+				
+				if(useFLM) {
+					flm.map(x2, tracingDirection > 0);
+				}				
+			} else {				
+				if(useFLM) {					
+					double newPhi = flm.phi + fieldOrientation * tracingDirection * request.getStepSize() / (2 * pi * r);
+					x2 = flm.advance(newPhi, tracingDirection == 1);
+				} else {
+					// Regular tracing step
+					kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), rungeKuttaInput);
+				}
 			}
 			
 			// KJ_DBG("Step advanced", x[0], x[1], x[2], x2[0], x2[1], x2[2]);
@@ -307,6 +343,13 @@ namespace fsc {
 				if(crossed) {
 					V3 xCross = crossedAt * x2 + (1. - crossedAt) * x;
 					
+					// If we use field-line mapping, the linear interpolation might be unreasonable
+					// due to large step sizes. Instead, use the mapping's spline interpolation
+					if(useFLM) {
+						double phiCross = crossedAt * kmath::wrap(phi2 - phi1) + phi1;
+						xCross = flm.unmap(flm.unwrap(phiCross));
+					}
+					
 					currentEvent().mutatePhiPlaneIntersection().setPlaneNo(iPlane);
 					FSC_FLT_LOG_EVENT(xCross);				
 				}
@@ -317,6 +360,11 @@ namespace fsc {
 			if(kmath::crossedPhi(phi1, phi2, phi0) && step > 1) {
 				auto l = kmath::wrap(phi0 - phi1) / kmath::wrap(phi2 - phi1);
 				V3 xCross = l * x2 + (1. - l) * x;
+				
+				// Same as above with the usual planes, interpolate if we are using the mapping
+				if(useFLM) {
+					xCross = flm.unmap(flm.unwrap(phi0));
+				}
 				
 				// printf("New turn\n");
 				
@@ -480,5 +528,7 @@ REFERENCE_KERNEL(
 	
 	fsc::CuPtr<const fsc::cu::MergedGeometry>,
 	fsc::CuPtr<const fsc::cu::IndexedGeometry>,
-	fsc::CuPtr<const fsc::cu::IndexedGeometry::IndexData>
+	fsc::CuPtr<const fsc::cu::IndexedGeometry::IndexData>,
+	
+	fsc::CuPtr<const fsc::cu::FieldlineMapping>
 );

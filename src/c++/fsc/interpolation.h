@@ -1,5 +1,7 @@
 #pragma once
 
+#include <fsc/magnetics.capnp.cu.h>
+
 #include "tensor.h"
 
 namespace fsc {
@@ -12,11 +14,83 @@ struct LinearInterpolation {
 	using Scalar = Num;
 	
 	constexpr EIGEN_DEVICE_FUNC size_t nPoints() { return 2; }
-	constexpr std::array<Scalar, 2> coefficients(Num x) {
+	constexpr EIGEN_DEVICE_FUNC std::array<Scalar, 2> coefficients(Num x) {
 		return {1 - x, x};
 	}
-	constexpr std::array<int, 2> offsets() {
+	constexpr EIGEN_DEVICE_FUNC std::array<int, 2> offsets() {
 		return {0, 1};
+	}
+};
+
+/**
+ * Continuously differentiable interpolation based on 3rd order Hermite splines.
+ * Interpolates exact up to 2nd order. Values on interval endpoints are exact. Derivatives
+ * equal their central finite difference.
+ */
+template<typename Num>
+struct C1CubicInterpolation {
+	// Cubic interpolation based on Hermite splines.
+	// Performs polynomial interpolation on [0, 1] with constraints on f(0), f'(0), f(1), and f'(1)
+	// Derivatives are derived as f'(0) = 0.5 * (f(1) - f(-1)), f'(1) = 0.5 * (f(2) - f(0))
+	//
+	// Implementation notes:
+	// The Hermite polynomial is given as P(x) = SUM_i:0 -> n f[x0, ..., xi] PROD_j:0 -> i-1 (x - xj)
+	//
+	// We have (x0, x1, x2, x3) = (0, 0, 1, 1)
+	//
+	// This gives us:
+	//
+	// f[x0] = f(0)
+	// f[x0, x1] = f'(0)
+	//
+	// f[x0, x1, x2] = f[x1, x2] - f[x0, x1]
+	//               = f[x2] - f[x1] - f[x0, x1]
+    //               = f(1) - f(0) - f'(0)
+	//
+	// f[x0, x1, x2, x3] = f[x1, x2, x3] - f[x0, x1, x2]
+	//                   = f[x2, x3] - f[x1, x2] - f[x0, x1, x2]
+	//                   = f[x2, x3] - (f[x2] - f[x1]) - f[x0, x1, x2]
+	//                   = f'(1) - f(1) + f(0) - f[x0, x1, x2]
+	
+	// For the different polynomials we get:
+	// - Associated with f(0):
+	//   f[x0] = 1
+	//   f[x0, x1] = 0
+	//   f[x0, ..., x2] = -1
+	//   f[x0, ..., x3] = 2
+	//    ==> P[x] = 1 - x**2 + 2 * x**2 * (x - 1) [Check]
+	// - Associated with f(1):
+	//   f[x0] = 0
+	//   f[x0, x1] = 0
+	//   f[x0, ..., x2] = 1
+	//   f[x0, ..., x3] = -2
+	//    ==> P[x] = x**2 - 2 * x**2 * (x - 1) [Check]
+	// - Associated with f'(0):
+	//   f[x0] = 0
+	//   f[x0, x1] = 1
+	//   f[x0, ..., x2] = -1
+	//   f[x0, ..., x3] = 1
+	//    ==> P[x] = x - x**2 + x**2 * (x - 1) [Check]
+	// - Associated with f'(1):
+	//   f[x0] = 0
+	//   f[x0, x1] = 0
+	//   f[x0, ..., x2] = 0
+	//   f[x0, ..., x3] = 1
+	//    ==> P[x] = x**2 * (x - 1) [Check]
+	
+	using Scalar = Num;
+	
+	constexpr EIGEN_DEVICE_FUNC size_t nPoints() { return 4; }
+	constexpr EIGEN_DEVICE_FUNC std::array<Scalar, 4> coefficients(Num x) {		
+		Num pf0 = 1 - x*x + 2 * (x*x) * (x-1);
+		Num pf1 = x*x - 2 * x*x * (x-1);
+		Num pdf0 = x - (x*x) + x*x * (x-1);
+		Num pdf1 = x*x * (x-1);
+		
+		return {-0.5 * pdf0, pf0 - 0.5 * pdf1, pf1 + 0.5 * pdf0, 0.5 * pdf1};
+	}
+	constexpr EIGEN_DEVICE_FUNC std::array<int, 4> offsets() {
+		return {-1, 0, 1, 2};
 	}
 };
 
@@ -28,7 +102,7 @@ struct NDInterpEvaluator {
 	static_assert(iDim >= 0);
 	
 	template<typename F, typename... Indices>
-	static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, Vec<int, nDims>& base, Vec<Scalar, nDims> lx, Indices... indices) {
+	static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, const Vec<int, nDims>& base, const Vec<Scalar, nDims>& lx, Indices... indices) {
 		static_assert(sizeof...(indices) == iDim);
 		
 		Scalar result = 0;
@@ -49,7 +123,7 @@ struct NDInterpEvaluator<nDims, Strategy, nDims> {
 	using Scalar = typename Strategy::Scalar;
 	
 	template<typename F, typename... Indices>
-	static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, Vec<int, nDims>& base, Vec<Scalar, nDims> lx, Indices... indices) {
+	static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, const Vec<int, nDims>& base, const Vec<Scalar, nDims>& lx, Indices... indices) {
 		static_assert(sizeof...(indices) == nDims);
 		
 		return f(indices...);
@@ -96,7 +170,7 @@ struct NDInterpolator {
 	}
 	
 	template<typename F>
-	EIGEN_DEVICE_FUNC Scalar operator()(const F& f, Vec<Scalar, nDims> x) {
+	EIGEN_DEVICE_FUNC Scalar operator()(const F& f, const Vec<Scalar, nDims>& x) {
 		Vec<int, nDims> base;
 		Vec<Scalar, nDims> lx;
 		
@@ -164,6 +238,89 @@ struct SlabFieldInterpolator {
 			bR * eR[1] + bPhi * ePhi[1],
 			bZ
 		};
+	}
+};
+
+template<typename Scalar>
+struct C1CubicDeriv {
+	// Cubic interpolation based on Hermite polynomials
+	// Performs polynomial interpolation on [0, 1] with constraints on f(0), f'(0), f(1), and f'(1)
+	//
+	// Implementation notes:
+	// The Hermite polynomial is given as P(x) = SUM_i:0 -> n f[x0, ..., xi] PROD_j:0 -> i-1 (x - xj)
+	//
+	// We have (x0, x1, x2, x3) = (0, 0, 1, 1)
+	//
+	// This gives us:
+	//
+	// f[x0] = f(0)
+	// f[x0, x1] = f'(0)
+	//
+	// f[x0, x1, x2] = f[x1, x2] - f[x0, x1]
+	//               = f[x2] - f[x1] - f[x0, x1]
+    //               = f(1) - f(0) - f'(0)
+	//
+	// f[x0, x1, x2, x3] = f[x1, x2, x3] - f[x0, x1, x2]
+	//                   = f[x2, x3] - f[x1, x2] - f[x0, x1, x2]
+	//                   = f[x2, x3] - (f[x2] - f[x1]) - f[x0, x1, x2]
+	//                   = f'(1) - f(1) + f(0) - f[x0, x1, x2]
+	
+	// For the different polynomials we get:
+	// - Associated with f(0):
+	//   f[x0] = 1
+	//   f[x0, x1] = 0
+	//   f[x0, ..., x2] = -1
+	//   f[x0, ..., x3] = 2
+	//    ==> P[x] = 1 - x**2 + 2 * x**2 * (x - 1) [Check]
+	// - Associated with f(1):
+	//   f[x0] = 0
+	//   f[x0, x1] = 0
+	//   f[x0, ..., x2] = 1
+	//   f[x0, ..., x3] = -2
+	//    ==> P[x] = x**2 - 2 * x**2 * (x - 1) [Check]
+	// - Associated with f'(0):
+	//   f[x0] = 0
+	//   f[x0, x1] = 1
+	//   f[x0, ..., x2] = -1
+	//   f[x0, ..., x3] = 1
+	//    ==> P[x] = x - x**2 + x**2 * (x - 1) [Check]
+	// - Associated with f'(1):
+	//   f[x0] = 0
+	//   f[x0, x1] = 0
+	//   f[x0, ..., x2] = 0
+	//   f[x0, ..., x3] = 1
+	//    ==> P[x] = x**2 * (x - 1) [Check]
+	
+	
+	const Scalar f0;
+	const Scalar df0;
+	const Scalar df1;
+	const Scalar f1_minus_f0;
+	const Scalar f_x0_x1_x2;
+	
+	constexpr C1CubicDeriv(Scalar f0, Scalar df0, Scalar f1, Scalar df1) :
+		f0(f0), df0(df0), df1(df1), f1_minus_f0(f1 - f0), f_x0_x1_x2(f1 - f0 - df0)
+	{}
+	
+	Scalar operator()(Scalar x) {
+		return
+		  f0
+		+ df0 * x
+		+ f_x0_x1_x2 * x * x
+		+ (df1 - f1_minus_f0 - f_x0_x1_x2) * x * x * (x - 1);
+	}
+	
+	Scalar d(Scalar x) {
+		return
+		  df0
+		+ f_x0_x1_x2 * 2 * x
+		+ (df1 - f1_minus_f0 - f_x0_x1_x2) * (2 * x * (x - 1) + x * x);
+	}
+	
+	Scalar dd(Scalar x) {
+		return
+		  f_x0_x1_x2 * 2
+		+ (df1 - f1_minus_f0 - f_x0_x1_x2) * (2 * x + 2 * (x - 1) + 2 * x);
 	}
 };
 

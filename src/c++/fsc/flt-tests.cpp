@@ -12,6 +12,8 @@
 
 using namespace fsc;
 
+namespace {
+
 void prepareToroidalField(ComputedField::Builder field) {
 	auto grid = field.initGrid();
 	grid.setNR(2);
@@ -34,6 +36,8 @@ void prepareToroidalField(ComputedField::Builder field) {
 	field.setData(getActiveThread().dataService().publish(fieldData.asReader()));
 }
 
+}
+
 TEST_CASE("flt") {
 	auto l = newLibrary();
 	auto lt = l->newThread();
@@ -41,7 +45,6 @@ TEST_CASE("flt") {
 	auto& ws = lt->waitScope();
 	
 	Temporary<RootConfig> config;
-	
 	auto req = createRoot(config).newTracerRequest();
 	req.setPreferredDeviceType(WorkerType::CPU);
 	auto flt = req.send().getService();

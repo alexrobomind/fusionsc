@@ -6,6 +6,10 @@
 
 #include <capnp/serialize.h>
 
+#define CAPNP_PRIVATE
+#include <capnp/arena.h>
+#undef CAPNP_PRIVATE
+
 namespace fsc {
 	
 template<typename T>
@@ -48,6 +52,25 @@ inline kj::Array<kj::ArrayPtr<const capnp::word>> extractSegmentTable(kj::ArrayP
 	}
 	
 	return segments.releaseAsArray();
+}
+
+inline kj::Array<kj::ArrayPtr<capnp::word>> extractSegmentTable(capnp::_::BuilderArena* builderArena) {
+	return coerceSegmentTableToNonConst(builderArena -> getSegmentsForOutput());
+}
+
+inline kj::Array<kj::ArrayPtr<const capnp::word>> extractSegmentTable(capnp::_::ReaderArena* readerArena) {
+	kj::Vector<kj::ArrayPtr<const capnp::word>> table;
+	
+	size_t i = 0;
+	while(true) {
+		auto reader = readerArena -> tryGetSegment(capnp::_::SegmentId(i));
+		if(reader != nullptr)
+			table.add(reader -> getStartPtr(), reader -> getSize() / capnp::WORDS);
+		else
+			break;
+	}
+	
+	return table.releaseAsArray();
 }
 
 inline kj::Array<cupnp::SegmentTable::Entry> buildSegmentTable(kj::ArrayPtr<kj::ArrayPtr<capnp::word>> input) {
@@ -131,7 +154,58 @@ struct CupnpMessage {
 		CupnpMessage(bytesToWords(srcData.getRaw()))
 	{}
 	
-private:
+	template<typename Builder, typename Builds = capnp::FromBuilder<Builder>>
+	static CupnpMessage<cupnp::AnyData> forMessageContaining(Builder b) {
+		capnp::_::StructBuilder& cpBuilder = b.builder;
+		capnp::_::BuilderArena* arena = cpBuilder.getArena();
+		
+		return CupnpMessage<cupnp::AnyData>(internal::extractSegmentTable(arena));
+	}
+	
+	Maybe<uint32_t> locateSegment(const char* ptr) {
+		for(auto& segment : segmentTable) {
+			if(ptr >= reinterpret_cast<const char*>(segment.begin()) && ptr < reinterpret_cast<const char*>(segment.end())) {
+				return &segment - segmentTable.begin();
+			}
+		}
+		return nullptr;
+	}
+	
+	template<typename T2, typename Builder, typename Builds = capnp::FromBuilder<Builder>>
+	T2 translateBuilder(Builder b) {
+		KJ_REQUIRE(!std::is_const<T>::value, "Const messages can not translate builders");
+		
+		capnp::_::StructBuilder& cpBuilder = b.builder;
+		auto dataSection = cpBuilder.getDataSectionAsBlob();
+		int16_t ptrSectionSize = cpBuilder.getPointerSectionSize();
+		
+		cupnp::Location dataLoc;
+		dataLoc.segments = segmentTable;
+		dataLoc.ptr = dataSection.begin();
+		KJ_IF_MAYBE(pSegId, locateSegment(dataSection.begin())) {
+			dataLoc.segmentId = *pSegId;
+		} else {
+			KJ_FAIL_REQUIRE("Could not locate given builder in message");
+		}
+		return T2(dataSection.size(), ptrSectionSize, dataLoc);
+	}
+	
+	template<typename T2, typename Reader, typename Reads = capnp::FromReader<Reader>>
+	const T2 translateReader(Reader r2) {
+		capnp::_::StructReader& cpReader = r2.reader;
+		auto dataSection = cpReader.getDataSectionAsBlob();
+		int16_t ptrSectionSize = cpReader.getPointerSectionSize();
+		
+		cupnp::Location dataLoc;
+		dataLoc.segments = segmentTable;
+		dataLoc.ptr = dataSection.begin();
+		KJ_IF_MAYBE(pSegId, locateSegment(dataSection.begin())) {
+			dataLoc.segmentId = *pSegId;
+		} else {
+			KJ_FAIL_REQUIRE("Could not locate given builder in message");
+		}
+		return T2(dataSection.size(), ptrSectionSize, dataLoc);
+	}
 };
 
 namespace internal {

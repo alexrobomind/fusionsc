@@ -14,6 +14,12 @@ if(BUILD_TESTING)
 		OUTPUT_SUFFIX ".xml"
 	)
 	
+	add_custom_target(
+		run-tests
+		COMMAND ctest .
+		DEPENDS tests
+	)
+	
 	# If we build ZLIB ourselves, we need to make sure that its test targets are also built
 	if(ZLIB_SOURCE_DIR)
 		# These two targets come from ZLIB (bleh, we're lucky there are no conflicts)

@@ -98,13 +98,16 @@ namespace fscpy {
 	}
 
 	void loadDefaultSchema(py::module_& m) {
+		// Here we need to specify datatypes that need to be loaded because they are passed to the python interface
+		
 		defaultLoader.addBuiltin<
 			capnp::schema::Node,
 			RootService,
 			OfflineData,
 			ResolverChain,
 			MergedGeometry,
-			FLTStopReason
+			FLTStopReason,
+			FieldlineMapping
 		>();
 		
 		// Schema submodule
@@ -119,7 +122,7 @@ namespace fscpy {
 		
 		// Root module
 		{		
-			auto schemas = getBuiltinSchemas<FieldResolver, GeometryResolver, RootService, OfflineData, ResolverChain, MergedGeometry>();
+			auto schemas = getBuiltinSchemas<FieldResolver, GeometryResolver, RootService, OfflineData, ResolverChain, MergedGeometry, FieldlineMapping>();
 				
 			for(auto node : schemas) {
 				defaultLoader.importNodeIfRoot(node.getId(), m);

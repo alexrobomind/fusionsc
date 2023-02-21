@@ -28,6 +28,32 @@ enum FLTStopReason {
 	couldNotStep @8;
 }
 
+struct FieldlineMapping {
+	struct MappingFilament {
+		data @0 : List(Float64);
+		# Numerical data of the mapping filament.
+		# Contains, per phi plane, six numbers.
+		# - Numbers 1 and 2 are the r and z coordinates of the
+		#   associated mapping point.
+		# - Numbers 3 to 6 are, in column-major order, a transformation
+		#   matrix from a local UV coordinate system to the RZ coordinates.
+		#   which tracks the orientation and shear of the magnetic planes.
+		
+		# Phi grid information
+		phiStart @1 : Float64;
+		phiEnd @2 : Float64;
+		nIntervals @3 : UInt64;
+	}
+	
+	struct Direction {
+		filaments @0 : List(MappingFilament);
+		index @1 : Index.KDTree;
+	}
+	
+	fwd @0 : Direction;
+	bwd @1 : Direction;
+}
+
 struct FLTRequest {
 	# Tensor of shape [3, ...] indicating tracing start points
 	startPoints @0 : Data.Float64Tensor;
@@ -59,26 +85,11 @@ struct FLTRequest {
 	}
 	
 	rngSeed @15 : UInt64;
+	
+	mapping @16 : Data.DataRef(FieldlineMapping);
+	forward @17 : Bool = true;
 }
 
-struct FieldlineMapping {
-	struct MappingFilament {
-		# Tensor of shape [N, 3]
-		points @0 : Data.Float64Tensor;
-		
-		# Tensor of shape [N, 3, 3]
-		jacobians @1 : Data.Float64Tensor;
-	}
-	
-	struct FilamentPoint {
-		filamentIndex @0 : UInt32;
-		pointIndex @1 : UInt32;
-	}
-	
-	index @0 : Index.KDTree;
-	points @1 : List(FilamentPoint);
-	filaments @2 : List(MappingFilament);
-}
 
 struct FLTResponse {
 	#struct Event {
@@ -105,7 +116,7 @@ struct FLTResponse {
 	# Maximum number of toroidal turns traversed by the fieldline
 	nTurns @0 : UInt32;
 	
-	# Tensor of shape [5] (x, y, z, Lc_fwd, Lc_bwd) + startPoints.shape[1:] + [len(poincarePlanes), nTurns]
+	# Tensor of shape [5] (x, y, z, Lc_fwd, Lc_bwd) + [len(poincarePlanes)] + startPoints.shape[1:] + [nTurns]
 	poincareHits @1 : Data.Float64Tensor;
 	
 	# Tensor of shape [4] (x, y, z, length) + startPoints.shape[1:]
@@ -124,6 +135,22 @@ struct FLTResponse {
 
 interface FLT {
 	trace @0 FLTRequest -> FLTResponse;
+}
+
+struct MappingRequest {
+	startPoints @0 : Data.Float64Tensor;
+	field @1 : Magnetics.ComputedField;
+	
+	nPhi @2 : UInt64;
+	
+	filamentLength @3 : Float64 = 5;
+	cutoff @4 : Float64 = 1;
+	
+	dx @5 : Float64 = 0.001;
+}
+
+interface Mapper {
+	computeMapping @0 MappingRequest -> (mapping : Data.DataRef(FieldlineMapping));
 }
 
 

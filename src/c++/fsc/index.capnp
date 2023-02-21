@@ -30,7 +30,7 @@ struct KDTree {
 		#   chunkSizeBase + 1 : chunkSizeBase
 		
 		boundingBoxes @0 : Data.Float64Tensor;
-		# A [chunkSize, nDims, 3] array holding, for each node and dimension,
+		# A [chunkSize, nDims, 2] array holding, for each node and dimension,
 		# minimum extent (0), maximum extent (1) and weighted center estimate (2)
 		# along that dimension.
 		
@@ -45,5 +45,9 @@ struct KDTree {
 }
 
 interface KDTreeService {
-	build @0 (boxes : List(Data.Float64Tensor), leafSize : UInt32) -> KDTree;
+	struct Chunk {
+		boxes @0 : Data.Float64Tensor;
+		keys @1 : List(UInt64);
+	}
+	build @0 (chunks : List(Chunk), leafSize : UInt32 = 1) -> KDTree;
 }

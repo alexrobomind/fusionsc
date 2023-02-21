@@ -55,16 +55,20 @@ struct TraceCalculation {
 	Temporary<IndexedGeometry> geometryIndex;
 	Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData;
 	Maybe<LocalDataRef<MergedGeometry>> geometryData;
+	Maybe<LocalDataRef<FieldlineMapping>> mappingData;
 	
 	Own<MappedMessage<const cu::IndexedGeometry>> mappedIndex;
 	Own<MappedMessage<const cu::IndexedGeometry::IndexData>> mappedIndexData;
 	Own<MappedMessage<const cu::MergedGeometry>> mappedGeometryData;
+	
+	Own<MappedMessage<const cu::FieldlineMapping>> mappedMappingData;
 		
 	const Operation& rootOp;
 	
 	TraceCalculation(Device& device,
 		Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<const Tensor<double, 4>>> newField, Tensor<double, 2> positions,
 		IndexedGeometry::Reader geometryIndex, Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData, Maybe<LocalDataRef<MergedGeometry>> geometryData,
+		Maybe<LocalDataRef<FieldlineMapping>> mappingData,
 		const Operation& rootOp
 	) :
 		device(device),
@@ -79,12 +83,15 @@ struct TraceCalculation {
 		indexData(indexData),
 		geometryData(geometryData),
 		
+		mappingData(mappingData),
+		
 		rootOp(rootOp)
 	{
 	
 		CupnpMessage<const cu::IndexedGeometry> geometryIndexMsg(this->geometryIndex);
 		CupnpMessage<const cu::IndexedGeometry::IndexData> indexDataMsg(nullptr);
 		CupnpMessage<const cu::MergedGeometry> geometryDataMsg(nullptr);
+		CupnpMessage<const cu::FieldlineMapping> mappingDataMsg(nullptr);
 		
 		// Extract message segments for geometry and index data
 		KJ_IF_MAYBE(pIndexData, indexData) {
@@ -95,14 +102,20 @@ struct TraceCalculation {
 			geometryDataMsg = CupnpMessage<const cu::MergedGeometry>(*pGeometryData);
 		}
 		
+		KJ_IF_MAYBE(pMappingData, mappingData) {
+			mappingDataMsg = CupnpMessage<const cu::FieldlineMapping>(*pMappingData);
+		}
+		
 		// Perform the actual device mapping for these messages
 		mappedIndex = kj::heap<MappedMessage<const cu::IndexedGeometry>>(geometryIndexMsg, device);
 		mappedIndexData = kj::heap<MappedMessage<const cu::IndexedGeometry::IndexData>>(indexDataMsg, device);
 		mappedGeometryData = kj::heap<MappedMessage<const cu::MergedGeometry>>(geometryDataMsg, device);
+		mappedMappingData = kj::heap<MappedMessage<const cu::FieldlineMapping>>(mappingDataMsg, device);
 		
 		mappedIndex -> updateDevice();
 		mappedIndexData -> updateDevice();
 		mappedGeometryData -> updateDevice();
+		mappedMappingData -> updateDevice();
 		deviceField.updateDevice();
 		
 		hostMemSynchronize(device, rootOp);
@@ -154,6 +167,7 @@ struct TraceCalculation {
 				pos.set(iDim, positions(iDim, i));
 			
 			state.setPhi0(std::atan2(pos[1], pos[0]));
+			state.setForward(request.getServiceRequest().getForward());
 			
 			fsc::MT19937::seed((uint32_t) seedGenerator(), state.getRngState());
 		}
@@ -238,7 +252,8 @@ struct TraceCalculation {
 			r.kernelData.getData().size(),
 			
 			kernelData, FSC_KARG(deviceField, NOCOPY), kernelRequest,
-			FSC_KARG(*mappedGeometryData, NOCOPY), FSC_KARG(*mappedIndex, NOCOPY), FSC_KARG(*mappedIndexData, NOCOPY)
+			FSC_KARG(*mappedGeometryData, NOCOPY), FSC_KARG(*mappedIndex, NOCOPY), FSC_KARG(*mappedIndexData, NOCOPY),
+			FSC_KARG(*mappedMappingData, NOCOPY)
 		);
 		calcOp -> attachDestroyAnywhere(rootOp.addRef());
 		return calcOp -> whenDone();
@@ -371,19 +386,22 @@ struct FLTImpl : public FLT::Server {
 		
 		auto indexDataRef = request.getGeometry().getData();
 		auto geoDataRef = request.getGeometry().getBase();
+		auto mappingDataRef = request.getMapping();
 			
 		KJ_DBG("Initiating download processes");
 		
 		Promise<LocalDataRef<Float64Tensor>> downloadField = dataService.download(request.getField().getData()).eagerlyEvaluate(nullptr);
 		Promise<Maybe<LocalDataRef<IndexedGeometry::IndexData>>> downloadIndexData = dataService.downloadIfNotNull(indexDataRef);
 		Promise<Maybe<LocalDataRef<MergedGeometry>>> downloadGeometryData =	dataService.downloadIfNotNull(geoDataRef).eagerlyEvaluate(nullptr);
+		Promise<Maybe<LocalDataRef<FieldlineMapping>>> downloadMappingData = dataService.downloadIfNotNull(mappingDataRef).eagerlyEvaluate(nullptr);
 		KJ_DBG("Waiting download processes");
 		
 		// I WANT COROUTINES -.-
 		
-		return downloadIndexData.then([ctx, request, downloadGeometryData = mv(downloadGeometryData), downloadField = mv(downloadField), this](Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData) mutable {
-		return downloadGeometryData.then([ctx, request, indexData = mv(indexData), downloadField = mv(downloadField), this](Maybe<LocalDataRef<MergedGeometry>> geometryData) mutable {
-		return downloadField.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), this](LocalDataRef<Float64Tensor> fieldData) mutable {
+		return downloadIndexData.then([ctx, request, downloadGeometryData = mv(downloadGeometryData), downloadField = mv(downloadField), downloadMappingData = mv(downloadMappingData), this](Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData) mutable {
+		return downloadGeometryData.then([ctx, request, indexData = mv(indexData), downloadField = mv(downloadField), downloadMappingData = mv(downloadMappingData), this](Maybe<LocalDataRef<MergedGeometry>> geometryData) mutable {
+		return downloadField.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), downloadMappingData = mv(downloadMappingData), this](LocalDataRef<Float64Tensor> fieldData) mutable {
+		return downloadMappingData.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), fieldData = mv(fieldData), this](Maybe<LocalDataRef<FieldlineMapping>> mappingData) mutable {
 			
 			KJ_DBG("All required data downloaded");
 			
@@ -425,9 +443,12 @@ struct FLTImpl : public FLT::Server {
 			
 			auto rootOp = newOperation();
 			
+			// KJ_UNIMPLEMENTED("Load mapping data");
+			
 			auto calc = heapHeld<TraceCalculation<Device>>(
 				*device, mv(kernelRequest), mv(field), mv(positions),
 				request.getGeometry(), mv(indexData), geometryData,
+				mappingData,
 				
 				*rootOp
 			);
@@ -607,6 +628,7 @@ struct FLTImpl : public FLT::Server {
 				results.getEndPoints().setShape(startPointShape);
 				results.getEndPoints().getShape().set(0, 4);
 			}).attach(mv(rootOp));
+		});
 		});
 		});
 		}).attach(thisCap());

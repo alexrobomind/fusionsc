@@ -1,3 +1,5 @@
+#pragma once
+
 namespace fsc {
 
 struct UnbalancedIntervalSplit {
@@ -26,6 +28,9 @@ struct BalancedIntervalSplit {
 	inline BalancedIntervalSplit(size_t nTotal, size_t blockSize) :
 		nTotal(nTotal), blockSize(blockSize)
 	{
+		if(blockSize > nTotal)
+			this -> blockSize = nTotal;
+		
 		compute();
 	}
 	
@@ -56,7 +61,7 @@ private:
 	size_t blockSize;
 	size_t remainder;
 	
-	inline size_t compute() {
+	inline void compute() {
 		remainder = blockCount() - (blockSize * blockCount() - nTotal);
 	}
 };

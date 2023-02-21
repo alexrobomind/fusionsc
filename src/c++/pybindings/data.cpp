@@ -48,6 +48,7 @@ PyPromise download(capnp::DynamicCapability::Client capability) {
 			return kj::refcounted<PyObjectHolder>(mv(result));
 		} else {
 			AnyPointer::Reader root = localRef.get();
+			KJ_DBG(root);
 			
 			if(payloadType.isInterface()) {
 				auto schema = payloadType.asInterface();

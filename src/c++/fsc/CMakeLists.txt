@@ -134,6 +134,10 @@ add_library(
 	
 	random.h
 	
+	interpolation.h
+	
+	fieldline-mapping.h
+	fieldline-mapping.cpp
 	
 	${FSC_CP_HEADERS}
 	${FSC_CP_SRC}
@@ -185,6 +189,8 @@ if(BUILD_TESTING)
 		services-tests.cpp
 		flt-tests.cpp
 		operation-tests.cpp
+		interpolation-tests.cpp
+		fieldline-mapping-tests.cpp
 		devices/w7x-test.cpp
 	)
 	target_link_libraries(tests PUBLIC fsc)
