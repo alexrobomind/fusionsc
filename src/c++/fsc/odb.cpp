@@ -520,7 +520,7 @@ private:
 				builder.add(c);
 			
 			refs = builder.finish();
-		}
+		});
 	}
 	
 	Own<PromiseFulfiller<DataRef<AnyPointer>::Client>> fulfiller;

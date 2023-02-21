@@ -227,15 +227,15 @@ struct DBCache {
 	struct TransmissionProcess;
 	struct TransmissionReceiver;
 	
-	DataRef<AnyPointer>::Client cache(DataRef<AnyPointer>::Client target, bool recursive);
+	DataRef<capnp::AnyPointer>::Client cache(DataRef<capnp::AnyPointer>::Client target, bool recursive);
 	
 	Own<BlobStore> store;
 	Own<sqlite::Connection> conn;
 	
-	static CapabilityServerSet<DataRef<AnyPointer>> SERVER_SET;
+	static capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> SERVER_SET;
 	
 	//! Clients that are currently in the process of being downloaded
-	std::unordered_map<ClientHook*, DataRef<AnyPointer>::Client> activeDownloads;
+	std::unordered_map<capnp::ClientHook*, DataRef<capnp::AnyPointer>::Client> activeDownloads;
 	
 	struct DownloadProcess;
 	struct CachedRef;

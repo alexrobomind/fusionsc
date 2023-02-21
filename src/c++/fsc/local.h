@@ -6,6 +6,8 @@
 #include <kj/refcount.h>
 #include <kj/filesystem.h>
 
+#include <botan/hash.h>
+
 #include <utility>
 
 #include "common.h"
@@ -87,6 +89,8 @@ public:
 	
 	inline bool inShutdownMode() const { return *(shutdownMode.lockShared()); }
 	inline void setShutdownMode() const { *(shutdownMode.lockExclusive()) = true; }
+	
+	std::unique_ptr<Botan::HashFunction> defaultHash() const;
 	
 private:
 	inline LibraryHandle() :
