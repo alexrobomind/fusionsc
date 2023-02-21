@@ -82,11 +82,11 @@ struct BlobBuilder {
 	void write(kj::ArrayPtr<const byte> bytes);
 	Blob finish();
 	
+	Own<BlobStore> parent;
+		
 private:
 	int64_t id;
 	int64_t currentChunkNo = 0;
-	
-	Own<BlobStore> parent;
 	kj::Array<byte> buffer;
 	
 	void flushBuffer();
@@ -186,7 +186,6 @@ private:
 	
 	bool shared;
 	
-	struct TransmissionProcess;
 	struct TransmissionReceiver;
 	
 	struct ObjectImpl;
@@ -194,6 +193,8 @@ private:
 	
 	friend class DBObject;
 };
+
+struct TransmissionProcess;
 
 //! Represents an object in the object database, as well as the permission to access it
 struct DBObject : public kj::Refcounted {
@@ -221,6 +222,24 @@ private:
 };
 
 Folder::Client openObjectDB(kj::StringPtr folder);
+
+struct DBCache {
+	struct TransmissionProcess;
+	struct TransmissionReceiver;
+	
+	DataRef<AnyPointer>::Client cache(DataRef<AnyPointer>::Client target, bool recursive);
+	
+	Own<BlobStore> store;
+	Own<sqlite::Connection> conn;
+	
+	static CapabilityServerSet<DataRef<AnyPointer>> SERVER_SET;
+	
+	//! Clients that are currently in the process of being downloaded
+	std::unordered_map<ClientHook*, DataRef<AnyPointer>::Client> activeDownloads;
+	
+	struct DownloadProcess;
+	struct CachedRef;
+};
 
 // ==================================== Inline implementation ===================================
 

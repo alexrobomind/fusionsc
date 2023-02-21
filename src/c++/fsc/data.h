@@ -538,6 +538,36 @@ Promise<ID> ID::fromReaderWithRefs(T t) {
 	});
 }
 
+template<typename Result>
+struct DownloadTask {
+	//! Check whether "src" can be directly unwrapped
+	virtual Maybe<Result> unwrap() { return nullptr; }
+	
+	//! Potentially register download in some registry
+	virtual void registerDownload() {}
+	
+	//! Check whether we can build a result from given metadata and captable
+	virtual Maybe<Result> useCached() { return nullptr; }
+	
+	virtual Promise<void> beginDownload() { return READY_NOW; }
+	virtual Promise<void> processData(kj::ArrayPtr<const byte> data) = 0;
+	virtual Promise<void> finishDownload() { return READY_NOW; }
+	
+	virtual Promise<Result> buildResult() = 0;
+	
+	// This is filled in by the constructor
+	ForkedPromise<Result> result;
+	
+	// These entries get filled out by the download task
+	DataRef<AnyPointer>::Client src;
+	Temporary<DataRef<AnyPointer>::Metadata> metadata;
+	kj::Array<capnp::Capability::Client> capTable;
+	
+	DownloadTask(DataRef<AnyPointer> src);
+private:
+	Promise<Result> actualTask();
+};
+
 
 }
 
