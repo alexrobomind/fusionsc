@@ -573,6 +573,26 @@ template<typename Result>
 struct DownloadTask : public kj::Refcounted {
 	using ResultType = Result;
 	
+	struct Registry : kj::Refcounted {
+		std::unordered_map<capnp::ClientHook*, DownloadTask*> activeDownloads;
+		
+		Own<Registry> addRef() { return kj::addRef(*this); }
+	};
+	
+	struct Context {
+		mutable Own<Registry> registry;
+		
+		Context() : registry(kj::refcounted<Registry>()) {}
+		Context(const Context& other) : registry(other.registry -> addRef()) {}
+		Context(Context&& other) = default;
+		
+		Context& operator=(const Context& other) { registry = other.registry -> addRef(); }
+		Context& operator=(Context&& other) = default;
+	};
+	
+	DownloadTask(DataRef<capnp::AnyPointer>::Client src, Context context);
+	virtual ~DownloadTask();
+	
 	//! Check whether "src" can be directly unwrapped
 	virtual Promise<Maybe<Result>> unwrap() { return Maybe<Result>(nullptr); }
 	
@@ -590,22 +610,15 @@ struct DownloadTask : public kj::Refcounted {
 	
 	Own<DownloadTask<Result>> addRef() { return kj::addRef(*this); }
 	
+	Promise<Result> output() { return result.addBranch().attach(addRef()); }
+	
 	//! The original DataRef under download
 	DataRef<capnp::AnyPointer>::Client src;
 	
 	Temporary<DataRef<capnp::AnyPointer>::Metadata> metadata;
 	kj::Array<capnp::Capability::Client> capTable;
 	
-	struct Registry : kj::Refcounted {
-		std::unordered_map<capnp::ClientHook*, DownloadTask*> activeDownloads;
-		
-		Own<Registry> addRef() { return kj::addRef(*this); }
-	};
-	
-	DownloadTask(DataRef<capnp::AnyPointer>::Client src, Maybe<Registry&> registry);
-	virtual ~DownloadTask();
-	
-	Promise<Result> output() { return result.addBranch().attach(addRef()); }
+	Context ctx;
 	
 private:
 	Promise<Result> actualTask();
@@ -631,7 +644,6 @@ private:
 	kj::Array<unsigned char> hashValue;
 	
 	capnp::ClientHook* registrationKey = nullptr;
-	Maybe<Own<Registry>> registry;
 };
 
 }

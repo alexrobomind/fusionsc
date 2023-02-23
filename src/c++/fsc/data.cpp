@@ -225,8 +225,7 @@ capnp::FlatArrayMessageReader& internal::LocalDataRefImpl::ensureReader(const ca
 
 internal::LocalDataServiceImpl::LocalDataServiceImpl(Library& lib) :
 	library(lib -> addRef()),
-	fileBackedMemory(kj::newDiskFilesystem()->getCurrent().clone()),
-	downloadRegistry(kj::refcounted<DownloadTask<LocalDataRef<capnp::AnyPointer>>::Registry>())
+	fileBackedMemory(kj::newDiskFilesystem()->getCurrent().clone())
 {}
 
 Own<internal::LocalDataServiceImpl> internal::LocalDataServiceImpl::addRef() {
@@ -269,8 +268,8 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 	kj::Array<kj::byte> downloadBuffer;
 	size_t downloadOffset = 0;
 	
-	DataRefDownloadProcess(LocalDataServiceImpl& service, DataRef<capnp::AnyPointer>::Client src, bool recursive) :
-		DownloadTask(mv(src), *(service.downloadRegistry)), service(service.addRef()), recursive(recursive)
+	DataRefDownloadProcess(LocalDataServiceImpl& service, DataRef<capnp::AnyPointer>::Client src, bool recursive, DTContext ctx) :
+		DownloadTask(mv(src), mv(ctx)), service(service.addRef()), recursive(recursive)
 	{}
 	
 	Promise<Maybe<ResultType>> unwrap() override {
@@ -284,7 +283,7 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 		if(!recursive)
 			return mv(ref);
 		
-		return service -> download(ref.castAs<DataRef<capnp::AnyPointer>>(), true);
+		return service -> download(ref.castAs<DataRef<capnp::AnyPointer>>(), true, this -> ctx);
 	}
 	
 	virtual Promise<Maybe<ResultType>> useCached() override {
@@ -365,13 +364,13 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 	}
 };
 
-Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::download(DataRef<capnp::AnyPointer>::Client src, bool recursive) {
-	return unwrap(src).then([this, src, recursive](Maybe<LocalDataRef<capnp::AnyPointer>> maybeUnwrapped) mutable -> Promise<LocalDataRef<capnp::AnyPointer>> {
+Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::download(DataRef<capnp::AnyPointer>::Client src, bool recursive, DTContext ctx) {
+	return unwrap(src).then([this, src, recursive, ctx = mv(ctx)](Maybe<LocalDataRef<capnp::AnyPointer>> maybeUnwrapped) mutable -> Promise<LocalDataRef<capnp::AnyPointer>> {
 		KJ_IF_MAYBE(pUnwrapped, maybeUnwrapped) {
 			return *pUnwrapped;
 		}
 		
-		auto downloadProcess = kj::refcounted<DataRefDownloadProcess>(*this, mv(src), recursive);
+		auto downloadProcess = kj::refcounted<DataRefDownloadProcess>(*this, mv(src), recursive, mv(ctx));
 		return downloadProcess -> output();
 		//return doDownload(src, recursive);
 	});

@@ -73,11 +73,12 @@ private:
 class LocalDataServiceImpl : public kj::Refcounted, public DataService::Server {
 public:
 	using Nursery = LocalDataService::Nursery;
+	using DTContext = DownloadTask<LocalDataRef<capnp::AnyPointer>>::Context;
 	
 	LocalDataServiceImpl(Library& h);
 	Own<LocalDataServiceImpl> addRef();
 	
-	Promise<LocalDataRef<capnp::AnyPointer>> download(DataRef<capnp::AnyPointer>::Client src, bool recursive);
+	Promise<LocalDataRef<capnp::AnyPointer>> download(DataRef<capnp::AnyPointer>::Client src, bool recursive, DTContext ctx = DTContext());
 	
 	LocalDataRef<capnp::AnyPointer> publish(DataRef<capnp::AnyPointer>::Metadata::Reader metaData, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable);
 	
@@ -104,8 +105,6 @@ private:
 	
 	LocalDataService::Limits limits;
 	MMapTemporary fileBackedMemory;
-	
-	Own<DownloadTask<LocalDataRef<capnp::AnyPointer>>::Registry> downloadRegistry;
 	
 	struct DataRefDownloadProcess;
 	
@@ -629,22 +628,17 @@ struct DownloadTask<Result>::TransmissionReceiver : public DataRef<capnp::AnyPoi
 };
 
 template<typename Result>
-DownloadTask<Result>::DownloadTask(DataRef<capnp::AnyPointer>::Client src, Maybe<Registry&> registry) :
-	src(src), hashFunction(getActiveThread().library() -> defaultHash()), result(nullptr)
+DownloadTask<Result>::DownloadTask(DataRef<capnp::AnyPointer>::Client src, Context ctx) :
+	src(src), hashFunction(getActiveThread().library() -> defaultHash()), result(nullptr), ctx(ctx)
 {
-	KJ_IF_MAYBE(pRegistry, registry) {
-		this -> registry = pRegistry -> addRef();
-	}
 	result = actualTask().fork();
 }
 
 template<typename Result>
 DownloadTask<Result>::~DownloadTask() {
 	if(registrationKey != nullptr) {
-		KJ_IF_MAYBE(pRegistry, registry) {
-			auto& active = (*pRegistry) -> activeDownloads;
-			active.erase(registrationKey);
-		}
+		auto& active = ctx.registry -> activeDownloads;
+		active.erase(registrationKey);
 	}
 }
 
@@ -697,30 +691,28 @@ Promise<Maybe<Result>> DownloadTask<Result>::checkLocalAndRegister() {
 			return mv(maybeResult);
 		}
 		
-		// If we have a download registry, scan all nested client hooks
-		// whether they are registered currently
-		KJ_IF_MAYBE(pRegistry, this -> registry) {
-			auto& active = (*pRegistry) -> activeDownloads;
-			
-			Own<ClientHook> hook = ClientHook::from(cp(src));
-			ClientHook* inner = hook.get();
-			
-			while(true) {				
-				KJ_IF_MAYBE(pNested, inner -> getResolved()) {
-					inner = &(*pNested);
-				} else {
-					break;
-				}
-			}
-				
-			auto it = active.find(inner);
-			if(it != active.end()) {
-				return it -> second -> output()
-				.then([](ResultType result) -> Maybe<ResultType> { return result; });
+		// Scan all nested client hooks and check whether
+		// they are currently being downloaded (deduplication)
+		auto& active = ctx.registry -> activeDownloads;
+		
+		Own<ClientHook> hook = ClientHook::from(cp(src));
+		ClientHook* inner = hook.get();
+		
+		while(true) {				
+			KJ_IF_MAYBE(pNested, inner -> getResolved()) {
+				inner = &(*pNested);
 			} else {
-				registrationKey = inner;
-				active.insert(std::make_pair(inner, this));
+				break;
 			}
+		}
+			
+		auto it = active.find(inner);
+		if(it != active.end()) {
+			return it -> second -> output()
+			.then([](ResultType result) -> Maybe<ResultType> { return result; });
+		} else {
+			registrationKey = inner;
+			active.insert(std::make_pair(inner, this));
 		}
 			
 		return Maybe<ResultType>(nullptr);
