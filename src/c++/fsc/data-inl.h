@@ -85,8 +85,6 @@ public:
 	Promise<void> writeArchive(DataRef<capnp::AnyPointer>::Client ref, const kj::File& out);
 	LocalDataRef<capnp::AnyPointer> publishArchive(Archive::Reader archive);
 	LocalDataRef<capnp::AnyPointer> publishArchive(const kj::ReadableFile& f, const capnp::ReaderOptions options);
-	
-	kj::FiberPool downloadPool;
 		
 	Promise<void> clone(CloneContext context) override;
 	Promise<void> store(StoreContext context) override;
@@ -95,15 +93,21 @@ public:
 	
 	void setChunkDebugMode();
 	
+	Promise<Maybe<LocalDataRef<capnp::AnyPointer>>> unwrap(DataRef<capnp::AnyPointer>::Client ref);
+	
 private:
 	Promise<LocalDataRef<capnp::AnyPointer>> doDownload(DataRef<capnp::AnyPointer>::Client src, bool recursive);
 	Promise<Archive::Entry::Builder> createArchiveEntry(DataRef<capnp::AnyPointer>::Client ref, kj::TreeMap<ID, capnp::Orphan<Archive::Entry>>& entries, capnp::Orphanage orphanage, Maybe<Nursery&> nursery);
-	
+
 	capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> serverSet;
 	Library library;
 	
 	LocalDataService::Limits limits;
 	MMapTemporary fileBackedMemory;
+	
+	Own<DownloadTask<LocalDataRef<capnp::AnyPointer>>::Registry> downloadRegistry;
+	
+	struct DataRefDownloadProcess;
 	
 	friend class LocalDataRefImpl;
 	
@@ -591,6 +595,185 @@ typename T::Reader internal::getDataRefAs(internal::LocalDataRefImpl& impl, cons
 	
 	// Copy root onto the heap and attach objects needed to keep it running
 	return root.getAs<T>();
+}
+
+// === class DownloadTask ===
+
+namespace internal {
+
+template<typename Result>
+struct DownloadTask<Result>::TransmissionReceiver : public DataRef<capnp::AnyPointer>::Receiver::Server {
+	Own<DownloadTask<Result>> parent;
+	TransmissionReceiver(DownloadTask<Result>& parent) :
+		parent(parent.addRef())
+	{}
+	
+	Promise<void> begin(BeginContext ctx) override {
+		return parent -> beginDownload();
+	}
+	
+	Promise<void> receive(ReceiveContext ctx) override {
+		auto data = ctx.getParams().getData();
+		parent -> hashFunction -> update(data.begin(), data.size());
+		return parent -> receiveData(data);
+	}
+	
+	Promise<void> done(DoneContext ctx) override {
+		parent -> hashValue = kj::heapArray<unsigned char>(parent -> hashFunction -> output_length());
+		parent -> hashFunction -> final(parent -> hashValue.begin());
+		
+		parent -> metadata.setDataHash(parent -> hashValue.asBytes());
+		
+		return parent -> finishDownload();
+	}
+};
+
+template<typename Result>
+DownloadTask<Result>::DownloadTask(DataRef<capnp::AnyPointer>::Client src, Maybe<Registry&> registry) :
+	src(src), hashFunction(getActiveThread().library() -> defaultHash()), result(nullptr)
+{
+	KJ_IF_MAYBE(pRegistry, registry) {
+		this -> registry = pRegistry -> addRef();
+	}
+	result = actualTask().fork();
+}
+
+template<typename Result>
+DownloadTask<Result>::~DownloadTask() {
+	if(registrationKey != nullptr) {
+		KJ_IF_MAYBE(pRegistry, registry) {
+			auto& active = (*pRegistry) -> activeDownloads;
+			active.erase(registrationKey);
+		}
+	}
+}
+
+template<typename Result>
+Promise<Result> DownloadTask<Result>::actualTask() {
+	KJ_UNIMPLEMENTED("Make sure hash function is set");
+	
+	// Check if the result can be directly obtained by unwrapping
+	return checkLocalAndRegister().then([this](Maybe<ResultType> result) mutable -> Promise<Result> {
+		KJ_IF_MAYBE(pResult, result) {
+			return mv(*pResult);
+		}
+		
+		// Perform downloads
+		auto builder = kj::heapArrayBuilder<Promise<void>>(2);
+		builder.add(downloadMetadata());
+		builder.add(downloadCapTable());
+		return kj::joinPromises(builder.finish())
+		.then([this]() mutable {
+			// Check if we can use cached data for the download
+			return useCached();
+		})
+		.then([this](Maybe<Result> maybeResult) mutable -> Promise<Result> {
+			// If we can use the cache, use that
+			// Otherwise, perform download
+			KJ_IF_MAYBE(pResult, maybeResult){
+				return mv(*pResult);
+			}
+			
+			return downloadData()
+			.then([this]() mutable {
+				return buildResult();
+			});
+		});
+	});
+}
+
+template<typename Result>
+Promise<Maybe<Result>> DownloadTask<Result>::checkLocalAndRegister() {
+	using capnp::ClientHook;
+	
+	// Wait for hook to resolve
+	return src.whenResolved()
+	
+	// Check if hook can be unwrapped locally
+	.then([this]() mutable { return unwrap(); })
+	.then([this](Maybe<ResultType> maybeResult) mutable -> Promise<Maybe<ResultType>> {
+		// If unwrap succeeded, return unwrapped
+		KJ_IF_MAYBE(pResult, maybeResult) {
+			return mv(maybeResult);
+		}
+		
+		// If we have a download registry, scan all nested client hooks
+		// whether they are registered currently
+		KJ_IF_MAYBE(pRegistry, this -> registry) {
+			auto& active = (*pRegistry) -> activeDownloads;
+			
+			Own<ClientHook> hook = ClientHook::from(cp(src));
+			ClientHook* inner = hook.get();
+			
+			while(true) {				
+				KJ_IF_MAYBE(pNested, inner -> getResolved()) {
+					inner = &(*pNested);
+				} else {
+					break;
+				}
+			}
+				
+			auto it = active.find(inner);
+			if(it != active.end()) {
+				return it -> second -> output()
+				.then([](ResultType result) -> Maybe<ResultType> { return result; });
+			} else {
+				registrationKey = inner;
+				active.insert(std::make_pair(inner, this));
+			}
+		}
+			
+		return Maybe<ResultType>(nullptr);
+	});
+}
+
+template<typename Result>
+Promise<void> DownloadTask<Result>::downloadMetadata() {
+	using MetadataResponse = capnp::Response<DataRef<capnp::AnyPointer>::MetadataResults>;
+	
+	return src.metadataRequest().send()
+	.then([this](MetadataResponse response) mutable {
+		metadata = response.getMetadata();
+	});
+}
+
+template<typename Result>
+Promise<void> DownloadTask<Result>::downloadCapTable() {
+	using CapTableResponse = capnp::Response<DataRef<capnp::AnyPointer>::CapTableResults>;
+	
+	return src.capTableRequest().send()
+	.then([this](CapTableResponse response) mutable {
+		auto capTable = response.getTable();
+		auto builder = kj::heapArrayBuilder<capnp::Capability::Client>(capTable.size());
+		for(auto ref : capTable) {
+			auto adjusted = adjustRef(ref);
+			
+			auto clientPromise = adjusted.whenResolved()
+			.then([adjusted]() mutable { return adjusted;  })
+			.catch_([ref](kj::Exception&& e) mutable {				
+				if(e.getType() == kj::Exception::Type::UNIMPLEMENTED)
+					return ref;
+				throw e;
+			});
+			
+			builder.add(mv(clientPromise));
+		}
+		
+		this -> capTable = builder.finish();
+	});
+}
+
+template<typename Result>
+Promise<void> DownloadTask<Result>::downloadData() {
+	auto downloadRequest = src.transmitRequest();
+	
+	downloadRequest.setStart(0);
+	downloadRequest.setEnd(metadata.getDataSize());
+	downloadRequest.setReceiver(kj::heap<TransmissionReceiver>(*this));
+	
+	return downloadRequest.send().ignoreResult();
+}
+
 }
 
 }

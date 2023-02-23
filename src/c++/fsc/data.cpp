@@ -138,13 +138,7 @@ Promise<void> internal::LocalDataRefImpl::capTable(CapTableContext context) {
 	return kj::READY_NOW;
 }
 
-namespace {
-	std::unique_ptr<Botan::HashFunction> defaultHash() {
-		auto result = Botan::HashFunction::create("Blake2b");
-		KJ_REQUIRE(result != nullptr, "Requested hash function not available");
-		return result;
-	}
-	
+namespace {	
 	struct TransmissionProcess {
 		constexpr static inline size_t CHUNK_SIZE = 1024 * 1024;
 		
@@ -231,8 +225,8 @@ capnp::FlatArrayMessageReader& internal::LocalDataRefImpl::ensureReader(const ca
 
 internal::LocalDataServiceImpl::LocalDataServiceImpl(Library& lib) :
 	library(lib -> addRef()),
-	downloadPool(65536),
-	fileBackedMemory(kj::newDiskFilesystem()->getCurrent().clone())
+	fileBackedMemory(kj::newDiskFilesystem()->getCurrent().clone()),
+	downloadRegistry(kj::refcounted<DownloadTask<LocalDataRef<capnp::AnyPointer>>::Registry>())
 {}
 
 Own<internal::LocalDataServiceImpl> internal::LocalDataServiceImpl::addRef() {
@@ -248,9 +242,141 @@ void internal::LocalDataServiceImpl::setChunkDebugMode() {
 	debugChunks = true;
 }
 
+Promise<Maybe<LocalDataRef<capnp::AnyPointer>>> internal::LocalDataServiceImpl::unwrap(DataRef<capnp::AnyPointer>::Client src) {
+	return serverSet.getLocalServer(src).then([this, src](Maybe<DataRef<capnp::AnyPointer>::Server&> maybeServer) mutable -> Maybe<LocalDataRef<capnp::AnyPointer>> {
+		KJ_IF_MAYBE(server, maybeServer) {
+			#if KJ_NO_RTTI
+				auto backend = static_cast<internal::LocalDataRefImpl*>(server);
+			#else
+				auto backend = dynamic_cast<internal::LocalDataRefImpl*>(server);
+				KJ_REQUIRE(backend != nullptr);
+			#endif
+
+			// If yes, extract the backend and return it
+			return LocalDataRef<capnp::AnyPointer>(backend -> addRef(), this -> serverSet);
+		} else {
+			return nullptr;
+		}
+	}).attach(addRef());
+}
+
+struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadTask<LocalDataRef<capnp::AnyPointer>> {
+	Own<LocalDataServiceImpl> service;
+	bool recursive;
+	
+	Own<const LocalDataStore::Entry> dataEntry;
+	
+	kj::Array<kj::byte> downloadBuffer;
+	size_t downloadOffset = 0;
+	
+	DataRefDownloadProcess(LocalDataServiceImpl& service, DataRef<capnp::AnyPointer>::Client src, bool recursive) :
+		DownloadTask(mv(src), *(service.downloadRegistry)), service(service.addRef()), recursive(recursive)
+	{}
+	
+	Promise<Maybe<ResultType>> unwrap() override {
+		if(recursive)
+			return Maybe<ResultType>(nullptr);
+		
+		return service -> unwrap(src);
+	}
+	
+	capnp::Capability::Client adjustRef(capnp::Capability::Client ref) override {
+		if(!recursive)
+			return mv(ref);
+		
+		return service -> download(ref.castAs<DataRef<capnp::AnyPointer>>(), true);
+	}
+	
+	virtual Promise<Maybe<ResultType>> useCached() override {
+		auto dataHash = metadata.getDataHash();
+		if(dataHash.size() > 0) {
+			auto lStore = getActiveThread().library() -> store.lockShared();
+			
+			KJ_IF_MAYBE(rowPtr, lStore -> table.find(dataHash)) {
+				dataEntry = (*rowPtr) -> addRef();
+				return buildResult()
+				.then([](ResultType result) {
+					return Maybe<ResultType>(mv(result));
+				});
+			}
+		}
+		
+		return Maybe<ResultType>(nullptr);
+	}
+	
+	Promise<void> beginDownload() override {
+		downloadBuffer = kj::heapArray<kj::byte>(metadata.getDataSize());
+		downloadOffset = 0;
+		return READY_NOW;
+	}
+	
+	Promise<void> receiveData(kj::ArrayPtr<const kj::byte> data) override {
+		KJ_REQUIRE(downloadOffset + data.size() <= downloadBuffer.size());
+		memcpy(downloadBuffer.begin() + downloadOffset, data.begin(), data.size());
+		
+		downloadOffset += data.size();
+		return READY_NOW;
+	}
+	
+	Promise<void> finishDownload() override {
+		KJ_REQUIRE(downloadOffset == downloadBuffer.size());
+		KJ_REQUIRE(downloadBuffer != nullptr);
+		
+		dataEntry = kj::atomicRefcounted<const LocalDataStore::Entry>(
+			metadata.getDataHash(),	mv(downloadBuffer)
+		);
+		
+		auto lStore = getActiveThread().library() -> store.lockExclusive();
+			
+		KJ_IF_MAYBE(rowPtr, lStore -> table.find(metadata.getDataHash())) {
+			// If found now, discard current download
+			// Note: This should happen only rarely
+			dataEntry = (*rowPtr) -> addRef();
+		} else {
+			// If not found, store row
+			lStore -> table.insert(dataEntry -> addRef());
+		}
+		
+		return READY_NOW;
+	}
+	
+	Promise<ResultType> buildResult() override {
+		auto backend = kj::refcounted<internal::LocalDataRefImpl>();
+		
+		// Build reader capability table
+		auto capHooks = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(capTable.size());
+		for(auto client : capTable) {
+			Own<capnp::ClientHook> hookPtr = capnp::ClientHook::from(mv(client));
+			
+			if(hookPtr.get() != nullptr)
+				capHooks.add(mv(hookPtr));
+			else
+				capHooks.add(nullptr);
+		}
+	
+		backend->readerTable = kj::heap<capnp::ReaderCapabilityTable>(capHooks.finish());
+		backend->capTableClients = mv(capTable);
+		
+		backend->_metadata.setRoot(metadata.asReader());
+		
+		backend->entryRef = mv(dataEntry);
+		
+		return ResultType(mv(backend), service -> serverSet);
+	}
+};
+
 Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::download(DataRef<capnp::AnyPointer>::Client src, bool recursive) {
+	return unwrap(src).then([this, src, recursive](Maybe<LocalDataRef<capnp::AnyPointer>> maybeUnwrapped) mutable -> Promise<LocalDataRef<capnp::AnyPointer>> {
+		KJ_IF_MAYBE(pUnwrapped, maybeUnwrapped) {
+			return *pUnwrapped;
+		}
+		
+		auto downloadProcess = kj::refcounted<DataRefDownloadProcess>(*this, mv(src), recursive);
+		return downloadProcess -> output();
+		//return doDownload(src, recursive);
+	});
 	// Check if the capability is actually local
-	return serverSet.getLocalServer(src).then([src, recursive, this](Maybe<DataRef<capnp::AnyPointer>::Server&> maybeServer) mutable -> Promise<LocalDataRef<capnp::AnyPointer>> {
+	/*return serverSet.getLocalServer(src).then([src, recursive, this](Maybe<DataRef<capnp::AnyPointer>::Server&> maybeServer) mutable -> Promise<LocalDataRef<capnp::AnyPointer>> {
 		KJ_IF_MAYBE(server, maybeServer) {
 			#if KJ_NO_RTTI
 				auto backend = static_cast<internal::LocalDataRefImpl*>(server);
@@ -265,7 +391,7 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::downloa
 			// If not, download for real
 			return doDownload(src, recursive);
 		}
-	});
+	});*/
 }
 
 LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRef<capnp::AnyPointer>::Metadata::Reader metaData, /*ArrayPtr<const byte> id, */Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable/*, uint64_t cpTypeId */) {
@@ -287,7 +413,7 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRef<
 	
 	// Check if hash is nullptr. If yes, construct own.
 	if(metaData.getDataHash().size() == 0) {
-		auto hashFunction = defaultHash();
+		auto hashFunction = getActiveThread().library() -> defaultHash();
 		hashFunction -> update(data.begin(), data.size());
 		
 		KJ_STACK_ARRAY(uint8_t, hashOutput, hashFunction -> output_length(), 1, 64);
@@ -340,7 +466,7 @@ namespace {
 		kj::Array<unsigned char>& hashTarget;
 		
 		TransmissionReceiver(kj::ArrayPtr<kj::byte> target, kj::Array<unsigned char>& hashTarget) :
-			target(target), offset(0), hashFunction(defaultHash()), hashTarget(hashTarget)
+			target(target), offset(0), hashFunction(getActiveThread().library() -> defaultHash()), hashTarget(hashTarget)
 		{}
 		
 		Promise<void> begin(BeginContext context) override {
@@ -373,7 +499,6 @@ namespace {
 		}
 	};
 }
-
 Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::doDownload(DataRef<capnp::AnyPointer>::Client src, bool recursive) {
 	using RemoteRef = DataRef<capnp::AnyPointer>;
 	using capnp::Response;

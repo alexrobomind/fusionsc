@@ -271,7 +271,7 @@ namespace {
 	}
 }
 
-struct ObjectDB::TransmissionProcess {
+struct odb::TransmissionProcess {
 	constexpr static inline size_t CHUNK_SIZE = 1024 * 1024;
 	
 	Own<BlobReader> reader;
@@ -335,6 +335,10 @@ struct ObjectDB::TransmissionProcess {
 	}
 };
 
+/**
+ * Transmission receiver that forwards the data into a blob store and in the end attaches
+ * the resulting blob to a DBObject
+ */
 struct ObjectDB::TransmissionReceiver : public DataRef<AnyPointer>::Receiver::Server {
 	Own<BlobBuilder> builder;
 	Own<DBObject> parent;
@@ -343,7 +347,7 @@ struct ObjectDB::TransmissionReceiver : public DataRef<AnyPointer>::Receiver::Se
 		parent(obj.addRef())
 	{}
 	
-	Promise<void> begin(BeginContext ctx) {
+	Promise<void> begin(BeginContext ctx) override {
 		return withODBBackoff([this]() {
 			// Always grab the write lock before doing anything to fail fast
 			auto t = parent -> getParent().conn -> beginRootTransaction(true);
@@ -351,8 +355,10 @@ struct ObjectDB::TransmissionReceiver : public DataRef<AnyPointer>::Receiver::Se
 		});
 	}
 	
-	Promise<void> receive(ReceiveContext ctx) {
+	Promise<void> receive(ReceiveContext ctx) override {
 		return withODBBackoff([this, ctx]() mutable {
+			KJ_REQUIRE(builder.get() != nullptr);
+			
 			// Always grab the write lock before doing anything to fail fast
 			auto t = parent -> getParent().conn -> beginRootTransaction(true);
 			
@@ -360,8 +366,10 @@ struct ObjectDB::TransmissionReceiver : public DataRef<AnyPointer>::Receiver::Se
 		});
 	}
 	
-	Promise<void> done(DoneContext ctx) {
+	Promise<void> done(DoneContext ctx) override {
 		return withODBBackoff([this]() {
+			KJ_REQUIRE(builder.get() != nullptr);
+			
 			// Always grab the write lock before doing anything to fail fast
 			auto t = parent -> getParent().conn -> beginRootTransaction(true);
 			
@@ -372,6 +380,229 @@ struct ObjectDB::TransmissionReceiver : public DataRef<AnyPointer>::Receiver::Se
 			parent -> info.getDataRef().getMetadata().setDataHash(blob.hash());
 			parent -> save();
 		});
+	}
+};
+
+struct DBCache::DownloadProcess : public DataRef<AnyPointer>::Receiver::Server {
+	using RemoteRef = DataRef<AnyPointer>;
+	using MetadataResponse = Response<RemoteRef::MetadataResults>;
+	using CapTableResponse = Response<RemoteRef::CapTableResults>;
+	
+	DataRef<AnyPointer>::Client src;
+	Own<BlobStore> store;
+	
+	DataRef<AnyPointer>::Client output;
+	
+	Promise<void> downloadTask;
+	
+	Temporary<DataRef<AnyPointer>::Metadata> metadata;
+	kj::Array<capnp::Capability::Client> refs;
+	
+	Maybe<Blob> blob;
+		
+	Own<BlobBuilder> builder;
+	
+	kj::UnwindDetector ud;
+	
+	DownloadProcess(BlobStore& store, DataRef::Client src) :
+		src(mv(src)),
+		store(store.addRef())
+	{
+		output = run();
+	}
+	
+	~DownloadProcess() {
+		ud.catchExceptionsIfUnwinding([this]() {
+			KJ_IF_MAYBE(pBlob, blob) {	
+				auto t = store -> conn -> beginRootTransaction(true);
+				pBlob -> decRef();
+			}
+		});
+	}
+	
+	Promise<RemoteRef::Client> run() {
+		// First, download metadata and cap table
+		return kj::joinPromises({ downloadMetadata(src), downloadCapTable(src) })
+		.ignoreResult()
+		
+		// Now check whether we have the hash stored already
+		.then([this]() mutable {
+			return withODBBackoff([this]() mutable -> Promise<void> {		
+				auto t = store -> conn -> beginRootTransaction(true);		
+				
+				// Check if blob is already present in store
+				auto hash = metadata.getDataHash();
+				KJ_IF_MAYBE(pBlob, store -> find(hash)) {
+					blob = *pBlob;
+					blob.incRef();
+					return READY_NOW;
+				} else {
+					// If not, use the bundled TransmissionReceiver implementation
+					auto downloadRequest = src.transmitRequest();
+					downloadRequest.setStart(0);
+					downloadRequest.setEnd(metadata.getDataSize());
+					downloadRequest.setReceiver(thisCap());
+					
+					return downloadRequest.send().ignoreResult();
+				}
+			});
+		})
+		
+		// Now there should be a blob ready to be paired with metadata and refs
+		// Group that into a cached ref
+		.then([this]() mutable {	
+			auto t = store -> conn -> beginRootTransaction(true);
+			
+			KJ_IF_MAYBE(pBlob, this -> blob) {
+				auto server = kj::heap<CachedRef>(mv(metadata), mv(refs), *pBlob);
+				// The CachedRef steals the blob, so we need to set blob to
+				// nullptr to avoid the destructor double-freeing
+				this -> blob = nullptr;
+				
+				return SERVER_SET.add(mv(server));
+			}
+			
+			KJ_FAIL_REQUIRE("Transmission process completed, but no blob stored");
+		})
+		.attach(thisCap());
+	}
+	
+	// TransmissionReceiver implementation (gets called during phase 2 download)
+	
+	Promise<void> begin(BeginContext ctx) override {
+		return withODBBackoff([this]() mutable {
+			// Always grab the write lock before doing anything to fail fast
+			auto t = store -> conn -> beginRootTransaction(true);
+			builder = kj::heap<BlobBuilder>(*(parent -> parent -> blobStore));
+		});
+	}
+	
+	Promise<void> receive(ReceiveContext ctx) override {
+		return withODBBackoff([this, ctx]() mutable {
+			KJ_REQUIRE(builder.get() != nullptr);
+			
+			// Always grab the write lock before doing anything to fail fast
+			auto t = store -> conn -> beginRootTransaction(true);
+			builder -> write(ctx.getParams().getData());
+		});
+	}
+	
+	Promise<void> done(DoneContext ctx) override {
+		return withODBBackoff([this]() mutable {
+			KJ_REQUIRE(builder.get() != nullptr);
+			
+			// Always grab the write lock before doing anything to fail fast
+			auto t = store -> conn -> beginRootTransaction(true);
+			
+			blob = builder -> finish();
+			blob.incRef();
+			
+			builder = nullptr;
+		});
+	}
+	
+private:
+	Promise<void> downloadMetadata(DataRef<AnyPointer>::Client src) {
+		return src.metadataRequest().send()
+		.then([this](MetadataResponse response) {
+			metadata = response.getMetadata();
+		});
+	}
+	
+	Promise<void> downloadCapTable(DataRef<AnyPointer>::Client src) {
+		KJ_UNIMPLEMENTED("TODO: Kick off recursive downloads here");
+		
+		return src.capTableRequest().send()
+		.then([this](CapTableResponse response) {
+			auto capTable = response.getTable();
+			auto builder = kj::heapArrayBuilder<capnp::Capability::Client>(capTable.size());
+			for(auto c : capTable)
+				builder.add(c);
+			
+			refs = builder.finish();
+		});
+	}
+	
+	Own<PromiseFulfiller<DataRef<AnyPointer>::Client>> fulfiller;
+};
+
+struct DBCache::CachedRef : public DataRef<AnyPointer>::Server {
+	Temporary<DataRef<AnyPointer>::Metadata> metadata;
+	kj::Array<capnp::Capability::Client> refs;
+	Blob blob;
+	kj::UnwindDetector ud;
+	
+	//! Create a cached reference by stealing metadata, refs AND blob (so no incRef inside, but a decRef on destruction)
+	CachedRef(Temporary<DataRef<AnyPointer>::Metadata>&& metadata, kj::Array<capnp::Capability::Client> refs, Blob blob) :
+		metadata(mv(metadata)),
+		refs(mv(refs))
+		blob(blob)
+	{
+		// No incRef, since the constructor steals the blob's refcount
+	}
+	
+	~CachedRef() {
+		ud.catchExceptionsIfUnwinding([this]() mutable {
+			auto t = blob.parent -> conn -> beginTransaction();
+			blob.decRef();
+		});
+	}
+	
+	Promise<void> metadata(MetadataContext ctx) override {
+		// The metadata table is only ready once the hash is verified
+		ctx.initResults().setMetadata(metadata);
+		return READY_NOW;
+	}
+	
+	Promise<void> capTable(CapTableContext ctx) override {
+		auto tableOut = ctx.getResults().initTable(refs.size());
+		for(auto i : kj::indices(refs))
+			tableOut.set(i, refs[i]);
+		
+		return READY_NOW;
+	}
+	
+	Promise<void> rawBytes(RawBytesContext ctx) override {
+		return withODBBackoff([this, ctx]() mutable {
+			auto t = blob.parent -> conn -> beginTransaction();
+				
+			const uint64_t start = ctx.getParams().getStart();
+			const uint64_t end = ctx.getParams().getEnd();
+			KJ_REQUIRE(end >= start);
+			
+			auto refInfo = checkRef();
+			KJ_REQUIRE(end < refInfo.getMetadata().getDataSize());
+			
+			auto buffer = kj::heapArray<byte>(8 * 1024 * 1024);
+			auto reader = blob.open();
+				
+			// Wind forward the stream until we hit the target point
+			uint64_t windRemaining = start;
+			while(true) {
+				if(windRemaining >= buffer.size()) {
+					reader -> read(buffer);
+					windRemaining -= buffer.size();
+				} else {
+					reader -> read(buffer.slice(0, windRemaining));
+					break;
+				}
+			}
+				
+			auto data = ctx.getResults().initData(end - start);
+			reader -> read(data);
+		});
+	}
+	
+	Promise<void> transmit(TransmitContext ctx) override {
+		return withODBBackoff([this, ctx]() mutable {
+			auto params = ctx.getParams();
+			auto reader = blob.open();
+			auto transProc = heapHeld<TransmissionProcess>(mv(reader), params.getReceiver(), params.getStart(), params.getEnd());
+			
+			auto transmission = kj::evalNow([=]() mutable { return transProc -> run(); });
+			return transmission.attach(transProc.x());
+		})
+		.attach(thisCap());
 	}
 };
 
@@ -464,7 +695,7 @@ struct ObjectDB::ObjectImpl : public Object::Server {
 				objectDeleted();
 			}
 		});
-}
+	}
 	
 	Promise<void> transmit(TransmitContext ctx) override {
 		return withODBBackoff([this, ctx]() mutable {
@@ -1293,3 +1524,6 @@ void DBObject::load() {
 }
 
 }}
+
+// =========================== class DBCache =======================
+
