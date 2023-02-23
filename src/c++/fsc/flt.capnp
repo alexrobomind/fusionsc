@@ -145,8 +145,13 @@ struct MappingRequest {
 	
 	filamentLength @3 : Float64 = 5;
 	cutoff @4 : Float64 = 1;
+	stepSize @5 : Float64 = 0.001;
 	
-	dx @5 : Float64 = 0.001;
+	dx @6 : Float64 = 0.001;
+	
+	nSym @7 : UInt32 = 1;
+	
+	batchSize @8 : UInt32 = 1000;
 }
 
 interface Mapper {

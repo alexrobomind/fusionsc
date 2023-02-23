@@ -214,8 +214,8 @@ struct SlabFieldInterpolator {
 			return [&fieldData, iDim](int iPhi, int iZ, int iR) {
 				if(iR < 0) iR = 0;
 				if(iZ < 0) iZ = 0;
-				if(iR > fieldData.dimension(1)) iR = fieldData.dimension(1);
-				if(iZ > fieldData.dimension(2)) iZ = fieldData.dimension(2);
+				if(iR >= fieldData.dimension(1)) iR = fieldData.dimension(1) - 1;
+				if(iZ >= fieldData.dimension(2)) iZ = fieldData.dimension(2) - 1;
 				
 				int nPhi = fieldData.dimension(3);
 				iPhi = (iPhi % nPhi + nPhi) % nPhi;

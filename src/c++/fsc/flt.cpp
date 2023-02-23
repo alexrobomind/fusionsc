@@ -28,6 +28,7 @@ template<typename Device>
 struct TraceCalculation {
 	constexpr static size_t STEPS_PER_ROUND = 1000;
 	constexpr static size_t EVENTBUF_SIZE = 2500;
+	constexpr static size_t EVENTBUF_SIZE_NOGEO = 100;
 	
 	template<typename T>
 	using MappedMessage = MapToDevice<CupnpMessage<T>, Device>;
@@ -134,8 +135,9 @@ struct TraceCalculation {
 		
 		auto data = round.kernelData.initData(nParticipants);
 		for(size_t i = 0; i < nParticipants; ++i) {
+			
 			data[i].initState();
-			auto events = data[i].initEvents(EVENTBUF_SIZE);
+			auto events = data[i].initEvents(/*request.getServiceRequest().hasGeometry() ? EVENTBUF_SIZE : EVENTBUF_SIZE_NOGEO*/EVENTBUF_SIZE);
 			
 			for(auto event : events)
 				event.initLocation(3);
@@ -230,7 +232,8 @@ struct TraceCalculation {
 			newRound.kernelRequest.getServiceRequest().setStepLimit(maxSteps + ROUND_STEP_LIMIT);
 		}
 		
-		KJ_DBG("Relaunching", newRound.kernelRequest.asReader());
+		// KJ_DBG("Relaunching", newRound.kernelRequest.asReader());
+		KJ_DBG("Relaunching", maxSteps, ROUND_STEP_LIMIT);
 		
 		return newRound;
 	}
@@ -643,6 +646,10 @@ namespace fsc {
 	// TODO: Make this accept data service instead	
 	FLT::Client newFLT(Own<Eigen::ThreadPoolDevice> device) {
 		return kj::heap<FLTImpl<Eigen::ThreadPoolDevice>>(mv(device));
+	}
+	
+	FLT::Client newFLT(Own<Eigen::DefaultDevice> device) {
+		return kj::heap<FLTImpl<Eigen::DefaultDevice>>(mv(device));
 	}
 	
 	#ifdef FSC_WITH_CUDA

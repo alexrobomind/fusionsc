@@ -100,7 +100,7 @@ namespace fsc {
 		bool useFLM = flmData.getFwd().getFilaments().size() > 0;
 		
 		// printf("Hello there\n");
-		CUPNP_DBG("FLT kernel started", idx, useFLM);
+		// CUPNP_DBG("FLT kernel started", idx, useFLM);
 		
 		// Extract local scratch space
 		fsc::cu::FLTKernelData::Entry myData = kernelData.mutateData()[idx];
@@ -226,6 +226,8 @@ namespace fsc {
 					displacementStep = true;
 			}
 			
+			// KJ_DBG(displacementStep);
+			
 			if(displacementStep) {
 				double prevFreePath = parModel.getMeanFreePath() + displacementCount * parModel.getMeanFreePathGrowth();
 				double nextFreePath = parModel.getMeanFreePath() + (1 + displacementCount) * parModel.getMeanFreePathGrowth();
@@ -276,7 +278,7 @@ namespace fsc {
 				}				
 			} else {				
 				if(useFLM) {					
-					double newPhi = flm.phi + fieldOrientation * tracingDirection * request.getStepSize() / (2 * pi * r);
+					double newPhi = flm.phi + fieldOrientation * tracingDirection * request.getStepSize() / r;
 					x2 = flm.advance(newPhi, tracingDirection == 1);
 				} else {
 					// Regular tracing step
@@ -398,7 +400,7 @@ namespace fsc {
 				
 				eventCount = newEventCount;
 			}
-			
+						
 			// KJ_DBG("Phi cross checks passed");
 			
 			// --- Sort generated events ---

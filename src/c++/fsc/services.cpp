@@ -28,7 +28,7 @@ auto selectDevice(T t, WorkerType preferredType) {
 	
 	#endif
 	
-	return tuple(t(newThreadPoolDevice()), WorkerType::CPU);
+	return tuple(t(newThreadPoolDevice()/*newDefaultDevice()*/), WorkerType::CPU);
 }
 
 struct RootServer : public RootService::Server {
