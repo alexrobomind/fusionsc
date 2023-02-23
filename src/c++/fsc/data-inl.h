@@ -643,9 +643,7 @@ DownloadTask<Result>::~DownloadTask() {
 }
 
 template<typename Result>
-Promise<Result> DownloadTask<Result>::actualTask() {
-	KJ_UNIMPLEMENTED("Make sure hash function is set");
-	
+Promise<Result> DownloadTask<Result>::actualTask() {	
 	// Check if the result can be directly obtained by unwrapping
 	return checkLocalAndRegister().then([this](Maybe<ResultType> result) mutable -> Promise<Result> {
 		KJ_IF_MAYBE(pResult, result) {

@@ -224,7 +224,6 @@ private:
 Folder::Client openObjectDB(kj::StringPtr folder);
 
 struct DBCache {
-	struct TransmissionProcess;
 	struct TransmissionReceiver;
 	
 	DataRef<capnp::AnyPointer>::Client cache(DataRef<capnp::AnyPointer>::Client target, bool recursive);
