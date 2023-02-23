@@ -63,7 +63,7 @@ async def visualizeMapping(mapping, nPoints = 50):
 		spline = pv.Spline(xyz, nPoints)
 		objects.append(spline)
 		
-		for i in range(0, filament.nIntervals):
+		for i in []: #range(0, filament.nIntervals):
 			phi0 = phi[i]
 			r0 = filData[i, 0]
 			z0 = filData[i, 1]
@@ -71,8 +71,6 @@ async def visualizeMapping(mapping, nPoints = 50):
 			for j in [0, 1]:
 				dr = filData[i, 2 + 2 * j]
 				dz = filData[i, 2 + 2 * j + 1]
-				
-				print(dr, dz)
 				
 				x0 = r0 * np.cos(phi0)
 				y0 = r0 * np.sin(phi0)
@@ -165,14 +163,15 @@ class FLT:
 	@asyncFunction
 	async def computeMapping(self,
 		startPoints, config, grid = None, 
+		nSym = 1, stepSize = 0.001, batchSize = 1000,
 		nPhi = 30, filamentLength = 5, cutoff = 1,
 		dx = 0.001
 	):
 		resolvedField = await config.resolve.asnc()
 		
 		if grid is None:
-			assert resolvedField.field.which() == 'computed', 'Can only omit grid if field is pre-computed'
-			computedField = resolvedField.field.computed
+			assert resolvedField.field.which() == 'computedField', 'Can only omit grid if field is pre-computed'
+			computedField = resolvedField.field.computedField
 		else:
 			computedField = (await self.calculator.compute(resolvedField.field, grid)).computedField
 		
@@ -184,6 +183,9 @@ class FLT:
 		request.filamentLength = filamentLength
 		request.cutoff = cutoff
 		request.nPhi = nPhi
+		request.nSym = nSym
+		request.stepSize = stepSize
+		request.batchSize = batchSize
 		
 		response = self.mapper.computeMapping(request)
 		
@@ -215,8 +217,8 @@ class FLT:
 		resolvedField = await config.resolve.asnc()
 		
 		if grid is None:
-			assert resolvedField.field.which() == 'computed', 'Can only omit grid if field is pre-computed'
-			computedField = resolvedField.field.computed
+			assert resolvedField.field.which() == 'computedField', 'Can only omit grid if field is pre-computed'
+			computedField = resolvedField.field.computedField
 		else:
 			computedField = (await self.calculator.compute(resolvedField.field, grid)).computedField
 		
