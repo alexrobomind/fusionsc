@@ -11,6 +11,12 @@ void LibraryHandle::stopSteward() const {
 	_daemonRunner->disconnect();
 	storeSteward.stop();
 }
+
+std::unique_ptr<Botan::HashFunction> LibraryHandle::defaultHash() const {
+	auto result = Botan::HashFunction::create("Blake2b");
+	KJ_REQUIRE(result != nullptr, "Requested hash function not available");
+	return result;
+}
 	
 // === class ThreadHandle ===
 

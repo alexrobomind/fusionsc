@@ -538,6 +538,103 @@ Promise<ID> ID::fromReaderWithRefs(T t) {
 	});
 }
 
+namespace internal {
+
+/** Common download logic.
+ * 
+ * In the implementation of this library, a frequent step is the transmission process required
+ * to locally transfer / store DataRefs. This is a fairly complex process to remain efficient. This
+ * class manages the organization of the process, while subclasses are required to implement the actual
+ * steps.
+ *
+ * The protocol for the download process is a follows:
+ *
+ *  1. Check whether the target DataRef is already locally materialized (e.g. a local data ref). This
+ *     should only rely on fast processes not requiring network communication, and therefore not call
+ *     any methods on the ref directly. Instead, it can inspect the resolved ref and check whether its
+ *     backend implementation is known (e.g. through CapabilityServerSet). This step is implemented in
+ *     unwrap().
+ *
+ *  2. Optionally register a download process for the target DataRef. This allows the transfer of recursive
+ *     structures and optimizes graph transfers with a lot of sharing.
+ *
+ *  3. Query the DataRef for its metadata and references to other capabilities. After receiving the references,
+ *     adjustRef() is called for each of them to potentially kick off child downloads etc.
+ *
+ *  4. Check whether the DataRef can be constructed from locally cached data, based on the given metadata (
+ *     which include a data hash).
+ *
+ *  5. Perform a piecewise streaming transfer of the data from the remote reference. This entails hashing
+ *     the data as they are streamed in and, after transfer, storing the adjusted hash in the metadata.
+ *
+ *  6. Build the final result type from metadata, refs, and the stored data.
+ */
+template<typename Result>
+struct DownloadTask : public kj::Refcounted {
+	using ResultType = Result;
+	
+	//! Check whether "src" can be directly unwrapped
+	virtual Promise<Maybe<Result>> unwrap() { return Maybe<Result>(nullptr); }
+	
+	//! Adjust refs e.g. by performing additional downloads. If the resulting client is broken with an exception of type "unimplemented", the original ref is used instead.
+	virtual capnp::Capability::Client adjustRef(capnp::Capability::Client ref) { return ref; }
+	
+	//! Check whether we can build a result from given metadata and captable
+	virtual Promise<Maybe<Result>> useCached() { return Maybe<Result>(nullptr); }
+	
+	virtual Promise<void> beginDownload() { return READY_NOW; }
+	virtual Promise<void> receiveData(kj::ArrayPtr<const byte> data) = 0;
+	virtual Promise<void> finishDownload() { return READY_NOW; }
+	
+	virtual Promise<Result> buildResult() = 0;
+	
+	Own<DownloadTask<Result>> addRef() { return kj::addRef(*this); }
+	
+	//! The original DataRef under download
+	DataRef<capnp::AnyPointer>::Client src;
+	
+	Temporary<DataRef<capnp::AnyPointer>::Metadata> metadata;
+	kj::Array<capnp::Capability::Client> capTable;
+	
+	struct Registry : kj::Refcounted {
+		std::unordered_map<capnp::ClientHook*, DownloadTask*> activeDownloads;
+		
+		Own<Registry> addRef() { return kj::addRef(*this); }
+	};
+	
+	DownloadTask(DataRef<capnp::AnyPointer>::Client src, Maybe<Registry&> registry);
+	virtual ~DownloadTask();
+	
+	Promise<Result> output() { return result.addBranch().attach(addRef()); }
+	
+private:
+	Promise<Result> actualTask();
+	
+	//! Access to the final result of the download task. To enable sharing, this must support copy assignment or reference counting
+	ForkedPromise<Result> result;
+	
+	//! Sub-task for metadata transfer
+	Promise<void> downloadMetadata();
+	
+	//! Sub-task for reference cap table download and adjustment
+	Promise<void> downloadCapTable();
+	
+	//! Sub-task for data transfer and hashing
+	Promise<void> downloadData();
+	
+	//! Pre-check for already-local refs and ongoing downloads
+	Promise<Maybe<Result>> checkLocalAndRegister();
+	
+	struct TransmissionReceiver;
+	
+	std::unique_ptr<Botan::HashFunction> hashFunction;
+	kj::Array<unsigned char> hashValue;
+	
+	capnp::ClientHook* registrationKey = nullptr;
+	Maybe<Own<Registry>> registry;
+};
+
+}
 
 }
 
