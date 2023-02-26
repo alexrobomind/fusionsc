@@ -223,10 +223,11 @@ private:
 
 Folder::Client openObjectDB(kj::StringPtr folder);
 
-struct DBCache {
+//! Simple non-persistent non-recursive cache to temporarily store DataRefs
+struct DBCache : public kj::Refcounted {
 	struct TransmissionReceiver;
 	
-	DataRef<capnp::AnyPointer>::Client cache(DataRef<capnp::AnyPointer>::Client target, bool recursive);
+	DataRef<capnp::AnyPointer>::Client cache(DataRef<capnp::AnyPointer>::Client target);
 	
 	Own<BlobStore> store;
 	Own<sqlite::Connection> conn;
@@ -238,6 +239,8 @@ struct DBCache {
 	
 	struct DownloadProcess;
 	struct CachedRef;
+	
+	inline Own<DBCache> addRef() { return kj::addRef(*this); }
 };
 
 // ==================================== Inline implementation ===================================

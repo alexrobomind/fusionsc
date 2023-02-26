@@ -389,12 +389,14 @@ struct DBCache::CachedRef : public DataRef<AnyPointer>::Server {
 	kj::Array<capnp::Capability::Client> refs;
 	Blob blob;
 	kj::UnwindDetector ud;
+	Own<DBCache> parent;
 	
 	//! Create a cached reference by stealing metadata, refs AND blob (so no incRef inside, but a decRef on destruction)
-	CachedRef(Temporary<DataRef<AnyPointer>::Metadata>&& metadata, kj::Array<capnp::Capability::Client> refs, Blob blob) :
+	CachedRef(Temporary<DataRef<AnyPointer>::Metadata>&& metadata, kj::Array<capnp::Capability::Client> refs, Blob blob, DBCache& parent) :
 		_metadata(mv(metadata)),
 		refs(mv(refs)),
-		blob(blob)
+		blob(blob),
+		parent(parent.addRef())
 	{
 		// No incRef, since the constructor steals the blob's refcount
 	}
@@ -462,118 +464,91 @@ struct DBCache::CachedRef : public DataRef<AnyPointer>::Server {
 	}
 };
 
-struct DBCache::DownloadProcess : public DataRef<AnyPointer>::Receiver::Server {
-	using RemoteRef = DataRef<AnyPointer>;
-	using MetadataResponse = Response<RemoteRef::MetadataResults>;
-	using CapTableResponse = Response<RemoteRef::CapTableResults>;
+struct DBCache::DownloadProcess : public internal::DownloadTask<DataRef<capnp::AnyPointer>::Client> {
+	Own<DBCache> parent;
 	
-	DataRef<AnyPointer>::Client src;
-	Own<BlobStore> store;
-	
-	DataRef<AnyPointer>::Client output;
-	
-	Temporary<DataRef<AnyPointer>::Metadata> metadata;
-	kj::Array<capnp::Capability::Client> refs;
-	
-	Maybe<Blob> blob;
-		
 	Own<BlobBuilder> builder;
+	Maybe<Blob> blob;
 	
 	kj::UnwindDetector ud;
 	
-	DownloadProcess(BlobStore& store, DataRef<AnyPointer>::Client src) :
-		src(mv(src)),
-		store(store.addRef()),
-		output(nullptr)
-	{
-		output = run();
-	}
+	DownloadProcess(DBCache& parent, DataRef<AnyPointer>::Client src) :
+		DownloadTask(src, Context()),
+		parent(parent.addRef())
+	{}
 	
 	~DownloadProcess() {
 		ud.catchExceptionsIfUnwinding([this]() {
 			KJ_IF_MAYBE(pBlob, blob) {	
-				auto t = store -> conn -> beginRootTransaction(true);
+				auto t = parent -> store -> conn -> beginRootTransaction(true);
 				pBlob -> decRef();
 			}
 		});
 	}
 	
-	Promise<RemoteRef::Client> run() {
-		// First, download metadata and cap table
-		auto promises = kj::heapArrayBuilder<Promise<void>>(2);
-		promises.add(downloadMetadata(src));
-		promises.add(downloadCapTable(src));
-		
-		return kj::joinPromises(promises.finish())
-		
-		// Now check whether we have the hash stored already
-		.then([this]() mutable {
-			return withODBBackoff([this]() mutable -> Promise<void> {		
-				auto t = store -> conn -> beginRootTransaction(true);		
+	//! Check whether "src" can be directly unwrapped
+	Promise<Maybe<ResultType>> unwrap() override {
+		return parent -> SERVER_SET.getLocalServer(src)
+		.then([this](Maybe<DataRef<AnyPointer>::Server> maybeResult) -> Maybe<ResultType> {
+			KJ_IF_MAYBE(pResult, maybeResult) {
+				auto backend = static_cast<CachedRef*>(pResult);
 				
-				// Check if blob is already present in store
-				auto hash = metadata.getDataHash();
-				KJ_IF_MAYBE(pBlob, store -> find(hash)) {
-					blob = *pBlob;
-					pBlob -> incRef();
-					return READY_NOW;
-				} else {
-					// If not, use the bundled TransmissionReceiver implementation
-					auto downloadRequest = src.transmitRequest();
-					downloadRequest.setStart(0);
-					downloadRequest.setEnd(metadata.getDataSize());
-					downloadRequest.setReceiver(thisCap());
-					
-					return downloadRequest.send().ignoreResult();
-				}
-			});
-		})
-		
-		// Now there should be a blob ready to be paired with metadata and refs
-		// Group that into a cached ref
-		.then([this]() mutable {	
-			auto t = store -> conn -> beginRootTransaction(true);
-			
-			KJ_IF_MAYBE(pBlob, this -> blob) {
-				auto server = kj::heap<CachedRef>(mv(metadata), mv(refs), *pBlob);
-				// The CachedRef steals the blob, so we need to set blob to
-				// nullptr to avoid the destructor double-freeing
-				this -> blob = nullptr;
+				// Ensure that the backend comes from the same store
+				// TODO: I should just have a non-static server set here ...
+				if(backend -> parent.get() != parent.get())
+					return nullptr;
 				
-				return SERVER_SET.add(mv(server));
+				return src;
 			}
 			
-			KJ_FAIL_REQUIRE("Transmission process completed, but no blob stored");
-		})
-		.attach(thisCap());
-	}
-	
-	// TransmissionReceiver implementation (gets called during phase 2 download)
-	
-	Promise<void> begin(BeginContext ctx) override {
-		return withODBBackoff([this]() mutable {
-			// Always grab the write lock before doing anything to fail fast
-			auto t = store -> conn -> beginRootTransaction(true);
-			builder = kj::heap<BlobBuilder>(*store);
+			return nullptr;
 		});
 	}
 	
-	Promise<void> receive(ReceiveContext ctx) override {
-		return withODBBackoff([this, ctx]() mutable {
-			KJ_REQUIRE(builder.get() != nullptr);
+	//! Adjust refs e.g. by performing additional downloads. If the resulting client is broken with an exception of type "unimplemented", the original ref is used instead.
+	capnp::Capability::Client adjustRef(capnp::Capability::Client ref) override {
+		return mv(ref); //DBCache doesn't do recursive downloads
+		/*if(!recursive)
+			return mv(ref);
+		
+		return parent -> cache(ref.castAs<DataRef<AnyPointer>>(), true);*/
+	}
+	
+	Promise<Maybe<ResultType>> useCached() override {
+		return withODBBackoff([this]() mutable -> Maybe<ResultType> {		
+			auto t = parent -> store -> conn -> beginRootTransaction(true);		
 			
-			// Always grab the write lock before doing anything to fail fast
-			auto t = store -> conn -> beginRootTransaction(true);
-			builder -> write(ctx.getParams().getData());
+			// Check if blob is already present in store
+			auto hash = metadata.getDataHash();
+			KJ_IF_MAYBE(pBlob, parent -> store -> find(hash)) {
+				pBlob -> incRef();
+				
+				auto server = kj::heap<CachedRef>(mv(metadata), mv(capTable), mv(*pBlob), *parent);
+				auto client = parent -> SERVER_SET.add(mv(server));
+				return client;
+			}
+			
+			builder = kj::heap<BlobBuilder>(*parent -> store);
+			return nullptr;
 		});
 	}
 	
-	Promise<void> done(DoneContext ctx) override {
-		return withODBBackoff([this]() mutable {
-			KJ_REQUIRE(builder.get() != nullptr);
+	Promise<void> beginDownload() override { return READY_NOW; }
+	Promise<void> receiveData(kj::ArrayPtr<const byte> data) override {
+		return withODBBackoff([this, data]() mutable {
+			KJ_ASSERT(builder.get() != nullptr);
 			
 			// Always grab the write lock before doing anything to fail fast
-			auto t = store -> conn -> beginRootTransaction(true);
+			auto t = parent -> conn -> beginRootTransaction(true);
+			builder -> write(data);
+		});
+	};
+	Promise<void> finishDownload() override {
+		return withODBBackoff([this]() mutable {
+			KJ_ASSERT(builder.get() != nullptr);
+			
+			// Always grab the write lock before doing anything to fail fast
+			auto t = parent -> conn -> beginRootTransaction(true);
 			
 			auto finishedBlob = builder -> finish();
 			this -> blob = finishedBlob;
@@ -583,29 +558,22 @@ struct DBCache::DownloadProcess : public DataRef<AnyPointer>::Receiver::Server {
 		});
 	}
 	
-private:
-	Promise<void> downloadMetadata(DataRef<AnyPointer>::Client src) {
-		return src.metadataRequest().send()
-		.then([this](MetadataResponse response) {
-			metadata = response.getMetadata();
-		});
-	}
-	
-	Promise<void> downloadCapTable(DataRef<AnyPointer>::Client src) {
-		KJ_UNIMPLEMENTED("TODO: Kick off recursive downloads here");
-		
-		return src.capTableRequest().send()
-		.then([this](CapTableResponse response) {
-			auto capTable = response.getTable();
-			auto builder = kj::heapArrayBuilder<capnp::Capability::Client>(capTable.size());
-			for(auto c : capTable)
-				builder.add(c);
+	Promise<ResultType> buildResult() override {
+		return withODBBackoff([this]() mutable {
+			auto t = parent -> store -> conn -> beginRootTransaction(true);
 			
-			refs = builder.finish();
+			KJ_IF_MAYBE(pBlob, this -> blob) {
+				auto server = kj::heap<CachedRef>(mv(metadata), mv(capTable), *pBlob, *parent);
+				// The CachedRef steals the blob, so we need to set blob to
+				// nullptr to avoid the destructor double-freeing
+				this -> blob = nullptr;
+				
+				return parent -> SERVER_SET.add(mv(server));
+			}
+			
+			KJ_FAIL_REQUIRE("Transmission process completed, but no blob stored");
 		});
 	}
-	
-	Own<PromiseFulfiller<DataRef<AnyPointer>::Client>> fulfiller;
 };
 
 capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> DBCache::SERVER_SET;
