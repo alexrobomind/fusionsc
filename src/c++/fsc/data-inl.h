@@ -2,6 +2,8 @@
 
 #include <botan/hash.h>
 
+#include <unordered_map>
+
 namespace fsc {
 
 namespace internal {
@@ -101,8 +103,8 @@ template<typename Result>
 struct DownloadTask : public kj::Refcounted {
 	using ResultType = Result;
 	
-	struct Registry : kj::Refcounted {
-		std::unordered_map<capnp::ClientHook*, DownloadTask*> activeDownloads;
+	struct Registry : public kj::Refcounted {
+		std::unordered_map<capnp::ClientHook*, DownloadTask<Result>*> activeDownloads;
 		
 		Own<Registry> addRef() { return kj::addRef(*this); }
 	};
