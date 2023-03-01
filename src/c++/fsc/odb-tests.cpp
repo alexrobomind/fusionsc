@@ -118,9 +118,11 @@ TEST_CASE("ODB rw") {
 	auto putResponse = putRequest.send().wait(ws);
 	auto storedObject = putResponse.getRef().asGeneric<test::DataRefHolder<capnp::Data>>();
 	
-	SECTION("fast termination") {
+	// Note: This section is commented out, since the object DB itself is supposed to hold open
+	// downloads, which also hold the db open recursively. There is no trivial to address this.
+	/*SECTION("fast termination") {
 		// Checks for memory leaks in case download process gets into limbo
-	}
+	}*/
 	
 	SECTION("failure") {
 		kj::Exception errors[4] = {

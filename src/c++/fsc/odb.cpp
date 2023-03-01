@@ -1067,6 +1067,86 @@ struct ObjectDB::ObjectHook : public ClientHook, public kj::Refcounted {
 	kj::Maybe<int> getFd() override { return nullptr; }
 };
 
+struct ObjectDB::DownloadProcess : public internal::DownloadTask<Own<DBObject>> {
+	Own<DBObject> dst;
+	Own<BlobBuilder> builder;
+	
+	DownloadProcess(Own<DBObject> dst, DataRef<AnyPointer>::Client src) :
+		DownloadTask(src, Context()),
+		dst(mv(dst))
+	{}
+	
+	auto inTransaction(bool readWrite = false) { return dst -> parent -> conn -> beginRootTransaction(readWrite); }
+	
+	Promise<Maybe<Own<DBObject>>> unwrap() override {
+		return withODBBackoff([this]() mutable -> Maybe<Own<DBObject>> {
+			KJ_DBG("Unwrapping");
+			auto t = inTransaction(false);
+			auto unwrapResult = dst -> parent -> unwrap(src);
+			
+			if(unwrapResult.is<Own<DBObject>>()) {
+				dst -> info.setLink(dst -> parent -> wrap(mv(unwrapResult.get<Own<DBObject>>())));
+				dst -> save();
+				return mv(dst);
+			}
+			
+			return nullptr;
+		});
+	}
+	
+	Promise<Maybe<Own<DBObject>>> useCached() override {
+		return withODBBackoff([this]() mutable -> Maybe<Own<DBObject>> {
+			auto t = inTransaction(true);
+			
+			// Initialize target to DataRef
+			auto ref = dst -> info.initDataRef();
+			ref.setMetadata(metadata);
+			auto capTableOut = ref.initCapTable(capTable.size());
+			for(auto i : kj::indices(capTable))
+				capTableOut.set(i, dst -> parent -> download(capTable[i].castAs<DataRef<AnyPointer>>()));
+			
+			// Check if we have hash in blob store
+			KJ_IF_MAYBE(pBlob, dst -> parent -> blobStore -> find(metadata.getDataHash())) {
+				ref.getDownloadStatus().setFinished();
+				pBlob -> incRef();
+				dst -> save();
+				return mv(dst);
+			}
+			
+			// Allocate blob builder
+			builder = kj::heap<BlobBuilder>(*(dst -> parent -> blobStore));
+			
+			return nullptr;
+		});
+	}
+	
+	Promise<void> receiveData(kj::ArrayPtr<const kj::byte> data) override {
+		return withODBBackoff([this, data]() mutable {
+			KJ_REQUIRE(builder.get() != nullptr);
+			
+			// Always grab the write lock before doing anything to fail fast
+			auto t = inTransaction(true);
+			builder -> write(data);
+		});
+	}
+	
+	Promise<void> finishDownload() override {
+		return withODBBackoff([this]() mutable {
+			KJ_REQUIRE(builder.get() != nullptr);
+			
+			auto finishedBlob = builder -> finish();
+			finishedBlob.incRef();
+			
+			dst -> info.getDataRef().getDownloadStatus().setFinished();
+			dst -> save();
+		});
+	}
+	
+	Promise<Own<DBObject>> buildResult() override {
+		return mv(dst);
+	}	
+};
+
 // ========================= class ObjectDB =============================
 
 namespace {
@@ -1082,7 +1162,7 @@ namespace {
 }
 
 ObjectDB::ObjectDB(kj::StringPtr filename, kj::StringPtr tablePrefix, bool readOnly) :
-	filename(str(filename)), tablePrefix(str(tablePrefix)), readOnly(readOnly), downloadTasks(DownloadErrorHandler::instance)
+	filename(str(filename)), tablePrefix(str(tablePrefix)), readOnly(readOnly)
 {
 	shared = true;
 	if(filename == ":memory:" ||filename == "")
@@ -1183,13 +1263,15 @@ OneOf<Capability::Client, Own<DBObject>, decltype(nullptr)> ObjectDB::unwrap(Cap
 	Own<capnp::ClientHook> hook = capnp::ClientHook::from(kj::cp(object));
 	
 	// First check whether this is a DB object in our database ...
+	Maybe<Own<DBObject>> extractedObject;
+	
 	ClientHook* inner = hook.get();
 	while(true) {
 		if(inner -> getBrand() == &ObjectHook::BRAND) {
 			auto asObjectHook = static_cast<ObjectHook*>(inner);
 			
 			if(asObjectHook -> object -> parent.get() == this)
-				return asObjectHook -> object -> addRef();
+				extractedObject = asObjectHook -> object -> addRef();
 		}
 		
 		KJ_IF_MAYBE(pHook, inner -> getResolved()) {
@@ -1199,21 +1281,8 @@ OneOf<Capability::Client, Own<DBObject>, decltype(nullptr)> ObjectDB::unwrap(Cap
 		}
 	}
 	
-	// ... only then (for security reasons) check whether we are downloading it ...
-	inner = hook.get();
-	while(true) {
-		// We are downloading this thing already
-		// KJ_IF_MAYBE(pId, activeDownloads.find(inner)) {
-		auto pId = activeDownloads.find(inner);
-		if(pId != activeDownloads.end()) {
-			return open(pId -> second);
-		}
-		
-		KJ_IF_MAYBE(pHook, inner -> getResolved()) {
-			inner = pHook;
-		} else {
-			break;
-		}
+	KJ_IF_MAYBE(pObj, extractedObject) {
+		return mv(*pObj);
 	}
 	
 	// ... otherwise check whether it is a null cap ... 
@@ -1226,6 +1295,7 @@ OneOf<Capability::Client, Own<DBObject>, decltype(nullptr)> ObjectDB::unwrap(Cap
 }
 
 Object::Client ObjectDB::download(DataRef<AnyPointer>::Client object) {
+	// Step 1: Check if object is a nullptr or a local DB object
 	auto unwrapped = unwrap(object);
 	
 	if(unwrapped.is<decltype(nullptr)>()) {
@@ -1236,6 +1306,7 @@ Object::Client ObjectDB::download(DataRef<AnyPointer>::Client object) {
 		return wrap(mv(unwrapped.get<Own<DBObject>>()));
 	}
 	
+	// Step 2: Start download task
 	auto asCap = unwrapped.get<Capability::Client>();
 	Own<DBObject> dbObject = startDownloadTask(asCap.castAs<DataRef<AnyPointer>>());
 	return wrap(mv(dbObject));
@@ -1244,13 +1315,27 @@ Object::Client ObjectDB::download(DataRef<AnyPointer>::Client object) {
 Own<DBObject> ObjectDB::startDownloadTask(DataRef<AnyPointer>::Client object) {	
 	// Initialize the object to an unresolved state
 	int64_t id = createObject.insert();
-	{
-		auto dbObject = open(id);
-		dbObject -> info.setUnresolved();
-		dbObject -> save();
-	}
+	auto dbObject = open(id);
+	dbObject -> info.setUnresolved();
+	dbObject -> save();
 	
-	// Remember that we are downloading this capability into the given address
+	// Create download process
+	auto downloadProcess = kj::refcounted<DownloadProcess>(dbObject -> addRef(), object);
+	
+	auto downloadThenCleanup = canceler.wrap(downloadProcess -> output())
+		.ignoreResult()
+		// Ignore exceptions
+		.catch_([](kj::Exception&& e) {})
+		.then([this, id]() { whenResolved.erase(id); })
+		.eagerlyEvaluate(nullptr)
+	;
+	
+	whenResolved.insert(std::make_pair(id, downloadThenCleanup.fork()));
+	
+	return dbObject;
+}
+	
+/*	// Remember that we are downloading this capability into the given address
 	// This will prevent starting double-downloads until the hash is actually
 	// present in our blob db.
 	ClientHook* inner = ClientHook::from(cp(object)).get();
@@ -1272,7 +1357,7 @@ Own<DBObject> ObjectDB::startDownloadTask(DataRef<AnyPointer>::Client object) {
 			/*if(e.getType() == kj::Exception::Type::UNIMPLEMENTED)
 				dbObject -> info.setUnknownObject();
 			else
-				dbObject -> info.setException(toProto(e));*/
+				dbObject -> info.setException(toProto(e));*//*
 			auto t = conn -> beginTransaction();
 			auto dbObject = open(id);
 			dbObject -> info.setException(toProto(e));
@@ -1296,7 +1381,7 @@ Own<DBObject> ObjectDB::startDownloadTask(DataRef<AnyPointer>::Client object) {
 	downloadTasks.add(exportTask.addBranch());
 	
 	return open(id);
-}
+}*/
 
 Promise<void> ObjectDB::downloadTask(DataRef<AnyPointer>::Client src, int64_t id) {
 	using RemoteRef = DataRef<AnyPointer>;

@@ -153,6 +153,8 @@ struct ObjectDB : public kj::Refcounted {
 	
 	Folder::Client getRoot();
 	
+	inline void cancelDownloads() { canceler.cancel("Downloads canceled"); whenResolved.clear(); }
+	
 private:
 	//! Replaces a DataRef with a variant pointing into the database
 	// Note: This method is private because the database does not support dangling objects. Therefore, any creation of such pointers
@@ -165,9 +167,6 @@ private:
 	//! Performs the download operations required to store the DataRef
 	Promise<void> downloadTask(DataRef<AnyPointer>::Client src, int64_t id);
 	
-	//! Clients that are currently in the process of being exported
-	std::unordered_map<ClientHook*, int64_t> activeDownloads;
-	
 	//! These promises tell us when the object we have might be worth
 	// looking into again.
 	std::unordered_map<int64_t, ForkedPromise<void>> whenResolved;
@@ -178,15 +177,16 @@ private:
 	Own<DBObject> open(int64_t id);
 	
 	void createRoot();
-		
-	kj::TaskSet downloadTasks;
 	
 	Own<BlobStore> blobStore;
 	Own<sqlite::Connection> conn;
 	
 	bool shared;
 	
+	kj::Canceler canceler;
+	
 	struct TransmissionReceiver;
+	struct DownloadProcess;
 	
 	struct ObjectImpl;
 	struct ObjectHook;

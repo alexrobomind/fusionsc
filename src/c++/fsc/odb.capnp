@@ -44,6 +44,7 @@ struct ObjectInfo {
 		unresolved @0 : Void;
 		exception @1 : Rpc.Exception;
 		link @2 : Object;
+		
 		dataRef : group {
 			downloadStatus : union {
 				downloading @3 : Void;
