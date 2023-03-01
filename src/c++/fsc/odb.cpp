@@ -578,7 +578,13 @@ struct DBCache::DownloadProcess : public internal::DownloadTask<DataRef<capnp::A
 
 capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> DBCache::SERVER_SET;
 
-
+/** Server class that gives clients access to DB object.
+ *
+ * \warning This class must be created on an already-loaded and resolved object.
+ *          Using unresolved objects is not allowed (which is why this class should
+ *          be instantiated through ObjectHook, which manages the resolution and
+ *          redirection process.
+ */
 struct ObjectDB::ObjectImpl : public Object::Server {
 	Own<DBObject> object;
 	
@@ -596,6 +602,22 @@ struct ObjectDB::ObjectImpl : public Object::Server {
 		if(object -> info.which() != ObjectInfo::DATA_REF)
 			KJ_UNIMPLEMENTED("This database object is not a DataRef");
 		return object -> info.getDataRef();
+	}
+	
+	Promise<void> dataReady() {
+		auto refInfo = checkRef();
+		if(refInfo.getDownloadStatus().isFinished())
+			return READY_NOW;
+		
+		return object -> whenUpdated()
+		.then([this]() mutable {
+			return withODBBackoff([this]() mutable {
+				auto t = object -> parent -> conn -> beginTransaction();
+				object -> load();
+				
+				return dataReady();
+			});
+		});
 	}
 	
 	Promise<void> getInfo(GetInfoContext ctx) override {
@@ -635,64 +657,71 @@ struct ObjectDB::ObjectImpl : public Object::Server {
 	}
 	
 	Promise<void> rawBytes(RawBytesContext ctx) override {
-		return withODBBackoff([this, ctx]() mutable {
-			auto t = object -> parent -> conn -> beginTransaction();
+		return dataReady()
+		.then([this, ctx]() mutable {
+			return withODBBackoff([this, ctx]() mutable {
+				auto t = object -> parent -> conn -> beginTransaction();
+					
+				const uint64_t start = ctx.getParams().getStart();
+				const uint64_t end = ctx.getParams().getEnd();
 				
-			const uint64_t start = ctx.getParams().getStart();
-			const uint64_t end = ctx.getParams().getEnd();
-			
-			auto refInfo = checkRef();
-			KJ_REQUIRE(end < refInfo.getMetadata().getDataSize());
-			
-			auto hash = refInfo.getMetadata().getDataHash();
-			KJ_IF_MAYBE(pBlob, object -> parent -> blobStore -> find(hash)) {
-				auto buffer = kj::heapArray<byte>(8 * 1024 * 1024);
-				auto reader = pBlob -> open();
-				KJ_REQUIRE(end >= start);
+				auto refInfo = checkRef();
+				KJ_REQUIRE(end < refInfo.getMetadata().getDataSize());
 				
-				// Wind forward the stream until we hit the target point
-				uint64_t windRemaining = start;
-				while(true) {
-					if(windRemaining >= buffer.size()) {
-						reader -> read(buffer);
-						windRemaining -= buffer.size();
-					} else {
-						reader -> read(buffer.slice(0, windRemaining));
-						break;
+				auto hash = refInfo.getMetadata().getDataHash();
+				KJ_IF_MAYBE(pBlob, object -> parent -> blobStore -> find(hash)) {
+					auto buffer = kj::heapArray<byte>(8 * 1024 * 1024);
+					auto reader = pBlob -> open();
+					KJ_REQUIRE(end >= start);
+					
+					// Wind forward the stream until we hit the target point
+					uint64_t windRemaining = start;
+					while(true) {
+						if(windRemaining >= buffer.size()) {
+							reader -> read(buffer);
+							windRemaining -= buffer.size();
+						} else {
+							reader -> read(buffer.slice(0, windRemaining));
+							break;
+						}
 					}
+					
+					auto data = ctx.getResults().initData(end - start);
+					reader -> read(data);
+				} else {
+					objectDeleted();
 				}
-				
-				auto data = ctx.getResults().initData(end - start);
-				reader -> read(data);
-			} else {
-				objectDeleted();
-			}
+			});
 		});
 	}
 	
 	Promise<void> transmit(TransmitContext ctx) override {
-		return withODBBackoff([this, ctx]() mutable {
-			auto params = ctx.getParams();
-			
-			// Since we preparing a long-running op, fork the blob store so that our main connection doesn't get blocked
-			// If the database isn't shared, we can use the main connection (though we have to hope the object doesn't get deleted
-			auto forkedStore = kj::refcounted<BlobStore>(
-				*(object -> parent -> forkConnection(true)),
-				object -> parent -> tablePrefix,
-				true
-			);
-			auto forkedTransaction = forkedStore -> conn -> beginTransaction();
-			
-			// Note: Read operations can still fail					
-			KJ_IF_MAYBE(pBlob, forkedStore -> find(checkRef().getMetadata().getDataHash())) {
-				auto reader = pBlob -> open();
-				auto transProc = heapHeld<TransmissionProcess>(mv(reader), params.getReceiver(), params.getStart(), params.getEnd());
+		return dataReady()
+		.then([this, ctx]() mutable {
+			return withODBBackoff([this, ctx]() mutable {
+				auto params = ctx.getParams();
 				
-				auto transmission = kj::evalNow([=]() mutable { return transProc -> run(); });
-				return transmission.attach(mv(forkedStore), mv(forkedTransaction), transProc.x());
-			} else {
-				objectDeleted();
-			}
+				// Since we preparing a long-running op, fork the blob store so that our main connection doesn't get blocked
+				// and the object doesn't get deleted during the transfer.
+				// If the database isn't shared, we can use the main connection (though we have to hope the object doesn't get deleted
+				auto forkedStore = kj::refcounted<BlobStore>(
+					*(object -> parent -> forkConnection(true)),
+					object -> parent -> tablePrefix,
+					true
+				);
+				auto forkedTransaction = forkedStore -> conn -> beginTransaction();
+				
+				// Note: Read operations can still fail					
+				KJ_IF_MAYBE(pBlob, forkedStore -> find(checkRef().getMetadata().getDataHash())) {
+					auto reader = pBlob -> open();
+					auto transProc = heapHeld<TransmissionProcess>(mv(reader), params.getReceiver(), params.getStart(), params.getEnd());
+					
+					auto transmission = kj::evalNow([=]() mutable { return transProc -> run(); });
+					return transmission.attach(mv(forkedStore), mv(forkedTransaction), transProc.x());
+				} else {
+					objectDeleted();
+				}
+			});
 		});
 	}
 	
@@ -963,17 +992,10 @@ struct ObjectDB::ObjectHook : public ClientHook, public kj::Refcounted {
 				case ObjectInfo::EXCEPTION: {
 					return fromProto(info.getException());
 				}	
+				case ObjectInfo::LINK:
+				case ObjectInfo::DATA_REF:
 				case ObjectInfo::FOLDER:
 					return READY_NOW;
-					
-				case ObjectInfo::DATA_REF: {	
-					switch(info.getDataRef().getDownloadStatus().which()) {
-						case ObjectInfo::DataRef::DownloadStatus::DOWNLOADING:
-							return object -> whenUpdated().then([this]() { return whenReady(); });
-						case ObjectInfo::DataRef::DownloadStatus::FINISHED:
-							return READY_NOW;
-					}
-				}
 			}
 			
 			KJ_FAIL_REQUIRE("Unknown object entry in database");
@@ -985,11 +1007,30 @@ struct ObjectDB::ObjectHook : public ClientHook, public kj::Refcounted {
 	{
 		KJ_ASSERT(object.get() != nullptr);
 		
-		auto innerPromise = whenReady()
-		.then([this]() -> Capability::Client {
-			return kj::heap<ObjectImpl>(object->addRef());
+		Promise<Own<ClientHook>> innerPromise = whenReady()
+		.then([this]() -> Own<ClientHook> {
+			// If object is a link, return a client hook pointing to the target
+			if(object -> info.isLink()) {
+				Object::Client target = object -> info.getLink();
+				auto unwrapResult = object -> getParent().unwrap(target);
+				
+				if(unwrapResult.is<decltype(nullptr)>()) {
+					return ClientHook::from(capnp::Capability::Client(nullptr));
+				}
+				
+				if(unwrapResult.is<Own<DBObject>>()) {
+					return kj::heap<ObjectHook>(mv(unwrapResult.get<Own<DBObject>>()));
+				}
+				
+				KJ_FAIL_REQUIRE("Invalid link target");
+			}
+			
+			// Otherwise, create an ObjectImpl pointing to the resolved object
+			Capability::Client client = kj::heap<ObjectImpl>(object->addRef());
+			return ClientHook::from(mv(client));
 		});
-		inner = ClientHook::from(Capability::Client(mv(innerPromise)));
+		
+		inner = capnp::newLocalPromiseClient(mv(innerPromise));
 	}
 
 	Request<AnyPointer, AnyPointer> newCall(
@@ -1016,6 +1057,7 @@ struct ObjectDB::ObjectHook : public ClientHook, public kj::Refcounted {
 
 	kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
 		return inner -> whenMoreResolved();
+		//return nullptr;
 	}
 
 	virtual kj::Own<ClientHook> addRef() override { return kj::addRef(*this); }

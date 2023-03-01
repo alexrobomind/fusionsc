@@ -43,16 +43,17 @@ struct ObjectInfo {
 	union {
 		unresolved @0 : Void;
 		exception @1 : Rpc.Exception;
+		link @2 : Object;
 		dataRef : group {
 			downloadStatus : union {
-				downloading @2 : Void;
-				finished @3 : Void;
+				downloading @3 : Void;
+				finished @4 : Void;
 			}
-			metadata @4 : Data.DataRef.Metadata;
-			capTable @5 : List(Object);
+			metadata @5 : Data.DataRef.Metadata;
+			capTable @6 : List(Object);
 		}
 		folder : group {
-			entries @6 : List(FolderEntry);
+			entries @7 : List(FolderEntry);
 		}
 	}
 }
