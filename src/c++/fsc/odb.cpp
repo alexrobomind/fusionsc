@@ -1134,6 +1134,8 @@ struct ObjectDB::DownloadProcess : public internal::DownloadTask<Own<DBObject>> 
 		return withODBBackoff([this]() mutable {
 			KJ_REQUIRE(builder.get() != nullptr);
 			
+			auto t = inTransaction(true);
+			
 			auto finishedBlob = builder -> finish();
 			finishedBlob.incRef();
 			
@@ -1322,9 +1324,20 @@ Own<DBObject> ObjectDB::startDownloadTask(DataRef<AnyPointer>::Client object) {
 	// Create download process
 	auto downloadProcess = kj::refcounted<DownloadProcess>(dbObject -> addRef(), object);
 	
-	auto downloadThenCleanup = canceler.wrap(downloadProcess -> output())
-		.ignoreResult()
-		// Ignore exceptions
+	auto downloadThenCleanup = canceler.wrap(
+			downloadProcess -> output()
+			.ignoreResult()
+			
+			// If download fails, set object to exception
+			.catch_([this, dbObject = dbObject -> addRef()](kj::Exception e) mutable {
+				return withODBBackoff([this, e, dbObject = mv(dbObject)]() mutable {
+					auto t = conn -> beginRootTransaction(true);
+					dbObject -> info.setException(toProto(e));
+					dbObject -> save();
+				});
+			})
+		)
+		// Ignore further exceptions
 		.catch_([](kj::Exception&& e) {})
 		.then([this, id]() { whenResolved.erase(id); })
 		.eagerlyEvaluate(nullptr)
