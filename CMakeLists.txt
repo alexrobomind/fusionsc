@@ -59,6 +59,9 @@ endif()
 # Get dependencies via CPM
 include(CPM.cmake)
 
+
+include(src/cmake/AddVendoredDependency.cmake)
+
 find_package(OpenSSL COMPONENTS Crypto SSL)
 
 # Disable BUILD_TESTING while compiling dependencies
@@ -69,35 +72,41 @@ set(BUILD_EXAMPLES_TMP ${BUILD_EXAMPLES})
 set(BUILD_EXAMPLES OFF CACHE BOOL "Temporarily disable examples" FORCE)
 
 # Standard fetching for Catch2, capnproto and eigen
-CPMAddPackage(
-  Catch2
-  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-  GIT_TAG        devel
+#CPMAddPackage(
+#  Catch2
+#  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+#  GIT_TAG        devel
+#)
+
+add_vendored_dependency(
+	PREFIX vendor/catch2
+	NAME Catch2
+	VERSION 3.0
 )
 
 # We need to include the test scan macro manually if we downloaded it manually
-if(Catch2_SOURCE_DIR)
+if(Catch2_VENDORED)
 	list(APPEND CMAKE_MODULE_PATH ${Catch2_SOURCE_DIR}/extras)
 else()
 	list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
 endif()
 
-message(STATUS "Module path: ${CMAKE_MODULE_PATH}")
+set(SKIP_INSTALL_ALL On)
+add_vendored_dependency(
+	PREFIX vendor/zlib
+	NAME ZLIB
+	VERSION 1.2.0
+)
+unset(SKIP_INSTALL_ALL)
 
-# Because it is so commonly used, we do not build our own zlib
-find_package(ZLIB)
-if(NOT ZLIB_FOUND)
-	message(STATUS "Building ZLib from source")
-	
-	set(SKIP_INSTALL_ALL On)
-	CPMAddPackage(
-		NAME ZLIB
-		GIT_REPOSITORY https://github.com/madler/zlib.git
-		GIT_TAG        v1.2.13
-		VERSION        1.2.0
-	)
-	unset(SKIP_INSTALL_ALL)
+#CPMAddPackage(
+#	NAME ZLIB
+#	GIT_REPOSITORY https://github.com/madler/zlib.git
+#	GIT_TAG        v1.2.13
+#	VERSION        1.2.0
+#)
 
+if(ZLIB_VENDORED)
 	set(ZLIB_CUSTOM_INCLUDES $<BUILD_INTERFACE:${ZLIB_SOURCE_DIR}> $<BUILD_INTERFACE:${ZLIB_BINARY_DIR}>)
 	target_include_directories(zlib PUBLIC ${ZLIB_CUSTOM_INCLUDES})
 	target_include_directories(zlibstatic PUBLIC ${ZLIB_CUSTOM_INCLUDES})
@@ -115,16 +124,8 @@ if(NOT ZLIB_FOUND)
 	INSTALL(TARGETS zlibstatic EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 	INSTALL(DIRECTORY "${ZLIB_SOURCE_DIR}/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
 else()
-	message(STATUS "Using system ZLIB")
 	add_library(ZLIB::zlib ALIAS ZLIB::ZLIB)
 	add_library(ZLIB::zlibstatic ALIAS ZLIB::ZLIB)
-endif()
-
-find_package(SQLite3)
-if(NOT SQLite3_FOUND)
-	add_subdirectory(vendor/sqlite3)
-	
-	# INSTALL rules are also in vendor/sqlite3/CMakeLists.txt
 endif()
 
 set(ZLIB_STATIC_LIBRARY ZLIB::zlibstatic)
@@ -132,14 +133,28 @@ set(ZLIB_LIBRARY ZLIB::zlib)
 set(ZLIB_INCLUDE_DIRECTORIES "")
 set(ZLIB_INCLUDE_DIR "")
 
-CPMAddPackage(
-  NAME CapnProto
-  GIT_REPOSITORY https://github.com/capnproto/capnproto.git
-  GIT_TAG        master
-  VERSION        0.11
-  OPTIONS
-    "WITH_ZLIB OFF"
+add_vendored_dependency(
+	PREFIX vendor/sqlite3
+	NAME SQLite3
+	VERSION 3.9.0
 )
+
+set(WITH_ZLIB OFF)
+add_vendored_dependency(
+	PREFIX vendor/capnproto
+	NAME CapnProto
+	VERSION 0.11
+)
+unset(WITH_ZLIB)
+
+#CPMAddPackage(
+#  NAME CapnProto
+#  GIT_REPOSITORY https://github.com/capnproto/capnproto.git
+#  GIT_TAG        master
+#  VERSION        0.11
+#  OPTIONS
+#    "WITH_ZLIB OFF"
+#)
 
 # We use Capn'n'protos builtin install rules
 
@@ -148,66 +163,16 @@ CPMAddPackage(
 # variable (when configured by find_package) to define its reference directories.
 # However, when using a find_package call through CPMAddPackage, the CAPNP_INCLUDE_DIRECTORY
 # does not get propagated to this scope. Therefore, we have to extract it manually.
-if(CapnProto_DIR)
-	get_property(CAPNP_INCLUDE_DIRECTORY TARGET CapnProto::capnp PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
-endif()
 
+#if(CapnProto_DIR)
+#	get_property(CAPNP_INCLUDE_DIRECTORY TARGET CapnProto::capnp PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
+#endif()
 
-CPMAddPackage(
-  NAME Eigen3
-  GIT_REPOSITORY https://github.com/alexrobomind/eigen34.git
-  GIT_TAG        3.4
+add_vendored_dependency(
+	PREFIX vendor/eigen3
+	NAME Eigen3
+	VERSION 3.4
 )
-
-# I think I can kick off HDF5 for the internal build
-# We need it for VMEC drive, but if vmec is installed, hdf5 will be too
-if(Off)
-	# HDF5's shared library option messes with other shared library builds
-	SET(HDF5_EXTERNALLY_CONFIGURED 1)
-	SET(HDF5_BUILD_HL_LIB ON CACHE BOOL "Enable building of HDF5 HL library" FORCE)
-	set(HDF5_ENABLE_Z_LIB_SUPPORT ON CACHE BOOL "Enable Hdf5 Zlib support" FORCE)
-	set(HDF5_BUILD_TOOLS OFF CACHE BOOL "Enable HDF5 tools" FORCE)
-	set(HDF5_BUILD_EXAMPLES OFF CACHE BOOL "Enable HDF5 examples" FORCE)
-
-	set(H5_ZLIB_HEADER "zlib.h")
-
-	CPMAddPackage(
-		HDF5
-		GIT_REPOSITORY https://github.com/HDFGroup/hdf5.git
-		GIT_TAG        hdf5-1_13_2
-		VERSION        1.12.0
-	)
-
-	if(NOT TARGET HDF5::hdf5-static)
-		add_library(HDF5::hdf5-static ALIAS hdf5-static)
-		add_library(HDF5::hdf5_hl-static ALIAS hdf5_hl-static)
-		
-		target_include_directories(hdf5-static INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-		INSTALL(TARGETS hdf5-static EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
-		INSTALL(DIRECTORY "${HDF5_SOURCE_DIR}/src/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
-	endif()
-
-	#set(HDF5_C_LIBRARY HDF5::hdf5-static)
-	#set(HDF5_HL_LIBRARY HDF5::hdf5_hl-static)
-
-	CPMGetPackageVersion(HDF5 HDF5_VERSION)
-
-	#if(NOT HDF5_VERSION)
-	#	get_target_property(HDF5_INCDIRS HDF5::hdf5-static INCLUDE_DIRECTORIES)
-	#	
-	#	find_file (HDF5_PUBCONF NAMES H5pubconf.h PATHS ${HDF5_INCDIRS} NO_DEFAULT_PATH REQUIRED)
-	#	file(READ ${HDF5_PUBCONF} _hdf5_version_lines REGEX "#define[ \t]+H5_VERSION")
-	#	string(REGEX REPLACE ".*H5_VERSION .*\"\(.*\)\".*" "\\1" _hdf5_version "${_hdf5_version_lines}")
-	#	set(HDF5_VERSION "${_hdf5_version}" CACHE STRING "")
-	#	unset(_hdf5_version)
-	#	unset(_hdf5_version_lines)
-	#endif()
-	MESSAGE(STATUS "Found HDF5 libraries version ${HDF5_VERSION}")
-
-	#find_path(HDF5_INCLUDE_DIR "hdf5.h" ${HDF5_INCDIRS} NO_DEFAULT_PATH REQUIRED)
-	set(HDF5_INCLUDE_DIR ${HDF5_INCDIRS})
-	message(STATUS "Using HDF5 include dir: ${HDF5_INCLUDE_DIR}")
-endif()
 
 find_package(HDF5)
 if(HDF5_FOUND)
@@ -223,12 +188,18 @@ endif()
 #	GIT_TAG        v4.9.0
 #)
 
-CPMAddPackage(
+add_vendored_dependency(
+	PREFIX vendor/libssh2
 	NAME Libssh2
-	GIT_REPOSITORY https://github.com/libssh2/libssh2
-	GIT_TAG        libssh2-1.10.0
-	VERSION        1.10.0
+	VERSION 1.10
 )
+
+#CPMAddPackage(
+#	NAME Libssh2
+#	GIT_REPOSITORY https://github.com/libssh2/libssh2
+#	GIT_TAG        libssh2-1.10.0
+#	VERSION        1.10.0
+#)
 
 if(TARGET libssh2)
 	add_library(Libssh2::libssh2 ALIAS libssh2)
@@ -237,24 +208,27 @@ if(TARGET libssh2)
 endif()
 
 if(FSC_WITH_PYTHON)
-	CPMAddPackage(
+	add_vendored_dependency(
+		PREFIX vendor/pybind11
 		NAME pybind11
-		GIT_REPOSITORY https://github.com/pybind/pybind11.git
-		GIT_TAG        v2.9.1
-		VERSION        2.9.1
+		VERSION 2.9.1
 	)
+	#CPMAddPackage(
+	#	NAME pybind11
+	#	GIT_REPOSITORY https://github.com/pybind/pybind11.git
+	#	GIT_TAG        v2.9.1
+	#	VERSION        2.9.1
+	#)
 endif()
 
-# For Botan, we have to be fancier, as it does not use CMake
-CPMAddPackage(
+add_vendored_dependency(
+	PREFIX vendor/botan
 	NAME Botan
-	GIT_REPOSITORY https://github.com/randombit/botan.git
-	GIT_TAG 2.19.0
-	VERSION 2.19.0
-	DOWNLOAD_ONLY
+	VERSION 2.9
+	SETUP_ONLY
 )
 
-if(NOT TARGET Botan::botan)	
+if(Botan_VENDORED)
 	include(src/cmake/CompileBotan.cmake)
 	
 	INSTALL(TARGETS botan_selfbuilt EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
@@ -262,6 +236,15 @@ if(NOT TARGET Botan::botan)
 	get_property(BOTAN_HEADERS TARGET botan_selfbuilt PROPERTY BUILT_HEADERS)
 	INSTALL(DIRECTORY "${BOTAN_HEADERS}/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
+	
+# For Botan, we have to be fancier, as it does not use CMake
+#CPMAddPackage(
+#	NAME Botan
+#	GIT_REPOSITORY https://github.com/randombit/botan.git
+#	GIT_TAG 2.19.0
+#	VERSION 2.19.0
+#	DOWNLOAD_ONLY
+#)
 
 # Re-enable BUILD_TESTING if desired
 set(BUILD_TESTING ${BUILD_TESTING_TMP} CACHE BOOL "" FORCE)

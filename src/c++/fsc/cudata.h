@@ -137,6 +137,10 @@ struct CupnpMessage {
 		segmentTable(internal::buildSegmentTable(internal::coerceSegmentTableToNonConst(segments)))
 	{}
 	
+	CupnpMessage(kj::ArrayPtr<kj::ArrayPtr<capnp::word>> segments) :
+		segmentTable(internal::buildSegmentTable(segments))
+	{}
+	
 	CupnpMessage(std::nullptr_t) :
 		CupnpMessage(internal::EMPTY_MESSAGE.asPtr())
 	{}
@@ -180,8 +184,8 @@ struct CupnpMessage {
 		int16_t ptrSectionSize = cpBuilder.getPointerSectionSize();
 		
 		cupnp::Location dataLoc;
-		dataLoc.segments = segmentTable;
-		dataLoc.ptr = dataSection.begin();
+		dataLoc.segments = cupnp::SegmentTable(segmentTable);
+		dataLoc.ptr = const_cast<unsigned char*>(dataSection.begin()); // This is a builder, this memory doesn't have to be const...
 		KJ_IF_MAYBE(pSegId, locateSegment(dataSection.begin())) {
 			dataLoc.segmentId = *pSegId;
 		} else {
@@ -197,8 +201,8 @@ struct CupnpMessage {
 		int16_t ptrSectionSize = cpReader.getPointerSectionSize();
 		
 		cupnp::Location dataLoc;
-		dataLoc.segments = segmentTable;
-		dataLoc.ptr = dataSection.begin();
+		dataLoc.segments = cupnp::SegmentTable(segmentTable);
+		dataLoc.ptr = const_cast<unsigned char*>(dataSection.begin()); // Memory is guarded through const-ness of the result type
 		KJ_IF_MAYBE(pSegId, locateSegment(dataSection.begin())) {
 			dataLoc.segmentId = *pSegId;
 		} else {

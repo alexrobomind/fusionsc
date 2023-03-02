@@ -235,7 +235,7 @@ struct DBCache : public kj::Refcounted {
 	static capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> SERVER_SET;
 	
 	//! Clients that are currently in the process of being downloaded
-	std::unordered_map<capnp::ClientHook*, DataRef<capnp::AnyPointer>::Client> activeDownloads;
+	// std::unordered_map<capnp::ClientHook*, DataRef<capnp::AnyPointer>::Client> activeDownloads;
 	
 	struct DownloadProcess;
 	struct CachedRef;
