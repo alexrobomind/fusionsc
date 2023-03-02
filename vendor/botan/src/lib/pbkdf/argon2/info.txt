@@ -1,0 +1,11 @@
+<defines>
+ARGON2 -> 20210407
+</defines>
+
+<requires>
+blake2
+</requires>
+
+<header:public>
+argon2.h
+</header:public>
