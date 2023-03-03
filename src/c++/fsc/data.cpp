@@ -10,8 +10,29 @@
 #include <functional>
 
 #include "data.h"
+#include "odb.h"
 
 namespace fsc {
+	
+Promise<bool> isDataRef(capnp::Capability::Client clt) {
+	auto asRef = clt.castAs<DataRef<capnp::AnyPointer>>();
+	auto req = asRef.metadataRequest();
+	return req.send().ignoreResult()
+	.then(
+		// Success case
+		[](){
+			return true;
+		},
+		
+		// Error case
+		[](kj::Exception e) {
+			if(e.getType() != kj::Exception::Type::UNIMPLEMENTED)
+				throw e;
+			
+			return false;
+		}
+	);
+}
 	
 // === functions in internal ===
 
@@ -225,7 +246,8 @@ capnp::FlatArrayMessageReader& internal::LocalDataRefImpl::ensureReader(const ca
 
 internal::LocalDataServiceImpl::LocalDataServiceImpl(Library& lib) :
 	library(lib -> addRef()),
-	fileBackedMemory(kj::newDiskFilesystem()->getCurrent().clone())
+	fileBackedMemory(kj::newDiskFilesystem()->getCurrent().clone()),
+	dbCache(kj::refcounted<odb::DBCache>())
 {}
 
 Own<internal::LocalDataServiceImpl> internal::LocalDataServiceImpl::addRef() {
@@ -889,6 +911,13 @@ Promise<void> internal::LocalDataServiceImpl::store(StoreContext context) {
 	);
 	
 	context.getResults().setRef(ref);
+	
+	return READY_NOW;
+}
+
+Promise<void> internal::LocalDataServiceImpl::cache(CacheContext ctx) {
+	//ctx.getResults().setRef(dbCache -> cache(ctx.getParams().getSource()));
+	KJ_UNIMPLEMENTED("The DBCache::cache method is not yet implemented");
 	
 	return READY_NOW;
 }

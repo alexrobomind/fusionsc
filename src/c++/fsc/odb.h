@@ -138,8 +138,9 @@ struct ObjectDB : public kj::Refcounted {
 	
 	Statement getRefcount;
 	
-	ObjectDB(kj::StringPtr filename, kj::StringPtr tablePrefix, bool readOnly = false);
+	ObjectDB(kj::StringPtr filename, kj::StringPtr tablePrefix = "objectDB", bool readOnly = false);
 	inline ~ObjectDB() {}
+	
 	inline Own<ObjectDB> addRef() { return kj::addRef(*this); }
 	
 	//! Determines whether the given capability is outside the database, pointing to a DB object, or null
@@ -154,6 +155,7 @@ struct ObjectDB : public kj::Refcounted {
 	Folder::Client getRoot();
 	
 	inline void cancelDownloads() { canceler.cancel("Downloads canceled"); whenResolved.clear(); }
+	Promise<void> drain();
 	
 private:
 	//! Replaces a DataRef with a variant pointing into the database
@@ -220,8 +222,6 @@ private:
 	
 	friend class ObjectDB;
 };
-
-Folder::Client openObjectDB(kj::StringPtr folder);
 
 //! Simple non-persistent non-recursive cache to temporarily store DataRefs
 struct DBCache : public kj::Refcounted {

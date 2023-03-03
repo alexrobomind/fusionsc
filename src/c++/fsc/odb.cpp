@@ -10,11 +10,18 @@ using kj::str;
 using namespace capnp;
 
 namespace fsc { namespace odb {
-	
+
+/*
 Folder::Client openObjectDB(kj::StringPtr folder) {
 	auto objectDB = kj::refcounted<ObjectDB>(folder, "objectdb", false);
-	return objectDB -> getRoot();
-}
+	
+	auto clientHook = ClientHook::from(objectDB -> getRoot());
+	clientHook = clientHook.attach(kj::defer([db = mv(objectDB)]() mutable {
+		db -> cancelDownloads();
+	}));
+	
+	return Folder::Client(mv(clientHook));
+}*/
 
 // ====================== class BlobStore =======================
 	
@@ -1346,6 +1353,21 @@ Own<DBObject> ObjectDB::startDownloadTask(DataRef<AnyPointer>::Client object) {
 	whenResolved.insert(std::make_pair(id, downloadThenCleanup.fork()));
 	
 	return dbObject;
+}
+
+Promise<void> ObjectDB::drain() {
+	if(whenResolved.empty())
+		return READY_NOW;
+	
+	kj::Vector<Promise<void>> promises;
+	for(auto& idPromisePair : whenResolved) {
+		promises.add(idPromisePair.second.addBranch());
+	}
+	
+	return kj::joinPromises(promises.releaseAsArray())
+	.then([db = addRef()]() mutable {
+		return db -> drain();
+	});
 }
 	
 /*	// Remember that we are downloading this capability into the given address

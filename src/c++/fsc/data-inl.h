@@ -6,6 +6,11 @@
 
 namespace fsc {
 
+namespace odb {
+	// Defined in odb.h
+	struct DBCache;
+}
+
 namespace internal {
 
 // Specializations for TensorFor
@@ -198,6 +203,7 @@ public:
 		
 	Promise<void> clone(CloneContext context) override;
 	Promise<void> store(StoreContext context) override;
+	Promise<void> cache(CacheContext context) override;
 	
 	inline void setLimits(LocalDataService::Limits newLimits);
 	
@@ -210,6 +216,8 @@ private:
 
 	capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> serverSet;
 	Library library;
+	
+	Own<odb::DBCache> dbCache;
 	
 	LocalDataService::Limits limits;
 	MMapTemporary fileBackedMemory;

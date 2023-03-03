@@ -86,15 +86,15 @@ TEST_CASE("ODB open") {
 	LibraryThread th = l -> newThread();
 	
 	SECTION("temporary") {
-		openObjectDB("");
+		kj::refcounted<ObjectDB>("");
 	}
 	
 	SECTION("memory") {
-		openObjectDB(":memory:");
+		kj::refcounted<ObjectDB>(":memory:");
 	}
 	
 	SECTION("testDB") {
-		openObjectDB("testDB");
+		kj::refcounted<ObjectDB>("testDB");
 	}
 }
 
@@ -109,7 +109,8 @@ TEST_CASE("ODB rw") {
 	auto paf = kj::newPromiseAndFulfiller<HolderRef::Client>();
 	HolderRef::Client promiseRef(mv(paf.promise));
 	
-	Folder::Client dbRoot = openObjectDB(":memory:");
+	auto odb = kj::refcounted<ObjectDB>(":memory:");
+	Folder::Client dbRoot = odb -> getRoot();
 	
 	auto putRequest = dbRoot.putEntryRequest();
 	putRequest.setName("obj");
@@ -118,11 +119,9 @@ TEST_CASE("ODB rw") {
 	auto putResponse = putRequest.send().wait(ws);
 	auto storedObject = putResponse.getRef().asGeneric<test::DataRefHolder<capnp::Data>>();
 	
-	// Note: This section is commented out, since the object DB itself is supposed to hold open
-	// downloads, which also hold the db open recursively. There is no trivial to address this.
-	/*SECTION("fast termination") {
+	SECTION("fast termination") {
 		// Checks for memory leaks in case download process gets into limbo
-	}*/
+	}
 	
 	SECTION("failure") {
 		kj::Exception errors[4] = {
@@ -179,6 +178,8 @@ TEST_CASE("ODB rw") {
 			REQUIRE(innerCopy.get() == data);
 		}
 	}
+	
+	odb -> cancelDownloads();
 }
 
 TEST_CASE("ODB rw main") {
@@ -192,7 +193,8 @@ TEST_CASE("ODB rw main") {
 	auto paf = kj::newPromiseAndFulfiller<HolderRef::Client>();
 	HolderRef::Client promiseRef(mv(paf.promise));
 	
-	Folder::Client dbRoot = openObjectDB(":memory:");
+	auto odb = kj::refcounted<ObjectDB>(":memory:");
+	Folder::Client dbRoot = odb -> getRoot();
 	
 	auto putRequest = dbRoot.putEntryRequest();
 	putRequest.setName("obj");
@@ -238,8 +240,9 @@ TEST_CASE("ODB rw persistent") {
 		auto& ws = th -> waitScope();	
 		
 		th -> rng().randomize(data);	
-		
-		Folder::Client dbRoot = openObjectDB("testdb.sqlite");
+	
+		auto odb = kj::refcounted<ObjectDB>("testdb.sqlite");
+		Folder::Client dbRoot = odb -> getRoot();
 		
 		auto putRequest = dbRoot.putEntryRequest();
 		putRequest.setName("obj");
@@ -256,7 +259,8 @@ TEST_CASE("ODB rw persistent") {
 		LibraryThread th = l -> newThread();
 		auto& ws = th -> waitScope();		
 		
-		Folder::Client dbRoot = openObjectDB("testdb.sqlite");
+		auto odb = kj::refcounted<ObjectDB>("testdb.sqlite");
+		Folder::Client dbRoot = odb -> getRoot();
 		
 		auto getRequest = dbRoot.getEntryRequest();
 		getRequest.setName("obj");

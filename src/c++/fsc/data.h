@@ -106,6 +106,9 @@ struct DataService {
 
 constexpr capnp::ReaderOptions READ_UNLIMITED { std::numeric_limits<uint64_t>::max(), std::numeric_limits<int>::max() };
 
+//! Checks if the object in question represents a DataRef object
+Promise<bool> isDataRef(capnp::Capability::Client);
+
 //! Publishes and downloads data into LocalDataRef instances.
 /**
  * \ingroup network
