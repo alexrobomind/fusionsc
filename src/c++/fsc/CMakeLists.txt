@@ -21,6 +21,8 @@ set(
 	flt.capnp
 	hfcam.capnp
 	
+	local-vat-network.capnp
+	
 	services.capnp
 	
 	java.capnp
@@ -96,6 +98,9 @@ add_library(
 	
 	odb.h
 	odb.cpp
+	
+	local-vat-network.h
+	local-vat-network.cpp
 	
 	index.h
 	index.cpp

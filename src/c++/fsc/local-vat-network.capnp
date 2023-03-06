@@ -22,4 +22,14 @@ struct ThirdPartyCapId {
 	id @1 : UInt64;
 }
 
-struct JoinResult{]
+struct JoinKeyPart {
+	secretPiece @0 : Data;
+	secretHash @1 : Data;
+	numPieces @2 : UInt64;
+}
+
+struct JoinResult {
+	vatKey @0 : UInt64;
+}
+
+const initialVatId : VatId = (key = 0);

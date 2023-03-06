@@ -6,10 +6,11 @@
 #include "hfcam.h"
 #include "index.h"
 #include "fieldline-mapping.h"
-
-#include <kj/list.h>
+#include "local-vat-network.h"
 
 #include <capnp/rpc-twoparty.h>
+
+#include <kj/list.h>
 
 using namespace fsc;
 
@@ -204,41 +205,50 @@ class DefaultErrorHandler : public kj::TaskSet::ErrorHandler {
 	}
 };
 
-struct InProcessServerImpl : public kj::AtomicRefcounted {
+struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::BootstrapFactory<lvn::VatId> {
 	using Service = capnp::Capability;
 	using Factory = kj::Function<Service::Client()>;
+	using VatId = fsc::lvn::VatId;
 	
 	Library library;
 	mutable Factory factory;
+	
+	Own<LocalVatHub> vatHub;
+	Own<LocalVatNetwork> vatNetwork;
+	
+	kj::MutexGuarded<bool> ready;
 		
 	// The desctructor of this joins the inner runnable. Everything above
 	// can be safely used from the inside.
 	kj::Thread thread;
 	
-	Own<const kj::Executor> executor;
-	kj::MutexGuarded<bool> ready;
-	
+	// Own<const kj::Executor> executor;
 	Own<CrossThreadPromiseFulfiller<void>> doneFulfiller;
 		
 	InProcessServerImpl(kj::Function<capnp::Capability::Client()> factory) :
 		library(getActiveThread().library()->addRef()),
 		factory(mv(factory)),
-		thread(KJ_BIND_METHOD(*this, run)),
-		ready(false)
+		
+		vatHub(newLocalVatHub()),
+		vatNetwork(kj::heap<LocalVatNetwork>(*vatHub)),
+		
+		ready(false),
+		thread(KJ_BIND_METHOD(*this, run))
 	{
 		auto locked = ready.lockExclusive();
 		locked.wait([](bool ready) { return ready; });
+		thread.detach();
 	}
 	
 	~InProcessServerImpl() {
 		doneFulfiller->fulfill();
-		
-		if(library -> inShutdownMode()) {
-			thread.detach();
-		}
 	}
 	
 	Own<const InProcessServerImpl> addRef() const { return kj::atomicAddRef(*this); }
+	
+	capnp::Capability::Client createFor(VatId::Reader clientId) {
+		return factory();
+	}
 	
 	void run() {
 		// Initialize event loop
@@ -246,11 +256,19 @@ struct InProcessServerImpl : public kj::AtomicRefcounted {
 		auto lt = library -> newThread();
 		auto& ws = lt -> waitScope();
 		
+		// Create server
+		using capnp::RpcSystem;
+		using fsc::lvn::VatId;
+		
+		// Move vat network into local scope and shadow it
+		Own<LocalVatNetwork> vatNetwork = mv(this -> vatNetwork);
+		capnp::RpcSystem<VatId> rpcSystem(*vatNetwork, *this);
+		
 		Promise<void> donePromise = READY_NOW;
 		
 		{
 			auto locked = ready.lockExclusive();
-			executor = kj::getCurrentThreadExecutor().addRef();
+			// executor = kj::getCurrentThreadExecutor().addRef();
 			
 			auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
 			doneFulfiller = mv(paf.fulfiller);
@@ -263,37 +281,16 @@ struct InProcessServerImpl : public kj::AtomicRefcounted {
 	}
 	
 	Service::Client connect() const {
-		using capnp::TwoPartyVatNetwork;
 		using capnp::RpcSystem;
-		using capnp::rpc::twoparty::VatId;
-		using capnp::rpc::twoparty::Side;
 		
-		// auto pipe = getActiveThread().ioContext().provider->newTwoWayPipe();
-		auto pipe = newPipe();
-				
-		// Create server
-		auto serverRunnable = [stream = mv(pipe.ends[1]), srv = this->addRef()]() mutable -> Promise<void> {
-			// Create RPC server on stream
-			auto vatNetwork = heapHeld<TwoPartyVatNetwork>(*stream, Side::SERVER);
-			auto rpcSystem  = heapHeld<RpcSystem<VatId>>(capnp::makeRpcServer(*vatNetwork, srv->factory()));
-			
-			return vatNetwork->onDisconnect().attach(mv(srv), mv(stream), vatNetwork.x(), rpcSystem.x());
-		};
+		auto vatNetwork = heapHeld<LocalVatNetwork>(*vatHub);
+		auto rpcClient  = heapHeld<capnp::RpcSystem<VatId>>(*vatNetwork, nullptr);
+		auto client     = rpcClient -> bootstrap(LocalVatHub::INITIAL_VAT_ID);
 		
-		auto serverDone = executor->executeAsync(mv(serverRunnable));
+		auto clientHook = capnp::ClientHook::from(mv(client));
+		clientHook = clientHook.attach(rpcClient.x(), vatNetwork.x());
 		
-		// Create connection
-		auto stream = mv(pipe.ends[0]);
-		
-		auto vatNetwork = heapHeld<TwoPartyVatNetwork>(*stream, Side::CLIENT);
-		auto rpcClient  = heapHeld<RpcSystem<VatId>>(capnp::makeRpcClient(*vatNetwork));
-		
-		// Retrieve server's bootstrap interface
-		Temporary<VatId> serverID;
-		serverID.setSide(Side::SERVER);
-		auto interface = rpcClient->bootstrap(serverID);
-		
-		return attach(interface, rpcClient.x(), vatNetwork.x(), mv(stream), mv(serverDone));
+		return Service::Client(mv(clientHook));
 	}
 };
 

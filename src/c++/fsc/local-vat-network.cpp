@@ -1,138 +1,207 @@
+#include <limits>
+
 #include "local-vat-network.h"
 
-namespace fsc { namespace lvn {
-
-using LocalVatNetworkBase = capnp::TwoPartyVatNetworkBase;
-using LocalMessage = Own<capnp::MallocMessageBuilder>;
-
-using VatId = capnp::rpc::twoparty::VatId;
-
-namespace {
+namespace fsc {
 	
-struct MessageBlock {
-	capnp::MallocMessageBuilder builder;
-	kj::Array<int> fds;
-	kj::ListLink<MessageBlock> link;
+LocalVatNetwork::Message::Message(unsigned int firstSegmentSize) : builder(firstSegmentSize) {}
+
+LocalVatNetwork::Connection::Connection() {}
+LocalVatNetwork::Connection::~Connection() {}
+
+lvn::VatId::Reader LocalVatHub::INITIAL_VAT_ID = lvn::INITIAL_VAT_ID.get();
+
+Own<LocalVatHub> newLocalVatHub() {
+	return kj::atomicRefcounted<LocalVatHub>();
+}
+
+Own<const LocalVatHub> LocalVatHub::addRef() const {
+	return kj::atomicAddRef(*this);
+}
+
+struct LocalVatNetwork::Connection::IncomingMessage : public capnp::IncomingRpcMessage {
+	Message* msg;
 	
-	MessageBlock(unsigned int fsSize) : builder(fsSize) {}
+	IncomingMessage(Message* msg) : msg(msg) {};
+	~IncomingMessage() { delete msg; };
+	
+	capnp::AnyPointer::Reader getBody() override { return msg -> builder.getRoot<capnp::AnyPointer>(); }
+	size_t sizeInWords() override { return msg -> builder.sizeInWords(); }
 };
 
-struct LocalIncomingMessage : public IncomingRpcMessage {
-	MessageBlock* block;
+struct LocalVatNetwork::Connection::OutgoingMessage : public capnp::OutgoingRpcMessage {
+	Connection* conn;
+	Message* msg;
 	
-	LocalIncomingMessage(MessageBlock* block) : block(block) {};
-	~LocalIncomingMessage() { delete block; };
+	OutgoingMessage(Connection& conn, unsigned int firstSegmentWordSize) :
+		conn(&conn),
+		msg(new Message(firstSegmentWordSize))
+	{}
+	~OutgoingMessage() { if(msg != nullptr) delete msg; }
 	
-	inline AnyPointer::Reader getBody() override { return block -> builder.getRoot<AnyPointer>(); }
-	inline size_t sizeInWords() override { return block -> builder.sizeInWords(); }
-	
-	kj::ArrayPtr<kj::AutoCloseFd> getAttachedFds() override;
-};
-
-struct LocalConnection : public LocalVatNetworkBase::Connection, public kj::AtomicRefcounted {
-	struct Data {
-		bool isClosed = false;
-		kj::List<MessageBlock> blocks;
-	
-		Own<kj::CrossThreadPromiseFulfiller<void>> readyFulfiller;
-	};
-	
-	~LocalConnection() {
-		auto locked = data.lockExclusive();
-		
-		for(auto& block : blocks) {
-			delete &block;
+	capnp::AnyPointer::Builder getBody() override { return msg -> builder.getRoot<capnp::AnyPointer>(); }
+	void send() override {
+		KJ_IF_MAYBE(ppPeer, conn -> peer) {
+			(*ppPeer) -> post(msg);
+			msg = nullptr;
 		}
 	}
+	size_t sizeInWords() override { return msg -> builder.sizeInWords(); }
+};
+
+void LocalVatNetwork::Connection::post(Message* msg) const {
+	auto locked = data.lockExclusive();
 	
-	void close() {
-		auto locked = data.lockExclusive();
+	if(locked -> isClosed)
+		return;
+	
+	locked -> queue.add(*msg);
+	
+	KJ_IF_MAYBE(ppFulfiller, locked -> readyFulfiller) {
+		(*ppFulfiller) -> fulfill();
+	}
+}
+
+lvn::VatId::Reader LocalVatNetwork::Connection::getPeerVatId() {
+	return peerId;
+}
+
+Own<capnp::OutgoingRpcMessage> LocalVatNetwork::Connection::newOutgoingMessage(unsigned int firstSegmentSize) {
+	return kj::heap<OutgoingMessage>(*this, firstSegmentSize);
+}
+
+Promise<Maybe<Own<capnp::IncomingRpcMessage>>> LocalVatNetwork::Connection::receiveIncomingMessage() {	
+	auto locked = data.lockExclusive();
+	
+	auto it = locked -> queue.begin();
+	if(it != locked -> queue.end()) {
+		Message* msg = &(*it);
+		locked -> queue.remove(*it);
 		
+		Own<capnp::IncomingRpcMessage> result = kj::heap<IncomingMessage>(msg);
+		return Maybe<Own<capnp::IncomingRpcMessage>>(mv(result));
+	}
+	
+	if(locked -> isClosed)
+		return Maybe<Own<capnp::IncomingRpcMessage>>(nullptr);
+
+	auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+	locked -> readyFulfiller = mv(paf.fulfiller);
+	
+	return paf.promise.then([this]() { return receiveIncomingMessage(); });
+}
+
+Promise<void> LocalVatNetwork::Connection::shutdown() {
+	KJ_IF_MAYBE(ppPeer, peer) {
+		auto locked = (*ppPeer) -> data.lockExclusive();
 		locked -> isClosed = true;
-		for(auto& block : blocks) {
-			delete &block;
+		
+		KJ_IF_MAYBE(ppFulfiller, locked -> readyFulfiller) {
+			(*ppFulfiller) -> fulfill();
 		}
-	}	
-		
-	Own<const LocalConnection> peer;
-	
-	MutexGuarded<Data> data;
-	MallocMessageBuilder peerId;
-	
-	::vsc::lvn::VatId::Reader getPeerVatId() override;
-	
-	inline void send(MessageBlock* block) {
-		auto locked = peer->data.lockExclusive();
-		
-		if(locked -> isClosed)
-			return;
-		
-		locked -> blocks.add(*block);
-		
-		if(locked -> readyFulfiller != nullptr)
-			locked -> readyFulfiller -> fulfill();
 	}
 	
-	kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override {		
-		auto locked = data.lockExclusive();
-		
-		auto it = locked -> blocks.begin();
-		if(it != locked -> blocks.end()) {
-			MessageBlock* block = &(*it);
-			locked -> blocks.remove(*it);
-			
-			return kj::heap<LocalIncomingMessage>(block);
-		}
-		
-		if(locked -> isClosed)
-			return nullptr;
-	
-		auto paf = kj::newPromiseAndCrossThreadFulfiller();
-		locked -> readyFulfiller = mv(paf.fulfiller);
-		
-		return paf.promise.then([this]() { return receiveIncomingMessage(); });
-	}
-	
-	kj::Own<OutgoingRpcMessage> newOutgoingMessage(unsigned int firstSegmentWordSize) override; // Implemented below
-	
-	kj::Promise<void> shutdown() override {	
-		auto locked = peer -> data.lockExclusive();
-		locked.isClosed = true;
-		
-		return READY_NOW;
-	}
-		
-};
-
-struct LocalOutgoingMessage : public OutgoingRpcMessage {
-	LocalConnection* conn;
-	MessageBlock* block;
-	
-	LocalOutgoingMessage(MessageBlock* block) : block(block) {}
-	inline ~LocalOutgoingMessage() { if(block != nullptr) delete block;	}
-	
-	inline AnyPointer::Builder getBody() override { return block -> builder.getRoot<AnyPointer>(); }
-	inline void send() override { conn -> send(block); block = nullptr;	}
-	inline size_t sizeInWords() override { return block -> builder.sizeInWords(); }
-	
-	void setFds(kj::Array<int> fds) override;
-};
-
-kj::Own<OutgoingRpcMessage> LocalConnection::newOutgoingMessage(unsigned int firstSegmentWordSize) {
-	MessageBlock* mb = new MessageBlock(firstSegmentWordSize);
-	return kj::heap<LocalOutgoingMessage>(mb);
+	peer = nullptr;
+	return READY_NOW;
 }
 
-struct ConnectionRequest {
-	Own<kj::CrossThreadPromiseFulfiller<Own<LocalConnection>>> putConnectionHere;
-	Own<LocalConnection> unfinishedConnection;
-	ListLink<ConnectionRequest> pendingRequests;
-};
-
-class LocalVatNetworkImpl : public LocalVatNetwork {
-	
-};
-
+Own<const LocalVatNetwork::Connection> LocalVatNetwork::Connection::addRef() const {
+	return kj::atomicAddRef(*this);
 }
 
-}}
+lvn::VatId::Reader LocalVatNetwork::getVatId() const {
+	return vatId;
+}
+
+LocalVatNetwork::LocalVatNetwork(const LocalVatHub& hub) :
+	hub(hub.addRef())
+{
+	auto locked = hub.data.lockExclusive();
+	
+	KJ_REQUIRE(locked -> freeId < std::numeric_limits<uint64_t>::max());
+	uint64_t myID = locked -> freeId++;
+	
+	locked -> vats.insert(myID, this);
+	vatId.setKey(myID);
+}
+
+LocalVatNetwork::~LocalVatNetwork() {
+	// De-register vat from the network hub
+	{
+		auto hubLocked = hub -> data.lockExclusive();
+		hubLocked -> vats.erase(vatId.getKey());
+	}
+	
+	// From now on, we will not be receiving accept requests
+	// (since they are guarded by the hub lock)
+	
+	// Clear out the accept queue
+	auto locked = data.lockExclusive();
+	for(auto& e : locked -> acceptQueue) {
+		e.conn -> shutdown();
+		locked -> acceptQueue.remove(e);
+		delete &e;
+	}
+	
+	KJ_IF_MAYBE(ppFulfiller, locked -> readyFulfiller) {
+		(*ppFulfiller) -> reject(KJ_EXCEPTION(DISCONNECTED, "Vat network deleted"));
+	}
+}
+
+void LocalVatNetwork::acceptPeer(Own<Connection> conn) const {	
+	auto e = new AcceptEntry;
+	e -> conn = mv(conn);
+	
+	auto locked = data.lockExclusive();
+	locked -> acceptQueue.add(*e);
+	
+	KJ_IF_MAYBE(ppFulfiller, locked -> readyFulfiller) {
+		(*ppFulfiller) -> fulfill();
+	}
+}
+
+Maybe<Own<LocalVatNetworkBase::Connection>> LocalVatNetwork::connect(lvn::VatId::Reader hostId) {
+	auto hubData = hub -> data.lockExclusive();
+	
+	KJ_IF_MAYBE(pVat, hubData -> vats.find(hostId.getKey())) {
+		// Create two connection endpoints
+		auto myConn = kj::heap<Connection>();
+		auto peerConn = kj::heap<Connection>();
+		
+		// Link two connections
+		myConn -> peer = peerConn -> addRef();
+		peerConn -> peer = myConn -> addRef();
+		
+		// Store peer IDs
+		myConn -> peerId.setKey(hostId.getKey());
+		peerConn -> peerId.setKey(this -> getVatId().getKey());
+		
+		// Pass remote end to accept loop
+		(*pVat) -> acceptPeer(mv(peerConn));
+		return myConn;
+	}
+
+	return nullptr;
+}
+
+Promise<Own<LocalVatNetworkBase::Connection>> LocalVatNetwork::accept() {
+	auto locked = data.lockExclusive();
+	
+	auto it = locked -> acceptQueue.begin();
+	if(it != locked -> acceptQueue.end()) {
+		AcceptEntry* e = &(*it);
+		Own<LocalVatNetworkBase::Connection> conn = mv(e->conn);
+		locked -> acceptQueue.remove(*e);
+		delete e;
+		return conn;
+	}
+	
+	auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+	locked -> readyFulfiller = mv(paf.fulfiller);
+	
+	return paf.promise.then([this]() { return accept(); });
+}
+
+
+
+}
