@@ -507,22 +507,6 @@ Promise<void> removeDatarefs(capnp::AnyStruct::Reader in, capnp::AnyStruct::Buil
 template<typename F>
 kj::PromiseForResult<F, void> withBackoff(kj::Duration min, kj::Duration max, uint64_t growth, F func);
 
-template<typename Key, typename T, template<typename, typename> typename Map = kj::TreeMap>
-struct Cache {
-	struct Holder;
-	struct Ref;
-	
-	struct InsertResult {
-		T& element;
-		Ref ref;
-	};
-	
-	InsertResult insert(Key key, T t);
-	Maybe<T&> find(Key key);
-	
-	Map<Key, Own<Holder>> map;
-};
-
 //! Creates ID from canonical representation of reader
 template<typename T>
 ID ID::fromReader(T t) {

@@ -19,8 +19,6 @@ kj::Function<typename T::Client()> newInProcessServer(kj::Function<typename T::C
 
 RootService::Client createRoot(RootConfig::Reader config);
 
-ResolverChain::Client newResolverChain();
-
 RootService::Client connectRemote(kj::StringPtr address, unsigned int portHint = 0);
 
 struct Server {

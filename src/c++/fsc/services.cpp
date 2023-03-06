@@ -86,119 +86,6 @@ struct RootServer : public RootService::Server {
 	}
 };
 
-struct ResolverChainImpl : public virtual capnp::Capability::Server, public virtual ResolverChain::Server {
-	using capnp::Capability::Server::DispatchCallResult;
-	using ResolverChain::Server::RegisterContext;
-	
-	struct Registration {
-		ResolverChainImpl& parent;
-		kj::ListLink<Registration> link;
-		
-		capnp::Capability::Client entry;
-
-		Registration(ResolverChainImpl& parent, capnp::Capability::Client entry);
-		~Registration();
-	};
-	
-	kj::List<Registration, &Registration::link> registrations;
-	
-	Promise<void> register_(RegisterContext ctx) override {		
-		auto result = attach(
-			ResolverChain::Client(capnp::newBrokenCap(KJ_EXCEPTION(UNIMPLEMENTED, "Unimplemented"))),
-			
-			thisCap(),
-			kj::heap<Registration>(*this, ctx.getParams().getResolver())
-		);
-		ctx.initResults().setRegistration(mv(result));
-		
-		return READY_NOW;
-	};
-	
-	DispatchCallResult dispatchCall(uint64_t interfaceId, uint16_t methodId, capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> ctx) override {
-		Promise<void> result = ResolverChain::Server::dispatchCall(interfaceId, methodId, ctx).promise
-		.catch_([=](kj::Exception&& exc) mutable -> Promise<void> {
-			using capnp::AnyStruct;
-			using capnp::AnyPointer;
-			
-			// We only handle generic methods if parent didnt have it implemented
-			if(exc.getType() != kj::Exception::Type::UNIMPLEMENTED) {
-				kj::throwRecoverableException(mv(exc));
-				return READY_NOW;
-			}
-			
-			// Updatable container on heap
-			auto paramMsg = heapHeld<Own<capnp::MallocMessageBuilder>>();
-			
-			// Fill initial value from context
-			*paramMsg = kj::heap<capnp::MallocMessageBuilder>();
-			(**paramMsg).setRoot(ctx.getParams());
-			ctx.releaseParams();
-			
-			// Check that first field is set
-			{
-				auto paramsStruct = (**paramMsg).getRoot<AnyStruct>();
-				auto pSec = paramsStruct.getPointerSection();
-				KJ_REQUIRE(pSec.size() > 0);
-			}
-			
-			Promise<void> result = READY_NOW;
-			for(auto& reg : registrations) {
-				result = result.then([=, e = cp(reg.entry)]() mutable {
-					auto params = (**paramMsg).getRoot<AnyPointer>();
-					
-					auto request = e.typelessRequest(
-						interfaceId, methodId, params.targetSize(), capnp::Capability::Client::CallHints()
-					);
-					request.set(params);
-					
-					return request.send();
-				}).then([=](auto result) mutable {
-					// Copy old extra parameters into new message, but drop old result
-					{
-						auto paramsStruct = (**paramMsg).getRoot<AnyStruct>();
-						auto params       = (**paramMsg).getRoot<AnyPointer>();
-						
-						auto pSec = paramsStruct.getPointerSection();		
-						pSec[0].clear();
-						
-						auto newParamMsg = kj::heap<capnp::MallocMessageBuilder>();
-						newParamMsg->setRoot(params.asReader());
-						*paramMsg = mv(newParamMsg);
-					}
-					
-					// Copy result into params
-					auto paramsStruct = (**paramMsg).getRoot<AnyStruct>();
-					auto pSec = paramsStruct.getPointerSection();		
-					pSec[0].set(result);
-				}).catch_([](kj::Exception&& e) mutable {
-					KJ_LOG(WARNING, "Exception in resolver chain", mv(e));
-				});
-			}
-			
-			result = result.then([=]() mutable {
-				auto paramsStruct = (**paramMsg).getRoot<AnyStruct>();
-				auto pSec = paramsStruct.getPointerSection();
-				
-				ctx.getResults().set(pSec[0]);
-			});
-			
-			return result.attach(paramMsg.x(), thisCap());
-		});
-		
-		return { mv(result), false };
-	}
-};
-
-ResolverChainImpl::Registration::Registration(ResolverChainImpl& parent, capnp::Capability::Client entry) :
-	parent(parent), entry(entry)
-{
-	parent.registrations.add(*this);
-}
-
-ResolverChainImpl::Registration::~Registration() {
-	parent.registrations.remove(*this);
-}
-
 class DefaultErrorHandler : public kj::TaskSet::ErrorHandler {
 	void taskFailed(kj::Exception&& exception) override {
 		KJ_LOG(WARNING, "Exception in connection", exception);
@@ -371,10 +258,6 @@ kj::Function<capnp::Capability::Client()> fsc::newInProcessServer(kj::Function<c
 
 RootService::Client fsc::createRoot(RootConfig::Reader config) {
 	return kj::heap<RootServer>(config);
-}
-
-ResolverChain::Client fsc::newResolverChain() {
-	return kj::heap<ResolverChainImpl>();
 }
 
 RootService::Client fsc::connectRemote(kj::StringPtr address, unsigned int portHint) {
