@@ -7,13 +7,29 @@
 
 #include "eigen.h"
 #include "kernels.h"
+#include "device.h"
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 	#define FSC_WIRE_MATCHES_NATIVE
 #endif
 
 namespace fsc {
+
+template<TensorType>
+struct TensorMapping<TensorType> : public DeviceMapping<kj::Array<typename TensorType::Scalar>> {
+	using Scalar = typename TensorType::Scalar;
 	
+	TensorMap<TensorType> hostMap;
+	TensorMap<TensorType> deviceMap;
+	
+	DeviceMapping(Held<TensorType> tensor, DeviceBase& device) :
+		DeviceMaping<kj::Array<TVal>>(kj::ArrayPtr<Scalar>(tensor -> data(), tensor -> size()).attach(tensor.x())),
+		hostMap(*tensor),
+		deviceMap(DeviceMapping<kj::Array<typename TensorType::Scalar>>::get(), tensor -> dimensions())
+	{}
+	
+	TensorMap<TensorType> get() { return deviceMap; }
+};
 
 
 // ------------------- Lots of different device mappings for tensors -------------------------

@@ -256,12 +256,12 @@ struct Held {
 	Held(Held&& other) = default;
 	
 	~Held() {
-		if(owningPtr.get() != nullptr) {
-			KJ_LOG(WARNING, "Unwinding across a Held<...>. Application might segfault");
-		}
-		kj::UnwindDetector ud;
-		if(false/*!ud.isUnwinding()*/) {
+		if(!ud.isUnwinding()) {
 			KJ_REQUIRE(owningPtr.get() == nullptr, "Destroyed Held<...> without ownership transfer");
+		} else {
+			if(owningPtr.get() != nullptr) {
+				KJ_LOG(WARNING, "Unwinding across a Held<...>. Application might segfault");
+			}
 		}
 	}
 	
@@ -269,12 +269,13 @@ struct Held {
 	T* operator->() { return &ref; }
 	T* get() { return &ref; }
 	
-	Own<T> release() { return mv(owningPtr); }
-	Own<T> x() { return mv(owningPtr); }
+	Own<T> release() { KJ_REQUIRE(owningPtr.get() == &ref, "Releasing already-released held"); return mv(owningPtr); }
+	Own<T> x() { return release(); }
 	
 private:
 	Own<T> owningPtr;
 	T& ref;
+	kj::UnwindDetector ud;
 };
 
 template<typename T, typename... Params>
@@ -286,6 +287,92 @@ template<typename T>
 Held<T> ownHeld(Own<T>&& src) {
 	return Held<T>(mv(src));
 }
+
+template<typename T>
+struct Shared {
+	using Payload = T;
+	
+	Shared<typename... T>
+	Shared(T&&... t) :
+		impl(kj::refcounted<impl>(kj::fwd<T>(t)...))
+	{}
+	
+	Shared(const Shared<T>& other) :
+		impl(other.impl -> addRef())
+	{}
+	
+	Shared<T>& operator=(const Shared<T>& other) {
+		impl = other.impl -> addRef();
+	}
+	
+	Shared(Shared<T>&& other) = default;
+	Shared<T>& operator=(Shared<T>&& other) = default;
+	
+	T& get() { return impl -> payload; }
+	T& operator*() { return get(); }
+	T* operator->() { return &get(); }
+	
+	Own<T> asOwn() { return kj::attachRef(get(), *this); }
+		
+private:
+	struct Impl : kj::Refcounted {
+		Own<Payload> payload;
+		
+		template<typename... T>
+		Impl(T&&... t) :
+			payload(kj::fwd<T>(t)...)
+		{}
+		
+		Own<Impl> addRef() {
+			return kj::addRef(*this);
+		}
+	};
+	
+	mutable Own<Impl> impl;
+};
+
+template<typename T>
+struct AtomicShared {
+	using Payload = T;
+	
+	AtomicShared<typename... T>
+	AtomicShared(T&&... t) :
+		impl(kj::atomicRefcounted<impl>(kj::fwd<T>(t)...))
+	{}
+	
+	AtomicShared(const AtomicShared<T>& other) :
+		impl(other.impl -> addRef())
+	{}
+	
+	AtomicShared<T>& operator=(const AtomicShared<T>& other) {
+		impl = other.impl -> addRef();
+	}
+	
+	AtomicShared(AtomicShared<T>&& other) = default;
+	AtomicShared<T>& operator=(AtomicShared<T>&& other) = default;
+	
+	T& get() { return impl -> payload; }
+	T& operator*() { return get(); }
+	T* operator->() { return &get(); }
+	
+	Own<T> asOwn() { return kj::attachRef(get(), *this); }
+	
+private:
+	struct Impl : kj::AtomicRefcounted {
+		mutable Payload payload;
+		
+		template<typename... T>
+		Impl(T&&... t) :
+			payload(kj::fwd<T>(t)...)
+		{}
+		
+		Own<const Impl> addRef() {
+			return kj::atomicAddRef(*this);
+		}
+	};
+	
+	mutable Own<const Impl> impl;
+};
 
 // === Inline implementation ===
 
