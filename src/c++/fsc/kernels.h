@@ -64,7 +64,7 @@ namespace fsc {
 		 *  The kernel will run asynchronously. It is guaranteed that it will not start before this function has returned.
 		 */
 		template<typename Kernel, Kernel f, typename... Params>
-		static Own<const Operation> launch(Device& device, size_t n, Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
+		static Promise<void> launch(Device& device, size_t n, Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
 			static_assert(sizeof(Device) == 0, "Kernel launcher not implemented / enabled for this device.");
 			return newOperation();
 		}
@@ -73,155 +73,13 @@ namespace fsc {
 	template<>
 	struct KernelLauncher<DeviceBase>;
 	
-	//! Synchronizes device-to-host copies
-	/**
-	 * \ingroup kernelAPI
-	 * \param device Device to synchronize memcopy on.
-	 * \returns a promise whose resolution indicates that the outputs
-	 * of all previously scheduled kernels have been copied back
-	 * to the host
-	 */
-	template<typename Device>
-	Promise<void> hostMemSynchronize(Device& device, const Operation& op) {
-		static_assert(sizeof(Device) == 0, "Memcpy synchronization not implemented for this device.");
-		return NEVER_DONE;
-	}
+	template<>
+	struct KernelLauncher<CpuDevice>;
 	
-	//! Synchronizes device-to-host copies
-	/**
-	 * \ingroup kernelAPI
-	 * \param device Device to synchronize memcopy on.
-	 */
-	/*template<typename Device>
-	void hostMemSynchronizeBlocking(Device& device) {
-		static_assert(sizeof(Device) == 0, "Memcpy synchronization not implemented for this device.");
-	}*/
-
-	//! \addtogroup kernelSupport
-	//! @{
-		
-	//! Class for allocating an array on a device and manage a host and device pointer simultaneously
-	template<typename T, typename Device>
-	struct MappedData {
-		using NonConst = kj::RemoveConst<T>;
-		
-		//! This helps us prevent our program from crashing. See inside ~MappedData
-		kj::UnwindDetector unwindDetector;
-		Device& device;
-		T* hostPtr;
-		NonConst* devicePtr;
-		size_t size;
-		
-		//! Construct a mapping using the given host- and device-pointers
-		/**
-		 * \warning Takes over ownership of the device pointer. The device pointer must
-		 *          be compatible with Device::deallocate().
-		 */
-		MappedData(Device& device, T* hostPtr, NonConst* devicePtr, size_t size);
-		
-		//! Allocate storage on the device to hold data specified by hostPtr (sizeof(T) * size)
-		MappedData(Device& device, T* hostPtr, size_t size);
-		
-		//! Create a mapping with no device storage
-		MappedData(Device& device);
-		
-		//! Take over the storage from another mapping
-		MappedData(MappedData&& other);
-		
-		//! Assign the storage from another mapping
-		MappedData& operator=(MappedData&& other);
-		
-		MappedData(const MappedData& other) = delete;
-		MappedData& operator=(const MappedData& other) = delete;
-		
-		~MappedData();
-		
-		//! Copy data from device array to host array
-		void updateHost();
-		
-		//! Copy data from host array to device array
-		void updateDevice();
-		
-		//! Allocates size * sizeof(T) bytes on the device
-		static NonConst* deviceAlloc(Device& device, size_t size);
-	};
-	
-	//! Helper class template that maps a value to a target device.
-	/** 
-	 *  Specialize this template to override how a specified parameter gets converted
-	 *  into a device-located parameter.
-	 *
-	 *  The default implementation just leaves the transfer up to CUDA / HIP.
-	 */
-	template<typename T, typename Device, typename SFINAE = void>
-	struct MapToDevice {
-		inline MapToDevice(const T in, Device& device) :
-			value(in)
-		{}
-		
-		inline T get() { return value; }
-		
-		inline void updateDevice() {}
-		inline void updateHost() {}
-		
-	private:
-		T value;
-	};
-	
-	/** \brief Returns the type to be passed to the kernel for a given
-	 *         argument passed into launchKernel.
-	 * \ingroup kernelSupport
-	 */
-	template<typename T, typename Device>
-	using DeviceType = decltype(std::declval<MapToDevice<Decay<T>, Device>>().get());
-	
-	//! Method to return a device mapper for a given value
-	/**
-	 * \ingroup kernelAPI
-	 */
-	template<typename Device, typename T>
-	MapToDevice<T, Device> mapToDevice(T& in, Device& device) { return MapToDevice<T, Device>(in, device); }
-	
-	//! Instantiation of MapToDevice that allows reuse of existing mappings.
-	/**
-	 * \ingroup kernelSupport
-	 * \warning This uses a reference to the original mapping, so its lifetime
-	 * is bound by the original mapping. Care must be taken that the original
-	 * mapping object is kept alive until the scheduled kernel finishes execution.
-	 *
-	 */
-	template<typename T, typename Device>
-	struct MapToDevice<MapToDevice<T, Device>, Device> {
-		using Delegate = MapToDevice<T, Device>;
-		
-		//! LValue constructor for variables
-		inline MapToDevice(Delegate& delegate, Device& device) :
-			delegate(delegate)
-		{}
-		
-		//! RValue constructor for temporaries
-		inline MapToDevice(Delegate&& delegate, Device& device) :
-			delegate((Delegate&) delegate)
-		{}
-		
-		inline auto get() { return delegate.get(); }
-		inline void updateDevice() { delegate.updateDevice(); }
-		inline void updateHost() { delegate.updateHost(); }
-		
-	private:
-		Delegate& delegate;
-	};
-	
-	
-	//! Guard check against cross-device mapppings
-	template<typename T, typename Device, typename OtherDevice>
-	struct MapToDevice<MapToDevice<T, Device>, OtherDevice> {
-		static_assert(
-			sizeof(T) == 0, "It is illegal to use data mapped"
-			"to separate devices. We only check the static portion (device types),"
-			"so ensure carefully that the underlying error is fixed"
-		);
-	};
+	#ifdef FSC_WITH_GPU
+	template<>
+	struct KernelLauncher<GpuDevice>;
+	#endif
 	
 	//! Helper type that describes kernel arguments and their in/out semantics.
 	/**
@@ -233,18 +91,24 @@ namespace fsc {
 		
 		bool copyToHost = true;
 		bool copyToDevice = true;
+		bool allowAlias = false;
 		
 		KernelArg(T& in, bool copyToHost, bool copyToDevice, bool allowAlias) :
 			ref(in), copyToHost(copyToHost), copyToDevice(copyToDevice)
 		{}
 	};
+	
+	template<typename T>
+	struct DeviceMapping<T>;
 		
 	//! Specifies copy behavior for arguments around kernel invocation
 	enum class KernelArgType {
-		NOCOPY = 0, //!< Don't copy data between host and device for this invocation
-		IN = 1,     //!< Only copy data to the device before kernel invocation
-		OUT = 2,    //!< Copy data to host after kernel invocation
-		INOUT = 3   //!< Equivalent to IN and OUT
+		NOCOPY = 0,  //!< Don't copy data between host and device for this invocation
+		IN = 1,      //!< Only copy data to the device before kernel invocation
+		OUT = 2,     //!< Copy data to host after kernel invocation
+		INOUT = 3,   //!< Equivalent to IN and OUT
+		ALIAS_IN = 5,
+		ALIAS_INOUT = 7
 	};
 	
 	//! Allows to override the copy behavior on a specified argument
@@ -257,7 +121,8 @@ namespace fsc {
 		return kArg(
 			in,
 			static_cast<int>(type) & static_cast<int>(KernelArgType::OUT),
-			static_cast<int>(type) & static_cast<int>(KernelArgType::IN)
+			static_cast<int>(type) & static_cast<int>(KernelArgType::IN),
+			static_cast<int>(type) & 4
 		);
 	}
 	
@@ -281,9 +146,7 @@ namespace fsc {
 	template<typename T, typename Device>
 	struct MapToDevice<KernelArg<T>, Device>;
 	
-	namespace internal {			
-		extern thread_local kj::TaskSet kernelDaemon;
-		
+	namespace internal {					
 		/**
 		 * Helper function that actually launches the kernel. Needed to perform index expansion
 		 * over the parameter.
@@ -293,9 +156,6 @@ namespace fsc {
 			auto result = ownHeld(newOperation());
 			
 			// Create mappers for input
-			/*auto mappers = heapHeld<std::tuple<MapToDevice<Decay<Params>, Device>...>>(
-				MapToDevice<Decay<Params>, Device>(fwd<Params>(params), device)...
-			);*/
 			auto mappers = heapHeld<std::tuple<Own<DeviceMapping<Decay<Params>>>...>>(
 				mapToDevice<Decay<Params>>(fwd<Params>(params), device)
 			);
@@ -313,7 +173,7 @@ namespace fsc {
 			.then([&device, cost, n, mappers]() mutable {
 				// Call kernel
 				auto promise = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params, Device>...>(device, n, cost, std::get<i>(*mappers).get()...);
-				promise = promise.attach(std.get<i>(*mappers).addRef()...);
+				promise = promise.attach(device.addRef(), std.get<i>(*mappers).addRef()...);
 				return getActiveThread().uncancelable(mv(promise));
 			}).then([&device, mappers...]() mutable {
 				// Update host memory
@@ -437,12 +297,6 @@ namespace fsc {
 	//! @{
 	
 	// === Specializations of kernel launcher ===
-	
-	template<>
-	struct KernelLauncher<Eigen::DefaultDevice>;
-	
-	template<>
-	struct KernelLauncher<Eigen::ThreadPoolDevice>;
 	
 	#ifdef FSC_WITH_CUDA
 	template<>

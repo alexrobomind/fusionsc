@@ -76,6 +76,9 @@ struct DeviceMapping<kj::Array<T>>;
 template<typename T>
 struct DeviceMapping<kj::Array<const T>>;
 
+template<typename T>
+struct DeviceMapping<Own<DeviceMapping<T>>;
+
 // ---------------------- Devices ----------------------------------------------------
 
 struct CPUDevice;

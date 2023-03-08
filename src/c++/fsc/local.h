@@ -26,46 +26,6 @@ using Library = Own<const LibraryHandle>;
 class ThreadHandle;
 using LibraryThread = Own<ThreadHandle>;
 
-struct DaemonRunner : public kj::AtomicRefcounted {
-	DaemonRunner(const kj::Executor& target);
-	inline DaemonRunner() : DaemonRunner(kj::getCurrentThreadExecutor()) {}
-	
-	inline ~DaemonRunner() { disconnect(); }
-	
-	inline Own<const DaemonRunner> addRef() const { return kj::atomicAddRef(*this); }
-	
-	/**
-	 * Runs the given task in the event loop associated with this runner, if it is still available.
-	 * If the runner is disconnected, this function returns false.
-	 *
-	 * \returns true if the task could be scheduled to the target event loop, false if the runner
-	 *          is disconnected.
-	 */
-	bool run(kj::Function<Promise<void>()> func) const;
-		
-	/**
-	 * Disconnects the runner from the target thread. After returning, the target event loop can be
-	 * destroyed and existing references to this runner can safely outlive it. All attempts to schedule
-	 * tasks will fail by returning false, and the passed functions will be destroyed immediately.
-	 */
-	void disconnect() const;
-	
-	/**
-	 * Blocks the current thread until all daemon tasks have finished.
-	 * \note Since usually daemon tasks run forever or until cancelled,
-	 *       this method is intended mostly for debug purposes.
-	 */
-	Promise<void> whenDone() const;
-
-private:
-	struct Connection {
-		Own<const kj::Executor> executor;
-		Own<kj::TaskSet> tasks;
-	};
-	
-	kj::MutexGuarded<Maybe<Connection>> connection;
-};
-
 /**
  *  "Global" libary handle. This class serves as the dependency injection context
  *  for objects that should be shared across all threads. Currently, this is only
@@ -95,16 +55,13 @@ public:
 private:
 	inline LibraryHandle() :
 		storeSteward(store),
-		_daemonRunner(kj::atomicRefcounted<DaemonRunner>(storeSteward.getExecutor())),
 		shutdownMode(false)
 	{};
 	
 	inline ~LibraryHandle() {
-		_daemonRunner->disconnect();
 	}
 	
 	mutable LocalDataStore::Steward storeSteward;
-	Own<DaemonRunner> _daemonRunner;
 	kj::MutexGuarded<bool> shutdownMode;
 	
 	friend Own<LibraryHandle> kj::atomicRefcounted<LibraryHandle>();
