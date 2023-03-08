@@ -177,6 +177,14 @@ public:
 	 */
 	Own<ThreadHandle> addRef();
 	Own<const ThreadHandle> addRef() const;
+	
+	template<typename T>
+	Promise<T> uncancelable(Promise<T> p);
+	
+	Promise<void> uncancelable(Promise<void> p);
+	
+	void detach(Promise<void> p);
+	Promise<void> drain();
 		
 private:
 	kj::AsyncIoContext _ioContext;
@@ -199,6 +207,8 @@ private:
 	struct RefData;
 	
 	kj::MutexGuarded<RefData>* refData;
+	
+	kj::TaskSet detachedTasks;
 };
 
 inline ThreadHandle& getActiveThread() {
@@ -273,6 +283,16 @@ kj::Maybe<kj::Promise<UnwrapIfPromise<UnwrapMaybe<ReturnType<Func>>>>> executeMa
 }
 
 // Inline implementations
+
+template<typename T>
+Promise<T> LibraryThread::uncancelable(Promise<T> p) {
+	auto promiseTuple = p.then([](T t) {
+		return kj::tuple(t, 0);
+	).split();
+	
+	detach(kj::get<1>(promiseTuple).ignoreResult());
+	return mv(kj::get<0>(promiseTuple));
+}
 
 LibraryThread LibraryHandle::newThread() const {
 	return kj::heap<ThreadHandle>(addRef());

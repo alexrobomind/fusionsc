@@ -70,6 +70,9 @@ namespace fsc {
 		}
 	};
 	
+	template<>
+	struct KernelLauncher<DeviceBase>;
+	
 	//! Synchronizes device-to-host copies
 	/**
 	 * \ingroup kernelAPI
@@ -231,7 +234,7 @@ namespace fsc {
 		bool copyToHost = true;
 		bool copyToDevice = true;
 		
-		KernelArg(T& in, bool copyToHost, bool copyToDevice) :
+		KernelArg(T& in, bool copyToHost, bool copyToDevice, bool allowAlias) :
 			ref(in), copyToHost(copyToHost), copyToDevice(copyToDevice)
 		{}
 	};
@@ -286,38 +289,41 @@ namespace fsc {
 		 * over the parameter.
 		 */
 		template<typename Kernel, Kernel f, typename Device, typename... Params, size_t... i>
-		Own<Operation> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {
+		Promise<void> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {
 			auto result = ownHeld(newOperation());
 			
 			// Create mappers for input
-			auto mappers = heapHeld<std::tuple<MapToDevice<Decay<Params>, Device>...>>(
+			/*auto mappers = heapHeld<std::tuple<MapToDevice<Decay<Params>, Device>...>>(
 				MapToDevice<Decay<Params>, Device>(fwd<Params>(params), device)...
+			);*/
+			auto mappers = heapHeld<std::tuple<Own<DeviceMapping<Decay<Params>>>...>>(
+				mapToDevice<Decay<Params>>(fwd<Params>(params), device)
 			);
 						
 			using givemeatype = int[];
 			
-			// Call kernel
-			Promise<void> task = prerequisite.then([mappers, n, cost, &device, result = result->addRef()]() mutable {
-			// Update device memory
+			Promise<void> task = prerequisite.then([&device, mappers]() mutable {
+				// Update device memory
 				// Note: This is an extremely convoluted looking way of calling updateDevice on all tuple members
 				// C++ 17 has a neater way to do this, but we don't wanna require it just yet
 				(void) (givemeatype { 0, (std::get<i>(*mappers).updateDevice(), 0)... });
 				
-				auto kernelLaunchResult = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params, Device>...>(device, n, cost, std::get<i>(*mappers).get()...);
-				kernelLaunchResult -> attachDestroyAnywhere(mv(result));
-				return kernelLaunchResult -> whenDone();
-			}).then([device, mappers, result = result->addRef()]() mutable {
+				return device.barrier();
+			})
+			.then([&device, cost, n, mappers]() mutable {
+				// Call kernel
+				auto promise = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params, Device>...>(device, n, cost, std::get<i>(*mappers).get()...);
+				promise = promise.attach(std.get<i>(*mappers).addRef()...);
+				return getActiveThread().uncancelable(mv(promise));
+			}).then([&device, mappers...]() mutable {
+				// Update host memory
 				(void) (givemeatype { 0, (std::get<i>(*mappers).updateHost(), 0)... });
 				
-				return hostMemSynchronize(device, *result);
-			}).then([result = result->addRef()]() mutable {
-				result->done();
-			});
+				return device.barrier();
+			})
+			.attach(mappers.x(), device.addRef());
 			
-			result -> dependsOn(mv(task));			
-			result -> attachDestroyHere(mappers.x());
-			
-			return result.x();
+			return result;
 		}
 	}
 	
@@ -506,6 +512,31 @@ inline void potentiallySynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& d) {
 // Inline Implementation
 
 namespace fsc {
+
+// Multi-target launcher
+template<>
+struct KernelLauncher<DeviceBase> {
+	template<typename Kernel, Kernel f, typename... Params>
+	Promise<void> launch(DeviceBase& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+		#define FSC_HANDLE_TYPE(DevType) \
+			if(device.brand == DevType::BRAND) \
+				return KernelLauncher<DevType>::launch(static_cast<DevType&>(device), n, cost, fwd<Params>(params)...);
+				
+		FSC_HANDLE_TYPE(CpuDevice);
+		
+		#ifdef FSC_WITH_CUDA
+		FSC_HANDLE_TYPE(GpuDevice);
+		#endif
+		
+		#undef FSC_HANDLE_TYPE
+		
+		KJ_FAIL_REQUIRE(
+			"Unknown device brand. To launch kernels from a DeviceBase reference,"
+			" the device must be of one of the following types: fsc::CpuDevice"
+			" or fsc::GpuDevice"
+		);
+	}
+};
 	
 #ifdef FSC_WITH_CUDA
 #ifdef EIGEN_GPUCC
@@ -555,13 +586,43 @@ struct KernelLauncher<Eigen::DefaultDevice> {
 template<>
 struct KernelLauncher<Eigen::ThreadPoolDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
-	static Own<Operation> launch(Eigen::ThreadPoolDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
-		auto func = [params...](Eigen::Index start, Eigen::Index end) mutable {
-			for(Eigen::Index i = start; i < end; ++i)
-				f(i, params...);
+	static Promise<void> launch(Eigen::ThreadPoolDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+		auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+		AtomicShared<kj::CrossThreadPromiseFulfiller<void>> fulfiller = mv(paf.fulfiller);
+		
+		struct Context {
+			kj::MutexGuarded<Maybe<kj::Exception>> exception;
+		};
+		AtomicShared<Context> ctx = kj::heap<Context>();
+		
+		auto func = [ctx, params...](Eigen::Index start, Eigen::Index end) mutable {
+			auto maybeException = kj::runCatchingExceptions([params..., start, end]() {
+				for(Eigen::Index i = start; i < end; ++i)
+					f(i, params...);
+			});
+			
+			// If we failed, transfer exception
+			KJ_IF_MAYBE(pErr, maybeException) {
+				auto locked = ctx -> exception.lockExclusive();
+				
+				KJ_IF_MAYBE(pDontCare, *locked) {
+				} else {
+					*locked = *pErr;
+				}
+			}
 		};
 		
-		auto result = newOperation();
+		auto whenDone = [fulfiller, ctx]() mutable {
+			auto locked = ctx -> exception.lockExclusive();
+			
+			KJ_IF_MAYBE(pErr, *locked) {
+				fulfiller.reject(*pErr);
+			} else {
+				fulfiller -> fulfill();
+			}
+		};
+		
+		/*auto result = newOperation();
 		
 		struct DoneFunctor {
 			Own<const Operation> op;
@@ -585,9 +646,10 @@ struct KernelLauncher<Eigen::ThreadPoolDevice> {
 		};
 		result->attachDestroyAnywhere(mv(funcPtr));
 		
-		device.parallelForAsync(n, cost, funcCopyable, DoneFunctor(result->addRef()));
+		device.parallelForAsync(n, cost, funcCopyable, DoneFunctor(result->addRef()));*/
+		device.parallelForAsync(n, cost, func, whenDone);
 		
-		return result;
+		return mv(paf.promise);
 	}
 };
 

@@ -323,6 +323,10 @@ private:
 			payload(kj::fwd<T>(t)...)
 		{}
 		
+		Impl(Own<Payload>&& payload) :
+			payload(mv(payload))
+		{}
+		
 		Own<Impl> addRef() {
 			return kj::addRef(*this);
 		}
@@ -364,6 +368,10 @@ private:
 		template<typename... T>
 		Impl(T&&... t) :
 			payload(kj::fwd<T>(t)...)
+		{}
+		
+		Impl(Own<Payload>&& payload) :
+			payload(mv(payload))
 		{}
 		
 		Own<const Impl> addRef() {

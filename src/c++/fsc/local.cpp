@@ -20,6 +20,16 @@ std::unique_ptr<Botan::HashFunction> LibraryHandle::defaultHash() const {
 	
 // === class ThreadHandle ===
 
+namespace {
+
+struct NullErrorHandler : public kj::TaskSet::ErrorHandler {
+	static inline NullErrorHandler instance;
+	
+	void taskFailed(kj::Exception&& e) {}
+};
+
+}
+
 struct ThreadHandle::Ref {		
 	Ref(const kj::MutexGuarded<RefData>* refData);
 	~Ref();
@@ -57,7 +67,8 @@ ThreadHandle::ThreadHandle(Library l) :
 	_executor(kj::getCurrentThreadExecutor()),
 	_dataService(kj::heap<LocalDataService>(l)),
 	_filesystem(kj::newDiskFilesystem()),
-	refData(new kj::MutexGuarded<RefData>())
+	refData(new kj::MutexGuarded<RefData>()),
+	detachedTasks(NullErrorHandler::instance)
 {	
 	KJ_REQUIRE(current == nullptr, "Can only have one active ThreadHandle / LibraryThread per thread");
 	current = this;
@@ -112,6 +123,20 @@ Own<ThreadHandle> ThreadHandle::addRef() {
 
 Own<const ThreadHandle> ThreadHandle::addRef() const {
 	return Own<const ThreadHandle>(this, kj::NullDisposer::instance).attach(kj::heap<ThreadHandle::Ref>(this->refData));
+}
+
+void ThreadHandle::detach(Promise<void> p) {
+	detachedTasks.add(mv(p));
+}
+
+Promise<void> ThreadHandle::drain() {
+	return detachedTasks.onEmpty();
+}
+
+Promise<void> ThreadHandle::uncancelable(Promise<void> p) {
+	auto forked = p.fork();
+	detach(p.addBranch());
+	return p.addBranch();
 }
 
 // === class CrossThreadConnection ===
