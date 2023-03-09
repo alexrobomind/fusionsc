@@ -248,6 +248,9 @@ public:
 	template<typename T>
 	typename T::Reader get(const capnp::ReaderOptions& options);
 	
+	// Returns an additional owning ref to the underlying data
+	kj::Array<const byte> addRefRaw();
+	
 	// Returns a reader to the locally stored metadata
 	Metadata::Reader localMetadata();
 	

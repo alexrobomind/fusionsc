@@ -8,7 +8,7 @@ struct DeviceMapping<kj::Array<T>> : public DeviceMappingBase {
 	bool aliased;
 	
 	DeviceMapping(kj::Array<T> array, DeviceBase& device, bool allowAlias = false) :
-		MappingBase(device),
+		DeviceMappingBase(device),
 		hostArray(mv(array))
 	{
 		size_t elementCount = hostArray->size();
@@ -40,7 +40,7 @@ struct DeviceMapping<kj::Array<const T>> : public DeviceMappingBase {
 	kj::ArrayPtr<T> deviceArray;
 	
 	DeviceMapping(kj::Array<T> array, DeviceBase& device, bool allowAlias = false) :
-		MappingBase(device),
+		DeviceMappingBase(device),
 		hostArray(mv(array))
 	{
 		kj::byte* hackedHost = const_cast<kj::byte*>(hostArray->begin());
@@ -66,26 +66,21 @@ struct DeviceMapping<kj::Array<const T>> : public DeviceMappingBase {
 	}
 };
 
-struct CPUDevice : public DeviceBase, public kj::Refcounted {
-	static int BRAND;
+template<typename T>
+struct DeviceMapping<Own<DeviceMapping<T>>> : public DeviceMappingBase {
+	Own<DeviceMapping<T>> target;
 	
-	CPUDevice();
-	~CPUDevice();
+	DeviceMapping(Own<DeviceMapping<T>> otherMapping, DeviceBase& device, bool allowAlias) :
+		DeviceMappingBase(device),
+		target(mv(otherMapping))
+	{}
 	
-	void updateDevice(kj::byte* devicePtr, const kj::byte* hostPtr, size_t size) override;
-	void updateHost(kj::byte* hostPtr, const kj::byte* devicePtr, size_t size) override;
-	kj::byte* map(const kj::byte* hostPtr, size_t size, bool allowAlias) override;
-	void unmap(const kj::byte* hostPtr, kj::byte* devicePtr) override;
+	void doUpdateHost() override { target -> doUpdateHost(); }
+	void doUpdateDevice() override { target -> doUpdateDevice(); }
 	
-	kj::byte* translateToDevice(kj::byte* hostPtr) override ;
-	
-	Own<DeviceBase> addRef() override;
-	
-	Own<Eigen::ThreadPoolDevice> eigenDevice;
-};
-
-struct GPUDevice : public DeviceBase, public kj::Refcounted {
-	
+	auto get() {
+		return target -> get();
+	}
 };
 
 }

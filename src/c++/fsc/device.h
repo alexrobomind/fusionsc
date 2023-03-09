@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include "eigen.h"
 
 namespace Eigen {
 	struct ThreadPoolDevice;
@@ -56,16 +57,26 @@ protected:
 };
 
 template<typename T>
-struct DeviceMapping {
-	static_assert(sizeof(T) == 0, "No device mapping defined for this type");
+struct DeviceMapping : public DeviceMappingbase {
+	T target;
+	
+	DeviceMapping(T newTarget, DeviceBase& device, bool allowAlias) :
+		DeviceMappingBase(device),
+		target(newTarget)
+	{}
+
+	void doUpdateDevice() override {}
+	void doUpdateHost() override {}
+	
+	T get() { return target; }
 };
 
 template<typename T>
 using DeviceType<T> = decltype(std::declval<DeviceMapping<T>>().get());
 
 template<typename T, typename... Args>
-Own<DeviceMapping<T>> mapToDevice(T t, DeviceBase& device, Args... args) {
-	return kj::refcounted<DeviceMapping<T>>(t, device, kj::fwd<Args>(args)...)
+Own<DeviceMapping<T>> mapToDevice(T t, DeviceBase& device, bool allowAlias, Args... args) {
+	return kj::refcounted<DeviceMapping<T>>(t, device, allowAlias, kj::fwd<Args>(args)...)
 }
 
 // ---------------------- Mapping type for simple arrays -----------------------------
@@ -81,8 +92,29 @@ struct DeviceMapping<Own<DeviceMapping<T>>;
 
 // ---------------------- Devices ----------------------------------------------------
 
-struct CPUDevice;
-struct GPUDevice;
+
+struct CPUDevice : public DeviceBase, public kj::Refcounted {
+	static int BRAND;
+	
+	CPUDevice();
+	~CPUDevice();
+	
+	void updateDevice(kj::byte* devicePtr, const kj::byte* hostPtr, size_t size) override;
+	void updateHost(kj::byte* hostPtr, const kj::byte* devicePtr, size_t size) override;
+	kj::byte* map(const kj::byte* hostPtr, size_t size, bool allowAlias) override;
+	void unmap(const kj::byte* hostPtr, kj::byte* devicePtr) override;
+	
+	kj::byte* translateToDevice(kj::byte* hostPtr) override ;
+	
+	Own<DeviceBase> addRef() override;
+	
+	Own<Eigen::ThreadPoolDevice> eigenDevice;
+};
+
+/*
+struct GPUDevice : public DeviceBase, public kj::Refcounted {
+};
+*/
 
 }
 

@@ -6,79 +6,12 @@
 
 #include <capnp/serialize.h>
 
-#define CAPNP_PRIVATE
-#include <capnp/arena.h>
-#undef CAPNP_PRIVATE
-
 namespace fsc {
 	
 template<typename T>
 using CuPtr = cupnp::TypedLocation<T>;
 	
 namespace internal {
-	
-/**
- * Takes a table to potentially const memory and changes it to non-const pointers.
- * This is just for internal storage, constness of the memory should still be assumed
- * unless known to be mutable.
- */
-template<typename T>
-kj::Array<kj::ArrayPtr<capnp::word>> coerceSegmentTableToNonConst(T table) {	
-	auto outputTable = kj::heapArray<kj::ArrayPtr<capnp::word>>(table.size());
-	
-	for(size_t i = 0; i < table.size(); ++i) {
-		auto maybeConstPtr = table[i].begin();
-		capnp::word* nonConstPtr = const_cast<capnp::word*>(maybeConstPtr);
-		size_t nWords = table[i].size();
-		
-		outputTable[i] = kj::ArrayPtr<capnp::word>(nonConstPtr, nWords);
-	}
-	
-	return outputTable;
-}
-
-inline kj::Array<kj::ArrayPtr<const capnp::word>> extractSegmentTable(kj::ArrayPtr<const capnp::word> flatArray) {
-	capnp::FlatArrayMessageReader reader(flatArray);
-	
-	kj::Vector<ArrayPtr<const capnp::word>> segments;
-	
-	size_t iSegment = 0;
-	while(true) {
-		auto segment = reader.getSegment(iSegment++);
-		if(segment == nullptr)
-			break;
-		
-		segments.add(segment);
-	}
-	
-	return segments.releaseAsArray();
-}
-
-inline kj::Array<kj::ArrayPtr<capnp::word>> extractSegmentTable(capnp::_::BuilderArena* builderArena) {
-	return coerceSegmentTableToNonConst(builderArena -> getSegmentsForOutput());
-}
-
-inline kj::Array<kj::ArrayPtr<const capnp::word>> extractSegmentTable(capnp::_::ReaderArena* readerArena) {
-	kj::Vector<kj::ArrayPtr<const capnp::word>> table;
-	
-	size_t i = 0;
-	while(true) {
-		auto reader = readerArena -> tryGetSegment(capnp::_::SegmentId(i));
-		if(reader != nullptr)
-			table.add(reader -> getStartPtr(), reader -> getSize() / capnp::WORDS);
-		else
-			break;
-	}
-	
-	return table.releaseAsArray();
-}
-
-inline kj::Array<cupnp::SegmentTable::Entry> buildSegmentTable(kj::ArrayPtr<kj::ArrayPtr<capnp::word>> input) {
-	auto result = kj::heapArrayBuilder<cupnp::SegmentTable::Entry>(input.size());
-	for(auto e : input)
-		result.add(e);
-	return result.finish();
-}
 
 inline kj::Array<const capnp::word> newEmptyMessage() {
 	auto emptyMessage = kj::heapArray<kj::byte>({
@@ -97,207 +30,90 @@ inline kj::Array<const capnp::word> EMPTY_MESSAGE = internal::newEmptyMessage();
 
 }
 
-template<typename T>
-struct CupnpMessage {	
-	// kj::Array<kj::ArrayPtr<capnp::word>> segmentTable;
-	kj::Array<cupnp::SegmentTable::Entry> segmentTable;
-	
-	T root() {
-		return cupnp::messageRoot<T>(segmentTable[0], segmentTable);
-	}
-	
-	CupnpMessage(capnp::MessageBuilder& builder) :
-		segmentTable(internal::buildSegmentTable(internal::coerceSegmentTableToNonConst(builder.getSegmentsForOutput())))
-	{}
-	
-	CupnpMessage(capnp::MessageReader& reader)
-	{
-		KJ_REQUIRE(std::is_const<T>::value, "Can only build non-const messages from message builders");
-		
-		kj::Vector<kj::ArrayPtr<const capnp::word>> segments;
-		
-		size_t segmentId = 0;
-		while(true) {
-			auto segment = reader.getSegment(segmentId++);
-			
-			if(segment == nullptr) break;
-			
-			segments.add(segment);
-		}
-		
-		segmentTable = internal::buildSegmentTable(internal::coerceSegmentTableToNonConst(segments.releaseAsArray()));
-	}
-	
-	template<typename T2>
-	CupnpMessage(Temporary<T2>& t) :
-		CupnpMessage(*(t.holder))
-	{}
-	
-	CupnpMessage(kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> segments) :
-		segmentTable(internal::buildSegmentTable(internal::coerceSegmentTableToNonConst(segments)))
-	{}
-	
-	CupnpMessage(kj::ArrayPtr<kj::ArrayPtr<capnp::word>> segments) :
-		segmentTable(internal::buildSegmentTable(segments))
-	{}
-	
-	CupnpMessage(std::nullptr_t) :
-		CupnpMessage(internal::EMPTY_MESSAGE.asPtr())
-	{}
-	
-	CupnpMessage(kj::ArrayPtr<const kj::byte> flatData) :
-		CupnpMessage(bytesToWords(flatData))
-	{}
-	
-	CupnpMessage(kj::ArrayPtr<const capnp::word> flatData) :
-		CupnpMessage(internal::extractSegmentTable(flatData.size() > 0 ? flatData : internal::EMPTY_MESSAGE.asPtr()))
-	{}
-	
-	template<typename T2>
-	CupnpMessage(LocalDataRef<T2>& srcData) :
-		CupnpMessage(bytesToWords(srcData.getRaw()))
-	{}
-	
-	template<typename Builder, typename Builds = capnp::FromBuilder<Builder>>
-	static CupnpMessage<cupnp::AnyData> forMessageContaining(Builder b) {
-		capnp::_::StructBuilder& cpBuilder = b.builder;
-		capnp::_::BuilderArena* arena = cpBuilder.getArena();
-		
-		return CupnpMessage<cupnp::AnyData>(internal::extractSegmentTable(arena));
-	}
-	
-	Maybe<uint32_t> locateSegment(const char* ptr) {
-		for(auto& segment : segmentTable) {
-			if(ptr >= reinterpret_cast<const char*>(segment.begin()) && ptr < reinterpret_cast<const char*>(segment.end())) {
-				return &segment - segmentTable.begin();
-			}
-		}
-		return nullptr;
-	}
-	
-	template<typename T2, typename Builder, typename Builds = capnp::FromBuilder<Builder>>
-	T2 translateBuilder(Builder b) {
-		KJ_REQUIRE(!std::is_const<T>::value, "Const messages can not translate builders");
-		
-		capnp::_::StructBuilder& cpBuilder = b.builder;
-		auto dataSection = cpBuilder.getDataSectionAsBlob();
-		int16_t ptrSectionSize = cpBuilder.getPointerSectionSize();
-		
-		cupnp::Location dataLoc;
-		dataLoc.segments = cupnp::SegmentTable(segmentTable);
-		dataLoc.ptr = const_cast<unsigned char*>(dataSection.begin()); // This is a builder, this memory doesn't have to be const...
-		KJ_IF_MAYBE(pSegId, locateSegment(dataSection.begin())) {
-			dataLoc.segmentId = *pSegId;
-		} else {
-			KJ_FAIL_REQUIRE("Could not locate given builder in message");
-		}
-		return T2(dataSection.size(), ptrSectionSize, dataLoc);
-	}
-	
-	template<typename T2, typename Reader, typename Reads = capnp::FromReader<Reader>>
-	const T2 translateReader(Reader r2) {
-		capnp::_::StructReader& cpReader = r2.reader;
-		auto dataSection = cpReader.getDataSectionAsBlob();
-		int16_t ptrSectionSize = cpReader.getPointerSectionSize();
-		
-		cupnp::Location dataLoc;
-		dataLoc.segments = cupnp::SegmentTable(segmentTable);
-		dataLoc.ptr = const_cast<unsigned char*>(dataSection.begin()); // Memory is guarded through const-ness of the result type
-		KJ_IF_MAYBE(pSegId, locateSegment(dataSection.begin())) {
-			dataLoc.segmentId = *pSegId;
-		} else {
-			KJ_FAIL_REQUIRE("Could not locate given builder in message");
-		}
-		return T2(dataSection.size(), ptrSectionSize, dataLoc);
-	}
+// Helpers to attach types to message builders & readers
+
+template<typename HostType, typename CupnpType>
+struct CuTypedMessageBuilder {
+	Own<capnp::MessageBuilder> builder;
 };
 
-namespace internal {
-	template<typename T, typename T2>
-	struct InferCuTIfVoid_ { using type = T2; };
-	
-	template<typename T>
-	struct InferCuTIfVoid_<T, void> { using type = cupnp::CuFor<T>; };
-	
-	template<typename T1, typename T2>
-	using InferCuTIfVoid = typename InferCuTIfVoid_<T1, T2>::type;
+template<typename HostType, typename CupnpType>
+struct CuTypedMessageReader {
+	Own<capnp::MessageReader> reader;
+};
+
+template<typename HostType, typename CupnpType>
+auto cuTyped(Own<capnp::MessageBuilder> builder) {
+	return CuTypedMessageBuilder<HostType, CupnpType> { mv(builder); }
 }
 
-template<typename CuT = void, typename T>
-CupnpMessage<internal::InferCuTIfVoid<T, CuT>> cupnpMessageFromTemporary(Temporary<T>& tmp) {
-	return CupnpMessage<internal::InferCuTIfVoid<T, CuT>>(*(tmp.holder));
+template<typename HostType, typename CupnpType>
+auto cuTyped(Own<capnp::MessageReader> builder) {
+	return CuTypedMessageReader<HostType, CupnpType> { mv(builder); }
 }
+
+template<typename HostType, typename CupnpType>
+auto cuTyped(LocalDataRef<HostType> ldr) {
+	Own<capnp::MessageReader> reader = kj::heap<capnp::FlatArrayMessageReader>(ldr.getRaw()).attach(ldr);
+	return cuTyped<HostType, CupnpType>(mv(reader));
+}
+
+template<typename HostType, typename CupnpType>
+auto cuTyped(std::nullptr_t) {
+	Own<capnp::MessageReader> reader = kj::heap<capnp::FlatArrayMessageReader>(internal::EMPTY_MESSAGE);
+	return cuTyped<HostType, CupnpType>(mv(reader));
+}
+
+// Mappings for untyped messages
+
+template<>
+struct DeviceMapping<Own<capnp::MessageBuilder>> : public DeviceMappingBase {
+	DeviceMapping(Own<capnp::MessageBuilder> builder, DeviceBase& device, bool allowAlias);
+	~DeviceMapping();
 	
-template<typename T, typename Device>
-struct MapToDevice<CupnpMessage<T>, Device> {
-	using Msg = CupnpMessage<T>;
+	void doUpdateHost() override ;
+	void doUpdateDevice() override ;
 	
-	// Msg& original;
-	Device& device;
+	cupnp::Location get();
 	
-	kj::Array<MappedData<capnp::word, Device>> deviceSegments;
+private:
+	kj::Array<Own<DeviceMapping<kj::Array<kj::word>>>> segmentMappings;
+};
+
+template<>
+struct DeviceMapping<Own<capnp::MessageReader>> : public DeviceMappingBase {
+	DeviceMapping(Own<capnp::MessageReader> builder, DeviceBase& device, bool allowAlias);
+	~DeviceMapping();
 	
-	kj::Array<cupnp::SegmentTable::Entry> hostSegmentTable;
-	MappedData<cupnp::SegmentTable::Entry, Device> deviceSegmentTable;
+	void doUpdateHost() override ;
+	void doUpdateDevice() override ;
 	
-	MapToDevice(Msg& original, Device& device) :
-		device(device), deviceSegmentTable(device)
-	{
-		size_t nSegments = original.segmentTable.size();
-		
-		// Allocate segments
-		{
-			auto builder = kj::heapArrayBuilder<MappedData<capnp::word, Device>>(nSegments);
-			
-			for(size_t i = 0; i < nSegments; ++i) {
-				cupnp::SegmentTable::Entry segment = original.segmentTable[i];
-				
-				builder.add(device, segment.begin(), segment.size());
-			}
-			
-			deviceSegments = builder.finish();
-		}
-		
-		// Gather device pointers
-		{
-			auto builder = kj::heapArrayBuilder<cupnp::SegmentTable::Entry>(nSegments);
-			
-			for(size_t i = 0; i < nSegments; ++i) {
-				builder.add(kj::ArrayPtr<capnp::word>(
-					deviceSegments[i].devicePtr,
-					deviceSegments[i].size
-				));
-			}
-			
-			hostSegmentTable = builder.finish();
-		}
-		
-		// Map segment table onto device
-		deviceSegmentTable = MappedData(device, hostSegmentTable.begin(), hostSegmentTable.size());
-		deviceSegmentTable.updateDevice();
-	}
+	cupnp::Location get();
 	
-	void updateHost() {
-		if(std::is_const<T>::value)
-			return;
+private:
+	kj::Array<Own<DeviceMapping<kj::Array<kj::word>>>> segmentMappings;
+};
+
+// Mappings for typed messages
+
+template<typename HostType, typename CupnpType>
+struct DeviceMapping<CuTypedMessageBuilder<HostType, CupnpType>> : public DeviceMapping<Own<MessageBuilder>> {
+	DeviceMapping(CuTypedMessageBuilder<HostType, CupnpType>&& typedBuilder, DeviceBase& device, bool allowAlias) :
+		DeviceMapping<Own<MessageBuilder>>(mv(typedBuilder.builder), device, allowAlias)
+	{}
 	
-		for(auto& segment : deviceSegments) {
-			segment.updateHost();
-		}
-	}
+	cupnp::Location getUntyped() { return DeviceMapping<Own<MessageBuilder>>::get(); }
+	CuPtr<CupnpType> get() { return getUntyped(); }
+};
+
+template<typename HostType, typename CupnpType>
+struct DeviceMapping<CuTypedMessageReader<HostType, CupnpType>> : public DeviceMapping<Own<MessageReader>> {
+	DeviceMapping(CuTypedMessageReader<HostType, CupnpType>&& typedReader, DeviceBase& device, bool allowAlias) :
+		DeviceMapping<Own<MessageReader>>(mv(typedReader.reader), device, allowAlias)
+	{}
 	
-	void updateDevice() {
-		for(auto& segment : deviceSegments) {
-			segment.updateDevice();
-		}
-	}
-	
-	CuPtr<T> get() {
-		kj::ArrayPtr<cupnp::SegmentTable::Entry> ptrSegmentTable(deviceSegmentTable.devicePtr, deviceSegmentTable.size);
-		cupnp::SegmentTable::Entry firstSegment = hostSegmentTable[0];
-		
-		return cupnp::messageRoot<T>(firstSegment, cupnp::SegmentTable(ptrSegmentTable));
-	}
+	cupnp::Location getUntyped() { return DeviceMapping<Own<MessageReader>>::get(); }
+	CuPtr<CupnpType> get() { return getUntyped(); }
 };
 
 }

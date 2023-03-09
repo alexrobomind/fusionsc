@@ -177,68 +177,6 @@ inline bool hasActiveThread() {
 	return ThreadHandle::current != nullptr;
 }
 
-
-/**
- * Class that can be used to connect two different threads with each other.
- * Must be constructed in the context of a running event loop. When both accept
- * and connect are called, their promises resolve to two ends of a local connection.
- * Each method can be called by any thread with an active event loop. Currently,
- * the local connection is implemented by a loopback network TCP/IP connection.
- *
- * The information required to connect to the other side (currently, the
- * accepting port number) is exchanged through the event loop present during the
- * constructor of CrossThreadConnection. This event loop must run until the port
- * information is exchanged, otherwise the promises will not resolve.
- *
- * accept() and connect() can be called in any order, just as their promises
- * can be waited on in any order. They can also be called from a single thread,
- * as long as this thread (obviously) doesn't wait() on any of the two promises
- * before having both methods called.
- *
- * WARNING: Currently, this object must be kept alive until the handshake is complete.
- * Preferably, this restriction will be lifted in the future.
- */
-class CrossThreadConnection {
-public:
-	CrossThreadConnection();
-	
-	Promise<Own<kj::AsyncIoStream>> accept(ThreadHandle& h);
-	Promise<Own<kj::AsyncIoStream>> connect(ThreadHandle& h);
-	
-	// Size of the random security token transfered to validate the connection
-	static constexpr size_t tokenSize = 128;
-	
-private:
-	const kj::Executor& _exec;
-	kj::PromiseFulfillerPair<kj::uint> _port;
-	
-	bool _acceptCalled;
-	bool _connectCalled;
-	
-	FixedArray<byte, tokenSize> sendToken1;
-	FixedArray<byte, tokenSize> recvToken1;
-	
-	FixedArray<byte, tokenSize> sendToken2;
-	FixedArray<byte, tokenSize> recvToken2;
-};
-
-kj::TwoWayPipe newPipe();
-
-template<typename Func>
-kj::Maybe<kj::Promise<UnwrapIfPromise<UnwrapMaybe<ReturnType<Func>>>>> executeMaybe(const kj::Executor& executor, Func&& func) {
-	using T = UnwrapIfPromise<UnwrapMaybe<decltype(func())>>;
-
-	// Run f on the other side to get the maybe
-	kj::Maybe<kj::Promise<T>> maybe = executor.executeSync(kj::fwd<Func>(func));
-	
-	KJ_IF_MAYBE(ptr, maybe) {
-		// If the maybe is not empty, use the executor to transfer the contained promise
-		return executor.executeAsync([&]() { return kj::mv(*ptr); });
-	} else {
-		return nullptr;
-	}
-}
-
 // Inline implementations
 
 template<typename T>
