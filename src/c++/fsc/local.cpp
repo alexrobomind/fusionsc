@@ -82,6 +82,8 @@ ThreadHandle::~ThreadHandle() {
 	// remaining active thread. We can not BANK on it, but we can not wait
 	// for any other promises on the event loop to resolve.
 	if(!_library->inShutdownMode()) {
+		drain().wait(waitScope());
+		
 		while(true) {
 			Promise<void> noMoreRefs = READY_NOW;
 			
@@ -102,6 +104,8 @@ ThreadHandle::~ThreadHandle() {
 		
 		delete refData;
 	} else {
+		detachedTasks.clear();
+		
 		bool canDeleteRefdata = false;
 		{
 			auto locked = refData -> lockExclusive();
