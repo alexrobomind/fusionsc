@@ -80,9 +80,6 @@ CuTypedMessageReader<HostType, CupnpType> cuReader(Maybe<T> maybe) {
 
 // Mappings for untyped messages
 
-struct CapnpMapping : public DeviceMappingBase {
-};
-
 template<>
 struct DeviceMapping<Own<capnp::MessageBuilder>> : public DeviceMappingBase {
 	DeviceMapping(Own<capnp::MessageBuilder> builder, DeviceBase& device, bool allowAlias);
