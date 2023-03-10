@@ -18,7 +18,7 @@ TEST_CASE("build-field") {
 	auto& ws = lt->waitScope();
 		
 	auto grid = TEST_GRID.get();
-	auto session = newFieldCalculator(newThreadPoolDevice());
+	auto session = newFieldCalculator(kj::heap<CPUDevice>());
 	
 	auto computeRequest = session.computeRequest();
 	computeRequest.setField(WIRE_FIELD.get());

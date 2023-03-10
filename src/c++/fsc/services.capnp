@@ -22,10 +22,6 @@ enum WorkerType {
 	gpu @1;
 }
 
-interface ResolverChain extends(Magnetics.FieldResolver, Geometry.GeometryResolver) {
-	register @0 (resolver : Capability) -> (registration : Capability);
-}
-
 interface RootService {
 	newFieldCalculator @0 (preferredDeviceType : WorkerType = gpu) -> (service : Magnetics.FieldCalculator, deviceType : WorkerType);
 	newGeometryLib     @1 () -> (service    : Geometry.GeometryLib);
