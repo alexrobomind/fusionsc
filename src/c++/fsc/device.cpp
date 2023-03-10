@@ -1,5 +1,6 @@
 #include "device.h"
 #include "local.h"
+#include "eigen.h"
 
 namespace fsc {
 	
@@ -52,11 +53,19 @@ Own<DeviceMappingBase> DeviceMappingBase::addRef() {
 
 int CPUDevice::BRAND = 0;
 
-CPUDevice::CPUDevice() :
-	DeviceBase(&BRAND)
+CPUDevice::CPUDevice(unsigned int numThreads) :
+	DeviceBase(&BRAND),
+	eigenDevice(createEigenDevice(numThreads))
 {}
 
 CPUDevice::~CPUDevice() {}
+
+Own<Eigen::ThreadPoolDevice> CPUDevice::createEigenDevice(unsigned int numThreads) {
+	Own<Eigen::ThreadPoolInterface> threadPool = kj::heap<Eigen::ThreadPool>(numThreads);
+	Own<Eigen::ThreadPoolDevice> poolDevice = kj::heap<Eigen::ThreadPoolDevice>(threadPool.get(), numThreads);
+	
+	return poolDevice.attach(mv(threadPool));
+}
 
 void CPUDevice::updateDevice(kj::byte* devicePtr, const kj::byte* hostPtr, size_t size) {
 	if(devicePtr == nullptr)

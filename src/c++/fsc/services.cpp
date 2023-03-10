@@ -21,14 +21,14 @@ kj::Tuple<Own<DeviceBase>, WorkerType> selectDevice(WorkerType preferredType) {
 	
 	try {
 		if(preferredType == WorkerType::GPU) {
-			return kj:tuple(kj::heap<GPUDevice>(), WorkerType::GPU);
+			return kj:tuple(kj::refcounted<GPUDevice>(), WorkerType::GPU);
 		}
 	} catch(kj::Exception& e) {
 	}
 	
 	#endif
 	
-	return kj::tuple(kj::heap<CPUDevice>(), WorkerType::CPU);
+	return kj::tuple(kj::refcounted<CPUDevice>(), WorkerType::CPU);
 }
 
 struct RootServer : public RootService::Server {

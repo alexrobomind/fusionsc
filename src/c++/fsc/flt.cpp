@@ -617,7 +617,7 @@ struct FLTImpl : public FLT::Server {
 
 				results.getEndPoints().setShape(startPointShape);
 				results.getEndPoints().getShape().set(0, 4);
-			});
+			}).attach(calc.x());
 		});
 		});
 		});
