@@ -8,7 +8,6 @@ namespace fsc {
 // === class LibraryHandle ===
 
 void LibraryHandle::stopSteward() const {
-	_daemonRunner->disconnect();
 	storeSteward.stop();
 }
 
@@ -23,10 +22,12 @@ std::unique_ptr<Botan::HashFunction> LibraryHandle::defaultHash() const {
 namespace {
 
 struct NullErrorHandler : public kj::TaskSet::ErrorHandler {
-	static inline NullErrorHandler instance;
+	static NullErrorHandler instance;
 	
 	void taskFailed(kj::Exception&& e) {}
 };
+
+NullErrorHandler NullErrorHandler::instance;
 
 }
 
@@ -139,8 +140,8 @@ Promise<void> ThreadHandle::drain() {
 
 Promise<void> ThreadHandle::uncancelable(Promise<void> p) {
 	auto forked = p.fork();
-	detach(p.addBranch());
-	return p.addBranch();
+	detach(forked.addBranch());
+	return forked.addBranch();
 }
 
 }

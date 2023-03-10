@@ -16,48 +16,39 @@ using namespace fsc;
 
 namespace {
 	
-template<typename T>
-auto selectDevice(T t, WorkerType preferredType) {
+kj::Tuple<Own<DeviceBase>, WorkerType> selectDevice(WorkerType preferredType) {
 	#ifdef FSC_WITH_CUDA
 	
 	try {
 		if(preferredType == WorkerType::GPU) {
-			return tuple(t(newGpuDevice()), WorkerType::GPU);
+			return kj:tuple(kj::heap<GPUDevice>(), WorkerType::GPU);
 		}
 	} catch(kj::Exception& e) {
 	}
 	
 	#endif
 	
-	return tuple(t(newThreadPoolDevice()/*newDefaultDevice()*/), WorkerType::CPU);
+	return kj::tuple(kj::heap<CPUDevice>(), WorkerType::CPU);
 }
 
 struct RootServer : public RootService::Server {
 	RootServer(RootConfig::Reader config) {}
 	
 	Promise<void> newFieldCalculator(NewFieldCalculatorContext context) override {
-		auto factory = [this, context](auto device) mutable {
-			return ::fsc::newFieldCalculator(/*context.getParams().getGrid(), */mv(device));
-		};
-		
-		auto selectResult = selectDevice(factory, context.getParams().getPreferredDeviceType());
+		auto selectResult = selectDevice(context.getParams().getPreferredDeviceType());
 		
 		auto results = context.getResults();
-		results.setService(kj::get<0>(selectResult));
+		results.setService(::fsc::newFieldCalculator(mv(kj::get<0>(selectResult))));
 		results.setDeviceType(kj::get<1>(selectResult));
 		
 		return READY_NOW;
 	}
 	
-	Promise<void> newTracer(NewTracerContext context) override {
-		auto factory = [this, context](auto device) mutable {
-			return ::fsc::newFLT(mv(device));
-		};
+	Promise<void> newTracer(NewTracerContext context) override {		
+		auto selectResult = selectDevice(context.getParams().getPreferredDeviceType());
 		
-		auto selectResult = selectDevice(factory, context.getParams().getPreferredDeviceType());
-		
-		auto results = context.initResults();
-		results.setService(kj::get<0>(selectResult));
+		auto results = context.getResults();
+		results.setService(::fsc::newFLT(mv(kj::get<0>(selectResult))));
 		results.setDeviceType(kj::get<1>(selectResult));
 		
 		return READY_NOW;

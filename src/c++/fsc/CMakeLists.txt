@@ -125,9 +125,6 @@ add_library(
 	http.h
 	http.cpp
 	
-	operation.h
-	operation.cpp
-	
 	devices/w7x.h
 	devices/w7x.cpp
 	
@@ -193,7 +190,6 @@ if(BUILD_TESTING)
 		http-tests.cpp
 		services-tests.cpp
 		flt-tests.cpp
-		operation-tests.cpp
 		interpolation-tests.cpp
 		fieldline-mapping-tests.cpp
 		devices/w7x-test.cpp

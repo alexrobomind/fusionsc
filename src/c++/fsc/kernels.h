@@ -7,6 +7,7 @@
 #endif
 
 #include "device.h"
+#include "local.h"
 	
 #ifdef FSC_WITH_CUDA
 	#ifdef EIGEN_GPUCC
@@ -65,7 +66,7 @@ namespace fsc {
 		template<typename Kernel, Kernel f, typename... Params>
 		static Promise<void> launch(Device& device, size_t n, Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
 			static_assert(sizeof(Device) == 0, "Kernel launcher not implemented / enabled for this device.");
-			return newOperation();
+			return READY_NOW;
 		}
 	};
 	
@@ -73,11 +74,11 @@ namespace fsc {
 	struct KernelLauncher<DeviceBase>;
 	
 	template<>
-	struct KernelLauncher<CpuDevice>;
+	struct KernelLauncher<CPUDevice>;
 	
 	#ifdef FSC_WITH_GPU
 	template<>
-	struct KernelLauncher<GpuDevice>;
+	struct KernelLauncher<GPUDevice>;
 	#endif
 	
 	//! Helper type that describes kernel arguments and their in/out semantics.
@@ -93,7 +94,7 @@ namespace fsc {
 		bool allowAlias = false;
 		
 		KernelArg(T in, bool copyToHost, bool copyToDevice, bool allowAlias) :
-			target(in), copyToHost(copyToHost), copyToDevice(copyToDevice)
+			target(mv(in)), copyToHost(copyToHost), copyToDevice(copyToDevice)
 		{}
 	};
 		
@@ -110,17 +111,24 @@ namespace fsc {
 	
 	//! Allows to override the copy behavior on a specified argument
 	template<typename T>
-	KernelArg<T> kArg(T in, bool copyToHost, bool copyToDevice) { return KernelArg<T>(in, copyToHost, copyToDevice); }
+	KernelArg<T> kArg(T in, bool copyToHost, bool copyToDevice, bool allowAlias) { return KernelArg<T>(mv(in), copyToHost, copyToDevice, allowAlias); }
 	
 	//! Allows to override the copy behavior on a specified argument
 	template<typename T>
-	KernelArg<T> kArg(T& in, KernelArgType type) {
+	KernelArg<T> kArg(T in, KernelArgType type) {
 		return kArg(
-			in,
+			mv(in),
 			static_cast<int>(type) & static_cast<int>(KernelArgType::OUT),
 			static_cast<int>(type) & static_cast<int>(KernelArgType::IN),
 			static_cast<int>(type) & 4
 		);
+	}
+	
+	//! Allows creation of a kernel arg form reference
+	template<typename T>
+	KernelArg<Own<DeviceMapping<T>>> kArg(Own<DeviceMapping<T>>& ref, KernelArgType type) {
+		Own<DeviceMappingBase> newRef = ref->addRef();
+		return kArg<Own<DeviceMapping<T>>>(newRef.downcast<DeviceMapping<T>>(), type);
 	}
 	
 	//! Convenience macro to wrap kernel arguments with the given type
@@ -149,38 +157,40 @@ namespace fsc {
 		 * over the parameter.
 		 */
 		template<typename Kernel, Kernel f, typename Device, typename... Params, size_t... i>
-		Promise<void> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {
-			auto result = ownHeld(newOperation());
-			
+		Promise<void> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {		
 			// Create mappers for input
-			auto mappers = heapHeld<std::tuple<Own<DeviceMapping<Decay<Params>>>...>>(
-				mapToDevice<Decay<Params>>(fwd<Params>(params), device)
-			);
+			auto mappers = heapHeld<kj::Tuple<DeviceMappingType<Decay<Params>>...>>(kj::tuple(
+				mapToDevice(fwd<Decay<Params>>(params), device, true)...
+			));
 						
 			using givemeatype = int[];
 			
-			Promise<void> task = prerequisite.then([&device, mappers]() mutable {
+			return prerequisite.then([&device, mappers]() mutable {
 				// Update device memory
 				// Note: This is an extremely convoluted looking way of calling updateDevice on all tuple members
 				// C++ 17 has a neater way to do this, but we don't wanna require it just yet
-				(void) (givemeatype { 0, (std::get<i>(*mappers).updateDevice(), 0)... });
+				(void) (givemeatype { 0, (kj::get<i>(*mappers) -> updateDevice(), 0)... });
 				
 				return device.barrier();
 			})
 			.then([&device, cost, n, mappers]() mutable {
 				// Call kernel
-				auto promise = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params, Device>...>(device, n, cost, std::get<i>(*mappers).get()...);
-				promise = promise.attach(device.addRef(), std.get<i>(*mappers).addRef()...);
+				Promise<void> promise = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params>...>(device, n, cost, kj::get<i>(*mappers) -> get()...);
+				promise = promise.attach(device.addRef(), kj::get<i>(*mappers) -> addRef()...);
 				return getActiveThread().uncancelable(mv(promise));
-			}).then([&device, mappers...]() mutable {
+			}).then([&device, mappers]() mutable {
 				// Update host memory
-				(void) (givemeatype { 0, (std::get<i>(*mappers).updateHost(), 0)... });
+				(void) (givemeatype { 0, (kj::get<i>(*mappers) -> updateHost(), 0)... });
 				
 				return device.barrier();
 			})
 			.attach(mappers.x(), device.addRef());
-			
-			return result;
+		}
+		
+		template<typename Kernel, Kernel f, typename Device, typename... Params, size_t... i>
+		Promise<void> auxKernelLaunch(const Own<Device>& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {		
+			static_assert(sizeof(Device) == 0, "Kernel launch requires Device as argument, not Own<Device>");
+			return READY_NOW;
 		}
 	}
 	
@@ -309,14 +319,15 @@ namespace fsc {
 
 template<typename T>
 struct DeviceMapping<KernelArg<T>> : public DeviceMappingBase {
-	Own<DeviceMapping<T>> target;
+	DeviceMappingType<T> target;
 	bool copyToDevice;
 	bool copyToHost;
 
-	DeviceMapping(KernelArg<T>&& arg, DeviceBase& device, bool allowAlias) :
+	DeviceMapping(KernelArg<T>&& arg, DeviceBase& device, bool allowAlias__ignored) :
+		DeviceMappingBase(device),
 		target(mapToDevice(mv(arg.target), device, arg.allowAlias)),
-		copyToDevice(target.copyToDevice),
-		copyToHost(target.copyToHost)
+		copyToDevice(arg.copyToDevice),
+		copyToHost(arg.copyToHost)
 	{}
 	
 	void doUpdateHost() override {
@@ -329,31 +340,6 @@ struct DeviceMapping<KernelArg<T>> : public DeviceMappingBase {
 	
 	auto get() {
 		return target -> get();
-	}
-};
-
-// Multi-target launcher
-template<>
-struct KernelLauncher<DeviceBase> {
-	template<typename Kernel, Kernel f, typename... Params>
-	Promise<void> launch(DeviceBase& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
-		#define FSC_HANDLE_TYPE(DevType) \
-			if(device.brand == DevType::BRAND) \
-				return KernelLauncher<DevType>::launch(static_cast<DevType&>(device), n, cost, fwd<Params>(params)...);
-				
-		FSC_HANDLE_TYPE(CpuDevice);
-		
-		#ifdef FSC_WITH_CUDA
-		FSC_HANDLE_TYPE(GpuDevice);
-		#endif
-		
-		#undef FSC_HANDLE_TYPE
-		
-		KJ_FAIL_REQUIRE(
-			"Unknown device brand. To launch kernels from a DeviceBase reference,"
-			" the device must be of one of the following types: fsc::CpuDevice"
-			" or fsc::GpuDevice"
-		);
 	}
 };
 	
@@ -385,7 +371,7 @@ namespace internal {
 #endif // FSC_WITH_CUDA
 
 
-template<>
+/*template<>
 struct KernelLauncher<Eigen::DefaultDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
 	static Own<Operation> launch(Eigen::DefaultDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
@@ -400,12 +386,12 @@ struct KernelLauncher<Eigen::DefaultDevice> {
 		
 		return result;
 	}
-};
+};*/
 
 template<>
-struct KernelLauncher<CpuDevice> {
+struct KernelLauncher<CPUDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
-	static Promise<void> launch(CpuDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+	static Promise<void> launch(CPUDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
 		auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
 		AtomicShared<kj::CrossThreadPromiseFulfiller<void>> fulfiller = mv(paf.fulfiller);
 		
@@ -435,7 +421,7 @@ struct KernelLauncher<CpuDevice> {
 			auto locked = ctx -> exception.lockExclusive();
 			
 			KJ_IF_MAYBE(pErr, *locked) {
-				fulfiller.reject(*pErr);
+				fulfiller -> reject(cp(*pErr));
 			} else {
 				fulfiller -> fulfill();
 			}
@@ -471,5 +457,30 @@ struct KernelLauncher<Eigen::GpuDevice> {
 };
 
 #endif // FSC_WITH_CUDA
+
+// Multi-target launcher
+template<>
+struct KernelLauncher<DeviceBase> {
+	template<typename Kernel, Kernel func, typename... Params>
+	static Promise<void> launch(DeviceBase& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+		#define FSC_HANDLE_TYPE(DevType) \
+			if(device.brand == &DevType::BRAND) \
+				return KernelLauncher<DevType>::launch<Kernel, func, Params...>(static_cast<DevType&>(device), n, cost, fwd<Params>(params)...);
+				
+		FSC_HANDLE_TYPE(CPUDevice);
+		
+		#ifdef FSC_WITH_CUDA
+		FSC_HANDLE_TYPE(GpuDevice);
+		#endif
+		
+		#undef FSC_HANDLE_TYPE
+		
+		KJ_FAIL_REQUIRE(
+			"Unknown device brand. To launch kernels from a DeviceBase reference,"
+			" the device must be of one of the following types: fsc::CpuDevice"
+			" or fsc::GpuDevice"
+		);
+	}
+};
 
 }

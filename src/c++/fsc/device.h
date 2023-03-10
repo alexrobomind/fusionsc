@@ -3,6 +3,8 @@
 #include "common.h"
 #include "eigen.h"
 
+#include <type_traits>
+
 namespace Eigen {
 	struct ThreadPoolDevice;
 	struct GpuDevice;
@@ -46,9 +48,9 @@ struct DeviceMappingBase : public kj::Refcounted {
 	DeviceMappingBase(DeviceBase& device);
 	virtual ~DeviceMappingBase();
 	
-	inline void updateHost();
-	inline void updateDevice();
-	inline Own<DeviceMappingBase> addRef();
+	void updateHost();
+	void updateDevice();
+	Own<DeviceMappingBase> addRef();
 
 protected:
 	virtual void doUpdateHost() = 0;
@@ -57,7 +59,7 @@ protected:
 };
 
 template<typename T>
-struct DeviceMapping : public DeviceMappingbase {
+struct DeviceMapping : public DeviceMappingBase {
 	T target;
 	
 	DeviceMapping(T newTarget, DeviceBase& device, bool allowAlias) :
@@ -72,12 +74,25 @@ struct DeviceMapping : public DeviceMappingbase {
 };
 
 template<typename T>
-using DeviceType<T> = decltype(std::declval<DeviceMapping<T>>().get());
-
-template<typename T, typename... Args>
-Own<DeviceMapping<T>> mapToDevice(T t, DeviceBase& device, bool allowAlias, Args... args) {
-	return kj::refcounted<DeviceMapping<T>>(t, device, allowAlias, kj::fwd<Args>(args)...)
+Own<DeviceMapping<T>> mapToDevice(T t, DeviceBase& device, bool allowAlias) {
+	return kj::refcounted<DeviceMapping<T>>(mv(t), device, allowAlias);
 }
+
+template<typename T>
+Own<DeviceMapping<T>> mapToDevice(Own<DeviceMapping<T>>&& mapping, DeviceBase& device, bool allowAlias) {
+	return mv(mapping);
+}
+
+template<typename T>
+Own<DeviceMapping<T>> mapToDevice(Own<DeviceMapping<T>>& mapping, DeviceBase& device, bool allowAlias) {
+	return mapping -> addRef().template downcast<DeviceMapping<T>>();
+}
+
+template<typename T>
+using DeviceMappingType = decltype(mapToDevice(std::declval<T>(), std::declval<DeviceBase&>(), true));
+
+template<typename T>
+using DeviceType = decltype(std::declval<DeviceMappingType<T>>() -> get());
 
 // ---------------------- Mapping type for simple arrays -----------------------------
 
@@ -86,9 +101,6 @@ struct DeviceMapping<kj::Array<T>>;
 
 template<typename T>
 struct DeviceMapping<kj::Array<const T>>;
-
-template<typename T>
-struct DeviceMapping<Own<DeviceMapping<T>>;
 
 // ---------------------- Devices ----------------------------------------------------
 
@@ -104,7 +116,9 @@ struct CPUDevice : public DeviceBase, public kj::Refcounted {
 	kj::byte* map(const kj::byte* hostPtr, size_t size, bool allowAlias) override;
 	void unmap(const kj::byte* hostPtr, kj::byte* devicePtr) override;
 	
-	kj::byte* translateToDevice(kj::byte* hostPtr) override ;
+	kj::byte* translateToDevice(kj::byte* hostPtr) override;
+	
+	Promise<void> emplaceBarrier() override;
 	
 	Own<DeviceBase> addRef() override;
 	

@@ -15,187 +15,109 @@
 
 namespace fsc {
 
-template<TensorType>
-struct TensorMapping<TensorType> : public DeviceMapping<kj::Array<typename TensorType::Scalar>> {
+template<typename TensorType>
+struct TensorMapping : public DeviceMapping<kj::Array<typename TensorType::Scalar>> {
 	using Scalar = typename TensorType::Scalar;
 	
 	TensorMap<TensorType> hostMap;
 	TensorMap<TensorType> deviceMap;
 	
-	DeviceMapping(Held<TensorType> tensor, DeviceBase& device) :
-		DeviceMaping<kj::Array<TVal>>(kj::ArrayPtr<Scalar>(tensor -> data(), tensor -> size()).attach(tensor.x())),
+	TensorMapping(Held<TensorType> tensor, DeviceBase& device, bool allowAlias) :
+		DeviceMapping<kj::Array<Scalar>>(kj::ArrayPtr<Scalar>(tensor -> data(), tensor -> size()).attach(tensor.x()), device, allowAlias),
 		hostMap(*tensor),
-		deviceMap(DeviceMapping<kj::Array<typename TensorType::Scalar>>::get(), tensor -> dimensions())
+		deviceMap(DeviceMapping<kj::Array<typename TensorType::Scalar>>::get().begin(), tensor -> dimensions())
+	{}
+	
+	TensorMapping(Held<TensorMap<TensorType>> tensor, DeviceBase& device, bool allowAlias) :
+		DeviceMapping<kj::Array<Scalar>>(kj::ArrayPtr<Scalar>(tensor -> data(), tensor -> size()).attach(tensor.x()), device, allowAlias),
+		hostMap(*tensor),
+		deviceMap(DeviceMapping<kj::Array<Scalar>>::get(), tensor -> dimensions())
 	{}
 	
 	TensorMap<TensorType> get() { return deviceMap; }
+	TensorMap<TensorType> getHost() { return hostMap; }
 };
 
-
-// ------------------- Lots of different device mappings for tensors -------------------------
-
-template<typename TVal, int tRank, int tOpts, typename Index, typename Device>
-struct MapToDevice<Tensor<TVal, tRank, tOpts, Index>, Device> : public TensorMap<Tensor<RemoveConst<TVal>, tRank, tOpts, Index>> {
-	using MapsFrom = Tensor<TVal, tRank, tOpts, Index>;
-	using Parent = TensorMap<Tensor<RemoveConst<TVal>, tRank, tOpts, Index>>;
-
-	MappedData<TVal, Device> _data;
-
-	MapToDevice(MapsFrom& target, Device& device) :
-		Parent(
-			MappedData<TVal, Device>::deviceAlloc(device, target.size()),
-			target.dimensions()
-		),
-		_data(device, target.data() /* Host pointer */, this->data() /* Device pointer allocated above */, this->size() /* Same as target.size() */)
+template<typename TensorType>
+struct ConstTensorMapping : public DeviceMapping<kj::Array<const typename TensorType::Scalar>> {
+	using Scalar = typename TensorType::Scalar;
+	
+	TensorMap<const TensorType> hostMap;
+	TensorMap<TensorType> deviceMap;
+	
+	ConstTensorMapping(Held<TensorMap<const TensorType>> tensor, DeviceBase& device, bool allowAlias) :
+		DeviceMapping<kj::Array<const Scalar>>(kj::ArrayPtr<const Scalar>(tensor -> data(), tensor -> size()).attach(tensor.x()), device, allowAlias),
+		hostMap(*tensor),
+		deviceMap(DeviceMapping<kj::Array<const Scalar>>::get().begin(), tensor -> dimensions())
 	{}
-
-	void updateHost() { _data.updateHost(); }
-	void updateDevice() { _data.updateDevice(); }
 	
-	Parent get() { return Parent(*this); }
+	TensorMap<TensorType> get() { return deviceMap; }
+	TensorMap<const TensorType> getHost() { return hostMap; }
 };
 
-template<typename TVal, int tRank, int tOpts, typename Index, typename Device>
-struct MapToDevice<const Tensor<TVal, tRank, tOpts, Index>, Device> : public TensorMap<Tensor<RemoveConst<TVal>, tRank, tOpts, Index>> {
-	using MapsFrom = const Tensor<TVal, tRank, tOpts, Index>;
-	using Parent = TensorMap<Tensor<RemoveConst<TVal>, tRank, tOpts, Index>>;
-
-	MappedData<const TVal, Device> _data;
-
-	MapToDevice(MapsFrom& target, Device& device) :
-		Parent(
-			MappedData<TVal, Device>::deviceAlloc(device, target.size()),
-			target.dimensions()
-		),
-		_data(device, target.data() /* Host pointer */, this->data() /* Device pointer allocated above */, this->size() /* Same as target.size() */)
-	{ /*KJ_DBG(target.data(), this->data());*/ }
-
-	void updateHost() { _data.updateHost(); }
-	void updateDevice() { _data.updateDevice(); }
-	
-	Parent get() { KJ_DBG("get()", this->data()); return Parent(*this); }
+template<typename TVal, int tRank, int tOpts, typename Index>
+struct DeviceMapping<Tensor<TVal, tRank, tOpts, Index>>
+	: public TensorMapping<Tensor<TVal, tRank, tOpts, Index>>
+{
+	DeviceMapping(Tensor<TVal, tRank, tOpts, Index> t, DeviceBase& device, bool allowAlias) :
+		TensorMapping<Tensor<TVal, tRank, tOpts, Index>>(
+			heapHeld<Tensor<TVal, tRank, tOpts, Index>>(mv(t)),
+			device,
+			allowAlias
+		)
+	{}
 };
 
-template<typename TVal, typename Dims, int options, typename Index, typename Device>
-struct MapToDevice<TensorFixedSize<TVal, Dims, options, Index>, Device> : public TensorMap<TensorFixedSize<RemoveConst<TVal>, Dims, options, Index>> {
-	using MapsFrom = TensorFixedSize<TVal, Dims, options, Index>;
-	using Parent = TensorMap<TensorFixedSize<RemoveConst<TVal>, Dims, options, Index>>;
-	
-	MappedData<TVal, Device> _data;
-
-	MapToDevice(MapsFrom& target, Device& device) :
-		Parent(
-			MappedData<TVal, Device>::deviceAlloc(device, target.data(), target.size())
-		),
-		_data(target.data(), target.size())
-	{ /*KJ_DBG(target.data(), this->data());*/ }
-
-	void updateHost() { _data.updateHost(); }
-	void updateDevice() { _data.updateDevice(); }
-	
-	Parent get() { KJ_DBG("get()", this->data()); return Parent(*this); }
+template<typename TVal, typename Dims, int options, typename Index>
+struct DeviceMapping<TensorFixedSize<TVal, Dims, options, Index>>
+	: public TensorMapping<TensorFixedSize<TVal, Dims, options, Index>>
+{
+	DeviceMapping(TensorFixedSize<TVal, Dims, options, Index> t, DeviceBase& device, bool allowAlias) :
+		TensorMapping<TensorFixedSize<TVal, Dims, options, Index>>(
+			heapHeld<TensorFixedSize<TVal, Dims, options, Index>>(mv(t)),
+			device,
+			allowAlias
+		)
+	{}
 };
 
-template<typename TVal, typename Dims, int options, typename Index, typename Device>
-struct MapToDevice<const TensorFixedSize<TVal, Dims, options, Index>, Device> : public TensorMap<TensorFixedSize<RemoveConst<TVal>, Dims, options, Index>> {
-	using MapsFrom = TensorFixedSize<TVal, Dims, options, Index>;
-	using Parent = TensorMap<TensorFixedSize<RemoveConst<TVal>, Dims, options, Index>>;
-	
-	MappedData<const TVal, Device> _data;
-
-	MapToDevice(MapsFrom& target, Device& device) :
-		Parent(
-			MappedData<TVal, Device>::deviceAlloc(device, target.data(), target.size())
-		),
-		_data(target.data(), target.size())
-	{ /*KJ_DBG(target.data(), this->data());*/ }
-
-	void updateHost() { _data.updateHost(); }
-	void updateDevice() { _data.updateDevice(); }
-	
-	Parent get() { /*KJ_DBG("get()", this->data());*/ return Parent(*this); }
+template<typename T>
+struct DeviceMapping<Own<TensorMap<T>>>
+	: public TensorMapping<T>
+{
+	DeviceMapping(Own<TensorMap<T>> t, DeviceBase& device, bool allowAlias) :
+		TensorMapping<T>(
+			ownHeld<TensorMap<T>>(mv(t)),
+			device,
+			allowAlias
+		)
+	{}
 };
 
-template<typename TVal, int tRank, int tOpts, typename Index, typename Device>
-struct MapToDevice<TensorMap<Tensor<TVal, tRank, tOpts, Index>>, Device> : public TensorMap<Tensor<RemoveConst<TVal>, tRank, tOpts, Index>> {
-	using MapsFrom = TensorMap<Tensor<TVal, tRank, tOpts, Index>>;
-	using Parent = TensorMap<Tensor<RemoveConst<TVal>, tRank, tOpts, Index>>;
-
-	MappedData<TVal, Device> _data;
-
-	MapToDevice(MapsFrom& target, Device& device) :
-		Parent(
-			MappedData<TVal, Device>::deviceAlloc(device, target.size()),
-			target.dimensions()
-		),
-		_data(device, target.data() /* Host pointer */, this->data() /* Device pointer allocated above */, this->size() /* Same as target.size() */)
-	{ /*KJ_DBG(target.data(), this->data());*/ }
-
-	void updateHost() { _data.updateHost(); }
-	void updateDevice() { _data.updateDevice(); }
-	
-	Parent get() { /*KJ_DBG("get()", this->data());*/ return Parent(*this); }
+template<typename T>
+struct DeviceMapping<Own<TensorMap<const T>>>
+	: public ConstTensorMapping<T>
+{
+	DeviceMapping(Own<TensorMap<const T>> t, DeviceBase& device, bool allowAlias) :
+		ConstTensorMapping<T>(
+			ownHeld<TensorMap<const T>>(mv(t)),
+			device,
+			allowAlias
+		)
+	{}
 };
 
-template<typename TVal, int tRank, int tOpts, typename Index, typename Device>
-struct MapToDevice<TensorMap<const Tensor<TVal, tRank, tOpts, Index>>, Device> : public TensorMap<Tensor<RemoveConst<TVal>, tRank, tOpts, Index>> {
-	using MapsFrom = TensorMap<const Tensor<TVal, tRank, tOpts, Index>>;
-	using Parent = TensorMap<Tensor<RemoveConst<TVal>, tRank, tOpts, Index>>;
-
-	MappedData<const TVal, Device> _data;
-
-	MapToDevice(MapsFrom& target, Device& device) :
-		Parent(
-			MappedData<TVal, Device>::deviceAlloc(device, target.size()),
-			target.dimensions()
-		),
-		_data(device, target.data() /* Host pointer */, this->data() /* Device pointer allocated above */, this->size() /* Same as target.size() */)
-	{ /*KJ_DBG(target.data(), this->data());*/ }
-
-	void updateHost() { _data.updateHost(); }
-	void updateDevice() { _data.updateDevice(); }
-	
-	Parent get() { /*KJ_DBG("get()", this->data());*/ return Parent(*this); }
-};
-
-template<typename TVal, typename Dims, int options, typename Index, typename Device>
-struct MapToDevice<TensorMap<TensorFixedSize<TVal, Dims, options, Index>>, Device> : public TensorMap<TensorFixedSize<RemoveConst<TVal>, Dims, options, Index>> {
-	using MapsFrom = TensorMap<TensorFixedSize<TVal, Dims, options, Index>>;
-	using Parent = TensorMap<TensorFixedSize<RemoveConst<TVal>, Dims, options, Index>>;
-	
-	MappedData<TVal, Device> _data;
-
-	MapToDevice(MapsFrom& target, Device& device) :
-		Parent(
-			MappedData<TVal, Device>::deviceAlloc(device, target.data(), target.size())
-		),
-		_data(target.data(), target.size())
-	{ /*KJ_DBG(target.data(), this->data());*/ }
-
-	void updateHost() { _data.updateHost(); }
-	void updateDevice() { _data.updateDevice(); }
-	
-	Parent get() { KJ_DBG("get()", this->data()); return Parent(*this); }
-};
-
-template<typename TVal, typename Dims, int options, typename Index, typename Device>
-struct MapToDevice<TensorMap<const TensorFixedSize<TVal, Dims, options, Index>>, Device> : public TensorMap<TensorFixedSize<RemoveConst<TVal>, Dims, options, Index>> {
-	using MapsFrom = TensorMap<const TensorFixedSize<TVal, Dims, options, Index>>;
-	using Parent = TensorMap<TensorFixedSize<RemoveConst<TVal>, Dims, options, Index>>;
-	
-	MappedData<const TVal, Device> _data;
-
-	MapToDevice(MapsFrom& target, Device& device) :
-		Parent(
-			MappedData<TVal, Device>::deviceAlloc(device, target.data(), target.size())
-		),
-		_data(target.data(), target.size())
-	{ /*KJ_DBG(target.data(), this->data());*/ }
-
-	void updateHost() { _data.updateHost(); }
-	void updateDevice() { _data.updateDevice(); }
-	
-	Parent get() { KJ_DBG("get()", this->data()); return Parent(*this); }
+template<typename TVal, typename Dims, int options, typename Index>
+struct DeviceMapping<Own<TensorMap<const TensorFixedSize<TVal, Dims, options, Index>>>>
+	: public ConstTensorMapping<TensorFixedSize<TVal, Dims, options, Index>>
+{
+	DeviceMapping(Own<TensorMap<const TensorFixedSize<TVal, Dims, options, Index>>> t, DeviceBase& device, bool allowAlias) :
+		ConstTensorMapping<TensorFixedSize<TVal, Dims, options, Index>>(
+			ownHeld<TensorMap<const TensorFixedSize<TVal, Dims, options, Index>>>(mv(t)),
+			device,
+			allowAlias
+		)
+	{}
 };
 
 // ===================== Reads and writes form serialized tensors ========================

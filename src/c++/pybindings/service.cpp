@@ -57,12 +57,6 @@ RootService::Client connectRemote1(kj::StringPtr address, unsigned int port) {
 	return attach(server, mv(serverFactory));
 }*/
 
-
-ResolverChain::Client newResolverChain1() {
-	fscpy::PyContext::startEventLoop();
-	return newResolverChain();
-}
-
 struct LocalRootServer {
 	kj::Function<capnp::Capability::Client()> clientFactory;
 	
@@ -88,8 +82,6 @@ namespace fscpy {
 		m.def("connectSameThread", &connectSameThread2);
 		// m.def("connectLocal", &connectLocal1);
 		m.def("connectRemote", &connectRemote1, py::arg("address"), py::arg("port") = 0);
-		m.def("newResolverChain", &newResolverChain1);
-		m.def("newCache", &fsc::newCache);
 		
 		py::class_<LocalRootServer>(m, "LocalRootServer")
 			.def(py::init<>())
@@ -104,7 +96,6 @@ namespace fscpy {
 			capnp::schema::Node,
 			RootService,
 			OfflineData,
-			ResolverChain,
 			MergedGeometry,
 			FLTStopReason,
 			FieldlineMapping
@@ -122,7 +113,7 @@ namespace fscpy {
 		
 		// Root module
 		{		
-			auto schemas = getBuiltinSchemas<FieldResolver, GeometryResolver, RootService, OfflineData, ResolverChain, MergedGeometry, FieldlineMapping>();
+			auto schemas = getBuiltinSchemas<FieldResolver, GeometryResolver, RootService, OfflineData, MergedGeometry, FieldlineMapping>();
 				
 			for(auto node : schemas) {
 				defaultLoader.importNodeIfRoot(node.getId(), m);

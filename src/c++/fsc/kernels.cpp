@@ -92,18 +92,4 @@ void synchronizeGpuDevice(Eigen::GpuDevice& device, const Operation& op) {
 	
 #endif
 
-namespace {
-	
-struct ErrorHandler : public kj::TaskSet::ErrorHandler {
-	void taskFailed(kj::Exception&& exception) override {
-		KJ_LOG(WARNING, "Update Host task failed", exception);
-	}
-};
-
-ErrorHandler errorHandler;
-
-}
-
-thread_local kj::TaskSet internal::kernelDaemon(errorHandler);
-
 }

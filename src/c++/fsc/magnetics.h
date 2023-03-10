@@ -34,21 +34,7 @@ public:
 /**
  * Creates a new field calculator.
  */
-FieldCalculator::Client newFieldCalculator(/*ToroidalGrid::Reader grid, */kj::Own<Eigen::ThreadPoolDevice> device);
-
-/**
- * Creates a new field calculator.
- */
-FieldCalculator::Client newFieldCalculator(/*ToroidalGrid::Reader grid, */kj::Own<Eigen::DefaultDevice> device);
-
-#ifdef FSC_WITH_CUDA
-
-/**
- * Creates a new gpu-based field calculator.
- */
-FieldCalculator::Client newFieldCalculator(/*ToroidalGrid::Reader grid, */kj::Own<Eigen::GpuDevice> device);
-
-#endif
+FieldCalculator::Client newFieldCalculator(Own<DeviceBase> dev);
 
 /**
  * Creates a field resolver that will insert a cache instruction when detecting the passed field

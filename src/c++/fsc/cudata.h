@@ -43,30 +43,39 @@ struct CuTypedMessageReader {
 };
 
 template<typename HostType, typename CupnpType>
-auto cuTyped(Own<capnp::MessageBuilder> builder) {
-	return CuTypedMessageBuilder<HostType, CupnpType> { mv(builder); }
+CuTypedMessageBuilder<HostType, CupnpType> cuBuilder(Own<capnp::MessageBuilder> builder) {
+	return { mv(builder) };
 }
 
 template<typename HostType, typename CupnpType>
-auto cuTyped(Own<capnp::MessageReader> builder) {
-	return CuTypedMessageReader<HostType, CupnpType> { mv(builder); }
+CuTypedMessageBuilder<HostType, CupnpType> cuBuilder(Temporary<HostType>&& tmp) {
+	return cuBuilder<HostType, CupnpType>(mv(tmp.holder));
 }
 
 template<typename HostType, typename CupnpType>
-auto cuTyped(LocalDataRef<HostType> ldr) {
-	Own<capnp::MessageReader> reader = kj::heap<capnp::FlatArrayMessageReader>(ldr.getRaw()).attach(ldr);
-	return cuTyped<HostType, CupnpType>(mv(reader));
+CuTypedMessageReader<HostType, CupnpType> cuReader(Own<capnp::MessageReader> reader) {
+	return { mv(reader) };
 }
 
 template<typename HostType, typename CupnpType>
-auto cuTyped(Temporary<HostType>&& tmp) {
-	return cuTyped<HostType, CupnpType>(mv(tmp.builder));
+CuTypedMessageReader<HostType, CupnpType> cuReader(LocalDataRef<HostType> ldr) {
+	Own<capnp::MessageReader> reader = kj::heap<capnp::FlatArrayMessageReader>(bytesToWords(ldr.getRaw())).attach(ldr);
+	return cuReader<HostType, CupnpType>(mv(reader));
 }
 
 template<typename HostType, typename CupnpType>
-auto cuTyped(std::nullptr_t) {
+CuTypedMessageReader<HostType, CupnpType> cuReader(std::nullptr_t) {
 	Own<capnp::MessageReader> reader = kj::heap<capnp::FlatArrayMessageReader>(internal::EMPTY_MESSAGE);
-	return cuTyped<HostType, CupnpType>(mv(reader));
+	return cuReader<HostType, CupnpType>(mv(reader));
+}
+
+template<typename HostType, typename CupnpType, typename T>
+CuTypedMessageReader<HostType, CupnpType> cuReader(Maybe<T> maybe) {
+	KJ_IF_MAYBE(pVal, maybe) {
+		return cuReader<HostType, CupnpType>(mv(*pVal));
+	} else {
+		return cuReader<HostType, CupnpType>(nullptr);
+	}
 }
 
 // Mappings for untyped messages
@@ -83,8 +92,16 @@ struct DeviceMapping<Own<capnp::MessageBuilder>> : public DeviceMappingBase {
 	
 	capnp::MessageBuilder& getHost();
 	
+	/** Update the message structure on-device.
+	 *
+	 * Causes re-allocation of all segments on the device and obtains a new segment table.
+	 * \warning Because this method invalidates the result of get(), it may only be used while
+	 *          unshared to prevent out-of-memory reads.
+	 */
+	void updateStructureOnDevice();
+	
 private:
-	kj::Array<Own<DeviceMapping<kj::Array<kj::word>>>> segmentMappings;
+	kj::Array<Own<DeviceMapping<kj::Array<capnp::word>>>> segmentMappings;
 	Own<capnp::MessageBuilder> builder;
 };
 
@@ -101,34 +118,40 @@ struct DeviceMapping<Own<capnp::MessageReader>> : public DeviceMappingBase {
 	capnp::MessageReader& getHost();
 	
 private:
-	kj::Array<Own<DeviceMapping<kj::Array<kj::word>>>> segmentMappings;
+	kj::Array<Own<DeviceMapping<kj::Array<capnp::word>>>> segmentMappings;
 	Own<capnp::MessageBuilder> reader;
 };
 
 // Mappings for typed messages
 
 template<typename HostType, typename CupnpType>
-struct DeviceMapping<CuTypedMessageBuilder<HostType, CupnpType>> : public DeviceMapping<Own<MessageBuilder>> {
+struct DeviceMapping<CuTypedMessageBuilder<HostType, CupnpType>> : public DeviceMapping<Own<capnp::MessageBuilder>> {
+	using Parent = DeviceMapping<Own<capnp::MessageBuilder>>;
+	
 	DeviceMapping(CuTypedMessageBuilder<HostType, CupnpType>&& typedBuilder, DeviceBase& device, bool allowAlias) :
-		DeviceMapping<Own<MessageBuilder>>(mv(typedBuilder.builder), device, allowAlias)
+		Parent(mv(typedBuilder.builder), device, allowAlias)
 	{}
 	
-	cupnp::Location getUntyped() { return DeviceMapping<Own<MessageBuilder>>::get(); }
+	cupnp::Location getUntyped() { return Parent::get(); }
 	CuPtr<CupnpType> get() { return getUntyped(); }
 	
-	typename HostType::Builder getHost() { return DeviceMapping<Own<MessageBuilder>>::getHost().getRoot<HostType>(); }
+	capnp::MessageBuilder& getHostUntyped() { return Parent::getHost(); }
+	typename HostType::Builder getHost() { return Parent::getHost().getRoot<HostType>(); }
 };
 
 template<typename HostType, typename CupnpType>
-struct DeviceMapping<CuTypedMessageReader<HostType, CupnpType>> : public DeviceMapping<Own<MessageReader>> {
+struct DeviceMapping<CuTypedMessageReader<HostType, CupnpType>> : public DeviceMapping<Own<capnp::MessageReader>> {
+	using Parent = DeviceMapping<Own<capnp::MessageReader>>;
+	
 	DeviceMapping(CuTypedMessageReader<HostType, CupnpType>&& typedReader, DeviceBase& device, bool allowAlias) :
-		DeviceMapping<Own<MessageReader>>(mv(typedReader.reader), device, allowAlias)
+		Parent(mv(typedReader.reader), device, allowAlias)
 	{}
 	
-	cupnp::Location getUntyped() { return DeviceMapping<Own<MessageReader>>::get(); }
+	cupnp::Location getUntyped() { return Parent::get(); }
 	CuPtr<CupnpType> get() { return getUntyped(); }
 	
-	typename HostType::Reader getHost() { return DeviceMapping<Own<MessageReader>>::getHost().getRoot<HostType>(); }
+	capnp::MessageReader& getHostUntyped() { return Parent::getHost(); }
+	typename HostType::Reader getHost() { return Parent::getHost().getRoot<HostType>(); }
 };
 
 }

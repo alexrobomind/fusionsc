@@ -5,15 +5,6 @@
 
 #include <fsc/flt.capnp.h>
 
-namespace fsc {
-	
-	// TODO: Make this accept data service instead	
-	FLT::Client newFLT(Own<Eigen::ThreadPoolDevice> device);
-	FLT::Client newFLT(Own<Eigen::DefaultDevice> device);
-	
-	#ifdef FSC_WITH_CUDA
-	
-	FLT::Client newFLT(Own<Eigen::GpuDevice> device);
-	
-	#endif
+namespace fsc {	
+	FLT::Client newFLT(Own<DeviceBase> device);
 }

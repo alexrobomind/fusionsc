@@ -45,8 +45,6 @@ public:
 	inline LibraryThread newThread() const ;
 	void stopSteward() const;
 	
-	inline const DaemonRunner& daemonRunner() const { return *_daemonRunner; }
-	
 	inline bool inShutdownMode() const { return *(shutdownMode.lockShared()); }
 	inline void setShutdownMode() const { *(shutdownMode.lockExclusive()) = true; }
 	
@@ -124,7 +122,6 @@ public:
 	inline const Library&                          library()      const { return _library; }
 	inline const kj::MutexGuarded<LocalDataStore>& store()        const { return _library -> store; }
 	inline const kj::Executor&                     executor()     const { return _executor; }
-	inline const DaemonRunner&                     daemonRunner() const { return _library -> daemonRunner(); }
 	
 	//! Creates a keep-alive reference to this thread
 	/**
@@ -180,10 +177,10 @@ inline bool hasActiveThread() {
 // Inline implementations
 
 template<typename T>
-Promise<T> LibraryThread::uncancelable(Promise<T> p) {
+Promise<T> ThreadHandle::uncancelable(Promise<T> p) {
 	auto promiseTuple = p.then([](T t) {
 		return kj::tuple(t, 0);
-	).split();
+	}).split();
 	
 	detach(kj::get<1>(promiseTuple).ignoreResult());
 	return mv(kj::get<0>(promiseTuple));

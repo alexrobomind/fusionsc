@@ -9,36 +9,29 @@ namespace fsc {
 	
 namespace {
 	
-template<typename Device>
 struct FieldCalculation {
 	using Field = ::fsc::kernels::Field;
 	using MFilament = ::fsc::kernels::MFilament;
 	
 	constexpr static unsigned int GRID_VERSION = 7;
 	
-	Device& _device;
+	Own<DeviceBase> _device;
 	ToroidalGridStruct grid;
 	ToroidalGrid::Reader gridReader;
-	Field field;
-	MapToDevice<Field, Device> mappedField;
+	DeviceMappingType<Field> field;
 	
 	// This promise makes sure we only schedule a
 	// calculation once the previous is finished
 	Promise<void> calculation = READY_NOW;
 	
-	const Operation& rootOp;
-	
-	FieldCalculation(/*ToroidalGridStruct*/ToroidalGrid::Reader in, Device& device, const Operation& rootOp) :
-		_device(device),
+	FieldCalculation(/*ToroidalGridStruct*/ToroidalGrid::Reader in, DeviceBase& device) :
+		_device(device.addRef()),
 		grid(readGrid(in, GRID_VERSION)),
 		gridReader(in),
-		field(3, grid.nR, grid.nZ, grid.nPhi),
-		mappedField(field, _device),
-		rootOp(rootOp)
+		field(mapToDevice(Field(3, grid.nR, grid.nZ, grid.nPhi), device, true))
 	{
-		field.setZero();
-		mappedField.updateDevice();
-		hostMemSynchronize(device, rootOp);
+		field -> getHost().setZero();
+		field -> updateDevice();
 	}
 	
 	~FieldCalculation() {}
@@ -52,22 +45,19 @@ struct FieldCalculation {
 		auto data = input.getData();
 		
 		// Write field into native format
-		auto newField = kj::heap<Field>(3, grid.nR, grid.nZ, grid.nPhi);
-		for(int i = 0; i < newField->size(); ++i) {
-			newField->data()[i] = data[i];
+		Field newField(3, grid.nR, grid.nZ, grid.nPhi);
+		for(int i = 0; i < newField.size(); ++i) {
+			newField.data()[i] = data[i];
 		}
 		
 		calculation = calculation.then([this, newField = mv(newField), scale]() mutable {
-			Own<Operation> calcOp = FSC_LAUNCH_KERNEL(
+			return FSC_LAUNCH_KERNEL(
 				kernels::addFieldKernel,
-				_device, 
-				field.size(),
-				FSC_KARG(mappedField, NOCOPY), FSC_KARG(*newField, IN), scale
+				*_device, 
+				field -> getHost().size(),
+				FSC_KARG(field, NOCOPY), FSC_KARG(newField, ALIAS_IN), scale
 			);
-			calcOp -> attachDestroyAnywhere(mv(newField), rootOp.addRef());
-		
-			return calcOp -> whenDone();
-		}).attach(rootOp.addRef());
+		});
 	}
 	
 	void biotSavart(double current, Float64Tensor::Reader input, BiotSavartSettings::Reader settings) {
@@ -79,14 +69,14 @@ struct FieldCalculation {
 		KJ_REQUIRE(shape[0] >= 2);
 		
 		int n_points = (int) shape[0];
-		auto filament = kj::heap<MFilament>(3, n_points);
+		MFilament filament(3, n_points);
 		
 		// Copy filament into native buffer
 		auto data = input.getData();
 		for(int i = 0; i < n_points; ++i) {
-			(*filament)(0, i) = data[3 * i + 0];
-			(*filament)(1, i) = data[3 * i + 1];
-			(*filament)(2, i) = data[3 * i + 2];
+			filament(0, i) = data[3 * i + 0];
+			filament(1, i) = data[3 * i + 1];
+			filament(2, i) = data[3 * i + 2];
 		}
 		
 		double coilWidth = settings.getWidth();
@@ -96,26 +86,24 @@ struct FieldCalculation {
 		
 		calculation = calculation.then([this, filament = mv(filament), coilWidth, stepSize, current]() mutable {
 			// Launch calculation
-			Own<Operation> calcOp = FSC_LAUNCH_KERNEL(
+			return FSC_LAUNCH_KERNEL(
 				kernels::biotSavartKernel,
-				_device,
-				field.size() / 3,
-				grid, FSC_KARG(*filament, IN), current, coilWidth, stepSize, FSC_KARG(mappedField, NOCOPY)
+				*_device,
+				field -> getHost().size() / 3,
+				grid, FSC_KARG(filament, ALIAS_IN), current, coilWidth, stepSize, FSC_KARG(field, NOCOPY)
 			);
-			calcOp -> attachDestroyAnywhere(mv(filament), rootOp.addRef());
-			return calcOp -> whenDone();
-		}).attach(rootOp.addRef());
+		});
 	}
 	
 	Promise<void> finish(Float64Tensor::Builder out) {
 		calculation = calculation
 		.then([this]() {
-			mappedField.updateHost();
-			return hostMemSynchronize(_device, rootOp);
+			field -> updateHost();
+			return _device -> barrier();
 		})
 		.then([this, out]() {
 			KJ_DBG("Calculation finished");
-			writeTensor(field, out);
+			writeTensor(field->getHost(), out);
 		});
 		
 		return mv(calculation);
@@ -125,13 +113,13 @@ struct FieldCalculation {
 template<typename Device>
 struct CalculationSession : public FieldCalculator::Server {	
 	// Device device;
-	Device& device;
+	Own<DeviceBase> device;
 	
 	// ToroidalGridStruct grid;
 	// Cache<ID, LocalDataRef<Float64Tensor>> cache;
 	
-	CalculationSession(Device& device/*, ToroidalGrid::Reader newGrid*/) :
-		device(device)/*,
+	CalculationSession(Own<DeviceBase> device/*, ToroidalGrid::Reader newGrid*/) :
+		device(mv(device))/*,
 		grid(readGrid(newGrid, GRID_VERSION))*/
 	{}
 	
@@ -170,10 +158,7 @@ struct CalculationSession : public FieldCalculator::Server {
 	
 	//! Processes a root node of a magnetic field (creates calculator)
 	Promise<LocalDataRef<Float64Tensor>> processRoot(MagneticField::Reader node, ToroidalGrid::Reader grid) {		
-		auto rootOp = newOperation();
-		auto newCalculator = heapHeld<FieldCalculation<Device>>(grid, device, *rootOp);
-		
-		rootOp -> attachDestroyHere(thisCap(), newCalculator.x());
+		auto newCalculator = heapHeld<FieldCalculation>(grid, *device);
 		
 		auto calcDone = processField(*newCalculator, node, 1);
 		
@@ -188,11 +173,10 @@ struct CalculationSession : public FieldCalculator::Server {
 			
 			return publish;
 		})
-		.attach(kj::defer([=]() mutable { newCalculator -> calculation = KJ_EXCEPTION(DISCONNECTED, "Calculation stopped"); }))
-		.attach(mv(rootOp));
+		.attach(newCalculator.x());
 	}
 	
-	Promise<void> processFilament(FieldCalculation<Device>& calculator, Filament::Reader node, BiotSavartSettings::Reader settings, double scale) {
+	Promise<void> processFilament(FieldCalculation& calculator, Filament::Reader node, BiotSavartSettings::Reader settings, double scale) {
 		switch(node.which()) {
 			case Filament::INLINE:
 				// The biot savart operation is chained by the calculator
@@ -208,7 +192,7 @@ struct CalculationSession : public FieldCalculator::Server {
 		}
 	}
 	
-	Promise<void> processField(FieldCalculation<Device>& calculator, MagneticField::Reader node, double scale) {
+	Promise<void> processField(FieldCalculation& calculator, MagneticField::Reader node, double scale) {
 		/*return ID::fromReaderWithRefs(node).then([this, &calculator, node, scale](ID id) -> Promise<void> {
 			// Check if the node is in the cache
 			KJ_IF_MAYBE(pFieldRef, cache.find(id)) {
@@ -464,32 +448,9 @@ Promise<void> FieldResolverBase::processFilament(Filament::Reader input, Filamen
 	}
 }
 
-FieldCalculator::Client newFieldCalculator(/*ToroidalGrid::Reader grid, */Own<Eigen::ThreadPoolDevice> dev) {
-	auto& devRef = *dev;
-	return FieldCalculator::Client(
-		kj::heap<CalculationSession<Eigen::ThreadPoolDevice>>(devRef/*, grid*/).attach(mv(dev))
-	);
+FieldCalculator::Client newFieldCalculator(Own<DeviceBase> dev) {
+	return kj::heap<CalculationSession<Eigen::ThreadPoolDevice>>(mv(dev));
 }
-
-FieldCalculator::Client newFieldCalculator(/*ToroidalGrid::Reader grid, */Own<Eigen::DefaultDevice> dev) {
-	auto& devRef = *dev;
-	return FieldCalculator::Client(
-		kj::heap<CalculationSession<Eigen::DefaultDevice>>(devRef/*, grid*/).attach(mv(dev))
-	);
-}
-
-#ifdef FSC_WITH_CUDA
-
-#include <cuda_runtime_api.h>
-
-FieldCalculator::Client newFieldCalculator(/*ToroidalGrid::Reader grid, */Own<Eigen::GpuDevice> dev) {
-	auto& devRef = *dev;
-	return FieldCalculator::Client(
-		kj::heap<CalculationSession<Eigen::GpuDevice>>(devRef/*, grid*/).attach(mv(dev))
-	);
-}
-
-#endif
 
 namespace {
 	void buildCoil(double rMaj, double rMin, double phi, Filament::Builder out) {

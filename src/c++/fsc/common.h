@@ -292,12 +292,16 @@ template<typename T>
 struct Shared {
 	using Payload = T;
 	
-	Shared<typename... T>
-	Shared(T&&... t) :
-		impl(kj::refcounted<impl>(kj::fwd<T>(t)...))
+	template<typename... Params>
+	Shared(Params&&... t) :
+		impl(kj::refcounted<Impl>(kj::fwd<Params>(t)...))
 	{}
 	
 	Shared(const Shared<T>& other) :
+		impl(other.impl -> addRef())
+	{}
+	
+	Shared(Shared<T>& other) :
 		impl(other.impl -> addRef())
 	{}
 	
@@ -308,7 +312,7 @@ struct Shared {
 	Shared(Shared<T>&& other) = default;
 	Shared<T>& operator=(Shared<T>&& other) = default;
 	
-	T& get() { return impl -> payload; }
+	T& get() { return *(impl -> payload); }
 	T& operator*() { return get(); }
 	T* operator->() { return &get(); }
 	
@@ -318,9 +322,9 @@ private:
 	struct Impl : kj::Refcounted {
 		Own<Payload> payload;
 		
-		template<typename... T>
-		Impl(T&&... t) :
-			payload(kj::fwd<T>(t)...)
+		template<typename... Params>
+		Impl(Params&&... t) :
+			payload(kj::heap<Payload>(kj::fwd<Params>(t)...))
 		{}
 		
 		Impl(Own<Payload>&& payload) :
@@ -339,12 +343,16 @@ template<typename T>
 struct AtomicShared {
 	using Payload = T;
 	
-	AtomicShared<typename... T>
-	AtomicShared(T&&... t) :
-		impl(kj::atomicRefcounted<impl>(kj::fwd<T>(t)...))
+	template<typename... Params>
+	AtomicShared(Params&&... t) :
+		impl(kj::atomicRefcounted<Impl>(kj::fwd<Params>(t)...))
 	{}
 	
 	AtomicShared(const AtomicShared<T>& other) :
+		impl(other.impl -> addRef())
+	{}
+	
+	AtomicShared(AtomicShared<T>& other) :
 		impl(other.impl -> addRef())
 	{}
 	
@@ -355,7 +363,7 @@ struct AtomicShared {
 	AtomicShared(AtomicShared<T>&& other) = default;
 	AtomicShared<T>& operator=(AtomicShared<T>&& other) = default;
 	
-	T& get() { return impl -> payload; }
+	T& get() { return *(impl -> payload); }
 	T& operator*() { return get(); }
 	T* operator->() { return &get(); }
 	
@@ -363,18 +371,18 @@ struct AtomicShared {
 	
 private:
 	struct Impl : kj::AtomicRefcounted {
-		mutable Payload payload;
+		mutable Own<Payload> payload;
 		
-		template<typename... T>
-		Impl(T&&... t) :
-			payload(kj::fwd<T>(t)...)
+		template<typename... Params>
+		Impl(Params&&... t) :
+			payload(kj::heap<Payload>(kj::fwd<Params>(t)...))
 		{}
 		
 		Impl(Own<Payload>&& payload) :
 			payload(mv(payload))
 		{}
 		
-		Own<const Impl> addRef() {
+		Own<const Impl> addRef() const {
 			return kj::atomicAddRef(*this);
 		}
 	};
