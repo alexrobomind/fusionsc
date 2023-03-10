@@ -1,18 +1,7 @@
 #include "device.h"
+#include "local.h"
 
 namespace fsc {
-
-namespace {
-
-struct CallOnExpire : public kj::AtomicRefcounted {
-	using F = kj::Function<void()>;
-	F f;
-	
-	CallOnExpire(F f) : f(mv(f)) {}
-	~CallOnExpire() { f(); }
-};
-
-}
 	
 // class DeviceBase
 
@@ -30,7 +19,7 @@ Promise<void> DeviceBase::barrier() {
 	return getActiveThread().uncancelable(emplaceBarrier().attach(releaseAttachments(), addRef()));
 }
 
-void DeviceBase::releaseAttachments() {
+Own<int> DeviceBase::releaseAttachments() {
 	Own<int> result = mv(attachments);
 	attachments = kj::Own<int>(&PTR_SLOT, kj::NullDisposer::instance);
 	return result;
@@ -42,7 +31,7 @@ DeviceMappingBase::DeviceMappingBase(DeviceBase& device) :
 	device(device.addRef())
 {}
 
-DeviceMappingBase::~DeviceMappingBase();
+DeviceMappingBase::~DeviceMappingBase() {}
 
 void DeviceMappingBase::updateHost() {
 	doUpdateHost();
@@ -97,8 +86,16 @@ void CPUDevice::unmap(const kj::byte* hostPtr, kj::byte* devicePtr) {
 	delete[] devicePtr;
 }
 
-kj::byte* translateToDevice(kj::byte* hostPtr) {
+kj::byte* CPUDevice::translateToDevice(kj::byte* hostPtr) {
 	return hostPtr;
+}
+
+Own<DeviceBase> CPUDevice::addRef() {
+	return kj::addRef(*this);
+}
+
+Promise<void> CPUDevice::emplaceBarrier() {
+	return READY_NOW;
 }
 
 }

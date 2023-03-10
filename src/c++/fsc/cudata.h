@@ -80,6 +80,9 @@ CuTypedMessageReader<HostType, CupnpType> cuReader(Maybe<T> maybe) {
 
 // Mappings for untyped messages
 
+struct CapnpMapping : public DeviceMappingBase {
+};
+
 template<>
 struct DeviceMapping<Own<capnp::MessageBuilder>> : public DeviceMappingBase {
 	DeviceMapping(Own<capnp::MessageBuilder> builder, DeviceBase& device, bool allowAlias);
@@ -101,13 +104,15 @@ struct DeviceMapping<Own<capnp::MessageBuilder>> : public DeviceMappingBase {
 	void updateStructureOnDevice();
 	
 private:
-	kj::Array<Own<DeviceMapping<kj::Array<capnp::word>>>> segmentMappings;
+	bool allowAlias;
+	kj::Array<DeviceMappingType<kj::Array<capnp::word>>> segmentMappings;
+	DeviceMappingType<kj::Array<cupnp::SegmentTable::Entry>> segmentTable;
 	Own<capnp::MessageBuilder> builder;
 };
 
 template<>
 struct DeviceMapping<Own<capnp::MessageReader>> : public DeviceMappingBase {
-	DeviceMapping(Own<capnp::MessageReader> builder, DeviceBase& device, bool allowAlias);
+	DeviceMapping(Own<capnp::MessageReader> reader, DeviceBase& device, bool allowAlias);
 	~DeviceMapping();
 	
 	void doUpdateHost() override ;
@@ -118,8 +123,12 @@ struct DeviceMapping<Own<capnp::MessageReader>> : public DeviceMappingBase {
 	capnp::MessageReader& getHost();
 	
 private:
-	kj::Array<Own<DeviceMapping<kj::Array<capnp::word>>>> segmentMappings;
-	Own<capnp::MessageBuilder> reader;
+	void updateStructureOnDevice();
+	
+	bool allowAlias;
+	kj::Array<DeviceMappingType<kj::Array<capnp::word>>> segmentMappings;
+	DeviceMappingType<kj::Array<cupnp::SegmentTable::Entry>> segmentTable;
+	Own<capnp::MessageReader> reader;
 };
 
 // Mappings for typed messages

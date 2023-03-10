@@ -90,6 +90,9 @@ add_library(
 	data.h
 	data.cpp
 	
+	cudata.h
+	cudata.cpp
+	
 	compression.h
 	compression.cpp
 	
@@ -111,6 +114,9 @@ add_library(
 	magnetics.h
 	magnetics-kernels.h
 	magnetics.cpp
+	
+	device.h
+	device.cpp
 	
 	flt.h
 	flt-kernels.h
