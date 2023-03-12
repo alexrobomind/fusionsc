@@ -478,7 +478,7 @@ namespace pybind11 { namespace detail {
 			
 			py::handle builder = type_caster<capnp::DynamicValue::Builder>::cast(dynamic, policy, parent);
 			
-			auto holder = new fscpy::UnknownHolder<kj::Own<capnp::MallocMessageBuilder>>(mv(src.holder));
+			auto holder = new fscpy::UnknownHolder<kj::Own<capnp::MessageBuilder>>(mv(src.holder));
 			py::object msg = py::cast((fscpy::UnknownObject*) holder);
 			builder.attr("_msg") = msg;
 			

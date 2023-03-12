@@ -94,7 +94,7 @@ namespace fscpy {
 		
 		defaultLoader.addBuiltin<
 			capnp::schema::Node,
-			RootService,
+			LocalResources,
 			OfflineData,
 			MergedGeometry,
 			FLTStopReason,
@@ -113,7 +113,7 @@ namespace fscpy {
 		
 		// Root module
 		{		
-			auto schemas = getBuiltinSchemas<FieldResolver, GeometryResolver, RootService, OfflineData, MergedGeometry, FieldlineMapping>();
+			auto schemas = getBuiltinSchemas<FieldResolver, GeometryResolver, LocalResources, OfflineData, MergedGeometry, FieldlineMapping>();
 				
 			for(auto node : schemas) {
 				defaultLoader.importNodeIfRoot(node.getId(), m);
