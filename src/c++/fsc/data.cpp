@@ -1384,9 +1384,9 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(c
 }*/
 
 Promise<void> internal::LocalDataServiceImpl::clone(CloneContext context) {
-	return download(context.getParams().getSource(), false)
-	.then([context](LocalDataRef<capnp::AnyPointer> ref) mutable {
-		context.getResults().setRef(ref);
+	return dbCache -> cache(context.getParams().getSource())
+	.then([context](DataRef<capnp::AnyPointer>::Client result) mutable {
+		context.getResults().setRef(mv(result));
 	});
 }
 
@@ -1442,14 +1442,8 @@ Promise<void> internal::LocalDataServiceImpl::store(StoreContext context) {
 		capTable.getTable()
 	);
 	
-	context.getResults().setRef(ref);
-	
-	return READY_NOW;
-}
-
-Promise<void> internal::LocalDataServiceImpl::cache(CacheContext ctx) {
-	//ctx.getResults().setRef(dbCache -> cache(ctx.getParams().getSource()));
-	KJ_UNIMPLEMENTED("The DBCache::cache method is not yet implemented");
+	auto cachedRef = dbCache -> cache(mv(ref));
+	context.getResults().setRef(mv(cachedRef));
 	
 	return READY_NOW;
 }

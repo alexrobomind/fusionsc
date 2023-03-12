@@ -203,7 +203,6 @@ public:
 		
 	Promise<void> clone(CloneContext context) override;
 	Promise<void> store(StoreContext context) override;
-	Promise<void> cache(CacheContext context) override;
 	
 	inline void setLimits(LocalDataService::Limits newLimits);
 	
@@ -212,7 +211,7 @@ public:
 	Promise<Maybe<LocalDataRef<capnp::AnyPointer>>> unwrap(DataRef<capnp::AnyPointer>::Client ref);
 	
 private:
-	Promise<Archive::Entry::Builder> createArchiveEntry(DataRef<capnp::AnyPointer>::Client ref, kj::TreeMap<ID, capnp::Orphan<Archive::Entry>>& entries, capnp::Orphanage orphanage, Maybe<Nursery&> nursery);
+	//Promise<Archive::Entry::Builder> createArchiveEntry(DataRef<capnp::AnyPointer>::Client ref, kj::TreeMap<ID, capnp::Orphan<Archive::Entry>>& entries, capnp::Orphanage orphanage, Maybe<Nursery&> nursery);
 
 	capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> serverSet;
 	Library library;

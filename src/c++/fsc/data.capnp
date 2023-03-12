@@ -37,31 +37,27 @@ interface DataService @0xc6d48902ddb7e122 {
 	
 	# Have the remote data service download a DataRef and re-publish it
 	clone @1 [T] (source : DataRef(T)) -> (ref : DataRef(T));
-	
-	# Create a DataRef that on-demand downloads the remote DataRef and caches it
-	# RESERVED UNIMPLEMENTED
-	cache @2 [T] (source : DataRef(T)) -> (ref : DataRef(T));
 }
 #//! [DataService]
 
 # Archive types
-struct Archive {
-	struct CapabilityInfo {
-		dataRefInfo : union {
-			noDataRef @0 : Void;
-			refID @1 : Data;
-		}
-	}
-	struct Entry {
-		id @0 : Data;
-		data @1 : List(Data);
-		capabilities @2 : List(CapabilityInfo);
-		typeId @3 : UInt64;
-		dataHash @4 : Data;
-	}
-	root @0 : Entry;
-	extra @1 : List(Entry);
-}
+#struct Archive {
+#	struct CapabilityInfo {
+#		dataRefInfo : union {
+#			noDataRef @0 : Void;
+#			refID @1 : Data;
+#		}
+#	}
+#	struct Entry {
+#		id @0 : Data;
+#		data @1 : List(Data);
+#		capabilities @2 : List(CapabilityInfo);
+#		typeId @3 : UInt64;
+#		dataHash @4 : Data;
+#	}
+#	root @0 : Entry;
+#	extra @1 : List(Entry);
+#}
 
 # Support data types
 

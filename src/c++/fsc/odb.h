@@ -227,7 +227,7 @@ private:
 struct DBCache : public kj::Refcounted {
 	struct TransmissionReceiver;
 	
-	DataRef<capnp::AnyPointer>::Client cache(DataRef<capnp::AnyPointer>::Client target);
+	Promise<DataRef<capnp::AnyPointer>::Client> cache(DataRef<capnp::AnyPointer>::Client target);
 	
 	Own<BlobStore> store;
 	Own<sqlite::Connection> conn;

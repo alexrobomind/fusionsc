@@ -583,6 +583,11 @@ struct DBCache::DownloadProcess : public internal::DownloadTask<DataRef<capnp::A
 	}
 };
 
+Promise<DataRef<AnyPointer>::Client> DBCache::cache(DataRef<AnyPointer>::Client src) {
+	auto downloadTask = kj::refcounted<DownloadProcess>(*this, mv(src));
+	return downloadTask -> output();
+}
+
 capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> DBCache::SERVER_SET;
 
 /** Server class that gives clients access to DB object.
