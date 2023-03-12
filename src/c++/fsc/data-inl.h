@@ -196,9 +196,9 @@ public:
 	
 	LocalDataRef<capnp::AnyPointer> publish(DataRef<capnp::AnyPointer>::Metadata::Reader metaData, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable);
 	
-	Promise<void> buildArchive(DataRef<capnp::AnyPointer>::Client ref, Archive::Builder out, Maybe<Nursery&> nursery);
+	//Promise<void> buildArchive(DataRef<capnp::AnyPointer>::Client ref, Archive::Builder out, Maybe<Nursery&> nursery);
 	Promise<void> writeArchive(DataRef<capnp::AnyPointer>::Client ref, const kj::File& out);
-	LocalDataRef<capnp::AnyPointer> publishArchive(Archive::Reader archive);
+	//LocalDataRef<capnp::AnyPointer> publishArchive(Archive::Reader archive);
 	LocalDataRef<capnp::AnyPointer> publishArchive(const kj::ReadableFile& f, const capnp::ReaderOptions options);
 		
 	Promise<void> clone(CloneContext context) override;
@@ -421,20 +421,20 @@ Promise<Maybe<LocalDataRef<T>>> LocalDataService::downloadIfNotNull(Reference sr
 	});
 }
 
-template<typename Ref, typename T>
+/*template<typename Ref, typename T>
 Promise<void> LocalDataService::buildArchive(Ref ref, Archive::Builder out, Maybe<Nursery&> nursery) {
 	return impl -> buildArchive(ref.asGeneric(), out, nursery);
-}
+}*/
 
 template<typename Ref, typename T>
 Promise<void> LocalDataService::writeArchive(Ref ref, const kj::File& out) {
 	return impl -> writeArchive(ref.asGeneric(), out);
 }
 
-template<typename T>
+/*template<typename T>
 LocalDataRef<T> LocalDataService::publishArchive(Archive::Reader in) {
 	return impl -> publishArchive(in).as<T>();
-}
+}*/
 
 template<typename T>
 LocalDataRef<T> LocalDataService::publishArchive(const kj::ReadableFile& in, const capnp::ReaderOptions options) {

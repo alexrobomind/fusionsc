@@ -3,6 +3,8 @@
 using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("fsc");
 
+using Rpc = import "/capnp/rpc.capnp";
+
 using Java = import "java.capnp";
 $Java.package("org.fsc");
 $Java.outerClassname("Data");

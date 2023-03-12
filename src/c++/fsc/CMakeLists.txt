@@ -8,6 +8,8 @@ set(
 	FSC_CAPNP_SOURCES
 	
 	data.capnp
+	data-archive.capnp
+	
 	index.capnp
 	odb.capnp
 	

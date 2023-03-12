@@ -9,10 +9,69 @@
 
 #include <functional>
 
+#include <fsc/data-archive.capnp.h>
+#include <capnp/rpc.capnp.h>
+
 #include "data.h"
 #include "odb.h"
 
+using capnp::WORDS;
+using capnp::word;
+
 namespace fsc {
+	
+namespace {	
+	kj::Exception fromProto(capnp::rpc::Exception::Reader proto) { 
+		kj::Exception::Type type;
+		switch(proto.getType()) {
+			#define HANDLE_VAL(val) \
+				case capnp::rpc::Exception::Type::val: \
+					type = kj::Exception::Type::val; \
+					break;
+					
+			HANDLE_VAL(FAILED)
+			HANDLE_VAL(OVERLOADED)
+			HANDLE_VAL(DISCONNECTED)
+			HANDLE_VAL(UNIMPLEMENTED)
+			
+			#undef HANDLE_VAL
+		}
+		
+		kj::Exception result(type, "remote", -1, str(proto.getReason()));
+		
+		if(proto.hasTrace()) {
+			result.setRemoteTrace(str(proto.getTrace()));
+		}
+		
+		return result;
+	}
+	
+	Temporary<capnp::rpc::Exception> toProto(kj::Exception& e) {
+		Temporary<capnp::rpc::Exception> result;
+		
+		switch(e.getType()) {
+			#define HANDLE_VAL(val) \
+				case kj::Exception::Type::val: \
+					result.setType(capnp::rpc::Exception::Type::val); \
+					break;
+					
+			HANDLE_VAL(FAILED)
+			HANDLE_VAL(OVERLOADED)
+			HANDLE_VAL(DISCONNECTED)
+			HANDLE_VAL(UNIMPLEMENTED)
+			
+			#undef HANDLE_VAL
+		}
+		
+		result.setReason(e.getDescription());
+		
+		if(e.getRemoteTrace() != nullptr) {
+			result.setTrace(e.getRemoteTrace());
+		}
+		
+		return result;
+	}
+}
 	
 Promise<bool> isDataRef(capnp::Capability::Client clt) {
 	auto asRef = clt.castAs<DataRef<capnp::AnyPointer>>();
@@ -460,7 +519,486 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRef<
 	return LocalDataRef<capnp::AnyPointer>(backend->addRef(), this -> serverSet);
 }
 
-Promise<Archive::Entry::Builder> internal::LocalDataServiceImpl::createArchiveEntry(DataRef<capnp::AnyPointer>::Client ref, kj::TreeMap<ID, capnp::Orphan<Archive::Entry>>& entries, capnp::Orphanage orphanage, Maybe<Nursery&> nursery) {
+/*
+
+ Documentation of archive format:
+ 
+ Nomenclature:
+   WORD : Elementary size unit, corresponds to 8 bytes
+   <u64: Unsigned 64-bit integer
+ 
+ Format structure:
+ 
+ - Magic tag (8 bytes): ASCII encoding of the 7 characters FSCARCH followed by a null terminator byte
+ - Header size (8 bytes, <u64): Size of the header in WORDs, must be at least 3
+ 
+ - Header (N WORDs as given by Header size):
+   - Description size (8 bytes, <u64): Size of text description in WORDs
+   - Data size (8 bytes, <u64): Size of data section in WORDs
+   - Info size (8 bytes, <u64): Size of info section in WORDs
+   - Remaining bytes to reach word count specified in Header size
+  
+ - Text description (N WORDs as given by description size):
+    This section contains an arbitrary text designed to be readable as an info message if this file were
+    to be opened by a text editor. Do not interpret the contents of this section in any way. Note that despite
+    the contained string incl. null-terminator not neccessarily sharing this property, the size of this section is
+    always a multiple of 8 bytes (hence the size info in WORDs) to keep the later sections aligned to 8-byte boundaries
+    (which is required by CapnProto).
+
+ - Data section (N WORDs as given by data section size):
+    This section contains all the contents of BLOBs used to back DataRefs. It is placed in front of the info section
+	to allow streaming downloads of data (at that time the size of the info section is not known).
+	
+ - Info section (N WORDs as given by info section size):
+    This section contains a message holding a fsc::ArchiveInfo struct as its root, serialized using Capn'n'proto'safe
+	flat array serialization format.
+	
+*/
+ 
+
+struct ArchiveWriter {
+	
+	static inline kj::StringPtr MAGIC_TAG = "FSCARCH"_kj;
+	static inline kj::StringPtr DESCRIPTION = "This is an FSC / fusionsc archive file. To read it, please use the fusionsc toolkit to inspect its contents or refer it for details on the format"_kj;
+	
+	static inline capnp::WordCount MAGIC_TAG_SIZE = 1 * WORDS;
+	static inline capnp::WordCount HEADER_SIZE_SIZE = 1 * WORDS;
+	static inline capnp::WordCount HEADER_SIZE = 3 * WORDS;
+	static inline capnp::WordCount DESCRIPTION_SIZE = (DESCRIPTION.size() + 7) / 8 * WORDS;
+	static inline capnp::WordCount TOTAL_PREFIX_SIZE = MAGIC_TAG_SIZE + HEADER_SIZE_SIZE + HEADER_SIZE + DESCRIPTION_SIZE;
+	
+	struct DataRecord {
+		uint64_t id;
+		capnp::WordCount offsetWords;
+		uint64_t sizeBytes;
+		Own<const kj::WritableFileMapping> mapping;
+		kj::ListLink<DataRecord> link;
+	};
+	
+	struct InfoRecord {
+		uint64_t id;
+		Temporary<ArchiveInfo::ObjectInfo> info;
+		kj::ListLink<InfoRecord> link;
+	};
+	
+	const kj::File& file;
+	
+	//! Current size of data section
+	capnp::WordCount dataSize = 0 * WORDS;
+	
+	//! Promise that resolves when all DataRefs known to advertise (don't trust this) a given hash have finished or failed downloading
+	kj::TreeMap<ID, Promise<void>> downloadQueue;
+	
+	//! Map of all completed data blocks by hash
+	kj::TreeMap<ID, uint64_t> dataRecordsByHash;
+	
+	//! List of all data records
+	kj::List<DataRecord, &DataRecord::link> dataRecords;
+	
+	//! List of all object info records
+	kj::List<InfoRecord, &InfoRecord::link> infoRecords;
+	
+	//! Download context to use for de-duplication
+	internal::DownloadTask<uint64_t>::Context downloadContext;
+	
+	ArchiveWriter(const kj::File& file) :
+		file(file)
+	{}
+	
+	~ArchiveWriter() {
+		for(auto& record : dataRecords) {
+			dataRecords.remove(record);
+			delete &record;
+		}
+		
+		for(auto& record : infoRecords) {
+			infoRecords.remove(record);
+			delete &record;
+		}
+	}
+	
+	void write(capnp::word* dst, uint64_t value) {
+		auto* wVal = reinterpret_cast<capnp::_::WireValue<uint64_t>*>(dst);
+		wVal -> set(value);
+	}
+	
+	void writePrefix() {
+		file.truncate(TOTAL_PREFIX_SIZE / WORDS * sizeof(word));
+		
+		auto mapping = file.mmapWritable(0, TOTAL_PREFIX_SIZE / WORDS * sizeof(word));
+		word* const mappingStart = reinterpret_cast<word*>(mapping -> get().begin());
+		word* buf = mappingStart;
+		
+		memcpy(buf, MAGIC_TAG.begin(), MAGIC_TAG_SIZE / WORDS * sizeof(word));
+		buf += MAGIC_TAG_SIZE / WORDS;
+		
+		write(buf, HEADER_SIZE / WORDS);
+		buf += HEADER_SIZE_SIZE / WORDS;
+		
+		write(buf, DESCRIPTION_SIZE / WORDS);
+		buf += 1;
+		
+		write(buf, 0); // Data size will be written later in writeInfo
+		buf += 1;
+		
+		write(buf, 0); // Info size will be written later in writeInfo
+		buf += 1;
+		
+		memset(buf, 0, DESCRIPTION_SIZE / WORDS * sizeof(word));
+		memcpy(buf, DESCRIPTION.begin(), DESCRIPTION.size());
+		buf += DESCRIPTION_SIZE;
+				
+		mapping -> sync(mapping -> get());
+	}
+	
+	//! Allocates data from the data section and creats a data record
+	DataRecord& allocData(uint64_t nBytes) {
+		capnp::WordCount nWords = (nBytes + 7) / 8 * WORDS;
+		KJ_ASSERT(sizeof(word) * nWords / WORDS >= nBytes);
+		
+		file.truncate((TOTAL_PREFIX_SIZE + dataSize + nWords) / WORDS * sizeof(word));
+		
+		auto* bl = new DataRecord;
+		bl -> id = dataRecords.size();
+		bl -> offsetWords = dataSize;
+		bl -> sizeBytes = nBytes;
+		bl -> mapping = file.mmapWritable((TOTAL_PREFIX_SIZE + dataSize) / WORDS * sizeof(word), nWords / WORDS * sizeof(word));
+		dataRecords.add(*bl);
+		
+		dataSize += nWords;
+		return *bl;
+	}
+	
+	//! Allocates a new info record
+	InfoRecord& allocInfo() {
+		auto* rec = new InfoRecord;
+		rec -> id = infoRecords.size();
+		infoRecords.add(*rec);
+		
+		return *rec;
+	}
+	
+	//! Serializes the info section and finalizes the header 
+	void writeInfo(Temporary<ArchiveInfo> infoSection) {
+		kj::Array<word> flatMessage = messageToFlatArray(*(infoSection.holder));
+		
+		file.truncate((TOTAL_PREFIX_SIZE + dataSize + flatMessage.size() * WORDS) / WORDS * sizeof(word));
+		
+		// Write info section to disk
+		{
+			auto mapping = file.mmapWritable((TOTAL_PREFIX_SIZE + dataSize) / WORDS * sizeof(word), flatMessage.size() * sizeof(word));
+			memcpy(mapping -> get().begin(), flatMessage.begin(), flatMessage.size() * sizeof(word));
+			
+			mapping -> sync(mapping -> get());
+		}
+		
+		// Write data and info size into header
+		{
+			auto mapping = file.mmapWritable((MAGIC_TAG_SIZE + HEADER_SIZE_SIZE + 1 /* Skip description */) / WORDS * sizeof(word), 2 * sizeof(word));
+			word* buf = reinterpret_cast<word*>(mapping -> get().begin());
+			write(buf, dataSize / WORDS);
+			write(buf + 1, flatMessage.size());
+			mapping -> sync(mapping -> get());
+		}
+	}
+	
+	//! Finalizes the file by writing root object and storing the file
+	void finalize(uint64_t rootObject) {
+		Temporary<ArchiveInfo> infoSection;
+		
+		// Store all data records
+		auto dataInfo = infoSection.initData(dataRecords.size());
+		for(auto& dataRecord : dataRecords) {
+			auto out = dataInfo[dataRecord.id];
+			out.setOffsetWords(dataRecord.offsetWords);
+			out.setSizeBytes(dataRecord.sizeBytes);
+		}
+		
+		auto objectInfo = infoSection.initObjects(infoRecords.size());
+		for(auto& infoRecord : infoRecords) {
+			objectInfo.setWithCaveats(infoRecord.id, infoRecord.info);
+		}
+		
+		infoSection.setRoot(rootObject);
+				
+		writeInfo(mv(infoSection));
+		
+		// Synchronize file to disk
+		file.sync();
+	}
+	
+	Promise<OneOf<std::nullptr_t, kj::Exception, uint64_t>> downloadRef(capnp::Capability::Client src) {
+		auto transProc = kj::refcounted<TransmissionProcess>(*this, src.castAs<DataRef<capnp::AnyPointer>>());
+		
+		return transProc -> output()
+		.then([](uint64_t result) -> OneOf<std::nullptr_t, kj::Exception, uint64_t> {
+			return result;
+		})
+		.catch_([](kj::Exception e) -> OneOf<std::nullptr_t, kj::Exception, uint64_t> {
+			if(e.getType() == kj::Exception::Type::UNIMPLEMENTED)
+				return nullptr;
+			return mv(e);
+		});
+	}
+	
+	Promise<void> writeArchive(DataRef<capnp::AnyPointer>::Client src) {
+		writePrefix();
+		
+		auto transProc = kj::refcounted<TransmissionProcess>(*this, src);
+		
+		return transProc -> output()
+		.then([this](uint64_t result) {
+			finalize(result);
+		});
+	}
+	
+	struct TransmissionProcess : public internal::DownloadTask<uint64_t> {
+		ArchiveWriter& parent;
+		
+		Maybe<DataRecord&> block;
+		size_t writeOffset = 0;
+		
+		TransmissionProcess(ArchiveWriter& parent, DataRef<capnp::AnyPointer>::Client src) :
+			DownloadTask<uint64_t>(src, parent.downloadContext),
+			parent(parent)
+		{}
+		
+		// unwrap() not overridden
+		// adjustRef() not overridden, recursive downloads are started during finalization
+		
+		Promise<Maybe<uint64_t>> useCached() override {
+			ID key = metadata.getDataHash().asConst();
+			
+			Promise<void> prereq = READY_NOW;
+			
+			// If we have active downloads for this key, let them finish first
+			KJ_IF_MAYBE(pResult, parent.downloadQueue.find(key)) {
+				prereq = mv(*pResult);
+				*pResult = output().ignoreResult().catch_([](kj::Exception e) {});
+			}
+			
+			return prereq.then([this, key = mv(key)]() mutable -> Promise<Maybe<uint64_t>> {
+				KJ_IF_MAYBE(pResult, parent.dataRecordsByHash.find(key)) {
+					return finalize(*pResult)
+					.then([](uint64_t x) -> Maybe<uint64_t> {
+						return x;
+					});
+				}
+				
+				auto dataHash = metadata.getDataHash().asConst();
+				
+				// Get a ref to the store entry if it is found
+				Maybe<Own<const LocalDataStore::Entry>> maybeStoreEntry = nullptr;
+				if(dataHash.size() > 0) {
+					auto lStore = getActiveThread().library() -> store.lockShared();
+					
+					KJ_IF_MAYBE(rowPtr, lStore -> table.find(dataHash)) {
+						maybeStoreEntry = (*rowPtr) -> addRef();
+					}
+				}
+				
+				KJ_IF_MAYBE(pStoreEntry, maybeStoreEntry) {
+					// We have the block locally. Just allocate space for it and memcpy
+					// it over
+					const LocalDataStore::Entry& storeEntry = **pStoreEntry;
+					
+					auto data = storeEntry.value.asPtr();
+					metadata.setDataSize(data.size());
+					
+					auto& dataRecord = parent.allocData(data.size());
+					kj::byte* target = dataRecord.mapping -> get().begin();
+					
+					memcpy(target, data.begin(), data.size());
+					dataRecord.mapping -> sync(dataRecord.mapping -> get());
+					
+					// KJ_DBG("Stored local block", dataRecord.id, dataRecord.mapping -> get(), data);
+					
+					return finalize(dataRecord.id)
+					.then([](uint64_t x) -> Maybe<uint64_t> {
+						return x;
+					});
+				}
+				
+				return Maybe<uint64_t>(nullptr);
+			});
+		}
+		
+		Promise<void> beginDownload() override { 
+			block = parent.allocData(metadata.getDataSize());
+			return READY_NOW;
+		}
+		
+		Promise<void> receiveData(kj::ArrayPtr<const kj::byte> data) override {
+			KJ_IF_MAYBE(pBlock, block) {
+				kj::ArrayPtr<kj::byte> output = pBlock -> mapping -> get();
+				KJ_REQUIRE(writeOffset + data.size() <= pBlock -> sizeBytes, "Overflow in download");
+				memcpy(output.begin() + writeOffset, data.begin(), data.size());
+				writeOffset += data.size();
+				
+				return READY_NOW;
+			} else {
+				KJ_FAIL_REQUIRE("Failed to allocate data");
+			}
+		}
+		
+		Promise<void> finishDownload() override { return READY_NOW; }
+		
+		Promise<uint64_t> buildResult() override {
+			KJ_IF_MAYBE(pBlock, block) {
+				kj::ArrayPtr<kj::byte> output = pBlock -> mapping -> get();
+				if(writeOffset < output.size()) {
+					memset(output.begin() + writeOffset, 0, output.size() - writeOffset);
+				}
+				
+				pBlock -> mapping -> sync(output);
+				
+				parent.dataRecordsByHash.insert(ID(metadata.getDataHash()), pBlock -> id);
+				
+				return finalize(pBlock -> id);
+			} else {
+				KJ_FAIL_REQUIRE("Failed to allocate data");
+			}
+		}
+		
+		Promise<uint64_t> finalize(uint64_t blockID) {
+			InfoRecord& newRecord = parent.allocInfo();
+			
+			newRecord.info.setMetadata(metadata);
+			newRecord.info.setDataId(blockID);
+			
+			kj::Vector<Promise<void>> childDownloads;
+			
+			auto refs = newRecord.info.initRefs(capTable.size());
+			for(auto i : kj::indices(capTable)) {
+				auto& client = capTable[i];
+				auto out = refs[i];
+				
+				Promise<void> processRef = parent.downloadRef(client)
+				.then([this, out](OneOf<std::nullptr_t, kj::Exception, uint64_t> downloadResult) mutable {
+					if(downloadResult.is<std::nullptr_t>()) {
+						out.setNull();
+					} else if(downloadResult.is<kj::Exception>()) {
+						out.setException(toProto(downloadResult.get<kj::Exception>()));
+					} else if(downloadResult.is<uint64_t>()) {
+						out.setObject(downloadResult.get<uint64_t>());
+					}
+				});
+				
+				childDownloads.add(mv(processRef));
+			}
+			
+			return kj::joinPromises(childDownloads.releaseAsArray())
+			.then([id = newRecord.id]() {
+				return id;
+			});
+		}
+	};
+};
+
+namespace {
+	struct SharedArrayHolder : public kj::AtomicRefcounted {
+		kj::Array<const capnp::word> data;
+	};
+}
+
+LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(const kj::ReadableFile& f, const capnp::ReaderOptions options) {
+	auto read = [](const word* ptr) {
+		return reinterpret_cast<const capnp::_::WireValue<uint64_t>*>(ptr) -> get();
+	};
+	
+	Array<const kj::byte> prefixMapping = f.mmap(0, 5 * sizeof(word));
+	const word* prefixStart = reinterpret_cast<const word*>(prefixMapping.begin());
+	
+	// Check magic tag
+	KJ_REQUIRE(prefixMapping.slice(0, 8) == ArchiveWriter::MAGIC_TAG.slice(0, 8).asBytes(), "Invalid magic tag");
+	
+	// Reader headers
+	capnp::WordCount headerSize = read(prefixStart + 1) * WORDS;
+	KJ_REQUIRE(headerSize / WORDS >= 3, "Could not load archive file, header size is too small");
+	capnp::WordCount descSize = read(prefixStart + 2);
+	capnp::WordCount dataSize = read(prefixStart + 3);
+	capnp::WordCount infoSize = read(prefixStart + 4);
+	
+	// Calculate section offsets
+	capnp::WordCount dataOffset = 2 * WORDS + headerSize + descSize;
+	capnp::WordCount infoOffset = dataOffset + dataSize;
+	
+	// Load file info
+	Array<const kj::byte> infoSection = f.mmap(infoOffset / WORDS * sizeof(word), infoSize / WORDS * sizeof(word));
+	capnp::FlatArrayMessageReader infoReader(bytesToWords(infoSection.asPtr()));
+	
+	ArchiveInfo::Reader archiveInfo = infoReader.getRoot<ArchiveInfo>();
+	
+	auto objectInfo = archiveInfo.getObjects();
+	auto dataInfo = archiveInfo.getData();
+	
+	// Create mappings from promises to fulfillers for ref dependencies
+	kj::Vector<ForkedPromise<LocalDataRef<capnp::AnyPointer>>> refPromises(objectInfo.size());
+	kj::Vector<Own<PromiseFulfiller<LocalDataRef<capnp::AnyPointer>>>> refFulfillers(objectInfo.size());
+	for(auto i : kj::indices(objectInfo)) {
+		auto paf = kj::newPromiseAndFulfiller<LocalDataRef<capnp::AnyPointer>>();
+		refPromises.add(paf.promise.fork());
+		refFulfillers.add(mv(paf.fulfiller));
+	}
+	
+	Maybe<LocalDataRef<capnp::AnyPointer>> root;
+	
+	// Scan all refs, looking to feed out root and fulfill any dependencies
+	for(auto i : kj::indices(objectInfo)) {
+		auto object = objectInfo[i];
+		auto refs = object.getRefs();
+		
+		auto refBuilder = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(refs.size());
+		for(auto iRef : kj::indices(refs)) {
+			auto refInfo = refs[iRef];
+			if(refInfo.isNull()) {
+				refBuilder.add(nullptr);
+			} else if(refInfo.isException()) {
+				refBuilder.add(capnp::ClientHook::from(capnp::Capability::Client(
+					fromProto(refInfo.getException())
+				)));
+			} else if(refInfo.isObject()) {
+				refBuilder.add(capnp::ClientHook::from(capnp::Capability::Client(
+					refPromises[refInfo.getObject()].addBranch()
+				)));
+			} else {
+				refBuilder.add(capnp::ClientHook::from(capnp::Capability::Client(
+					KJ_EXCEPTION(DISCONNECTED, "Unknown object type")
+				)));
+			}
+		}
+		
+		auto dataRecord = dataInfo[object.getDataId()];
+		
+		kj::Array<const kj::byte> dataMapping = f.mmap((dataOffset / WORDS + dataRecord.getOffsetWords()) * sizeof(word), dataRecord.getSizeBytes());
+		
+		LocalDataRef<capnp::AnyPointer> published = publish(
+			object.getMetadata(),
+			mv(dataMapping),
+			refBuilder.finish()
+		);
+		
+		if(i == archiveInfo.getRoot())
+			root = published;
+		
+		refFulfillers[i] -> fulfill(mv(published));
+	}
+	
+	KJ_IF_MAYBE(pRoot, root) {
+		return mv(*pRoot);
+	}
+	
+	KJ_FAIL_REQUIRE("Root object could not be located in archive", archiveInfo.getRoot(), archiveInfo.getObjects().size());
+}
+
+
+Promise<void> internal::LocalDataServiceImpl::writeArchive(DataRef<capnp::AnyPointer>::Client ref, const kj::File& out) {
+	auto writer = heapHeld<ArchiveWriter>(out);
+	
+	return writer -> writeArchive(mv(ref)).attach(writer.x());
+}
+
+/*Promise<Archive::Entry::Builder> internal::LocalDataServiceImpl::createArchiveEntry(DataRef<capnp::AnyPointer>::Client ref, kj::TreeMap<ID, capnp::Orphan<Archive::Entry>>& entries, capnp::Orphanage orphanage, Maybe<Nursery&> nursery) {
 	using RemoteRef = DataRef<capnp::AnyPointer>::Client;
 	using LocalRef  = LocalDataRef<capnp::AnyPointer>;
 	using capnp::Orphan;
@@ -714,12 +1252,6 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(A
 	return handleEntry(archive.getRoot());
 }
 
-namespace {
-	struct SharedArrayHolder : public kj::AtomicRefcounted {
-		kj::Array<const capnp::word> data;
-	};
-}
-
 LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(const kj::ReadableFile & f, const capnp::ReaderOptions options) {
 	using RemoteRef = DataRef<capnp::AnyPointer>::Client;
 	using LocalRef  = LocalDataRef<capnp::AnyPointer>;
@@ -849,7 +1381,7 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(c
 		handleEntry(e);
 	
 	return handleEntry(archive.getRoot());
-}
+}*/
 
 Promise<void> internal::LocalDataServiceImpl::clone(CloneContext context) {
 	return download(context.getParams().getSource(), false)

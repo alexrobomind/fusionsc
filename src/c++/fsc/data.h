@@ -267,15 +267,15 @@ public:
 	 * Like writeArchive, but instead of writing to a file, stores the data in memory in the
 	 * provided Archive::Builder.
 	 */
-	template<typename Ref, typename T = References<Ref>>
-	Promise<void> buildArchive(Ref reference, Archive::Builder out, Maybe<Nursery&> nursery = Maybe<Nursery&>()) KJ_WARN_UNUSED_RESULT;
+	//template<typename Ref, typename T = References<Ref>>
+	//Promise<void> buildArchive(Ref reference, Archive::Builder out, Maybe<Nursery&> nursery = Maybe<Nursery&>()) KJ_WARN_UNUSED_RESULT;
 	
 	//! Publish the data in the given Archive::Reader as LocalDataRef
 	/**
 	 * Like publishArchive, but copies the data from the in-memory structure given
 	 */
-	template<typename T>
-	LocalDataRef<T> publishArchive(Archive::Reader in);
+	//template<typename T>
+	//LocalDataRef<T> publishArchive(Archive::Reader in);
 	
 	//! Publish the contents of a file as a data ref via mmap
 	LocalDataRef<capnp::Data> publishFile(const kj::ReadableFile& in, kj::ArrayPtr<const kj::byte> fileHash = nullptr);
