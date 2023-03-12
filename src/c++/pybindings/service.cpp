@@ -30,21 +30,21 @@ using namespace fscpy;
 
 namespace {
 
-RootService::Client connectSameThread1(RootConfig::Reader config) {
+LocalResources::Client connectSameThread1(RootConfig::Reader config) {
 	fscpy::PyContext::startEventLoop();
-	return createRoot(config);
+	return createLocalResources(config);
 }
 	
-RootService::Client connectSameThread2() {
+LocalResources::Client connectSameThread2() {
 	Temporary<RootConfig> config;
 	return connectSameThread1(config);
 }
 
-RootService::Client connectRemote1(kj::StringPtr address, unsigned int port) {
+/*RootService::Client connectRemote1(kj::StringPtr address, unsigned int port) {
 	fscpy::PyContext::startEventLoop();
 	KJ_UNIMPLEMENTED("Remote connection not implemented");
 	return connectRemote(address, port);
-}
+}*/
 
 /*RootService::Client connectLocal1() {
 	fscpy::PyContext::startEventLoop();
@@ -62,15 +62,16 @@ struct LocalRootServer {
 	
 	LocalRootServer() :
 		clientFactory(
-			newInProcessServer<RootService>([]() mutable {
+			newInProcessServer<LocalResources>([]() mutable {
 				Temporary<RootConfig> rootConfig;
-				return createRoot(rootConfig);
+				return createLocalResources(rootConfig);
 			})
 		)
 	{}
 	
-	RootService::Client connect() {
-		return clientFactory().castAs<RootService>();
+	LocalResources::Client connect() {
+		auto result = clientFactory().castAs<LocalResources>();
+		return result;
 	}
 };
 
@@ -81,7 +82,7 @@ namespace fscpy {
 		m.def("connectSameThread", &connectSameThread1);
 		m.def("connectSameThread", &connectSameThread2);
 		// m.def("connectLocal", &connectLocal1);
-		m.def("connectRemote", &connectRemote1, py::arg("address"), py::arg("port") = 0);
+		// m.def("connectRemote", &connectRemote1, py::arg("address"), py::arg("port") = 0);
 		
 		py::class_<LocalRootServer>(m, "LocalRootServer")
 			.def(py::init<>())
@@ -92,13 +93,12 @@ namespace fscpy {
 	void loadDefaultSchema(py::module_& m) {
 		// Here we need to specify datatypes that need to be loaded because they are passed to the python interface
 		
+		#define FSC_BUILTIN_SCHEMAS FieldResolver, GeometryResolver, LocalResources, OfflineData, \
+			MergedGeometry, FLTStopReason, FieldlineMapping
+		
 		defaultLoader.addBuiltin<
 			capnp::schema::Node,
-			LocalResources,
-			OfflineData,
-			MergedGeometry,
-			FLTStopReason,
-			FieldlineMapping
+			FSC_BUILTIN_SCHEMAS
 		>();
 		
 		// Schema submodule
@@ -113,7 +113,7 @@ namespace fscpy {
 		
 		// Root module
 		{		
-			auto schemas = getBuiltinSchemas<FieldResolver, GeometryResolver, LocalResources, OfflineData, MergedGeometry, FieldlineMapping>();
+			auto schemas = getBuiltinSchemas<FSC_BUILTIN_SCHEMAS>();
 				
 			for(auto node : schemas) {
 				defaultLoader.importNodeIfRoot(node.getId(), m);

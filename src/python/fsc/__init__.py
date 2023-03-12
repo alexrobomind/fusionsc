@@ -30,7 +30,7 @@ def local() -> native.RootService:
 	Creates a local instance of the FSC services
 	"""
 	
-	return localRoot # localServer.connect() #native.connectSameThread()
+	return localRoot.root().root # localServer.connect() #native.connectSameThread()
 
 def tracer(backend: Optional[native.RootService] = None) -> flt.FLT:
 	"""

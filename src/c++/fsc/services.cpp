@@ -9,6 +9,7 @@
 #include "local-vat-network.h"
 
 #include <capnp/rpc-twoparty.h>
+#include <capnp/membrane.h>
 
 #include <kj/list.h>
 
@@ -77,6 +78,18 @@ struct RootServer : public RootService::Server {
 	}
 };
 
+struct LocalResourcesImpl : public LocalResources::Server {
+	Temporary<RootConfig> config;
+	LocalResourcesImpl(RootConfig::Reader config) :
+		config(config)
+	{}
+	
+	Promise<void> root(RootContext ctx) {
+		ctx.getResults().setRoot(createRoot(config));
+		return READY_NOW;
+	}
+};
+
 class DefaultErrorHandler : public kj::TaskSet::ErrorHandler {
 	void taskFailed(kj::Exception&& exception) override {
 		KJ_LOG(WARNING, "Exception in connection", exception);
@@ -128,6 +141,22 @@ struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::Bootstra
 		return factory();
 	}
 	
+	//! Keep-alive membrane that maintains the connection as long as at least one instance is there
+	struct KeepaliveMembrane : public capnp::MembranePolicy, kj::Refcounted {
+		Own<void> keepAlive;
+		KeepaliveMembrane(Own<void> keepAlive) : keepAlive(mv(keepAlive)) {}
+		
+		Own<MembranePolicy> addRef() override { return kj::addRef(*this); }
+		
+		kj::Maybe<capnp::Capability::Client> inboundCall(uint64_t interfaceId, uint16_t methodId, capnp::Capability::Client target) override {
+			return nullptr;
+		}
+		
+		kj::Maybe<capnp::Capability::Client> outboundCall(uint64_t interfaceId, uint16_t methodId, capnp::Capability::Client target) override {
+			return nullptr;
+		}
+	};
+	
 	void run() {
 		// Initialize event loop
 		Library library = this->library->addRef();
@@ -165,10 +194,8 @@ struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::Bootstra
 		auto rpcClient  = heapHeld<capnp::RpcSystem<VatId>>(*vatNetwork, nullptr);
 		auto client     = rpcClient -> bootstrap(LocalVatHub::INITIAL_VAT_ID);
 		
-		auto clientHook = capnp::ClientHook::from(mv(client));
-		clientHook = clientHook.attach(rpcClient.x(), vatNetwork.x());
-		
-		return Service::Client(mv(clientHook));
+		Own<void> attachments = kj::attachRef(client, vatNetwork.x(), rpcClient.x());
+		return capnp::membrane(mv(client), kj::refcounted<KeepaliveMembrane>(mv(attachments)));
 	}
 };
 
@@ -245,6 +272,10 @@ kj::Function<capnp::Capability::Client()> fsc::newInProcessServer(kj::Function<c
 	return [server = mv(server)]() mutable {
 		return server->connect();
 	};
+}
+
+LocalResources::Client fsc::createLocalResources(RootConfig::Reader config) {
+	return kj::heap<LocalResourcesImpl>(config);
 }
 
 RootService::Client fsc::createRoot(RootConfig::Reader config) {

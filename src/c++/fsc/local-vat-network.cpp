@@ -82,8 +82,9 @@ Promise<Maybe<Own<capnp::IncomingRpcMessage>>> LocalVatNetwork::Connection::rece
 		return Maybe<Own<capnp::IncomingRpcMessage>>(mv(result));
 	}
 	
-	if(locked -> isClosed)
+	if(locked -> isClosed) {
 		return Maybe<Own<capnp::IncomingRpcMessage>>(nullptr);
+	}
 
 	auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
 	locked -> readyFulfiller = mv(paf.fulfiller);
@@ -125,7 +126,7 @@ LocalVatNetwork::LocalVatNetwork(const LocalVatHub& hub) :
 	vatId.setKey(myID);
 }
 
-LocalVatNetwork::~LocalVatNetwork() {
+LocalVatNetwork::~LocalVatNetwork() {	
 	// De-register vat from the network hub
 	{
 		auto hubLocked = hub -> data.lockExclusive();
@@ -165,8 +166,8 @@ Maybe<Own<LocalVatNetworkBase::Connection>> LocalVatNetwork::connect(lvn::VatId:
 	
 	KJ_IF_MAYBE(pVat, hubData -> vats.find(hostId.getKey())) {
 		// Create two connection endpoints
-		auto myConn = kj::heap<Connection>();
-		auto peerConn = kj::heap<Connection>();
+		auto myConn = kj::atomicRefcounted<Connection>();
+		auto peerConn = kj::atomicRefcounted<Connection>();
 		
 		// Link two connections
 		myConn -> peer = peerConn -> addRef();
