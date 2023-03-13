@@ -24,9 +24,13 @@ struct SSHChannelStream : public AsyncIOStream {
 	Promise<void> write(void* buffer, size_t nBytes) override;
 	Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
 	
+	// AsyncIOStream
+	void shutdownWrite() override;
+	
 	void close();
 	
 	kj::ListLink<SSHChannelStream> streamsLink;
+	kj::ListLink<SSHChannelStream> writingStreamsLink;
 	Own<SSHChannelImpl> parent;
 	size_t streamId;
 	
@@ -44,6 +48,7 @@ struct SSHChannelImpl : public SSHChannel, public kj::Refcounted {
 	
 	//! List of all open streams
 	List<ChannelStream, &ChannelStream::streamsLink> streams;
+	List<ChannelStream, &ChannelStream::writingStreamsLink> writingStreams;
 		
 	kj::ListLink<SSHChannelImpl> channelsLink;
 	
@@ -217,20 +222,23 @@ SSHSessionImpl::SSHSessionImpl(Own<kj::AsyncIOStream> stream) :
 }
 
 SSHSessionImpl::~SSHSessionImpl() {
+	// Terminate the keep-alive loop
+	keepAliveTask = READY_NOW;
+	
 	// Remove the stream to cause all send / receive calls to fail
 	stream = nullptr;
+	
+	// Close session
+	// This also unlinks all nested objects
+	close();
+	
+	// Terminate all active closing tasks (data structures will be cleared
+	// up by libssh2_session_free
+	tasks.clear();
 	
 	if(session != nullptr) {
 		libssh2_session_free(session);
 		session = nullptr;
-	}
-	
-	// Freeing the session also cleared all channels
-	// Make sure that all channels are notified of that
-	for(auto& channel : channels) {
-		channel.libChannel = nullptr;
-		
-		channels.remove(channel);
 	}
 }
 
@@ -458,19 +466,18 @@ void SSHSessionImpl::close() {
 		channel.close():
 	}
 	
-	auto result = kj::joinPromises(channelCloseOps.releaseAsArray())
-	.then([this]() mutable {
-		return queueLibssh2Call([this]() mutable {
+	tasks.add(
+		queueLibssh2Call([this]() mutable {
 			return libssh2_session_disconnect(libSession, "Disconnected by client");
-		}, true);
-	})
-	.then([this]) mutable {
-		return queueLibssh2Call([this]() mutable {
-			int result = libssh2_session_free(libSession);
-			if(result == 0) libSession = nullptr;
-			return result;
-		}, true);
-	});
+		}, true)
+		.then([this]) mutable {
+			return queueLibssh2Call([this]() mutable {
+				int result = libssh2_session_free(libSession);
+				if(result == 0) libSession = nullptr;
+				return result;
+			}, true);
+		})
+	);
 	tasks.add(mv(result));
 }
 
@@ -572,54 +579,89 @@ SSHChannelStream::SSHChannelStream(Own<SSHChannelImpl> newParent, size_t id) :
 	streamId(id)
 {
 	parent -> streams.add(*this);
+	parent -> writingStreams.add(*this);
 }
 
 SSHChannelStream::~SSHChannelStream() {
+	shutdownWrite();
+	
 	if(streamsLink.isLinked()) {
 		parent -> streams.remove(*this);
 	}
 }
 
-Promise<size_t> SSHChannel::ChannelStream::tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {	
-	return parent -> session -> queueOp<size_t>([this, buffer, minBytes, maxBytes]() mutable -> Maybe<size_t> {
+Promise<size_t> SSHChannelStream::tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {	
+	return parent -> session -> queueOp<size_t>([this, buffer = (unsigned char*) buffer, minBytes, maxBytes, bytesRead = (size_t) 0]() mutable -> Maybe<size_t> {
 		KJ_REQUIRE(streamsLink.isLinked(), "Stream closed");
 		KJ_REQUIRE(parent -> isOpen(), "Channel closed");
-			
-		ssize_t rc = libssh2_channel_read_ex(parent -> channel, streamID, ((unsigned char*) buffer) + bytesRead, maxBytes - bytesRead);
 		
+		// Try to read
+		ssize_t rc = libssh2_channel_read_ex(parent -> channel, streamID, buffer, maxBytes);
+		
+		// No packets in queue, please ask again later
 		if(rc == LIBSSH2_ERROR_EAGAIN)
 			return nullptr;
 		
+		// If the channel was already closed, return whatever bytes we have
 		if(rc == LIBSSH2_CHANNEL_CLOSED)
-			return 0;
+			return bytesRead;
+				
+		KJ_REQUIRE(rc >= 0, "Failure during read", streamID);
+		bytesRead += rc;
 		
-		KJ_REQUIRE(rc == 0, "Failure during read", streamID);
-		
-		return (size_t) rc;
+		if(rc < minBytes) {
+			// We read data, but not enough to fill our buffer
+			// Adjust buffer and boundaries for later calls
+			buffer += rc;
+			minBytes -= rc;
+			maxBytes -= rc;
+			
+			// The read was insufficient to meet our window requirements.
+			// See whether that is because the stream found EOF
+			auto rc = libssh2_channel_eof(parent -> channel);
+			if(rc == 1) {
+				// We hit EOF
+				return bytesRead;
+			} else if(rc == 0) {
+				// The stream is still open
+				// Wait until more data arrives
+				return nullptr;
+			} else if(rc == LIBSSH2_ERROR_EAGAIN) {
+				// Stream is busy, please ask again later
+				// Wait until data arrives
+				return nullptr;
+			}
+			
+			KJ_FAIL_REQUIRE("libssh2_channel_eof failed", rc, streamID);
+		} else {
+			// We collected enough bytes for now.
+			return bytesRead;
+		}
 	});
 }
 
-Promise<void> SSHChannel::ChannelStream::write(void* buffer, size_t nBytes) override {
-	return parent -> session -> queueOp<bool>([this, buffer, nBytes, bytesWritten = (size_t) 0, ]() mutable -> Maybe<bool> {
+Promise<void> SSHChannelStream::write(void* buffer, size_t nBytes) override {
+	return parent -> session -> queueOp<bool>([this, buffer = (unsigned char*) buffer, nBytes]() mutable -> Maybe<bool> {
 		KJ_REQUIRE(streamsLink.isLinked(), "Stream closed");
 		KJ_REQUIRE(parent -> isOpen(), "Channel closed");
 			
-		ssize_t rc = libssh_channel_write_ex(parent -> channel, streamID, ((unsigned char*) buffer) + bytesWritten, nBytes - bytesWritten);
+		ssize_t rc = libssh_channel_write_ex(parent -> channel, streamID, buffer, nBytes);
 		
 		if(rc == LIBSSH2_ERROR_EAGAIN)
 			return nullptr;
 		
-		KJ_REQUIRE(rc > 0);
-		bytesWritten += rc;
+		KJ_REQUIRE(rc >= 0);
+		buffer += rc;
+		nBytes -= rc;
 		
-		if(nBytes >= maxBytes)
+		if(nBytes == 0)
 			return true;
 		
 		return nullptr;
-	});
+	}).ignoreResult();
 }
 
-Promise<void> SSHChannel::ChannelStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {	
+Promise<void> SSHChannelStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {	
 	Promise<void> result = READY_NOW;
 	
 	for(auto piece : pieces) {
@@ -629,6 +671,22 @@ Promise<void> SSHChannel::ChannelStream::write(ArrayPtr<const ArrayPtr<const byt
 	}
 	
 	return result;
+}
+
+void SSHChannelStream::shutdownWrite() {
+	if(!writingStreamsLink.isLinked())
+		return;
+	
+	parent -> writingStreams.remove(*this);
+	
+	if(parent -> writingStreams().empty()) {
+		parent -> parent -> tasks.add(parent -> session -> queueLibssh2Call([this]() mutable {
+			KJ_REQUIRE(streamsLink.isLinked(), "Stream closed");
+			KJ_REQUIRE(parent -> isOpen(), "Channel closed");
+			
+			return libssh2_channel_send_eof(parent -> channel);
+		}));
+	}
 }
 
 }
