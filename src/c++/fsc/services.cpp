@@ -76,6 +76,11 @@ struct RootServer : public RootService::Server {
 		ctx.initResults().setService(fsc::newMapper(mv(flt), mv(idx)));
 		return READY_NOW;
 	}
+	
+	Promise<void> dataService(DataServiceContext ctx) override {
+		ctx.getResults().setService(getActiveThread().dataService());
+		return READY_NOW;
+	}
 };
 
 struct LocalResourcesImpl : public LocalResources::Server {
@@ -84,9 +89,39 @@ struct LocalResourcesImpl : public LocalResources::Server {
 		config(config)
 	{}
 	
-	Promise<void> root(RootContext ctx) {
+	Promise<void> root(RootContext ctx) override {
 		ctx.getResults().setRoot(createRoot(config));
 		return READY_NOW;
+	}
+	
+	Promise<void> openArchive(OpenArchiveContext ctx) override {
+		auto fs = kj::newDiskFilesystem();
+		auto currentPath = fs -> getCurrentPath();
+		auto realPath = currentPath.eval(ctx.getParams().getFilename());
+		
+		Own<const kj::ReadableFile> file = fs -> getRoot().openFile(realPath);
+		auto result = getActiveThread().dataService().publishArchive<capnp::AnyPointer>(*file);
+		
+		ctx.getResults().setRef(mv(result));
+		return READY_NOW;
+	}
+	
+	Promise<void> writeArchive(WriteArchiveContext ctx) override {
+		auto fs = kj::newDiskFilesystem();
+		auto currentPath = fs -> getCurrentPath();
+		auto realPath = currentPath.eval(ctx.getParams().getFilename());
+		
+		Own<const kj::File> file = fs -> getRoot().openFile(realPath, kj::WriteMode::CREATE | kj::WriteMode::MODIFY | kj::WriteMode::CREATE_PARENT);
+		Promise<void> result = getActiveThread().dataService().writeArchive(ctx.getParams().getRef(), *file);
+		
+		return result.attach(mv(file));
+	}
+	
+	Promise<void> download(DownloadContext ctx) override {		
+		return getActiveThread().dataService().download(ctx.getParams().getRef())
+		.then([ctx](LocalDataRef<capnp::AnyPointer> ref) mutable {
+			ctx.getResults().setRef(mv(ref));
+		});
 	}
 };
 

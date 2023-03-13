@@ -4,6 +4,7 @@ from . import flt
 from . import asnc
 from . import data
 from . import geometry
+from . import worker
 
 from .native import kj
 from .native import capnp
@@ -15,22 +16,18 @@ from .native.timer import delay
 
 from typing import Optional
 
+import threading
+
 __all__ = [
 	'run', 'asyncFunction', 'wait', 'importOfflineData', 'delay', 'Promise', 'MagneticConfig'
 ]
-
-# Initialize event loop for main thread
-asnc.startEventLoop()
-
-localServer = native.LocalRootServer()
-localRoot = localServer.connect()
 
 def local() -> native.RootService:
 	"""
 	Creates a local instance of the FSC services
 	"""
 	
-	return localRoot.root().root # localServer.connect() #native.connectSameThread()
+	return worker.root()
 
 def tracer(backend: Optional[native.RootService] = None) -> flt.FLT:
 	"""

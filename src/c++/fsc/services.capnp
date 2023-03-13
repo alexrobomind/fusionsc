@@ -29,6 +29,8 @@ interface RootService {
 	newHFCamProvider   @3 () -> (service : HFCam.HFCamProvider);
 	newKDTreeService   @4 () -> (service : Index.KDTreeService);
 	newMapper          @5 () -> (service : FLT.Mapper);
+	
+	dataService @6 () -> (service : Data.DataService);
 }
 
 # Extended local interface to provide access to the local file system and network connections
