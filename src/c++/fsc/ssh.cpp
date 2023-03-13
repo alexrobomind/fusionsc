@@ -14,9 +14,8 @@ struct SSHChannelImpl;
 struct SSHSessionImpl;
 
 struct SSHChannelStream : public AsyncIOStream {
-	inline ChannelStream(Own<SSHChannelImpl> channel, size_t streamID) :
-		channel(mv(channel)), streamID(streamID)
-	{}
+	SSHChannelStream(Own<SSHChannelImpl> channel, size_t streamID);
+	~SSHChannelStream();
 	
 	// AsyncInputStream
 	Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
@@ -25,37 +24,41 @@ struct SSHChannelStream : public AsyncIOStream {
 	Promise<void> write(void* buffer, size_t nBytes) override;
 	Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
 	
+	void close();
+	
 	kj::ListLink<SSHChannelStream> streamsLink;
-	Own<SSHChannelImpl> channel;
-	size_t streamID;
+	Own<SSHChannelImpl> parent;
+	size_t streamId;
 	
 	kj::Canceler canceler;
 };
 
 struct SSHChannelImpl : public SSHChannel, public kj::Refcounted {
-	SSHChannelImpl(SSHSessionImpl& parent, LIBSSH2_CHANNEL* channel);
+	SSHChannelImpl(Own<SSHSessionImpl> parent, LIBSSH2_CHANNEL* channel);
 	~SSHChannelImpl();
 	
 	Own<SSHChannel> addRef() override { return kj::addRef(*this); };
 	Own<AsyncIOStream> openStream(size_t id) override ;
-	virtual void close() override ;
+	void close() override ;
+	bool isOpen() override ;
 	
+	//! List of all open streams
 	List<ChannelStream, &ChannelStream::streamsLink> streams;
 		
-	Own<SSHSessionImpl> parent;
 	kj::ListLink<SSHChannelImpl> channelsLink;
 	
-	LIBSSH2_CHANNEL* libChannel;
+	LIBSSH2_CHANNEL* const libChannel;
 };
 
 struct SSHChannelListenerImpl : public SSHChannelListener, public kj::Refcounted {
-	SSHChannelListenerImpl(SSHSessionImpl& parent, LIBSSH2_LISTENER* pListener, int port);
+	SSHChannelListenerImpl(Own<SSHSessionImpl> parent, LIBSSH2_LISTENER* pListener, int port);
 	~SSHChannelListener();
 	
 	Promise<Own<SSHChannel>> accept() override ;
 	int getPort() override { return port; }
 	Own<SSHChannelListener> addRef() override { return kj::addRef(*this); };
 	void close() override ;
+	bool isOpen() override ;
 	
 	Own<SSHSessionImpl> parent;
 	
@@ -107,6 +110,7 @@ struct SSHSessionImpl : public SSHSession, public kj::Refcounted {
 	Promise<Own<SSHChannel>> connectRemote(kj::StringPtr remoteHost, size_t remotePort, kj::StringPtr srcHost, size_t srcPort) override ;
 	Promise<Own<SSHChannelListener>> listen(kj::StringPtr host = "0.0.0.0"_kj, Maybe<int> port = nullptr) override ;
 	void close() override ;
+	bool isOpen() override ;
 	Promise<void> drain() override ;
 	
 	//! Underlying I/O stream
@@ -470,27 +474,31 @@ void SSHSessionImpl::close() {
 	tasks.add(mv(result));
 }
 
+bool SSHSessionImpl::isOpen() {
+	return liBSession != nullptr;
+}
+
 Promise<void> SSHSessionImpl::drain() {
 	return tasks.onEmpty();
 }
 
 // class SSHChannelListenerImpl
 
-SSHChannelListenerImpl::SSHChannelListenerImpl(SSHSessionImpl& parent, LIBSSH2_LISTENER* listener, int port) :
-	parent(parent.addImplRef()),
+SSHChannelListenerImpl::SSHChannelListenerImpl(Own<SSHSessionImpl> newParent, LIBSSH2_LISTENER* listener, int port) :
+	parent(mv(newParent)),
 	listener(listener),
 	port(port)
 {
-	parent.listeners.add(*this);
+	parent -> listeners.add(*this);
 }
 
 SSHChannelListenerImpl::~SSHChannelListenerImpl() {
 	close();
 }
 
-Promise<Own<SSHChannel>> SSHChannelListenerImpl::accept() {
+Promise<Own<SSHChannel>> SSHChannelListenerImpl::accept() {	
 	return queueOp<Own<SSHChannel>>([this]() mutable -> Maybe<Own<SSHChannel>> {
-		KJ_REQUIRE(listenersLink.isLinked(), "Listener was closed");
+		KJ_REQUIRE(isOpen(), "Listener was closed");
 		LIBSSH2_CHANNEL* result = libssh2_channel_forward_accept(listener);
 		
 		if(result == nullptr) {
@@ -513,6 +521,10 @@ void SSHChannelListenerImpl::close() {
 	}
 }
 
+bool SSHChannelListenerImpl::isOpen() {
+	return listenersLink().isLinked();
+}
+
 Own<AsyncIOStream> SSHChannel::getStream(size_t id) {
 	auto result = kj::heap<ChannelStream>(*this, id);
 	channels.add(*result);
@@ -521,96 +533,90 @@ Own<AsyncIOStream> SSHChannel::getStream(size_t id) {
 
 // class SSHChannelImpl
 
-Promise<bool> SSHChannel::close() {
-	if(libChannel == nullptr)
-		return false;
-	
-	auto closeChannelOp = [libChannel, this]() -> Maybe<bool> {
-		int returnCode = libssh2_channel_free(libChannel);
-		
-		if(returnCode == LIBSSH2_ERROR_EAGAIN)
-			return nullptr;
-		
-		KJ_REQUIRE(returnCode == 0);
-		
-		return true;
-	};
-	
-	libChannel = nullptr;
-	
-	return session.runAsync(mv(closeChannelOp), false);
+SSHChannelImpl::SSHChannelImpl(Own<SSHSessionImpl> newParent, LIBSSH2_CHANNEL* channel) :
+	parent(mv(newParent)),
+	channel(channel)
+{
+	parent -> channels.add(*this);
 }
 
-SSHChannel::ChannelStream::~ChannelStream() {
-	if(streamsLink.isLinked()) {
-		channel.streams.remove(*this);
+SSHChannelImpl::~SSHChannelImpl() {
+	close();
+}
+
+void SSHChannelImpl::close() {
+	if(!isOpen())
+		return;
+	
+	parent.tasks.add(parent -> queueLibssh2Call([channe]() {
+		return libssh2_channel_close(channel);
+	}).attach(addRef()));
+	
+	for(auto& stream : streams) {
+		stream.close();
 	}
 }
 
-Promise<size_t> SSHChannel::ChannelStream::tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-	struct OpImpl {
-		ChannelStream& stream;
-		
-		void* buffer;
-		size_t minBytes;
-		size_t maxBytes;
-		OpImpl(ChannelStream& stream, void* buffer, size_t minBytes, size_t maxBytes) : channel(channel), buffer(buffer), minBytes(minBytes), maxBytes(maxBytes) {}
+bool SSHChannelImpl::isOpen() {
+	return channelsLink.isLinked();
+}
 
-		size_t bytesRead = 0;
+Own<AsyncIOStream> SSHChannelImpl::openStream(size_t id) {
+	return kj::heap<SSHChannelStream>>(*this, id);
+}
+
+// class SSHChannelStream
+
+SSHChannelStream::SSHChannelStream(Own<SSHChannelImpl> newParent, size_t id) :
+	parent(mv(newParent)),
+	streamId(id)
+{
+	parent -> streams.add(*this);
+}
+
+SSHChannelStream::~SSHChannelStream() {
+	if(streamsLink.isLinked()) {
+		parent -> streams.remove(*this);
+	}
+}
+
+Promise<size_t> SSHChannel::ChannelStream::tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {	
+	return parent -> session -> queueOp<size_t>([this, buffer, minBytes, maxBytes]() mutable -> Maybe<size_t> {
+		KJ_REQUIRE(streamsLink.isLinked(), "Stream closed");
+		KJ_REQUIRE(parent -> isOpen(), "Channel closed");
+			
+		ssize_t rc = libssh2_channel_read_ex(parent -> channel, streamID, ((unsigned char*) buffer) + bytesRead, maxBytes - bytesRead);
 		
-		Maybe<size_t> operator() {
-			KJ_REQUIRE(stream.streamsLink -> isLinked(), "Channel deleted");
-			KJ_REQUIRE(stream.channel.libChannel != nullptr, "Channel closed");
-			
-			ssize_t rc = libssh2_channel_read_ex(stream.channel.libChannel, stream.streamID, ((unsigned char*) buffer) + bytesRead, maxBytes - bytesRead);
-			
-			if(rc == LIBSSH2_ERROR_EAGAIN)
-				return nullptr;
-						
-			KJ_REQUIRE(rc >= 0);
-			
-			bytesRead += rc;
-			
-			if(bytesRead >= minBytes)
-				return bytesRead;
-			else
-				return nullptr;
-		}
-	};
-	
-	return canceler.wrap(session.runAsync<size_t>(OpImpl(*this, buffer, minBytes, maxBytes), true));
+		if(rc == LIBSSH2_ERROR_EAGAIN)
+			return nullptr;
+		
+		if(rc == LIBSSH2_CHANNEL_CLOSED)
+			return 0;
+		
+		KJ_REQUIRE(rc == 0, "Failure during read", streamID);
+		
+		return (size_t) rc;
+	});
 }
 
 Promise<void> SSHChannel::ChannelStream::write(void* buffer, size_t nBytes) override {
-	struct OpImpl {
-		ChannelStream& stream;
+	return parent -> session -> queueOp<bool>([this, buffer, nBytes, bytesWritten = (size_t) 0, ]() mutable -> Maybe<bool> {
+		KJ_REQUIRE(streamsLink.isLinked(), "Stream closed");
+		KJ_REQUIRE(parent -> isOpen(), "Channel closed");
+			
+		ssize_t rc = libssh_channel_write_ex(parent -> channel, streamID, ((unsigned char*) buffer) + bytesWritten, nBytes - bytesWritten);
 		
-		void* buffer;
-		size_t maxBytes;
-		OpImpl(SSHChannel& channel, void* buffer, size_t maxBytes) : channel(channel), buffer(buffer), maxBytes(maxBytes) {}
-		
-		size_t bytesWritten = 0;
-		
-		Maybe<bool> operator() {
-			KJ_REQUIRE(stream.streamsLink -> isLinked(), "Channel deleted");
-			KJ_REQUIRE(stream.channel.libChannel != nullptr, "Channel closed");
-			
-			ssize_t rc = libssh_channel_write_ex(stream.channel.libChannel, stream.streamID, ((unsigned char*) buffer) + bytesWritten, maxBytes - bytesWritten);
-			
-			if(rc == LIBSSH2_ERROR_EAGAIN)
-				return nullptr;
-			
-			KJ_REQUIRE(rc > 0);
-			bytesWritten += rc;
-			
-			if(bytesWritten >= maxBytes)
-				return true;
-			
+		if(rc == LIBSSH2_ERROR_EAGAIN)
 			return nullptr;
-		}
-	};
-	
-	return session.runAsync<size_t>(OpImpl(*this, buffer, nBytes), true).ignoreResult();
+		
+		KJ_REQUIRE(rc > 0);
+		bytesWritten += rc;
+		
+		if(nBytes >= maxBytes)
+			return true;
+		
+		return nullptr;
+	});
 }
 
 Promise<void> SSHChannel::ChannelStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {	

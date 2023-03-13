@@ -7,6 +7,7 @@ struct SSHChannel {
 	virtual Own<AsyncIOStream> openStream(size_t id) = 0;
 	
 	virtual void close() = 0;
+	virtual bool isOpen() = 0;
 };
 
 struct SSHChannelListener {
@@ -18,6 +19,7 @@ struct SSHChannelListener {
 	virtual Own<SSHChannelListener> addRef() = 0;
 	
 	virtual void close() = 0;
+	virtual bool isOpen() = 0;
 };
 
 struct SSHSession {
@@ -31,6 +33,7 @@ struct SSHSession {
 	virtual Promise<bool> authenticatePassword(kj::StringPtr user, kj::StringPtr password) = 0;
 	
 	virtual void close() = 0;
+	virtual bool isOpen() = 0;
 	
 	Promise<void> drain();
 };
