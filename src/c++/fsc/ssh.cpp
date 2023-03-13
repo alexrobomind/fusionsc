@@ -149,6 +149,10 @@ ssize_t libssh2SendCallback(
 ) {
 	SSHSessionImpl* session = reinterpret_cast<SSHSessionImpl*>(*abstract);
 	
+	if(session -> stream.get() == nullptr) {
+		return LIBSSH2_ERROR_SOCKET_DISCONNECT;
+	}
+	
 	try {
 		return (ssize_t) session -> writeToStream(buffer, length));
 	} catch(kj::Exception& e) {
@@ -168,6 +172,10 @@ ssize_t SSHSession::receiveCallback(
 	void **abstract
 ) {
 	SSHSessionImpl* session = reinterpret_cast<SSHSessionImpl*>(*abstract);
+	
+	if(session -> stream.get() == nullptr) {
+		return LIBSSH2_ERROR_SOCKET_DISCONNECT;
+	}
 	
 	try {
 		KJ_IF_MAYBE(pSize, session -> tryReadFromStream(buffer, length)) {
@@ -226,7 +234,10 @@ SSHSessionImpl::~SSHSessionImpl() {
 	keepAliveTask = READY_NOW;
 	
 	// Remove the stream to cause all send / receive calls to fail
-	stream = nullptr;
+	// Note that this is safe because libssh2SendCallback and libssh2RecvCallback
+	// explicitly check whether the stream is null (don't want an exception to be
+	// propagated in that case).
+	stream = Own<AsyncIOStream>();
 	
 	// Close session
 	// This also unlinks all nested objects
@@ -268,9 +279,7 @@ Promise<void> SSHSessionImpl::keepAlive() {
 	});
 }
 
-Maybe<size_t> SSHSessionImpl::tryReadFromStream(void* buffer, size_t length) {
-	KJ_REQUIRE(stream != nullptr);
-	
+Maybe<size_t> SSHSessionImpl::tryReadFromStream(void* buffer, size_t length) {	
 	KJ_IF_MAYBE(pBytes, bytesReady) {
 		KJ_REQUIRE(activeRead == nullptr);
 		
@@ -301,9 +310,7 @@ Maybe<size_t> SSHSessionImpl::tryReadFromStream(void* buffer, size_t length) {
 	return nullptr;
 }
 
-ssize_t SSHSessionImpl::writeToStream(const void* buffer, size_t length) {
-	KJ_REQUIRE(stream != nullptr);
-	
+ssize_t SSHSessionImpl::writeToStream(const void* buffer, size_t length) {	
 	auto tmpBuf = kj::heapArray<kj::byte>(length);
 	memcpy(tmpBuf.begin(), buffer, length);
 	
