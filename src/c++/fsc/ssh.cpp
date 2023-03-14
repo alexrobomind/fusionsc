@@ -2,13 +2,18 @@
 #include "local.h"
 
 #include <libssh2.h>
-
 #include <kj/list.h>
+
+#include <errno.h>
 
 using kj::AsyncIoStream;
 using kj::List;
 
 namespace fsc {
+
+SSHChannel::~SSHChannel() {}
+SSHChannelListener::~SSHChannelListener() {}
+SSHSession::~SSHSession() {}
 	
 namespace {
 		
@@ -33,8 +38,6 @@ struct SSHChannelStream : public AsyncIoStream {
 	// AsyncIoStream
 	void shutdownWrite() override;
 	Promise<void> whenWriteDisconnected() override;
-	
-	void close();
 	
 	kj::ListLink<SSHChannelStream> streamsLink;
 	kj::ListLink<SSHChannelStream> writingStreamsLink;
@@ -137,7 +140,7 @@ struct SSHSessionImpl : public SSHSession, public kj::Refcounted {
 	Promise<void> writesFinished = READY_NOW;
 	
 	//! Promise that tracks the currently active read
-	Maybe<Promise<void>> activeRead;
+	Promise<void> activeRead = READY_NOW;
 	
 	//! Promise holding the keep-alive loop
 	Promise<void> keepAliveTask;
@@ -145,6 +148,7 @@ struct SSHSessionImpl : public SSHSession, public kj::Refcounted {
 	Maybe<size_t> bytesReady;
 	size_t bytesConsumed = 0;
 	kj::Array<kj::byte> readBuffer;
+	bool readActive = false;
 	
 	List<SSHChannelImpl,&SSHChannelImpl::channelsLink> channels;
 	List<SSHChannelListenerImpl, &SSHChannelListenerImpl::listenersLink> listeners;
@@ -161,6 +165,7 @@ ssize_t libssh2SendCallback(
 	int flags,
 	void **abstract
 ) {
+	KJ_DBG("send CB");
 	SSHSessionImpl* session = reinterpret_cast<SSHSessionImpl*>(*abstract);
 	
 	if(session -> stream.get() == nullptr) {
@@ -170,6 +175,7 @@ ssize_t libssh2SendCallback(
 	try {
 		return (ssize_t) session -> writeToStream(buffer, length);
 	} catch(kj::Exception& e) {
+		KJ_DBG("Error in libssh2SendCallback", e);
 		if(e.getType() == kj::Exception::Type::DISCONNECTED) {
 			return LIBSSH2_ERROR_SOCKET_DISCONNECT;
 		}
@@ -185,32 +191,30 @@ ssize_t libssh2RecvCallback(
 	int flags,
 	void **abstract
 ) {
+	KJ_DBG("recv CB");
 	SSHSessionImpl* session = reinterpret_cast<SSHSessionImpl*>(*abstract);
 	
 	if(session -> stream.get() == nullptr) {
+		KJ_DBG("disconnected");
 		return LIBSSH2_ERROR_SOCKET_DISCONNECT;
 	}
 	
 	try {
 		KJ_IF_MAYBE(pSize, session -> tryReadFromStream(buffer, length)) {
+			KJ_DBG("Read from stream", *pSize);
 			return (ssize_t) *pSize;
 		} else {
-			return LIBSSH2_ERROR_EAGAIN;
+			KJ_DBG("EAGAIN");
+			return -EAGAIN;
 		}
 	} catch(kj::Exception& e) {
+		KJ_DBG("Error in libssh2RecvCallback", e);
 		if(e.getType() == kj::Exception::Type::DISCONNECTED) {
 			return LIBSSH2_ERROR_SOCKET_DISCONNECT;
 		}
 	}
 	
 	return LIBSSH2_ERROR_SOCKET_NONE;
-}
-
-Promise<Own<SSHSession>> createSSHSession(Own<kj::AsyncIoStream> stream) {
-	Own<SSHSessionImpl> sess = kj::refcounted<SSHSessionImpl>(mv(stream));
-	Promise<void> startupTask = sess -> startup();
-	return startupTask
-	.then([sess = mv(sess)]() mutable -> Own<SSHSession> { return mv(sess); });
 }
 	
 
@@ -248,6 +252,7 @@ SSHSessionImpl::~SSHSessionImpl() noexcept {
 	// Note that this is safe because libssh2SendCallback and libssh2RecvCallback
 	// explicitly check whether the stream is null (don't want an exception to be
 	// propagated in that case).
+	writesFinished = READY_NOW;
 	stream = Own<AsyncIoStream>();
 	
 	// Close session
@@ -265,8 +270,12 @@ SSHSessionImpl::~SSHSessionImpl() noexcept {
 }
 
 Promise<void> SSHSessionImpl::startup() {
+	KJ_DBG("Engaging startup task");
 	return queueLibssh2Call([this]() {
-		return libssh2_session_startup(session, 0);
+		KJ_DBG("pre-startup");
+		auto rc = libssh2_session_startup(session, 0);
+		KJ_DBG("Startup", rc);
+		return rc;
 	});
 }
 
@@ -290,12 +299,14 @@ Promise<void> SSHSessionImpl::keepAlive() {
 	});
 }
 
-Maybe<size_t> SSHSessionImpl::tryReadFromStream(void* buffer, size_t length) {	
+Maybe<size_t> SSHSessionImpl::tryReadFromStream(void* buffer, size_t length) {
+	KJ_DBG("SSH session: tryRead", length);
 	KJ_IF_MAYBE(pBytes, bytesReady) {
-		KJ_REQUIRE(activeRead == nullptr);
+		KJ_REQUIRE(!readActive);
 		
 		size_t bytesToCopy = kj::min(*pBytes - bytesConsumed, length);
-		memcpy(buffer, readBuffer.begin(), bytesToCopy);
+		memcpy(buffer, readBuffer.begin() + bytesConsumed, bytesToCopy);
+		KJ_DBG("Read: ", readBuffer.slice(bytesConsumed, bytesToCopy));
 		bytesConsumed += bytesToCopy;
 		
 		if(bytesConsumed >= *pBytes) {
@@ -306,28 +317,40 @@ Maybe<size_t> SSHSessionImpl::tryReadFromStream(void* buffer, size_t length) {
 		return bytesToCopy;
 	}
 	
-	if(activeRead == nullptr) {
-		if(readBuffer.size() < length)
-			readBuffer = kj::heapArray<kj::byte>(length);
+	if(!readActive) {
+		readActive = true;
 		
-		activeRead = stream->read(readBuffer.begin(), 1, length)
+		activeRead = activeRead
+		.then([this, length]() { 
+			if(readBuffer.size() < length)
+				readBuffer = kj::heapArray<kj::byte>(length);
+			return stream->read(readBuffer.begin(), 1, length);
+		})
 		.then([this](size_t actualBytesRead) {
+			KJ_DBG("Read from stream: ", actualBytesRead);
+			
+			readActive = false;
 			bytesReady = actualBytesRead;
 			bytesConsumed = 0;
 			checkAllOps();
-		});
+		}).eagerlyEvaluate(nullptr);
 	}
 	
 	return nullptr;
 }
 
 size_t SSHSessionImpl::writeToStream(const void* buffer, size_t length) {	
+	KJ_DBG("SSH session: write", length);
 	auto tmpBuf = kj::heapArray<kj::byte>(length);
 	memcpy(tmpBuf.begin(), buffer, length);
 	
 	writesFinished = writesFinished.then([this, tmpBuf = mv(tmpBuf)]() {
-		return stream->write(tmpBuf.begin(), tmpBuf.size());
-	});
+		KJ_DBG("Writing data: ", tmpBuf);
+		return stream->write(tmpBuf.begin(), tmpBuf.size())
+		.then([](){
+			KJ_DBG("Write complete");
+		});
+	}).eagerlyEvaluate(nullptr);
 	return length;
 }
 
@@ -355,6 +378,14 @@ Promise<T> SSHSessionImpl::queueOp(kj::Function<Maybe<T>()> op, bool cancelable)
 		
 		bool cancelable;
 		
+		void unlink() {
+			KJ_DBG("Op::Unlink");
+			if(opsLink.isLinked()) {
+				fulfiller.reject(KJ_EXCEPTION(FAILED, "Operation deleted"));
+				session.queuedOps.remove(*this);
+			}
+		}
+		
 		bool check() override {
 			bool finished = false;
 			
@@ -371,11 +402,12 @@ Promise<T> SSHSessionImpl::queueOp(kj::Function<Maybe<T>()> op, bool cancelable)
 			if(!ok) {
 				finished = true;
 			}
-			
+						
 			return finished;
 		}
 		
 		void kill() override {
+			unlink();
 			fulfiller.reject(KJ_EXCEPTION(FAILED, "Session closed"));
 		}
 		
@@ -389,14 +421,13 @@ Promise<T> SSHSessionImpl::queueOp(kj::Function<Maybe<T>()> op, bool cancelable)
 		}
 		
 		~Adapter() noexcept {
-			if(opsLink.isLinked()) {
-				fulfiller.reject(KJ_EXCEPTION(FAILED, "Operation deleted"));
-				session.queuedOps.remove(*this);
-			}
+			unlink();
 		}
 	};
 	
-	return kj::newAdaptedPromise<T, Adapter>(mv(op), *this, cancelable);
+	auto result = kj::newAdaptedPromise<T, Adapter>(mv(op), *this, cancelable);
+	checkAllOps();
+	return result;
 }
 
 Promise<void> SSHSessionImpl::queueLibssh2Call(kj::Function<int()> op, bool uncancelable) {
@@ -409,7 +440,7 @@ Promise<void> SSHSessionImpl::queueLibssh2Call(kj::Function<int()> op, bool unca
 		return callResult;
 	};
 	
-	return queueOp<int>(mv(op), uncancelable)
+	return queueOp<int>(mv(wrapped), uncancelable)
 	.then([](int result) {
 		KJ_REQUIRE(result == 0, "Error in LibSSH2 call");
 	});
@@ -417,7 +448,9 @@ Promise<void> SSHSessionImpl::queueLibssh2Call(kj::Function<int()> op, bool unca
 
 Promise<bool> SSHSessionImpl::authenticatePassword(kj::StringPtr user, kj::StringPtr password) {
 	return queueOp<bool>([this, user = kj::heapString(user), pw = kj::heapString(password)]() -> Maybe<bool> {
+		KJ_DBG("Authentication attempt");
 		auto rc = libssh2_userauth_password_ex(session, user.cStr(), user.size(), pw.cStr(), pw.size(), nullptr);
+		KJ_DBG(rc);
 		
 		if(rc == 0)
 			return true;
@@ -597,13 +630,11 @@ void SSHChannelImpl::close() {
 	if(!isOpen())
 		return;
 	
+	channelWriteDisconnectFulfiller -> fulfill();
+	
 	parent -> tasks.add(parent -> queueLibssh2Call([channel = channel]() {
 		return libssh2_channel_close(channel);
 	}).attach(addRef()));
-	
-	for(auto& stream : streams) {
-		stream.close();
-	}
 }
 
 bool SSHChannelImpl::isOpen() {
@@ -736,6 +767,13 @@ void SSHChannelStream::shutdownWrite() {
 	}
 }
 
+}
+
+Promise<Own<SSHSession>> createSSHSession(Own<kj::AsyncIoStream> stream) {
+	Own<SSHSessionImpl> sess = kj::refcounted<SSHSessionImpl>(mv(stream));
+	Promise<void> startupTask = sess -> startup();
+	return startupTask
+	.then([sess = mv(sess)]() mutable -> Own<SSHSession> { return mv(sess); });
 }
 
 }

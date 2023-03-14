@@ -7,7 +7,7 @@
 namespace fsc {
 
 struct SSHChannel {
-	virtual ~SSHChannel() = 0;
+	virtual ~SSHChannel();
 	virtual Own<SSHChannel> addRef() = 0;
 	
 	virtual Own<kj::AsyncIoStream> openStream(size_t id) = 0;
@@ -17,7 +17,7 @@ struct SSHChannel {
 };
 
 struct SSHChannelListener {
-	virtual ~SSHChannelListener() = 0;
+	virtual ~SSHChannelListener();
 	
 	virtual Promise<Own<SSHChannel>> accept() = 0;
 	virtual int getPort() = 0;
@@ -29,7 +29,7 @@ struct SSHChannelListener {
 };
 
 struct SSHSession {
-	virtual ~SSHSession() = 0;
+	virtual ~SSHSession();
 	virtual Own<SSHSession> addRef() = 0;
 	
 	virtual Promise<Own<SSHChannel>> connectRemote(kj::StringPtr remoteHost, size_t remotePort) = 0;

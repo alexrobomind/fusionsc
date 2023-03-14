@@ -125,9 +125,11 @@ Promise<void> NetworkInterfaceBase::sshConnect(SshConnectContext ctx) {
 	auto params = ctx.getParams();
 	return makeConnection(params.getHost(), params.getPort())
 	.then([](Own<kj::AsyncIoStream> stream) {
+		KJ_DBG("sshConnect: Connection formed");
 		return createSSHSession(mv(stream));
 	})
 	.then([ctx](Own<SSHSession> sshSession) mutable {
+		KJ_DBG("sshConnect: Session created");
 		ctx.initResults().setConnection(kj::heap<SSHConnectionImpl>(mv(sshSession)));
 	});
 }

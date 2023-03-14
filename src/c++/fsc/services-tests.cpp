@@ -27,6 +27,20 @@ TEST_CASE("in-process-server") {
 	KJ_DBG("Resolved");
 }
 
+TEST_CASE("ssh-connect", "[.][ssh]") {
+	auto library = newLibrary();
+	auto thread = library -> newThread();
+	
+	Temporary<RootConfig> config;
+	auto localResources = createLocalResources(config.asReader());
+	
+	auto req = localResources.sshConnectRequest();
+	req.setHost("localhost");
+	req.setPort(2222);
+	
+	auto conn = req.send().wait(thread->waitScope()).getConnection();
+}
+
 namespace {
 	bool fieldDummyCalled;
 	
