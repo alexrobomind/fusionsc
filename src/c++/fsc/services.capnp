@@ -33,6 +33,16 @@ interface RootService {
 	dataService @6 () -> (service : Data.DataService);
 }
 
+interface NetworkInterface {
+	connect    @0 (url : Text) -> (client : Capability);
+	sshConnect @1 (host : Text, port : UInt16) -> (connection : SSHConnection);
+}
+
+interface SSHConnection extends(NetworkInterface) {
+	close @0 () -> ();
+	authenticatePassword @1 (user : Text, password : Text) -> (success : Bool);
+}
+
 # Extended local interface to provide access to the local file system and network connections
 #
 # This interface is intended to support interactive applications where the event loop in the main
@@ -46,12 +56,10 @@ interface RootService {
 #
 # !!! NEVER EXPOSE THIS INTERFACE EXTERNALLY !!!
 
-interface LocalResources {
+interface LocalResources extends(NetworkInterface) {
 	root         @0 () -> (root : RootService);
 	
 	openArchive  @1 (filename : Text) -> (ref : Data.DataRef);
 	writeArchive @2 (filename : Text, ref : Data.DataRef) -> ();
 	download     @3 (ref : Data.DataRef) -> (ref : Data.DataRef);
-	
-	connect   @4 (url : Text) -> (client : Capability);
 }

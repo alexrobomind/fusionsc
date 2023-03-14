@@ -1,19 +1,25 @@
 #include "ssh.h"
+#include "local.h"
 
 #include <libssh2.h>
+
+#include <kj/list.h>
+
+using kj::AsyncIoStream;
+using kj::List;
 
 namespace fsc {
 	
 namespace {
 		
 static ssize_t libssh2SendCallback(libssh2_socket_t sockfd, const void *buffer, size_t length, int flags, void **abstract);
-static ssize_t libssh2RecvCallback(libssh2_socket_t sockfd, const void *buffer, size_t length, int flags, void **abstract);
+static ssize_t libssh2RecvCallback(libssh2_socket_t sockfd, void *buffer, size_t length, int flags, void **abstract);
 
 struct SSHChannelStream;
 struct SSHChannelImpl;
 struct SSHSessionImpl;
 
-struct SSHChannelStream : public AsyncIOStream {
+struct SSHChannelStream : public AsyncIoStream {
 	SSHChannelStream(Own<SSHChannelImpl> channel, size_t streamID);
 	~SSHChannelStream();
 	
@@ -21,11 +27,12 @@ struct SSHChannelStream : public AsyncIOStream {
 	Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
 	
 	// AsyncOutputStream
-	Promise<void> write(void* buffer, size_t nBytes) override;
+	Promise<void> write(const void* buffer, size_t nBytes) override;
 	Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
 	
-	// AsyncIOStream
+	// AsyncIoStream
 	void shutdownWrite() override;
+	Promise<void> whenWriteDisconnected() override;
 	
 	void close();
 	
@@ -39,25 +46,29 @@ struct SSHChannelStream : public AsyncIOStream {
 
 struct SSHChannelImpl : public SSHChannel, public kj::Refcounted {
 	SSHChannelImpl(Own<SSHSessionImpl> parent, LIBSSH2_CHANNEL* channel);
-	~SSHChannelImpl();
+	~SSHChannelImpl() noexcept;
 	
 	Own<SSHChannel> addRef() override { return kj::addRef(*this); };
-	Own<AsyncIOStream> openStream(size_t id) override ;
+	Own<AsyncIoStream> openStream(size_t id) override ;
 	void close() override ;
 	bool isOpen() override ;
 	
 	//! List of all open streams
-	List<ChannelStream, &ChannelStream::streamsLink> streams;
-	List<ChannelStream, &ChannelStream::writingStreamsLink> writingStreams;
+	List<SSHChannelStream, &SSHChannelStream::streamsLink> streams;
+	List<SSHChannelStream, &SSHChannelStream::writingStreamsLink> writingStreams;
 		
 	kj::ListLink<SSHChannelImpl> channelsLink;
 	
-	LIBSSH2_CHANNEL* const libChannel;
+	ForkedPromise<void> whenChannelWriteDisconnected;
+	Own<PromiseFulfiller<void>> channelWriteDisconnectFulfiller;
+	
+	Own<SSHSessionImpl> parent;
+	LIBSSH2_CHANNEL* const channel;
 };
 
 struct SSHChannelListenerImpl : public SSHChannelListener, public kj::Refcounted {
 	SSHChannelListenerImpl(Own<SSHSessionImpl> parent, LIBSSH2_LISTENER* pListener, int port);
-	~SSHChannelListener();
+	~SSHChannelListenerImpl() noexcept;
 	
 	Promise<Own<SSHChannel>> accept() override ;
 	int getPort() override { return port; }
@@ -73,10 +84,8 @@ struct SSHChannelListenerImpl : public SSHChannelListener, public kj::Refcounted
 };
 	
 struct SSHSessionImpl : public SSHSession, public kj::Refcounted {
-	SSHSessionImpl(Own<AsyncIOStream> stream);
-	~SSHSessionImpl();
-	
-	Own<SSHSessoinImpl> addImplRef() { return kj::addRef(*this); }
+	SSHSessionImpl(Own<AsyncIoStream> stream);
+	~SSHSessionImpl() noexcept;
 	
 	//! Performs basic handshaking
 	Promise<void> startup();
@@ -114,12 +123,14 @@ struct SSHSessionImpl : public SSHSession, public kj::Refcounted {
 	Promise<Own<SSHChannel>> connectRemote(kj::StringPtr remoteHost, size_t remotePort) override ;
 	Promise<Own<SSHChannel>> connectRemote(kj::StringPtr remoteHost, size_t remotePort, kj::StringPtr srcHost, size_t srcPort) override ;
 	Promise<Own<SSHChannelListener>> listen(kj::StringPtr host = "0.0.0.0"_kj, Maybe<int> port = nullptr) override ;
+	Promise<bool> authenticatePassword(kj::StringPtr user, kj::StringPtr password) override;
+	bool isAuthenticated() override;
 	void close() override ;
 	bool isOpen() override ;
 	Promise<void> drain() override ;
 	
 	//! Underlying I/O stream
-	Own<AsyncIOStream> stream;
+	Own<AsyncIoStream> stream;
 	LIBSSH2_SESSION* session;
 	
 	//! Promise that resolves when all writes are performed
@@ -134,6 +145,9 @@ struct SSHSessionImpl : public SSHSession, public kj::Refcounted {
 	Maybe<size_t> bytesReady;
 	size_t bytesConsumed = 0;
 	kj::Array<kj::byte> readBuffer;
+	
+	List<SSHChannelImpl,&SSHChannelImpl::channelsLink> channels;
+	List<SSHChannelListenerImpl, &SSHChannelListenerImpl::listenersLink> listeners;
 
 	kj::TaskSet tasks;
 };
@@ -154,7 +168,7 @@ ssize_t libssh2SendCallback(
 	}
 	
 	try {
-		return (ssize_t) session -> writeToStream(buffer, length));
+		return (ssize_t) session -> writeToStream(buffer, length);
 	} catch(kj::Exception& e) {
 		if(e.getType() == kj::Exception::Type::DISCONNECTED) {
 			return LIBSSH2_ERROR_SOCKET_DISCONNECT;
@@ -164,9 +178,9 @@ ssize_t libssh2SendCallback(
 	return LIBSSH2_ERROR_SOCKET_NONE;
 }
 
-ssize_t SSHSession::receiveCallback(
+ssize_t libssh2RecvCallback(
 	libssh2_socket_t sockfd,
-	const void *buffer,
+	void *buffer,
 	size_t length,
 	int flags,
 	void **abstract
@@ -192,15 +206,11 @@ ssize_t SSHSession::receiveCallback(
 	return LIBSSH2_ERROR_SOCKET_NONE;
 }
 
-Promise<Own<SSHSession>> createSSHSession(Own<AsyncIOStream> stream) {
-	auto session = kj::refcounted<SSHSessionImpl>(mv(stream));
-	
-	Promise<void> whenReady = session -> start();
-	return whenReady
-	.then([session = mv(session)]() mutable {
-		session -> keepAliveTask = session.keepAlive().eagerlyEvaluate(nullptr);
-		return mv(session);
-	});
+Promise<Own<SSHSession>> createSSHSession(Own<kj::AsyncIoStream> stream) {
+	Own<SSHSessionImpl> sess = kj::refcounted<SSHSessionImpl>(mv(stream));
+	Promise<void> startupTask = sess -> startup();
+	return startupTask
+	.then([sess = mv(sess)]() mutable -> Own<SSHSession> { return mv(sess); });
 }
 	
 
@@ -216,20 +226,21 @@ namespace {
 	NullErrorHandler NullErrorHandler::INSTANCE;
 }
 
-SSHSessionImpl::SSHSessionImpl(Own<kj::AsyncIOStream> stream) :
+SSHSessionImpl::SSHSessionImpl(Own<kj::AsyncIoStream> stream) :
 	stream(mv(stream)),
 	session(libssh2_session_init_ex(nullptr, nullptr, nullptr, reinterpret_cast<void*>(this))),
-	tasks(NullErrorHandler::INSTANCE)
+	tasks(NullErrorHandler::INSTANCE),
+	keepAliveTask(READY_NOW)
 {
 	// Set send and receive callbacks
-	libssh2_session_callback_set(session, LIBSSH2_CALLBACK_SEND, &libssh2SendCallback);
-	libssh2_session_callback_set(session, LIBSSH2_CALLBACK_RECV, &libssh2RecvCallback);
+	libssh2_session_callback_set(session, LIBSSH2_CALLBACK_SEND, (void*) &libssh2SendCallback);
+	libssh2_session_callback_set(session, LIBSSH2_CALLBACK_RECV, (void*) &libssh2RecvCallback);
 	
 	// Set session to non-blocking operation
 	libssh2_session_set_blocking(session, 0);
 }
 
-SSHSessionImpl::~SSHSessionImpl() {
+SSHSessionImpl::~SSHSessionImpl() noexcept {
 	// Terminate the keep-alive loop
 	keepAliveTask = READY_NOW;
 	
@@ -237,7 +248,7 @@ SSHSessionImpl::~SSHSessionImpl() {
 	// Note that this is safe because libssh2SendCallback and libssh2RecvCallback
 	// explicitly check whether the stream is null (don't want an exception to be
 	// propagated in that case).
-	stream = Own<AsyncIOStream>();
+	stream = Own<AsyncIoStream>();
 	
 	// Close session
 	// This also unlinks all nested objects
@@ -261,7 +272,7 @@ Promise<void> SSHSessionImpl::startup() {
 
 Promise<void> SSHSessionImpl::keepAlive() {
 	return queueOp<int>([this]() -> Maybe<int> {
-		int* secondsToNext = 0;
+		int secondsToNext = 0;
 		auto result = libssh2_keepalive_send(session, &secondsToNext);
 		
 		if(result != 0) {
@@ -283,9 +294,9 @@ Maybe<size_t> SSHSessionImpl::tryReadFromStream(void* buffer, size_t length) {
 	KJ_IF_MAYBE(pBytes, bytesReady) {
 		KJ_REQUIRE(activeRead == nullptr);
 		
-		size_t bytesToCopy = std::min(*pBytes - bytesConsumed, length);
+		size_t bytesToCopy = kj::min(*pBytes - bytesConsumed, length);
 		memcpy(buffer, readBuffer.begin(), bytesToCopy);
-		bytesConsumed += bytesCopy;
+		bytesConsumed += bytesToCopy;
 		
 		if(bytesConsumed >= *pBytes) {
 			bytesConsumed = 0;
@@ -310,27 +321,27 @@ Maybe<size_t> SSHSessionImpl::tryReadFromStream(void* buffer, size_t length) {
 	return nullptr;
 }
 
-ssize_t SSHSessionImpl::writeToStream(const void* buffer, size_t length) {	
+size_t SSHSessionImpl::writeToStream(const void* buffer, size_t length) {	
 	auto tmpBuf = kj::heapArray<kj::byte>(length);
 	memcpy(tmpBuf.begin(), buffer, length);
 	
-	writesFinished = writesFinished.then([this]() {
-		stream->write(tmpBuf.begin(), tmpBuf.size());
+	writesFinished = writesFinished.then([this, tmpBuf = mv(tmpBuf)]() {
+		return stream->write(tmpBuf.begin(), tmpBuf.size());
 	});
 	return length;
 }
 
-void SSHSession::checkAllOps() {
-	for(QueuedOp& op : ops) {
-		if(libSession == nullptr) {
+void SSHSessionImpl::checkAllOps() {
+	for(QueuedOp& op : queuedOps) {
+		if(session == nullptr) {
 			op.kill();
-			ops.remove(op);
+			queuedOps.remove(op);
 			continue;
 		}
 		
 		if(op.check()) {
 			op.kill();
-			ops.remove(op);
+			queuedOps.remove(op);
 		}
 	}
 }
@@ -352,7 +363,7 @@ Promise<T> SSHSessionImpl::queueOp(kj::Function<Maybe<T>()> op, bool cancelable)
 			
 			bool ok = fulfiller.rejectIfThrows([this, &finished]() {
 				KJ_IF_MAYBE(pResult, op()) {
-					fulfiller -> fulfill(mv(*pResult));
+					fulfiller.fulfill(mv(*pResult));
 					finished = true;
 				}
 			});
@@ -365,10 +376,10 @@ Promise<T> SSHSessionImpl::queueOp(kj::Function<Maybe<T>()> op, bool cancelable)
 		}
 		
 		void kill() override {
-			fulfiller.reject("Session closed");
+			fulfiller.reject(KJ_EXCEPTION(FAILED, "Session closed"));
 		}
 		
-		Adapter(PromiseFulfiller<T>& fulfiller, kj::Function<Maybe<T>()> op, SSHSession& session, bool cancelable) :
+		Adapter(PromiseFulfiller<T>& fulfiller, kj::Function<Maybe<T>()> op, SSHSessionImpl& session, bool cancelable) :
 			op(mv(op)),
 			fulfiller(fulfiller),
 			session(session),
@@ -377,20 +388,20 @@ Promise<T> SSHSessionImpl::queueOp(kj::Function<Maybe<T>()> op, bool cancelable)
 			session.queuedOps.add(*this);
 		}
 		
-		~Adapter() {
+		~Adapter() noexcept {
 			if(opsLink.isLinked()) {
-				fulfiller.reject("Operation deleted");
+				fulfiller.reject(KJ_EXCEPTION(FAILED, "Operation deleted"));
 				session.queuedOps.remove(*this);
 			}
 		}
 	};
 	
-	return kj::newAdaptedPromise<Adapter>(mv(op), *this, cancelable);
+	return kj::newAdaptedPromise<T, Adapter>(mv(op), *this, cancelable);
 }
 
-Promise<void> queueLibssh2Call(kj::Function<int()> op) {
-	auto wrapped = [op = mv(op)]() -> Maybe<int> {
-		T callResult = op();
+Promise<void> SSHSessionImpl::queueLibssh2Call(kj::Function<int()> op, bool uncancelable) {
+	auto wrapped = [op = mv(op)]() mutable -> Maybe<int> {
+		int callResult = op();
 		
 		if(callResult == LIBSSH2_ERROR_EAGAIN)
 			return nullptr;
@@ -398,16 +409,38 @@ Promise<void> queueLibssh2Call(kj::Function<int()> op) {
 		return callResult;
 	};
 	
-	return queueOp<T>(mv(op))
+	return queueOp<int>(mv(op), uncancelable)
 	.then([](int result) {
 		KJ_REQUIRE(result == 0, "Error in LibSSH2 call");
 	});
 }
 
+Promise<bool> SSHSessionImpl::authenticatePassword(kj::StringPtr user, kj::StringPtr password) {
+	return queueOp<bool>([this, user = kj::heapString(user), pw = kj::heapString(password)]() -> Maybe<bool> {
+		auto rc = libssh2_userauth_password_ex(session, user.cStr(), user.size(), pw.cStr(), pw.size(), nullptr);
+		
+		if(rc == 0)
+			return true;
+		if(rc == LIBSSH2_ERROR_AUTHENTICATION_FAILED )
+			return false;
+		if(rc == LIBSSH2_ERROR_PASSWORD_EXPIRED ) {
+			KJ_LOG(WARNING, "Authentication failed due to expired password");
+			return false;
+		}
+		
+		KJ_REQUIRE(rc == LIBSSH2_ERROR_EAGAIN, "Error during authentication");
+		return nullptr;
+	});
+}
+
+bool SSHSessionImpl::isAuthenticated() {
+	return libssh2_userauth_authenticated(session) != 0;
+}
+
 // --- Session interface ---
 
 Promise<Own<SSHChannel>> SSHSessionImpl::connectRemote(kj::StringPtr remoteHost, size_t remotePort) {
-	return queueOp<Own<SSHChannel>>([this, remoteHost = kj::heapString(remoteHost), remotePort] mutable -> Maybe<Own<SSHChannel>> {
+	return queueOp<Own<SSHChannel>>([this, remoteHost = kj::heapString(remoteHost), remotePort]() mutable -> Maybe<Own<SSHChannel>> {
 		LIBSSH2_CHANNEL* pChannel = libssh2_channel_direct_tcpip(session, remoteHost.cStr(), remotePort);
 		
 		if(pChannel == nullptr) {
@@ -417,28 +450,28 @@ Promise<Own<SSHChannel>> SSHSessionImpl::connectRemote(kj::StringPtr remoteHost,
 			return nullptr;			
 		}
 		
-		return kj::refcounted<SSHChannelImpl>(*this, pChannel);
+		return kj::refcounted<SSHChannelImpl>(kj::addRef(*this), pChannel);
 	});
 };
 
 Promise<Own<SSHChannel>> SSHSessionImpl::connectRemote(kj::StringPtr remoteHost, size_t remotePort, kj::StringPtr srcHost, size_t srcPort) {
-	return queueOp<Own<SSHChannel>>([this, remoteHost = kj::heapString(remoteHost), srcHost = kj::heapString(srcHost), srcPort, remotePort] mutable -> Maybe<Own<SSHChannel>> {
+	return queueOp<Own<SSHChannel>>([this, remoteHost = kj::heapString(remoteHost), srcHost = kj::heapString(srcHost), srcPort, remotePort]() mutable -> Maybe<Own<SSHChannel>> {
 		LIBSSH2_CHANNEL* pChannel = libssh2_channel_direct_tcpip_ex(session, remoteHost.cStr(), remotePort, srcHost.cStr(), srcPort);
 		
 		if(pChannel == nullptr) {
 			auto errCode = libssh2_session_last_errno(session);
-			KJ_REQUIRE(errCode == LIBSSH2_ERROR_EAGAIN, "libssh2_channel_direct_tcpip_ex failed", remoteHost, remotePort, srcHost, srcPost);
+			KJ_REQUIRE(errCode == LIBSSH2_ERROR_EAGAIN, "libssh2_channel_direct_tcpip_ex failed", remoteHost, remotePort, srcHost, srcPort);
 			
 			return nullptr;			
 		}
 		
-		return kj::refcounted<SSHChannelImpl>(*this, pChannel);
+		return kj::refcounted<SSHChannelImpl>(kj::addRef(*this), pChannel);
 	});
 };
 
-Promise<Own<SSHChannelListener>> listen(kj::StringPtr host, Maybe<int> port) {
-	return queueOp<Own<SSHChannelListener>>([this, host = kj::heapString(host), port] mutable -> Maybe<Own<SSHChannelListener>> {
-		int& boundPort = 0;
+Promise<Own<SSHChannelListener>> SSHSessionImpl::listen(kj::StringPtr host, Maybe<int> port) {
+	return queueOp<Own<SSHChannelListener>>([this, host = kj::heapString(host), port]() mutable -> Maybe<Own<SSHChannelListener>> {
+		int boundPort = 0;
 		
 		int portArg = 0;
 		KJ_IF_MAYBE(pPort, port) {
@@ -446,22 +479,22 @@ Promise<Own<SSHChannelListener>> listen(kj::StringPtr host, Maybe<int> port) {
 		}
 		
 		// LIBSSH2_LISTENER * libssh2_channel_forward_listen_ex(LIBSSH2_SESSION *session, char *host, int port, int *bound_port, int queue_maxsize); 
-		LIBSSH2_LISTENER* pListener =  libssh2_channel_forward_listen_ex(session, host.cStr(), port, &boundPort, 5);
+		LIBSSH2_LISTENER* pListener =  libssh2_channel_forward_listen_ex(session, host.cStr(), portArg, &boundPort, 5);
 		
-		if(pChannel == nullptr) {
+		if(pListener == nullptr) {
 			auto errCode = libssh2_session_last_errno(session);
-			KJ_REQUIRE(errCode == LIBSSH2_ERROR_EAGAIN, "libssh2_channel_direct_tcpip failed", host, port);
+			KJ_REQUIRE(errCode == LIBSSH2_ERROR_EAGAIN, "libssh2_channel_forward_listen_ex failed", host, portArg);
 			
 			return nullptr;			
 		}
 		
-		return kj::refcounted<SSHChannelListenerImpl>(*this, pListener, boundPort);
+		return kj::refcounted<SSHChannelListenerImpl>(kj::addRef(*this), pListener, boundPort);
 	});
 };
 
 void SSHSessionImpl::close() {
-	if(libSession == nullptr)
-		return false;
+	if(session == nullptr)
+		return;
 	
 	kj::Vector<Promise<void>> channelCloseOps;
 	
@@ -470,26 +503,25 @@ void SSHSessionImpl::close() {
 	}
 	
 	for(auto& channel : channels) {
-		channel.close():
+		channel.close();
 	}
 	
 	tasks.add(
 		queueLibssh2Call([this]() mutable {
-			return libssh2_session_disconnect(libSession, "Disconnected by client");
+			return libssh2_session_disconnect(session, "Disconnected by client");
 		}, true)
-		.then([this]) mutable {
+		.then([this]() mutable {
 			return queueLibssh2Call([this]() mutable {
-				int result = libssh2_session_free(libSession);
-				if(result == 0) libSession = nullptr;
+				int result = libssh2_session_free(session);
+				if(result == 0) session = nullptr;
 				return result;
 			}, true);
 		})
 	);
-	tasks.add(mv(result));
 }
 
 bool SSHSessionImpl::isOpen() {
-	return liBSession != nullptr;
+	return session != nullptr;
 }
 
 Promise<void> SSHSessionImpl::drain() {
@@ -506,63 +538,66 @@ SSHChannelListenerImpl::SSHChannelListenerImpl(Own<SSHSessionImpl> newParent, LI
 	parent -> listeners.add(*this);
 }
 
-SSHChannelListenerImpl::~SSHChannelListenerImpl() {
+SSHChannelListenerImpl::~SSHChannelListenerImpl() noexcept {
 	close();
 }
 
 Promise<Own<SSHChannel>> SSHChannelListenerImpl::accept() {	
-	return queueOp<Own<SSHChannel>>([this]() mutable -> Maybe<Own<SSHChannel>> {
+	return parent -> queueOp<Own<SSHChannel>>([this]() mutable -> Maybe<Own<SSHChannel>> {
 		KJ_REQUIRE(isOpen(), "Listener was closed");
 		LIBSSH2_CHANNEL* result = libssh2_channel_forward_accept(listener);
 		
 		if(result == nullptr) {
-			auto errCode = libssh2_session_last_errno(session);
+			auto errCode = libssh2_session_last_errno(parent -> session);
 			KJ_REQUIRE(errCode == LIBSSH2_ERROR_EAGAIN, "libssh2_channel_forward_accept", port);
 			
 			return nullptr;			
 		}
 		
-		return kj::refcounted<Own<SSHChannel>>(*parent, result);
+		return kj::refcounted<SSHChannelImpl>(kj::addRef(*parent), result);
 	}).attach(addRef());
 }
 
 void SSHChannelListenerImpl::close() {
 	if(listenersLink.isLinked()) {
 		parent -> listeners.remove(*this);
-		parent -> tasks.add(queueLibssh2Call([listener]() {
+		parent -> tasks.add(parent -> queueLibssh2Call([listener = listener]() {
 			 return libssh2_channel_forward_cancel(listener);
 		}));
 	}
 }
 
 bool SSHChannelListenerImpl::isOpen() {
-	return listenersLink().isLinked();
-}
-
-Own<AsyncIOStream> SSHChannel::getStream(size_t id) {
-	auto result = kj::heap<ChannelStream>(*this, id);
-	channels.add(*result);
-	return result;
+	return listenersLink.isLinked();
 }
 
 // class SSHChannelImpl
 
 SSHChannelImpl::SSHChannelImpl(Own<SSHSessionImpl> newParent, LIBSSH2_CHANNEL* channel) :
 	parent(mv(newParent)),
-	channel(channel)
+	channel(channel),
+	whenChannelWriteDisconnected(nullptr)
 {
+	auto paf = kj::newPromiseAndFulfiller<void>();
+	whenChannelWriteDisconnected = paf.promise.fork();
+	channelWriteDisconnectFulfiller = mv(paf.fulfiller);
+	
 	parent -> channels.add(*this);
 }
 
-SSHChannelImpl::~SSHChannelImpl() {
-	close();
+SSHChannelImpl::~SSHChannelImpl() noexcept {
+	try {
+		close();
+	} catch(kj::Exception e) {
+		KJ_DBG("Caught exception in SSHChannel destructor", e);
+	}
 }
 
 void SSHChannelImpl::close() {
 	if(!isOpen())
 		return;
 	
-	parent.tasks.add(parent -> queueLibssh2Call([channe]() {
+	parent -> tasks.add(parent -> queueLibssh2Call([channel = channel]() {
 		return libssh2_channel_close(channel);
 	}).attach(addRef()));
 	
@@ -575,8 +610,8 @@ bool SSHChannelImpl::isOpen() {
 	return channelsLink.isLinked();
 }
 
-Own<AsyncIOStream> SSHChannelImpl::openStream(size_t id) {
-	return kj::heap<SSHChannelStream>>(*this, id);
+Own<AsyncIoStream> SSHChannelImpl::openStream(size_t id) {
+	return kj::heap<SSHChannelStream>(kj::addRef(*this), id);
 }
 
 // class SSHChannelStream
@@ -597,23 +632,27 @@ SSHChannelStream::~SSHChannelStream() {
 	}
 }
 
-Promise<size_t> SSHChannelStream::tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {	
-	return parent -> session -> queueOp<size_t>([this, buffer = (unsigned char*) buffer, minBytes, maxBytes, bytesRead = (size_t) 0]() mutable -> Maybe<size_t> {
+Promise<void> SSHChannelStream::whenWriteDisconnected() {
+	return parent -> whenChannelWriteDisconnected.addBranch();
+}
+
+Promise<size_t> SSHChannelStream::tryRead(void* buffer, size_t minBytes, size_t maxBytes) {	
+	return parent -> parent -> queueOp<size_t>([this, buffer = (char*) buffer, minBytes, maxBytes, bytesRead = (size_t) 0]() mutable -> Maybe<size_t> {
 		KJ_REQUIRE(streamsLink.isLinked(), "Stream closed");
 		KJ_REQUIRE(parent -> isOpen(), "Channel closed");
 		
 		// Try to read
-		ssize_t rc = libssh2_channel_read_ex(parent -> channel, streamID, buffer, maxBytes);
+		ssize_t rc = libssh2_channel_read_ex(parent -> channel, streamId, buffer, maxBytes);
 		
 		// No packets in queue, please ask again later
 		if(rc == LIBSSH2_ERROR_EAGAIN)
 			return nullptr;
 		
 		// If the channel was already closed, return whatever bytes we have
-		if(rc == LIBSSH2_CHANNEL_CLOSED)
+		if(rc == LIBSSH2_ERROR_CHANNEL_CLOSED)
 			return bytesRead;
 				
-		KJ_REQUIRE(rc >= 0, "Failure during read", streamID);
+		KJ_REQUIRE(rc >= 0, "Failure during read", streamId);
 		bytesRead += rc;
 		
 		if(rc < minBytes) {
@@ -639,7 +678,7 @@ Promise<size_t> SSHChannelStream::tryRead(void* buffer, size_t minBytes, size_t 
 				return nullptr;
 			}
 			
-			KJ_FAIL_REQUIRE("libssh2_channel_eof failed", rc, streamID);
+			KJ_FAIL_REQUIRE("libssh2_channel_eof failed", rc, streamId);
 		} else {
 			// We collected enough bytes for now.
 			return bytesRead;
@@ -647,12 +686,12 @@ Promise<size_t> SSHChannelStream::tryRead(void* buffer, size_t minBytes, size_t 
 	});
 }
 
-Promise<void> SSHChannelStream::write(void* buffer, size_t nBytes) override {
-	return parent -> session -> queueOp<bool>([this, buffer = (unsigned char*) buffer, nBytes]() mutable -> Maybe<bool> {
+Promise<void> SSHChannelStream::write(const void* buffer, size_t nBytes) {
+	return parent -> parent -> queueOp<bool>([this, buffer = (const char*) buffer, nBytes]() mutable -> Maybe<bool> {
 		KJ_REQUIRE(streamsLink.isLinked(), "Stream closed");
 		KJ_REQUIRE(parent -> isOpen(), "Channel closed");
 			
-		ssize_t rc = libssh_channel_write_ex(parent -> channel, streamID, buffer, nBytes);
+		ssize_t rc = libssh2_channel_write_ex(parent -> channel, streamId, buffer, nBytes);
 		
 		if(rc == LIBSSH2_ERROR_EAGAIN)
 			return nullptr;
@@ -668,7 +707,7 @@ Promise<void> SSHChannelStream::write(void* buffer, size_t nBytes) override {
 	}).ignoreResult();
 }
 
-Promise<void> SSHChannelStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {	
+Promise<void> SSHChannelStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {	
 	Promise<void> result = READY_NOW;
 	
 	for(auto piece : pieces) {
@@ -686,14 +725,17 @@ void SSHChannelStream::shutdownWrite() {
 	
 	parent -> writingStreams.remove(*this);
 	
-	if(parent -> writingStreams().empty()) {
-		parent -> parent -> tasks.add(parent -> session -> queueLibssh2Call([this]() mutable {
+	if(parent -> writingStreams.empty()) {
+		parent -> parent -> tasks.add(parent -> parent -> queueLibssh2Call([this]() mutable {
 			KJ_REQUIRE(streamsLink.isLinked(), "Stream closed");
 			KJ_REQUIRE(parent -> isOpen(), "Channel closed");
 			
 			return libssh2_channel_send_eof(parent -> channel);
 		}));
+		parent -> channelWriteDisconnectFulfiller -> fulfill();
 	}
+}
+
 }
 
 }

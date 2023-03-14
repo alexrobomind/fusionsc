@@ -89,6 +89,9 @@ add_library(
 	store.h
 	store.cpp
 	
+	ssh.h
+	ssh.cpp
+	
 	data.h
 	data.cpp
 	
