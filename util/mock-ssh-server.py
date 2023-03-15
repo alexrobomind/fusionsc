@@ -2,6 +2,10 @@ import paramiko
 import socket
 import threading
 import sys
+import logging
+
+logging.basicConfig()
+logging.getLogger("paramiko").setLevel(logging.DEBUG) # for example
 
 class Server(paramiko.ServerInterface):
 	def check_auth_password(self, username, password):
@@ -31,15 +35,25 @@ def listener():
 		else:
 			break
 
-	t = paramiko.Transport(client)
+	t = paramiko.Transport(
+		client
+	)
+		
+	#t.default_window_size = 2147483647
+	#t.packetizer.REKEY_BYTES = pow(2, 40)
+	#t.packetizer.REKEY_PACKETS = pow(2, 40)
+	
 	t.set_gss_host(socket.getfqdn(""))
-	t.load_server_moduli()
+	print("Server moduli load status:", t.load_server_moduli("./moduli"))
+	t.add_server_key(host_key)
 	server = Server()
 	t.start_server(server=server)
 
 	# Wait 30 seconds for a command
-	server.event.wait(30)
+	server.event.wait(1)
 	t.close()
+
+host_key = paramiko.rsakey.RSAKey.from_private_key_file("mock-ssh-key")
 
 
 while True:

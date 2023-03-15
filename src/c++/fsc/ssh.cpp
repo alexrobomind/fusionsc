@@ -16,6 +16,22 @@ SSHChannelListener::~SSHChannelListener() {}
 SSHSession::~SSHSession() {}
 	
 namespace {
+
+struct LibSSH2 {
+	LibSSH2() {
+		libssh2_init(0); 
+	}
+	
+	~LibSSH2() {
+		libssh2_exit(); 
+	}
+	
+	auto createSession(void* userData) {
+		return libssh2_session_init_ex(nullptr, nullptr, nullptr, userData);
+	}
+};
+
+static LibSSH2 LIBSSH2;
 		
 static ssize_t libssh2SendCallback(libssh2_socket_t sockfd, const void *buffer, size_t length, int flags, void **abstract);
 static ssize_t libssh2RecvCallback(libssh2_socket_t sockfd, void *buffer, size_t length, int flags, void **abstract);
@@ -232,7 +248,7 @@ namespace {
 
 SSHSessionImpl::SSHSessionImpl(Own<kj::AsyncIoStream> stream) :
 	stream(mv(stream)),
-	session(libssh2_session_init_ex(nullptr, nullptr, nullptr, reinterpret_cast<void*>(this))),
+	session(LIBSSH2.createSession(reinterpret_cast<void*>(this))),
 	tasks(NullErrorHandler::INSTANCE),
 	keepAliveTask(READY_NOW)
 {
@@ -358,13 +374,11 @@ void SSHSessionImpl::checkAllOps() {
 	for(QueuedOp& op : queuedOps) {
 		if(session == nullptr) {
 			op.kill();
-			queuedOps.remove(op);
 			continue;
 		}
 		
 		if(op.check()) {
 			op.kill();
-			queuedOps.remove(op);
 		}
 	}
 }

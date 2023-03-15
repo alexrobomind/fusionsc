@@ -40,7 +40,7 @@ interface NetworkInterface {
 
 interface SSHConnection extends(NetworkInterface) {
 	close @0 () -> ();
-	authenticatePassword @1 (user : Text, password : Text) -> (success : Bool);
+	authenticatePassword @1 (user : Text, password : Text) -> ();
 }
 
 # Extended local interface to provide access to the local file system and network connections

@@ -39,6 +39,20 @@ TEST_CASE("ssh-connect", "[.][ssh]") {
 	req.setPort(2222);
 	
 	auto conn = req.send().wait(thread->waitScope()).getConnection();
+	
+	{
+		auto req = conn.authenticatePasswordRequest();
+		req.setUser("testuser");
+		req.setPassword("wrongPassword");
+		REQUIRE_THROWS(req.send().wait(thread -> waitScope()));
+	}
+	
+	{
+		auto req = conn.authenticatePasswordRequest();
+		req.setUser("testuser");
+		req.setPassword("testpass");
+		req.send().wait(thread -> waitScope());
+	}
 }
 
 namespace {
