@@ -8,6 +8,7 @@
 #include "fieldline-mapping.h"
 #include "local-vat-network.h"
 #include "ssh.h"
+#include "networking.h"
 
 #include <capnp/rpc-twoparty.h>
 #include <capnp/membrane.h>
@@ -86,68 +87,13 @@ struct RootServer : public RootService::Server {
 
 // Networking implementation
 
-struct NetworkInterfaceBase : public virtual NetworkInterface::Server {
-	virtual Promise<Own<kj::AsyncIoStream>> makeConnection(kj::StringPtr host, unsigned int port) = 0;
-	
-	Promise<void> sshConnect(SshConnectContext ctx);
-};
 
-struct SSHConnectionImpl : public SSHConnection::Server, public NetworkInterfaceBase {
-	Own<SSHSession> session;
-	
-	SSHConnectionImpl(Own<SSHSession> session) :
-		session(mv(session))
-	{}
-	
-	Promise<Own<kj::AsyncIoStream>> makeConnection(kj::StringPtr host, unsigned int port) override {
-		KJ_REQUIRE(session -> isAuthenticated(), "Not authenticated");
-		return session -> connectRemote(host, port)
-		.then([](Own<SSHChannel> channel) {
-			return channel -> openStream(0);
-		});
-	}
-	
-	Promise<void> close(CloseContext ctx) {
-		session -> close();
-		return session -> drain();
-	}
-	
-	Promise<void> authenticatePassword(AuthenticatePasswordContext ctx) {
-		auto params = ctx.getParams();
-		return session -> authenticatePassword(params.getUser(), params.getPassword())
-		.then([](bool result) {
-			KJ_REQUIRE(result, "Authentication failed");
-		});
-	}
-};
 
-Promise<void> NetworkInterfaceBase::sshConnect(SshConnectContext ctx) {
-	auto params = ctx.getParams();
-	return makeConnection(params.getHost(), params.getPort())
-	.then([](Own<kj::AsyncIoStream> stream) {
-		KJ_DBG("sshConnect: Connection formed");
-		return createSSHSession(mv(stream));
-	})
-	.then([ctx](Own<SSHSession> sshSession) mutable {
-		KJ_DBG("sshConnect: Session created");
-		ctx.initResults().setConnection(kj::heap<SSHConnectionImpl>(mv(sshSession)));
-	});
-}
-
-struct LocalResourcesImpl : public LocalResources::Server, public NetworkInterfaceBase {
+struct LocalResourcesImpl : public LocalResources::Server, public LocalNetworkInterface {
 	Temporary<RootConfig> config;
 	LocalResourcesImpl(RootConfig::Reader config) :
 		config(config)
 	{}
-	
-	// Local network interface
-	
-	virtual Promise<Own<kj::AsyncIoStream>> makeConnection(kj::StringPtr host, unsigned int port) {
-		return getActiveThread().network().parseAddress(host, port)
-		.then([](Own<kj::NetworkAddress> addr) {
-			return addr -> connect();
-		});
-	}
 	
 	// Root service
 	

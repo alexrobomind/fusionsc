@@ -40,7 +40,7 @@ TEST_CASE("ssh-connect", "[.][ssh]") {
 	
 	auto conn = req.send().wait(thread->waitScope()).getConnection();
 	
-	{
+	SECTION("badauth") {
 		auto req = conn.authenticatePasswordRequest();
 		req.setUser("testuser");
 		req.setPassword("wrongPassword");
@@ -52,7 +52,7 @@ TEST_CASE("ssh-connect", "[.][ssh]") {
 		req.setUser("testuser");
 		req.setPassword("testpass");
 		req.send().wait(thread -> waitScope());
-	}
+	}	
 }
 
 namespace {

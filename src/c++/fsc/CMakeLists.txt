@@ -25,6 +25,7 @@ set(
 	
 	local-vat-network.capnp
 	
+	networking.capnp
 	services.capnp
 	
 	java.capnp
@@ -94,6 +95,9 @@ add_library(
 	
 	data.h
 	data.cpp
+	
+	networking.h
+	networking.cpp
 	
 	cudata.h
 	cudata.cpp

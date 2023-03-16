@@ -13,6 +13,7 @@ using FLT = import "flt.capnp";
 using HFCam = import "hfcam.capnp";
 using Index = import "index.capnp";
 using Data = import "data.capnp";
+using Networking = import "networking.capnp";
 
 struct RootConfig {
 }
@@ -33,16 +34,6 @@ interface RootService {
 	dataService @6 () -> (service : Data.DataService);
 }
 
-interface NetworkInterface {
-	connect    @0 (url : Text) -> (client : Capability);
-	sshConnect @1 (host : Text, port : UInt16) -> (connection : SSHConnection);
-}
-
-interface SSHConnection extends(NetworkInterface) {
-	close @0 () -> ();
-	authenticatePassword @1 (user : Text, password : Text) -> ();
-}
-
 # Extended local interface to provide access to the local file system and network connections
 #
 # This interface is intended to support interactive applications where the event loop in the main
@@ -56,7 +47,7 @@ interface SSHConnection extends(NetworkInterface) {
 #
 # !!! NEVER EXPOSE THIS INTERFACE EXTERNALLY !!!
 
-interface LocalResources extends(NetworkInterface) {
+interface LocalResources extends(Networking.NetworkInterface) {
 	root         @0 () -> (root : RootService);
 	
 	openArchive  @1 (filename : Text) -> (ref : Data.DataRef);
