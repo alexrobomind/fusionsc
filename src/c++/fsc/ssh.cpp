@@ -143,6 +143,7 @@ struct SSHSessionImpl : public SSHSession, public kj::Refcounted {
 	Promise<Own<SSHChannel>> connectRemote(kj::StringPtr remoteHost, size_t remotePort, kj::StringPtr srcHost, size_t srcPort) override ;
 	Promise<Own<SSHChannelListener>> listen(kj::StringPtr host = "0.0.0.0"_kj, Maybe<int> port = nullptr) override ;
 	Promise<bool> authenticatePassword(kj::StringPtr user, kj::StringPtr password) override;
+	Promise<bool> authenticatePubkeyFile(kj::StringPtr user, kj::StringPtr pubkeyFile, kj::StringPtr privkeyFile, kj::StringPtr passPhrase) override;
 	bool isAuthenticated() override;
 	void close() override ;
 	bool isOpen() override ;
@@ -474,6 +475,34 @@ Promise<bool> SSHSessionImpl::authenticatePassword(kj::StringPtr user, kj::Strin
 			KJ_LOG(WARNING, "Authentication failed due to expired password");
 			return false;
 		}
+		
+		KJ_REQUIRE(rc == LIBSSH2_ERROR_EAGAIN, "Error during authentication");
+		return nullptr;
+	});
+}
+
+Promise<bool> SSHSessionImpl::authenticatePubkeyFile(kj::StringPtr user, kj::StringPtr pubkeyFile, kj::StringPtr privkeyFile, kj::StringPtr passPhrase) {
+	auto fs = kj::newDiskFilesystem();
+	auto curPath = fs -> getCurrentPath();
+	
+	auto pubPath = curPath.evalNative(pubkeyFile).toNativeString();
+	auto privPath = curPath.evalNative(privkeyFile).toNativeString();
+	
+	return queueOp<bool>([
+		this,
+		user = kj::heapString(user),
+		pubPath = kj::heapString(pubPath),
+		privPath = kj::heapString(privPath),
+		passPhrase = kj::heapString(passPhrase)
+	]() -> Maybe<bool> {
+		KJ_DBG("Authentication attempt (pubkey)");
+		auto rc = libssh2_userauth_publickey_fromfile_ex(session, user.cStr(), user.size(), pubPath.cStr(), privPath.cStr(), passPhrase.cStr());
+		KJ_DBG(rc);
+		
+		if(rc == 0)
+			return true;
+		if(rc == LIBSSH2_ERROR_AUTHENTICATION_FAILED )
+			return false;
 		
 		KJ_REQUIRE(rc == LIBSSH2_ERROR_EAGAIN, "Error during authentication");
 		return nullptr;
