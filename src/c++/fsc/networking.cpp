@@ -19,6 +19,7 @@ using capnp::Capability;
 using kj::HttpMethod;
 using kj::HttpHeaders;
 using kj::HttpHeaderId;
+using kj::HttpServer;
 
 namespace fsc {
 
@@ -174,18 +175,64 @@ struct StreamNetworkConnection : public MembranePolicy, capnp::BootstrapFactory<
 	kj::Canceler canceler;
 };
 
-struct FSCHttpService : public kj::HttpService {
-	using Side = capnp::rpc::twoparty::Side;
+struct OpenPortImpl : public NetworkInterface::OpenPort::Server {
+	Maybe<Own<ConnectionReceiver>> receiver;
+	Maybe<Own<HttpServer>> server;
+	Promise<void> listenPromise;
 	
-	static inline kj::HttpHeaderTable headerTable = kj::HttpHeaderTable();
+	OpenPortImpl(Own<HttpServer> server, Own<ConnectionReceiver> recv) :
+		receiver(mv(recv)), server(mv(server))
+	{
+		KJ_IF_MAYBE(pSrv, this -> server) {
+			listenPromise = (*pSrv) -> listen(receiver).eagerlyEvaluate(nullptr);
+		}
+	}
+	
+	Promise<void> getInfo(GetInfoContext ctx) override {
+		KJ_IF_MAYBE(pRecv, receiver) {
+			ctx.getResults().setPort((*pRecv) -> getPort());
+			return READY_NOW;
+		} else {
+			KJ_FAIL_REQUIRE("Listener already stopped");
+		}
+	}
+	
+	Promise<void> drain(DrainContext ctx) override {
+		KJ_IF_MAYBE(pSrv, server) {
+			return (*pSrv) -> drain();
+		}
+		return READY_NOW;
+	}
+	
+	Promise<void> stopListening(DrainCOntext ctx) override {
+		listenPromise = READY_NOW;
+		return READY_NOW;
+	}
+	
+	Promise<void> closeAll(CloseAllContext) override {
+		KJ_UNIMPLEMENTED("Safe shutdown not yet implemented");
+	}
+	
+	Promise<void> unsafeCloseAllNow(UnsafeCloseNowContext) override {
+		listenPromise = READY_NOW;
+		server = nullptr:
+		receiver = nullptr;
+		return READY_NOW;
+	}
+};
+
+static kj::HttpHeaderTable DEFAULT_HEADERS = kj::HttpHeaderTable();
+
+struct HttpListener : public kj::HttpService {
+	using Side = capnp::rpc::twoparty::Side;
 	
 	OneOf<NetworkInterface::Listener::Client, capnp::Capability::Client> listener;
 	
-	FSCHttpService(NetworkInterface::Listener::Client listener) :
+	HttpListener(NetworkInterface::Listener::Client listener) :
 		listener(mv(listener))
 	{}
 	
-	FSCHttpService(capnp::Capability::Client client) :
+	HttpListener(capnp::Capability::Client client) :
 		listener(mv(client))
 	{}
 	
@@ -196,7 +243,7 @@ struct FSCHttpService : public kj::HttpService {
 		kj::AsyncInputStream& requestBody,
 		Response& response
 	) override {
-		HttpHeaders responseHeaders(headerTable);
+		HttpHeaders responseHeaders(DEFAULT_HEADERS);
 		responseHeaders.set(HttpHeaderId::UPGRADE, "websocket");
 		
 		// Check if the request is a websocket request
@@ -241,6 +288,49 @@ struct FSCHttpService : public kj::HttpService {
 	}
 };
 
+struct DefaultEntropySource : public kj::HttpEntropySource {
+	static DefaultEntropySource INSTANCE;
+	void generate(kj::ArrayPtr<byte> buffer) override {
+		getActiveThread().rng().randomize(buffer);
+	}
+};
+
+DefaultEntropySource DefaultEntropySource::INSTANCE;
+
+NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, kj::StringPtr url) {
+	HttpClientSettings settings;
+	settings.entropySource = DefaultEntropySource::INSTANCE;
+	
+	auto client = ownHeld(kj::newHttpClient(DEFAULT_HEADERS, stream, settings).attach(stream));
+	
+	return client -> openWebSocket(url, kj::HttpHeaders(DEFAULT_HEADERS))
+	.then([client = mv(client)](kj::WebSocketResponse response) {
+		KJ_REQUIRE(
+			response.webSocketOrBody.is<Own<kj::WebSocket>>(),
+			"Connection did not provide a proper websocket",
+			response.statusCode, response.statusText
+		);
+		
+		Own<kj::WebSocket> webSocket = mv(response.webSocketOrBody.get<Own<kj::WebSocket>>());
+		auto msgStream = kj::heap<capnp::WebSocketMessageStream>(*wsStream);
+		msgStream = msgStream.attach(webSocket, client.x());
+		
+		auto acceptFunc = [clientInterface = mv(clientInterface)]() {
+			return clientInterface;
+		};
+		
+		return kj::refcounted<StreamNetworkConnection>(mv(msgStream), []() { return Capability::Client(nullptr); }, Side::CLIENT, Side::SERVER);
+	});
+}
+
+NetworkInterface::OpenPort::Client listenViaHttp(Own<kj::ConnectionReceiver> receiver, NetworkInterface::Listener::Client target) {
+	// Wrap listener client into HTTP server
+	auto service = kj::heap<HttpListener>(mv(target));
+	auto server = kj::heap<kj::HttpServer>(getActiveThread().timer(), DEFAULT_HEADERS, *service);
+	server = server.attach(mv(service));
+	
+	// Create open port interface
+	return kj::heap<OpenPortImpl>(mv(server), mv(receiver));
 }
 
 // === class NetworkInterfaceBase ===

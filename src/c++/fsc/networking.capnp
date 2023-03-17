@@ -26,7 +26,7 @@ interface NetworkInterface {
 		unsafeCloseAllNow @4 () -> ();
 	}
 	
-	connect    @0 (url : Text, pushInterface : Capability) -> (connection : Connection);
+	connect    @0 (url : Text) -> (connection : Connection);
 	listen     @1 (host : Text = "0.0.0.0", portHint : UInt16, listener : Listener) -> (assignedPort : UInt64);
 	serve      @2 (host : Text = "0.0.0.0", portHint : UInt16, server : Capability) -> (assignedPort : UInt64);
 	
