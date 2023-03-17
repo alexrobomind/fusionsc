@@ -11,9 +11,19 @@ interface NetworkInterface {
 	interface Connection {
 		getRemote @0 () -> (remote : Capability);
 		close     @1 () -> ();
+		unsafeCloseNow @2 () -> ();
 	}
 	interface Listener {
-		accept @0 (connection : Connection) -> (client : Capability);
+		accept @0 () -> (client : Capability);
+	}
+	interface OpenPort {
+		getInfo @0 () -> (port : UInt64);
+		
+		drain @1 () -> ();
+		stopListening @2 () -> ();
+		
+		closeAll @3 () -> ();
+		unsafeCloseAllNow @4 () -> ();
 	}
 	
 	connect    @0 (url : Text, pushInterface : Capability) -> (connection : Connection);

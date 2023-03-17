@@ -312,6 +312,14 @@ struct ServerImpl : public fsc::Server {
 
 }
 
+kj::ArrayPtr<uint64_t> fsc::protectedInterfaces() {
+	static kj::Array<uint64_t> result = kj::heapArray<uint64_t>({
+		capnp::typeId<LocalResources>(),
+		capnp::typeId<NetworkInterface>()
+	});
+	
+	return result.asPtr();
+}
 
 kj::Function<capnp::Capability::Client()> fsc::newInProcessServer(kj::Function<capnp::Capability::Client()> serviceFactory) {
 	auto server = kj::atomicRefcounted<InProcessServerImpl>(mv(serviceFactory));
