@@ -5,6 +5,8 @@
 #include "services.h"
 
 #include <kj/compat/http.h>
+// #include <kj/async-io.h>
+
 #include <capnp/compat/websocket-rpc.h>
 #include <capnp/membrane.h>
 #include <capnp/rpc-twoparty.h>
@@ -20,6 +22,12 @@ using kj::HttpMethod;
 using kj::HttpHeaders;
 using kj::HttpHeaderId;
 using kj::HttpServer;
+using kj::HttpClientSettings;
+using kj::HttpService;
+using kj::HttpClient;
+
+using kj::AsyncIoStream;
+using kj::ConnectionReceiver;
 
 namespace fsc {
 
@@ -181,30 +189,28 @@ struct OpenPortImpl : public NetworkInterface::OpenPort::Server {
 	Promise<void> listenPromise;
 	
 	OpenPortImpl(Own<HttpServer> server, Own<ConnectionReceiver> recv) :
-		receiver(mv(recv)), server(mv(server))
+		receiver(mv(recv)), server(mv(server)), listenPromise(nullptr)
 	{
-		KJ_IF_MAYBE(pSrv, this -> server) {
-			listenPromise = (*pSrv) -> listen(receiver).eagerlyEvaluate(nullptr);
-		}
+		FSC_ASSERT_MAYBE(pSrv, this -> server);
+		FSC_ASSERT_MAYBE(pRecv, this -> receiver);
+		
+		listenPromise = (*pSrv) -> listenHttp(**pRecv).eagerlyEvaluate(nullptr);
 	}
 	
 	Promise<void> getInfo(GetInfoContext ctx) override {
-		KJ_IF_MAYBE(pRecv, receiver) {
-			ctx.getResults().setPort((*pRecv) -> getPort());
-			return READY_NOW;
-		} else {
-			KJ_FAIL_REQUIRE("Listener already stopped");
-		}
-	}
-	
-	Promise<void> drain(DrainContext ctx) override {
-		KJ_IF_MAYBE(pSrv, server) {
-			return (*pSrv) -> drain();
-		}
+		FSC_REQUIRE_MAYBE(pRecv, receiver, "Listener already stopped");
+		
+		ctx.getResults().setPort((*pRecv) -> getPort());
 		return READY_NOW;
 	}
 	
-	Promise<void> stopListening(DrainCOntext ctx) override {
+	Promise<void> drain(DrainContext ctx) override {
+		FSC_MAYBE_OR_RETURN(pSrv, server, READY_NOW);
+		
+		return (*pSrv) -> drain();
+	}
+	
+	Promise<void> stopListening(StopListeningContext ctx) override {
 		listenPromise = READY_NOW;
 		return READY_NOW;
 	}
@@ -213,9 +219,9 @@ struct OpenPortImpl : public NetworkInterface::OpenPort::Server {
 		KJ_UNIMPLEMENTED("Safe shutdown not yet implemented");
 	}
 	
-	Promise<void> unsafeCloseAllNow(UnsafeCloseNowContext) override {
+	Promise<void> unsafeCloseAllNow(UnsafeCloseAllNowContext) override {
 		listenPromise = READY_NOW;
-		server = nullptr:
+		server = nullptr;
 		receiver = nullptr;
 		return READY_NOW;
 	}
@@ -288,7 +294,7 @@ struct HttpListener : public kj::HttpService {
 	}
 };
 
-struct DefaultEntropySource : public kj::HttpEntropySource {
+struct DefaultEntropySource : public kj::EntropySource  {
 	static DefaultEntropySource INSTANCE;
 	void generate(kj::ArrayPtr<byte> buffer) override {
 		getActiveThread().rng().randomize(buffer);
@@ -301,10 +307,11 @@ NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, k
 	HttpClientSettings settings;
 	settings.entropySource = DefaultEntropySource::INSTANCE;
 	
-	auto client = ownHeld(kj::newHttpClient(DEFAULT_HEADERS, stream, settings).attach(stream));
+	auto client = ownHeld(kj::newHttpClient(DEFAULT_HEADERS, *stream, settings));
+	client.attach(mv(stream));
 	
 	return client -> openWebSocket(url, kj::HttpHeaders(DEFAULT_HEADERS))
-	.then([client = mv(client)](kj::WebSocketResponse response) {
+	.then([client = mv(client)](HttpClient::WebSocketResponse response) mutable -> fsc::NetworkInterface::Connection::Client {
 		KJ_REQUIRE(
 			response.webSocketOrBody.is<Own<kj::WebSocket>>(),
 			"Connection did not provide a proper websocket",
@@ -312,13 +319,10 @@ NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, k
 		);
 		
 		Own<kj::WebSocket> webSocket = mv(response.webSocketOrBody.get<Own<kj::WebSocket>>());
-		auto msgStream = kj::heap<capnp::WebSocketMessageStream>(*wsStream);
-		msgStream = msgStream.attach(webSocket, client.x());
+		auto msgStream = kj::heap<capnp::WebSocketMessageStream>(*webSocket);
+		msgStream = msgStream.attach(mv(webSocket), client.x());
 		
-		auto acceptFunc = [clientInterface = mv(clientInterface)]() {
-			return clientInterface;
-		};
-		
+		using capnp::rpc::twoparty::Side;
 		return kj::refcounted<StreamNetworkConnection>(mv(msgStream), []() { return Capability::Client(nullptr); }, Side::CLIENT, Side::SERVER);
 	});
 }
@@ -331,6 +335,8 @@ NetworkInterface::OpenPort::Client listenViaHttp(Own<kj::ConnectionReceiver> rec
 	
 	// Create open port interface
 	return kj::heap<OpenPortImpl>(mv(server), mv(receiver));
+}
+
 }
 
 // === class NetworkInterfaceBase ===

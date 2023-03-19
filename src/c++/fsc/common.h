@@ -13,6 +13,18 @@
 
 #define FSC_MVCAP(obj) obj = ::kj::mv(obj)
 
+#define FSC_REQUIRE_MAYBE(result, maybe, ...) \
+	auto result = kj::_::readMaybe(maybe); \
+	KJ_REQUIRE(result, __VA_ARGS__);
+
+#define FSC_ASSERT_MAYBE(result, maybe, ...) \
+	auto result = kj::_::readMaybe(maybe); \
+	KJ_ASSERT(result, __VA_ARGS__);
+
+#define FSC_MAYBE_OR_RETURN(result, maybe, returnExpr) \
+	auto result = kj::_::readMaybe(maybe); \
+	if(!result) { return returnExpr; }
+
 namespace kj {
 	template<typename T>
 	class Promise;
@@ -269,6 +281,11 @@ struct Held {
 	T* operator->() { return &ref; }
 	T* get() { return &ref; }
 	
+	template<typename... Params>
+	void attach(Params&&... params) {
+		owningPtr = owningPtr.attach(fwd<Params>(params)...);
+	}
+	
 	Own<T> release() { KJ_REQUIRE(owningPtr.get() == &ref, "Releasing already-released held"); return mv(owningPtr); }
 	Own<T> x() { return release(); }
 	
@@ -315,6 +332,11 @@ struct Shared {
 	T& get() { return *(impl -> payload); }
 	T& operator*() { return get(); }
 	T* operator->() { return &get(); }
+	
+	template<typename... Params>
+	void attach(Params&&... params) {
+		impl -> payload = impl -> payload.attach(fwd<Params>(params)...);
+	}
 	
 	Own<T> asOwn() { return kj::attachRef(get(), *this); }
 		
@@ -366,6 +388,9 @@ struct AtomicShared {
 	T& get() { return *(impl -> payload); }
 	T& operator*() { return get(); }
 	T* operator->() { return &get(); }
+	
+	// no attach() since we assume Impl to be cross-thread and therefore
+	// unsafe to mutate
 	
 	Own<T> asOwn() { return kj::attachRef(get(), *this); }
 	
