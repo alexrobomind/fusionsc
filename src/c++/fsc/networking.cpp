@@ -212,6 +212,8 @@ struct OpenPortImpl : public NetworkInterface::OpenPort::Server {
 	
 	Promise<void> stopListening(StopListeningContext ctx) override {
 		listenPromise = READY_NOW;
+		receiver = nullptr;
+		
 		return READY_NOW;
 	}
 	
