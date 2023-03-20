@@ -27,8 +27,8 @@ interface NetworkInterface {
 	}
 	
 	connect    @0 (url : Text) -> (connection : Connection);
-	listen     @1 (host : Text = "0.0.0.0", portHint : UInt16, listener : Listener) -> (assignedPort : UInt64);
-	serve      @2 (host : Text = "0.0.0.0", portHint : UInt16, server : Capability) -> (assignedPort : UInt64);
+	listen     @1 (host : Text = "0.0.0.0", portHint : UInt16, listener : Listener) -> (openPort : OpenPort);
+	serve      @2 (host : Text = "0.0.0.0", portHint : UInt16, server : Capability) -> (openPort : OpenPort);
 	
 	sshConnect @3 (host : Text, port : UInt16) -> (connection : SSHConnection);
 }

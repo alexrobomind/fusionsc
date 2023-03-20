@@ -5,6 +5,7 @@
 #include "services.h"
 
 #include <kj/compat/http.h>
+#include <kj/compat/url.h>
 // #include <kj/async-io.h>
 
 #include <capnp/compat/websocket-rpc.h>
@@ -339,6 +340,16 @@ NetworkInterface::OpenPort::Client listenViaHttp(Own<kj::ConnectionReceiver> rec
 	return kj::heap<OpenPortImpl>(mv(server), mv(receiver));
 }
 
+NetworkInterface::OpenPort::Client listenViaHttp(Own<kj::ConnectionReceiver> receiver, capnp::Capability::Client target) {
+	// Wrap listener client into HTTP server
+	auto service = kj::heap<HttpListener>(mv(target));
+	auto server = kj::heap<kj::HttpServer>(getActiveThread().timer(), DEFAULT_HEADERS, *service);
+	server = server.attach(mv(service));
+	
+	// Create open port interface
+	return kj::heap<OpenPortImpl>(mv(server), mv(receiver));
+}
+
 }
 
 // === class NetworkInterfaceBase ===
@@ -354,6 +365,54 @@ Promise<void> NetworkInterfaceBase::sshConnect(SshConnectContext ctx) {
 		KJ_DBG("sshConnect: Session created");
 		ctx.initResults().setConnection(kj::heap<SSHConnectionImpl>(mv(sshSession)));
 	});
+}
+
+Promise<void> NetworkInterfaceBase::listen(ListenContext ctx) {
+	Maybe<unsigned int> portHint;
+	if(ctx.getParams().getPortHint() != 0)
+		portHint = ctx.getParams().getPortHint();
+	
+	return listen(ctx.getParams().getHost(), portHint)
+	.then([ctx](Own<ConnectionReceiver> recv) mutable {
+		ctx.getResults().setOpenPort(listenViaHttp(mv(recv), ctx.getParams().getListener()));
+	});
+}
+
+Promise<void> NetworkInterfaceBase::serve(ServeContext ctx) {
+	Maybe<unsigned int> portHint;
+	if(ctx.getParams().getPortHint() != 0)
+		portHint = ctx.getParams().getPortHint();
+	
+	return listen(ctx.getParams().getHost(), portHint)
+	.then([ctx](Own<ConnectionReceiver> recv) mutable {
+		ctx.getResults().setOpenPort(listenViaHttp(mv(recv), ctx.getParams().getServer()));
+	});
+}
+
+Promise<void> NetworkInterfaceBase::connect(ConnectContext ctx) {
+	using kj::Url;
+	Url url = Url::parse(ctx.getParams().getUrl());
+	auto hostAndPort = url.host.asPtr();
+	
+	int port = 80;
+	kj::String host = nullptr;
+	KJ_IF_MAYBE(pIdx, hostAndPort.findFirst(':')) {
+		host = kj::heapString(hostAndPort.slice(0, *pIdx));
+		port = hostAndPort.slice(*pIdx).parseAs<unsigned int>();
+	} else {
+		host = kj::heapString(hostAndPort);
+	}
+	
+	kj::String httpUrl = url.toString(Url::HTTP_REQUEST);
+	
+	return makeConnection(host, port)
+	.then([ctx, httpUrl = mv(httpUrl)](Own<kj::AsyncIoStream> stream) mutable {
+		ctx.getResults().setConnection(connectViaHttp(mv(stream), httpUrl));
+	});
+	
+	// TODO: User authentication
+	
+	
 }
 
 // === class LocalNetworkInterface ===

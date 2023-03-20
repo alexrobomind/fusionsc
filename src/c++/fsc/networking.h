@@ -14,6 +14,9 @@ struct NetworkInterfaceBase : public virtual NetworkInterface::Server {
 	virtual Promise<Own<kj::ConnectionReceiver>> listen(kj::StringPtr host, Maybe<unsigned int> portHint = nullptr) = 0;
 	
 	Promise<void> sshConnect(SshConnectContext ctx) override;
+	Promise<void> listen(ListenContext ctx) override;
+	Promise<void> serve(ServeContext ctx) override;
+	Promise<void> connect(ConnectContext ctx) override;
 };
 
 //! Network implementation based on the local network interface
