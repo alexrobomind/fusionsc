@@ -10,6 +10,7 @@
 #include <kj/tuple.h>
 
 #include <kj/async.h>
+#include <kj/debug.h>
 
 #define FSC_MVCAP(obj) obj = ::kj::mv(obj)
 

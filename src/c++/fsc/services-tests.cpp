@@ -27,6 +27,35 @@ TEST_CASE("in-process-server") {
 	KJ_DBG("Resolved");
 }
 
+TEST_CASE("http-connect") {
+	auto library = newLibrary();
+	auto thread = library -> newThread();
+	auto& ws = thread -> waitScope();
+	
+	Temporary<RootConfig> conf;
+	auto lr = createLocalResources(conf);
+	
+	auto serveRequest = lr.serveRequest();
+	// serveRequest.setPortHint(8000);
+	auto openPort = serveRequest.send().wait(ws).getOpenPort();
+	auto port = openPort.getInfoRequest().send().wait(ws).getPort();
+	KJ_DBG(port);
+	
+	auto connReq = lr.connectRequest();
+	connReq.setUrl(kj::str("http://localhost:", port));
+	auto connection = connReq.send().wait(ws).getConnection();
+	
+	auto remote = connection.getRemoteRequest().send().wait(ws).getRemote();
+	remote.whenResolved().wait(ws);
+	
+	remote = nullptr;
+	connection = nullptr;
+	
+	openPort.drainRequest().send().wait(ws);
+	
+	KJ_DBG("Finished test");
+}
+
 TEST_CASE("ssh-connect", "[.][ssh]") {
 	auto library = newLibrary();
 	auto thread = library -> newThread();

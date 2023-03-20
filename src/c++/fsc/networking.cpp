@@ -99,26 +99,43 @@ struct StreamNetworkConnection : public MembranePolicy, capnp::BootstrapFactory<
 	
 	StreamNetworkConnection(Own<AsyncIoStream> newStream, kj::Function<Capability::Client()> factory, Side local, Side remote) :
 		stream(mv(newStream)),
-		vatNetwork(*(stream.get<Own<AsyncIoStream>>()), local),
+		vatNetwork(kj::heap<capnp::TwoPartyVatNetwork>(*(stream.get<Own<AsyncIoStream>>()), local)),
 		factory(mv(factory)),
 		peerSide(remote)
 	{
-		rpcSystem.emplace(static_cast<capnp::TwoPartyVatNetworkBase&>(vatNetwork), *this);
+		constructCommon();
 	}
 	
 	StreamNetworkConnection(Own<MessageStream> newStream, kj::Function<Capability::Client()> factory, Side local, Side remote) :
 		stream(mv(newStream)),
-		vatNetwork(*(stream.get<Own<MessageStream>>()), local),
+		vatNetwork(kj::heap<capnp::TwoPartyVatNetwork>(*(stream.get<Own<MessageStream>>()), local)),
 		factory(mv(factory)),
 		peerSide(remote)
 	{
-		rpcSystem.emplace(static_cast<capnp::TwoPartyVatNetworkBase&>(vatNetwork), *this);
+		constructCommon();
+	}
+	
+	void constructCommon() {
+		rpcSystem.emplace(static_cast<capnp::TwoPartyVatNetworkBase&>(*vatNetwork), *this);
+		
+		auto onDC = vatNetwork -> onDisconnect();
+		onDC = onDC.then([stream = mv(stream)]() mutable -> Promise<void> {
+			KJ_DBG("RPC system has disconnected");
+			if(stream.is<Own<MessageStream>>()) {
+				auto result = stream.get<Own<MessageStream>>() -> end();
+				return result.attach(mv(stream));
+			}
+			return READY_NOW;
+		}).attach(mv(vatNetwork));
+		getActiveThread().detach(mv(onDC));
 	}
 	
 	void disconnect(kj::Exception e) {
+		KJ_DBG("Disconnecting connection", e);
 		canceler.cancel(mv(e));
 		rpcSystem = nullptr;
-		stream = nullptr;
+		
+		// stream = nullptr;
 	}
 	
 	// Refcounting & remote interface access
@@ -137,7 +154,7 @@ struct StreamNetworkConnection : public MembranePolicy, capnp::BootstrapFactory<
 	
 	// MembranePolicy interface
 	
-	Own<MembranePolicy> addRef() override { return addRef(); }
+	Own<MembranePolicy> addRef() override { return kj::addRef(*this); }
 	
 	Maybe<Capability::Client> outboundCall(uint64_t interfaceId, uint16_t methodId, Capability::Client target) override {
 		for(auto blockedId : protectedInterfaces()) {
@@ -176,7 +193,7 @@ struct StreamNetworkConnection : public MembranePolicy, capnp::BootstrapFactory<
 	}
 	
 	OneOf<Own<AsyncIoStream>, Own<MessageStream>, std::nullptr_t> stream;
-	capnp::TwoPartyVatNetwork vatNetwork;
+	Own<capnp::TwoPartyVatNetwork> vatNetwork;
 	kj::Function<Capability::Client()> factory;
 	Side peerSide;
 	Maybe<capnp::RpcSystem<VatId>> rpcSystem;
@@ -192,8 +209,8 @@ struct OpenPortImpl : public NetworkInterface::OpenPort::Server {
 	OpenPortImpl(Own<HttpServer> server, Own<ConnectionReceiver> recv) :
 		receiver(mv(recv)), server(mv(server)), listenPromise(nullptr)
 	{
-		FSC_ASSERT_MAYBE(pSrv, this -> server);
-		FSC_ASSERT_MAYBE(pRecv, this -> receiver);
+		FSC_ASSERT_MAYBE(pSrv, this -> server, "Internal error");
+		FSC_ASSERT_MAYBE(pRecv, this -> receiver, "Internal error");
 		
 		listenPromise = (*pSrv) -> listenHttp(**pRecv).eagerlyEvaluate(nullptr);
 	}
@@ -314,7 +331,7 @@ NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, k
 	client.attach(mv(stream));
 	
 	return client -> openWebSocket(url, kj::HttpHeaders(DEFAULT_HEADERS))
-	.then([client = mv(client)](HttpClient::WebSocketResponse response) mutable -> fsc::NetworkInterface::Connection::Client {
+	.then([client = client.x()](HttpClient::WebSocketResponse response) mutable -> fsc::NetworkInterface::Connection::Client {
 		KJ_REQUIRE(
 			response.webSocketOrBody.is<Own<kj::WebSocket>>(),
 			"Connection did not provide a proper websocket",
@@ -323,7 +340,7 @@ NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, k
 		
 		Own<kj::WebSocket> webSocket = mv(response.webSocketOrBody.get<Own<kj::WebSocket>>());
 		auto msgStream = kj::heap<capnp::WebSocketMessageStream>(*webSocket);
-		msgStream = msgStream.attach(mv(webSocket), client.x());
+		msgStream = msgStream.attach(mv(webSocket), mv(client));
 		
 		using capnp::rpc::twoparty::Side;
 		return kj::refcounted<StreamNetworkConnection>(mv(msgStream), []() { return Capability::Client(nullptr); }, Side::CLIENT, Side::SERVER);
@@ -392,27 +409,33 @@ Promise<void> NetworkInterfaceBase::serve(ServeContext ctx) {
 Promise<void> NetworkInterfaceBase::connect(ConnectContext ctx) {
 	using kj::Url;
 	Url url = Url::parse(ctx.getParams().getUrl());
+	
+	// URL compatibility validation
+	KJ_IF_MAYBE(pDontCare, url.userInfo) {
+		KJ_FAIL_REQUIRE("User authentication via HTTP is hilariously unsafe and not supported");
+	}
+	
+	KJ_REQUIRE(url.scheme == "http", "Only basic HTTP connections are supported (https will come)");
+	
 	auto hostAndPort = url.host.asPtr();
 	
 	int port = 80;
 	kj::String host = nullptr;
 	KJ_IF_MAYBE(pIdx, hostAndPort.findFirst(':')) {
 		host = kj::heapString(hostAndPort.slice(0, *pIdx));
-		port = hostAndPort.slice(*pIdx).parseAs<unsigned int>();
+		port = hostAndPort.slice(*pIdx + 1).parseAs<unsigned int>();
 	} else {
 		host = kj::heapString(hostAndPort);
 	}
 	
-	kj::String httpUrl = url.toString(Url::HTTP_REQUEST);
+	KJ_DBG(host, port);
 	
 	return makeConnection(host, port)
-	.then([ctx, httpUrl = mv(httpUrl)](Own<kj::AsyncIoStream> stream) mutable {
+	.then([ctx, url = mv(url)](Own<kj::AsyncIoStream> stream) mutable {
+		kj::String httpUrl = url.toString(Url::HTTP_REQUEST);
+		KJ_DBG(httpUrl);
 		ctx.getResults().setConnection(connectViaHttp(mv(stream), httpUrl));
-	});
-	
-	// TODO: User authentication
-	
-	
+	});	
 }
 
 // === class LocalNetworkInterface ===
@@ -428,10 +451,13 @@ LocalNetworkInterface::LocalNetworkInterface(Own<kj::Network> network) :
 LocalNetworkInterface::~LocalNetworkInterface() {}
 
 Promise<Own<kj::AsyncIoStream>> LocalNetworkInterface::makeConnection(kj::StringPtr host, unsigned int port) {
-	return network -> parseAddress(host, port)
+	auto newHost = kj::heapString(host);
+	auto result = network -> parseAddress(newHost, port)
 	.then([](Own<kj::NetworkAddress> addr) {
+		KJ_DBG("Parsed address", *addr);
 		return addr -> connect();
 	});
+	return result.attach(mv(newHost));
 }
 
 Promise<Own<kj::ConnectionReceiver>> LocalNetworkInterface::listen(kj::StringPtr host, Maybe<unsigned int> port) {

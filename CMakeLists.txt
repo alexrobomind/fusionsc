@@ -257,6 +257,7 @@ target_link_libraries(
 	Botan::botan
 	CapnProto::capnp-rpc
 	CapnProto::capnp-json
+	CapnProto::capnp-websocket
 	CapnProto::kj-http
 	CapnProto::kj
 	Eigen3::Eigen
