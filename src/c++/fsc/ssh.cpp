@@ -182,7 +182,6 @@ ssize_t libssh2SendCallback(
 	int flags,
 	void **abstract
 ) {
-	KJ_DBG("send CB");
 	SSHSessionImpl* session = reinterpret_cast<SSHSessionImpl*>(*abstract);
 	
 	if(session -> stream.get() == nullptr) {
@@ -208,20 +207,16 @@ ssize_t libssh2RecvCallback(
 	int flags,
 	void **abstract
 ) {
-	KJ_DBG("recv CB");
 	SSHSessionImpl* session = reinterpret_cast<SSHSessionImpl*>(*abstract);
 	
 	if(session -> stream.get() == nullptr) {
-		KJ_DBG("disconnected");
 		return LIBSSH2_ERROR_SOCKET_DISCONNECT;
 	}
 	
 	try {
 		KJ_IF_MAYBE(pSize, session -> tryReadFromStream(buffer, length)) {
-			KJ_DBG("Read from stream", *pSize);
 			return (ssize_t) *pSize;
 		} else {
-			KJ_DBG("EAGAIN");
 			return -EAGAIN;
 		}
 	} catch(kj::Exception& e) {
@@ -287,11 +282,8 @@ SSHSessionImpl::~SSHSessionImpl() noexcept {
 }
 
 Promise<void> SSHSessionImpl::startup() {
-	KJ_DBG("Engaging startup task");
 	return queueLibssh2Call([this]() {
-		KJ_DBG("pre-startup");
 		auto rc = libssh2_session_startup(session, 0);
-		KJ_DBG("Startup", rc);
 		return rc;
 	});
 }
@@ -317,13 +309,12 @@ Promise<void> SSHSessionImpl::keepAlive() {
 }
 
 Maybe<size_t> SSHSessionImpl::tryReadFromStream(void* buffer, size_t length) {
-	KJ_DBG("SSH session: tryRead", length);
 	KJ_IF_MAYBE(pBytes, bytesReady) {
 		KJ_REQUIRE(!readActive);
 		
 		size_t bytesToCopy = kj::min(*pBytes - bytesConsumed, length);
 		memcpy(buffer, readBuffer.begin() + bytesConsumed, bytesToCopy);
-		KJ_DBG("Read: ", readBuffer.slice(bytesConsumed, bytesToCopy));
+		// KJ_DBG("Read: ", readBuffer.slice(bytesConsumed, bytesToCopy));
 		bytesConsumed += bytesToCopy;
 		
 		if(bytesConsumed >= *pBytes) {
@@ -344,7 +335,7 @@ Maybe<size_t> SSHSessionImpl::tryReadFromStream(void* buffer, size_t length) {
 			return stream->read(readBuffer.begin(), 1, length);
 		})
 		.then([this](size_t actualBytesRead) {
-			KJ_DBG("Read from stream: ", actualBytesRead);
+			// KJ_DBG("Read from stream: ", actualBytesRead);
 			
 			readActive = false;
 			bytesReady = actualBytesRead;
@@ -357,16 +348,12 @@ Maybe<size_t> SSHSessionImpl::tryReadFromStream(void* buffer, size_t length) {
 }
 
 size_t SSHSessionImpl::writeToStream(const void* buffer, size_t length) {	
-	KJ_DBG("SSH session: write", length);
 	auto tmpBuf = kj::heapArray<kj::byte>(length);
 	memcpy(tmpBuf.begin(), buffer, length);
 	
 	writesFinished = writesFinished.then([this, tmpBuf = mv(tmpBuf)]() {
-		KJ_DBG("Writing data: ", tmpBuf);
-		return stream->write(tmpBuf.begin(), tmpBuf.size())
-		.then([](){
-			KJ_DBG("Write complete");
-		});
+		// KJ_DBG("Writing data: ", tmpBuf);
+		return stream->write(tmpBuf.begin(), tmpBuf.size());
 	}).eagerlyEvaluate(nullptr);
 	return length;
 }
@@ -394,7 +381,6 @@ Promise<T> SSHSessionImpl::queueOp(kj::Function<Maybe<T>()> op, bool cancelable)
 		bool cancelable;
 		
 		void unlink() {
-			KJ_DBG("Op::Unlink");
 			if(opsLink.isLinked()) {
 				fulfiller.reject(KJ_EXCEPTION(FAILED, "Operation deleted"));
 				session.queuedOps.remove(*this);
@@ -463,9 +449,7 @@ Promise<void> SSHSessionImpl::queueLibssh2Call(kj::Function<int()> op, bool unca
 
 Promise<bool> SSHSessionImpl::authenticatePassword(kj::StringPtr user, kj::StringPtr password) {
 	return queueOp<bool>([this, user = kj::heapString(user), pw = kj::heapString(password)]() -> Maybe<bool> {
-		KJ_DBG("Authentication attempt");
 		auto rc = libssh2_userauth_password_ex(session, user.cStr(), user.size(), pw.cStr(), pw.size(), nullptr);
-		KJ_DBG(rc);
 		
 		if(rc == 0)
 			return true;
@@ -495,9 +479,7 @@ Promise<bool> SSHSessionImpl::authenticatePubkeyFile(kj::StringPtr user, kj::Str
 		privPath = kj::heapString(privPath),
 		passPhrase = kj::heapString(passPhrase)
 	]() -> Maybe<bool> {
-		KJ_DBG("Authentication attempt (pubkey)");
 		auto rc = libssh2_userauth_publickey_fromfile_ex(session, user.cStr(), user.size(), pubPath.cStr(), privPath.cStr(), passPhrase.cStr());
-		KJ_DBG(rc);
 		
 		if(rc == 0)
 			return true;

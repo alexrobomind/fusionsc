@@ -120,7 +120,6 @@ struct StreamNetworkConnection : public MembranePolicy, capnp::BootstrapFactory<
 		
 		auto onDC = vatNetwork -> onDisconnect();
 		onDC = onDC.then([stream = mv(stream)]() mutable -> Promise<void> {
-			KJ_DBG("RPC system has disconnected");
 			if(stream.is<Own<MessageStream>>()) {
 				auto result = stream.get<Own<MessageStream>>() -> end();
 				return result.attach(mv(stream));
@@ -131,7 +130,6 @@ struct StreamNetworkConnection : public MembranePolicy, capnp::BootstrapFactory<
 	}
 	
 	void disconnect(kj::Exception e) {
-		KJ_DBG("Disconnecting connection", e);
 		canceler.cancel(mv(e));
 		rpcSystem = nullptr;
 		
@@ -375,11 +373,9 @@ Promise<void> NetworkInterfaceBase::sshConnect(SshConnectContext ctx) {
 	auto params = ctx.getParams();
 	return makeConnection(params.getHost(), params.getPort())
 	.then([](Own<kj::AsyncIoStream> stream) {
-		KJ_DBG("sshConnect: Connection formed");
 		return createSSHSession(mv(stream));
 	})
 	.then([ctx](Own<SSHSession> sshSession) mutable {
-		KJ_DBG("sshConnect: Session created");
 		ctx.initResults().setConnection(kj::heap<SSHConnectionImpl>(mv(sshSession)));
 	});
 }
@@ -428,12 +424,9 @@ Promise<void> NetworkInterfaceBase::connect(ConnectContext ctx) {
 		host = kj::heapString(hostAndPort);
 	}
 	
-	KJ_DBG(host, port);
-	
 	return makeConnection(host, port)
 	.then([ctx, url = mv(url)](Own<kj::AsyncIoStream> stream) mutable {
 		kj::String httpUrl = url.toString(Url::HTTP_REQUEST);
-		KJ_DBG(httpUrl);
 		ctx.getResults().setConnection(connectViaHttp(mv(stream), httpUrl));
 	});	
 }
@@ -454,7 +447,6 @@ Promise<Own<kj::AsyncIoStream>> LocalNetworkInterface::makeConnection(kj::String
 	auto newHost = kj::heapString(host);
 	auto result = network -> parseAddress(newHost, port)
 	.then([](Own<kj::NetworkAddress> addr) {
-		KJ_DBG("Parsed address", *addr);
 		return addr -> connect();
 	});
 	return result.attach(mv(newHost));

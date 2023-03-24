@@ -31,12 +31,19 @@ TEST_CASE("http-connect") {
 	auto library = newLibrary();
 	auto thread = library -> newThread();
 	auto& ws = thread -> waitScope();
+	auto& ds = thread -> dataService();
+	
+	// Create a DataRef as service we want to serve
 	
 	Temporary<RootConfig> conf;
 	auto lr = createLocalResources(conf);
 	
+	auto data = kj::heapArray<capnp::byte>(20);
+	thread -> rng().randomize(data);
+	auto published = ds.publish((capnp::Data::Reader) data);
+	
 	auto serveRequest = lr.serveRequest();
-	// serveRequest.setPortHint(8000);
+	serveRequest.setServer(published);
 	auto openPort = serveRequest.send().wait(ws).getOpenPort();
 	auto port = openPort.getInfoRequest().send().wait(ws).getPort();
 	KJ_DBG(port);
@@ -46,7 +53,9 @@ TEST_CASE("http-connect") {
 	auto connection = connReq.send().wait(ws).getConnection();
 	
 	auto remote = connection.getRemoteRequest().send().wait(ws).getRemote();
-	remote.whenResolved().wait(ws);
+	auto copy = ds.download(remote.castAs<DataRef<capnp::Data>>()).wait(ws);
+	
+	KJ_REQUIRE(copy.get() == data);
 	
 	remote = nullptr;
 	connection = nullptr;
@@ -81,7 +90,8 @@ TEST_CASE("ssh-connect", "[.][ssh]") {
 		req.setUser("testuser");
 		req.setPassword("testpass");
 		req.send().wait(thread -> waitScope());
-	}	
+	}
+
 }
 
 namespace {
