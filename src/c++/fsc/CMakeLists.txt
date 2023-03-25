@@ -12,6 +12,7 @@ set(
 	
 	index.capnp
 	odb.capnp
+	jobs.capnp
 	
 	magnetics.capnp
 	geometry.capnp
@@ -104,6 +105,9 @@ add_library(
 	
 	compression.h
 	compression.cpp
+	
+	jobs.h
+	jobs.cpp
 	
 	db.h
 	db.cpp

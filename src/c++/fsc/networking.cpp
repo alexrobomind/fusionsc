@@ -118,8 +118,16 @@ struct StreamNetworkConnection : public MembranePolicy, capnp::BootstrapFactory<
 	void constructCommon() {
 		rpcSystem.emplace(static_cast<capnp::TwoPartyVatNetworkBase&>(*vatNetwork), *this);
 		
+		localDisconnectHandler = vatNetwork -> onDisconnect()
+		.then([this]() {
+			KJ_IF_MAYBE(pDontCare, rpcSystem) {
+				rpcSystem = nullptr;
+			}
+		}).eagerlyEvaluate(nullptr);
+		
 		auto onDC = vatNetwork -> onDisconnect();
 		onDC = onDC.then([stream = mv(stream)]() mutable -> Promise<void> {
+			KJ_DBG("Disconnecting ...");
 			if(stream.is<Own<MessageStream>>()) {
 				auto result = stream.get<Own<MessageStream>>() -> end();
 				return result.attach(mv(stream));
@@ -195,6 +203,7 @@ struct StreamNetworkConnection : public MembranePolicy, capnp::BootstrapFactory<
 	kj::Function<Capability::Client()> factory;
 	Side peerSide;
 	Maybe<capnp::RpcSystem<VatId>> rpcSystem;
+	Promise<void> localDisconnectHandler = nullptr;
 	
 	kj::Canceler canceler;
 };
