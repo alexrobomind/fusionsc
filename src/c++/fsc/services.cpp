@@ -15,6 +15,8 @@
 
 #include <kj/list.h>
 
+#include <fsc/jobs.capnp.h>
+
 using namespace fsc;
 
 namespace {
@@ -315,7 +317,8 @@ struct ServerImpl : public fsc::Server {
 kj::ArrayPtr<uint64_t> fsc::protectedInterfaces() {
 	static kj::Array<uint64_t> result = kj::heapArray<uint64_t>({
 		capnp::typeId<LocalResources>(),
-		capnp::typeId<NetworkInterface>()
+		capnp::typeId<NetworkInterface>(),
+		capnp::typeId<JobScheduler>()
 	});
 	
 	return result.asPtr();

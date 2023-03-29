@@ -2,13 +2,35 @@
 
 #include "local.h"
 #include "data.h"
+#include "streams.h"
 
 namespace fsc {
 	
 // === class LibraryHandle ===
+	
+LibraryHandle::LibraryHandle() :
+	shutdownMode(false),
+	// loopbackReferenceForStewardStartup(addRef()),
+	sharedData(kj::atomicRefcounted<SharedData>()),
+	stewardTask(nullptr),
+	stewardThread([this]() { runSteward(); })
+{
+	stewardThread.detach();
+	auto& st = steward();
+	stewardTask = st.executeSync([shared = kj::atomicAddRef(*sharedData)]() mutable {
+		Promise<void> promise = LocalDataStore::gcLoop(shared -> store)
+		.attach(mv(shared));
+		getActiveThread().detach(mv(promise));
+		return READY_NOW;
+	});
+};
+
+LibraryHandle::~LibraryHandle() {
+	stopSteward();
+}
 
 void LibraryHandle::stopSteward() const {
-	storeSteward.stop();
+	stewardFulfiller -> fulfill();
 }
 
 std::unique_ptr<Botan::HashFunction> LibraryHandle::defaultHash() const {
@@ -16,20 +38,81 @@ std::unique_ptr<Botan::HashFunction> LibraryHandle::defaultHash() const {
 	KJ_REQUIRE(result != nullptr, "Requested hash function not available");
 	return result;
 }
-	
-// === class ThreadHandle ===
 
-namespace {
-
-struct NullErrorHandler : public kj::TaskSet::ErrorHandler {
-	static NullErrorHandler instance;
+const kj::Executor& LibraryHandle::steward() const {
+	auto locked = stewardExecutor.lockExclusive();
+	locked.wait([](const Maybe<Own<const kj::Executor>>& exec) { return exec != nullptr; });
 	
-	void taskFailed(kj::Exception&& e) {}
-};
+	FSC_ASSERT_MAYBE(pExecutor, *locked, "Internal error");
+		
+	// The life of this is guarded by the lifetime of the LibraryHandle instance,
+	// so this is safe.
+	return **pExecutor;
+}
+
+void LibraryHandle::runSteward() {
+	// We use a special thread context for the steward that doesn't
+	// have back-access to the library.
+	StewardContext ctx;
+	
+	// Pass back the executor
+	{
+		auto locked = stewardExecutor.lockExclusive();
+		*locked = ctx.executor().addRef();
+	}
+	
+	// Register fulfiller for shutdown	
+	auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+	stewardFulfiller = mv(paf.fulfiller);
+
+	auto runPromise = paf.promise.catch_([](kj::Exception&& e) {});
+
+	// loopbackReferenceForStewardStartup = nullptr;
+	runPromise.wait(ctx.waitScope());
+	// DO NOT USE this PAST THIS POINT
+}
+
+// === class NullErrorHandler ===
+
+void NullErrorHandler::taskFailed(kj::Exception&& e) {
+}
 
 NullErrorHandler NullErrorHandler::instance;
 
+// === class ThreadContext ===
+
+ThreadContext::ThreadContext() :
+	_ioContext(kj::setupAsyncIo()),
+	_executor(kj::getCurrentThreadExecutor()),
+	_filesystem(kj::newDiskFilesystem()),
+	_streamConverter(newStreamConverter()),
+	detachedTasks(NullErrorHandler::instance)
+{	
+	KJ_REQUIRE(current == nullptr, "Can only have one active thread context per thread");
+	current = this;
 }
+
+ThreadContext::~ThreadContext() {
+	KJ_REQUIRE(current == this, "Destroying LibraryThread in wrong thread");
+	current = nullptr;
+}
+
+
+void ThreadContext::detach(Promise<void> p) {
+	detachedTasks.add(mv(p));
+}
+
+Promise<void> ThreadContext::drain() {
+	return detachedTasks.onEmpty();
+}
+
+Promise<void> ThreadContext::uncancelable(Promise<void> p) {
+	auto forked = p.fork();
+	detach(forked.addBranch());
+	return forked.addBranch();
+}
+	
+// === class ThreadHandle ===
 
 struct ThreadHandle::Ref {		
 	Ref(const kj::MutexGuarded<RefData>* refData);
@@ -63,21 +146,12 @@ ThreadHandle::Ref::~Ref() {
 }
 
 ThreadHandle::ThreadHandle(Library l) :
-	_ioContext(kj::setupAsyncIo()),
 	_library(l -> addRef()),
-	_executor(kj::getCurrentThreadExecutor()),
 	_dataService(kj::heap<LocalDataService>(l)),
-	_filesystem(kj::newDiskFilesystem()),
-	refData(new kj::MutexGuarded<RefData>()),
-	detachedTasks(NullErrorHandler::instance)
-{	
-	KJ_REQUIRE(current == nullptr, "Can only have one active ThreadHandle / LibraryThread per thread");
-	current = this;
-}
+	refData(new kj::MutexGuarded<RefData>())
+{}
 
-ThreadHandle::~ThreadHandle() {
-	KJ_REQUIRE(current == this, "Destroying LibraryThread in wrong thread") {}
-	
+ThreadHandle::~ThreadHandle() {	
 	// If the library is in shutdown mode, we have to (conservatively) assume 
 	// that all other threads  have unexpectedly died and this is the last
 	// remaining active thread. We can not BANK on it, but we can not wait
@@ -118,8 +192,6 @@ ThreadHandle::~ThreadHandle() {
 		if(canDeleteRefdata)
 			delete refData;
 	}
-			
-	current = nullptr;
 }
 
 Own<ThreadHandle> ThreadHandle::addRef() {
@@ -130,18 +202,11 @@ Own<const ThreadHandle> ThreadHandle::addRef() const {
 	return Own<const ThreadHandle>(this, kj::NullDisposer::instance).attach(kj::heap<ThreadHandle::Ref>(this->refData));
 }
 
-void ThreadHandle::detach(Promise<void> p) {
-	detachedTasks.add(mv(p));
-}
+// === class StewardContext ===
 
-Promise<void> ThreadHandle::drain() {
-	return detachedTasks.onEmpty();
-}
-
-Promise<void> ThreadHandle::uncancelable(Promise<void> p) {
-	auto forked = p.fork();
-	detach(forked.addBranch());
-	return forked.addBranch();
-}
+StewardContext::StewardContext() {};
+StewardContext::~StewardContext() {
+	detachedTasks.clear();
+};
 
 }

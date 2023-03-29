@@ -2,6 +2,20 @@
 
 #include "local-vat-network.h"
 
+#include <kj/miniposix.h>
+
+namespace {
+	
+int dupFD(int fd) {
+	#if _WIN32
+	return _dup(fd);
+	#else
+	return dup(fd);
+	#endif
+}
+
+}
+
 namespace fsc {
 	
 LocalVatNetwork::Message::Message(unsigned int firstSegmentSize) : builder(firstSegmentSize) {}
@@ -47,6 +61,11 @@ struct LocalVatNetwork::Connection::OutgoingMessage : public capnp::OutgoingRpcM
 		}
 	}
 	size_t sizeInWords() override { return msg -> builder.sizeInWords(); }
+	void setFds(Array<int> fds) override {
+		auto builder = kj::heapArrayBuilder<kj::AutoCloseFd>(fds.size());
+		for(auto fd : fds) builder.add(dupFD(fd));
+		msg -> fds = builder.finish();
+	}
 };
 
 void LocalVatNetwork::Connection::post(Message* msg) const {

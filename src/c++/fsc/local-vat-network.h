@@ -64,6 +64,7 @@ private:
 	struct Message {
 		capnp::MallocMessageBuilder builder;
 		kj::ListLink<Message> link;
+		kj::Array<kj::AutoCloseFd> fds;
 		
 		Message(unsigned int firstSegmentSize);
 	};

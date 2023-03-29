@@ -9,6 +9,7 @@ set(
 	
 	data.capnp
 	data-archive.capnp
+	streams.capnp
 	
 	index.capnp
 	odb.capnp
@@ -93,6 +94,9 @@ add_library(
 	
 	ssh.h
 	ssh.cpp
+	
+	streams.h
+	streams.cpp
 	
 	data.h
 	data.cpp
@@ -201,6 +205,7 @@ if(BUILD_TESTING)
 		tests
 		PUBLIC
 		local-tests.cpp
+		jobs-tests.cpp
 		random-tests.cpp
 		data-tests.cpp
 		odb-tests.cpp

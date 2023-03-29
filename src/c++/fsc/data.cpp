@@ -370,7 +370,7 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 	virtual Promise<Maybe<ResultType>> useCached() override {
 		auto dataHash = metadata.getDataHash();
 		if(dataHash.size() > 0) {
-			auto lStore = getActiveThread().library() -> store.lockShared();
+			auto lStore = getActiveThread().library() -> store().lockShared();
 			
 			KJ_IF_MAYBE(rowPtr, lStore -> table.find(dataHash)) {
 				dataEntry = (*rowPtr) -> addRef();
@@ -406,7 +406,7 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 			metadata.getDataHash(),	mv(downloadBuffer)
 		);
 		
-		auto lStore = getActiveThread().library() -> store.lockExclusive();
+		auto lStore = getActiveThread().library() -> store().lockExclusive();
 			
 		KJ_IF_MAYBE(rowPtr, lStore -> table.find(metadata.getDataHash())) {
 			// If found now, discard current download
@@ -486,7 +486,7 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRef<
 	
 	// Prepare construction of the data
 	{
-		kj::Locked<LocalDataStore> lStore = library -> store.lockExclusive();
+		kj::Locked<LocalDataStore> lStore = library -> store().lockExclusive();
 		auto dataHash = myMetaData.getDataHash();
 		KJ_IF_MAYBE(ppRow, lStore -> table.find(dataHash)) {
 			entry = (*ppRow) -> addRef();
@@ -790,7 +790,7 @@ struct ArchiveWriter {
 				// Get a ref to the store entry if it is found
 				Maybe<Own<const LocalDataStore::Entry>> maybeStoreEntry = nullptr;
 				if(dataHash.size() > 0) {
-					auto lStore = getActiveThread().library() -> store.lockShared();
+					auto lStore = getActiveThread().library() -> store().lockShared();
 					
 					KJ_IF_MAYBE(rowPtr, lStore -> table.find(dataHash)) {
 						maybeStoreEntry = (*rowPtr) -> addRef();

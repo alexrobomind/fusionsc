@@ -13,6 +13,7 @@
 #include "common.h"
 #include "store.h"
 #include "random.h"
+#include "streams.h"
 
 namespace fsc {
 	class LocalDataService;
@@ -26,21 +27,27 @@ using Library = Own<const LibraryHandle>;
 class ThreadHandle;
 using LibraryThread = Own<ThreadHandle>;
 
+struct NullErrorHandler : public kj::TaskSet::ErrorHandler {
+	static NullErrorHandler instance;
+	void taskFailed(kj::Exception&& e) override ;
+};
+
 /**
  *  "Global" libary handle. This class serves as the dependency injection context
  *  for objects that should be shared across all threads. Currently, this is only
  *  the local data store table and a shared daemon runner.
  */
-class LibraryHandle : public kj::AtomicRefcounted {
-public:
-	// Mutex protected local data store
-	kj::MutexGuarded<LocalDataStore> store;
+struct LibraryHandle : public kj::AtomicRefcounted {
+	LibraryHandle();
+	~LibraryHandle();
 	
 	// Creates an additional owning reference to this handle.
 	inline kj::Own<const LibraryHandle> addRef() const { return kj::atomicAddRef(*this); }
 	
-	// TODO: Currently the daemon runner uses the event loop of the steward. Refactor
-	//       the steward to be a daemon instead ...
+	// Mutex protected local data store
+	inline const kj::MutexGuarded<LocalDataStore>& store() const { return sharedData -> store; }
+	
+	const kj::Executor& steward() const ;
 	
 	inline LibraryThread newThread() const ;
 	void stopSteward() const;
@@ -50,19 +57,42 @@ public:
 	
 	std::unique_ptr<Botan::HashFunction> defaultHash() const;
 	
+	/**
+	 * Sets this FSC library instance to elevated mode. This causes the following changed:
+	 *  - On UNIX, installs a signal handler to handle SIGCHLD events. The handler is restricted
+	 *    to the event loop of the steward thread. Since SIGCHLD handlers tend to heavily interfere
+	 *    with each other, this action is restricted to on-demand.
+	 *
+	 * \warning You can only have one elevated instance per process.
+	 */
+	void elevate();
+	bool isElevated () { return elevatedInstance == this; }
+	
 private:
-	inline LibraryHandle() :
-		storeSteward(store),
-		shutdownMode(false)
-	{};
+	struct SharedData : public kj::AtomicRefcounted {
+		kj::MutexGuarded<LocalDataStore> store;
+	};
 	
-	inline ~LibraryHandle() {
-	}
+	//! Executes the steward thread
+	void runSteward();
 	
-	mutable LocalDataStore::Steward storeSteward;
 	kj::MutexGuarded<bool> shutdownMode;
+	Own<SharedData> sharedData;
+	
+	Own<kj::CrossThreadPromiseFulfiller<void>> stewardFulfiller;
+	kj::MutexGuarded<Maybe<Own<const kj::Executor>>> stewardExecutor;
+	Promise<void> stewardTask;
+	kj::Thread stewardThread;
+	
+	// This loopback reference will be nulled by he steward once it has finished
+	// startup and the fulfiller is initialized. This ensures that the destructor
+	// is not called before the steward finishes booting up.
+	// Maybe<Own<const LibraryHandle>> loopbackReferenceForStewardStartup;
 	
 	friend Own<LibraryHandle> kj::atomicRefcounted<LibraryHandle>();
+	
+	static inline LibraryHandle* elevatedInstance = nullptr;
+	friend class StewardContext;
 };
 
 
@@ -70,58 +100,94 @@ inline Library newLibrary() {
 	return kj::atomicRefcounted<LibraryHandle>();
 }
 
-/**
- * Thread-local library handle. This holds local infrastructure components required by the
- * library, but which may not be shared in-between threads.
- */
-class ThreadHandle /*: public kj::Refcounted*/ {
-public:
-	// Creates a new library handle from a library handle
-	ThreadHandle(Library lh);
-	~ThreadHandle();
+struct ThreadContext {
+	ThreadContext();
+	~ThreadContext();
 	
-	// Accessors for local use only
+	//! Access to executor from outside threads
+	virtual const Library& library() const = 0;
 	
-	// Convenience method to retrieve the wait scope from the io context
-	inline kj::WaitScope&      waitScope() { return _ioContext.waitScope; }
+	virtual LocalDataService& dataService() = 0;
 	
-	/**
-	 * IO context. This object holds the event loop, its wait scope, and IO providers to
-	 * access network and the file system.
-	 */
-	inline kj::AsyncIoContext& ioContext() { return _ioContext; }
+	inline const kj::Executor& executor() const {
+		return _executor;
+	}
+	inline kj::AsyncIoContext& ioContext() {
+		return _ioContext;
+	}
+	inline kj::WaitScope& waitScope() {
+		return ioContext().waitScope;
+	}
+	inline kj::Timer& timer() {
+		return ioContext().provider->getTimer();
+	}
+	inline CSPRNG& rng() {
+		return _rng;
+	}
+	inline kj::Network& network() {
+		return ioContext().provider -> getNetwork();
+	}
+	inline StreamConverter& streamConverter() {
+		return *_streamConverter;
+	}
+	inline kj::Filesystem& filesystem() {
+		return *_filesystem;
+	}
+	inline const kj::MutexGuarded<LocalDataStore>& store() const {
+		return library() -> store();
+	}
 	
-	/**
-	 * System clock timer
-	 */
-	inline kj::Timer& timer() { return _ioContext.provider->getTimer(); }
-		
-	/**
-	 * This thread's random number generator.
-	 */
-	inline CSPRNG&             rng()       { return _rng; }
-	
-	/**
-	 * Network interface routines
-	 */
-	inline kj::Network&        network()   { return _ioContext.provider -> getNetwork(); }
-	
-	kj::Array<const byte> randomID() {
+	inline kj::Array<const byte> randomID() {
 		auto result = kj::heapArray<byte>(16);
 		rng().randomize(result);
 		return result;
 	}
 	
-	LocalDataService& dataService() { return *_dataService; }
+	template<typename T>
+	Promise<T> uncancelable(Promise<T> p);
 	
-	kj::Filesystem& filesystem() { return *_filesystem; }
+	Promise<void> uncancelable(Promise<void> p);
 	
-	// Accessors that may be used cross-thread
+	void detach(Promise<void> p);
+	Promise<void> drain();
 	
-	// Convenience method to retrieve the local data store from the library
-	inline const Library&                          library()      const { return _library; }
-	inline const kj::MutexGuarded<LocalDataStore>& store()        const { return _library -> store; }
-	inline const kj::Executor&                     executor()     const { return _executor; }
+private:
+	// Access to currenly active instance
+	inline static thread_local ThreadContext* current = nullptr;
+	friend ThreadContext& getActiveThread();
+	friend bool hasActiveThread();
+	
+	// Fields
+	kj::AsyncIoContext _ioContext;
+	CSPRNG _rng;
+	Own<kj::Filesystem> _filesystem;
+	Own<StreamConverter> _streamConverter;
+	const kj::Executor& _executor;
+
+protected:
+	kj::TaskSet detachedTasks;
+};
+
+inline ThreadContext& getActiveThread() {
+	KJ_REQUIRE(ThreadContext::current != nullptr, "No active thread");
+	return *ThreadContext::current;
+}
+
+inline bool hasActiveThread() {
+	return ThreadContext::current != nullptr;
+}
+
+/**
+ * Thread-local library handle. This holds local infrastructure components required by the
+ * library, but which may not be shared in-between threads.
+ */
+struct ThreadHandle : public ThreadContext {
+	// Creates a new thread handle from a library handle
+	ThreadHandle(Library lh);
+	~ThreadHandle();
+	
+	LocalDataService& dataService() override { return *_dataService; }
+	inline const Library& library() const override { return _library; }
 	
 	//! Creates a keep-alive reference to this thread
 	/**
@@ -131,53 +197,30 @@ public:
 	 */
 	Own<ThreadHandle> addRef();
 	Own<const ThreadHandle> addRef() const;
-	
-	template<typename T>
-	Promise<T> uncancelable(Promise<T> p);
-	
-	Promise<void> uncancelable(Promise<void> p);
-	
-	void detach(Promise<void> p);
-	Promise<void> drain();
 		
 private:
-	kj::AsyncIoContext _ioContext;
-	CSPRNG _rng;
-	
 	// Back-reference to the library handle.
 	Library _library;
-	
-	const kj::Executor& _executor;
-	
 	Own<LocalDataService> _dataService;
-	Own<kj::Filesystem> _filesystem;
-	
-	// Access to currenly active instance
-	inline static thread_local ThreadHandle* current = nullptr;
-	friend ThreadHandle& getActiveThread();
-	friend bool hasActiveThread();
 	
 	struct Ref;
 	struct RefData;
 	
 	kj::MutexGuarded<RefData>* refData;
-	
-	kj::TaskSet detachedTasks;
 };
 
-inline ThreadHandle& getActiveThread() {
-	KJ_REQUIRE(ThreadHandle::current != nullptr, "No active thread");
-	return *ThreadHandle::current;
-}
-
-inline bool hasActiveThread() {
-	return ThreadHandle::current != nullptr;
-}
+struct StewardContext : public ThreadContext {
+	inline const Library& library() const override { KJ_FAIL_REQUIRE("Library instance not available from steward context"); }
+	inline LocalDataService& dataService() override { KJ_FAIL_REQUIRE("Data service not available from steward context"); }
+	
+	StewardContext();
+	~StewardContext();
+};
 
 // Inline implementations
 
 template<typename T>
-Promise<T> ThreadHandle::uncancelable(Promise<T> p) {
+Promise<T> ThreadContext::uncancelable(Promise<T> p) {
 	auto promiseTuple = p.then([](T t) {
 		return kj::tuple(t, 0);
 	}).split();
