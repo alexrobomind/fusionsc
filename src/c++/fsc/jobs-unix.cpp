@@ -31,7 +31,7 @@ struct UnixProcessJob : public Job::Server {
 	ForkedPromise<void> completionPromise;
 	
 	bool isDetached = false;
-	Job::State state;
+	Job::State state = Job::State::RUNNING;
 	
 	Temporary<Job::AttachResponse> streams;
 	
@@ -61,7 +61,11 @@ struct UnixProcessJob : public Job::Server {
 				KJ_FAIL_REQUIRE("Internal error: Process did not exit when expected to");
 			}
 		})
-		.eagerlyEvaluate(nullptr)
+		.eagerlyEvaluate([this](kj::Exception&& e) {
+			if(state == Job::State::RUNNING)
+				state = Job::State::FAILED;
+			kj::throwFatalException(mv(e));
+		})
 		.fork();
 	}
 	
@@ -114,7 +118,7 @@ struct UnixProcessJob : public Job::Server {
 	}
 };
 
-struct ProcessJobScheduler : public JobScheduler::Server {
+struct UnixProcessJobScheduler : public JobScheduler::Server {
 	Promise<void> run(RunContext ctx) override {
 		// All signal-related things should run on the steward thread
 		auto& executor = getActiveThread().library() -> steward();
@@ -230,7 +234,7 @@ struct SlurmJob {
 
 JobScheduler::Client newProcessScheduler() {
 	KJ_REQUIRE(getActiveThread().library() -> isElevated(), "Process jobs can only be run through elevated FSC instances.");
-	return kj::heap<ProcessJobScheduler>();
+	return kj::heap<UnixProcessJobScheduler>();
 }
 
 }

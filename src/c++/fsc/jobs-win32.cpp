@@ -13,24 +13,100 @@ namespace fsc {
 	
 namespace {
 
+struct HandleWriter {
+	kj::AutoCloseHandle pipeHandle;
+	
+	HandleWriter(HANDLE hdl) : pipeHandle(hdl) {}
+	
+	void operator()(kj::AsyncIoProvider& provider, kj::AsyncIoStream& stream, kj::WaitScope& waitScope) {
+		const size_t BUFFER_SIZE = 1024;
+		auto buffer = kj::heapArray<kj::byte>(BUFFER_SIZE);
+		
+		size_t bytes;
+		DWORD bytesWritten = 0;
+		
+		auto readAction = [&, this]() {
+			bytes = stream.read((void*) buffer.begin(), 1, buffer.size()).wait(waitScope);
+		};
+		auto writeAction = [&, this]() {
+			KJ_WIN32(WriteFile(pipeHandle, (void*) buffer.begin(), bytes, &bytesWritten, nullptr), "Failed to write data to output stream");
+		};
+		
+		while(true) {
+			KJ_IF_MAYBE(pException, kj::runCatchingExceptions(readAction)) {
+				// Failed to read, EOF
+				return;
+			}
+			
+			size_t offset = 0;
+			while(offset < bytes) {
+				KJ_IF_MAYBE(pException, kj::runCatchingExceptions(writeAction)) {
+					return;
+				}
+				offset += bytesWritten;
+			}
+		}
+	}
+};
 
-// For Windows, we can use the kj SignalObserver API to wait on processes once it is finished.
-using ProcessHandle = kj::AutoCloseHandle;
+struct HandleReader {
+	kj::AutoCloseHandle pipeHandle;
+	
+	HandleReader(HANDLE hdl) : pipeHandle(hdl) {}
+	
+	void operator()(kj::AsyncIoProvider& provider, kj::AsyncIoStream& stream, kj::WaitScope& waitScope) {
+		const size_t BUFFER_SIZE = 1024;
+		auto buffer = kj::heapArray<kj::byte>(BUFFER_SIZE);
+		
+		DWORD numBytesRead;
+			
+		auto readAction = [&, this]() {
+			KJ_WIN32(ReadFile(pipeHandle, (void*) buffer.begin(), buffer.size(), &numBytesRead, nullptr), "Failed to read data from input stream");
+		};
+		auto writeAction = [&, this]() {
+			stream.write((void*) buffer.begin(), numBytesRead).wait(waitScope);
+		};
+		
+		while(true) {
+			KJ_IF_MAYBE(pException, kj::runCatchingExceptions(readAction)) {
+				return;
+			}
+			
+			if(numBytesRead == 0)
+				return;
+			
+			KJ_IF_MAYBE(pException, kj::runCatchingExceptions(writeAction)) {
+				return;
+			}
+		}
+	}
+};
+
+Own<kj::AsyncOutputStream> newHandleWriter(HANDLE hdl) {
+	auto pipeThread = getActiveThread().ioContext().provider -> newPipeThread(HandleWriter(hdl));
+	
+	return pipeThread.pipe.attach(mv(pipeThread.thread));
+}
+
+Own<kj::AsyncInputStream> newHandleReader(HANDLE hdl) {
+	auto pipeThread = getActiveThread().ioContext().provider -> newPipeThread(HandleReader(hdl));
+	
+	return pipeThread.pipe.attach(mv(pipeThread.thread));
+}
 
 struct Win32ProcessJob : public Job::Server {
-	ProcessHandle process;
+	kj::AutoCloseHandle process;
 	
 	kj::Canceler canceler;
-	ForkedPromise<int> completionPromise;
+	ForkedPromise<void> completionPromise;
 	
 	bool isDetached = false;
-	Job::State state;
+	Job::State state = Job::State::RUNNING;
 	
 	Temporary<Job::AttachResponse> streams;
 	
-	Win32ProcessJob(ProcessHandle&& process) :
-		process(mv(process)),
-		observer(prepareObserver(this -> process)),
+	Win32ProcessJob(HANDLE process) :
+		process(process),
 		completionPromise(nullptr)
 	{
 		startTrackingTask();
@@ -44,6 +120,10 @@ struct Win32ProcessJob : public Job::Server {
 	void startTrackingTask() {
 		completionPromise = kj::evalLater([this]() { return waitForTermination(); })
 		.eagerlyEvaluate([this](kj::Exception e) {
+			KJ_DBG("Task failure", e);
+			if(state == Job::State::RUNNING)
+				state = Job::State::FAILED;
+			
 			state = Job::State::FAILED;
 			kj::throwFatalException(mv(e));
 		})
@@ -51,52 +131,27 @@ struct Win32ProcessJob : public Job::Server {
 	}
 	
 	Promise<void> waitForTermination() {
-		#if _WIN32
-		
-		// Win32 version
 		DWORD exitCode = 0;
 		KJ_WIN32(GetExitCodeProcess(process, &exitCode));
 		
+		KJ_DBG(exitCode);
+		
 		if(exitCode == STILL_ACTIVE) {
 			// Currently Cap'n'proto does not support waiting on signals
-			return getActiveThread().timer().afterDelay(100 * kj::MILLISECONDS)
+			return getActiveThread().timer().afterDelay(200 * kj::MILLISECONDS)
 			// return observer -> onSignaled()
 			.then([this]() { return waitForTermination(); });
 		}
 		
 		KJ_REQUIRE(exitCode == 0, "Process finished with non-zero exit code");
+		state = Job::State::COMPLETED;
 		
 		return READY_NOW;
-		
-		#else
-		
-		// UNIX version
-		siginfo_t info;
-		info.si_pid = 0;
-		KJ_SYSCALL(waitid((idtype_t) P_PIDFD, (int) process, &info, WEXITED | WNOHANG));
-		
-		if(info.si_pid != 0) {
-			KJ_REQUIRE(info.si_pid == (int) process);
-			KJ_REQUIRE(info.si_pid == CLD_EXITED, "Process was killed");
-			auto childStatusCode = info.si_status;
-			KJ_REQUIRE(childStatusCode == 0, "Process finished with non-zero exit code");
-			return READY_NOW;
-		}
-		
-		return observer -> whenBecomesReadable()
-		.then([this]() { waitForTermination(); });
-		
-		#endif
 	}
 	
 	void cancelTask() {
 		canceler.cancel("Canceled");
-		
-		#if _WIN32
-		KJ_WIN32(TerminateProcess(process, 1));
-		#else
-		KJ_SYSCALL(pidfd_send_signal_wrapper((int) process, SIGTERM));
-		#endif
+		TerminateProcess(process, 1);
 	}
 	
 	Promise<void> getState(GetStateContext ctx) override {
@@ -104,7 +159,7 @@ struct Win32ProcessJob : public Job::Server {
 		return READY_NOW;
 	}
 	
-	Promise<void> cancel(CancelContext ctx) override {
+	Promise<void> cancel(CancelContext ctx) override {		
 		cancelTask();
 		return READY_NOW;
 	}
@@ -126,27 +181,6 @@ struct Win32ProcessJob : public Job::Server {
 		ctx.setResults(streams);
 		return READY_NOW;
 	}
-	
-	#if _WIN32
-	
-	// Win32 API specific function
-	static Own<SignalObserver> prepareObserver(ProcessHandle& handle) {
-		// return getActiveThread().ioContext().win32EventPort.observeSignalState(handle);
-		return kj::heap<SignalObserver>();
-	}
-	
-	#else
-	
-	// Unix API specific function
-	static Own<SignalObserver> prepareObserver(ProcessHandle& handle) {
-		return kj::heap<SignalObserver>(
-			getActiveThread().ioContext().unixEventPort,
-			handle,
-			SignalObserver::OBSERVE_READ
-		);
-	}
-	
-	#endif
 };
 
 struct WinCArgumentEscaper {
@@ -203,13 +237,9 @@ struct WinCArgumentEscaper {
 	}
 };
 
-struct ProcessJobScheduler : public JobScheduler::Server {
+struct Win32ProcessJobScheduler : public JobScheduler::Server {
 	Promise<void> run(RunContext ctx) {
 		JobRequest::Reader params = ctx.getParams();
-		
-		#if _WIN32
-		
-		// Windows launch code
 		
 		kj::Vector<kj::StringPtr> cmdLine;
 		cmdLine.add(params.getCommand());
@@ -218,9 +248,37 @@ struct ProcessJobScheduler : public JobScheduler::Server {
 		
 		kj::String cmdString = WinCArgumentEscaper::escapeCommandLine(cmdLine.releaseAsArray());
 		
+		SECURITY_ATTRIBUTES pipeAttributes;
+		memset(&pipeAttributes, 0, sizeof(SECURITY_ATTRIBUTES));
+		pipeAttributes.nLength = sizeof(SECURITY_ATTRIBUTES);
+		pipeAttributes.bInheritHandle = true;
+		
+		HANDLE inStream[2];
+		HANDLE outStream[2];
+		HANDLE errStream[2];
+		KJ_WIN32(CreatePipe(inStream, inStream + 1, &pipeAttributes, 0), "Failed to create stdin pipe");
+		KJ_WIN32(CreatePipe(outStream, outStream + 1, &pipeAttributes, 0), "Failed to create stdout pipe");
+		KJ_WIN32(CreatePipe(errStream, errStream + 1, &pipeAttributes, 0), "Failed to create stderr pipe");
+		
+		auto stdinStream = newHandleWriter(inStream[1]);
+		auto stdoutStream = newHandleReader(outStream[0]);
+		auto stderrStream = newHandleReader(errStream[0]);
+		
+		KJ_DEFER({
+			CloseHandle(inStream[0]);
+			CloseHandle(outStream[1]);
+			CloseHandle(errStream[1]);
+		});
+		
 		STARTUPINFOW stInfo;
 		memset(&stInfo, 0, sizeof(STARTUPINFOW));
 		stInfo.cb = sizeof(STARTUPINFOW);
+		stInfo.dwFlags = STARTF_USESTDHANDLES;
+		stInfo.hStdInput = inStream[0];
+		stInfo.hStdOutput = outStream[1];
+		stInfo.hStdError  = errStream[1];
+		
+		KJ_DBG(cmdString);
 		
 		PROCESS_INFORMATION procInfo;
 		
@@ -229,116 +287,28 @@ struct ProcessJobScheduler : public JobScheduler::Server {
 			kj::encodeWideString(cmdString, true).begin(), // lpCommandLine
 			nullptr, // lpSecurityAttributes
 			nullptr, // lpThreadAttributes
-			false,   // bInheritHandles
+			true,   // bInheritHandles
 			0, // dwCreationFlags
 			nullptr, // lpEnvironment
 			params.getWorkDir().size() != 0 ? kj::encodeWideString(params.getWorkDir(), true).begin() : nullptr, // lpCurrentDirectory
 			&stInfo, // lpStartupInfo
 			&procInfo
 		));
-		
-		ProcessHandle procHandle(procInfo.hProcess);
+				
 		CloseHandle(procInfo.hThread);
 		
 		// Note: Stream tracking not yet available
 		
-		auto job = kj::heap<ProcessJob>(mv(procHandle));
-		ctx.initResults().setJob(mv(job));
+		auto job = kj::heap<Win32ProcessJob>(procInfo.hProcess);
 		
-		return READY_NOW;
-		
-		#else
-			
-		// Linux launch code
-		
-		// Pipes for communication
-		int stdinPipe[2];
-		int stdoutPipe[2];
-		int stderrPipe[2];
-		
-		pipe(stdinPipe);
-		pipe(stdoutPipe);
-		pipe(stderrPipe);
-		
-		const size_t STACK_SIZE = 1024 * 1024; // Reserve 1MB of stack for fork action
-		auto stackSpace = kj::heapArray<kj::byte>(STACK_SIZE);
-		
-		// Note: execv takes the arguments as char* instead of const char* because
-		// of C limitations. They are guaranteed not to be modified.
-		auto heapArgs = kj::heapArrayBuilder<char*>(params.getArguments().size() + 2);
-		heapArgs.add(const_cast<char*>(params.getCommand().cStr()));
-		for(auto arg : params.getArguments())
-			heapArgs.add(const_cast<char*>(arg.cStr()));
-		heapArgs.add(nullptr);
-		
-		char** args = heapArgs.begin();
-		const char* path = params.getCommand().cStr();
-		
-		// Note: Since we use PID FDs, th cloned process does not need to send a
-		// SIGCHLD signal upon termination, which frees us from having to mess with
-		// signal handler potentially installed by other libraries.
-		// int clonedFD;
-		
-		// Clone is nicer, but valgrind can't do it. So we use vfork() instead.
-		pid_t pid;
-		pid = vfork();
-		// SYSCALL check is done below once we are sure we are not the child process
-		// (if the check fails on the child for some reason
-		
-		if(pid == 0) {
-			// Child process
-			dup2(stdinPipe[0], 0);
-			dup2(stdoutPipe[1], 1);
-			dup2(stderrPipe[2], 2);
-			
-			close(stdinPipe[0]);
-			close(stdoutPipe[1]);
-			close(stderrPipe[2]);
-			
-			execv(path, args);
-			exit(-1);
-		}
-		
-		KJ_SYSCALL(pid);
-		
-		// Parent process
-		int pidFD;
-		KJ_SYSCALL(pidFD = pidfd_open_wrapper(pid));
-		ProcessHandle procHandle(pidFD);
-		
-		auto job = kj::heap<ProcessJob>(mv(procHandle));
-		
-		job -> streams.setStdin(
-			getActiveThread().streamConverter().toRemote(
-				getActiveThread().ioContext().lowLevelProvider -> wrapOutputFd(stdinPipe[1], kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP)
-			)
-		);
-		
-		job -> streams.setStdout(
-			getActiveThread().streamConverter().toRemote(
-				getActiveThread().ioContext().lowLevelProvider -> wrapInputFd(stdoutPipe[0], kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP)
-			)
-		);
-		
-		job -> streams.setStderr(
-			getActiveThread().streamConverter().toRemote(
-				getActiveThread().ioContext().lowLevelProvider -> wrapInputFd(stderrPipe[0], kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP)
-			)
-		);
+		job -> streams.setStdin(getActiveThread().streamConverter().toRemote(mv(stdinStream)));
+		job -> streams.setStdout(getActiveThread().streamConverter().toRemote(mv(stdoutStream)));
+		job -> streams.setStderr(getActiveThread().streamConverter().toRemote(mv(stderrStream)));
 		
 		ctx.initResults().setJob(mv(job));
 		
 		return READY_NOW;
-		
-		#endif
-		
-		// Portable code
 	}
-};
-
-struct SlurmJob {
-	JobScheduler::Client localScheduler;
-	uint64_t jobId;
 };
 
 }
@@ -346,18 +316,8 @@ struct SlurmJob {
 // API
 
 JobScheduler::Client newProcessScheduler() {
-	return kj::heap<ProcessJobScheduler>();
-}
-
-Job::Client runJob(JobScheduler::Client sched, kj::StringPtr cmd, kj::ArrayPtr<kj::StringPtr> args, kj::StringPtr workDir) {
-	auto req = sched.runRequest();
-	req.setWorkDir(workDir);
-	req.setCommand(cmd);
-	auto argsOut = req.initArguments(args.size());
-	for(auto i : kj::indices(args))
-		argsOut.set(i, args[i]);
-	
-	return req.sendForPipeline().getJob();
+	KJ_REQUIRE(getActiveThread().library() -> isElevated(), "Process jobs can only be run through elevated FSC instances.");
+	return kj::heap<Win32ProcessJobScheduler>();
 }
 
 }
