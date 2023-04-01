@@ -147,11 +147,11 @@ StreamConverter::~StreamConverter() noexcept(false) {}
 // === class StreamConverterImpl ===
 
 RemoteInputStream::Client StreamConverterImpl::toRemote(Own<AsyncInputStream> backend) {
-	return kj::heap<RIImpl>(*this, mv(backend));
+	return wrappedIStreams.add(kj::heap<RIImpl>(*this, mv(backend)));
 }
 
 RemoteOutputStream::Client StreamConverterImpl::toRemote(Own<AsyncOutputStream> backend) {
-	return kj::heap<ROImpl>(*this, mv(backend));
+	return wrappedOStreams.add(kj::heap<ROImpl>(*this, mv(backend)));
 }
 
 Promise<Own<AsyncOutputStream>> StreamConverterImpl::fromRemote(RemoteOutputStream::Client backend) {

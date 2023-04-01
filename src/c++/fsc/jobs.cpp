@@ -10,7 +10,7 @@ Job::Client runJob(JobScheduler::Client sched, kj::StringPtr cmd, kj::ArrayPtr<k
 	for(auto i : kj::indices(args))
 		argsOut.set(i, args[i]);
 	
-	return req.sendForPipeline().getJob();
+	return req.send().getJob();
 }
 
 }

@@ -4,17 +4,30 @@
 #include "data.h"
 #include "streams.h"
 
+#ifndef _WIN32
+#include <kj/async-unix.h>
+#endif
+
 namespace fsc {
 	
 // === class LibraryHandle ===
 	
-LibraryHandle::LibraryHandle() :
+LibraryHandle::LibraryHandle(bool elevated) :
 	shutdownMode(false),
 	// loopbackReferenceForStewardStartup(addRef()),
 	sharedData(kj::atomicRefcounted<SharedData>()),
 	stewardTask(nullptr),
-	stewardThread([this]() { runSteward(); })
+	stewardThread([this, elevated]() { runSteward(elevated); })
 {
+	if(elevated) {
+		KJ_REQUIRE(elevatedInstance == nullptr, "Can only have one active elevated instance");
+		elevatedInstance = this;
+		
+		#ifndef _WIN32
+		kj::UnixEventPort::captureChildExit();
+		#endif
+	}
+	
 	stewardThread.detach();
 	auto& st = steward();
 	stewardTask = st.executeSync([shared = kj::atomicAddRef(*sharedData)]() mutable {
@@ -27,6 +40,9 @@ LibraryHandle::LibraryHandle() :
 
 LibraryHandle::~LibraryHandle() {
 	stopSteward();
+	
+	if(elevatedInstance == this)
+		elevatedInstance = nullptr;
 }
 
 void LibraryHandle::stopSteward() const {
@@ -50,10 +66,16 @@ const kj::Executor& LibraryHandle::steward() const {
 	return **pExecutor;
 }
 
-void LibraryHandle::runSteward() {
+void LibraryHandle::runSteward(bool elevated) {
+	#ifndef _WIN32
+	if(elevated)
+		kj::UnixEventPort::captureChildExit();
+	#endif
+
 	// We use a special thread context for the steward that doesn't
 	// have back-access to the library.
 	StewardContext ctx;
+	
 	
 	// Pass back the executor
 	{

@@ -23,7 +23,7 @@ namespace {
 	
 struct TrackedProcess {
 	Maybe<int> pid;
-	ForkedPromise<int> retCode;
+	Promise<int> retCode = nullptr;
 };
 
 struct UnixProcessJob : public Job::Server {
@@ -35,50 +35,47 @@ struct UnixProcessJob : public Job::Server {
 	
 	Temporary<Job::AttachResponse> streams;
 	
-	UnixProcessJob(Own<TrackedProcess> process) :
-		process(mv(process)),
-		observer(prepareObserver(this -> process)),
+	UnixProcessJob(Own<TrackedProcess> argProcess) :
+		process(mv(argProcess)),
 		completionPromise(nullptr)
 	{
 		auto& executor = getActiveThread().library() -> steward();
 		
-		// Synchronously extract a branch from the remote promise
-		// (This is neccessary since after the constructor "process" might be destroyed)
-		Own<Promise<int>> remoteResult;
-		executor.runSync([&remoteResult, this]() {
-			remoteResult = k::heap<Promise<int>>(this -> process -> retCode.addBranch());
-		});
-		
-		// Now asynchronously unwrap it
-		completionPromise = executor.runAsync([result = mv(remoteResult)]() {
-			// The destructor for "runAsync" lambdas runs on the calling thread
-			// We need to destroy the promise in the thread that created it
-			// Therefore, here we need to set result to nullptr in the function
-			Promise<int> innerResult = mv(result);
-			result = Own<Promise<int>>();
-			
-			return innerResult;
+		completionPromise = executor.executeAsync([&process = *(this->process)]() mutable {
+			return mv(process.retCode);
 		})
-		.then([this](int returnCode) {
-			static_assert(false, "Needs post-processing with WIFSTATUS etc. etc.");
+		.then([this](int waitCode) {
+			state = Job::State::FAILED;
 			
-			state = Job::FAILED;
-			KJ_REQUIRE(returnCode == 0, "Process failed");
-			state = Job::COMPLETED;
+			KJ_DBG(waitCode);
+			
+			if(WIFEXITED(waitCode)) {
+				int returnCode = WEXITSTATUS(waitCode);
+				
+				KJ_REQUIRE(returnCode == 0, "Process returned non-zero exit code");
+				state = Job::State::COMPLETED;
+				return;
+			} else if(WIFSIGNALED(waitCode)) {
+				KJ_FAIL_REQUIRE("Process was killed with signal ", WTERMSIG(waitCode));
+			} else {
+				KJ_FAIL_REQUIRE("Internal error: Process did not exit when expected to");
+			}
 		})
 		.eagerlyEvaluate(nullptr)
 		.fork();
 	}
 	
 	~UnixProcessJob() {
-		Promise<void> cleanup = getActiveThread().library() -> steward().executeAsync([process = mv(process)]() {			
+		Promise<void> cleanup = getActiveThread().library() -> steward().executeAsync([&process = *process]() mutable {			
 			// Kill child
-			KJ_IF_MAYBE(pPid, process -> pid) {
-				kill(*pPid);
+			KJ_IF_MAYBE(pPid, process.pid) {
+				kill(*pPid, SIGKILL);
 			}
-			
-			return process -> retCode.addBranch().ignoreResult().attach(mv(process));
-		});
+		})
+		.then([this, completion = completionPromise.addBranch()]() mutable {
+			return mv(completion);
+		})
+		.attach(mv(process));
 		
 		getActiveThread().detach(mv(cleanup));
 	}
@@ -89,7 +86,13 @@ struct UnixProcessJob : public Job::Server {
 	}
 	
 	Promise<void> cancel(CancelContext ctx) override {
-		return 
+		auto& executor = getActiveThread().library() -> steward();
+		
+		return executor.executeAsync([this]() {
+			KJ_IF_MAYBE(pPid, process -> pid) {
+				kill(*pPid, SIGKILL);
+			}
+		});
 		return READY_NOW;
 	}
 	
@@ -105,26 +108,14 @@ struct UnixProcessJob : public Job::Server {
 		return completionPromise.addBranch();
 	}
 	
-	Promise<void> attach(AttachContext ctx) {
+	Promise<void> attach(AttachContext ctx) override {
 		ctx.setResults(streams);
 		return READY_NOW;
 	}
-	
-	
-	// Unix API specific function
-	static Own<SignalObserver> prepareObserver(ProcessHandle& handle) {
-		return kj::heap<SignalObserver>(
-			getActiveThread().ioContext().unixEventPort,
-			handle,
-			SignalObserver::OBSERVE_READ
-		);
-	}
-	
-	#endif
 };
 
 struct ProcessJobScheduler : public JobScheduler::Server {
-	Promise<void> run(RunContext ctx) {
+	Promise<void> run(RunContext ctx) override {
 		// All signal-related things should run on the steward thread
 		auto& executor = getActiveThread().library() -> steward();
 		
@@ -155,7 +146,7 @@ struct ProcessJobScheduler : public JobScheduler::Server {
 		executor.executeSync([
 			stdin = stdinPipe[0],
 			stdout = stdoutPipe[1],
-			stderr = stderrPipe[2],
+			stderr = stderrPipe[1],
 			args, path, ctx,
 			&proc
 		]() {
@@ -168,32 +159,39 @@ struct ProcessJobScheduler : public JobScheduler::Server {
 			
 			// Clone is nicer, but valgrind can't do it. So we use vfork() instead.
 			pid_t pid;
-			pid = vfork();
+			pid = fork();
 			// SYSCALL check is done below once we are sure we are not the child process
 			// (if the check fails on the child for some reason
 			
 			if(pid == 0) {
 				// Child process
-				dup2(stdinPipe[0], 0);
-				dup2(stdoutPipe[1], 1);
-				dup2(stderrPipe[2], 2);
+				dup2(stdin, 0);
+				dup2(stdout, 1);
+				dup2(stderr, 2);
 				
-				close(stdinPipe[0]);
-				close(stdoutPipe[1]);
-				close(stderrPipe[2]);
+				close(stdin);
+				close(stdout);
+				close(stderr);
 				
-				execv(path, args);
+				execvp(path, args);
 				exit(-1);
 			}
+			
+			close(stdin);
+			close(stdout);
+			close(stderr);
 		
 			// Check for result now after vfork
-			KJ_SYSCALL(pid);
+			// KJ_SYSCALL(pid);
+			// KJ_REQUIRE(pid > 0);
 			
 			proc -> pid = pid;
 			proc -> retCode = getActiveThread().ioContext().unixEventPort.onChildExit(proc -> pid);
-		}
+			
+			// KJ_DBG(pid);
+		});
 				
-		auto job = kj::heap<ProcessJob>(mv(proc));
+		auto job = kj::heap<UnixProcessJob>(mv(proc));
 		
 		job -> streams.setStdin(
 			getActiveThread().streamConverter().toRemote(
@@ -231,18 +229,8 @@ struct SlurmJob {
 // API
 
 JobScheduler::Client newProcessScheduler() {
+	KJ_REQUIRE(getActiveThread().library() -> isElevated(), "Process jobs can only be run through elevated FSC instances.");
 	return kj::heap<ProcessJobScheduler>();
-}
-
-Job::Client runJob(JobScheduler::Client sched, kj::StringPtr cmd, kj::ArrayPtr<kj::StringPtr> args, kj::StringPtr workDir) {
-	auto req = sched.runRequest();
-	req.setWorkDir(workDir);
-	req.setCommand(cmd);
-	auto argsOut = req.initArguments(args.size());
-	for(auto i : kj::indices(args))
-		argsOut.set(i, args[i]);
-	
-	return req.sendForPipeline().getJob();
 }
 
 }

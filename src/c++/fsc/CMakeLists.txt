@@ -112,6 +112,8 @@ add_library(
 	
 	jobs.h
 	jobs.cpp
+	jobs-unix.cpp
+	jobs-win32.cpp
 	
 	db.h
 	db.cpp

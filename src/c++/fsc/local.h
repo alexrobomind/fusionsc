@@ -38,7 +38,7 @@ struct NullErrorHandler : public kj::TaskSet::ErrorHandler {
  *  the local data store table and a shared daemon runner.
  */
 struct LibraryHandle : public kj::AtomicRefcounted {
-	LibraryHandle();
+	LibraryHandle(bool elevated);
 	~LibraryHandle();
 	
 	// Creates an additional owning reference to this handle.
@@ -65,8 +65,7 @@ struct LibraryHandle : public kj::AtomicRefcounted {
 	 *
 	 * \warning You can only have one elevated instance per process.
 	 */
-	void elevate();
-	bool isElevated () { return elevatedInstance == this; }
+	bool isElevated () const { return elevatedInstance == this; }
 	
 private:
 	struct SharedData : public kj::AtomicRefcounted {
@@ -74,7 +73,7 @@ private:
 	};
 	
 	//! Executes the steward thread
-	void runSteward();
+	void runSteward(bool elevated);
 	
 	kj::MutexGuarded<bool> shutdownMode;
 	Own<SharedData> sharedData;
@@ -91,13 +90,13 @@ private:
 	
 	friend Own<LibraryHandle> kj::atomicRefcounted<LibraryHandle>();
 	
-	static inline LibraryHandle* elevatedInstance = nullptr;
+	static inline const LibraryHandle* elevatedInstance = nullptr;
 	friend class StewardContext;
 };
 
 
-inline Library newLibrary() {
-	return kj::atomicRefcounted<LibraryHandle>();
+inline Library newLibrary(bool elevated = false) {
+	return kj::atomicRefcounted<LibraryHandle>(elevated);
 }
 
 struct ThreadContext {
