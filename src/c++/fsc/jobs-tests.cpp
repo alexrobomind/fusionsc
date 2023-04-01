@@ -23,8 +23,11 @@ TEST_CASE("job-echo") {
 	KJ_DBG("Attaching");
 	
 	// Obtain job's stdout
-	auto remoteStdout = job.attachRequest().send().getStdout();
-	auto remoteStderr = job.attachRequest().send().getStderr();
+	auto attach = job.attachRequest().sendForPipeline();
+	// auto remoteStdout = job.attachRequest().send().getStdout();
+	// auto remoteStderr = job.attachRequest().send().getStderr();
+	auto remoteStdout = attach.getStdout();
+	auto remoteStderr = attach.getStderr();
 	
 	KJ_DBG("Received remote output stream");
 	remoteStdout.whenResolved().wait(ws);
