@@ -12,13 +12,6 @@ TEST_CASE("job-echo") {
 	auto& ws = lt -> waitScope();
 	
 	kj::StringPtr ECHO_STRING = "Echo String p9\\\"84598z!=()§$()\"kjasd'as";
-	/*#if _WIN32
-	kj::StringPtr cmd = "cmd";
-	auto args = kj::heapArray<kj::StringPtr>({"/C", "echo", ECHO_STRING});
-	#else
-	kj::StringPtr cmd = "echo";
-	auto args = kj::heapArray<kj::StringPtr>({"-n", ECHO_STRING});
-	#endif*/
 	kj::StringPtr cmd = "cmake";
 	auto args = kj::heapArray<kj::StringPtr>({"-E", "echo_append", ECHO_STRING});
 	
