@@ -9,6 +9,9 @@ $Java.outerClassname("Streams");
 
 interface RemoteInputStream {
 	pumpTo @0 (target : RemoteOutputStream) -> (pumpedBytes : UInt64);
+	
+	readAllBinary @1 () -> (data : Data);
+	readAllString @2 () -> (text : Text);
 }
 
 interface RemoteOutputStream {

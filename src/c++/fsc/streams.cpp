@@ -60,7 +60,7 @@ struct RIImpl : public RemoteInputStream::Server {
 		backend(mv(backend))
 	{}
 	
-	Promise<void> pumpTo(PumpToContext ctx) {
+	Promise<void> pumpTo(PumpToContext ctx) override {
 		auto ros = ctx.getParams().getTarget();
 		
 		KJ_REQUIRE(!locked, "Stream already in use");
@@ -75,6 +75,22 @@ struct RIImpl : public RemoteInputStream::Server {
 		}, [this](kj::Exception&& e) mutable {
 			locked = false;
 			kj::throwFatalException(mv(e));
+		});
+	}
+	
+	Promise<void> readAllBinary(ReadAllBinaryContext ctx) override {
+		locked = true;
+		return backend -> readAllBytes()
+		.then([ctx](Array<kj::byte> bytes) mutable {
+			ctx.setData(bytes);
+		});
+	}
+	
+	Promise<void> readAllString(ReadAllStringContext ctx) override {
+		locked = true;
+		return backend -> readAllText()
+		.then([ctx](kj::String str) mutable {
+			ctx.setText(str);
 		});
 	}
 };
