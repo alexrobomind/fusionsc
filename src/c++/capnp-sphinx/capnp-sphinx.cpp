@@ -22,6 +22,7 @@ using kj::ArrayBuilder;
 
 using kj::String;
 using kj::StringTree;
+using kj::StringPtr;
 
 using kj::str;
 using kj::strTree;
@@ -118,7 +119,7 @@ Node::Reader getNode(CodeGeneratorRequest::Reader request, uint64_t id) {
 Node::SourceInfo::Reader getSourceInfo(CodeGeneratorRequest::Reader request, uint64_t id) {
 	for(auto srcInfo : request.getSourceInfo())
 		if(srcInfo.getId() == id)
-			return node;
+			return srcInfo;
 	
 	KJ_FAIL_REQUIRE("ID not found");
 }
@@ -565,7 +566,7 @@ StringTree indent(StringPtr code, StringPtr prefix) {
 	StringTree result;
 	
 	while(true) {
-		KJ_IF_MAYBE(pLineBreak, code.findFirst("\n")) {
+		KJ_IF_MAYBE(pLineBreak, code.findFirst('\n')) {
 			result = strTree(mv(result), prefix, code.slice(0, *pLineBreak), "\n");
 			code = code.slice(*pLineBreak + 1);
 		} else {
@@ -588,14 +589,16 @@ StringTree generateInterfaceDocumentation(CodeGeneratorRequest::Reader request, 
 	kj::String cppName = cppNodeTypeName(nodeId, nodeBrand, nodeId, nodeBrand, request).flatten();
 	kj::String pyName = pythonNodeTypeName(nodeId, nodeBrand, nodeId, nodeBrand, request).flatten();
 	
+	auto sourceInfo = getSourceInfo(request, nodeId);
+	
 	StringTree result = strTree(
 		indentPrefix, ".. cpp:struct ", generateAllTemplateHeaders(request, nodeId), name.flatten(), cppName, "::\n",
-		indent(sourceInfo.getDocComment(), str(indentPredix, "  ")),
+		indent(sourceInfo.getDocComment(), str(indentPrefix, "  ")),
 		"\n",
 		
 		indentPrefix, ".. py:struct ", pyName, "::\n",
-		indent(sourceInfo.getDocComment(), str(indentPredix, "  ")),
-		"\n",
+		indent(sourceInfo.getDocComment(), str(indentPrefix, "  ")),
+		"\n"
 	);
 	
 	return result;
@@ -612,7 +615,9 @@ StringTree generateStructDocumentation(CodeGeneratorRequest::Reader request, uin
 	
 	StringTree result;
 	
-	for(auto i : range(0, 2)) {
+	auto sourceInfo = getSourceInfo(request, nodeId);
+	
+	for(auto i : kj::range(0, 2)) {
 		bool builder = i == 0;
 		
 		kj::String cppName = cppNodeTypeName(nodeId, nodeBrand, nodeId, nodeBrand, request, builder).flatten();
@@ -622,12 +627,12 @@ StringTree generateStructDocumentation(CodeGeneratorRequest::Reader request, uin
 			mv(result),
 			
 			indentPrefix, ".. cpp:struct ", generateAllTemplateHeaders(request, nodeId), name.flatten(), cppName, "::\n",
-			indent(sourceInfo.getDocComment(), str(indentPredix, "  ")),
+			indent(sourceInfo.getDocComment(), str(indentPrefix, "  ")),
 			"\n",
 			
 			indentPrefix, ".. py:struct ", pyName, "::\n",
-			indent(sourceInfo.getDocComment(), str(indentPredix, "  ")),
-			"\n",
+			indent(sourceInfo.getDocComment(), str(indentPrefix, "  ")),
+			"\n"
 		);
 	}
 	
@@ -639,35 +644,36 @@ StringTree generateMethodDocumentation(CodeGeneratorRequest::Reader request, uin
 	
 	kj::String cppName = cppNodeTypeName(nodeId, nodeBrand, nodeId, nodeBrand, request).flatten();
 	kj::String pyName = pythonNodeTypeName(nodeId, nodeBrand, nodeId, nodeBrand, request).flatten();
-
+	
+	auto sourceInfo = getSourceInfo(request, nodeId);
 	
 	StringTree methodDocumentation = strTree(
 		indentPrefix, ".. cpp:function ",
 		generateAllTemplateHeaders(request, nodeId),
-		returnType.flatten(), " ", typeNameRef, "::", name.flatten(), "::\n",
-		indent(sourceInfo.getDocComment(), str(indentPredix, "  ")),
+		returnType.flatten(), " ", cppName, "::", name.flatten(), "::\n",
+		indent(sourceInfo.getDocComment(), str(indentPrefix, "  ")),
 		
 		indentPrefix, ".. py:method ", pyName, ".", name.flatten(), "::\n",
-		indent(sourceInfo.getDocComment(), str(indentPredix, "  ")),
+		indent(sourceInfo.getDocComment(), str(indentPrefix, "  "))
 	);
 	
 	return mv(methodDocumentation);
 }
 
-StringTree generateFieldDocumentation(CodeGeneratorRequest::Reader request, uint64_t nodeId, Field field, SourceInfo::Reader fieldInfo, StringPtr indentPrefix) {	
+StringTree generateFieldDocumentation(CodeGeneratorRequest::Reader request, uint64_t nodeId, Field::Reader field, capnp::schema::Node::SourceInfo::Reader fieldInfo, StringPtr indentPrefix) {	
 	auto nodeBrand = capnp::defaultValue<Brand>();
 	auto node = getNode(request, nodeId);
 	
 	KJ_REQUIRE(node.isStruct());
 	auto asInterface = node.getStruct();
 	
-	auto fieldName = field.getProto().getName();
+	auto fieldName = field.getName();
 	
 	StringTree result;
 	
 	kj::String cppType = cppTypeName(field.getType());
 	
-	for(auto i : range(0, 2)) {
+	for(auto i : kj::range(0, 2)) {
 		bool builder = i == 0;
 		
 		kj::String cppTN = cppTypeName(field.getType(), nodeId, capnp::defaultValue<Brand>(), request, builder).flatten();
