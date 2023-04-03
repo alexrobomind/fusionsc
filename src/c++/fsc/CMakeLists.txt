@@ -114,6 +114,7 @@ add_library(
 	jobs.cpp
 	jobs-unix.cpp
 	jobs-win32.cpp
+	jobs-slurm.cpp
 	
 	db.h
 	db.cpp

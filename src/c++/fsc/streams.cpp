@@ -82,7 +82,7 @@ struct RIImpl : public RemoteInputStream::Server {
 		locked = true;
 		return backend -> readAllBytes()
 		.then([ctx](Array<kj::byte> bytes) mutable {
-			ctx.setData(bytes);
+			ctx.initResults().setData(bytes);
 		});
 	}
 	
@@ -90,7 +90,7 @@ struct RIImpl : public RemoteInputStream::Server {
 		locked = true;
 		return backend -> readAllText()
 		.then([ctx](kj::String str) mutable {
-			ctx.setText(str);
+			ctx.initResults().setText(str);
 		});
 	}
 };
