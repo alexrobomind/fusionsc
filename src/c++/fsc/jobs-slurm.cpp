@@ -1,5 +1,6 @@
 #include "jobs.h"
 #include "common.h"
+#include "local.h"
 
 #include <kj/parse/common.h>
 #include <kj/parse/char.h>
@@ -11,55 +12,59 @@ namespace fsc {
 
 namespace {
 
+//! Parser that can read the output of an scontrol show command
 struct SControlParser {
 	using Result = kj::TreeMap<kj::String, kj::Array<kj::String>>;
 	
+	template<typename Result>
+	static Array<Result> merge(Result head, kj::Array<kj::Tuple<Result>> tail) {
+		auto builder = kj::heapArrayBuilder<Result>(tail.size() + 1);
+		builder.add(mv(head));
+		for(auto& e : tail)
+			builder.add(mv(kj::get<0>(e)));
+		
+		return builder.finish();
+	}
+	
 	template<typename Result, typename T, typename Sep>
 	static auto sepBy(T t, Sep sep) {
-		const auto parser = p::sequence(
-			t, p::many(p::sequence(p::discard(sep), t))
+		auto parser = p::sequence(
+			cp(t), p::many(p::sequence(p::discard(mv(sep)), cp(t)))
 		);
 		
-		auto merger = [](Result head, kj::Array<kj::Tuple<Result>> tail) -> kj::Array<Result> {
-			auto builder = kj::heapArrayBuilder<Result>(tail.size() + 1);
-			builder.add(mv(head));
-			for(auto& e : tail)
-				builder.add(mv(kj::get<0>(e)));
-			
-			return builder.finish();
-		};
-		
-		return p::transform(parser, merger);
+		return p::transform(mv(parser), &SControlParser::merge<Result>);
 	}
 		
 	template<typename Input>
 	Maybe<Result> operator()(Input& input) {
-		const auto unquotedChars = p::whitespaceChar.orAny("\"/").invert();
+		auto unquotedChars = p::whitespaceChar.orAny("\"/").invert();
 		
-		const auto valueSegment = p::oneOf(
-			p::charsToString(p::oneOrMore(unquotedChars)),
-			p::doubleQuotedString
+		auto valueSegment = p::oneOf(
+			p::doubleQuotedString,
+			p::charsToString(p::many(cp(unquotedChars)))
 		);
 		
-		const auto valueExpr = sepBy<kj::String>(valueSegment, p::exactChar<'/'>());
+		auto valueExpr = sepBy<kj::String>(cp(valueSegment), p::exactChar<'/'>());
 			
-		const auto keyValueExpr = p::sequence(
-			p::charsToString(p::oneOrMore(p::alphaNumeric)),
+		auto keyValueExpr = p::sequence(
+			p::charsToString(p::oneOrMore(p::anyOfChars("=").invert())),
 			p::discard(p::exactChar<'='>()),
-			valueExpr
+			cp(valueExpr)
 		);
 		
-		const auto scontrolGrammar = p::sequence(
+		auto scontrolGrammar = p::sequence(
 			p::discardWhitespace,
-			keyValueExpr,
+			cp(keyValueExpr),
 			p::many(p::sequence(
 				p::discardWhitespace,
-				keyValueExpr
+				cp(keyValueExpr)
 			)),
+			p::discardWhitespace,
 			p::endOfInput
 		);
 		
-		FSC_MAYBE_OR_RETURN(pRes, scontrolGrammar(input), nullptr);
+		auto maybeResult = scontrolGrammar(input);
+		FSC_MAYBE_OR_RETURN(pRes, maybeResult, nullptr);
 		
 		Result result;
 		
@@ -82,13 +87,62 @@ struct SlurmJob : public Job::Server {
 	
 	SlurmJob(JobScheduler::Client systemLauncher, unsigned int jobId) :
 		systemLauncher(mv(systemLauncher)), jobId(jobId),
-		completionPromise(track().fork())
-	{
-		
-	}
+		completionPromise(track().eagerlyEvaluate(nullptr).fork())
+	{}
 	
 	Promise<void> track() {
-		KJ_UNIMPLEMENTED();
+		return queryState()
+		.catch_([this](kj::Exception&& e) {
+			// If job state query fails, assume that state didn't change
+			// but log error to console
+			KJ_LOG(ERROR, "Failed to query job state", e);
+			return state;
+		})
+		.then([this](Job::State state) mutable -> Promise<void> {
+			KJ_REQUIRE(state != Job::State::FAILED, "Job failed");
+			
+			if(state == Job::State::COMPLETED)
+				return READY_NOW;
+			
+			//TODO: Change this to a larger time interval
+			const auto QUERY_DELAY = 1 * kj::SECONDS;
+			return getActiveThread().timer().afterDelay(QUERY_DELAY)
+			.then([this]() mutable { return track(); });
+		});
+	}
+	
+	Promise<Job::State> queryState() {
+		auto scontrolRequest = systemLauncher.runRequest();
+		scontrolRequest.setCommand("scontrol");
+		scontrolRequest.setArguments({"show", "job", kj::str(jobId)});
+		
+		return scontrolRequest.sendForPipeline().getJob().evalRequest().send()
+		.then([](Job::EvalResults::Reader results) {
+			p::IteratorInput<char, const char*> input(results.getStdOut().begin(), results.getStdOut().end());
+			
+			Maybe<SControlParser::Result> maybeParseResult = SControlParser()(input);
+			FSC_REQUIRE_MAYBE(pParseResult, maybeParseResult, "Failed to parse scontrol response", results.getStdOut());
+			
+			auto maybeResult = pParseResult -> find("JobState");
+			FSC_REQUIRE_MAYBE(pResult, maybeResult, "scontrol response does not contain JobState entry");
+			
+			KJ_REQUIRE(pResult -> size() == 1, "Invalid job state entry");
+			kj::StringPtr state = (*pResult)[0];
+			
+			if(state == "RUNNING")
+				return Job::State::RUNNING;
+			
+			if(state == "PENDING")
+				return Job::State::PENDING;
+			
+			if(state == "FAILED")
+				return Job::State::FAILED;
+			
+			if(state == "COMPLETED")
+				return Job::State::COMPLETED;
+			
+			KJ_FAIL_REQUIRE("Unknown job state", state);
+		});
 	}
 	
 	Promise<void> attach(AttachContext ctx) {
@@ -101,6 +155,26 @@ struct SlurmJob : public Job::Server {
 			auto sattachJob = sattachRequest.sendForPipeline().getJob();
 			return ctx.tailCall(sattachJob.attachRequest());
 		});
+	}
+	
+	Promise<void> whenCompleted(WhenCompletedContext ctx) {
+		return completionPromise.addBranch();
+	}
+	
+	Promise<void> whenRunning(WhenRunningContext ctx) {
+		if(state != Job::State::PENDING)
+			return READY_NOW;
+		
+		return getActiveThread().timer().afterDelay(1 * kj::SECONDS)
+		.then([this, ctx]() mutable { return whenRunning(ctx); });
+	}
+	
+	Promise<void> cancel(CancelContext ctx) {
+		auto cancelReq = systemLauncher.runRequest();
+		cancelReq.setCommand("scancel");
+		cancelReq.setArguments({kj::str(jobId)});
+		
+		return cancelReq.sendForPipeline().getJob().whenCompletedRequest().send().ignoreResult();
 	}
 };
 
@@ -140,9 +214,13 @@ struct SlurmJobLauncher : public JobScheduler::Server {
 
 namespace internal {
 	kj::TreeMap<kj::String, kj::Array<kj::String>> testSControlParser(kj::StringPtr example) {
+		// KJ_DBG(example);
+		// example = "a=b c=d/e"_kj;
 		p::IteratorInput<char, const char*> input(example.begin(), example.end());
 		
-		FSC_REQUIRE_MAYBE(pResult, SControlParser()(input), "Parsing failed");
+		auto result = SControlParser()(input);
+		
+		FSC_REQUIRE_MAYBE(pResult, result, "Parsing failed");
 		
 		return mv(*pResult);
 	}

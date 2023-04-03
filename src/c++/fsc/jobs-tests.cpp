@@ -27,7 +27,7 @@ constexpr kj::StringPtr SCONTROL_EXAMPLE_OUT =
 "   Features=(null) DelayBoot=00:00:00\n"
 "   OverSubscribe=NO Contiguous=0 Licenses=home@just,project@just,scratch@just Network=(null)\n"
 "   Command=python3\n"
-"   WorkDir=/p/project/ciek-4/knieps/git-repos/main/programs/coils\n"
+"   WorkDir=/p/project/ciek-4/knieps/git-repos/\"a b c\"/main/programs/coils\n"
 "   Power=\n"
 "   TresPerNode=gres:mem512\n"_kj;
 
