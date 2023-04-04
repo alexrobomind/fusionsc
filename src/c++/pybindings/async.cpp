@@ -164,6 +164,18 @@ namespace {
 		
 		return getActiveThread().timer().atTime(targetPoint);
 	}
+	
+	PyPromise startFiber(kj::FiberPool& fiberPool, py::object callable) {
+		auto func = [callable = mv(callable)](kj::WaitScope& ws) -> PyPromise {
+			// Override default wait scope
+			ScopeOverride overrideWS(ws);
+			
+			py::gil_scoped_acquire withGIL;
+			return callable();
+		};
+		
+		return fiberPool.startFiber(mv(func));
+	}
 }
 
 namespace fscpy {
@@ -215,6 +227,11 @@ void initAsync(py::module_& m) {
 		.def("__next__", &PyPromiseAwaitContext::next)
 		.def("send", &PyPromiseAwaitContext::send)
 		.def("throw", &PyPromiseAwaitContext::throw_)
+	;
+	
+	py::class_<kj::FiberPool>(asyncModule, "FiberPool")
+		.def(py::init<unsigned int>())
+		.def("startFiber", &startFiber)
 	;
 	
 	asyncModule.def("startEventLoop", &PyContext::startEventLoop, "If the active thread has no active event loop, starts a new one");

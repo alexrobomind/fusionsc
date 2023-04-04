@@ -5,11 +5,12 @@
 #include <fsc/local.h>
 
 #include <functional>
+#include <type_traits>
 
 namespace fscpy {
 	
 struct ScopeOverride {
-	inline ScopeOverride(WaitScope& ws) :
+	inline ScopeOverride(kj::WaitScope& ws) :
 		scope(ws),
 		parent(current)
 	{
@@ -102,6 +103,15 @@ struct PyPromise {
 	inline PyPromise(py::object obj) :
 		holder(nullptr)
 	{
+		// If we initialize from another promise, take over
+		// the object that promise is referring to
+		try {
+			PyPromise* asPromise = obj.cast<PyPromise*>();
+			this -> holder = asPromise -> holder.addBranch().fork();
+			return;
+		} catch(py::cast_error err) {
+		}
+		
 		auto holder = kj::refcounted<PyObjectHolder>(mv(obj));
 		Promise<Own<PyObjectHolder>> holderPromise = mv(holder);
 		
@@ -127,7 +137,7 @@ struct PyPromise {
 			.fork()
 		)
 	{
-		static_assert(!kj::isSameType<T, py::object>(), "Promise<py::object> is unsafe");
+		static_assert(!std::is_base_of<py::object, T>::value, "Promise<py::object> is unsafe");
 	}
 	
 	PyPromise(Promise<void> input) :
@@ -136,6 +146,16 @@ struct PyPromise {
 			.then([]() {
 				py::gil_scoped_acquire withGIL;
 				return kj::refcounted<PyObjectHolder>(py::none());
+			})
+			.fork()
+		)
+	{}
+	
+	PyPromise(Promise<PyPromise> input) :
+		holder(
+			input
+			.then([](PyPromise unwrapped) {
+				return unwrapped.holder.addBranch();
 			})
 			.fork()
 		)
@@ -182,7 +202,7 @@ struct PyPromise {
 	
 	template<typename T>
 	Promise<T> as() {
-		static_assert(!kj::isSameType<T, py::object>(), "Promise<py::object> is unsafe");
+		static_assert(!std::is_base_of<py::object, T>::value, "Promise<py::object> is unsafe");
 		
 		return then([](py::object pyObj) { return py::cast<T>(pyObj); });
 	}
@@ -213,9 +233,8 @@ struct PyPromise {
 	}
 	
 	inline PyPromise pyThen(py::function f) {
-		return then([f = mv(f)](py::object o) {
-			py::object result = f(o);
-			return kj::refcounted<PyObjectHolder>(mv(result));
+		return then([f = mv(f)](py::object o) -> PyPromise {
+			return f(o);
 		});
 	}
 	

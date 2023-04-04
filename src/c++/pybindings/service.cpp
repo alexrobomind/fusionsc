@@ -93,7 +93,7 @@ namespace fscpy {
 	void loadDefaultSchema(py::module_& m) {
 		// Here we need to specify datatypes that need to be loaded because they are passed to the python interface
 		
-		#define FSC_BUILTIN_SCHEMAS FieldResolver, GeometryResolver, LocalResources, OfflineData, \
+		#define FSC_BUILTIN_SCHEMAS FieldResolver, GeometryResolver, NetworkInterface, LocalResources, OfflineData, \
 			MergedGeometry, FLTStopReason, FieldlineMapping
 		
 		defaultLoader.addBuiltin<

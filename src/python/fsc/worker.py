@@ -1,4 +1,7 @@
 from . import asnc
+from . import native
+
+import threading
 
 # Initialize event loop for main thread
 asnc.startEventLoop()
@@ -9,7 +12,7 @@ _threadLocal = threading.local()
 
 def connect():
     _threadLocal.localResources = inProcessWorker.connect()
-    _threadLocal.root = threadLocal.localResources.root().root
+    _threadLocal.root = _threadLocal.localResources.root().root
     
 def disconnect():
     del _threadLocal.localResources
