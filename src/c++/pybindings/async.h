@@ -7,6 +7,24 @@
 #include <functional>
 
 namespace fscpy {
+	
+struct ScopeOverride {
+	inline ScopeOverride(WaitScope& ws) :
+		scope(ws),
+		parent(current)
+	{
+		current = this;
+	}
+	
+	inline ~ScopeOverride() {
+		current = parent;
+	}
+	
+	ScopeOverride* parent;
+	kj::WaitScope& scope;
+	
+	static inline thread_local ScopeOverride* current = nullptr;
+};
 
 struct PyContext {
 	static inline Library library() {
@@ -29,6 +47,9 @@ struct PyContext {
 	}
 	
 	static inline kj::WaitScope& waitScope() {
+		if(ScopeOverride::current != nullptr)
+			return ScopeOverride::current -> scope;
+		
 		startEventLoop();
 		return _libraryThread -> waitScope();
 	}
