@@ -94,7 +94,7 @@ Own<kj::AsyncInputStream> newHandleReader(HANDLE hdl) {
 	return pipeThread.pipe.attach(mv(pipeThread.thread));
 }
 
-struct Win32ProcessJob : public Job::Server {
+struct Win32ProcessJob : public JobServerBase {
 	kj::AutoCloseHandle process;
 	
 	kj::Canceler canceler;

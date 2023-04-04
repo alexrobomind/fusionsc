@@ -13,6 +13,10 @@ JobScheduler::Client newSlurmScheduler();
 Job::Client runJob(JobScheduler::Client, kj::StringPtr cmd, kj::ArrayPtr<kj::StringPtr> args = {}, kj::StringPtr wd = nullptr);
 Promise<kj::String> runToCompletion(Job::Client job);
 
+struct JobServerBase : public Job::Server {
+	Promise<void> eval(EvalContext) override;
+};
+
 
 namespace internal {
 	kj::TreeMap<kj::String, kj::Array<kj::String>> testSControlParser(kj::StringPtr example);

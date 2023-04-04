@@ -26,7 +26,7 @@ struct TrackedProcess {
 	Promise<int> retCode = nullptr;
 };
 
-struct UnixProcessJob : public Job::Server {
+struct UnixProcessJob : public JobServerBase {
 	Own<TrackedProcess> process;
 	ForkedPromise<void> completionPromise;
 	

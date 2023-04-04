@@ -14,8 +14,8 @@ struct JobRequest {
 	command @1 : Text;
 	arguments @2 : List(Text);
 	
-	numTasks @3 : UInt32;
-	numCpusPerTask @4 : UInt32;
+	numTasks @3 : UInt32 = 1;
+	numCpusPerTask @4 : UInt32 = 1;
 }
 
 interface Job {
@@ -40,6 +40,7 @@ interface Job {
 	whenCompleted @4 () -> ();
 	
 	attach @5 () -> AttachResponse;
+	eval @6 (stdIn : Data) -> (stdOut : Text, stdErr : Text);
 }
 
 interface JobScheduler {
