@@ -508,6 +508,8 @@ struct FLTImpl : public FLT::Server {
 				auto stopReasonData = results.getStopReasons().initData(nStartPoints);
 				auto endTagData = results.getEndTags().getData();
 				
+				size_t nRecorded = 0;
+				
 				for(int64_t iStartPoint = 0; iStartPoint < nStartPoints; ++iStartPoint) {
 					auto entry = kData[iStartPoint].asReader();
 					auto state = entry.getState();
@@ -551,6 +553,8 @@ struct FLTImpl : public FLT::Server {
 						}
 					}
 					
+					size_t recordedForThis = 0;
+					
 					for(auto iEvt : kj::indices(events)) {
 						auto evt = events[iEvt];
 						
@@ -570,8 +574,12 @@ struct FLTImpl : public FLT::Server {
 							}
 							pcCuts(iTurn, iStartPoint, ppi.getPlaneNo(), 3) = forwardLCs[iEvt];
 							pcCuts(iTurn, iStartPoint, ppi.getPlaneNo(), 4) = backwardLCs[iEvt];
+						} else if(evt.isRecord()) {
+							++recordedForThis;
 						}
 					}
+					
+					nRecorded = kj::max(nRecorded, recordedForThis);
 					
 					auto stopLoc = state.getPosition();
 					for(int i = 0; i < 3; ++i) {
@@ -608,12 +616,42 @@ struct FLTImpl : public FLT::Server {
 				writeTensor(pcCuts, results.getPoincareHits());
 				writeTensor(endPoints, results.getEndPoints());
 				
+				if(nRecorded > 0) {
+					Tensor<double, 3> fieldLines(nRecorded, nStartPoints, 3);
+					fieldLines.setConstant(std::nan(""));
+					
+					for(auto iStartPoint : kj::range(0, nStartPoints)) {
+						auto entry = kData[iStartPoint].asReader();
+						auto events = entry.getEvents();
+						
+						int64_t iRecord = 0;
+						for(auto evt : events) {
+							// Process only "record" events
+							if(!evt.isRecord())
+								continue;
+							
+							auto loc = evt.getLocation();
+							for(int32_t iDim = 0; iDim < 3; ++iDim)
+								fieldLines(iRecord, iStartPoint, iDim) = loc[iDim];
+							
+							++iRecord;
+						}
+					}
+					
+					writeTensor(fieldLines, results.getFieldLines());
+				}
+				
 				auto pcHitsShape = results.getPoincareHits().initShape(startPointShape.size() + 2);
 				pcHitsShape.set(0, 5);
 				pcHitsShape.set(1, nSurfs);
 				for(int i = 0; i < startPointShape.size() - 1; ++i)
 					pcHitsShape.set(i + 2, startPointShape[i + 1]);
 				pcHitsShape.set(startPointShape.size() + 1, nTurns);
+				
+				auto fieldLinesShape = results.getFieldLines().initShape(startPointShape.size() + 1);
+				for(auto i : kj::indices(startPointShape))
+					fieldLinesShape.set(i, startPointShape[i]);
+				fieldLinesShape.set(startPointShape.size(), nRecorded);
 
 				results.getEndPoints().setShape(startPointShape);
 				results.getEndPoints().getShape().set(0, 4);
@@ -622,6 +660,91 @@ struct FLTImpl : public FLT::Server {
 		});
 		});
 		}).attach(thisCap());
+	}
+	
+	Promise<void> findAxis(FindAxisContext ctx) {
+		struct IterResult {
+			double r;
+			double z;
+		};
+		
+		auto params = ctx.getParams();
+		auto xyz = params.getStartPoint();
+		
+		KJ_REQUIRE(xyz.size() == 3);
+		
+		double phi = atan2(xyz[1], xyz[0]);
+		
+		auto performIteration = [this, params, phi](IterResult iter) mutable {
+			double r = iter.r;
+			double z = iter.z;
+			
+			// Trace from starting position
+			auto req = thisCap().traceRequest();
+			auto sp = req.initStartPoints();
+			
+			sp.setShape({3});
+			sp.setData({r * cos(phi), r * sin(phi), z});
+			req.setTurnLimit(params.getNTurns());
+			req.setStepSize(params.getStepSize());
+			req.setField(params.getField());
+			
+			auto planes = req.initPlanes(1);
+			planes[0].getOrientation().setPhi(phi);
+			
+			return req.send()
+			.then([phi](capnp::Response<FLTResponse> response) mutable {
+				// After tracing, take mean of points
+				Tensor<double, 3> result;
+				readTensor(response.getPoincareHits(), result);
+				KJ_REQUIRE(result.dimension(1) == 1);
+				KJ_REQUIRE(result.dimension(2) == 5);
+				
+				Tensor<double, 1> mean = result.mean(Eigen::array<int, 2>{0, 1});
+				double x = mean[0];
+				double y = mean[1];
+				double z = mean[2];
+				
+				return IterResult { sqrt(x * x + y * y), z };
+			});
+		};
+		
+		auto traceAxis = [this, ctx, params, phi](IterResult iter) mutable {
+			double r = iter.r;
+			double z = iter.z;
+			
+			auto req = thisCap().traceRequest();
+			auto sp = req.initStartPoints();
+			sp.setShape({3});
+			sp.setData({r * cos(phi), r * sin(phi), z});
+			
+			// Copy position into output
+			ctx.getResults().setPos(sp.getData());
+			
+			req.setTurnLimit(1);
+			req.setStepSize(params.getStepSize());
+			req.setField(params.getField());
+			
+			req.setRecordEvery(1);
+			
+			return req.send()
+			.then([ctx](capnp::Response<FLTResponse> response) mutable {
+				auto axis = response.getFieldLines();
+				
+				ctx.getResults().setAxis(response.getFieldLines());
+			});
+		};
+		
+		double r = sqrt(xyz[0] * xyz[0] + xyz[1] * xyz[1]);
+		double z = xyz[2];
+		
+		Promise<IterResult> nIterResult = IterResult { r, z };
+		
+		for(auto iteration : kj::range(0, params.getNIterations())) {
+			nIterResult = nIterResult.then(cp(performIteration));
+		}
+		
+		return nIterResult.then(mv(traceAxis));
 	}
 };
 	

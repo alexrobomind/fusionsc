@@ -88,6 +88,8 @@ struct FLTRequest {
 	
 	mapping @16 : Data.DataRef(FieldlineMapping);
 	forward @17 : Bool = true;
+	
+	recordEvery @18 : UInt32;
 }
 
 
@@ -130,11 +132,23 @@ struct FLTResponse {
 	# Tensor of shape startPoints.shape[1:]
 	stopReasons @5 : Data.ShapedList(List(FLTStopReason));
 	
+	# Tensor of shape startPoints.shape + [max. field line length]
+	fieldLines @7 : Data.Float64Tensor;
+	
 	rngSeed @6 : UInt64;
+}
+
+struct FindAxisRequest {
+	startPoint @0 : List(Float64);
+	field @1 : Magnetics.ComputedField;
+	stepSize @2 : Float64 = 0.001;
+	nTurns @3 : UInt32 = 10;
+	nIterations @4 : UInt32 = 10;
 }
 
 interface FLT {
 	trace @0 FLTRequest -> FLTResponse;
+	findAxis @1 FindAxisRequest -> (pos : List(Float64), axis : Data.Float64Tensor);
 }
 
 struct MappingRequest {
@@ -196,6 +210,7 @@ struct FLTKernelEvent {
 			meshIndex @6 : UInt64;
 			elementIndex @7 : UInt64;
 		}
+		record @8 : Void;
 	}
 }
 

@@ -835,6 +835,13 @@ StringTree generateStruct(CodeGeneratorRequest::Reader request, uint64_t nodeId,
 									strTree(
 										"	return cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(dataSectionSize, data) == ", field.getDiscriminantValue(), ";\n"
 									)
+								),
+								generateMethod(
+									request, nodeId, methodDefinitions,
+									strTree("void"), strTree("set", subName.asPtr(), "()"),
+									strTree(
+										"	cupnp::setDiscriminant<", asStruct.getDiscriminantOffset(), ">(dataSectionSize, data, ", field.getDiscriminantValue(), ");\n"
+									)
 								)
 							);
 						}

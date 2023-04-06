@@ -14,8 +14,8 @@ TEST_CASE("in-process-server") {
 	auto thread = library -> newThread();
 	
 	auto localFactory = []() {
-		Temporary<RootConfig> conf;
-		return createLocalResources(conf);
+		Temporary<LocalConfig> config;
+		return createLocalResources(config);
 	};
 	
 	auto server = newInProcessServer<LocalResources>(mv(localFactory));
@@ -35,8 +35,8 @@ TEST_CASE("http-connect") {
 	
 	// Create a DataRef as service we want to serve
 	
-	Temporary<RootConfig> conf;
-	auto lr = createLocalResources(conf);
+	Temporary<LocalConfig> config;
+	auto lr = createLocalResources(config);
 	
 	auto data = kj::heapArray<capnp::byte>(20);
 	thread -> rng().randomize(data);
@@ -69,7 +69,7 @@ TEST_CASE("ssh-connect", "[.][ssh]") {
 	auto library = newLibrary();
 	auto thread = library -> newThread();
 	
-	Temporary<RootConfig> config;
+	Temporary<LocalConfig> config;
 	auto localResources = createLocalResources(config.asReader());
 	
 	auto req = localResources.sshConnectRequest();

@@ -31,6 +31,8 @@ using kj::Maybe;
 
 using kj::mv;
 
+
+
 StringTree generateNested(CodeGeneratorRequest::Reader request, uint64_t nodeId, StringTree& methodDefinitions);
 
 kj::String camelCase(kj::StringPtr in, bool firstUpper) {

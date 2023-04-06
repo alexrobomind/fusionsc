@@ -206,6 +206,11 @@ namespace fsc {
 			
 			if(x != x)
 				FSC_FLT_RETURN(NAN_ENCOUNTERED);
+			
+			if(request.getRecordEvery() != 0 && (step % request.getRecordEvery() == 0)) {
+				currentEvent().setRecord();
+				FSC_FLT_LOG_EVENT(x)
+			}
 						
 			Num r = std::sqrt(x[0] * x[0] + x[1] * x[1]);
 			Num z = x[2];

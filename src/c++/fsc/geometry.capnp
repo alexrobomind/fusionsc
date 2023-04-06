@@ -115,7 +115,10 @@ struct Mesh {
 
 struct Plane {
 	orientation : union {
+		# Indicates that this plane is a phi-oriented toroidal HALF-plane
 		phi @0 : Float64;
+		
+		# Indicates that this plane is a usual plane normal to the given direction
 		normal @1 : List(Float64);
 	}
 	

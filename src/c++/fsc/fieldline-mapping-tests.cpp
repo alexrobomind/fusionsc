@@ -40,7 +40,8 @@ TEST_CASE("flm") {
 	LibraryThread lt = l -> newThread();
 	auto& ws = lt -> waitScope();
 	
-	Temporary<RootConfig> config;
+	Temporary<LocalConfig> config;
+	config.setPreferredDeviceType(ComputationDeviceType::CPU);
 	auto req = createRoot(config).newMapperRequest();
 	auto mapper = req.send().getService();
 	
@@ -62,7 +63,6 @@ TEST_CASE("flm") {
 	// KJ_DBG(resultData.get());
 	
 	auto fltReq = createRoot(config).newTracerRequest();
-	fltReq.setPreferredDeviceType(WorkerType::CPU);
 	auto flt = fltReq.send().getService();
 	
 	auto traceReq = flt.traceRequest();
