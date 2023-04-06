@@ -1,12 +1,12 @@
 import argparse
 from tqdm import tqdm
 
-from fsc.asnc import asyncFunction
+from fusionsc.asnc import asyncFunction
 
-import fsc
-import fsc.native as native
-import fsc.data as data
-import fsc.native.devices.w7x as w7xnative
+import fusionsc
+import fusionsc.native as native
+import fusionsc.data as data
+import fusionsc.native.devices.w7x as w7xnative
 
 from . import divertor, baffles, heatShield, pumpSlits, vessel
 

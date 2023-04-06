@@ -1,8 +1,8 @@
-import fsc
-import fsc.native.devices.w7x as w7xnative
+import fusionsc
+import fusionsc.native.devices.w7x as w7xnative
 
-from fsc import native, resolve, flt
-from fsc.asnc import asyncFunction
+from fusionsc import native, resolve, flt
+from fusionsc.asnc import asyncFunction
 
 from typing import Union
 
