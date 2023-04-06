@@ -30,13 +30,13 @@ using namespace fscpy;
 
 namespace {
 
-LocalResources::Client connectSameThread1(RootConfig::Reader config) {
+LocalResources::Client connectSameThread1(LocalConfig::Reader config) {
 	fscpy::PyContext::startEventLoop();
 	return createLocalResources(config);
 }
 	
 LocalResources::Client connectSameThread2() {
-	Temporary<RootConfig> config;
+	Temporary<LocalConfig> config;
 	return connectSameThread1(config);
 }
 
@@ -63,7 +63,7 @@ struct LocalRootServer {
 	LocalRootServer() :
 		clientFactory(
 			newInProcessServer<LocalResources>([]() mutable {
-				Temporary<RootConfig> rootConfig;
+				Temporary<LocalConfig> rootConfig;
 				return createLocalResources(rootConfig);
 			})
 		)
@@ -114,6 +114,7 @@ namespace fscpy {
 		// Root module
 		{		
 			auto schemas = getBuiltinSchemas<FSC_BUILTIN_SCHEMAS>();
+			py::module_ subM = m.def_submodule("service");
 				
 			for(auto node : schemas) {
 				defaultLoader.importNodeIfRoot(node.getId(), m);

@@ -1,7 +1,7 @@
 import fusionsc
 import fusionsc.native.devices.w7x as w7xnative
 
-from fusionsc import native, resolve, flt
+from fusionsc import service, resolve, flt
 from fusionsc.asnc import asyncFunction
 
 from typing import Union
@@ -33,11 +33,11 @@ def connectIPPSite():
 	connectComponentsDB("http://esb.ipp-hgw.mpg.de:8280/services/ComponentsDbRest")
 
 @asyncFunction
-async def computeCoilFields(calculator, coils: Union[native.W7XCoilSet.Builder, native.W7XCoilSet.Reader], grid = None) -> native.W7XCoilSet.Builder:
+async def computeCoilFields(calculator, coils: Union[service.W7XCoilSet.Builder, service.W7XCoilSet.Reader], grid = None) -> service.W7XCoilSet.Builder:
 	if grid is None:
 		grid = defaultGrid
 	
-	result = native.W7XCoilSet.newMessage()
+	result = service.W7XCoilSet.newMessage()
 	w7xnative.buildCoilFields(coils, result.initFields())
 	
 	async def resolveAndCompute(x):
@@ -49,7 +49,7 @@ async def computeCoilFields(calculator, coils: Union[native.W7XCoilSet.Builder, 
 		# Computed field is two part: Grid and data ref
 		# To hide latency, we extract the reference directly
 		
-		compField = native.ComputedField.newMessage()
+		compField = service.ComputedField.newMessage()
 		compField.grid = grid
 		compField.data = calculator.compute(x, grid).computedField.data
 		

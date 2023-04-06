@@ -15,23 +15,32 @@ using Index = import "index.capnp";
 using Data = import "data.capnp";
 using Networking = import "networking.capnp";
 
-struct RootConfig {
-}
-
-enum WorkerType {
+enum ComputationDeviceType {
 	cpu @0;
 	gpu @1;
 }
 
+struct LocalConfig {
+	preferredDeviceType @0 : ComputationDeviceType;
+}
+
+struct NodeInfo {
+	deviceType @0 : ComputationDeviceType;
+}
+
+# Main service interface that can be connected to by clients.
+
 interface RootService {
-	newFieldCalculator @0 (preferredDeviceType : WorkerType = gpu) -> (service : Magnetics.FieldCalculator, deviceType : WorkerType);
-	newGeometryLib     @1 () -> (service    : Geometry.GeometryLib);
-	newTracer          @2 (preferredDeviceType : WorkerType = gpu) -> (service    : FLT.FLT, deviceType : WorkerType);
+	newFieldCalculator @0 () -> (service : Magnetics.FieldCalculator);
+	newGeometryLib     @1 () -> (service : Geometry.GeometryLib);
+	newTracer          @2 () -> (service : FLT.FLT);
 	newHFCamProvider   @3 () -> (service : HFCam.HFCamProvider);
 	newKDTreeService   @4 () -> (service : Index.KDTreeService);
 	newMapper          @5 () -> (service : FLT.Mapper);
 	
 	dataService @6 () -> (service : Data.DataService);
+	
+	getInfo @7 () -> NodeInfo;
 }
 
 # Extended local interface to provide access to the local file system and network connections

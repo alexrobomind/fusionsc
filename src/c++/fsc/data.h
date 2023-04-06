@@ -58,7 +58,7 @@ using References = typename internal::References_<T>::Type;
  * \tparam T Type of the root message stored in the data ref.
  *
  * The DataRef template is a special capability recognized all throughout the FSC library.
- * It represents a link to a data storage location (local or remote), associated with abort
+ * It represents a link to a data storage location (local or remote), associated with a
  * unique ID, which can be downloaded to local storage and accessed there. Locally downloaded
  * data are represented by the LocalDataRef class, which subclasses DataRef::Client.
  *

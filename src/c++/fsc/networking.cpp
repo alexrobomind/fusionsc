@@ -82,9 +82,20 @@ struct SSHConnectionImpl : public SSHConnection::Server, public NetworkInterface
 		return session -> drain();
 	}
 	
-	Promise<void> authenticatePassword(AuthenticatePasswordContext ctx) {
+	Promise<void> authenticatePassword(AuthenticatePasswordContext ctx) override {
 		auto params = ctx.getParams();
 		return session -> authenticatePassword(params.getUser(), params.getPassword())
+		.then([](bool result) {
+			KJ_REQUIRE(result, "Authentication failed");
+		});
+	}
+	
+	Promise<void> authenticateKeyFile(AuthenticateKeyFileContext ctx) override {
+		auto params = ctx.getParams();
+		return session -> authenticatePubkeyFile(
+			params.getUser(), params.getPubKeyFile(),
+			params.getPrivKeyFile(), params.getKeyPass()
+		)
 		.then([](bool result) {
 			KJ_REQUIRE(result, "Authentication failed");
 		});

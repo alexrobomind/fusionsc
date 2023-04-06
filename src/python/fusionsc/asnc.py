@@ -15,6 +15,8 @@ from .native.asnc import (
 	FiberPool
 )
 
+from .native.timer import delay
+
 from typing import Callable, Any, Union, TypeVar, Awaitable
 from typing_extensions import ParamSpec
 
@@ -24,6 +26,7 @@ T = TypeVar("T")
 P = ParamSpec("P")
 
 class AsyncMethodDescriptor:
+	"""Helper class to implement asyncFunction"""
 	def __init__(self, f):
 		self.f = f
 	
@@ -36,23 +39,6 @@ class AsyncMethodDescriptor:
 		return run(coro)
 	
 	def __get__(self, obj, objtype = None):
-		"""if hasattr(self.f, "__get__"):
-			f = self.f.__get__(obj, objtype)
-		else:
-			f = functools.partial(self.f, obj)		
-		
-		@functools.wraps(f)
-		def wrapper(*args, **kwargs):
-			coro = f(*args, **kwargs)
-			return run(coro).wait()
-		
-		@functools.wraps(f)
-		def asnc(*args, **kwargs):
-			coro = f(*args, **kwargs)
-			return run(coro)
-		
-		wrapper.asnc = asnc
-		return wrapper"""
 		return AsyncMethodDescriptor(self.f.__get__(obj, objtype))
 	
 	@property

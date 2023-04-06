@@ -21,41 +21,35 @@ using namespace fsc;
 
 namespace {
 	
-kj::Tuple<Own<DeviceBase>, WorkerType> selectDevice(WorkerType preferredType) {
+Own<DeviceBase> selectDevice(ComputationDeviceType preferredType) {
 	#ifdef FSC_WITH_CUDA
 	
 	try {
-		if(preferredType == WorkerType::GPU) {
-			return kj:tuple(kj::refcounted<GPUDevice>(), WorkerType::GPU);
+		if(preferredType == ComputationDeviceType::GPU) {
+			return kj::refcounted<GPUDevice>();
 		}
 	} catch(kj::Exception& e) {
 	}
 	
 	#endif
 	
-	return kj::tuple(kj::refcounted<CPUDevice>(), WorkerType::CPU);
+	return kj::refcounted<CPUDevice>();
 }
 
 struct RootServer : public RootService::Server {
-	RootServer(RootConfig::Reader config) {}
+	RootServer(LocalConfig::Reader config) :
+		device(selectDevice(config.getPreferredDeviceType()))
+	{}
+	
+	Own<DeviceBase> device;
 	
 	Promise<void> newFieldCalculator(NewFieldCalculatorContext context) override {
-		auto selectResult = selectDevice(context.getParams().getPreferredDeviceType());
-		
-		auto results = context.getResults();
-		results.setService(::fsc::newFieldCalculator(mv(kj::get<0>(selectResult))));
-		results.setDeviceType(kj::get<1>(selectResult));
-		
+		context.initResults().setService(::fsc::newFieldCalculator(device -> addRef()));		
 		return READY_NOW;
 	}
 	
-	Promise<void> newTracer(NewTracerContext context) override {		
-		auto selectResult = selectDevice(context.getParams().getPreferredDeviceType());
-		
-		auto results = context.getResults();
-		results.setService(::fsc::newFLT(mv(kj::get<0>(selectResult))));
-		results.setDeviceType(kj::get<1>(selectResult));
-		
+	Promise<void> newTracer(NewTracerContext context) override {				
+		context.initResults().setService(newFLT(device -> addRef()));		
 		return READY_NOW;
 	}
 	
@@ -75,14 +69,29 @@ struct RootServer : public RootService::Server {
 	}
 	
 	Promise<void> newMapper(NewMapperContext ctx) override {
-		auto flt = thisCap().newTracerRequest().send().getService();
-		auto idx = thisCap().newKDTreeServiceRequest().send().getService();
+		auto flt = thisCap().newTracerRequest().sendForPipeline().getService();
+		auto idx = thisCap().newKDTreeServiceRequest().sendForPipeline().getService();
+		
 		ctx.initResults().setService(fsc::newMapper(mv(flt), mv(idx)));
 		return READY_NOW;
 	}
 	
 	Promise<void> dataService(DataServiceContext ctx) override {
 		ctx.getResults().setService(getActiveThread().dataService());
+		return READY_NOW;
+	}
+	
+	Promise<void> getInfo(GetInfoContext ctx) {
+		if(device -> brand == &CPUDevice::BRAND) {
+			ctx.getResults().setDeviceType(ComputationDeviceType::CPU);
+		#ifdef FSC_WITH_CUDA
+		} else if(device -> brand == &GPUDevice::BRAND) {
+			ctx.getResults().setDeviceType(ComputationDeviceType::GPU);
+		#endif
+		} else {
+			KJ_FAIL_REQUIRE("Unknown device type");
+		}
+		
 		return READY_NOW;
 	}
 };
@@ -92,8 +101,8 @@ struct RootServer : public RootService::Server {
 
 
 struct LocalResourcesImpl : public LocalResources::Server, public LocalNetworkInterface {
-	Temporary<RootConfig> config;
-	LocalResourcesImpl(RootConfig::Reader config) :
+	Temporary<LocalConfig> config;
+	LocalResourcesImpl(LocalConfig::Reader config) :
 		config(config)
 	{}
 	
@@ -318,7 +327,8 @@ kj::ArrayPtr<uint64_t> fsc::protectedInterfaces() {
 	static kj::Array<uint64_t> result = kj::heapArray<uint64_t>({
 		capnp::typeId<LocalResources>(),
 		capnp::typeId<NetworkInterface>(),
-		capnp::typeId<JobScheduler>()
+		capnp::typeId<JobScheduler>(),
+		capnp::typeId<SSHConnection>()
 	});
 	
 	return result.asPtr();
@@ -332,11 +342,11 @@ kj::Function<capnp::Capability::Client()> fsc::newInProcessServer(kj::Function<c
 	};
 }
 
-LocalResources::Client fsc::createLocalResources(RootConfig::Reader config) {
+LocalResources::Client fsc::createLocalResources(LocalConfig::Reader config) {
 	return kj::heap<LocalResourcesImpl>(config);
 }
 
-RootService::Client fsc::createRoot(RootConfig::Reader config) {
+RootService::Client fsc::createRoot(LocalConfig::Reader config) {
 	return kj::heap<RootServer>(config);
 }
 
@@ -371,7 +381,7 @@ RootService::Client fsc::connectRemote(kj::StringPtr address, unsigned int portH
 }
 
 Promise<Own<fsc::Server>> fsc::startServer(unsigned int portHint, kj::StringPtr address) {	
-	Temporary<RootConfig> rootConfig;
+	Temporary<LocalConfig> rootConfig;
 	auto rootInterface = createRoot(rootConfig);
 	
 	// Get root network

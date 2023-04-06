@@ -8,6 +8,131 @@ from .asnc import asyncFunction
 
 import numpy as np
 
+class Geometry:
+	"""A pythonic wrapper around fusion.service.Geometry.Builder"""
+	def __init__(self, geo = None):
+		self._holder = native.service.Geometry.newMessage()
+		
+		if geo is None:
+			self._holder.initNested()
+		else:
+			self._holder.nested = geo
+	
+	@property
+	def geometry(self):
+		return self._holder.nested
+	
+	@geometry.setter
+	def geometry(self, newVal):
+		self._holder.nested = newVal
+	
+	def ptree(self):
+		import printree
+		printree.ptree(self.geometry)
+	
+	def graph(self, **kwargs):
+		return capnp.visualize(self.geometry, **kwargs)
+		
+	def __repr__(self):
+		return str(self.geometry)
+		
+	@asyncFunction
+	async def resolve(self):
+		return Geometry(await resolve.resolveGeometry.asnc(self.geometry))
+	
+	def __add__(self, other):
+		if not isinstance(other, Geometry):
+			return NotImplemented
+			
+		result = Geometry()
+		
+		if self.geometry.which() == 'combined' and other.geometry.which() == 'combined':
+			result.geometry.combined = list(self.geometry.combined) + list(other.geometry.combined)
+			return result
+		
+		if self.geometry.which() == 'combined':
+			result.geometry.combined = list(self.geometry.combined) + [other.geometry]
+			return result
+		
+		if other.geometry.which() == 'combined':
+			result.geometry.combined = [self.geometry] + list(other.geometry.combined)
+			return result
+		
+		result.geometry.combined = [self.geometry, other.geometry]
+		return result
+	
+	def translate(self, dx):
+		result = Geometry()
+		
+		transformed = result.geometry.initTransformed()
+		shifted = transformed.initShifted()
+		shifted.shift = dx
+		shifted.node.leaf = self.geometry
+		
+		return result
+	
+	def rotate(self, angle, axis, center = [0, 0, 0]):
+		result = Geometry()
+		
+		transformed = result.geometry.initTransformed()
+		turned = transformed.initTurned()
+		turned.axis = axis
+		turned.angle = angle
+		turned.center = center
+		turned.node.leaf = self.geometry
+		
+		return result
+	
+	@staticmethod
+	def polyMesh(vertices, polyIndices):
+		"""
+		Creates a polygon mesh from a [N, 3] array-like of vertices and a list of polygins (which is each a list of vertex indices)
+		"""
+		vertices = np.asarray(vertices)
+		assert len(vertices.shape) == 2
+		assert vertices.shape[1] == 3
+		
+		meshIndices = np.concatenate(polygons)
+		
+		polyBoundaries = [0]
+		offset = 0
+		isTrimesh = True
+		
+		for poly in polygons:
+			offset += len(poly)
+			polyBoundaries.append(offset)
+			
+			if len(poly) != 3:
+				isTrimesh = False
+		
+		
+		mesh = native.Mesh.initMessage()
+		mesh.vertices = vertices
+		mesh.indices = meshIndices
+		
+		if isTrimesh:
+			mesh.triMesh = None
+		else:
+			mesh.polyMesh = polyBoundaries
+		
+		meshRef = data.publish(mesh)
+		del mesh
+		
+		result = Geometry()
+		result.geometry.mesh = meshRef
+		
+		return result
+	
+	@asyncFunction
+	@staticmethod
+	async def load(filename):
+		geo = await data.readArchive.asnc(filename)
+		return Geometry(geo)
+	
+	@asyncFunction
+	async def save(self, filename):
+		await data.writeArchive.asnc(self.geometry, filename)
+
 def asTagValue(x):
 	"""Convert a possible tag value into an instance of fsc.native.TagValue"""
 	result = native.TagValue.newMessage()

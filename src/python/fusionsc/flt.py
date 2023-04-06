@@ -1,9 +1,12 @@
 """
 Root service frontend
 """
-
-from . import native
 from . import data
+from . import service
+from . import capnp
+from . import resolve
+from . import inProcess
+
 from .asnc import asyncFunction
 from .resolve import resolveField
 
@@ -13,6 +16,116 @@ import functools
 from types import SimpleNamespace
 
 from typing import Optional, List
+
+class MagneticConfig:
+	"""
+	Magnetic configuration class. Wraps an instance of fusionsc.service.MagneticField.Builder
+	and provides access to +, -, *, and / operators.
+	"""
+	
+	_holder: service.MagneticField.Builder
+	
+	def __init__(self, field = None):	
+		self._holder = service.MagneticField.newMessage()
+		
+		if field is None:
+			self._holder.initNested()
+		else:
+			self._holder.nested = field
+	
+	# Directly assigning python variables does not copy them, so we
+	# need to do a bit of propery magic to make sure we assign
+	# struct fields	
+	@property
+	def field(self):
+		return self._holder.nested
+	
+	@field.setter
+	def field(self, newVal):
+		self._holder.nested = newVal
+	
+	@asyncFunction
+	async def resolve(self):
+		return MagneticConfig(await resolve.resolveField.asnc(self.field))
+	
+	def ptree(self):
+		import printree
+		printree.ptree(self.field)
+	
+	def graph(self, **kwargs):
+		return capnp.visualize(self.field, **kwargs)
+		
+	def __repr__(self):
+		return str(self.field)
+	
+	def __neg__(self):
+		result = MagneticConfig()
+		
+		# Remove double inversion
+		if self.field.which() == 'invert':
+			result.field = self.field.invert
+			return result
+		
+		result.field.invert = self.field
+		return result
+	
+	def __add__(self, other):
+		if not isinstance(other, MagneticConfig):
+			return NotImplemented()
+			
+		result = MagneticConfig()
+		
+		if self.field.which() == 'sum' and other.field.which() == 'sum':
+			result.field.sum = list(self.field.sum) + list(other.field.sum)
+			return result
+		
+		if self.field.which() == 'sum':
+			result.field.sum = list(self.field.sum) + [other.field]
+			return result
+		
+		if other.field.which() == 'sum':
+			result.field.sum = [self.field] + list(other.field.sum)
+		
+		result.field.sum = [self.field, other.field]
+		
+		return result
+		
+	def __sub__(self, other):
+		return self + (-other)
+	
+	def __mul__(self, factor):
+		import numbers
+		
+		if not isinstance(factor, numbers.Number):
+			return NotImplemented
+		
+		result = MagneticConfig()
+		
+		if self.field.which() == 'scaleBy':
+			result.field.scaleBy = self.field.scaleBy
+			result.field.scaleBy.factor *= factor
+		
+		scaleBy = result.field.initScaleBy()
+		scaleBy.field = self.field
+		scaleBy.factor = factor
+		
+		return result
+	
+	def __rmul__(self, factor):
+		return self.__mul__(factor)
+	
+	def __truediv__(self, divisor):
+		return self * (1 / divisor)
+	
+	@asyncFunction
+	@staticmethod
+	async def load(filename):
+		field = await data.readArchive.asnc(filename)
+		return MagneticConfig(field)
+	
+	@asyncFunction
+	async def save(self, filename):
+		await data.writeArchive.asnc(self.field, filename)
 
 def symmetrize(points, nSym = 1, stellaratorSymmetric = False):
 	x, y, z = points
@@ -90,39 +203,29 @@ async def visualizeMapping(mapping, nPoints = 50):
 	])
 
 class FLT:
-	# backend: native.RootService.Client
+	backend: service.RootService.Client
 	
-	calculator: native.FieldCalculator.Client
-	tracer: native.FLT.Client
-	geometryLib : native.GeometryLib.Client
-	mapper : native.Mapper.Client
+	def __init__(self, backend = None):
+		if backend is None:
+			backend = inProcess.root()
+			
+		self.backend = backend
 	
-	def __init__(self, backend):
-		# self.backend = backend
-		self.calculator = backend.newFieldCalculator().service
-		self.tracer	 = backend.newTracer().service
-		self.geometryLib = backend.newGeometryLib().service
-		self.mapper = backend.newMapper().service
+	@property
+	def calculator(self):
+		return self.backend.newFieldCalculator().service
 	
-	@asyncFunction
-	async def mergeGeometry(self, geometry):
-		resolved  = await geometry.resolve.asnc()
-		mergedRef = self.geometryLib.merge(resolved.geometry).ref
-		
-		result = Geometry()
-		result.geometry.merged = mergedRef
-		return result
+	@property
+	def tracer(self):
+		return self.backend.newTracer().service
 	
-	@asyncFunction
-	async def indexGeometry(self, geometry, grid):
-		from . import Geometry
-		
-		resolved  = await geometry.resolve.asnc()
-		indexed	  = (await self.geometryLib.index(resolved.geometry, grid)).indexed
-		
-		result = Geometry()
-		result.geometry.indexed = indexed
-		return result
+	@property
+	def geometryLib(self):
+		return self.backend.newGeometryLib().service
+	
+	@property
+	def mapper(self):
+		return self.backend.newMapper().service
 	
 	@asyncFunction
 	async def fieldValues(self, config, grid):
@@ -176,7 +279,7 @@ class FLT:
 			computedField = (await self.calculator.compute(resolvedField.field, grid)).computedField
 		
 		# We use the request based API because tensor values are not yet supported for fields
-		request = native.MappingRequest.newMessage()
+		request = service.MappingRequest.newMessage()
 		request.startPoints = startPoints
 		request.field = computedField
 		request.dx = dx
@@ -227,9 +330,9 @@ class FLT:
 				assert geometry.geometry.which() == 'indexed', 'Can only omit geometry grid if geometry is already indexed'
 				indexedGeometry = geometry.geometry.indexed
 			else:
-				indexedGeometry = (await self.indexGeometry.asnc(geometry, geometryGrid)).geometry.indexed
+				indexedGeometry = (await self._indexGeometry.asnc(geometry, geometryGrid)).geometry.indexed
 		
-		request = native.FLTRequest.newMessage()
+		request = service.FLTRequest.newMessage()
 		request.startPoints = points
 		request.field = computedField
 		request.stepSize = stepSize
@@ -275,6 +378,26 @@ class FLT:
 			"poincareHits" : np.asarray(response.poincareHits),
 			"stopReasons" : np.asarray(response.stopReasons),
 			"endTags" : endTags,
-			"responseSize" : native.capnp.totalSize(response)
+			"responseSize" : capnp.totalSize(response)
 		}
+	
+	@asyncFunction
+	async def _mergeGeometry(self, geometry):
+		resolved  = await geometry.resolve.asnc()
+		mergedRef = self.geometryLib.merge(resolved.geometry).ref
+		
+		result = Geometry()
+		result.geometry.merged = mergedRef
+		return result
+	
+	@asyncFunction
+	async def _indexGeometry(self, geometry, grid):
+		from . import Geometry
+		
+		resolved  = await geometry.resolve.asnc()
+		indexed	  = (await self.geometryLib.index(resolved.geometry, grid)).indexed
+		
+		result = Geometry()
+		result.geometry.indexed = indexed
+		return result
 	

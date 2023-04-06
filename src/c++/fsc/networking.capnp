@@ -36,4 +36,5 @@ interface NetworkInterface {
 interface SSHConnection extends(NetworkInterface) {
 	close @0 () -> ();
 	authenticatePassword @1 (user : Text, password : Text) -> ();
+	authenticateKeyFile @2 (user : Text, pubKeyFile : Text, privKeyFile : Text, keyPass : Text) -> ();
 }
