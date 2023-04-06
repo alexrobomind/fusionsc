@@ -10,7 +10,9 @@ from .native.asnc import (
 	hasEventLoop,
 	cycle,
 	
-	run
+	run,
+	
+	FiberPool
 )
 
 from typing import Callable, Any, Union, TypeVar, Awaitable

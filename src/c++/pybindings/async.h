@@ -103,13 +103,10 @@ struct PyPromise {
 	inline PyPromise(py::object obj) :
 		holder(nullptr)
 	{
-		// If we initialize from another promise, take over
-		// the object that promise is referring to
-		try {
-			PyPromise* asPromise = obj.cast<PyPromise*>();
+		PyPromise* asPromise = obj.cast<PyPromise*>();
+		if(asPromise != nullptr) {
 			this -> holder = asPromise -> holder.addBranch().fork();
 			return;
-		} catch(py::cast_error err) {
 		}
 		
 		auto holder = kj::refcounted<PyObjectHolder>(mv(obj));

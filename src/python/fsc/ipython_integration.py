@@ -1,7 +1,12 @@
 from .native.timer import delay
-from .nativ.asnc import FiberPool
+from .asnc import FiberPool, asyncFunction
+
+from .asnc import asyncFunction
 
 hasIPython = False
+
+import asyncio
+import nest_asyncio
 
 try:
 	import IPython
@@ -10,7 +15,7 @@ except:
 	pass
 
 if hasIPython:
-	from IPython.kernel.zmq.eventloops import register_integration
+	from ipykernel.eventloops import register_integration
 	from IPython.terminal.pt_inputhooks import register
 	
 	# The IPython kernel integrates by having us call its event loop
@@ -26,6 +31,16 @@ if hasIPython:
 	def kernel_integration(kernel):
 		"""IPython kernel integration"""
 		
+		# Modify the event loop to allow nesting
+		nest_asyncio.apply()
+		
+		def runKernel():
+			loop = asyncio.get_event_loop()
+			try:
+				loop.run_until_complete(kernel.do_one_iteration())
+			except Exception:
+				kernel.log.exception("Error in message handler")
+		
 		@asyncFunction
 		async def loop():
 			# Reserve 8MB of stack size
@@ -33,8 +48,8 @@ if hasIPython:
 			fiberPool = FiberPool(stackSize)
 			
 			while True:
+				await fiberPool.startFiber(runKernel)
 				await delay(kernel._poll_interval)
-				await fiberPool.startFiber(kernel.do_one_iteration)
 		
 		# Run infinite loop
 		loop()

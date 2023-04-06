@@ -166,11 +166,15 @@ namespace {
 	}
 	
 	PyPromise startFiber(kj::FiberPool& fiberPool, py::object callable) {
-		auto func = [callable = mv(callable)](kj::WaitScope& ws) -> PyPromise {
+		auto func = [callable = mv(callable)](kj::WaitScope& ws) mutable -> PyPromise {			
 			// Override default wait scope
 			ScopeOverride overrideWS(ws);
 			
 			py::gil_scoped_acquire withGIL;
+			
+			// Delete object while in GIL scope
+			KJ_DEFER({callable = py::object();});
+			
 			return callable();
 		};
 		

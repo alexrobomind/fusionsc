@@ -5,6 +5,7 @@ from . import asnc
 from . import data
 from . import geometry
 from . import worker
+from . import ipython_integration
 
 from .native import kj
 from .native import capnp
