@@ -120,8 +120,8 @@ namespace fsc {
 		MT19937 rng(state.getRngState());
 		
 		// Set up the magnetic field
-		using InterpolationStrategy = LinearInterpolation<Num>;
-		// using InterpolationStrategy = C1CubicInterpolation<Num>;
+		//using InterpolationStrategy = LinearInterpolation<Num>;
+		using InterpolationStrategy = C1CubicInterpolation<Num>;
 		
 		auto grid = request.getField().getGrid();
 		SlabFieldInterpolator<InterpolationStrategy> interpolator(InterpolationStrategy(), grid);

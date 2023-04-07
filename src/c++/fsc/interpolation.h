@@ -12,6 +12,7 @@ namespace fsc {
 template<typename Num>
 struct LinearInterpolation {
 	using Scalar = Num;
+	using Coeffs = std::array<Scalar, 2>;
 	
 	constexpr EIGEN_DEVICE_FUNC size_t nPoints() { return 2; }
 	constexpr EIGEN_DEVICE_FUNC std::array<Scalar, 2> coefficients(Num x) {
@@ -79,6 +80,7 @@ struct C1CubicInterpolation {
 	//    ==> P[x] = x**2 * (x - 1) [Check]
 	
 	using Scalar = Num;
+	using Coeffs = std::array<Scalar, 4>;
 	
 	constexpr EIGEN_DEVICE_FUNC size_t nPoints() { return 4; }
 	constexpr EIGEN_DEVICE_FUNC std::array<Scalar, 4> coefficients(Num x) {		
@@ -94,6 +96,11 @@ struct C1CubicInterpolation {
 	}
 };
 
+template<typename Strategy, typename Vec, size_t... indices>
+std::array<typename Strategy::Coeffs, sizeof...(indices)> calculateCoeffsND(Strategy& strategy, const Vec& lx, std::index_sequence<indices...> indexSequence) {
+	return { strategy.coefficients(lx[indices]) ... };
+}
+
 template<int nDims, typename Strategy, int iDim>
 struct NDInterpEvaluator {
 	using Scalar = typename Strategy::Scalar;
@@ -101,17 +108,20 @@ struct NDInterpEvaluator {
 	static_assert(iDim < nDims);
 	static_assert(iDim >= 0);
 	
+	/*const Vec<Scalar, nDims>& lx,*/
+	
 	template<typename F, typename... Indices>
-	static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, const Vec<int, nDims>& base, const Vec<Scalar, nDims>& lx, Indices... indices) {
+	static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, const Vec<int, nDims>& base, const std::array<typename Strategy::Coeffs, nDims>& coeffs, Indices... indices) {
 		static_assert(sizeof...(indices) == iDim);
 		
 		Scalar result = 0;
 		
-		auto coefficients = strategy.coefficients(lx[iDim]);
+		// auto coefficients = strategy.coefficients(lx[iDim]);
+		auto& coefficients = coeffs[iDim];
 		auto offsets      = strategy.offsets();
 					
 		for(int idx = 0; idx < strategy.nPoints(); ++idx) {
-			result += coefficients[idx] * NDInterpEvaluator<nDims, Strategy, iDim + 1>::evaluate(strategy, f, base, lx, indices..., base[iDim] + offsets[idx]);
+			result += coefficients[idx] * NDInterpEvaluator<nDims, Strategy, iDim + 1>::evaluate(strategy, f, base, /*lx,*/coeffs, indices..., base[iDim] + offsets[idx]);
 		}
 		
 		return result;
@@ -123,7 +133,7 @@ struct NDInterpEvaluator<nDims, Strategy, nDims> {
 	using Scalar = typename Strategy::Scalar;
 	
 	template<typename F, typename... Indices>
-	static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, const Vec<int, nDims>& base, const Vec<Scalar, nDims>& lx, Indices... indices) {
+	static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, const Vec<int, nDims>& base, /*const Vec<Scalar, nDims>& lx*/const std::array<typename Strategy::Coeffs, nDims>& coeffs, Indices... indices) {
 		static_assert(sizeof...(indices) == nDims);
 		
 		return f(indices...);
@@ -180,7 +190,10 @@ struct NDInterpolator {
 			lx[i] = scaled - base[i];
 		}
 		
-		return NDInterpEvaluator<nDims, Strategy, 0>::evaluate(strategy, f, base, lx);
+		std::array<typename Strategy::Coeffs, nDims> coeffs =
+			calculateCoeffsND(strategy, lx, std::make_index_sequence<nDims>());
+		
+		return NDInterpEvaluator<nDims, Strategy, 0>::evaluate(strategy, f, base, coeffs/*lx*/);
 	}
 };
 
