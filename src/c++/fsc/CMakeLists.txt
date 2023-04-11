@@ -101,6 +101,9 @@ add_library(
 	data.h
 	data.cpp
 	
+	yaml.h
+	yaml.cpp
+	
 	networking.h
 	networking.cpp
 	

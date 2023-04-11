@@ -1,6 +1,7 @@
 #include <fsc/local.h>
 #include <fsc/services.h>
 #include <fsc/data.h>
+#include <fsc/networking.h>
 
 #include <capnp/rpc-twoparty.h>
 
@@ -14,6 +15,19 @@
 #include <capnp/ez-rpc.h>
 
 using namespace fsc;
+
+struct RootServiceProvider : public NetworkInterface::Listener::Server {
+	Temporary<LocalConfig> config;
+	
+	RootServiceProvider(LocalConfig::Reader configIn) :
+		config(configIn)
+	{}
+	
+	Promise<void> accept(AcceptContext ctx) override {
+		ctx.initResults().setClient(createRoot(config.asReader()));
+		return READY_NOW;
+	}
+};
 
 struct MainCls {
 	kj::ProcessContext& context;
@@ -39,38 +53,35 @@ struct MainCls {
 		auto lt = l -> newThread();
 		auto& ws = lt->waitScope();
 		
-		unsigned int port = 0;
-		KJ_IF_MAYBE(pPort, this -> port)
-			port = *pPort;
-			
-		auto server = fsc::startServer(port, this->address).wait(ws);
-		port = server->getPort();
+		NetworkInterface::Client networkInterface = kj::heap<LocalNetworkInterface>();
 		
-		std::cout << port << std::endl;
-		std::cout << std::endl;
-		std::cout << "Listening on port " << port << std::endl;
+		Temporary<LocalConfig> config;
 		
-		auto shutdownPaf = kj::newPromiseAndCrossThreadFulfiller<void>();
-		auto readThenFulfill = [&]() {
-			std::cout << "Press any key to drain" << std::endl;
-			std::string bla;
-			std::getline(std::cin, bla);
-			
-			shutdownPaf.fulfiller -> fulfill();
-		};
+		auto listenRequest = networkInterface.listenRequest();
+		KJ_IF_MAYBE(pPort, port) {
+			listenRequest.setPortHint(*pPort);
+		}
+		listenRequest.setHost(address);
+		listenRequest.setListener(kj::heap<RootServiceProvider>(config));
 		
-		kj::Thread cinReader(readThenFulfill);
+		auto openPort = listenRequest.sendForPipeline().getOpenPort();
+		auto info = openPort.getInfoRequest().send().wait(ws);
 		
-		//TODO: On unix, listen for shutdown signals
-		Promise<void> promise = server->run();
-		promise = promise.exclusiveJoin(mv(shutdownPaf.promise));
+		std::cout << "Listening on port " << info.getPort() << std::endl;
 		
-		promise.wait(ws);
+		while(true) {
+			try {
+				lt -> timer().afterDelay(1 * kj::SECONDS).wait(ws);
+			} catch(kj::Exception e) {
+				KJ_DBG("Received exception", e);
+				break;
+			}
+		}
 		
-		std::cout << "Waiting for clients to disconnect. Press Ctrl+C again to force shutdown." << std::endl;
-		server->drain().wait(ws);
-		std::cout << "All clients disconnected. Good bye :-)" << std::endl;
+		std::cout << "Draining ..." << std::endl;
+		openPort.drainRequest().send().wait(ws);
 		
+		std::cout << "Shutting down" << std::endl;		
 		return true;
 	}
 	

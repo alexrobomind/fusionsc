@@ -1,5 +1,6 @@
 import fusionsc
 import fusionsc.native.devices.w7x as w7xnative
+from fusionsc.native import service
 
 from fusionsc import service, resolve, flt
 from fusionsc.asnc import asyncFunction
@@ -71,7 +72,7 @@ async def computeCoilFields(calculator, coils: Union[service.W7XCoilSet.Builder,
 	
 	return result
 
-def cadCoils(convention = '1-AA-R0004.5') -> native.W7XCoilSet:
+def cadCoils(convention = '1-AA-R0004.5') -> service.W7XCoilSet:
 	"""
 	Returns the coil pack for the standard W7-X CAD coils. The winding direction
 	of the main coils is adjusted to the requested convention.
@@ -79,7 +80,7 @@ def cadCoils(convention = '1-AA-R0004.5') -> native.W7XCoilSet:
 	convention = processCoilConvention(convention)
 	
 	# The native W7X coil set is the CAD coils
-	coilPack = native.W7XCoilSet.newMessage()
+	coilPack = service.W7XCoilSet.newMessage()
 	
 	if convention == '1-AA-R0004.5':
 		coilPack.coils.invertMainCoils = True

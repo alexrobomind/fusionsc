@@ -1,14 +1,14 @@
 from . import native
-from . import worker
+from . import inProcess
 from .asnc import asyncFunction
 
 @asyncFunction
 def openArchive(filename: str):
-	return worker.localResources().openArchive(filename)
+	return inProcess.localResources().openArchive(filename)
 
 def publish(data):
 	inThreadRef = native.data.publish(ref)
-	cloneResult = worker.localResources().download(inThreadRef)
+	cloneResult = inProcess.localResources().download(inThreadRef)
 	return cloneResult.ref
 
 @asyncFunction
@@ -17,7 +17,7 @@ def download(ref):
 
 @asyncFunction
 def writeArchive(data, filename: str):
-	return worker.localResources().writeArchive(filename, data)
+	return inProcess.localResources().writeArchive(filename, data)
 
 @asyncFunction
 def readArchive(filename: str):

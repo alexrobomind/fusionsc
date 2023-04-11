@@ -16,7 +16,6 @@ from . import inProcess
 
 # Load auxiliary modules
 from . import data
-from . import worker
 from . import ipython_integration
 from . import resolve
 
@@ -39,7 +38,7 @@ __all__ = [
 	'run', 'asyncFunction', 'wait', 'importOfflineData', 'delay', 'Promise', 'MagneticConfig'
 ]
 
-def tracer(backend: Optional[native.RootService] = None) -> flt.FLT:
+def tracer(backend: Optional[service.RootService] = None) -> flt.FLT:
 	"""
 	Creates a new field line tracer backed by an FSC service. If
 	no backend is specified, creates a local backend.

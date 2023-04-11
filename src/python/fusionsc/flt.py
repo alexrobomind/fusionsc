@@ -380,47 +380,47 @@ class FLT:
 			"endTags" : endTags,
 			"responseSize" : capnp.totalSize(response)
 		}
-    
-    @asyncFunction
-    async def findAxis(self, field, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10):
-        resolvedField = await field.resolve.asnc()
+	
+	@asyncFunction
+	async def findAxis(self, field, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10):
+		resolvedField = await field.resolve.asnc()
 		
 		if grid is None:
 			assert resolvedField.field.which() == 'computedField', 'Can only omit grid if field is pre-computed'
 			computedField = resolvedField.field.computedField
-            grid = computedField.grid
+			grid = computedField.grid
 		else:
 			computedField = (await self.calculator.compute(resolvedField.field, grid)).computedField
-        
-        # If start point is not provided, use grid center
-        if startPoint is None:
-            startPoint = [0.5 * (grid.rMax + grid.rMin),
-                0, 0.5 * (grid.zMax + grid.zMin)
-            ]
-        
-        request = service.FindAxisRequest.newMessage()
-        request.startPoint = startPoint
-        request.field = computedField
-        request.stepSize = stepSize
-        request.nTurns = nTurns
-        request.nIterations = nIterations
-        
-        response = await self.tracer.findAxis(request)
-        
-        return np.asarray(response.pos), np.asarray(response.axis)
-    
-    @asyncFunction
-    async def axisCurrent(self, field, current, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10):
-        _, axis = await self.findAxis(field, grid, startPoint, stepSize, nTurns, nIterations)
-        
-        result = MagneticField()
-        
-        filField = result.initFilamentField()
-        filField.current = current
-        filField.biotSavartSettings.stepSize = stepSize
-        filField.filament.inline = axis
-        
-        return result
+		
+		# If start point is not provided, use grid center
+		if startPoint is None:
+			startPoint = [0.5 * (grid.rMax + grid.rMin),
+				0, 0.5 * (grid.zMax + grid.zMin)
+			]
+		
+		request = service.FindAxisRequest.newMessage()
+		request.startPoint = startPoint
+		request.field = computedField
+		request.stepSize = stepSize
+		request.nTurns = nTurns
+		request.nIterations = nIterations
+		
+		response = await self.tracer.findAxis(request)
+		
+		return np.asarray(response.pos), np.asarray(response.axis)
+	
+	@asyncFunction
+	async def axisCurrent(self, field, current, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10):
+		_, axis = await self.findAxis(field, grid, startPoint, stepSize, nTurns, nIterations)
+		
+		result = MagneticField()
+		
+		filField = result.initFilamentField()
+		filField.current = current
+		filField.biotSavartSettings.stepSize = stepSize
+		filField.filament.inline = axis
+		
+		return result
 	
 	@asyncFunction
 	async def _mergeGeometry(self, geometry):

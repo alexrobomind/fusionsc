@@ -2,7 +2,11 @@
 
 #include "local-vat-network.h"
 
-#include <kj/miniposix.h>
+#ifdef WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace {
 	

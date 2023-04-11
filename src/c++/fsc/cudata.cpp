@@ -2,8 +2,8 @@
 
 #include <capnp/any.h>
 
-#define CAPNP_PRIVATE
-#include <capnp/arena.h>
+/*#define CAPNP_PRIVATE
+#include <capnp/arena.h>*/
 
 namespace fsc {
 	
@@ -48,10 +48,10 @@ cupnp::Location DeviceMapping<Own<capnp::MessageBuilder>>::get() {
 }
 
 void DeviceMapping<Own<capnp::MessageBuilder>>::updateStructureOnDevice() {
-	using capnp::_::SegmentId;
+	// using capnp::_::SegmentId;
 	
 	// Get access to the underlying message
-	capnp::AnyPointer::Builder root = getHost().getRoot<capnp::AnyPointer>();
+	/*capnp::AnyPointer::Builder root = getHost().getRoot<capnp::AnyPointer>();
 	capnp::_::PointerBuilder rootInternal = capnp::_::PointerHelpers<capnp::AnyPointer>
 		::getInternalBuilder(cp(root));
 	capnp::_::BuilderArena& arena = *(rootInternal.getArena());
@@ -71,7 +71,20 @@ void DeviceMapping<Own<capnp::MessageBuilder>>::updateStructureOnDevice() {
 			));
 		}
 		segmentMappings = segmentMappingBuilder.releaseAsArray();
+	}*/
+	auto hostSegments = getHost().getSegmentsForOutput();
+	{
+		kj::Vector<DeviceMappingType<kj::Array<capnp::word>>> segmentMappingBuilder;
+		for(kj::ArrayPtr<const capnp::word> hostSegment : hostSegments) {
+			capnp::word* start = const_cast<capnp::word*>(hostSegment.begin());
+			segmentMappingBuilder.add(mapToDevice(
+				kj::ArrayPtr<capnp::word>(start, hostSegment.size()).attach(nullptr),
+				*device, true
+			));
+		}
+		segmentMappings = segmentMappingBuilder.releaseAsArray();
 	}
+	
 	
 	// Create segment table
 	{
@@ -126,10 +139,10 @@ cupnp::Location DeviceMapping<Own<capnp::MessageReader>>::get() {
 }
 
 void DeviceMapping<Own<capnp::MessageReader>>::updateStructureOnDevice() {
-	using capnp::_::SegmentId;
+	// using capnp::_::SegmentId;
 	
 	// Get access to the underlying message
-	capnp::AnyPointer::Reader root = getHost().getRoot<capnp::AnyPointer>();
+	/*capnp::AnyPointer::Reader root = getHost().getRoot<capnp::AnyPointer>();
 	capnp::_::PointerReader rootInternal = capnp::_::PointerHelpers<capnp::AnyPointer>
 		::getInternalReader(cp(root));
 	
@@ -153,6 +166,22 @@ void DeviceMapping<Own<capnp::MessageReader>>::updateStructureOnDevice() {
 		segmentMappings = segmentMappingBuilder.releaseAsArray();
 	} else {
 		KJ_FAIL_REQUIRE("Reader root had no builder arena. This should not happen.");
+	}*/
+	{
+		kj::Vector<DeviceMappingType<kj::Array<capnp::word>>> segmentMappingBuilder;
+		for(unsigned int iSegment = 0;;++iSegment) {
+			kj::ArrayPtr<const capnp::word> hostSegment = getHost().getSegment(iSegment);
+			
+			if(hostSegment == nullptr)
+				break;
+			
+			capnp::word* start = const_cast<capnp::word*>(hostSegment.begin());
+			segmentMappingBuilder.add(mapToDevice(
+				kj::ArrayPtr<capnp::word>(start, hostSegment.size()).attach(nullptr),
+				*device, true
+			));
+		}
+		segmentMappings = segmentMappingBuilder.releaseAsArray();
 	}
 	
 	// Create segment table

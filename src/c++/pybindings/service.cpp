@@ -117,7 +117,7 @@ namespace fscpy {
 			py::module_ subM = m.def_submodule("service");
 				
 			for(auto node : schemas) {
-				defaultLoader.importNodeIfRoot(node.getId(), m);
+				defaultLoader.importNodeIfRoot(node.getId(), subM);
 			}
 		}
 	}

@@ -378,9 +378,15 @@ if(FSC_WITH_PYTHON)
 		INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION src/python/fsc COMPONENT SKBUILD)
 	else()
 		include(GNUInstallDirs)
-		INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION ${Python_SITEARCH}/fsc)
+		
+		if(DEFINED FSC_PYLIB_DIR)
+			set(INSTALL_DIR ${FSC_PYLIB_DIR})
+		else()
+			set(INSTALL_DIR ${Python_SITEARCH})
+		endif()
+		INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION ${INSTALL_DIR}/fusionsc)
 
-		INSTALL(DIRECTORY src/python/ DESTINATION ${Python_SITEARCH})
+		INSTALL(DIRECTORY src/python/ DESTINATION ${INSTALL_DIR} FILES_MATCHING PATTERN "*.py")
 	endif()
 endif()
 

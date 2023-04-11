@@ -11,7 +11,7 @@ import threading
 _threadLocal = threading.local()
 
 def connect():
-	"""Connects a thread to the in-process worker"""
+    """Connects a thread to the in-process worker"""
     _threadLocal.localResources = inProcessWorker.connect()
     _threadLocal.root = _threadLocal.localResources.root().root
     
