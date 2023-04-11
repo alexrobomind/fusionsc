@@ -15,6 +15,7 @@
 #include <fsc/local.h>
 #include <fsc/common.h>
 #include <fsc/data.h>
+#include <fsc/yaml.h>
 
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/ndarrayobject.h>
@@ -303,6 +304,7 @@ struct BuilderSlot {
 	virtual void set(capnp::DynamicValue::Reader other) const = 0;
 	virtual void adopt(capnp::Orphan<DynamicValue>&& orphan) const = 0;
 	virtual DynamicValue::Builder get() const = 0;
+	virtual DynamicValue::Builder init() const = 0;
 	virtual DynamicValue::Builder init(unsigned int size) const = 0;
 	
 	virtual ~BuilderSlot() {};
@@ -320,6 +322,7 @@ struct FieldSlot : public BuilderSlot {
 	void set(DynamicValue::Reader newVal) const override { builder.set(field, newVal); }
 	void adopt(capnp::Orphan<DynamicValue>&& orphan) const override { builder.adopt(field, mv(orphan)); }
 	DynamicValue::Builder get() const override { return builder.get(field); }
+	DynamicValue::Builder init() const override { return builder.init(field); }
 	DynamicValue::Builder init(unsigned int size) const override { return builder.init(field, size); }
 };
 
@@ -335,6 +338,22 @@ struct ListItemSlot : public BuilderSlot {
 	void set(DynamicValue::Reader newVal) const override { list.set(index, newVal); }
 	void adopt(capnp::Orphan<DynamicValue>&& orphan) const override { list.adopt(index, mv(orphan)); }
 	DynamicValue::Builder get() const override { return list[index]; }
+	
+	DynamicValue::Builder init() const override { 
+		// Unfortunately, DynamicList::Builder has no init(idx) method
+		// Therefore, we need to hack one up ourselves
+		// This is only relevant for struct cases, so let's first check for that
+		if(!list.getSchema().getElementType().isStruct())
+			return get();
+		
+		// Construct a default value and assign it
+		capnp::MallocMessageBuilder tmp;
+		auto tmpRoot = tmp.initRoot<capnp::DynamicStruct>(list.getSchema().getElementType().asStruct());
+		list.set(index, tmpRoot.asReader());
+		
+		return get();
+	}
+	
 	DynamicValue::Builder init(unsigned int size) const override { return list.init(index, size); }
 	
 };
@@ -517,14 +536,41 @@ void assign(const BuilderSlot& dst, py::object object) {
 		return;
 	}
 	
-	// Attempt 2: Check if target can be converted into a reader directly
-	pybind11::detail::make_caster<DynamicValue::Reader> dynValCaster;
-	if(dynValCaster.load(object, false)) {
-		dst.set((DynamicValue::Reader&) dynValCaster);
-		return;
+	// Attempt 2: Try to parse structs / lists as YAML
+	pybind11::detail::make_caster<kj::StringPtr> strCaster;
+	if(strCaster.load(object, false) && (dst.type.isList() || dst.type.isStruct())) {
+		KJ_IF_MAYBE(pException, kj::runCatchingExceptions([&]() {
+			auto node = YAML::Load(((kj::StringPtr) strCaster).cStr());
+			
+			if(dst.type.isList()) {
+				auto asList = dst.init(node.size()).as<capnp::DynamicList>();
+				load(asList, node);
+				return;
+			} else if(dst.type.isStruct()) {
+				auto asStruct = dst.init().as<capnp::DynamicStruct>();
+				load(asStruct, node);
+				return;
+			}
+		})) {
+			auto& error = *pException;
+			assignmentFailureLog = strTree(mv(assignmentFailureLog), "Error while trying to assign from YAML: ", error, "\n");
+		} else {
+			return;
+		}
 	}
 	
-	// Attempt 3: Try to assign from a sequence
+	// Attempt 3: Check if target can be converted into a reader directly
+	pybind11::detail::make_caster<DynamicValue::Reader> dynValCaster;
+	if(dynValCaster.load(object, false)) {
+		try {
+			dst.set((DynamicValue::Reader&) dynValCaster);
+			return;
+		} catch(kj::Exception e) {
+			assignmentFailureLog = strTree(mv(assignmentFailureLog), "Error while trying to assign from primitive: ", e, "\n");
+		}
+	}
+	
+	// Attempt 4: Try to assign from a sequence
 	if(py::sequence::check_(object) && dst.type.isList()) {
 		auto asSequence = py::reinterpret_borrow<py::sequence>(object);
 		
@@ -540,7 +586,7 @@ void assign(const BuilderSlot& dst, py::object object) {
 		}
 	}
 	
-	// Attempt 4: If we are a tensor, try to convert via a numpy array
+	// Attempt 5: If we are a tensor, try to convert via a numpy array
 	if(isTensor(dst.type)) {
 		auto scalarType = dst.type.asStruct().getFieldByName("data").getType().asList().getElementType();
 		
@@ -1051,7 +1097,15 @@ void bindStructClasses(py::module_& m) {
 	});
 	
 	cDSB.def("__repr__", [](DSB& self) {
-		return kj::str(self);
+		auto emitter = kj::heap<YAML::Emitter>();
+		emitter -> SetMapFormat(YAML::Flow);
+		emitter -> SetSeqFormat(YAML::Flow);
+		
+		(*emitter) << self.asReader();
+		
+		kj::ArrayPtr<char> stringData(const_cast<char*>(emitter -> c_str()), emitter -> size() + 1);
+		
+		return kj::String(stringData.attach(mv(emitter)));
 	});
 	
 	cDSB.def("pretty", [](DSB& self) {
@@ -1125,7 +1179,15 @@ void bindStructClasses(py::module_& m) {
 	});
 	
 	cDSR.def("__repr__", [](DSR& self) {
-		return kj::str(self);
+		auto emitter = kj::heap<YAML::Emitter>();
+		emitter -> SetMapFormat(YAML::Flow);
+		emitter -> SetSeqFormat(YAML::Flow);
+		
+		(*emitter) << self;
+		
+		kj::ArrayPtr<char> stringData(const_cast<char*>(emitter -> c_str()), emitter -> size() + 1);
+		
+		return kj::String(stringData.attach(mv(emitter)));
 	});
 	
 	cDSR.def("pretty", [](DSR& self) {

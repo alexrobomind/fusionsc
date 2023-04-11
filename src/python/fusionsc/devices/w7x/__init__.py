@@ -89,11 +89,11 @@ def cadCoils(convention = '1-AA-R0004.5') -> service.W7XCoilSet:
 	
 	return coilPack
 
-def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coils = None) -> "fsc.MagneticConfig":
+def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coils = None) -> "fusionsc.flt.MagneticConfig":
 	if coils is None:
 		coils = defaultCoils
 	
-	config = fsc.MagneticConfig()
+	config = fusionsc.flt.MagneticConfig()
 	
 	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
 	cnc.coils = coils
@@ -103,11 +103,11 @@ def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coil
 	
 	return config
 
-def trimCoils(i_trim = [0, 0, 0, 0, 0], coils = None) -> "fsc.MagneticConfig":
+def trimCoils(i_trim = [0, 0, 0, 0, 0], coils = None) -> "fusionsc.flt.MagneticConfig":
 	if coils is None:
 		coils = defaultCoils
 	
-	config = fsc.MagneticConfig()
+	config = fusionsc.flt.MagneticConfig()
 	
 	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
 	cnc.coils = coils
@@ -116,11 +116,11 @@ def trimCoils(i_trim = [0, 0, 0, 0, 0], coils = None) -> "fsc.MagneticConfig":
 	
 	return config
 
-def controlCoils(i_cc = [0, 0], coils = None) -> "fsc.MagneticConfig":
+def controlCoils(i_cc = [0, 0], coils = None) -> "fusionsc.flt.MagneticConfig":
 	if coils is None:
 		coils = defaultCoils
 	
-	config = fsc.MagneticConfig()
+	config = fusionsc.flt.MagneticConfig()
 	
 	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
 	cnc.coils = coils
@@ -129,17 +129,17 @@ def controlCoils(i_cc = [0, 0], coils = None) -> "fsc.MagneticConfig":
 	
 	return config
 
-def standard(bAx = 2.52, coils = None) -> "fsc.MagneticConfig":
+def standard(bAx = 2.52, coils = None) -> "fusionsc.flt.MagneticConfig":
 	return mainField([15000 * bAx / 2.52] * 5, [0] * 2, coils = coils)
 
-def highMirror(bAx = 2.72, coils = None)  -> "fsc.MagneticConfig":
+def highMirror(bAx = 2.72, coils = None)  -> "fusionsc.flt.MagneticConfig":
 	a = bAx / 2.3
 	return mainField([13000 * a, 13260 * a, 14040 * a, 12090 * a, 10959 * a], [0] * 2, coils = coils)
 
-def highIota(bAx = 2.72, coils = None) -> "fsc.MagneticConfig":
+def highIota(bAx = 2.72, coils = None) -> "fusionsc.flt.MagneticConfig":
 	return mainField([14814.81 * field / 2.43] * 5, [-10222.22 * field / 2.43] * 2, coils = coils)
 
-def lowIota(bAx = 2.72, coils = None) -> "fsc.MagneticConfig":
+def lowIota(bAx = 2.72, coils = None) -> "fusionsc.flt.MagneticConfig":
 	return mainField([12222.22 * field / 2.45] * 5, [9166.67 * field / 2.45] * 2, coils = coils)
 
 coil_conventions = ['coilsdb', '1-AA-R0004.5', 'archive']
@@ -152,7 +152,7 @@ def processCoilConvention(convention):
 	return convention
 
 def components(ids = [], name = None):
-	result = fsc.Geometry()
+	result = fusionsc.geometry.Geometry()
 	result.geometry.componentsDBMeshes = ids
 	
 	if name:
@@ -163,7 +163,7 @@ def components(ids = [], name = None):
 	return result
 
 def assemblies(ids = [], name = None):
-	result = fsc.Geometry()
+	result = fusionsc.geometry.Geometry()
 	result.geometry.componentsDBAssemblies = ids
 	
 	if name:
@@ -178,7 +178,7 @@ def divertor(campaign = 'OP21'):
         return components(range(165, 170), 'Divertor TDU')
     
     if campaign == 'OP21':
-        return fsc.Geometry(w7xnative.op21Divertor())
+        return fusionsc.geometry.Geometry(w7xnative.op21Divertor())
     
     raise "Unknown campaign " + campaign
 
@@ -187,7 +187,7 @@ def baffles(campaign = 'OP21'):
         return components(range(320, 325), 'OP1.2 Baffles') + components(range(325, 330), 'OP1.2 Baffle Covers')
     
     if campaign == 'OP21':
-        return fsc.Geometry(w7xnative.op21BafflesNoHoles())
+        return fusionsc.geometry.Geometry(w7xnative.op21BafflesNoHoles())
     
     raise "Unknown campaign " + campaign
 
@@ -196,7 +196,7 @@ def heatShield(campaign = 'OP21'):
         return components(range(330, 335), 'OP1.2 Heat Shield')
     
     if campaign == 'OP21':
-        return fsc.Geometry(w7xnative.op21HeatShieldNoHoles())
+        return fusionsc.geometry.Geometry(w7xnative.op21HeatShieldNoHoles())
     
     raise "Unknown campaign " + campaign
 
