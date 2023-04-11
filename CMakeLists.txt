@@ -147,6 +147,16 @@ add_vendored_dependency(
 )
 unset(WITH_ZLIB)
 
+add_vendored_dependency(
+	PREFIX vendor/yaml-cpp
+	NAME yaml-cpp
+	VERSION 0.7
+)
+
+if(yaml-cpp_VENDORED)
+	INSTALL(TARGETS yaml-cpp EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
+
 #CPMAddPackage(
 #  NAME CapnProto
 #  GIT_REPOSITORY https://github.com/capnproto/capnproto.git
@@ -265,6 +275,7 @@ target_link_libraries(
 	Libssh2::libssh2
 	SQLite::SQLite3
 	ZLIB::ZLIB
+	yaml-cpp::yaml-cpp
 )
 
 if(FSC_WITH_CUDA)
