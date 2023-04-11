@@ -12,7 +12,11 @@ namespace {
 		KJ_REQUIRE(!type.isList());
 		
 		if(type.isEnum()) {
-			return capnp::DynamicEnum(type.asEnum().getEnumerantByName(src.as<std::string>()));
+			KJ_IF_MAYBE(pEnumerant, type.asEnum().findEnumerantByName(src.as<std::string>())) {
+				return capnp::DynamicEnum(*pEnumerant);
+			} else {
+				return capnp::DynamicEnum(type.asEnum(), src.as<uint16_t>());
+			}
 		}
 		
 		if(type.isVoid()) return capnp::Void();		
@@ -32,9 +36,9 @@ namespace {
 		HANDLE_TYPE(isInt64, int64_t);
 		
 		HANDLE_TYPE(isUInt8, unsigned int);
-		HANDLE_TYPE(isUInt16, int16_t);
-		HANDLE_TYPE(isUInt32, int32_t);
-		HANDLE_TYPE(isUInt64, int64_t);
+		HANDLE_TYPE(isUInt16, uint16_t);
+		HANDLE_TYPE(isUInt32, uint32_t);
+		HANDLE_TYPE(isUInt64, uint64_t);
 		#undef HANDLE_TYPE
 		
 		return capnp::Void();
@@ -56,7 +60,7 @@ namespace {
 				break;
 				
 			case DynamicValue::VOID:
-				emitter << "void";
+				emitter << YAML::Null;
 				break;
 				
 			case DynamicValue::DATA: {
@@ -67,9 +71,18 @@ namespace {
 			}
 			
 			case DynamicValue::TEXT:
-			case DynamicValue::ENUM:
 				emitter << val.as<capnp::Text>().cStr();
 				break;
+				
+			case DynamicValue::ENUM: {
+				auto enumerant = val.as<capnp::DynamicEnum>().getEnumerant();
+				KJ_IF_MAYBE(pEn, enumerant) {
+					emitter << pEn -> getProto().getName().cStr();
+				} else {
+					emitter << val.as<capnp::DynamicEnum>().getRaw();
+				}
+				break;
+			}
 			
 			case DynamicValue::BOOL:
 				emitter << val.as<bool>();
@@ -121,6 +134,14 @@ void load(DynamicList::Builder dst, YAML::Node src) {
 }
 
 void load(DynamicStruct::Builder dst, YAML::Node src) {
+	// If the node is scalar, this means we set that field with default value
+	if(src.IsScalar()) {
+		auto field = dst.getSchema().getFieldByName(src.as<std::string>());
+		dst.init(field);
+		
+		return;
+	}
+	
 	// Interpret nodes as map
 	for(auto it = src.begin(); it != src.end(); ++it) {
 		// Extract key and value
@@ -209,6 +230,20 @@ YAML::Emitter& operator<<(YAML::Emitter& dst, DynamicList::Reader src) {
 }
 	
 YAML::Emitter& operator<<(YAML::Emitter& dst, DynamicStruct::Reader src) {
+	auto structSchema = src.getSchema();
+	
+	// If we have no non-union fields and the active union field is a
+	// default-valued one, then we write only the field name (reads nicer)
+	if(structSchema.getNonUnionFields().size() == 0) {
+		auto maybeActive = src.which();
+		KJ_IF_MAYBE(pActive, maybeActive) {
+			auto& active = *pActive;
+			if(!src.has(active, capnp::HasMode::NON_DEFAULT)) {
+				dst << active.getProto().getName();
+				return dst;
+			}
+		}
+	}
 	dst << YAML::BeginMap;
 	
 	auto emitField = [&](capnp::StructSchema::Field field) {
@@ -238,9 +273,11 @@ YAML::Emitter& operator<<(YAML::Emitter& dst, DynamicStruct::Reader src) {
 			emitPrimitive(dst, val);
 		}
 	};
-	
-	auto structSchema = src.getSchema();
+		
 	for(auto field : structSchema.getNonUnionFields()) {
+		// There is no point in emitting a non-union void field.
+		if(field.getType().isVoid())
+			continue;
 		emitField(field);
 	}
 	

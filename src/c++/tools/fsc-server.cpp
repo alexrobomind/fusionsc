@@ -2,6 +2,7 @@
 #include <fsc/services.h>
 #include <fsc/data.h>
 #include <fsc/networking.h>
+#include <fsc/yaml.h>
 
 #include <capnp/rpc-twoparty.h>
 
@@ -34,6 +35,8 @@ struct MainCls {
 	Maybe<uint64_t> port = nullptr;
 	kj::String address = kj::heapString("0.0.0.0");
 	
+	OneOf<decltype(nullptr), LocalConfig::Reader, kj::Path> config = nullptr;
+	
 	MainCls(kj::ProcessContext& context):
 		context(context)
 	{}
@@ -47,22 +50,57 @@ struct MainCls {
 		port = val.parseAs<uint64_t>();
 		return true;
 	}
+	
+	bool setBuiltin(kj::StringPtr name) {
+		KJ_REQUIRE(config.is<decltype(nullptr)>(), "Can only specify one built-in profile OR settings file");
+		
+		if(name == "loginNode")
+			config = LOGIN_NODE_PROFILE.get();
+		else if(name == "computeNode")
+			config = COMPUTE_NODE_PROFILE.get();
+		else {
+			KJ_FAIL_REQUIRE("Invalid profile name, must be 'loginNode' or 'computeNode'", name);
+		}
+		
+		return true;
+	}
+	
+	bool setFile(kj::StringPtr fileName) {
+		KJ_REQUIRE(config.is<decltype(nullptr)>(), "Can only specify one built-in profile OR settings file");
+		config = kj::Path(nullptr).evalNative(fileName);
+		return true;
+	}
 		
 	bool run() {
 		auto l = newLibrary();
 		auto lt = l -> newThread();
 		auto& ws = lt->waitScope();
 		
-		NetworkInterface::Client networkInterface = kj::heap<LocalNetworkInterface>();
+		Temporary<LocalConfig> loadedConfig;
 		
-		Temporary<LocalConfig> config;
+		if(config.is<kj::Path>()) {
+			auto configFile = lt -> filesystem().getCurrent().openFile(config.get<kj::Path>());
+			auto configString = configFile -> readAllText();
+			YAML::Node root = YAML::Load(configString.cStr());
+			load(loadedConfig, root);
+		} else if(config.is<LocalConfig::Reader>()) {
+			loadedConfig = config.get<LocalConfig::Reader>();
+		}
+		
+		// Dump configuration to console
+		std::cout << "Configuration: " << std::endl;
+		YAML::Emitter emitter(std::cout);
+		emitter << loadedConfig.asReader();
+		std::cout << std::endl;
+		
+		NetworkInterface::Client networkInterface = kj::heap<LocalNetworkInterface>();
 		
 		auto listenRequest = networkInterface.listenRequest();
 		KJ_IF_MAYBE(pPort, port) {
 			listenRequest.setPortHint(*pPort);
 		}
 		listenRequest.setHost(address);
-		listenRequest.setListener(kj::heap<RootServiceProvider>(config));
+		listenRequest.setListener(kj::heap<RootServiceProvider>(loadedConfig));
 		
 		auto openPort = listenRequest.sendForPipeline().getOpenPort();
 		auto info = openPort.getInfoRequest().send().wait(ws);
@@ -89,6 +127,8 @@ struct MainCls {
 		return kj::MainBuilder(context, "FSC server", "Creates an FSC server")
 			.addOptionWithArg({"-a", "address"}, KJ_BIND_METHOD(*this, setAddress), "<address>", "Address to listen on, defaults to 0.0.0.0")
 			.addOptionWithArg({"-p", "port"}, KJ_BIND_METHOD(*this, setPort), "<port>", "Port to listen on, defaults to system-assigned")
+			.addOptionWithArg({"-b", "builtin"}, KJ_BIND_METHOD(*this, setBuiltin), "<built-in>", "Name of built-in profile, either 'computeNode' or 'loginNode'")
+			.expectOptionalArg("<settings file>", KJ_BIND_METHOD(*this, setFile))
 			.callAfterParsing(KJ_BIND_METHOD(*this, run))
 			.build();
 	}

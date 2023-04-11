@@ -22,6 +22,13 @@ enum ComputationDeviceType {
 
 struct LocalConfig {
 	preferredDeviceType @0 : ComputationDeviceType;
+	enableCompute @1 : Bool = true;
+	enableStorage @2 : Bool = true;
+	
+	jobScheduler : union {
+		system @3 : Void;
+		slurm @4 : Void;
+	}
 }
 
 struct NodeInfo {
@@ -42,6 +49,11 @@ interface RootService {
 	
 	getInfo @7 () -> NodeInfo;
 }
+
+# Default profiles
+const computeNodeProfile : LocalConfig = (enableStorage = false, preferredDeviceType = gpu);
+const loginNodeProfile : LocalConfig = (enableCompute = false, jobScheduler = (slurm = void));
+
 
 # Extended local interface to provide access to the local file system and network connections
 #
