@@ -159,7 +159,7 @@ namespace {
 	};
 	
 	Promise<void> delay(double seconds) {
-		uint64_t timeInNS = (uint64_t) seconds * 1e9;
+		uint64_t timeInNS = static_cast<uint64_t>(seconds * 1e9);
 		auto targetPoint = kj::systemPreciseMonotonicClock().now() + timeInNS * kj::NANOSECONDS;
 		
 		return getActiveThread().timer().atTime(targetPoint);

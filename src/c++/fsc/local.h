@@ -80,7 +80,6 @@ private:
 	
 	Own<kj::CrossThreadPromiseFulfiller<void>> stewardFulfiller;
 	kj::MutexGuarded<Maybe<Own<const kj::Executor>>> stewardExecutor;
-	Promise<void> stewardTask;
 	kj::Thread stewardThread;
 	
 	// This loopback reference will be nulled by he steward once it has finished

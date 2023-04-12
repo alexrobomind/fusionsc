@@ -16,7 +16,6 @@ LibraryHandle::LibraryHandle(bool elevated) :
 	shutdownMode(false),
 	// loopbackReferenceForStewardStartup(addRef()),
 	sharedData(kj::atomicRefcounted<SharedData>()),
-	stewardTask(nullptr),
 	stewardThread([this, elevated]() { runSteward(elevated); })
 {
 	if(elevated) {
@@ -30,11 +29,10 @@ LibraryHandle::LibraryHandle(bool elevated) :
 	
 	stewardThread.detach();
 	auto& st = steward();
-	stewardTask = st.executeSync([shared = kj::atomicAddRef(*sharedData)]() mutable {
+	st.executeSync([shared = kj::atomicAddRef(*sharedData)]() mutable {
 		Promise<void> promise = LocalDataStore::gcLoop(shared -> store)
 		.attach(mv(shared));
 		getActiveThread().detach(mv(promise));
-		return READY_NOW;
 	});
 };
 
