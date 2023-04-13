@@ -741,9 +741,16 @@ struct FLTImpl : public FLT::Server {
 			
 			return req.send()
 			.then([ctx](capnp::Response<FLTResponse> response) mutable {
+				// Extract field line
 				auto axis = response.getFieldLines();
-				
 				ctx.getResults().setAxis(response.getFieldLines());
+				
+				// Compute mean field along axis
+				double accum = 0;
+				for(double fs : response.getFieldStrengths().getData()) {
+					accum += fs;
+				}
+				ctx.getResults().setMeanField(accum / response.getFieldStrengths().getData().size());
 			});
 		};
 		
