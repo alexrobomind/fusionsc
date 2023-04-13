@@ -135,6 +135,9 @@ struct FLTResponse {
 	# Tensor of shape startPoints.shape + [max. field line length]
 	fieldLines @7 : Data.Float64Tensor;
 	
+	# Tensor of shape startPoints.shape[1:] + [max. field line length]
+	fieldStrengths @8 : Data.Float64Tensor;
+	
 	rngSeed @6 : UInt64;
 }
 
@@ -148,7 +151,7 @@ struct FindAxisRequest {
 
 interface FLT {
 	trace @0 FLTRequest -> FLTResponse;
-	findAxis @1 FindAxisRequest -> (pos : List(Float64), axis : Data.Float64Tensor);
+	findAxis @1 FindAxisRequest -> (pos : List(Float64), axis : Data.Float64Tensor, meanField : Float64);
 }
 
 struct MappingRequest {
@@ -210,7 +213,9 @@ struct FLTKernelEvent {
 			meshIndex @6 : UInt64;
 			elementIndex @7 : UInt64;
 		}
-		record @8 : Void;
+		record : group {
+			fieldStrength @8 : Float64;
+		}
 	}
 }
 

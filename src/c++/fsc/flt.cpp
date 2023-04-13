@@ -620,6 +620,9 @@ struct FLTImpl : public FLT::Server {
 					Tensor<double, 3> fieldLines(nRecorded, nStartPoints, 3);
 					fieldLines.setConstant(std::nan(""));
 					
+					Tensor<double, 2> fieldStrengths(nRecorded, nStartPoints);
+					fieldStrengths.setConstant(std::nan(""));
+					
 					for(auto iStartPoint : kj::range(0, nStartPoints)) {
 						auto entry = kData[iStartPoint].asReader();
 						auto events = entry.getEvents();
@@ -634,11 +637,14 @@ struct FLTImpl : public FLT::Server {
 							for(int32_t iDim = 0; iDim < 3; ++iDim)
 								fieldLines(iRecord, iStartPoint, iDim) = loc[iDim];
 							
+							fieldStrengths(iRecord, iStartPoint) = evt.getRecord().getFieldStrength();
+							
 							++iRecord;
 						}
 					}
 					
 					writeTensor(fieldLines, results.getFieldLines());
+					writeTensor(fieldStrengths, results.getFieldStrengths());
 				}
 				
 				auto pcHitsShape = results.getPoincareHits().initShape(startPointShape.size() + 2);
@@ -652,6 +658,12 @@ struct FLTImpl : public FLT::Server {
 				for(auto i : kj::indices(startPointShape))
 					fieldLinesShape.set(i, startPointShape[i]);
 				fieldLinesShape.set(startPointShape.size(), nRecorded);
+				
+				auto fieldStrengthsShape = results.getFieldStrengths().initShape(startPointShape.size());
+				for(auto i : kj::range(0, startPointShape.size() - 1)) {
+					fieldStrengthsShape.set(i, startPointShape[i + 1]);
+				}
+				fieldStrengthsShape.set(startPointShape.size() - 1, nRecorded);
 
 				results.getEndPoints().setShape(startPointShape);
 				results.getEndPoints().getShape().set(0, 4);

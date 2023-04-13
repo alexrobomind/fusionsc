@@ -208,7 +208,10 @@ namespace fsc {
 				FSC_FLT_RETURN(NAN_ENCOUNTERED);
 			
 			if(request.getRecordEvery() != 0 && (step % request.getRecordEvery() == 0)) {
-				currentEvent().setRecord();
+				auto rec = currentEvent().mutateRecord();
+				V3 fv = interpolator(fieldData, x);
+				rec.setFieldStrength(std::sqrt(fv[0] * fv[0] + fv[1] * fv[1] + fv[2] * fv[2]));
+				
 				FSC_FLT_LOG_EVENT(x)
 			}
 						
