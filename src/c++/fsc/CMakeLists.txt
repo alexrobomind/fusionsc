@@ -18,6 +18,8 @@ set(
 	magnetics.capnp
 	geometry.capnp
 	
+	vmec.capnp
+	
 	http.capnp
 	offline.capnp
 	
@@ -130,6 +132,9 @@ add_library(
 	
 	index.h
 	index.cpp
+	
+	vmec.h
+	vmec.cpp
 	
 	geometry.h
 	geometry.cpp

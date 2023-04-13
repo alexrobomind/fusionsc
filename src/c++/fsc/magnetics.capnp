@@ -43,6 +43,7 @@ interface FieldResolver {
 
 interface FieldCalculator {
 	compute @0 (field : MagneticField, grid : ToroidalGrid) -> (computedField : ComputedField);
+	evaluateXYZ @1 (field : ComputedField, points : Float64Tensor) -> (values : Float64Tensor);
 }
 
 struct BiotSavartSettings {
