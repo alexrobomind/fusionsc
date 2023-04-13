@@ -90,6 +90,28 @@ struct FLTRequest {
 	forward @17 : Bool = true;
 	
 	recordEvery @18 : UInt32;
+	
+	fieldLineAnalysis : union {
+		noTask @19 : Void;
+		calculateIota : group {
+			unwrapEvery @20 : UInt32;
+			rAxis @21 : List(Float64);
+			zAxis @22 : List(Float64);
+		}
+		calculateFourierModes : group {
+			rAxis @23 : List(Float64);
+			zAxis @24 : List(Float64);
+			
+			# Tensor of shape startPointShape[1:]
+			iota @25 : Data.Float64Tensor;
+			
+			# Maximum n number to calculate
+			nMax @26 : UInt32 = 1;
+			
+			# Maximum m number to calculate
+			mMax @27 : UInt32 = 0;
+		}
+	}
 }
 
 
@@ -147,6 +169,7 @@ struct FindAxisRequest {
 	stepSize @2 : Float64 = 0.001;
 	nTurns @3 : UInt32 = 10;
 	nIterations @4 : UInt32 = 10;
+	nPhi @5 : UInt64 = 20;
 }
 
 interface FLT {
@@ -196,6 +219,9 @@ struct FLTKernelState {
 	
 	displacementCount @9 : UInt32;
 	rngState @10 : Random.MT19937State;
+	
+	theta @11 : Float64;
+	iota @12 : Float64;
 }
 
 struct FLTKernelEvent {

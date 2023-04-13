@@ -701,23 +701,24 @@ struct FLTImpl : public FLT::Server {
 			req.setStepSize(params.getStepSize());
 			req.setField(params.getField());
 			
-			auto planes = req.initPlanes(1);
-			planes[0].getOrientation().setPhi(phi);
+			size_t nSym = params.getField().getGrid().getNSym();
+			auto planes = req.initPlanes(nSym);
+			for(auto i : kj::indices(planes)) {
+				planes[i].getOrientation().setPhi(phi + i * 2 * pi / nSym);
+			}
 			
 			return req.send()
-			.then([phi](capnp::Response<FLTResponse> response) mutable {
+			.then([phi, nSym](capnp::Response<FLTResponse> response) mutable {
 				// After tracing, take mean of points
 				Tensor<double, 3> result;
 				readTensor(response.getPoincareHits(), result);
-				KJ_REQUIRE(result.dimension(1) == 1);
+				KJ_REQUIRE(result.dimension(1) == nSym);
 				KJ_REQUIRE(result.dimension(2) == 5);
 				
-				Tensor<double, 1> mean = result.mean(Eigen::array<int, 2>{0, 1});
-				double x = mean[0];
-				double y = mean[1];
-				double z = mean[2];
+				Tensor<double, 0> rMean = (result.chip(0, 2).square() + result.chip(1, 2).square()).sqrt().mean();
+				Tensor<double, 0> zMean = result.chip(2, 2).mean();
 				
-				return IterResult { sqrt(x * x + y * y), z };
+				return IterResult { rMean(), zMean() };
 			});
 		};
 		
@@ -738,12 +739,22 @@ struct FLTImpl : public FLT::Server {
 			req.setField(params.getField());
 			
 			req.setRecordEvery(1);
+			auto nPhi = params.getNPhi();
+			auto planes = req.initPlanes(nPhi);
+			for(auto i : kj::indices(planes))
+				planes[i].getOrientation().setPhi(2 * i * pi / nPhi);
 			
 			return req.send()
-			.then([ctx](capnp::Response<FLTResponse> response) mutable {
+			.then([ctx, nPhi](capnp::Response<FLTResponse> response) mutable {
 				// Extract field line
-				auto axis = response.getFieldLines();
-				ctx.getResults().setAxis(response.getFieldLines());
+				Tensor<double, 3> result;
+				readTensor(response.getPoincareHits(), result);
+				KJ_REQUIRE(result.dimension(0) == 1);    // nTurns
+				KJ_REQUIRE(result.dimension(1) == nPhi); // nPlanes
+				KJ_REQUIRE(result.dimension(2) == 5);    // x, y, z, lc_fwd, lc_bwd
+				
+				Tensor<double, 2> subRegion = result.chip(0, 0).slice(Eigen::array<int64_t, 2> {0, 0}, Eigen::array<int64_t, 2> {(int) nPhi, 3});
+				writeTensor(subRegion, ctx.getResults().getAxis());
 				
 				// Compute mean field along axis
 				double accum = 0;

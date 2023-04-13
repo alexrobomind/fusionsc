@@ -84,6 +84,7 @@ namespace fsc {
 		using Num = double;
 		using V3 = Vec3<Num>;
 		using V2 = Vec2<Num>;
+		using V1 = Vec1<Num>;
 		
 		auto kernelData = *pKernelData;
 		auto kernelRequest   = *pRequest;
@@ -125,6 +126,43 @@ namespace fsc {
 		
 		auto grid = request.getField().getGrid();
 		SlabFieldInterpolator<InterpolationStrategy> interpolator(InterpolationStrategy(), grid);
+		
+		// Set up the magnetic axis
+		cupnp::List<double> rAxis(0, nullptr);
+		cupnp::List<double> zAxis(0, nullptr);
+		auto rAxisAt = [&](int i) {
+			i %= rAxis.size();
+			i += rAxis.size();
+			i %= rAxis.size();
+			return rAxis[i];
+		};
+		auto zAxisAt = [&](int i) {
+			i %= zAxis.size();
+			i += zAxis.size();
+			i %= zAxis.size();
+			return zAxis[i];
+		};
+		
+		// Set up unwrapping configuration
+		const double iota = state.getIota();
+		double theta = state.getTheta();
+		uint32_t unwrapEvery = 0;
+		
+		using AxisInterpolator = NDInterpolator<1, C1CubicInterpolation<double>>;
+		AxisInterpolator axisInterpolator(C1CubicInterpolation<double>(), { AxisInterpolator::Axis(0, 2 * pi, rAxis.size()) });
+		
+		{
+			auto fla = request.getFieldLineAnalysis();
+			if(fla.isCalculateIota()) {
+				rAxis = fla.getCalculateIota().getRAxis();
+				zAxis = fla.getCalculateIota().getZAxis();
+				unwrapEvery = fla.getCalculateIota().getUnwrapEvery();
+			} else if(fla.isCalculateFourierModes()) {
+				rAxis = fla.getCalculateFourierModes().getRAxis();
+				zAxis = fla.getCalculateFourierModes().getZAxis();
+			}
+		}
+		
 		
 		bool processDisplacements = perpModel.hasIsotropicDiffusionCoefficient();
 		
@@ -207,6 +245,7 @@ namespace fsc {
 			if(x != x)
 				FSC_FLT_RETURN(NAN_ENCOUNTERED);
 			
+			// Position recording
 			if(request.getRecordEvery() != 0 && (step % request.getRecordEvery() == 0)) {
 				auto rec = currentEvent().mutateRecord();
 				V3 fv = interpolator(fieldData, x);
@@ -217,6 +256,22 @@ namespace fsc {
 						
 			Num r = std::sqrt(x[0] * x[0] + x[1] * x[1]);
 			Num z = x[2];
+			
+			// Unwrapping of phase
+			if(unwrapEvery != 0 && (step % unwrapEvery == 0)) {
+				double phi = atan2(x[1], x[0]);
+				double rAxisVal = axisInterpolator(rAxisAt, V1(phi));
+				double zAxisVal = axisInterpolator(zAxisAt, V1(phi));
+				
+				double dr = r - rAxisVal;
+				double dz = z - zAxisVal;
+				
+				double newTheta = atan2(dz, dr);
+				double dTheta = newTheta - theta;
+				dTheta = fmod(dTheta + pi, 2 * pi) - pi;
+				
+				theta += dTheta;
+			}
 			
 			// KJ_DBG("In grid?", r, z, grid.getRMin(), grid.getRMax(), grid.getZMin(), grid.getZMax());
 			
