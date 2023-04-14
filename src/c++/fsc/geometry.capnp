@@ -142,6 +142,19 @@ struct Geometry {
 		merged @6 : DataRef(MergedGeometry);
 		indexed @7 : IndexedGeometry;
 		
+		wrapToroidally : group {
+			r @13 : List(Float64);
+			z @14 : List(Float64);
+			nPhi @15 : UInt32;
+			union {
+				fullTorus @10 : Void;
+				phiRange : group {
+					phiStart @11 : Float64;
+					phiEnd @12 : Float64;
+				}
+			}
+		}
+		
 		# ====== Device-specific ======
 		# ----------- W7-X ------------
 		

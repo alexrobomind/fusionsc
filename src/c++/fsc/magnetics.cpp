@@ -286,7 +286,8 @@ struct CalculationSession : public FieldCalculator::Server {
 				return processField(calculator, cached.getNested(), scale);
 			}
 			case MagneticField::AXISYMMETRIC_EQUILIBRIUM: {
-				
+				calculator.equilibrium(scale, node.getAxisymmetricEquilibrium());
+				return READY_NOW;
 			}
 			default:
 				KJ_FAIL_REQUIRE("Unknown magnetic field node encountered. This either indicates that a device-specific node was not resolved, or a generic node from a future library version was presented");

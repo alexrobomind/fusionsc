@@ -129,11 +129,14 @@ class MagneticConfig:
 		await data.writeArchive.asnc(self.field, filename)
 	
 	@staticmethod
-	def fromGFile(name):
+	def fromEFit(name):
 		with open(name, "r") as f:
 			fileContents = f.read()
+			
+		result = MagneticConfig()
+		result.field.axisymmetricEquilibrium = axisymmetricEquilibrium = efit.eqFromGFile(fileContents)
 		
-		return MagneticConfig(efit.eqFromGFile(fileContents))
+		return result
 
 def symmetrize(points, nSym = 1, stellaratorSymmetric = False):
 	x, y, z = points
@@ -210,6 +213,82 @@ async def visualizeMapping(mapping, nPoints = 50):
 		for f in filArray
 	])
 
+@asyncFunction
+async def visualizeCoils(field):
+	"""Convert the given geometry into a PyVista / VTK mesh"""
+	import numpy as np
+	import pyvista as pv
+	
+	coils = []
+	
+	async def processCoil(coil):
+		if coil.which() == 'inline':
+			coils.append(np.asarray(coil.inline))
+			return
+		
+		if coil.which() == 'ref':
+			local = await data.download(coil.ref)
+			await processCoil(local)
+			return
+		
+		if coil.which() == 'nested':
+			await processCoil(coil.nested)
+			return
+		
+		print("Warning: Unresolved nodes can not be visualized")
+			
+	
+	async def process(field):
+		if field.which() == 'sum':
+			for x in field.sum:
+				await process(x)
+			return
+		
+		if field.which() == 'ref':
+			local = await data.download(field.ref)
+			await process(local)
+			return
+		
+		if field.which() == 'scaleBy':
+			await process(field.scaleBy.field)
+			return
+		
+		if field.which() == 'invert':
+			await process(field.invert)
+			return
+		
+		if field.which() == 'nested':
+			await process(field.nested)
+			return
+		
+		if field.which() == 'cached':
+			await process(field.cached.nested)
+			return
+		
+		if field.which() == 'filamentField':
+			await processCoil(field.filamentField.filament)
+			return
+		
+		print("Warning: Unresolved nodes can not be visualized")
+	
+	resolved = await field.resolve.asnc()
+	await process(resolved.field)
+	
+	def makeCoil(coil):
+		vertexArray = np.asarray(coil)
+		nPoints = vertexArray.shape[0]
+		
+		indices = [nPoints] + list(range(nPoints))
+		
+		return pv.PolyData(vertexArray, lines = np.asarray(indices))
+		
+	dataSets = [
+		makeCoil(coil)
+		for coil in coils
+	]
+	
+	return pv.MultiBlock(dataSets)
+
 class FLT:
 	backend: service.RootService.Client
 	
@@ -249,9 +328,7 @@ class FLT:
 		return np.asarray(fieldData).transpose([3, 0, 1, 2])
 	
 	@asyncFunction
-	async def computeField(self, config, grid):
-		from . import MagneticConfig
-		
+	async def computeField(self, config, grid):		
 		resolved = await config.resolve.asnc()
 		computed = (await self.calculator.compute(resolved.field, grid)).computedField
 		

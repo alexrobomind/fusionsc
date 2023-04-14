@@ -206,6 +206,8 @@ Promise<void> GeometryLibImpl::collectTagNames(Geometry::Reader input, kj::HashS
 			return handleMerged(input.getMerged());
 		case Geometry::INDEXED:
 			return handleMerged(input.getIndexed().getBase());
+		case Geometry::WRAP_TOROIDALLY:
+			return READY_NOW;
 			
 		default:
 			KJ_FAIL_REQUIRE("Unknown geometry node type encountered during merge operation. Likely an unresolved node", input.which());
@@ -349,6 +351,84 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 		
 		case Geometry::INDEXED:
 			return handleMerged(input.getIndexed().getBase(), tagValues.asReader()).attach(mv(tagValues));
+		
+		case Geometry::WRAP_TOROIDALLY: {
+			auto wt = input.getWrapToroidally();
+			
+			double phiStart = 0;
+			double phiEnd = 2 * pi;
+			
+			uint32_t nPhi = wt.getNPhi();
+			KJ_REQUIRE(nPhi > 1);
+			if(wt.isPhiRange()) {
+				auto pr = wt.getPhiRange();
+				phiStart = pr.getPhiStart();
+				phiEnd = pr.getPhiEnd();
+			}
+			
+			auto r = wt.getR();
+			auto z = wt.getZ();
+			KJ_REQUIRE(z.size() == r.size());
+			
+			uint32_t nVerts = r.size();
+			KJ_REQUIRE(nVerts > 1);
+			
+			uint32_t nLines = nVerts - 1;
+			
+			// Create vertices
+			Tensor<double, 3> vertices(3, nVerts, nPhi + 1);
+			const double dPhi = (phiEnd - phiStart) / nPhi;
+			for(auto iPhi : kj::range(0, nPhi + 1)) {
+				double phi = iPhi * dPhi + phiStart;
+				
+				for(auto iVert : kj::indices(r)) {					
+					vertices(0, iVert, iPhi) = r[iVert] * cos(phi);
+					vertices(1, iVert, iPhi) = r[iVert] * sin(phi);
+					vertices(2, iVert, iPhi) = z[iVert];
+				}
+			}
+			KJ_DBG("Vertices generated");
+			
+			// Create triangles
+			Tensor<uint32_t, 4> triangles(3, 2, nLines, nPhi);
+			for(auto iPhi : kj::range(0, nPhi)) {
+				for(auto iLine : kj::range(0, nLines)) {
+					uint32_t v1 = iPhi * nVerts + iLine;
+					uint32_t v2 = v1 + 1;
+					uint32_t v3 = v2 + nVerts;
+					uint32_t v4 = v3 - 1;
+					
+					triangles(0, 0, iLine, iPhi) = v1;
+					triangles(1, 0, iLine, iPhi) = v2;
+					triangles(2, 0, iLine, iPhi) = v3;
+					
+					triangles(0, 1, iLine, iPhi) = v3;
+					triangles(1, 1, iLine, iPhi) = v4;
+					triangles(2, 1, iLine, iPhi) = v1;
+				}
+			}
+			KJ_DBG("Triangles generated");
+			
+			using A = Eigen::array<int64_t, 2>;
+			
+			Tensor<double, 2> flatVerts = vertices.reshape(A({3, nVerts * (nPhi + 1)}));
+			KJ_DBG("Verts reshaped");
+			
+			Temporary<Mesh> tmpMesh;
+			writeTensor(flatVerts, tmpMesh.getVertices());
+			KJ_DBG("Verts written");
+			
+			auto indices = tmpMesh.initIndices(3 * 2 * nLines * nPhi);
+			for(auto i : kj::indices(indices))
+				indices.set(i, triangles.data()[i]);
+			KJ_DBG("Triangles written");
+			
+			tmpMesh.setTriMesh();
+			
+			handleMesh(tmpMesh, tagValues);
+			KJ_DBG(tmpMesh.asReader());
+			return READY_NOW;
+		}
 			
 		default:
 			KJ_FAIL_REQUIRE("Unknown geometry node type encountered during merge operation. Likely an unresolved node", input.which());

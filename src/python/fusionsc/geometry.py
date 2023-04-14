@@ -1,8 +1,10 @@
 """Geometry processing
 """
 
-from . import native
 from . import data
+from . import resolve
+from . import service
+from . import inProcess
 
 from .asnc import asyncFunction
 
@@ -11,7 +13,7 @@ import numpy as np
 class Geometry:
 	"""A pythonic wrapper around fusion.service.Geometry.Builder"""
 	def __init__(self, geo = None):
-		self._holder = native.service.Geometry.newMessage()
+		self._holder = service.Geometry.newMessage()
 		
 		if geo is None:
 			self._holder.initNested()
@@ -106,7 +108,7 @@ class Geometry:
 				isTrimesh = False
 		
 		
-		mesh = native.Mesh.initMessage()
+		mesh = service.Mesh.initMessage()
 		mesh.vertices = vertices
 		mesh.indices = meshIndices
 		
@@ -129,19 +131,40 @@ class Geometry:
 		geo = await data.readArchive.asnc(filename)
 		return Geometry(geo)
 	
+	@staticmethod
+	def wrapToroidally(r, z, nPhi = 100, phi1 = None, phi2 = None, tags = {}):
+		result = Geometry()
+		
+		wt = result.geometry.initWrapToroidally()
+		wt.nPhi = nPhi
+		wt.r = r
+		wt.z = z
+		
+		if phi1 is not None:
+			range = wt.initPhiRange()
+			range.phiStart = phi1
+			range.phiEnd = phi2
+	
+		outTags = result.geometry.initTags(len(tags))
+		for i, name in enumerate(tags):
+			outTags[i].name = name
+			outTags[i].value = asTagValue(tags[name])
+		
+		return result
+	
 	@asyncFunction
 	async def save(self, filename):
 		await data.writeArchive.asnc(self.geometry, filename)
 
 def asTagValue(x):
-	"""Convert a possible tag value into an instance of fsc.native.TagValue"""
-	result = native.TagValue.newMessage()
+	"""Convert a possible tag value into an instance of fsc.service.TagValue"""
+	result = service.TagValue.newMessage()
 	
 	if x is None:
 		result.notSet = None
-	elif instanceof(x, int) and x >= 0:
+	elif isinstance(x, int) and x >= 0:
 		result.uInt64 = x
-	elif instanceof(x, str):
+	elif isinstance(x, str):
 		result.text = x
 	else:
 		raise "Tag values can only be None, unsigned integer or string"
@@ -180,7 +203,7 @@ def cuboid(x1, x2, tags = {}):
 	]
 	
 	# Put data into mesh struct
-	mesh = native.Mesh.newMessage()
+	mesh = service.Mesh.newMessage()
 	mesh.vertices = cubeVertices
 	mesh.indices = indices,
 	mesh.polyMesh = [0, 4, 8, 12, 16, 20, 24]
@@ -203,7 +226,7 @@ def cuboid(x1, x2, tags = {}):
 
 def localGeoLib():
 	"""Creates an in-thread GeometryLib instance"""
-	return native.connectSameThread().newGeometryLib().service
+	return inProcess.root().newGeometryLib().service
 
 @asyncFunction
 async def planarCut(geometry, phi = None, normal = None, center = None):
@@ -213,7 +236,7 @@ async def planarCut(geometry, phi = None, normal = None, center = None):
 	
 	geometry = await geometry.resolve.asnc()
 	
-	request = native.GeometryLib.methods.planarCut.Params.newMessage()
+	request = service.GeometryLib.methods.planarCut.Params.newMessage()
 	request.geometry = geometry.geometry
 	
 	plane = request.plane
