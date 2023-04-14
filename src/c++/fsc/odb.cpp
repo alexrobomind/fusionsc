@@ -415,13 +415,10 @@ struct DBCache::CachedRef : public DataRef<AnyPointer>::Server {
 		});
 	}
 	
-	Promise<void> metadata(MetadataContext ctx) override {
+	Promise<void> metaAndCapTable(MetaAndCapTableContext ctx) override {
 		// The metadata table is only ready once the hash is verified
 		ctx.initResults().setMetadata(_metadata);
-		return READY_NOW;
-	}
-	
-	Promise<void> capTable(CapTableContext ctx) override {
+		
 		auto tableOut = ctx.getResults().initTable(refs.size());
 		for(auto i : kj::indices(refs))
 			tableOut.set(i, refs[i]);
@@ -651,13 +648,10 @@ struct ObjectDB::ObjectImpl : public Object::Server {
 		return READY_NOW;
 	}
 	
-	Promise<void> metadata(MetadataContext ctx) override {
+	Promise<void> metaAndCapTable(MetaAndCapTableContext ctx) override {
 		// The metadata table is only ready once the hash is verified
 		ctx.initResults().setMetadata(checkRef().getMetadata());
-		return READY_NOW;
-	}
-	
-	Promise<void> capTable(CapTableContext ctx) override {
+		
 		return withODBBackoff([this, ctx]() mutable {
 			auto t = object -> parent -> conn -> beginTransaction();
 			
@@ -1425,69 +1419,62 @@ Promise<void> ObjectDB::drain() {
 
 Promise<void> ObjectDB::downloadTask(DataRef<AnyPointer>::Client src, int64_t id) {
 	using RemoteRef = DataRef<AnyPointer>;
-	using MetadataResponse = Response<RemoteRef::MetadataResults>;
-	using CapTableResponse = Response<RemoteRef::CapTableResults>;
-	
-	// Download metadata and capability table
-	auto metadataPromise = src.metadataRequest().send().eagerlyEvaluate(nullptr);
-	auto capTablePromise = src.capTableRequest().send().eagerlyEvaluate(nullptr);
+	using MetaCPResponse = Response<RemoteRef::MetaAndCapTableResults>;
 	
 	// Wait for both to be downloaded
-	return metadataPromise
-	.then([this, src, id, capTablePromise = mv(capTablePromise)](MetadataResponse metadataResponse) mutable {
-	return capTablePromise.then([this, src, id, metadataResponse = mv(metadataResponse)](CapTableResponse capTableResponse) mutable {
-	return withODBBackoff([this, src, id, metadataResponse = mv(metadataResponse), capTableResponse = mv(capTableResponse)]() mutable -> Promise<void> {
-		auto t = conn -> beginTransaction();
-		
-		auto dst = open(id);
-		auto refData = dst -> info.initDataRef();
-		
-		refData.setMetadata(metadataResponse.getMetadata());
-		refData.getMetadata().setDataHash(nullptr);
-		
-		// Copy cap table over, wrap child objects in their own download processes
-		auto capTableIn = capTableResponse.getTable();
-		auto capTableOut = refData.initCapTable(capTableIn.size());
-		for(auto i : kj::indices(capTableIn)) {
-			capTableOut.set(i, download(capTableIn[i].castAs<DataRef<AnyPointer>>()));
-		}
-		
-		auto dataSize = metadataResponse.getMetadata().getDataSize();
-		
-		// Check if the data already exist in the blob db
-		{
-			KJ_IF_MAYBE(pBlob, blobStore -> find(metadataResponse.getMetadata().getDataHash())) {
-				refData.getDownloadStatus().setFinished();
-				pBlob -> incRef();
-				dst -> save();
-				return READY_NOW;
-			}
-		}
-		
-		refData.getDownloadStatus().setDownloading();
+	return src.metaAndCapTableRequest().send()
+	.then([this, src, id](MetaCPResponse response) mutable {
+		return withODBBackoff([this, src, id, response = mv(response)]() mutable -> Promise<void> {
+			auto t = conn -> beginTransaction();
 			
-		auto downloadRequest = src.transmitRequest();
-		downloadRequest.setStart(0);
-		downloadRequest.setEnd(dataSize);
-		downloadRequest.setReceiver(kj::heap<TransmissionReceiver>(*dst));
-		
-		dst -> save();
-		
-		return downloadRequest.send().ignoreResult()
-		.then([this, id]() mutable {
-			return withODBBackoff([this, id]() {
-				auto t = conn -> beginTransaction();
-				auto dst = open(id);
+			auto dst = open(id);
+			auto refData = dst -> info.initDataRef();
+			
+			refData.setMetadata(response.getMetadata());
+			refData.getMetadata().setDataHash(nullptr);
+			
+			// Copy cap table over, wrap child objects in their own download processes
+			auto capTableIn = response.getTable();
+			auto capTableOut = refData.initCapTable(capTableIn.size());
+			for(auto i : kj::indices(capTableIn)) {
+				capTableOut.set(i, download(capTableIn[i].castAs<DataRef<AnyPointer>>()));
+			}
+			
+			auto dataSize = response.getMetadata().getDataSize();
+			
+			// Check if the data already exist in the blob db
+			{
+				KJ_IF_MAYBE(pBlob, blobStore -> find(response.getMetadata().getDataHash())) {
+					refData.getDownloadStatus().setFinished();
+					pBlob -> incRef();
+					dst -> save();
+					return READY_NOW;
+				}
+			}
+			
+			refData.getDownloadStatus().setDownloading();
 				
-				dst -> load();
-				
-				auto refData = dst -> info.getDataRef();
-				refData.getDownloadStatus().setFinished();
-				dst -> save();
+			auto downloadRequest = src.transmitRequest();
+			downloadRequest.setStart(0);
+			downloadRequest.setEnd(dataSize);
+			downloadRequest.setReceiver(kj::heap<TransmissionReceiver>(*dst));
+			
+			dst -> save();
+			
+			return downloadRequest.send().ignoreResult()
+			.then([this, id]() mutable {
+				return withODBBackoff([this, id]() {
+					auto t = conn -> beginTransaction();
+					auto dst = open(id);
+					
+					dst -> load();
+					
+					auto refData = dst -> info.getDataRef();
+					refData.getDownloadStatus().setFinished();
+					dst -> save();
+				});
 			});
 		});
-	});
-	});
 	});
 }
 

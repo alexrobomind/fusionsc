@@ -24,10 +24,9 @@ interface DataRef (T) {
 		done @2 () -> ();
 	}
 	
-	metadata @0 () -> (metadata : Metadata);
+	metaAndCapTable @0 () -> (metadata : Metadata, table : List(Capability));
 	rawBytes @1 (start : UInt64, end : UInt64) -> (data : Data);
-	capTable @2 () -> (table : List(Capability));
-	transmit @3 (start : UInt64, end : UInt64, receiver : Receiver);
+	transmit @2 (start : UInt64, end : UInt64, receiver : Receiver);
 }
 
 #//! [DataService]
@@ -37,6 +36,10 @@ interface DataService @0xc6d48902ddb7e122 {
 	
 	# Have the remote data service download a DataRef and re-publish it
 	clone @1 [T] (source : DataRef(T)) -> (ref : DataRef(T));
+	
+	# Have the remote service inspect the linked tree of refs and their content tables and
+	# compute a hash based on the received information.
+	hash @2 [T] (source : DataRef(T)) -> (hash : Data);
 }
 #//! [DataService]
 

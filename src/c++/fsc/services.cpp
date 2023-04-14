@@ -81,7 +81,7 @@ struct RootServer : public RootService::Server {
 		return READY_NOW;
 	}
 	
-	Promise<void> getInfo(GetInfoContext ctx) {
+	Promise<void> getInfo(GetInfoContext ctx) override {
 		if(device -> brand == &CPUDevice::BRAND) {
 			ctx.getResults().setDeviceType(ComputationDeviceType::CPU);
 		#ifdef FSC_WITH_CUDA

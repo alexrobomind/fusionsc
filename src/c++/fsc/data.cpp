@@ -75,7 +75,7 @@ namespace {
 	
 Promise<bool> isDataRef(capnp::Capability::Client clt) {
 	auto asRef = clt.castAs<DataRef<capnp::AnyPointer>>();
-	auto req = asRef.metadataRequest();
+	auto req = asRef.metaAndCapTableRequest();
 	return req.send().ignoreResult()
 	.then(
 		// Success case
@@ -181,8 +181,17 @@ DataRef<capnp::AnyPointer>::Metadata::Reader internal::LocalDataRefImpl::localMe
 	return _metadata.getRoot<Metadata>();
 }
 
-Promise<void> internal::LocalDataRefImpl::metadata(MetadataContext context) {
+Promise<void> internal::LocalDataRefImpl::metaAndCapTable(MetaAndCapTableContext context) {
+	using CC = capnp::Capability::Client;
+	
 	context.getResults().setMetadata(localMetadata());
+	
+	auto results = context.getResults();
+	results.initTable((unsigned int) capTableClients.size());
+	
+	for(unsigned int i = 0; i < capTableClients.size(); ++i) {
+		results.getTable().set(i, capTableClients[i]);
+	}
 	
 	return kj::READY_NOW;
 }
@@ -201,19 +210,6 @@ Promise<void> internal::LocalDataRefImpl::rawBytes(RawBytesContext context) {
 		return kj::READY_NOW;
 	
 	context.getResults().setData(ptr.slice(start, end));
-	
-	return kj::READY_NOW;
-}
-
-Promise<void> internal::LocalDataRefImpl::capTable(CapTableContext context) {
-	using CC = capnp::Capability::Client;
-	
-	auto results = context.getResults();
-	results.initTable((unsigned int) capTableClients.size());
-	
-	for(unsigned int i = 0; i < capTableClients.size(); ++i) {
-		results.getTable().set(i, capTableClients[i]);
-	}
 	
 	return kj::READY_NOW;
 }
@@ -517,6 +513,43 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRef<
 		
 	// Now construct a local data ref from the backend
 	return LocalDataRef<capnp::AnyPointer>(backend->addRef(), this -> serverSet);
+}
+
+Promise<void> internal::LocalDataServiceImpl::hash(HashContext ctx) {
+	using DR = DataRef<capnp::AnyPointer>;
+	
+	auto ref = ctx.getParams().getSource();
+	return ref.metaAndCapTableRequest().send()
+	.then([this, ctx, ref = mv(ref)](capnp::Response<DR::MetaAndCapTableResults> response) mutable {
+		auto hashFunction = getActiveThread().library() -> defaultHash();
+		
+		auto asBytes = wordsToBytes(capnp::canonicalize(response.getMetadata()));
+		hashFunction -> update(asBytes.begin(), asBytes.size());
+		
+		Promise<void> hashAll = READY_NOW;
+		
+		for(auto child : response.getTable()) {
+			hashAll = hashAll.then([this, child = mv(child)]() mutable {
+				auto childHashReq = thisCap().hashRequest<capnp::AnyPointer>();
+				childHashReq.setSource(mv(child).castAs<DataRef<capnp::AnyPointer>>());
+				return childHashReq.send();
+			})
+			.then([&hf = *hashFunction](auto response) mutable {
+				hf.update("Success");
+				auto hash = response.getHash();
+				hf.update(hash.begin(), hash.size());
+			}).catch_([&hf = *hashFunction](kj::Exception e) mutable {
+				hf.update("Failure");
+			});
+		}
+		
+		return hashAll.then([ctx, &hf = *hashFunction]() mutable {
+			KJ_STACK_ARRAY(uint8_t, hashOutput, hf.output_length(), 1, 64);
+			hf.final(hashOutput.begin());
+			
+			ctx.getResults().setHash(hashOutput);
+		}).attach(mv(hashFunction));
+	});
 }
 
 /*
@@ -1824,7 +1857,7 @@ Promise<void> removeCapability(capnp::Capability::Client client, capnp::AnyPoint
 	
 	auto typedClient = client.castAs<DataRef<AnyPointer>>();
 	
-	return typedClient.metadataRequest().send()
+	return typedClient.metaAndCapTableRequest().send()
 	.then([out](auto response) mutable {
 		out.setAs<capnp::Data>(response.getMetadata().getId());
 	})

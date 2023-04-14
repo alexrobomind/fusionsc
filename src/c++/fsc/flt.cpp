@@ -674,7 +674,7 @@ struct FLTImpl : public FLT::Server {
 		}).attach(thisCap());
 	}
 	
-	Promise<void> findAxis(FindAxisContext ctx) {
+	Promise<void> findAxis(FindAxisContext ctx) override {
 		struct IterResult {
 			double r;
 			double z;

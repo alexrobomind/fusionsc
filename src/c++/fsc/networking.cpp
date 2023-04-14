@@ -77,7 +77,7 @@ struct SSHConnectionImpl : public SSHConnection::Server, public NetworkInterface
 		});
 	}
 	
-	Promise<void> close(CloseContext ctx) {
+	Promise<void> close(CloseContext ctx) override {
 		session -> close();
 		return session -> drain();
 	}

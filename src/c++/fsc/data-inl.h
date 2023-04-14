@@ -161,11 +161,12 @@ private:
 	//! Access to the final result of the download task. To enable sharing, this must support copy assignment or reference counting
 	ForkedPromise<Result> result;
 	
-	//! Sub-task for metadata transfer
+	/* //! Sub-task for metadata transfer
 	Promise<void> downloadMetadata();
 	
 	//! Sub-task for reference cap table download and adjustment
-	Promise<void> downloadCapTable();
+	Promise<void> downloadCapTable();*/
+	Promise<void> downloadMetaAndCapTable();
 	
 	//! Sub-task for data transfer and hashing
 	Promise<void> downloadData();
@@ -203,6 +204,7 @@ public:
 		
 	Promise<void> clone(CloneContext context) override;
 	Promise<void> store(StoreContext context) override;
+	Promise<void> hash(HashContext context) override;
 	
 	inline void setLimits(LocalDataService::Limits newLimits);
 	
@@ -235,9 +237,6 @@ private:
  */
 class LocalDataRefImpl : public DataRef<capnp::AnyPointer>::Server, public kj::Refcounted {
 public:
-	using typename DataRef<capnp::AnyPointer>::Server::MetadataContext;
-	using typename DataRef<capnp::AnyPointer>::Server::RawBytesContext;
-	using typename DataRef<capnp::AnyPointer>::Server::CapTableContext;
 	
 	using Metadata = typename DataRef<capnp::AnyPointer>::Metadata;
 	
@@ -253,9 +252,8 @@ public:
 	// Returns a reader to the locally stored metadata
 	Metadata::Reader localMetadata();
 	
-	Promise<void> metadata(MetadataContext) override ;
+	Promise<void> metaAndCapTable(MetaAndCapTableContext) override ;
 	Promise<void> rawBytes(RawBytesContext) override ;
-	Promise<void> capTable(CapTableContext) override ;
 	Promise<void> transmit(TransmitContext) override ;
 	
 	// Reference to the local data store entry holding our data
@@ -670,11 +668,7 @@ Promise<Result> DownloadTask<Result>::actualTask() {
 			return mv(*pResult);
 		}
 		
-		// Perform downloads
-		auto builder = kj::heapArrayBuilder<Promise<void>>(2);
-		builder.add(downloadMetadata());
-		builder.add(downloadCapTable());
-		return kj::joinPromises(builder.finish())
+		return downloadMetaAndCapTable()		
 		.then([this]() mutable {
 			// Check if we can use cached data for the download
 			return useCached();
@@ -738,21 +732,11 @@ Promise<Maybe<Result>> DownloadTask<Result>::checkLocalAndRegister() {
 }
 
 template<typename Result>
-Promise<void> DownloadTask<Result>::downloadMetadata() {
-	using MetadataResponse = capnp::Response<DataRef<capnp::AnyPointer>::MetadataResults>;
-	
-	return src.metadataRequest().send()
-	.then([this](MetadataResponse response) mutable {
+Promise<void> DownloadTask<Result>::downloadMetaAndCapTable() {	
+	return src.metaAndCapTableRequest().send()
+	.then([this](auto response) mutable {
 		metadata = response.getMetadata();
-	});
-}
-
-template<typename Result>
-Promise<void> DownloadTask<Result>::downloadCapTable() {
-	using CapTableResponse = capnp::Response<DataRef<capnp::AnyPointer>::CapTableResults>;
-	
-	return src.capTableRequest().send()
-	.then([this](CapTableResponse response) mutable {
+		
 		auto capTable = response.getTable();
 		auto builder = kj::heapArrayBuilder<capnp::Capability::Client>(capTable.size());
 		for(auto ref : capTable) {
