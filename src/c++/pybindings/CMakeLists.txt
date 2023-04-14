@@ -11,6 +11,8 @@ if(FSC_WITH_PYTHON)
 		devices.cpp
 		
 		service.cpp
+		
+		helpers.cpp
 	)
 
 	target_link_libraries(

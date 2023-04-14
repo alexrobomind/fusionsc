@@ -7,6 +7,8 @@ from .native import capnp
 from .native import schema
 from .native import service
 
+from .native import efit
+
 # Load asynchronous subprocessing module
 # (this also imports relevant portions of native.asnc)
 from . import asnc

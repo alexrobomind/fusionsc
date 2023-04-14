@@ -136,6 +136,9 @@ add_library(
 	vmec.h
 	vmec.cpp
 	
+	efit.h
+	efit.cpp
+	
 	geometry.h
 	geometry.cpp
 	
@@ -227,6 +230,9 @@ if(BUILD_TESTING)
 		flt-tests.cpp
 		interpolation-tests.cpp
 		fieldline-mapping-tests.cpp
+		
+		efit-tests.cpp
+		
 		devices/w7x-test.cpp
 	)
 	target_link_libraries(tests PUBLIC fsc)

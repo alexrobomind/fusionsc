@@ -60,6 +60,7 @@ namespace fscpy {
 	void initKj(py::module_& m);
 	void initLoader(py::module_& m);	
 	void initService(py::module_& m);
+	void initHelpers(py::module_& m);
 	
 	// Defined in service.cpp
 	void loadDefaultSchema(py::module_& m);

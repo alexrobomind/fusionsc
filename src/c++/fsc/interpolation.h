@@ -140,6 +140,21 @@ struct NDInterpEvaluator<nDims, Strategy, nDims> {
 	}
 };
 
+/** Helper that extracts the scalar value of an AutoDiff scalar */
+template<typename T>
+struct ValueExtractor {
+	using Scalar = T;
+	
+	static T extract(T in) { return in; }
+};
+
+template<typename T>
+struct ValueExtractor<Eigen::AutoDiffScalar<T>> {
+	using Scalar = typename T::Scalar;
+	
+	static Scalar extract(Eigen::AutoDiffScalar<T> in) { return in.value(); }
+};
+
 /**
  * Multi-dimensional interpolator that runs based on a given
  * 1-dimensional interpolation strategy
@@ -186,14 +201,14 @@ struct NDInterpolator {
 		
 		for(int i = 0; i < nDims; ++i) {
 			Scalar scaled = scaleMultipliers[i] * (x[i] + offsets[i]);
-			base[i] = floor(scaled);
+			base[i] = floor(ValueExtractor<Scalar>::extract(scaled));
 			lx[i] = scaled - base[i];
 		}
 		
 		std::array<typename Strategy::Coeffs, nDims> coeffs =
 			calculateCoeffsND(strategy, lx, std::make_index_sequence<nDims>());
 		
-		return NDInterpEvaluator<nDims, Strategy, 0>::evaluate(strategy, f, base, coeffs/*lx*/);
+		return NDInterpEvaluator<nDims, Strategy, 0>::evaluate(strategy, f, base, coeffs);
 	}
 };
 

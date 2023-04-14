@@ -95,6 +95,24 @@ struct FieldCalculation {
 		});
 	}
 	
+	void equilibrium(double scale, AxisymmetricEquilibrium::Reader equilibrium) {
+		KJ_DBG("Processing equilibrium");
+		
+		calculation = calculation.then([this, equilibrium = Temporary<AxisymmetricEquilibrium>(equilibrium), scale]() mutable {
+			auto mapped = mapToDevice(
+				cuBuilder<AxisymmetricEquilibrium, cu::AxisymmetricEquilibrium>(mv(equilibrium)),
+				*_device, true
+			);
+			
+			return FSC_LAUNCH_KERNEL(
+				kernels::eqFieldKernel,
+				*_device,
+				field -> getHost().size() / 3,
+				grid, FSC_KARG(mapped, ALIAS_IN), scale, FSC_KARG(field, NOCOPY)
+			);
+		});
+	}
+	
 	Promise<void> finish(Float64Tensor::Builder out) {
 		calculation = calculation
 		.then([this]() {
@@ -266,6 +284,9 @@ struct CalculationSession : public FieldCalculator::Server {
 				}
 				
 				return processField(calculator, cached.getNested(), scale);
+			}
+			case MagneticField::AXISYMMETRIC_EQUILIBRIUM: {
+				
 			}
 			default:
 				KJ_FAIL_REQUIRE("Unknown magnetic field node encountered. This either indicates that a device-specific node was not resolved, or a generic node from a future library version was presented");

@@ -11,6 +11,7 @@
 
 # include <unsupported/Eigen/CXX11/Tensor>
 # include <unsupported/Eigen/CXX11/ThreadPool>
+# include <unsupported/Eigen/AutoDiff>
 # include <Eigen/Dense>
 # include <Eigen/Core>
 # include <cmath>
@@ -27,6 +28,8 @@ namespace fsc {
 	using Eigen::Sizes;
 	
 	using Eigen::TensorOpCost;
+	
+	using Eigen::AutoDiffScalar;
 
 	template<typename T, unsigned int n>
 	using TVec = Eigen::TensorFixedSize<T, Eigen::Sizes<n>>;

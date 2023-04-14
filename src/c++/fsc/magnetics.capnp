@@ -69,6 +69,25 @@ struct Filament {
 	}
 }
 
+struct AxisymmetricEquilibrium {
+	# 2D computational box
+	rMin @0 : Float64;
+	rMax @1 : Float64;
+	zMin @2 : Float64;
+	zMax @3 : Float64;
+	
+	# Poloidal flux function in Weber / rad
+	# Shape is [nZ, nR]
+	poloidalFlux @4 : Float64Tensor;
+	
+	# Flux profile range (all fluxes in Weber / rad) for interpolation
+	fluxAxis @5 : Float64;
+	fluxBoundary @6 : Float64;
+	
+	# Normalized toroidal field F (F = rMaj * Bt) as a profile of flux
+	normalizedToroidalField @7 : List(Float64);
+}
+
 # =========================== Device-specifics =============================
 
 # --------------------------------- W7-X -----------------------------------
@@ -165,6 +184,8 @@ struct MagneticField {
 			nested @11 : MagneticField;
 			computed @12 : ComputedField;
 		}
+		
+		axisymmetricEquilibrium @20 : AxisymmetricEquilibrium;
 		
 		# ========================= Device-specific ==========================
 		

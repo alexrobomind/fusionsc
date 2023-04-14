@@ -158,13 +158,6 @@ namespace {
 		}	
 	};
 	
-	Promise<void> delay(double seconds) {
-		uint64_t timeInNS = static_cast<uint64_t>(seconds * 1e9);
-		auto targetPoint = kj::systemPreciseMonotonicClock().now() + timeInNS * kj::NANOSECONDS;
-		
-		return getActiveThread().timer().atTime(targetPoint);
-	}
-	
 	PyPromise startFiber(kj::FiberPool& fiberPool, py::object callable) {
 		auto func = [callable = mv(callable)](kj::WaitScope& ws) mutable -> PyPromise {			
 			// Override default wait scope
@@ -244,9 +237,6 @@ void initAsync(py::module_& m) {
 	asyncModule.def("cycle", &cycle, "Cycles this thread's event loop a single time");
 	
 	asyncModule.def("run", &run, "Turns an awaitable (e.g. Promise or Coroutine) into a promise by running it on the active event loop");
-	
-	py::module_ timerModule = m.def_submodule("timer");
-	timerModule.def("delay", &delay, "Creates a promise resolving at a defined delay (in seconds) after this function is called");
 	
 	auto atexitModule = py::module_::import("atexit");
 	atexitModule.attr("register")(py::cpp_function(&atExitFunction));

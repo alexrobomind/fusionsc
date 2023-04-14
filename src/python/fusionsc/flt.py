@@ -6,6 +6,7 @@ from . import service
 from . import capnp
 from . import resolve
 from . import inProcess
+from . import efit
 
 from .asnc import asyncFunction
 from .resolve import resolveField
@@ -126,6 +127,13 @@ class MagneticConfig:
 	@asyncFunction
 	async def save(self, filename):
 		await data.writeArchive.asnc(self.field, filename)
+	
+	@staticmethod
+	def fromGFile(name):
+		with open(name, "r") as f:
+			fileContents = f.read()
+		
+		return MagneticConfig(efit.eqFromGFile(fileContents))
 
 def symmetrize(points, nSym = 1, stellaratorSymmetric = False):
 	x, y, z = points
