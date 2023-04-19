@@ -151,6 +151,7 @@ struct Geometry {
 				phiRange : group {
 					phiStart @11 : Float64;
 					phiEnd @12 : Float64;
+					close @16 : Bool = true;
 				}
 			}
 		}

@@ -1,4 +1,5 @@
 #include "geometry.h"
+#include "poly.h"
 
 #include <kj/map.h>
 
@@ -360,10 +361,13 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 			
 			uint32_t nPhi = wt.getNPhi();
 			KJ_REQUIRE(nPhi > 1);
+			
+			bool close = false;
 			if(wt.isPhiRange()) {
 				auto pr = wt.getPhiRange();
 				phiStart = pr.getPhiStart();
 				phiEnd = pr.getPhiEnd();
+				close = pr.getClose();
 			}
 			
 			auto r = wt.getR();
@@ -427,6 +431,38 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 			
 			handleMesh(tmpMesh, tagValues);
 			KJ_DBG(tmpMesh.asReader());
+			
+			// Generate end caps
+			if(close) {
+				Tensor<double, 2> rz(nVerts, 2);
+				for(auto i : kj::range(0, nVerts)) {
+					rz(i, 0) = r[i];
+					rz(i, 1) = z[i];
+				}
+				
+				Tensor<uint32_t, 2> triangulation = triangulate(rz);
+				
+				auto phis = kj::heapArray<double>({phiStart, phiEnd});
+				for(double phi : phis) {
+					Tensor<double, 2> vertices(3, nVerts);
+					for(auto iVert : kj::indices(r)) {					
+						vertices(0, iVert) = r[iVert] * cos(phi);
+						vertices(1, iVert) = r[iVert] * sin(phi);
+						vertices(2, iVert) = z[iVert];
+					}
+				}
+				
+				auto indices = tmpMesh.initIndices(3 * (nVerts - 2));
+				for(auto i : kj::range(0, nVerts - 2)) {
+					indices.set(3 * i + 0, triangulation(i, 0));
+					indices.set(3 * i + 1, triangulation(i, 1));
+					indices.set(3 * i + 2, triangulation(i, 2));
+				}
+				
+				tmpMesh.setTriMesh();
+				handleMesh(tmpMesh, tagValues);
+				KJ_DBG(tmpMesh.asReader());
+			}
 			return READY_NOW;
 		}
 			

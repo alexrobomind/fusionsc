@@ -159,6 +159,9 @@ add_library(
 	hfcam.h
 	hfcam.cpp
 	
+	poly.h
+	poly.cpp
+	
 	http.h
 	http.cpp
 	
@@ -218,6 +221,7 @@ if(BUILD_TESTING)
 	target_sources(
 		tests
 		PUBLIC
+		poly-tests.cpp
 		local-tests.cpp
 		jobs-tests.cpp
 		random-tests.cpp

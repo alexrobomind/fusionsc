@@ -132,7 +132,7 @@ class Geometry:
 		return Geometry(geo)
 	
 	@staticmethod
-	def wrapToroidally(r, z, nPhi = 100, phi1 = None, phi2 = None, tags = {}):
+	def wrapToroidally(r, z, nPhi = 100, phi1 = None, phi2 = None, tags = {}, close = True):
 		result = Geometry()
 		
 		wt = result.geometry.initWrapToroidally()
@@ -144,6 +144,7 @@ class Geometry:
 			range = wt.initPhiRange()
 			range.phiStart = phi1
 			range.phiEnd = phi2
+			range.close = close
 	
 		outTags = result.geometry.initTags(len(tags))
 		for i, name in enumerate(tags):
