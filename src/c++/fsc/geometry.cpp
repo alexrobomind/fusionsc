@@ -444,24 +444,25 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 				
 				auto phis = kj::heapArray<double>({phiStart, phiEnd});
 				for(double phi : phis) {
+					Temporary<Mesh> tmpMesh2;
 					Tensor<double, 2> vertices(3, nVerts);
 					for(auto iVert : kj::indices(r)) {					
 						vertices(0, iVert) = r[iVert] * cos(phi);
 						vertices(1, iVert) = r[iVert] * sin(phi);
 						vertices(2, iVert) = z[iVert];
 					}
-				}
+					writeTensor(vertices, tmpMesh2.getVertices());
 				
-				auto indices = tmpMesh.initIndices(3 * (nVerts - 2));
-				for(auto i : kj::range(0, nVerts - 2)) {
-					indices.set(3 * i + 0, triangulation(i, 0));
-					indices.set(3 * i + 1, triangulation(i, 1));
-					indices.set(3 * i + 2, triangulation(i, 2));
-				}
+					auto indices = tmpMesh2.initIndices(3 * (nVerts - 2));
+					for(auto i : kj::range(0, nVerts - 2)) {
+						indices.set(3 * i + 0, triangulation(i, 0));
+						indices.set(3 * i + 1, triangulation(i, 1));
+						indices.set(3 * i + 2, triangulation(i, 2));
+					}
 				
-				tmpMesh.setTriMesh();
-				handleMesh(tmpMesh, tagValues);
-				KJ_DBG(tmpMesh.asReader());
+					tmpMesh.setTriMesh();
+					handleMesh(tmpMesh2, tagValues);
+				}
 			}
 			return READY_NOW;
 		}
