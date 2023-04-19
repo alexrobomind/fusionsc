@@ -418,19 +418,17 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 			Tensor<double, 2> flatVerts = vertices.reshape(A({3, nVerts * (nPhi + 1)}));
 			KJ_DBG("Verts reshaped");
 			
-			Temporary<Mesh> tmpMesh;
-			writeTensor(flatVerts, tmpMesh.getVertices());
-			KJ_DBG("Verts written");
-			
-			auto indices = tmpMesh.initIndices(3 * 2 * nLines * nPhi);
-			for(auto i : kj::indices(indices))
-				indices.set(i, triangles.data()[i]);
-			KJ_DBG("Triangles written");
-			
-			tmpMesh.setTriMesh();
-			
-			handleMesh(tmpMesh, tagValues);
-			KJ_DBG(tmpMesh.asReader());
+			{
+				Temporary<Mesh> tmpMesh;
+				writeTensor(flatVerts, tmpMesh.getVertices());
+				
+				auto indices = tmpMesh.initIndices(3 * 2 * nLines * nPhi);
+				for(auto i : kj::indices(indices))
+					indices.set(i, triangles.data()[i]);
+				
+				tmpMesh.setTriMesh();
+				handleMesh(tmpMesh, tagValues);
+			}
 			
 			// Generate end caps
 			if(close) {
@@ -441,27 +439,28 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 				}
 				
 				Tensor<uint32_t, 2> triangulation = triangulate(rz);
+				uint32_t numTriangles = triangulation.dimension(0);
 				
 				auto phis = kj::heapArray<double>({phiStart, phiEnd});
 				for(double phi : phis) {
-					Temporary<Mesh> tmpMesh2;
+					Temporary<Mesh> tmpMesh;
 					Tensor<double, 2> vertices(3, nVerts);
 					for(auto iVert : kj::indices(r)) {					
 						vertices(0, iVert) = r[iVert] * cos(phi);
 						vertices(1, iVert) = r[iVert] * sin(phi);
 						vertices(2, iVert) = z[iVert];
 					}
-					writeTensor(vertices, tmpMesh2.getVertices());
+					writeTensor(vertices, tmpMesh.getVertices());
 				
-					auto indices = tmpMesh2.initIndices(3 * (nVerts - 2));
-					for(auto i : kj::range(0, nVerts - 2)) {
+					auto indices = tmpMesh.initIndices(3 * numTriangles);
+					for(auto i : kj::range(0, numTriangles)) {						
 						indices.set(3 * i + 0, triangulation(i, 0));
 						indices.set(3 * i + 1, triangulation(i, 1));
 						indices.set(3 * i + 2, triangulation(i, 2));
 					}
 				
 					tmpMesh.setTriMesh();
-					handleMesh(tmpMesh2, tagValues);
+					handleMesh(tmpMesh, tagValues);
 				}
 			}
 			return READY_NOW;

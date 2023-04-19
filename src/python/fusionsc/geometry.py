@@ -132,7 +132,7 @@ class Geometry:
 		return Geometry(geo)
 	
 	@staticmethod
-	def wrapToroidally(r, z, nPhi = 100, phi1 = None, phi2 = None, tags = {}, close = True):
+	def from2D(r, z, nPhi = 100, phi1 = None, phi2 = None, tags = {}, close = True):
 		result = Geometry()
 		
 		wt = result.geometry.initWrapToroidally()

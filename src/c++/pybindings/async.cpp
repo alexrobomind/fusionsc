@@ -200,7 +200,13 @@ void initAsync(py::module_& m) {
 	
 	py::object promiseParam = pyTypeVar("T", py::arg("covariant") = true);
 	
-	py::class_<PyPromise>(asyncModule, "Promise", py::multiple_inheritance(), py::metaclass(*baseMetaType))
+	py::class_<PyPromise>(asyncModule, "Promise", py::multiple_inheritance(), py::metaclass(*baseMetaType), R"(
+		Asynchronous promise to a future value being computed by the event loop. The computation will eventually
+		either resolve or throw an exception. The promise can either be awaited using the wait() method, or using
+		the await keyword in asynchronous functions. The "poll" method can be used to check the promise for completion
+		(or failure) without blocking, while the "then" function can be used to register a continuation function
+		(though we recommend the usage of "await" and coroutines).
+	)")
 		.def(py::init([](PyPromise& other) { return PyPromise(other); }))
 		.def(py::init([](py::object o) { return PyPromise(o); }))
 		.def("wait", &PyPromise::wait)
@@ -226,7 +232,17 @@ void initAsync(py::module_& m) {
 		.def("throw", &PyPromiseAwaitContext::throw_)
 	;
 	
-	py::class_<kj::FiberPool>(asyncModule, "FiberPool")
+	py::class_<kj::FiberPool>(asyncModule, "FiberPool", R"(
+		Despite python's extensive support for coroutines, it can sometimes be neccessary to use the blocking Promise.wait(...)
+		function inside a coroutine (e.g. if using an external library, which commonly is not directly compatible with event-
+		loops). Since this would block the very event loop that processes the promise, this is not possible.
+		
+		Fiber pools resolve this issue by allowing to start a callable as a pseudo-thread (referred to as a "fiber"), which
+		maintains its own stack, but is otherwise contained in the active thread and follows the same cooperative scheduling.
+		Calling "wait" on any promise inside the fiber will suspend the fiber and continue event loop scheduling until the
+		promise resolved, at which point the fiber will continue execution. Like with coroutines, the active thread will not
+		perform other tasks while fiber is active (which eliminates the need for locking between fibers).
+	)")
 		.def(py::init<unsigned int>())
 		.def("startFiber", &startFiber)
 	;

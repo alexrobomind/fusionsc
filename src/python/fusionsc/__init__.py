@@ -1,3 +1,7 @@
+"""
+The FusionSC package for fusion-related scientific computations.
+"""
+
 # Load native library
 from . import native
 

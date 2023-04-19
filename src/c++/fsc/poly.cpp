@@ -13,7 +13,7 @@ struct PolyNode {
 	PolyNode* prev = nullptr;
 	PolyNode* next = nullptr;
 	
-	PolyNode(Vec2d x, double idx) :
+	PolyNode(Vec2d x, uint32_t idx) :
 		x(x), idx(idx)
 	{}
 };
@@ -88,15 +88,13 @@ Tensor<uint32_t, 2> triangulate(Tensor<double, 2> vertices) {
 	double totalArea = 0;
 	for(auto i : kj::range(1, nVerts - 1)) {
 		totalArea += doubleArea(nodes[0].x, nodes[i].x, nodes[i+1].x);
-	}	
-	
+	}
 	
 	auto resultNodes = kj::heapArrayBuilder<PolyNode*>(nVerts - 2);
 	PolyNode* start = nodes.begin();
 	
 	// Each pass removes one triangle
 	for(auto iPass : kj::range(0, nVerts - 2)) {
-		KJ_DBG(iPass);
 		PolyNode* best = nullptr;
 		double bestArea = 0;
 		
@@ -105,7 +103,6 @@ Tensor<uint32_t, 2> triangulate(Tensor<double, 2> vertices) {
 			// Skip concave triangles
 			// Multiply by totalArea to maintain proper sign
 			double area = totalArea * doubleArea(current);
-			KJ_DBG(area);
 			if(area < 0)
 				goto NEXT_ITERATION;
 			
@@ -113,7 +110,6 @@ Tensor<uint32_t, 2> triangulate(Tensor<double, 2> vertices) {
 			PolyNode* pOther = current -> next -> next;
 			while(pOther != current -> prev) {
 				KJ_IF_MAYBE(pDontCare, locateInTriangle(current -> x, current -> prev -> x, current -> next -> x, pOther -> x)) {
-					KJ_DBG("Found inside");
 					goto NEXT_ITERATION;
 				}
 				pOther = pOther -> next;
@@ -145,6 +141,7 @@ Tensor<uint32_t, 2> triangulate(Tensor<double, 2> vertices) {
 	Tensor<uint32_t, 2> result(nVerts - 2, 3);
 	for(auto i : kj::indices(resultNodes)) {
 		PolyNode* ptr = resultNodes[i];
+		
 		result(i, 0) = ptr -> prev -> idx;
 		result(i, 1) = ptr         -> idx;
 		result(i, 2) = ptr -> next -> idx;

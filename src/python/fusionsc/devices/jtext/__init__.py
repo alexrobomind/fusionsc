@@ -19,7 +19,7 @@ def defaultGrid(n = 128, nPhi = 128):
 	return grid
 
 def firstWall(nPhi = 100):
-	return geometry.Geometry.wrapToroidally(
+	return geometry.Geometry.from2D(
 		r = [0.7135, 1.311, 1.409,  1.409,  1.311,  0.7135, 0.7135],
 		z = [0.326 , 0.326, 0.268, -0.268, -0.326, -0.326 , 0.326],
 		nPhi = nPhi,
@@ -27,39 +27,42 @@ def firstWall(nPhi = 100):
 	)
 
 def hfsLimiter(nPhi = 100):
-	return geometry.Geometry.wrapToroidally(
+	return geometry.Geometry.from2D(
 		r = [0.7135, 0.754, 0.754, 0.7135, 0.7135],
 		z = [-0.32, -0.32, 0.32, 0.32, -0.32],
 		nPhi = nPhi,
 		tags = {"component" : "hfsLimiter"}
 	)
 
-def lfsLimiter(nPhi = 5):
-	return geometry.Geometry.wrapToroidally(
+def lfsLimiter(pos, nPhi = 5):
+	phi = np.radians(337.5)
+	dr = np.asarray([np.cos(phi), np.sin(phi), 0])
+	
+	return geometry.Geometry.from2D(
 		r = [1.285, 1.315, 1.315, 1.285, 1.285],
 		z = [-0.125, -0.125, 0.125, 0.125, -0.125],
 		nPhi = nPhi,
 		phi1 = np.radians(335.5), phi2 = np.radians(339.5),
 		tags = {"component" : "lfsLimiter"}
-	)
+	).translate(dr * (pos - 0.235))
 
-def topLimiter(nPhi = 5):
-	return geometry.Geometry.wrapToroidally(
+def topLimiter(pos, nPhi = 5):
+	return geometry.Geometry.from2D(
 		r = [0.925, 1.175, 1.175, 0.925, 0.925],
 		z = [0.235, 0.235, 0.265, 0.265, 0.235],
 		nPhi = nPhi,
 		phi1 = np.radians(335.5), phi2 = np.radians(339.5),
 		tags = {"component" : "topLimiter"}
-	)
+	).translate([0, 0, pos - 0.235])
 
-def bottomLimiter(nPhi = 5):
-	return geometry.Geometry.wrapToroidally(
+def bottomLimiter(pos, nPhi = 5):
+	return geometry.Geometry.from2D(
 		r = [0.925, 1.175, 1.175, 0.925, 0.925],
 		z = [-0.235, -0.235, -0.265, -0.265, -0.235],
 		nPhi = nPhi,
 		phi1 = np.radians(335.5), phi2 = np.radians(339.5),
 		tags = {"component" : "bottomLimiter"}
-	)
+	).translate([0, 0, 0.235 - pos])
 
 def target(nPhi = 19):
 	strData = pkg_resources.read_text(resources, "target.dat")
@@ -69,7 +72,7 @@ def target(nPhi = 19):
 		for line in strData.split("\n")
 	], dtype = np.float64).T
 
-	return geometry.Geometry.wrapToroidally(
+	return geometry.Geometry.from2D(
 		r, z,
 		nPhi = nPhi,
 		phi1 = np.radians(125), phi2 = np.radians(145),
@@ -112,5 +115,5 @@ def islandCoils(currents):
 	return result
 			
 			
-def pfcs():
-	return firstWall() + hfsLimiter() + lfsLimiter() + bottomLimiter() + topLimiter() + target()
+def pfcs(limiterPos):
+	return firstWall() + hfsLimiter() + lfsLimiter(limiterPos) + bottomLimiter(limiterPos) + topLimiter(limiterPos) + target()

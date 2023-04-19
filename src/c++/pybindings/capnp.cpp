@@ -621,11 +621,15 @@ void setFieldByName(capnp::DynamicStruct::Builder builder, kj::StringPtr fieldNa
 }
 
 void setField(capnp::DynamicStruct::Builder builder, capnp::StructSchema::Field field, py::object value) {
-	assign(FieldSlot(builder, field), mv(value));
+	// Note: This is neccessary because for branded structs, the field descriptors are shared by all brands
+	// assign(FieldSlot(builder, field), mv(value));
+	setFieldByName(mv(builder), field.getProto().getName(), mv(value));
 }
 
 DynamicValue::Builder initField(capnp::DynamicStruct::Builder builder, capnp::StructSchema::Field field) {
-	return builder.init(field);
+	// Note: This is neccessary because for branded structs, the field descriptors are shared by all brands
+	// return builder.init(field);
+	return builder.init(field.getProto().getName());
 }
 
 DynamicValue::Builder initFieldByName(capnp::DynamicStruct::Builder builder, kj::StringPtr fieldName) {
@@ -633,7 +637,8 @@ DynamicValue::Builder initFieldByName(capnp::DynamicStruct::Builder builder, kj:
 }
 
 DynamicValue::Builder initList(capnp::DynamicStruct::Builder builder, capnp::StructSchema::Field field, size_t size) {
-	return builder.init(field, size);
+	// return builder.init(field, size);
+	return builder.init(field.getProto().getName(), size);
 }
 
 DynamicValue::Builder initListByName(capnp::DynamicStruct::Builder builder, kj::StringPtr listName, size_t size) {

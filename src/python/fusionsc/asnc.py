@@ -21,9 +21,12 @@ from typing import Callable, Any, Union, TypeVar, Awaitable
 from typing_extensions import ParamSpec
 
 import functools
+import inspect
 
 T = TypeVar("T")
 P = ParamSpec("P")
+
+__all__ = ["Promise", "startEventLop", "stopEventLoop", "hasEventLoop", "FiberPool"]
 
 class AsyncMethodDescriptor:
 	"""Helper class to implement asyncFunction"""
@@ -43,7 +46,7 @@ class AsyncMethodDescriptor:
 	
 	@property
 	def __doc__(self):
-		docSuffix = "*Note* Has :ref:`asynchronous variant <Asynchronous Function>`"
+		docSuffix = "*Note* Has :ref:`asynchronous variant<Asynchronous Function>` '.asnc(...)' that returns Promise[...]"
 		
 		if(hasattr(self.f, "__doc__") and self.f.__doc__ is not None):
 			return self.f.__doc__ + "\n" + docSuffix
@@ -53,7 +56,22 @@ class AsyncMethodDescriptor:
 	@__doc__.setter
 	def __doc__(self, val):
 		pass
+	
+	@property
+	def __signature__(self):
+		import typing
+		import inspect
 		
+		sig = inspect.signature(self.f)
+		retAnn = sig.return_annotation
+		
+		orig = typing.get_origin(retAnn)
+		args = typing.get_args(retAnn)
+				
+		if (orig is Promise or orig is Awaitable) and len(args) == 1:
+			return sig.replace(return_annotation = args[0])
+		else:
+			return sig.replace(return_annotation = Any)
 
 def wait(awaitable: Awaitable[T]) -> T:
 	"""
