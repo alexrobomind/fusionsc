@@ -26,9 +26,9 @@ Maybe<Vec2d> locateInTriangle(Vec2d p1, Vec2d p2, Vec2d p3, Vec2d x) {
 	
 	Vec2d result = m.inverse() * (x - p1);
 	
-	if(result(0) < 0) return nullptr;
-	if(result(1) < 0) return nullptr;
-	if(result(0) + result(1) > 1) return nullptr;
+	if(result(0) <= 1e-10) return nullptr;
+	if(result(1) <= 1e-10) return nullptr;
+	if(result(0) + result(1) >= 1 - 1E-10) return nullptr;
 	
 	return result;
 }
