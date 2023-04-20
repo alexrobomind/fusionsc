@@ -2,6 +2,7 @@ from . import native, data
 from .asnc import asyncFunction, startEventLoop
 
 from .native.devices import w7x as cppw7x
+from .native.devices import jtext as cppjtext
 import contextlib
 
 # Ensure event loop is running
@@ -10,10 +11,13 @@ startEventLoop()
 # Since there is a small regree of work that the W7-X coil resolver can do even
 # without a backing components DB, we add connected to a dummy database.
 fieldResolvers = [
-	cppw7x.coilsDBResolver(cppw7x.CoilsDB.newDisconnected(""))
+	cppw7x.coilsDBResolver(cppw7x.CoilsDB.newDisconnected("")),
+	cppjtext.fieldResolver()
 ]
 
-geometryResolvers = []
+geometryResolvers = [
+	cppjtext.geometryResolver()
+]
 
 def importOfflineData(filename: str):
 	"""

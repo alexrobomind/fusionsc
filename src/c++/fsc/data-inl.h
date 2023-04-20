@@ -200,7 +200,15 @@ public:
 	//Promise<void> buildArchive(DataRef<capnp::AnyPointer>::Client ref, Archive::Builder out, Maybe<Nursery&> nursery);
 	Promise<void> writeArchive(DataRef<capnp::AnyPointer>::Client ref, const kj::File& out);
 	//LocalDataRef<capnp::AnyPointer> publishArchive(Archive::Reader archive);
+	
+	struct Mappable {
+		virtual kj::Array<const kj::byte> mmap(size_t start, size_t size) = 0;
+	};
+	
+	LocalDataRef<capnp::AnyPointer> publishArchive(Mappable& mappable, const capnp::ReaderOptions options);
+	
 	LocalDataRef<capnp::AnyPointer> publishArchive(const kj::ReadableFile& f, const capnp::ReaderOptions options);
+	LocalDataRef<capnp::AnyPointer> publishArchive(const kj::Array<const kj::byte> f, const capnp::ReaderOptions options);
 		
 	Promise<void> clone(CloneContext context) override;
 	Promise<void> store(StoreContext context) override;

@@ -80,6 +80,13 @@ struct CartesianGrid {
 	nZ @8 : UInt32;
 }
 
+struct Angle {
+	union {
+		deg @0 : Float64;
+		rad @1 : Float64;
+	}
+}
+
 struct Transformed(T) {
 	union {
 		leaf @0 : T;
@@ -88,7 +95,7 @@ struct Transformed(T) {
 			node  @2 : Transformed(T);
 		}
 		turned : group {
-			angle @3 : Float64;
+			angle @3 : Angle;
 			center @4 : List(Float64) = [0, 0, 0];
 			axis  @5 : List(Float64);
 			node  @6 : Transformed(T);
@@ -149,8 +156,8 @@ struct Geometry {
 			union {
 				fullTorus @10 : Void;
 				phiRange : group {
-					phiStart @11 : Float64;
-					phiEnd @12 : Float64;
+					phiStart @11 : Angle;
+					phiEnd @12 : Angle;
 					close @16 : Bool = true;
 				}
 			}
@@ -159,19 +166,33 @@ struct Geometry {
 		# ====== Device-specific ======
 		# ----------- W7-X ------------
 		
-		componentsDBMeshes     @8 : List(UInt64);
-		componentsDBAssemblies @9 : List(UInt64);
+		w7x : union {
+			componentsDbMeshes     @8 : List(UInt64);
+			componentsDbAssemblies @9 : List(UInt64);
+		}
+		
+		# ----------- J-TEXT ------------
+		
+		jtext : union {
+			target @17 : Void;
+			hfsLimiter @18 : Void;
+			firstWall @22 : Void;
+			
+			lfsLimiter @19 : Float64;
+			topLimiter @20 : Float64;
+			bottomLimiter @21 : Float64;
+		}
 	}
 }
 
-const w7xOp12Divertor : Geometry = ( componentsDBMeshes = [165, 166, 167, 168, 169] );
-const w7xOp12Baffles : Geometry = ( componentsDBMeshes = [320, 321, 322, 323, 324] );
-const w7xOp12Covers : Geometry = ( componentsDBMeshes = [325, 326, 327, 328, 329] );
-const w7xOp12HeatShield : Geometry = ( componentsDBMeshes = [330, 331, 332, 333, 334] );
-const w7xOp12PumpSlits : Geometry = ( componentsDBMeshes = [450, 451, 452, 453, 454] );
+const w7xOp12Divertor   : Geometry = ( w7x = ( componentsDbMeshes = [165, 166, 167, 168, 169] ));
+const w7xOp12Baffles    : Geometry = ( w7x = ( componentsDbMeshes = [320, 321, 322, 323, 324] ));
+const w7xOp12Covers     : Geometry = ( w7x = ( componentsDbMeshes = [325, 326, 327, 328, 329] ));
+const w7xOp12HeatShield : Geometry = ( w7x = ( componentsDbMeshes = [330, 331, 332, 333, 334] ));
+const w7xOp12PumpSlits  : Geometry = ( w7x = ( componentsDbMeshes = [450, 451, 452, 453, 454] ));
 
-const w7xSteelPanels : Geometry = ( componentsDBAssemblies = [8] );
-const w7xPlasmaVessel : Geometry = ( componentsDBAssemblies = [9] );
+const w7xSteelPanels : Geometry =  ( w7x = ( componentsDbAssemblies = [8] ));
+const w7xPlasmaVessel : Geometry = ( w7x = ( componentsDbAssemblies = [9] ));
 
 const w7xOp12Pfcs : Geometry = (
 	combined = [

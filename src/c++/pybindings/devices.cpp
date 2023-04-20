@@ -2,6 +2,8 @@
 #include <fsc/devices/w7x-geometry.capnp.h>
 #include <fsc/devices/w7x.h>
 
+#include <fsc/devices/jtext.h>
+
 #include "fscpy.h"
 
 namespace {
@@ -38,9 +40,7 @@ namespace fscpy {
 		
 		w7x.def("op21BafflesNoHoles", &w7xOp21BafflesNoHoles);
 		w7x.def("op21HeatShieldNoHoles", &w7xOp21HeatShieldNoHoles);
-		w7x.def("op21Divertor", &w7xOp21Divertor);
-		
-		
+		w7x.def("op21Divertor", &w7xOp21Divertor);		
 		
 		w7x.def("offlineComponentsDB", &fsc::devices::w7x::newComponentsDBFromOfflineData);
 		w7x.def("offlineCoilsDB", &fsc::devices::w7x::newCoilsDBFromOfflineData);
@@ -52,6 +52,12 @@ namespace fscpy {
 		w7x.def("coilsDBResolver", &fsc::devices::w7x::newCoilsDBResolver);
 		
 		w7x.def("buildCoilFields", &fsc::devices::w7x::buildCoilFields);
+		
+		py::module_ jtext = devices.def_submodule("jtext");
+		
+		jtext.def("geometryResolver", &fsc::devices::jtext::newGeometryResolver);
+		jtext.def("fieldResolver", &fsc::devices::jtext::newFieldResolver);
+		jtext.def("exampleGeqdsk", &fsc::devices::jtext::exampleGeqdsk);
 	}
 	
 	void loadDeviceSchema(py::module_& m) {

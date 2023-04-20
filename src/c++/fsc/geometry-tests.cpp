@@ -14,9 +14,7 @@ TEST_CASE("transform-cube") {
 	Library l = newLibrary();
 	LibraryThread lt = l -> newThread();
 	
-	KJ_LOG(WARNING, "Publishing");
 	DataRef<Mesh>::Client cube = lt->dataService().publish(TEST_CUBE.get());
-	KJ_LOG(WARNING, "Published");
 	
 	Temporary<Geometry> geometry;
 	
@@ -27,22 +25,17 @@ TEST_CASE("transform-cube") {
 	auto turned = geometry.initTransformed().initTurned();
 	turned.setAxis({0, 0, 1});
 	turned.setCenter({0, 0, 0});
-	turned.setAngle(3.14159265358979323846);
+	turned.getAngle().setRad(3.14159265358979323846);
 	
 	turned.initNode().initLeaf().setMesh(cube);
 	
 	GeometryLib::Client geoLib = newGeometryLib();
 	
-	KJ_LOG(WARNING, "Preparing merge request");
 	auto mergeRequest = geoLib.mergeRequest();
 	mergeRequest.setRef(lt->dataService().publish(geometry.asReader()));
 	
-	KJ_LOG(WARNING, "Sending merge request");
 	auto mergeResult = mergeRequest.send();
-	KJ_LOG(WARNING, "Downloading cube");
 	auto transformedCube = lt->dataService().download(mergeResult.getRef()).wait(lt->waitScope());
-	
-	KJ_LOG(WARNING, transformedCube.get());
 }
 
 TEST_CASE("index-cube") {
@@ -66,7 +59,6 @@ TEST_CASE("index-cube") {
 	}
 	uint32_t nPolys = polyIndices.size() - 1;
 	
-	KJ_DBG("Merging");
 	auto mergeRequest = geoLib.mergeRequest();
 	mergeRequest.setMesh(lt->dataService().publish(geo));
 	auto mergeResult = mergeRequest.send();
@@ -88,7 +80,6 @@ TEST_CASE("index-cube") {
 	indexRequest.initGeometry().setMerged(mergeResult.getRef());
 	indexRequest.setGrid(grid);
 	
-	KJ_DBG("Indexing");
 	auto indexResult = indexRequest.send().wait(ws);
 	auto indexDataRef = lt->dataService().download(indexResult.getIndexed().getData()).wait(ws);
 	auto indexData = indexDataRef.get();

@@ -36,6 +36,8 @@ set(
 	
 	devices/w7x.capnp
 	devices/w7x-geometry.capnp
+	
+	devices/jtext.capnp
 )
 
 set(
@@ -168,6 +170,9 @@ add_library(
 	devices/w7x.h
 	devices/w7x.cpp
 	
+	devices/jtext.h
+	devices/jtext.cpp
+	
 	grids.h
 	tensor.h
 	
@@ -238,6 +243,7 @@ if(BUILD_TESTING)
 		efit-tests.cpp
 		
 		devices/w7x-test.cpp
+		devices/jtext-test.cpp
 	)
 	target_link_libraries(tests PUBLIC fsc)
 endif()

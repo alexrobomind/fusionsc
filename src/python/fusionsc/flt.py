@@ -129,12 +129,15 @@ class MagneticConfig:
 		await data.writeArchive.asnc(self.field, filename)
 	
 	@staticmethod
-	def fromEFit(name):
-		with open(name, "r") as f:
-			fileContents = f.read()
+	def fromEFit(contents: Optional[str] = None, filename: Optional[str] = None):
+		assert contents or filename, "Must provide either GEqdsk file contents or filename"
+		
+		if contents is None:
+			with open(filename, "r") as f:
+				contents = f.read()
 			
 		result = MagneticConfig()
-		result.field.axisymmetricEquilibrium = axisymmetricEquilibrium = efit.eqFromGFile(fileContents)
+		result.field.axisymmetricEquilibrium = axisymmetricEquilibrium = efit.eqFromGFile(contents)
 		
 		return result
 

@@ -4,6 +4,16 @@
 #include <kj/map.h>
 
 namespace fsc {
+
+namespace {
+	double angle(Angle::Reader in) {
+		switch(in.which()) {
+			case Angle::RAD: return in.getRad();
+			case Angle::DEG: return pi / 180 * in.getDeg();
+		}
+		KJ_FAIL_REQUIRE("Unknown angle type");
+	}
+}
 	
 Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context) {
 	output.setTags(input.getTags());
@@ -365,8 +375,8 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 			bool close = false;
 			if(wt.isPhiRange()) {
 				auto pr = wt.getPhiRange();
-				phiStart = pr.getPhiStart();
-				phiEnd = pr.getPhiEnd();
+				phiStart = angle(pr.getPhiStart());
+				phiEnd = angle(pr.getPhiEnd());
 				close = pr.getClose();
 			}
 			
@@ -498,7 +508,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader inp
 			auto turned = input.getTurned();
 			auto inAxis = turned.getAxis();
 			auto inCenter = turned.getCenter();
-			double angle = turned.getAngle();
+			double ang = angle(turned.getAngle());
 			
 			KJ_REQUIRE(inAxis.size() == 3);
 			KJ_REQUIRE(inCenter.size() == 3);
@@ -506,7 +516,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader inp
 			Vec3d axis   { inAxis[0], inAxis[1], inAxis[2] };
 			Vec3d center { inCenter[0], inCenter[1], inCenter[2] };
 			
-			auto rotation = rotationAxisAngle(center, axis, angle);
+			auto rotation = rotationAxisAngle(center, axis, ang);
 			
 			KJ_IF_MAYBE(pTransform, transform) {
 				return mergeGeometries(turned.getNode(), tagTable, tagScope, (Mat4d)((*pTransform) * rotation), output);

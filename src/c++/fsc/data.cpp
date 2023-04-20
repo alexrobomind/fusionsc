@@ -932,9 +932,43 @@ namespace {
 	struct SharedArrayHolder : public kj::AtomicRefcounted {
 		kj::Array<const capnp::word> data;
 	};
+	
+	struct FileMappable : public internal::LocalDataServiceImpl::Mappable {
+		const kj::ReadableFile& f;
+		
+		FileMappable(const kj::ReadableFile& f) : f(f) {} 
+		kj::Array<const kj::byte> mmap(size_t start, size_t size) override {
+			return f.mmap(start, size);
+		}
+	};
+	
+	struct ArrayMappable : public internal::LocalDataServiceImpl::Mappable, public kj::AtomicRefcounted {
+		kj::Array<const kj::byte> backend;
+		
+		ArrayMappable(kj::Array<const kj::byte> backend) :
+			backend(mv(backend))
+		{
+			// Make sure that we are allocated through atomicRefcounted
+			(void) kj::atomicAddRef(*this);
+		}
+		
+		kj::Array<const kj::byte> mmap(size_t start, size_t size) override {
+			return backend.slice(start, size).attach(kj::atomicAddRef(*this));
+		}
+	};
 }
 
 LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(const kj::ReadableFile& f, const capnp::ReaderOptions options) {
+	FileMappable fm(f);
+	return publishArchive(fm, mv(options));
+}
+
+LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(kj::Array<const kj::byte> array, const capnp::ReaderOptions options) {
+	auto am = kj::atomicRefcounted<ArrayMappable>(mv(array));
+	return publishArchive(*am, mv(options));
+}
+
+LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(Mappable& f, const capnp::ReaderOptions options) {
 	auto read = [](const word* ptr) {
 		return reinterpret_cast<const capnp::_::WireValue<uint64_t>*>(ptr) -> get();
 	};
