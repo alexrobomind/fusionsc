@@ -8,7 +8,7 @@ def defaultGeometryGrid() -> service.CartesianGrid.Reader:
 
 def firstWall():
 	result = geometry.Geometry()
-	result.geometry.initJtext().hfsLimiter = None
+	result.geometry.initJtext().firstWall = None
 	return result
 
 def hfsLimiter():
