@@ -58,6 +58,9 @@ namespace fscpy {
 		jtext.def("geometryResolver", &fsc::devices::jtext::newGeometryResolver);
 		jtext.def("fieldResolver", &fsc::devices::jtext::newFieldResolver);
 		jtext.def("exampleGeqdsk", &fsc::devices::jtext::exampleGeqdsk);
+		
+		jtext.def("defaultGrid", &fsc::devices::jtext::defaultGrid);
+		jtext.def("defaultGeometryGrid", &fsc::devices::jtext::defaultGeometryGrid);
 	}
 	
 	void loadDeviceSchema(py::module_& m) {

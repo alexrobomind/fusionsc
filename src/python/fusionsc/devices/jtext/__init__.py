@@ -1,17 +1,10 @@
 from ... import service, geometry, flt, native
 
-def defaultGrid(n = 128, nPhi = 128):
-	grid = service.ToroidalGrid.newMessage()
-	
-	grid.nPhi = nPhi
-	grid.nR = n
-	grid.nZ = n
-	grid.rMin = 0.7
-	grid.rMax = 1.4
-	grid.zMin = -0.35
-	grid.zMax = 0.35
-	
-	return grid
+def defaultGrid() -> service.ToroidalGrid.Reader:
+	return native.devices.jtext.defaultGrid()
+
+def defaultGeometryGrid() -> service.CartesianGrid.Reader:
+	return native.devices.jtext.defaultGeometryGrid()
 
 def firstWall():
 	result = geometry.Geometry()

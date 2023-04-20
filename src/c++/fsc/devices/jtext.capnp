@@ -4,6 +4,7 @@ using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("fsc::devices::jtext");
 
 using G = import "../geometry.capnp";
+using M = import "../magnetics.capnp";
 
 # Embed resources into the executable
 
@@ -17,6 +18,30 @@ const islandCoils : List(Text) = [
 	embed "jtext-resources/GP6_sco.dat"
 ];
 const target : Text = embed "jtext-resources/target.dat";
+
+const defaultGrid : M.ToroidalGrid = (
+	rMin = 0.7,
+	rMax = 1.4,
+	zMin = -0.35,
+	zMax = 0.35,
+	nR = 70,
+	nZ = 70,
+	nPhi = 128,
+	nSym = 1
+);
+
+const defaultGeoGrid : G.CartesianGrid = (
+	xMin = -1.5,
+	xMax = 1.5,
+	yMin = -1.5,
+	yMax = 1.5,
+	zMin = -0.5,
+	zMax = 0.5,
+	
+	nX = 150,
+	nY = 150,
+	nZ = 50
+);
 
 const topLimiter : G.Transformed(G.Geometry) = (
 	shifted = (

@@ -162,6 +162,14 @@ kj::StringPtr exampleGeqdsk() {
 	return EXAMPLE_GFILE.get();
 }
 
+ToroidalGrid::Reader defaultGrid() {
+	return DEFAULT_GRID.get();
+}
+
+CartesianGrid::Reader defaultGeometryGrid() {
+	return DEFAULT_GEO_GRID.get();
+}
+
 }}
 
 }

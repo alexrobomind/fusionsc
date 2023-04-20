@@ -7,6 +7,9 @@ namespace devices { namespace jtext {
 	
 kj::StringPtr exampleGeqdsk();
 
+ToroidalGrid::Reader defaultGrid();
+CartesianGrid::Reader defaultGeometryGrid();
+
 FieldResolver::Client newFieldResolver();
 GeometryResolver::Client newGeometryResolver();
 
