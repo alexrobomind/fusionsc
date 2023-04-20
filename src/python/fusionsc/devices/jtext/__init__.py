@@ -1,10 +1,5 @@
 from ... import service, geometry, flt, native
 
-from . import resources
-
-import numpy as np
-import importlib.resources as pkg_resources
-
 def defaultGrid(n = 128, nPhi = 128):
 	grid = service.ToroidalGrid.newMessage()
 	
