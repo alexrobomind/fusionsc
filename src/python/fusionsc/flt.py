@@ -521,7 +521,7 @@ class FLT:
 	
 	@asyncFunction
 	async def _indexGeometry(self, geometry, grid):
-		from . import Geometry
+		from .geometry import Geometry
 		
 		resolved  = await geometry.resolve.asnc()
 		indexed	  = (await self.geometryLib.index(resolved.geometry, grid)).indexed
