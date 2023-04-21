@@ -32,10 +32,7 @@ if(BUILD_TESTING)
 	endif()
 endif()
 
-# First build the cupnp library / compiler
-add_subdirectory(cupnp)
-add_subdirectory(capnpc-java)
-add_subdirectory(capnp-sphinx)
+# Cupnp is included from the root
 
 # Then build the fsc library
 add_subdirectory(fsc)

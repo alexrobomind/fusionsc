@@ -23,3 +23,6 @@ add_executable(cupnp_test test.cpp ${CUPNP_TEST_HEADERS} ${CUPNP_TEST_HEADERS} $
 target_include_directories(cupnp_test PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 
 target_link_libraries(cupnp_test Catch2::Catch2WithMain CapnProto::capnp CapnProto::kj cupnp)
+
+# Built in src/c++/fsc
+install(TARGETS cupnp EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
