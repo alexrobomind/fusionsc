@@ -167,8 +167,8 @@ struct Geometry {
 		# ----------- W7-X ------------
 		
 		w7x : union {
-			componentsDbMeshes     @8 : List(UInt64);
-			componentsDbAssemblies @9 : List(UInt64);
+			componentsDbMesh     @8 : UInt64;
+			componentsDbAssembly @9 : UInt64;
 		}
 		
 		# ----------- J-TEXT ------------
@@ -185,21 +185,21 @@ struct Geometry {
 	}
 }
 
-const w7xOp12Divertor   : Geometry = ( w7x = ( componentsDbMeshes = [165, 166, 167, 168, 169] ));
-const w7xOp12Baffles    : Geometry = ( w7x = ( componentsDbMeshes = [320, 321, 322, 323, 324] ));
-const w7xOp12Covers     : Geometry = ( w7x = ( componentsDbMeshes = [325, 326, 327, 328, 329] ));
-const w7xOp12HeatShield : Geometry = ( w7x = ( componentsDbMeshes = [330, 331, 332, 333, 334] ));
-const w7xOp12PumpSlits  : Geometry = ( w7x = ( componentsDbMeshes = [450, 451, 452, 453, 454] ));
-
-const w7xSteelPanels : Geometry =  ( w7x = ( componentsDbAssemblies = [8] ));
-const w7xPlasmaVessel : Geometry = ( w7x = ( componentsDbAssemblies = [9] ));
-
-const w7xOp12Pfcs : Geometry = (
-	combined = [
-		.w7xOp12Divertor, .w7xOp12Baffles, .w7xOp12Covers, .w7xOp12HeatShield,
-		.w7xOp12PumpSlits, .w7xSteelPanels, .w7xPlasmaVessel
-	]
-);
+#const w7xOp12Divertor   : Geometry = ( w7x = ( componentsDbMeshes = [165, 166, 167, 168, 169] ));
+#const w7xOp12Baffles    : Geometry = ( w7x = ( componentsDbMeshes = [320, 321, 322, 323, 324] ));
+#const w7xOp12Covers     : Geometry = ( w7x = ( componentsDbMeshes = [325, 326, 327, 328, 329] ));
+#const w7xOp12HeatShield : Geometry = ( w7x = ( componentsDbMeshes = [330, 331, 332, 333, 334] ));
+#const w7xOp12PumpSlits  : Geometry = ( w7x = ( componentsDbMeshes = [450, 451, 452, 453, 454] ));
+#
+#const w7xSteelPanels : Geometry =  ( w7x = ( componentsDbAssemblies = [8] ));
+#const w7xPlasmaVessel : Geometry = ( w7x = ( componentsDbAssemblies = [9] ));
+#
+#const w7xOp12Pfcs : Geometry = (
+#	combined = [
+#		.w7xOp12Divertor, .w7xOp12Baffles, .w7xOp12Covers, .w7xOp12HeatShield,
+#		.w7xOp12PumpSlits, .w7xSteelPanels, .w7xPlasmaVessel
+#	]
+#);
 
 struct MergedGeometry {
 	tagNames @0 : List(Text);

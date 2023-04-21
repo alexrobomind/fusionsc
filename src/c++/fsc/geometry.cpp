@@ -14,6 +14,22 @@ namespace {
 		KJ_FAIL_REQUIRE("Unknown angle type");
 	}
 }
+
+bool isBuiltin(Geometry::Reader in) {
+	switch(in.which()) {
+		case Geometry::COMBINED:
+		case Geometry::TRANSFORMED:
+		case Geometry::REF:
+		case Geometry::NESTED:
+		case Geometry::MESH:
+		case Geometry::MERGED:
+		case Geometry::INDEXED:
+			return true;
+		
+		default:
+			return false;
+	}
+}
 	
 Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context) {
 	output.setTags(input.getTags());

@@ -151,6 +151,9 @@ add_library(
 	device.h
 	device.cpp
 	
+	offline.h
+	offline.cpp
+	
 	flt.h
 	flt-kernels.h
 	flt.cpp

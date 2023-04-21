@@ -121,7 +121,7 @@ struct W7XCoilSet {
 			];
 			
 			union {
-				coilsDBSet : group {
+				coilsDbSet : group {
 					mainCoilOffset    @2 : UInt32 = 160;
 					trimCoilIDs       @3 : List(UInt32) = [350, 241, 351, 352, 353];
 					controlCoilOffset @4 : UInt32 = 230;
@@ -198,41 +198,35 @@ struct MagneticField {
 		
 		# ------------------------------ W7-X --------------------------------
 
-		w7x : group {
-			# Note: Turn this into union if more variants arrive
+		w7x : union {
+			configurationDb : group {
+				# The W7-X config specification does not usually include a coil width
+				# Therefore, we have to add this information here
+				biotSavartSettings @13 : BiotSavartSettings = (
+					width = 0.01,
+					stepSize = 0.01
+				);
+				configId  @14 : UInt64;
+			}
 			
-			magneticConfig : group {
-				union {
-					configurationDB : group {
-						# The W7-X config specification does not usually include a coil width
-						# Therefore, we have to add this information here
-						biotSavartSettings @13 : BiotSavartSettings = (
-							width = 0.01,
-							stepSize = 0.01
-						);
-						configID  @14 : UInt64;
-					}
-					
-					coilsAndCurrents : group {
-						# Currents in the non-planar coils
-						nonplanar @ 15 : List(Float64) = [0, 0, 0, 0, 0];
-						
-						# A list of planar coil currents
-						planar    @ 16 : List(Float64) = [0, 0];
-						
-						# A list of trim coil currents
-						trim      @ 17 : List(Float64) = [0, 0, 0, 0, 0];
-						
-						# A list of control coil currents of either
-						# - length 2: Upper and Lower coils
-						# - length 5: Coils in each module
-						# - length 10: All 10 control coils
-						control @18 : List(Float64) = [0, 0];
-						
-						# The coil set to use. Usually the default theory coils
-						coils @19 : W7XCoilSet;
-					}
-				}
+			coilsAndCurrents : group {
+				# Currents in the non-planar coils
+				nonplanar @ 15 : List(Float64) = [0, 0, 0, 0, 0];
+				
+				# A list of planar coil currents
+				planar    @ 16 : List(Float64) = [0, 0];
+				
+				# A list of trim coil currents
+				trim      @ 17 : List(Float64) = [0, 0, 0, 0, 0];
+				
+				# A list of control coil currents of either
+				# - length 2: Upper and Lower coils
+				# - length 5: Coils in each module
+				# - length 10: All 10 control coils
+				control @18 : List(Float64) = [0, 0];
+				
+				# The coil set to use. Usually the default theory coils
+				coils @19 : W7XCoilSet;
 			}
 		}
 	}
@@ -241,5 +235,5 @@ struct MagneticField {
 # END [magnetics]
 
 const w7xEIMplus252 : MagneticField = (
-	w7x = (magneticConfig = ()),
+	w7x = (),
 );

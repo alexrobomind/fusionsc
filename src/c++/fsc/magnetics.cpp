@@ -323,6 +323,34 @@ struct FieldCache : public FieldResolverBase {
 
 }
 
+bool isBuiltin(MagneticField::Reader field) {
+	switch(field.which()) {
+		case MagneticField::SUM:
+		case MagneticField::REF:
+		case MagneticField::COMPUTED_FIELD:
+		case MagneticField::FILAMENT_FIELD:
+		case MagneticField::SCALE_BY:
+		case MagneticField::INVERT:
+		case MagneticField::CACHED:
+		case MagneticField::NESTED:
+			return true;
+		default:
+			return false;
+	}
+}
+
+bool isBuiltin(Filament::Reader filament) {
+	switch(filament.which()) {
+		case Filament::INLINE:
+		case Filament::REF:
+		case Filament::NESTED:
+			return true;
+		
+		default:
+			return false;
+	}
+}
+
 FieldResolver::Client newCache(MagneticField::Reader field, ComputedField::Reader computed) {
 	Temporary<ComputedField> cf(computed);
 	auto clientPromise = ID::fromReaderWithRefs(field).then([cf = mv(cf)](ID id) mutable -> FieldResolver::Client {

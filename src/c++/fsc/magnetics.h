@@ -20,12 +20,15 @@ namespace fsc {
  * \snippet magnetics.capnp magnetics
  */
 
+bool isBuiltin(MagneticField::Reader);
+bool isBuiltin(Filament::Reader);
+
 ToroidalGridStruct readGrid(ToroidalGrid::Reader in, unsigned int maxOrdinal);
 void writeGrid(const ToroidalGridStruct& grid, ToroidalGrid::Builder out);
 
 class FieldResolverBase : public FieldResolver::Server {
 public:	
-	virtual Promise<void> resolveField(ResolveFieldContext context) override;
+	Promise<void> resolveField(ResolveFieldContext context) override;
 	
 	virtual Promise<void> processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context);
 	virtual Promise<void> processFilament(Filament::Reader input, Filament::Builder output, ResolveFieldContext context);
@@ -40,7 +43,6 @@ FieldCalculator::Client newFieldCalculator(Own<DeviceBase> dev);
  * Creates a field resolver that will insert a cache instruction when detecting the passed field
  */
 FieldResolver::Client newCache(MagneticField::Reader field, ComputedField::Reader computed);
-
 /**
  * For testing
  */
