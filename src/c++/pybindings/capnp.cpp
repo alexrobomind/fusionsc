@@ -570,7 +570,38 @@ void assign(const BuilderSlot& dst, py::object object) {
 		}
 	}
 	
-	// Attempt 4: Try to assign from a sequence
+	// Attempt 4: Try to assign from a dict
+	if(py::dict::check_(object) && dst.type.isStruct()) {
+		auto asDict = py::reinterpret_borrow<py::dict>(object);
+		auto dstAsStruct = dst.get().as<DynamicStruct>();
+		
+		for(auto item : asDict) {
+			pybind11::detail::make_caster<kj::StringPtr> keyCaster;
+			if(!keyCaster.load(item.first, false)) {
+				assignmentFailureLog = strTree(mv(assignmentFailureLog), "Skipped assigning from dict because a key could not be converted to string\n");
+				goto dict_assignment_failed;
+			}
+			
+			kj::StringPtr fieldName = static_cast<kj::StringPtr>(keyCaster);
+			
+			auto maybeField = dst.type.asStruct().findFieldByName(fieldName);
+			KJ_IF_MAYBE(pField, maybeField) {
+				try {
+					assign(FieldSlot(dstAsStruct, *pField), py::reinterpret_borrow<py::object>(item.second));
+				} catch(std::exception e) {
+					assignmentFailureLog = strTree(mv(assignmentFailureLog), "Skipped assigning from dict because assignment of field failed\n", fieldName, e.what());
+					goto dict_assignment_failed;
+				}
+			} else {
+				assignmentFailureLog = strTree(mv(assignmentFailureLog), "Skipped assigning from dict because a key did not have a corresponding field\n", fieldName);
+				goto dict_assignment_failed;
+			}
+		}
+	}
+	
+	dict_assignment_failed:
+	
+	// Attempt 5: Try to assign from a sequence
 	if(py::sequence::check_(object) && dst.type.isList()) {
 		auto asSequence = py::reinterpret_borrow<py::sequence>(object);
 		
@@ -586,7 +617,7 @@ void assign(const BuilderSlot& dst, py::object object) {
 		}
 	}
 	
-	// Attempt 5: If we are a tensor, try to convert via a numpy array
+	// Attempt 6: If we are a tensor, try to convert via a numpy array
 	if(isTensor(dst.type)) {
 		auto scalarType = dst.type.asStruct().getFieldByName("data").getType().asList().getElementType();
 		

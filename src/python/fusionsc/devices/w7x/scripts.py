@@ -4,21 +4,17 @@ from tqdm import tqdm
 from fusionsc.asnc import asyncFunction
 
 import fusionsc
-import fusionsc.native as native
-import fusionsc.data as data
-import fusionsc.native.devices.w7x as w7xnative
 
-from . import divertor, baffles, heatShield, pumpSlits, vessel
+from fusionsc import native, data, devices
+
+from . import divertor, baffles, heatShield, pumpSlits, vessel, singleComponent, singleAssembly, connectCoilsDB, connectComponentsDB
 
 def downloadArgs(parser):
 	# Declare arguments	
 	parser.add_argument("--coil", type=int, action='append', default = [])
-	parser.add_argument("--config", type=int, action='append', default = [])
 	parser.add_argument("--assembly", type=int, action='append', default = [])
 	parser.add_argument("--mesh", type=int, action='append', default = [])
 	
-	#parser.add_argument("--op1", action = "store_true")
-	#parser.add_argument("--op2", action = "store_true")
 	parser.add_argument("--campaign", default="OP12")
 	parser.add_argument("--default", action = "store_true")
 	
@@ -29,16 +25,19 @@ def downloadArgs(parser):
 	
 	return parser
 	
-@asyncFunction
-async def download(args = None):
+def download(args = None):
 	if args is None:
 		args = downloadArgs(argparse.ArgumentParser()).parse_args()
+			
+	# Connect to webservices
+	connectCoilsDB(args.coilsdb)
+	connectComponentsDB(args.componentsDB)
 	
-	configs = args.config
 	coils = args.coil
 	assemblies = args.assembly
 	meshes = args.mesh
-		
+	
+	# Extract parts from multi-part geometries
 	def addParts(reader):
 		if isinstance(reader, fsc.Geometry):
 			addParts(reader.geometry)
@@ -47,11 +46,11 @@ async def download(args = None):
 			for el in reader.combined:
 				addParts(el)
 		
-		if reader.which() == 'componentsDBMeshes':
-			meshes.extend(reader.componentsDBMeshes)
+		if reader.which() == 'componentsDbMesh':
+			meshes.append(reader.componentsDBMesh)
 		
-		if reader.which() == 'componentsDBAssemblies':
-			assemblies.extend(reader.componentsDBAssemblies)
+		if reader.which() == 'componentsDbAssembly':
+			assemblies.append(reader.componentsDBAssembly)
 	
 	c = args.campaign
 	
@@ -63,99 +62,37 @@ async def download(args = None):
 		
 		meshes.append(164) # Boundary
 		
-		#meshes.extend(range(165, 170)) # OP1.2 test divertor unit
-		#meshes.extend(range(320, 335)) # OP1.2 baffles, baffle covers, heat shield
-		#meshes.extend(range(450, 455)) # Pump splits
-		
 		addParts(divertor(c))
 		addParts(baffles(c))
 		addParts(heatShield(c))
 		addParts(pumpSlits())
 		addParts(vessel())
+	
+	# Perform downloads
+	geometriesOut = []
+	coilsOut = []
+	
+	for id in tqdm(assemblies, "Downloading assemblies"):
+		key = singleAssembly(id)
+		geometriesOut.append({"key" : key.geometry, "val" : key.resolve().geometry})
+	
+	for id in tqdm(meshes, "Downloading meshes"):
+		key = singleMesh(id)
+		geometriesOut.append({"key" : key.geometry, "val" : key.resolve().geometry})
+	
+	for id in tqdm(coils, "Downloading coils"):
+		key = fusionsc.service.Filament.newMessage()
+		key.initW7x().coilsDb = id
 		
-		#assemblies.append(8) # OP1.2 steel panels
-		#assemblies.append(9) # OP1.2 vessel
-	
-	# Connect to webservices
-	coilsDB = w7xnative.webserviceCoilsDB(args.coilsdb)
-	componentsDB = w7xnative.webserviceComponentsDB(args.componentsdb)
-	
-	# Download configs and assemblies
-	# We need to do that first as these give us additional coils and meshes
-	async def getConfig(id):
-		config = await coilsDB.getConfig(id)
-		for coilId in config.coils:
-			coils.append(coilId)
-		
-		return config
-	
-	async def getAssembly(id):
-		assembly = await componentsDB.getAssembly(id)
-		for meshId in assembly.components:
-			meshes.append(meshId)
-		
-		return assembly
-	
-	async def getGeometry(reader):
-		if reader.which() == 'combined':
-			for piece in reader.combined:
-				getGeometry(piece)
-		
-		elif reader.which() == 'componentsDBMeshes':
-			meshes.extend(reader.componentsDBMeshes)
-	
-	configs = {
-		id : await getConfig(id)
-		for id in tqdm(set(configs), "Downloading configurations")
-	}
-	
-	assemblies = {
-		id : await getAssembly(id)
-		for id in tqdm(set(assemblies), "Downloading assemblies")
-	}
-	
-	# Now download coils and meshes
-	coils = {
-		id : await coilsDB.getCoil(id)
-		for id in tqdm(set(coils), "Downloading coils")
-	}
-	
-	meshes = {
-		id : await componentsDB.getMesh(id)
-		for id in tqdm(set(meshes), "Download components")
-	}
-	
-	print('Writing', args.output)
+		coilsOut.append({"key" : key, "val" : fusionsc.resolve.resolveFilament(key)})
 	
 	# Prepare output
 	output = native.OfflineData.newMessage()
-	
-	output.initW7xConfigs(len(configs))
-	for out, (id, config) in zip(output.w7xConfigs, configs.items()):
-		out.id = id
-		out.config = config
-	del configs
-	
-	output.initW7xAssemblies(len(assemblies))
-	for out, (id, assembly) in zip(output.w7xAssemblies, assemblies.items()):
-		out.id = id
-		out.assembly = assembly
-	del assemblies
-	
-	output.initW7xCoils(len(coils))
-	for out, (id, coil) in zip(output.w7xCoils, coils.items()):
-		out.id = id
-		out.filament = coil
-	del coils
-	
-	output.initW7xComponents(len(meshes))
-	for out, (id, mesh) in zip(output.w7xComponents, meshes.items()):
-		out.id = id
-		out.component = mesh
-	del meshes
+	output.geometries = geometriesOut
+	output.coils = coilsOut
 	
 	# Write output
-	await data.writeArchive.asnc(output, args.output)
+	data.writeArchive(output, args.output)
 	print("Done")
 	
 	return 0

@@ -8,10 +8,8 @@ import contextlib
 # Ensure event loop is running
 startEventLoop()
 
-# Since there is a small regree of work that the W7-X coil resolver can do even
-# without a backing components DB, we add connected to a dummy database.
 fieldResolvers = [
-	cppw7x.coilsDBResolver(cppw7x.CoilsDB.newDisconnected("")),
+	cppw7x.fieldResolver(),
 	cppjtext.fieldResolver()
 ]
 
@@ -26,17 +24,9 @@ def importOfflineData(filename: str):
 	"""
 	offlineData = data.openArchive(filename)
 	
-	# =============== W7-X specifics ==================
-	
-	# Create offline Coils- and Components-DBs and connect resolvers
-	coilsDB = cppw7x.offlineCoilsDB(offlineData)
-	coilsDBResolver = cppw7x.coilsDBResolver(coilsDB)
-	
-	componentsDB = cppw7x.offlineComponentsDB(offlineData)
-	componentsDBResolver = cppw7x.componentsDBResolver(componentsDB)
-
-	fieldResolvers.append(coilsDBResolver)
-	geometryResolvers.append(componentsDBResolver)
+	# Install offline resolvers
+	fieldResolvers.append(native.offline.fieldResolver(offlineData))
+	geometryResolvers.append(native.offline.geometryResolver(offlineData))
 
 @asyncFunction
 async def resolveField(field, followRefs: bool = False):		
@@ -47,6 +37,16 @@ async def resolveField(field, followRefs: bool = False):
 			pass
 		
 	return field
+
+@asyncFunction
+async def resolveFilament(filament, followRefs: bool = False):		
+	for r in fieldResolvers:
+		try:
+			filament = await r.resolveFilament(filament, followRefs)
+		except:
+			pass
+		
+	return filament
 	
 @asyncFunction
 async def resolveGeometry(geometry, followRefs: bool = False):		

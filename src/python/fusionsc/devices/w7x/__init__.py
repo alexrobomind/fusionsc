@@ -15,8 +15,10 @@ def connectCoilsDB(address: str):
 	W7-X coil specifications
 	"""
 	coilsDB = w7xnative.webserviceCoilsDB(address)
-	coilsDBResolver = w7xnative.coilsDBResolver(coilsDB)
-	resolve.fieldResolvers.append(coilsDBResolver)
+	
+	resolve.fieldResolvers.append(w7xnative.configDBResolver(coilsDB))
+	resolve.fieldResolvers.append(w7xnative.coilsDBResolver(coilsDB)))
+	
 	return coilsDB
 
 def connectComponentsDB(address: str):
@@ -25,8 +27,9 @@ def connectComponentsDB(address: str):
 	W7-X geometry specifications
 	"""	
 	componentsDB = w7xnative.webserviceComponentsDB(address)
-	componentsDBResolver = w7xnative.componentsDBResolver(componentsDB)
-	resolve.geometryResolvers.append(componentsDBResolver)
+	
+	resolve.geometryResolvers.append(w7xnative.componentsDBResolver(componentsDB))
+	
 	return componentsDB
 
 def connectIPPSite():
@@ -79,7 +82,7 @@ def cadCoils(convention = '1-AA-R0004.5') -> service.W7XCoilSet:
 	"""
 	convention = processCoilConvention(convention)
 	
-	# The native W7X coil set is the CAD coils
+	# The default W7X coil set is the CAD coils
 	coilPack = service.W7XCoilSet.newMessage()
 	
 	if convention == '1-AA-R0004.5':
@@ -151,9 +154,25 @@ def processCoilConvention(convention):
 	
 	return convention
 
-def components(ids = [], name = None):
+def coilsDBConfig(id: int) -> fusionsc.flt.MagneticConfig:
+	result = fusionsc.flt.MagneticConfig()
+	result.field.initW7x().configurationDb = id
+	
+	return result
+
+def coilsDBCoil(id: int) -> fusionsc.service.Filament.Reader:
+	result = fusionsc.service.Filament.newMessage()
+	result.initW7x().coilsDb = id
+	
+	return result
+	
+def component(id):
 	result = fusionsc.geometry.Geometry()
-	result.geometry.componentsDBMeshes = ids
+	result.geometry.initW7x().componentsDbMesh = id
+	return result
+
+def components(ids = [], name = None):
+	result = sum([component(id) for id in ids])
 	
 	if name:
 		tag = result.geometry.initTags(1)[0]
@@ -161,10 +180,15 @@ def components(ids = [], name = None):
 		tag.value.text = name
 		
 	return result
+	
+def assembly(id):
+	result = fusionsc.geometry.Geometry()
+	result.geometry.initW7x().componentsDbAssembly = id
+	
+	return result
 
 def assemblies(ids = [], name = None):
-	result = fusionsc.geometry.Geometry()
-	result.geometry.componentsDBAssemblies = ids
+	result = sum([assembly(id) for id in ids])
 	
 	if name:
 		tag = result.geometry.initTags(1)[0]
@@ -174,31 +198,31 @@ def assemblies(ids = [], name = None):
 	return result
 
 def divertor(campaign = 'OP21'):
-    if campaign == 'OP12':
-        return components(range(165, 170), 'Divertor TDU')
-    
-    if campaign == 'OP21':
-        return fusionsc.geometry.Geometry(w7xnative.op21Divertor())
-    
-    raise "Unknown campaign " + campaign
+	if campaign == 'OP12':
+		return components(range(165, 170), 'Divertor TDU')
+	
+	if campaign == 'OP21':
+		return fusionsc.geometry.Geometry(w7xnative.op21Divertor())
+	
+	raise "Unknown campaign " + campaign
 
 def baffles(campaign = 'OP21'):
-    if campaign == 'OP12':
-        return components(range(320, 325), 'OP1.2 Baffles') + components(range(325, 330), 'OP1.2 Baffle Covers')
-    
-    if campaign == 'OP21':
-        return fusionsc.geometry.Geometry(w7xnative.op21BafflesNoHoles())
-    
-    raise "Unknown campaign " + campaign
+	if campaign == 'OP12':
+		return components(range(320, 325), 'OP1.2 Baffles') + components(range(325, 330), 'OP1.2 Baffle Covers')
+	
+	if campaign == 'OP21':
+		return fusionsc.geometry.Geometry(w7xnative.op21BafflesNoHoles())
+	
+	raise "Unknown campaign " + campaign
 
 def heatShield(campaign = 'OP21'):
-    if campaign == 'OP12':
-        return components(range(330, 335), 'OP1.2 Heat Shield')
-    
-    if campaign == 'OP21':
-        return fusionsc.geometry.Geometry(w7xnative.op21HeatShieldNoHoles())
-    
-    raise "Unknown campaign " + campaign
+	if campaign == 'OP12':
+		return components(range(330, 335), 'OP1.2 Heat Shield')
+	
+	if campaign == 'OP21':
+		return fusionsc.geometry.Geometry(w7xnative.op21HeatShieldNoHoles())
+	
+	raise "Unknown campaign " + campaign
 
 def pumpSlits():
 	return components(range(450, 455), 'Pump Slits')
@@ -213,7 +237,7 @@ def op12Geometry():
 	return divertor() + baffles() + heatShield() + pumpSlits() + steelPanels() + vessel()
 
 def op21Geometry():
-    return divertor('OP21') + baffles('OP21') + heatShield('OP21') + pumpSlits() + steelPanels() + vessel()
+	return divertor('OP21') + baffles('OP21') + heatShield('OP21') + pumpSlits() + steelPanels() + vessel()
 	
 # The W7XCoilSet type defaults to the W7-X coils 160 ... 230
 defaultCoils = cadCoils('archive')

@@ -42,14 +42,14 @@ namespace fscpy {
 		w7x.def("op21HeatShieldNoHoles", &w7xOp21HeatShieldNoHoles);
 		w7x.def("op21Divertor", &w7xOp21Divertor);		
 		
-		w7x.def("offlineComponentsDB", &fsc::devices::w7x::newComponentsDBFromOfflineData);
-		w7x.def("offlineCoilsDB", &fsc::devices::w7x::newCoilsDBFromOfflineData);
-		
 		w7x.def("webserviceCoilsDB", &fsc::devices::w7x::newCoilsDBFromWebservice);
 		w7x.def("webserviceComponentsDB", &fsc::devices::w7x::newComponentsDBFromWebservice);
 		
 		w7x.def("componentsDBResolver", &fsc::devices::w7x::newComponentsDBResolver);
 		w7x.def("coilsDBResolver", &fsc::devices::w7x::newCoilsDBResolver);
+		w7x.def("configDBResolver", &fsc::devices::w7x::newCoilsDBResolver);
+		
+		w7x.def("fieldResolver", &fsc::devices::w7x::newW7xResolver);
 		
 		w7x.def("buildCoilFields", &fsc::devices::w7x::buildCoilFields);
 		

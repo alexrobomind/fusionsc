@@ -1,5 +1,7 @@
 #include "fscpy.h"
+
 #include <fsc/efit.h>
+#include <fsc/offline.h>
 
 
 namespace fscpy {
@@ -27,6 +29,11 @@ void initHelpers(py::module_& m) {
 	
 	py::module_ efitModule = m.def_submodule("efit");
 	efitModule.def("eqFromGFile", &parseGFile, "Creates an axisymmetric equilibrium from an EFIT GFile");
+	
+	py::module_ offlineModule = m.def_submodule("offline");
+	
+	offlineModule.def("fieldResolver", &newOfflineFieldResolver);
+	offlineModule.def("geometryResolver", &newOfflineGeometryResolver);
 }
 
 }
