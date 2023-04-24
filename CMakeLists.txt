@@ -23,6 +23,7 @@ include(src/cmake/OptimizeForTarget.cmake)
 
 # Prepare CTest
 include(CTest)
+include(GNUInstallDirs)
 
 # Pre-load python to make sure we have compatible dev environment and interpreter
 #set(CMAKE_FIND_DEBUG_MODE On)
@@ -271,7 +272,6 @@ target_link_libraries(
 	CapnProto::kj-http
 	CapnProto::kj
 	Eigen3::Eigen
-	#HDF5::hdf5-static
 	Libssh2::libssh2
 	SQLite::SQLite3
 	ZLIB::ZLIB
@@ -321,10 +321,13 @@ endif()
 # Set up testing subsystem
 include(Catch)
 
-# Cross-communication variables
-SET(FSC_GENAPI "")
+# First build the cupnp library / compiler
+add_subdirectory(src/c++/cupnp)
+add_subdirectory(src/c++/capnpc-java)
+add_subdirectory(src/c++/capnp-sphinx)
 
 # Build and install the libraries
+add_subdirectory(src/service)
 add_subdirectory(src/c++)
 
 # Build the documentation
@@ -357,49 +360,5 @@ if(FSC_WITH_INSTRUMENTATION AND (CMAKE_CXX_COMPILER_ID STREQUAL "Clang") AND BUI
 	)
 endif()
 
-# Extra target for the python-driven build
-if(SKBUILD)
-	add_custom_target(fsc-install-skbuild
-		${CMAKE_COMMAND}
-		-DCMAKE_INSTALL_COMPONENT=SKBUILD
-		-P "${PROJECT_BINARY_DIR}/cmake_install.cmake"
-		DEPENDS fsc-python-bindings
-    )
-endif(SKBUILD)
-
-# Install procedure
-include(GNUInstallDirs)
-
-# Built in src/c++/fsc
-INSTALL(TARGETS fsc cupnp deps EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
-
-# FSC headers
-# - Source headers
-INSTALL(DIRECTORY src/c++/fsc/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
-
-# - Genapi service headers
-get_property(FSC_GENAPI_DIR TARGET fsc PROPERTY GENAPI_DIR)
-INSTALL(DIRECTORY "${FSC_GENAPI_DIR}/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
-
-if(FSC_WITH_PYTHON)
-	if(SKBUILD)
-		# If we build with scikit-build, this library needs to go into a special path that mirrors the package structure
-		# Scikit will then automatically detect its presence and copy it into the source tree before packaging or creating
-		# editable installs (!!!).
-		INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION src/python/fsc COMPONENT SKBUILD)
-	else()
-		include(GNUInstallDirs)
-		
-		if(DEFINED FSC_PYLIB_DIR)
-			set(INSTALL_DIR ${FSC_PYLIB_DIR})
-		else()
-			set(INSTALL_DIR ${Python_SITEARCH})
-		endif()
-		INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION ${INSTALL_DIR}/fusionsc)
-
-		INSTALL(DIRECTORY src/python/ DESTINATION ${INSTALL_DIR} FILES_MATCHING PATTERN "*.py")
-	endif()
-endif()
-
-INSTALL(EXPORT FSCTargets DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake NAMESPACE FSC::)
+install(EXPORT FSCTargets DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake NAMESPACE FSC::)
 export(EXPORT FSCTargets NAMESPACE fsc FILE FSCExports.cmake)
