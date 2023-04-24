@@ -27,7 +27,7 @@ if(FSC_WITH_PYTHON)
 		# If we build with scikit-build, this library needs to go into a special path that mirrors the package structure
 		# Scikit will then automatically detect its presence and copy it into the source tree before packaging or creating
 		# editable installs (!!!).
-		INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION src/python/fsc COMPONENT SKBUILD)
+		INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION src/python/fusionsc COMPONENT SKBUILD)
 		
 		add_custom_target(fsc-install-skbuild
 			${CMAKE_COMMAND}
