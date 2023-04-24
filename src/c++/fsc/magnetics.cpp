@@ -61,7 +61,6 @@ struct FieldCalculation {
 	}
 	
 	void biotSavart(double current, Float64Tensor::Reader input, BiotSavartSettings::Reader settings) {
-		KJ_DBG("Scheduling Biot-Savart calculation");
 		auto shape = input.getShape();
 		
 		KJ_REQUIRE(shape.size() == 2);
@@ -95,9 +94,7 @@ struct FieldCalculation {
 		});
 	}
 	
-	void equilibrium(double scale, AxisymmetricEquilibrium::Reader equilibrium) {
-		KJ_DBG("Processing equilibrium");
-		
+	void equilibrium(double scale, AxisymmetricEquilibrium::Reader equilibrium) {		
 		calculation = calculation.then([this, equilibrium = Temporary<AxisymmetricEquilibrium>(equilibrium), scale]() mutable {
 			auto mapped = mapToDevice(
 				cuBuilder<AxisymmetricEquilibrium, cu::AxisymmetricEquilibrium>(mv(equilibrium)),
@@ -205,6 +202,17 @@ struct CalculationSession : public FieldCalculator::Server {
 				return getActiveThread().dataService().download(node.getRef()).then([&calculator, settings, scale, this](LocalDataRef<Filament> local) mutable {
 					return processFilament(calculator, local.get(), settings, scale).attach(cp(local));
 				});
+			
+			case Filament::SUM: {
+				auto sum = node.getSum();
+				auto arrBuilder = kj::heapArrayBuilder<Promise<void>>(sum.size());
+				
+				for(auto i : kj::indices(sum)) {
+					arrBuilder.add(processFilament(calculator, sum[i], settings, scale));
+				}
+				
+				return kj::joinPromises(arrBuilder.finish());
+			}
 			default:
 				KJ_FAIL_REQUIRE("Unknown filament node encountered. This either indicates that a device-specific node was not resolved, or a generic node from a future library version was presented");
 		}
@@ -344,6 +352,7 @@ bool isBuiltin(Filament::Reader filament) {
 		case Filament::INLINE:
 		case Filament::REF:
 		case Filament::NESTED:
+		case Filament::SUM:
 			return true;
 		
 		default:
@@ -396,6 +405,21 @@ Promise<void> FieldResolverBase::resolveField(ResolveFieldContext context) {
 	auto output = context.initResults();
 	
 	return processField(input, output, context);
+}
+
+Promise<void> FieldResolverBase::resolveFilament(ResolveFilamentContext ctx) {
+	auto input = ctx.getParams().getFilament();
+	
+	auto req = thisCap().resolveFieldRequest();
+	req.getField().initFilamentField().setFilament(input);
+	req.setFollowRefs(ctx.getParams().getFollowRefs());
+	
+	return req.send()
+	.then([ctx](auto field) mutable {
+		KJ_REQUIRE(field.isFilamentField());
+		
+		ctx.setResults(field.getFilamentField().getFilament());
+	});
 }
 
 Promise<void> FieldResolverBase::processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) {
@@ -490,6 +514,21 @@ Promise<void> FieldResolverBase::processFilament(Filament::Reader input, Filamen
 		}
 		case Filament::NESTED: {
 			return processFilament(input.getNested(), output, context);
+		}
+		case Filament::SUM: {
+			auto sumIn = input.getSum();
+			auto sumOut = output.initSum(sumIn.size());
+			
+			auto arrBuilder = kj::heapArrayBuilder<Promise<void>>(sumIn.size());
+			
+			for(auto i : kj::indices(sumIn)) {
+				auto in = sumIn[i];
+				auto out = sumOut[i];
+				
+				arrBuilder.add(processFilament(in, out, context));
+			}
+			
+			return kj::joinPromises(arrBuilder.finish());
 		}
 		default: {
 			output.setNested(input);

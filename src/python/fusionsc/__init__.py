@@ -26,6 +26,7 @@ from . import ipython_integration
 from . import resolve
 
 # Load core services
+from . import magnetics
 from . import flt
 from . import geometry
 

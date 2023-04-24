@@ -37,6 +37,7 @@ struct ComputedField {
 
 interface FieldResolver {
 	resolveField @0 (field : MagneticField, followRefs : Bool = false) -> MagneticField;
+	resolveFilament @1 (filament : Filament, followRefs : Bool = false) -> Filament;
 }
 
 # Interface for the computation of magnetic fields
@@ -55,11 +56,13 @@ struct Filament {
 	union {
 		# ============= General ============
 		
-		# Tensor of shape [3, nPoints]
+		# Tensor of shape [nPoints, 3]
 		inline @0 : Float64Tensor;
 		
 		ref    @1 : DataRef(Filament);
 		nested @2 : Filament;
+		
+		sum    @5 : List(Filament);
 		
 		# ========= Device-specific ========
 		

@@ -29,6 +29,7 @@ void writeGrid(const ToroidalGridStruct& grid, ToroidalGrid::Builder out);
 class FieldResolverBase : public FieldResolver::Server {
 public:	
 	Promise<void> resolveField(ResolveFieldContext context) override;
+	Promise<void> resolveFilament(ResolveFilamentContext context) override;
 	
 	virtual Promise<void> processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context);
 	virtual Promise<void> processFilament(Filament::Reader input, Filament::Builder output, ResolveFieldContext context);
