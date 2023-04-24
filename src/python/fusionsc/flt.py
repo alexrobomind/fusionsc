@@ -7,6 +7,9 @@ from . import capnp
 from . import resolve
 from . import inProcess
 from . import efit
+from . import magnetics
+
+from .asnc import asyncFunction
 
 import numpy as np
 import functools
@@ -133,7 +136,7 @@ class FLT:
 		resolved = await config.resolve.asnc()
 		computed = (await self.calculator.compute(resolved.field, grid)).computedField
 		
-		result = MagneticConfig()
+		result = magnetics.MagneticConfig()
 		result.field.computedField = computed
 		
 		return result

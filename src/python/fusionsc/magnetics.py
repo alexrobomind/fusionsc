@@ -7,6 +7,8 @@ from . import efit
 
 from .asnc import asyncFunction
 
+from typing import Optional
+
 class CoilFilament:
 	"""
 	Set of coils that can be associated with a current to compute magnetic fields.
@@ -77,7 +79,7 @@ class CoilFilament:
 		
 		return result
 	
-	@staticfunction
+	@staticmethod
 	def fromArray(data):
 		"""Creates a coil from numpy array of shape [3, nPoints]"""
 		data = np.asarray(data)

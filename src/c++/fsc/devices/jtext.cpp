@@ -76,13 +76,13 @@ struct JtextGeoResolver : public GeometryResolverBase {
 		auto jtext = input.getJtext();
 		switch(jtext.which()) {
 			case Geometry::Jtext::TOP_LIMITER: {
-				double dr = jtext.getTopLimiter() - 0.235;
+				double dr = jtext.getTopLimiter() - 0.24;
 				output.setTransformed(TOP_LIMITER.get());
 				output.getTransformed().getShifted().setShift({0, 0, dr});
 				return READY_NOW;
 			}
 			case Geometry::Jtext::BOTTOM_LIMITER: {
-				double dr = jtext.getBottomLimiter() - 0.235;
+				double dr = jtext.getBottomLimiter() - 0.24;
 				
 				output.setTransformed(BOTTOM_LIMITER.get());
 				output.getTransformed().getShifted().setShift({0, 0, -dr});
@@ -93,7 +93,7 @@ struct JtextGeoResolver : public GeometryResolverBase {
 				const double s = std::sin(ang);
 				const double c = std::cos(ang);
 				
-				double dr = jtext.getLfsLimiter() - 0.235;
+				double dr = jtext.getLfsLimiter() - 0.24;
 				
 				output.setTransformed(LFS_LIMITER.get());
 				output.getTransformed().getShifted().setShift({c * dr, s * dr, 0});

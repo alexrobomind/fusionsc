@@ -1,9 +1,11 @@
-import fusionsc
-import fusionsc.native.devices.w7x as w7xnative
-from fusionsc.native import service
+from ... import service, resolve
 
-from fusionsc import service, resolve, flt
-from fusionsc.asnc import asyncFunction
+from ...magnetics import MagneticConfig, CoilFilament
+from ...geometry import Geometry
+
+from ...native.devices import w7x as w7xnative
+
+from ...data import asyncFunction
 
 from typing import Union
 
@@ -17,7 +19,7 @@ def connectCoilsDB(address: str):
 	coilsDB = w7xnative.webserviceCoilsDB(address)
 	
 	resolve.fieldResolvers.append(w7xnative.configDBResolver(coilsDB))
-	resolve.fieldResolvers.append(w7xnative.coilsDBResolver(coilsDB)))
+	resolve.fieldResolvers.append(w7xnative.coilsDBResolver(coilsDB))
 	
 	return coilsDB
 
@@ -92,11 +94,11 @@ def cadCoils(convention = '1-AA-R0004.5') -> service.W7XCoilSet:
 	
 	return coilPack
 
-def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coils = None) -> "fusionsc.flt.MagneticConfig":
+def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coils = None) -> MagneticConfig:
 	if coils is None:
 		coils = defaultCoils
 	
-	config = fusionsc.flt.MagneticConfig()
+	config = MagneticConfig()
 	
 	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
 	cnc.coils = coils
@@ -106,11 +108,11 @@ def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coil
 	
 	return config
 
-def trimCoils(i_trim = [0, 0, 0, 0, 0], coils = None) -> "fusionsc.flt.MagneticConfig":
+def trimCoils(i_trim = [0, 0, 0, 0, 0], coils = None) -> MagneticConfig:
 	if coils is None:
 		coils = defaultCoils
 	
-	config = fusionsc.flt.MagneticConfig()
+	config = MagneticConfig()
 	
 	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
 	cnc.coils = coils
@@ -119,11 +121,11 @@ def trimCoils(i_trim = [0, 0, 0, 0, 0], coils = None) -> "fusionsc.flt.MagneticC
 	
 	return config
 
-def controlCoils(i_cc = [0, 0], coils = None) -> "fusionsc.flt.MagneticConfig":
+def controlCoils(i_cc = [0, 0], coils = None) -> MagneticConfig:
 	if coils is None:
 		coils = defaultCoils
 	
-	config = fusionsc.flt.MagneticConfig()
+	config = MagneticConfig()
 	
 	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
 	cnc.coils = coils
@@ -132,17 +134,17 @@ def controlCoils(i_cc = [0, 0], coils = None) -> "fusionsc.flt.MagneticConfig":
 	
 	return config
 
-def standard(bAx = 2.52, coils = None) -> "fusionsc.flt.MagneticConfig":
+def standard(bAx = 2.52, coils = None) -> MagneticConfig:
 	return mainField([15000 * bAx / 2.52] * 5, [0] * 2, coils = coils)
 
-def highMirror(bAx = 2.72, coils = None)  -> "fusionsc.flt.MagneticConfig":
+def highMirror(bAx = 2.72, coils = None) -> MagneticConfig:
 	a = bAx / 2.3
 	return mainField([13000 * a, 13260 * a, 14040 * a, 12090 * a, 10959 * a], [0] * 2, coils = coils)
 
-def highIota(bAx = 2.72, coils = None) -> "fusionsc.flt.MagneticConfig":
+def highIota(bAx = 2.72, coils = None) -> MagneticConfig:
 	return mainField([14814.81 * field / 2.43] * 5, [-10222.22 * field / 2.43] * 2, coils = coils)
 
-def lowIota(bAx = 2.72, coils = None) -> "fusionsc.flt.MagneticConfig":
+def lowIota(bAx = 2.72, coils = None) -> MagneticConfig:
 	return mainField([12222.22 * field / 2.45] * 5, [9166.67 * field / 2.45] * 2, coils = coils)
 
 coil_conventions = ['coilsdb', '1-AA-R0004.5', 'archive']
@@ -154,24 +156,24 @@ def processCoilConvention(convention):
 	
 	return convention
 
-def coilsDBConfig(id: int) -> fusionsc.flt.MagneticConfig:
-	result = fusionsc.flt.MagneticConfig()
+def coilsDBConfig(id: int) -> MagneticConfig:
+	result = fusionsc.magnetics.MagneticConfig()
 	result.field.initW7x().configurationDb = id
 	
 	return result
 
-def coilsDBCoil(id: int) -> fusionsc.service.Filament.Reader:
-	result = fusionsc.service.Filament.newMessage()
-	result.initW7x().coilsDb = id
+def coilsDBCoil(id: int) -> CoilFilament:
+	result = CoilFilament()
+	result.filament.initW7x().coilsDb = id
 	
 	return result
 	
-def component(id):
-	result = fusionsc.geometry.Geometry()
+def component(id) -> Geometry:
+	result = Geometry()
 	result.geometry.initW7x().componentsDbMesh = id
 	return result
 
-def components(ids = [], name = None):
+def components(ids = [], name = None) -> Geometry:
 	result = sum([component(id) for id in ids])
 	
 	if name:
@@ -181,13 +183,13 @@ def components(ids = [], name = None):
 		
 	return result
 	
-def assembly(id):
-	result = fusionsc.geometry.Geometry()
+def assembly(id) -> Geometry:
+	result = Geometry()
 	result.geometry.initW7x().componentsDbAssembly = id
 	
 	return result
 
-def assemblies(ids = [], name = None):
+def assemblies(ids = [], name = None) -> Geometry:
 	result = sum([assembly(id) for id in ids])
 	
 	if name:
@@ -197,30 +199,30 @@ def assemblies(ids = [], name = None):
 		
 	return result
 
-def divertor(campaign = 'OP21'):
+def divertor(campaign = 'OP21') -> Geometry:
 	if campaign == 'OP12':
 		return components(range(165, 170), 'Divertor TDU')
 	
 	if campaign == 'OP21':
-		return fusionsc.geometry.Geometry(w7xnative.op21Divertor())
+		return Geometry(w7xnative.op21Divertor())
 	
 	raise "Unknown campaign " + campaign
 
-def baffles(campaign = 'OP21'):
+def baffles(campaign = 'OP21') -> Geometry:
 	if campaign == 'OP12':
 		return components(range(320, 325), 'OP1.2 Baffles') + components(range(325, 330), 'OP1.2 Baffle Covers')
 	
 	if campaign == 'OP21':
-		return fusionsc.geometry.Geometry(w7xnative.op21BafflesNoHoles())
+		return Geometry(w7xnative.op21BafflesNoHoles())
 	
 	raise "Unknown campaign " + campaign
 
-def heatShield(campaign = 'OP21'):
+def heatShield(campaign = 'OP21') -> Geometry:
 	if campaign == 'OP12':
 		return components(range(330, 335), 'OP1.2 Heat Shield')
 	
 	if campaign == 'OP21':
-		return fusionsc.geometry.Geometry(w7xnative.op21HeatShieldNoHoles())
+		return Geometry(w7xnative.op21HeatShieldNoHoles())
 	
 	raise "Unknown campaign " + campaign
 

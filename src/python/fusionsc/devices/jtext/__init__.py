@@ -1,4 +1,4 @@
-from ... import service, geometry, flt, native
+from ... import service, geometry, magnetics, native
 
 def defaultGrid() -> service.ToroidalGrid.Reader:
 	return native.devices.jtext.defaultGrid()
@@ -37,7 +37,7 @@ def bottomLimiter(pos):
 	return result
 
 def singleIslandCoil(i, current):
-	result = flt.MagneticConfig()
+	result = magnetics.MagneticConfig()
 	
 	filField = result.field.initFilamentField()
 	
@@ -49,7 +49,7 @@ def singleIslandCoil(i, current):
 	return result
 
 def islandCoils(currents):
-	result = flt.MagneticConfig()
+	result = magnetics.MagneticConfig()
 	
 	result.field.sum = [
 		singleIslandCoil(i, currents[i-1]).field
