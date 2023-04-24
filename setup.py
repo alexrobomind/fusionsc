@@ -4,7 +4,7 @@ from setuptools import find_packages
 setup(
 	name = 'fusionsc',
 	version = '0.1',
-	packages = ['fusionsc', 'fusionsc.devices', 'fusionsc.devices.w7x'],
+	packages = ['fusionsc', 'fusionsc.devices', 'fusionsc.devices.w7x', 'fusionsc.devices.jtext'],
 	package_dir = {"" : "src/python"},
 	cmake_install_target = "fsc-install-skbuild",
 	entry_points = {
