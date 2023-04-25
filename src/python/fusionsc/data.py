@@ -31,7 +31,7 @@ def publish(data: Union[capnp.DynamicStructReader, capnp.DataReader]) -> service
 	Returns:
 		A DataRef pointing to an in-memory copy of 'data'.
 	"""
-	inThreadRef = native.data.publish(ref)
+	inThreadRef = native.data.publish(data)
 	cloneResult = inProcess.localResources().download(inThreadRef)
 	return cloneResult.ref
 
@@ -52,13 +52,18 @@ def download(ref: service.DataRef) -> asnc.Promise[Union[capnp.DynamicCapability
 	return native.data.downloadAsync(ref)
 
 @asyncFunction
-def writeArchive(data, filename: str):
+def writeArchive(data: Union[capnp.DynamicStructReader, capnp.DataReader, capnp.DynamicCapabilityClient], filename: str):
 	"""
 	Writes a copy of 'data' into a local archive file. All transitively contained DataRefs will be downloaded and a copy of them
 	will be stored in this file. This ensures that an archive always contains a complete copy of all information needed to reconstruct
 	its contents.
 	"""
-	return inProcess.localResources().writeArchive(filename, data)
+	if isinstance(data, capnp.DynamicCapabilityClient):
+		ref = data
+	else:
+		ref = publish(data)
+	
+	return inProcess.localResources().writeArchive(filename, ref)
 
 @asyncFunction
 def readArchive(filename: str) -> asnc.Promise[Union[capnp.DynamicCapabilityClient, capnp.DynamicStructReader, capnp.DataReader]]:
