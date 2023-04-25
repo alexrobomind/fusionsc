@@ -572,28 +572,42 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 				// Parse positional arguments
 				KJ_REQUIRE(pyArgs.size() <= argFields.size(), "Too many arguments specified");
 				
-				auto checkType = [&typeInference]
+				auto checkType = [&typeInference](capnp::Type dst, DynamicValue::Reader reader) {
+					Maybe<capnp::Type> asType;
+					if(dst.isStruct()) {
+						KJ_REQUIRE(reader.getType() == capnp::DynamicValue::STRUCT);	
+						asType = reader.as<capnp::DynamicStruct>().getSchema();
+					} else if(dst.isInterface()) {
+						KJ_REQUIRE(reader.getType() == capnp::DynamicValue::CAPABILITY);
+						asType = reader.as<capnp::DynamicCapability>().getSchema();
+					} else if(dst.isList()) {
+						KJ_REQUIRE(reader.getType() == capnp::DynamicValue::LIST);
+						asType = reader.as<capnp::DynamicList>().getSchema();
+					}
+					
+					KJ_IF_MAYBE(pType, asType) {
+						if(!typeInference.infer(*pType, dst, false)) {
+							KJ_FAIL_REQUIRE("Failed to match types for parameter", reader, typeInference.errorMsg);
+						}
+					}
+				};
 				
 				// Try to derive proper type for fields
 				for(size_t i = 0; i < pyArgs.size(); ++i) {
 					auto field = argFields[i];
 										
-					auto asReader = pyArgs[i].cast<DynamicValue::Reader>();				
-					if(!typeInference.infer(asReader.getType(), field.getType(), false)) {
-						KJ_FAIL_REQUIRE("Failed to match types for parameter", i, typeInference.errorMsg);
-					}
+					auto asReader = pyArgs[i].cast<DynamicValue::Reader>();	
+					checkType(field.getType(), asReader);
 				}
 				
-				auto inferEntry = [paramType, &typeInference](kj::StringPtr name, DynamicValue::Reader value) mutable {
+				auto inferEntry = [paramType, &checkType](kj::StringPtr name, DynamicValue::Reader value) mutable {
 					KJ_IF_MAYBE(pField, paramType.findFieldByName(name)) {
-						if(!typeInference.infer(value.getType(), pField -> getType(), false)) {
-							KJ_FAIL_REQUIRE("Failed to match types for parameter", name, typeInference.errorMsg);
-						}
+						checkType(pField -> getType(), value);
 					} else {
 						KJ_FAIL_REQUIRE("Unknown named parameter", name);
 					}
 				};
-				auto pyInferEntry = py::cpp_function(processEntry);
+				auto pyInferEntry = py::cpp_function(inferEntry);
 				
 				auto nameList = py::list(pyKwargs);
 				for(auto name : nameList) {
@@ -601,7 +615,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 				}
 				
 				// Specialize types
-				auto specializedParamType  = typeInference.specialize(paramType).asStructSchema();
+				auto specializedParamType  = typeInference.specialize(paramType).asStruct();
 				
 				for(size_t i = 0; i < pyArgs.size(); ++i) {
 					auto field = argFields[i];
