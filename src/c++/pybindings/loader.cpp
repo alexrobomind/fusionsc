@@ -54,7 +54,7 @@ struct TypeInference {
 	bool infer(capnp::Type from, capnp::Type to, bool strict) {
 		if(to.isStruct()) {
 			if(!from.isStruct()) {
-				errorMsg = str("Attempting to use non-struct type ", from, " as struct ", to.asStruct());
+				errorMsg = str("Attempting to use non-struct type as struct ", to.asStruct());
 				return false;
 			}
 			
@@ -63,7 +63,7 @@ struct TypeInference {
 		
 		if(to.isInterface()) {
 			if(!from.isInterface()) {
-				errorMsg = str("Attempting to use non-interface type ", from, " as interface ", to.asInterface());
+				errorMsg = str("Attempting to use non-interface type as interface ", to.asInterface());
 				return false;
 			}
 			
@@ -90,12 +90,12 @@ struct TypeInference {
 		}
 		
 		if(to.which() == capnp::schema::Type::ANY_POINTER) {
-			if(!from.isInterface() && !from.isList() && !from.isStruct()) {
+			if(!from.isInterface() && !from.isList() && !from.isStruct() && !from.isAnyPointer()) {
 				errorMsg = str("Only structs, interfaces, and lists can be used for AnyPointer parameters (incl. type parameters)");
 				return false;
 			}
 			
-			KJ_IF_MAYBE(pImplicit, to.getImplicitParameter()) {
+			KJ_IF_MAYBE(pImplicit, to.getImplicitParameter()) {				
 				unsigned int idx = pImplicit -> index;
 				
 				if(idx >= paramBindings.size()) {
@@ -115,8 +115,8 @@ struct TypeInference {
 	}
 	
 	capnp::Type specialize(capnp::Type type) {
-		/*if(paramBindings.empty())
-			return type;*/
+		if(paramBindings.empty())
+			return type;
 		
 		Temporary<capnp::schema::Type> proto;
 		extractType(type, proto);
@@ -486,8 +486,42 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		kj::StringPtr rawName = method.getProto().getName();
 		kj::String name = memberName(rawName);
 		
-		auto paramType = method.getParamType();
-		auto resultType = method.getResultType();
+		// auto paramType = method.getParamType();
+		// auto resultType = method.getResultType();
+		// Temporary<capnp::schema::Type> paramTypeProto;
+		// Temporary<capnp::schema::Type> resultTypeProto;
+		
+		auto makeDefaultBrand = [&loader](uint64_t nodeId, capnp::schema::Brand::Builder out) {
+			// Creates a default brand that binds each argument to a method parameter
+			auto structInfo = loader.get(nodeId);
+			auto proto = structInfo.getProto();
+			
+			if(proto.getParameters().size() == 0)
+				return;
+			
+			auto scope = out.initScopes(1)[0];
+			scope.setScopeId(nodeId);
+			
+			auto bindings = scope.initBind(proto.getParameters().size());
+			for(auto iBinding : kj::indices(bindings)) {
+				auto binding = bindings[iBinding];
+				binding.initType().initAnyPointer().initImplicitMethodParameter().setParameterIndex(iBinding);
+			}
+		};
+		
+		Temporary<capnp::schema::Brand> paramBrand = method.getProto().getParamBrand();
+		Temporary<capnp::schema::Brand> resultBrand = method.getProto().getResultBrand();
+		
+		if(paramBrand.getScopes().size() == 0) {
+			makeDefaultBrand(method.getProto().getParamStructType(), paramBrand);
+		}
+		
+		if(resultBrand.getScopes().size() == 0) {
+			makeDefaultBrand(method.getProto().getResultStructType(), resultBrand);
+		}
+		
+		auto paramType = loader.get(method.getProto().getParamStructType(), paramBrand.asReader()).asStruct();
+		auto resultType = loader.get(method.getProto().getResultStructType(), resultBrand.asReader()).asStruct();	
 		
 		auto doc = kj::strTree();
 		
@@ -537,7 +571,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 			name, " : (", paramName.flatten(), ") -> ", resultName.flatten(), ".Promise"
 		);
 		
-		auto function = [paramType, resultType, method, types = mv(types), argFields = mv(argFields), nArgs, &loader](capnp::DynamicCapability::Client self, py::args pyArgs, py::kwargs pyKwargs) mutable {			
+		auto function = [paramType, resultType, method, types = mv(types), argFields = mv(argFields), nArgs, &loader](capnp::DynamicCapability::Client self, py::args pyArgs, py::kwargs pyKwargs) mutable {	
 			// auto request = self.newRequest(method);
 			capnp::Request<AnyPointer, AnyPointer> request = self.typelessRequest(
 				method.getContainingInterface().getProto().getId(), method.getOrdinal(), nullptr, capnp::Capability::Client::CallHints()
@@ -562,7 +596,6 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 						
 						requestBuilt = true;
 					} else {
-						KJ_DBG(typeInference.errorMsg);
 						typeInference.clear();
 					}
 				}
@@ -596,8 +629,10 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 				for(size_t i = 0; i < pyArgs.size(); ++i) {
 					auto field = argFields[i];
 										
-					auto asReader = pyArgs[i].cast<DynamicValue::Reader>();	
-					checkType(field.getType(), asReader);
+					py::detail::type_caster<DynamicValue::Reader> readerCaster;
+					KJ_REQUIRE(readerCaster.load(pyArgs[i], false), "Failed to convert positional argument", i);
+					
+					checkType(field.getType(), (DynamicValue::Reader) readerCaster);
 				}
 				
 				auto inferEntry = [paramType, &checkType](kj::StringPtr name, DynamicValue::Reader value) mutable {
@@ -615,35 +650,26 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 				}
 				
 				// Specialize types
-				auto specializedParamType  = typeInference.specialize(paramType).asStruct();
-				
-				for(size_t i = 0; i < pyArgs.size(); ++i) {
-					auto field = argFields[i];
-										
-					auto asReader = pyArgs[i].cast<DynamicValue::Reader>();					
-					structRequest.set(field, pyArgs[i].cast<DynamicValue::Reader>());
-				}
-				
+				auto specializedParamType = typeInference.specialize(paramType).asStruct();
 				DynamicStruct::Builder structRequest = request.initAs<DynamicStruct>(specializedParamType);
 				
 				for(size_t i = 0; i < pyArgs.size(); ++i) {
 					auto field = argFields[i];
-										
-					auto asReader = pyArgs[i].cast<DynamicValue::Reader>();					
-					structRequest.set(field, pyArgs[i].cast<DynamicValue::Reader>());
+					
+					py::detail::type_caster<DynamicValue::Reader> readerCaster;
+					KJ_REQUIRE(readerCaster.load(pyArgs[i], false), "Failed to convert positional argument", i);
+					structRequest.set(field.getProto().getName(), (DynamicValue::Reader) readerCaster);
 				}
 				
 				// Parse keyword arguments
-				auto processEntry = [&structRequest, paramType](kj::StringPtr name, DynamicValue::Reader value) mutable {
-					KJ_IF_MAYBE(pField, paramType.findFieldByName(name)) {
+				auto processEntry = [&structRequest, specializedParamType](kj::StringPtr name, DynamicValue::Reader value) mutable {
+					KJ_IF_MAYBE(pField, specializedParamType.findFieldByName(name)) {
 						structRequest.set(*pField, value);
 					} else {
 						KJ_FAIL_REQUIRE("Unknown named parameter", name);
 					}
 				};
 				auto pyProcessEntry = py::cpp_function(processEntry);
-				
-				auto nameList = py::list(pyKwargs);
 				for(auto name : nameList) {
 					pyProcessEntry(name, pyKwargs[name]);
 				}
@@ -651,7 +677,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 			
 			RemotePromise<AnyPointer> result = request.send();
 			
-			auto specializedResultType = typeInference.specialize(resultType).asStructSchema();
+			auto specializedResultType = typeInference.specialize(resultType).asStruct();
 			
 			// Extract promise
 			PyPromise resultPromise = result.then([specializedResultType](capnp::Response<AnyPointer> response) {

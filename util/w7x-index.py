@@ -46,7 +46,6 @@ for row, output in zip(rows.itertuples(), geoList):
 	tags[3].name = 'tileNo'
 	tags[3].value.uInt64 = int(tileNo)
 
-print(type(baffles.geometry))
 baffles.save("baffles.fsc")
 
 # Baffle geometry
@@ -129,4 +128,5 @@ for row, output in zip(rows.itertuples(), geoList):
 
 divertor.save("divertor.fsc")
 
-print(compTypes)
+geo = fsc.geometry.Geometry.load("divertor.fsc")
+geo.ptree()

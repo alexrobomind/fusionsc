@@ -71,7 +71,7 @@ const loginNodeProfile : LocalConfig = (enableCompute = false, jobScheduler = (s
 interface LocalResources extends(Networking.NetworkInterface) {
 	root         @0 () -> (root : RootService);
 	
-	openArchive  @1 (filename : Text) -> (ref : Data.DataRef);
-	writeArchive @2 (filename : Text, ref : Data.DataRef) -> ();
-	download     @3 (ref : Data.DataRef) -> (ref : Data.DataRef);
+	openArchive  @1 (filename : Text) -> (ref : Data.DataRef(AnyPointer));
+	writeArchive @2 [T] (filename : Text, ref : Data.DataRef(T)) -> ();
+	download     @3 [T] (ref : Data.DataRef(T)) -> (ref : Data.DataRef(T));
 }

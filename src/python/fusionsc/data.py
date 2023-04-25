@@ -8,7 +8,6 @@ from .asnc import asyncFunction
 
 from typing import Any, Union
 
-@asyncFunction
 def openArchive(filename: str) -> service.DataRef:
 	"""
 	Opens the given archive file and provides a DataRef representing its root.
@@ -19,7 +18,7 @@ def openArchive(filename: str) -> service.DataRef:
 	Returns:
 		A DataRef pointing to the file root that can be shared or opened using the 'download' method.
 	"""
-	return inProcess.localResources().openArchive(filename)
+	return inProcess.localResources().openArchive(filename).ref
 
 def publish(data: Union[capnp.DynamicStructReader, capnp.DataReader]) -> service.DataRef:
 	"""
@@ -32,7 +31,6 @@ def publish(data: Union[capnp.DynamicStructReader, capnp.DataReader]) -> service
 		A DataRef pointing to an in-memory copy of 'data'.
 	"""
 	inThreadRef = native.data.publish(data)
-	print(type(inThreadRef))
 	cloneResult = inProcess.localResources().download(inThreadRef)
 	return cloneResult.ref
 
@@ -78,4 +76,5 @@ def readArchive(filename: str) -> asnc.Promise[Union[capnp.DynamicCapabilityClie
 		The contents of the archive, interpreted as the appropriate type (either a DataReader if the ref holds raw binary
 		data, or a subtype of DynamicCapabilityClient or DynamicStructReader typed to the appropriate Cap'n'proto schema).
 	"""
-	return download.asnc(openArchive(filename))
+	archiveRef = openArchive(filename)
+	return download.asnc(archiveRef)

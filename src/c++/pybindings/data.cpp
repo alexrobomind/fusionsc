@@ -29,15 +29,25 @@ PyPromise download(capnp::DynamicCapability::Client capability) {
 	DataRef<AnyPointer>::Client dataRef = capability.castAs<DataRef<AnyPointer>>();
 	
 	capnp::Type payloadType = refSchema.getBrandArgumentsAtScope(DR_ID)[0];
-	KJ_REQUIRE(payloadType.isInterface() || payloadType.isStruct() || payloadType.isData(), "DataRefs can only carry interface, struct or data types");
+	KJ_REQUIRE(payloadType.isInterface() || payloadType.isStruct() || payloadType.isData() || payloadType.isAnyPointer(), "DataRefs can only carry interface, struct or data types (or AnyPointer if unknown)");
 	
 	auto promise = getActiveThread().dataService().download(dataRef)
-	.then([payloadType](LocalDataRef<AnyPointer> localRef) {
+	.then([payloadType](LocalDataRef<AnyPointer> localRef) mutable {
 		// Because async execution usually happens outside the GIL, we need to re-acquire it here
 		py::gil_scoped_acquire withPythonGIL;
 		
 		// Create a keepAlive object
 		py::object keepAlive = py::cast((UnknownObject*) new UnknownHolder<LocalDataRef<AnyPointer>>(localRef));
+		
+		// If the type is "AnyPointer", we need to deduce it from the local ref
+		if(payloadType.isAnyPointer()) {
+			// Retrieve target type
+			if(localRef.getTypeID() == 1) {
+				payloadType = capnp::Type(capnp::schema::Type::DATA);
+			} else {
+				payloadType = defaultLoader.capnpLoader.get(localRef.getTypeID()).asStruct();
+			}
+		}
 		
 		// "Data" type payloads do not have a root pointer. They are NO capnp messages.
 		if(payloadType.isData()) {
