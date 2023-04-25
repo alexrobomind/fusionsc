@@ -103,6 +103,10 @@ capnp::DynamicCapability::Client publish(capnp::DynamicStruct::Reader value) {
 	return asAny.castAs<capnp::DynamicCapability>(dataRefSchema.asInterface());
 }
 
+auto publish2(capnp::DynamicStruct::Builder dsb) {
+	return publish(dsb.asReader());
+}
+
 capnp::DynamicValue::Reader openArchive(kj::StringPtr path) {
 	using capnp::AnyPointer;
 	using capnp::DynamicCapability;
@@ -193,6 +197,7 @@ void initData(py::module_& m) {
 	
 	dataModule.def("downloadAsync", &download, "Starts a download for the given DataRef and returns a promise for its contents");
 	dataModule.def("publish", &publish, "Creates a DataRef containing the given data");
+	dataModule.def("publish", &publish2, "Creates a DataRef containing the given data");
 	
 	dataModule.def("openArchive", &openArchive, "Opens an archive file and returns a DataRef to its root");
 	

@@ -1230,7 +1230,9 @@ void bindStructClasses(py::module_& m) {
 		return capnp::prettyPrint(self).flatten();
 	});
 	
-	m.def("totalSize", [](DSR& reader) { return reader.totalSize().wordCount * 8; });
+	m.def("totalSize", [](DSR& reader) { return reader.totalSize().wordCount * 8; });\
+	
+	py::implicitly_convertible<DSB, DSR>();
 	
 	// ----------------- PIPELINE ------------------
 	

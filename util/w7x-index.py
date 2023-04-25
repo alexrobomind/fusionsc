@@ -5,10 +5,6 @@ import numpy as np
 import fusionsc as fsc
 from fusionsc.devices import w7x
 
-def save(g, filename):
-	published = fsc.data.publish(g.geometry)
-	fsc.data.writeArchive(published, filename)
-
 print("Loading...")
 
 # Load whole component list
@@ -50,7 +46,8 @@ for row, output in zip(rows.itertuples(), geoList):
 	tags[3].name = 'tileNo'
 	tags[3].value.uInt64 = int(tileNo)
 
-save(baffles, "baffles.fsc")
+print(type(baffles.geometry))
+baffles.save("baffles.fsc")
 
 # Baffle geometry
 heatShield = fsc.geometry.Geometry()
@@ -89,8 +86,8 @@ for row, output in zip(rows.itertuples(), geoList):
 	tags[2].value.uInt64 = int(groupNo)
 	tags[3].name = 'tileNo'
 	tags[3].name.uInt64 = int(bafNo)
-
-save(heatShield, "heatShield.fsc")
+	
+heatShield.save("heatShield.fsc")
 
 divertor = fsc.geometry.Geometry()
 print("Processing divertor")
@@ -130,6 +127,6 @@ for row, output in zip(rows.itertuples(), geoList):
 	tags[4].name = 'componentNo'
 	tags[4].value.uInt64 = int(compId)
 
-save(divertor, "divertor.fsc")
+divertor.save("divertor.fsc")
 
 print(compTypes)
