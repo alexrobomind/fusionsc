@@ -256,10 +256,6 @@ YAML::Emitter& operator<<(YAML::Emitter& dst, DynamicStruct::Reader src) {
 			elType = asList.getElementType();
 		}
 		
-		// Don't emit interface- or any-typed fields or nested lists
-		if(elType.isInterface() || elType.isAnyPointer())
-			return;
-		
 		auto val = src.get(field);
 		
 		dst << YAML::Key << field.getProto().getName();
@@ -278,6 +274,11 @@ YAML::Emitter& operator<<(YAML::Emitter& dst, DynamicStruct::Reader src) {
 		// There is no point in emitting a non-union void field.
 		if(field.getType().isVoid())
 			continue;
+		
+		// Don't emit interface- or any-typed fields or nested lists
+		if(field.getType().isInterface() || field.getType().isAnyPointer())
+			continue;
+		
 		emitField(field);
 	}
 	

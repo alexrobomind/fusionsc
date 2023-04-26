@@ -619,6 +619,20 @@ void buildCoilFields(W7XCoilSet::Reader in, W7XCoilSet::Fields::Builder output) 
 		getControlCoil(i_coil, filField.getFilament());
 	}
 }
+
+// built-in geometries
+
+DataRef<Geometry>::Client op21Divertor() {
+	return getActiveThread().dataService().publishConstant<Geometry>(W7X_OP21_DIVERTOR.get());
+}
+
+DataRef<Geometry>::Client op21Baffles() {
+	return getActiveThread().dataService().publishConstant<Geometry>(W7X_OP21_BAFFLES_NO_HOLES.get());
+}
+
+DataRef<Geometry>::Client op21HeatShield() {
+	return getActiveThread().dataService().publishConstant<Geometry>(W7X_OP21_HEAT_SHIELD_NO_HOLES.get());
+}
 	
 }}
 

@@ -31,6 +31,10 @@ GeometryResolver::Client newComponentsDBResolver(ComponentsDB::Client components
 
 void buildCoilFields(W7XCoilSet::Reader in, W7XCoilSet::Fields::Builder out);
 
+DataRef<Geometry>::Client op21Divertor();
+DataRef<Geometry>::Client op21Baffles();
+DataRef<Geometry>::Client op21HeatShield();
+
 }}
 
 }

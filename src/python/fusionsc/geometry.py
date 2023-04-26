@@ -43,6 +43,9 @@ class Geometry:
 		return Geometry(await resolve.resolveGeometry.asnc(self.geometry))
 	
 	def __add__(self, other):
+		if isinstance(other, int) and other == 0:
+			return self
+		
 		if not isinstance(other, Geometry):
 			return NotImplemented
 			
@@ -84,6 +87,16 @@ class Geometry:
 		turned.node.leaf = self.geometry
 		
 		return result
+	
+	@asyncFunction
+	async def download(self):
+		if self.geometry.which() != 'ref':
+			return Geometry(self.geometry)
+		
+		ref = self.geometry.ref
+		downloaded = await data.download.asnc(ref)
+		
+		return Geometry(downloaded)
 	
 	@staticmethod
 	def polyMesh(vertices, polyIndices):

@@ -184,7 +184,7 @@ public:
 	 *          DataRef::Client.
 	 */
 	template<typename T = capnp::Data>
-	LocalDataRef<T> publish(typename DataRef<T>::Metadata::Reader metaData, Array<const byte> backingArray, ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable = kj::heapArrayBuilder<Maybe<Own<capnp::Capability::Client>>>(0).finish());
+	LocalDataRef<T> publish(typename DataRefMetadata::Reader metaData, Array<const byte> backingArray, ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable = kj::heapArrayBuilder<Maybe<Own<capnp::Capability::Client>>>(0).finish());
 	
 	//! Publishes Cap'n'proto message
 	/**
@@ -261,6 +261,12 @@ public:
 	 */
 	template<typename T>
 	LocalDataRef<T> publishArchive(const kj::ReadableFile& in, const capnp::ReaderOptions readerOpts = READ_UNLIMITED);
+	
+	template<typename T>
+	LocalDataRef<T> publishArchive(kj::Array<const byte> in, const capnp::ReaderOptions readerOpts = READ_UNLIMITED);
+	
+	template<typename T>
+	LocalDataRef<T> publishConstant(kj::ArrayPtr<const byte> in);
 	
 	//! Write DataRef to an Archive::Builder
 	/**
@@ -369,9 +375,10 @@ public:
 
 	ArrayPtr<const byte> getID();
 	ArrayPtr<capnp::Capability::Client> getCapTable();
-	uint64_t getTypeID();
+	// uint64_t getTypeID();
+	DataRefMetadata::Format::Reader getFormat();
 	
-	typename DataRef<T>::Metadata::Reader getMetadata();
+	typename DataRefMetadata::Reader getMetadata();
 
 	// Non-const copy constructor
 	LocalDataRef(LocalDataRef<T>& other);

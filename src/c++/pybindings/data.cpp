@@ -39,39 +39,44 @@ PyPromise download(capnp::DynamicCapability::Client capability) {
 		// Create a keepAlive object
 		py::object keepAlive = py::cast((UnknownObject*) new UnknownHolder<LocalDataRef<AnyPointer>>(localRef));
 		
+		auto format = localRef.getFormat();
+		
 		// If the type is "AnyPointer", we need to deduce it from the local ref
 		if(payloadType.isAnyPointer()) {
 			// Retrieve target type
-			if(localRef.getTypeID() == 1) {
+			if(format.isRaw()) {
 				payloadType = capnp::Type(capnp::schema::Type::DATA);
 			} else {
-				payloadType = defaultLoader.capnpLoader.get(localRef.getTypeID()).asStruct();
+				payloadType = defaultLoader.capnpLoader.getType(format.getSchema().getAs<capnp::schema::Type>());
 			}
 		}
 		
 		// "Data" type payloads do not have a root pointer. They are NO capnp messages.
 		if(payloadType.isData()) {
-			KJ_REQUIRE(localRef.getTypeID() == 0);
+			KJ_REQUIRE(!format.isSchema());
 			
 			py::object result = py::cast(localRef.getRaw());
 			result.attr("_ref") = keepAlive;
 			return kj::refcounted<PyObjectHolder>(mv(result));
 		} else {
 			AnyPointer::Reader root = localRef.get();
-			KJ_DBG(root);
+			
+			KJ_REQUIRE(!localRef.getFormat().isRaw());
+			
+			if(format.isSchema()) {
+				auto type = defaultLoader.capnpLoader.getType(format.getSchema().getAs<capnp::schema::Type>());
+				KJ_REQUIRE(payloadType == type);
+			}
 			
 			if(payloadType.isInterface()) {
 				auto schema = payloadType.asInterface();
 				
-				KJ_REQUIRE(localRef.getTypeID() == schema.getProto().getId());
 				DynamicValue::Reader asDynamic = root.getAs<DynamicCapability>(schema);
-				
 				return kj::refcounted<PyObjectHolder>(py::cast(asDynamic));
 			}
 			if(payloadType.isStruct()) {
 				auto schema = payloadType.asStruct();
 				
-				KJ_REQUIRE(localRef.getTypeID() == schema.getProto().getId());
 				DynamicValue::Reader asDynamic = root.getAs<DynamicStruct>(schema);
 				
 				py::object result = py::cast(asDynamic);
@@ -134,38 +139,31 @@ capnp::DynamicValue::Reader openArchive(kj::StringPtr path) {
 	
 	LocalDataRef<AnyPointer> root = getActiveThread().dataService().publishArchive<AnyPointer>(*file);
 	
-	auto maybeSchema = defaultLoader.capnpLoader.tryGet(root.getTypeID());
-	KJ_IF_MAYBE(pSchema, maybeSchema) {
-		KJ_REQUIRE(pSchema->getProto().isStruct() || pSchema->getProto().isInterface(), "Can only load archives with struct or interface types");
-		
-		if(pSchema->getProto().getIsGeneric()) {
-			KJ_LOG(WARNING, "Loading archive with generic type, assuming default brand", root.getTypeID());
-		}
-		
-		capnp::Capability::Client asAny = root;
-		
-		// Create brand binding for DataRef
-		constexpr uint64_t DR_ID = capnp::typeId<DataRef<capnp::AnyPointer>>();
-		Temporary<capnp::schema::Brand> brand;
-		auto scopes = brand.initScopes(1);
-		auto scope = scopes[0];
-		scope.setScopeId(DR_ID);
-		
-		auto bindings = scope.initBind(1);
-		auto boundType = bindings[0].initType();
-		
-		if(pSchema->getProto().isInterface()) {
-			boundType.initInterface().setTypeId(root.getTypeID());
-		} else {
-			boundType.initStruct().setTypeId(root.getTypeID());
-		}
-		
-		capnp::InterfaceSchema dataRefSchema = defaultLoader.capnpLoader.get(DR_ID, brand.asReader()).asInterface();
-		
-		return asAny.castAs<capnp::DynamicCapability>(dataRefSchema);
+	capnp::Type type = capnp::Type(capnp::schema::Type::DATA);
+	auto format = root.getFormat();
+	if(format.isSchema()) {
+		type = defaultLoader.capnpLoader.getType(format.getSchema().getAs<capnp::schema::Type>());
 	}
 	
-	KJ_FAIL_REQUIRE("Failed to load schema for payload type ID", root.getTypeID());
+	constexpr uint64_t DR_ID = capnp::typeId<DataRef<capnp::AnyPointer>>();
+	
+	Temporary<capnp::schema::Brand> brand;
+	auto scopes = brand.initScopes(1);
+	auto scope = scopes[0];
+	scope.setScopeId(DR_ID);
+	
+	auto bindings = scope.initBind(1);
+	if(format.isSchema()) {
+		bindings[0].setType(format.getSchema().getAs<capnp::schema::Type>());
+	} else {
+		bindings[0].initType().setData();
+	}
+	auto boundType = bindings[0].initType();
+	
+	capnp::InterfaceSchema dataRefSchema = defaultLoader.capnpLoader.get(DR_ID, brand.asReader()).asInterface();
+	
+	capnp::Capability::Client asAny = root;
+	return asAny.castAs<capnp::DynamicCapability>(dataRefSchema);
 }
 
 Promise<void> writeArchive1(capnp::DynamicCapability::Client ref, kj::StringPtr path) {

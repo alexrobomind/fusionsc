@@ -9,22 +9,27 @@ using Java = import "java.capnp";
 $Java.package("org.fsc");
 $Java.outerClassname("Data");
 
-interface DataRef (T) {
-	struct Metadata {
-		id @0 : Data;
-		typeId @1 : UInt64;
-		capTableSize @2 : UInt64;
-		dataSize @3 : UInt64;
-		dataHash @4 : Data;
-	}
+struct DataRefMetadata {
+	id @0 : Data;
+	capTableSize @1 : UInt64;
+	dataSize @2 : UInt64;
+	dataHash @3 : Data;
 	
+	format : union {
+		unknown @4 : Void;
+		schema @5 : AnyPointer; # In reality, this is capnp/schema.Type, but we don't want to include that file here
+		raw @6 : Void;
+	}
+}
+
+interface DataRef (T) {
 	interface Receiver {
 		begin @0 (numBytes : UInt64) -> ();
 		receive @1 (data : Data) -> stream;
 		done @2 () -> ();
 	}
 	
-	metaAndCapTable @0 () -> (metadata : Metadata, table : List(Capability));
+	metaAndCapTable @0 () -> (metadata : DataRefMetadata, table : List(Capability));
 	rawBytes @1 (start : UInt64, end : UInt64) -> (data : Data);
 	transmit @2 (start : UInt64, end : UInt64, receiver : Receiver);
 }
@@ -32,7 +37,7 @@ interface DataRef (T) {
 #//! [DataService]
 interface DataService @0xc6d48902ddb7e122 {
 	# Upload a message to the remote data service and have it publish it
-	store @0 [T] (id : Data, data : T, typeId : UInt64) -> (ref : DataRef(T));
+	store @0 [T] (id : Data, data : T, schema : AnyPointer) -> (ref : DataRef(T));
 	
 	# Have the remote data service download a DataRef and re-publish it
 	clone @1 [T] (source : DataRef(T)) -> (ref : DataRef(T));

@@ -204,7 +204,9 @@ def divertor(campaign = 'OP21') -> Geometry:
 		return components(range(165, 170), 'Divertor TDU')
 	
 	if campaign == 'OP21':
-		return Geometry(w7xnative.op21Divertor())
+		result = Geometry()
+		result.geometry.ref = w7xnative.op21Divertor()
+		return result
 	
 	raise "Unknown campaign " + campaign
 
@@ -213,7 +215,9 @@ def baffles(campaign = 'OP21') -> Geometry:
 		return components(range(320, 325), 'OP1.2 Baffles') + components(range(325, 330), 'OP1.2 Baffle Covers')
 	
 	if campaign == 'OP21':
-		return Geometry(w7xnative.op21BafflesNoHoles())
+		result = Geometry()
+		result.geometry.ref = w7xnative.op21BafflesNoHoles()
+		return result
 	
 	raise "Unknown campaign " + campaign
 
@@ -222,7 +226,9 @@ def heatShield(campaign = 'OP21') -> Geometry:
 		return components(range(330, 335), 'OP1.2 Heat Shield')
 	
 	if campaign == 'OP21':
-		return Geometry(w7xnative.op21HeatShieldNoHoles())
+		result = Geometry()
+		result.geometry.ref = w7xnative.op21HeatShieldNoHoles()
+		return result
 	
 	raise "Unknown campaign " + campaign
 

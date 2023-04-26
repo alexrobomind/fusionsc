@@ -392,14 +392,14 @@ struct ObjectDB::TransmissionReceiver : public DataRef<AnyPointer>::Receiver::Se
 
 
 struct DBCache::CachedRef : public DataRef<AnyPointer>::Server {
-	Temporary<DataRef<AnyPointer>::Metadata> _metadata;
+	Temporary<DataRefMetadata> _metadata;
 	kj::Array<capnp::Capability::Client> refs;
 	Blob blob;
 	kj::UnwindDetector ud;
 	Own<DBCache> parent;
 	
 	//! Create a cached reference by stealing metadata, refs AND blob (so no incRef inside, but a decRef on destruction)
-	CachedRef(Temporary<DataRef<AnyPointer>::Metadata>&& metadata, kj::Array<capnp::Capability::Client> refs, Blob blob, DBCache& parent) :
+	CachedRef(Temporary<DataRefMetadata>&& metadata, kj::Array<capnp::Capability::Client> refs, Blob blob, DBCache& parent) :
 		_metadata(mv(metadata)),
 		refs(mv(refs)),
 		blob(blob),

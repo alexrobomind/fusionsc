@@ -7,8 +7,8 @@ using Java = import "../java.capnp";
 $Java.package("org.fsc.devices");
 $Java.outerClassname("W7X");
 
-using Data = import "../data.capnp";
-using DataRef = Data.DataRef;
+using D = import "../data.capnp";
+using DataRef = D.DataRef;
 
 using Magnetics = import "../magnetics.capnp";
 using MagneticField = Magnetics.MagneticField;

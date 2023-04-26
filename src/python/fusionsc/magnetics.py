@@ -47,6 +47,9 @@ class CoilFilament:
 		return str(self.filament)
 	
 	def __add__(self, other):
+		if isinstance(other, int) and other == 0:
+			return self
+		
 		if not isinstance(other, CoilFilament):
 			return NotImplemented()
 			
@@ -155,6 +158,9 @@ class MagneticConfig:
 		return result
 	
 	def __add__(self, other):
+		if isinstance(other, int) and other == 0:
+			return self
+		
 		if not isinstance(other, MagneticConfig):
 			return NotImplemented()
 			

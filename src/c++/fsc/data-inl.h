@@ -4,6 +4,8 @@
 
 #include <unordered_map>
 
+#include "typing.h"
+
 namespace fsc {
 
 namespace odb {
@@ -150,7 +152,7 @@ struct DownloadTask : public kj::Refcounted {
 	//! The original DataRef under download
 	DataRef<capnp::AnyPointer>::Client src;
 	
-	Temporary<DataRef<capnp::AnyPointer>::Metadata> metadata;
+	Temporary<DataRefMetadata> metadata;
 	kj::Array<capnp::Capability::Client> capTable;
 	
 	Context ctx;
@@ -195,7 +197,7 @@ public:
 	
 	Promise<LocalDataRef<capnp::AnyPointer>> download(DataRef<capnp::AnyPointer>::Client src, bool recursive, DTContext ctx = DTContext());
 	
-	LocalDataRef<capnp::AnyPointer> publish(DataRef<capnp::AnyPointer>::Metadata::Reader metaData, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable);
+	LocalDataRef<capnp::AnyPointer> publish(DataRefMetadata::Reader metaData, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable);
 	
 	//Promise<void> buildArchive(DataRef<capnp::AnyPointer>::Client ref, Archive::Builder out, Maybe<Nursery&> nursery);
 	Promise<void> writeArchive(DataRef<capnp::AnyPointer>::Client ref, const kj::File& out);
@@ -209,6 +211,7 @@ public:
 	
 	LocalDataRef<capnp::AnyPointer> publishArchive(const kj::ReadableFile& f, const capnp::ReaderOptions options);
 	LocalDataRef<capnp::AnyPointer> publishArchive(const kj::Array<const kj::byte> f, const capnp::ReaderOptions options);
+	LocalDataRef<capnp::AnyPointer> publishConstant(const kj::ArrayPtr<const kj::byte> f, const capnp::ReaderOptions options);
 		
 	Promise<void> clone(CloneContext context) override;
 	Promise<void> store(StoreContext context) override;
@@ -246,7 +249,7 @@ private:
 class LocalDataRefImpl : public DataRef<capnp::AnyPointer>::Server, public kj::Refcounted {
 public:
 	
-	using Metadata = typename DataRef<capnp::AnyPointer>::Metadata;
+	using Metadata = typename DataRefMetadata;
 	
 	Own<LocalDataRefImpl> addRef();
 	
@@ -314,23 +317,27 @@ inline bool checkReader<capnp::Data>(capnp::Data::Reader reader, const Array<con
 	return reader.begin() == array.begin();
 }
 
-// Helper methods to determine type ids.
+// Helper methods to get schema nodes
 
 template<typename T>
-uint64_t capnpTypeId(typename T::Reader reader) { return capnp::typeId<T>(); }
+capnp::Type typeFor(typename T::Reader) {
+	return capnp::Type::from<T>();
+}
 
 template<>
-inline uint64_t capnpTypeId<capnp::Data>(capnp::Data::Reader reader) { return 0; }
+inline capnp::Type typeFor<capnp::DynamicStruct>(capnp::DynamicStruct::Reader r) {
+	return r.getSchema();
+}
 
 template<>
-inline uint64_t capnpTypeId<capnp::AnyPointer>(capnp::AnyPointer::Reader reader) { return 1; }
+inline capnp::Type typeFor<capnp::AnyStruct>(capnp::AnyStruct::Reader r) {
+	return capnp::schema::Type::AnyPointer::Unconstrained::STRUCT;
+}
 
 template<>
-inline uint64_t capnpTypeId<capnp::AnyStruct>(capnp::AnyStruct::Reader reader) { return 1; }
-
-template<>
-inline uint64_t capnpTypeId<capnp::DynamicStruct>(capnp::DynamicStruct::Reader reader) { return reader.getSchema().getProto().getId(); }
-// Type inference helper that tells what a data ref references
+inline capnp::Type typeFor<capnp::AnyList>(capnp::AnyList::Reader r) {
+	return capnp::schema::Type::AnyPointer::Unconstrained::LIST;
+}
 
 template<typename T>
 struct References_ { using Type = typename References_<capnp::FromClient<T>>::Type; };
@@ -351,12 +358,20 @@ LocalDataRef<T> LocalDataService::publish(/*ArrayPtr<const byte> id, */Reader da
 	
 	Array<const byte> byteData = internal::buildData<T>(data, capTable);
 	
-	Temporary<DataRef<capnp::AnyPointer>::Metadata> metadata;
+	Temporary<DataRefMetadata> metadata;
 	metadata.setId(getActiveThread().randomID());
-	metadata.setTypeId(internal::capnpTypeId<T>(data));
 	metadata.setCapTableSize(capTable.getTable().size());
 	metadata.setDataSize(byteData.size());
 	// dataHash set by impl->publish()
+	
+	Temporary<capnp::schema::Type> typeBuilder;
+	extractType(internal::typeFor<T>(data), typeBuilder);
+	
+	if(typeBuilder.isData()) {
+		metadata.getFormat().setRaw();
+	} else {
+		metadata.getFormat().initSchema().setAs<capnp::schema::Type>(typeBuilder.asReader());
+	}
 			
 	return impl->publish(
 		metadata,
@@ -384,7 +399,7 @@ Promise<LocalDataRef<T>> LocalDataService::publish(IDReader dataForID, Reader da
 
 template<typename T>
 LocalDataRef<T> LocalDataService::publish(
-	typename DataRef<T>::Metadata::Reader metaData,
+	typename DataRefMetadata::Reader metaData,
 	Array<const byte> backingArray,
 	ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable
 ) {
@@ -398,7 +413,7 @@ LocalDataRef<T> LocalDataService::publish(
 	}
 	
 	return impl->publish(
-		metaData.asDataRefGeneric(),
+		metaData,
 		mv(backingArray),
 		hooks.finish()
 	).template as<T>();
@@ -426,24 +441,25 @@ Promise<Maybe<LocalDataRef<T>>> LocalDataService::downloadIfNotNull(Reference sr
 	});
 }
 
-/*template<typename Ref, typename T>
-Promise<void> LocalDataService::buildArchive(Ref ref, Archive::Builder out, Maybe<Nursery&> nursery) {
-	return impl -> buildArchive(ref.asGeneric(), out, nursery);
-}*/
 
 template<typename Ref, typename T>
 Promise<void> LocalDataService::writeArchive(Ref ref, const kj::File& out) {
 	return impl -> writeArchive(ref.asGeneric(), out);
 }
 
-/*template<typename T>
-LocalDataRef<T> LocalDataService::publishArchive(Archive::Reader in) {
-	return impl -> publishArchive(in).as<T>();
-}*/
-
 template<typename T>
 LocalDataRef<T> LocalDataService::publishArchive(const kj::ReadableFile& in, const capnp::ReaderOptions options) {
 	return impl -> publishArchive(in, options).as<T>();
+}
+
+template<typename T>
+LocalDataRef<T> LocalDataService::publishArchive(kj::Array<const byte> in, const capnp::ReaderOptions options) {
+	return impl -> publishArchive(mv(in), options).as<T>();
+}
+
+template<typename T>
+LocalDataRef<T> LocalDataService::publishConstant(kj::ArrayPtr<const byte> in) {
+	return impl -> publishConstant(mv(in), READ_UNLIMITED).as<T>();
 }
 
 // === class LocalDataRefImpl ===
@@ -521,15 +537,21 @@ template<typename T>
 ArrayPtr<capnp::Capability::Client> LocalDataRef<T>::getCapTable() {
 	return backend -> capTableClients.asPtr();
 }
-
+/*
 template<typename T>
 uint64_t LocalDataRef<T>::getTypeID() {
 	return backend -> localMetadata().getTypeId();
+}*/
+
+
+template<typename T>
+DataRefMetadata::Format::Reader LocalDataRef<T>::getFormat() {
+	return backend -> localMetadata().getFormat();
 }
 
 template<typename T>
-typename DataRef<T>::Metadata::Reader LocalDataRef<T>::getMetadata() {
-	return backend -> _metadata.getRoot<typename DataRef<T>::Metadata>();
+typename DataRefMetadata::Reader LocalDataRef<T>::getMetadata() {
+	return backend -> _metadata.getRoot<DataRefMetadata>();
 }
 
 // === function attachToClient ===
@@ -613,6 +635,8 @@ Array<const byte> internal::buildData(typename T::Reader reader, capnp::BuilderC
 template<typename T>
 typename T::Reader internal::getDataRefAs(internal::LocalDataRefImpl& impl, const capnp::ReaderOptions& options) {
 	auto& msgReader = impl.ensureReader(options);
+	
+	KJ_REQUIRE(!impl.localMetadata().getFormat().isRaw(), "Attempting to read raw DataRef as structured type");
 	
 	// Return the reader's root at the requested type
 	capnp::AnyPointer::Reader root = msgReader.getRoot<capnp::AnyPointer>();

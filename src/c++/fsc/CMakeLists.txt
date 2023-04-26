@@ -4,6 +4,9 @@ add_library(
 	common.h
 	common.cpp
 	
+	typing.h
+	typing.cpp
+	
 	local.h
 	local.cpp
 	

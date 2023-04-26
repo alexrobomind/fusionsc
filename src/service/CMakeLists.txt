@@ -34,9 +34,7 @@ set(
 	
 	java.capnp
 	
-	devices/w7x.capnp
-	devices/w7x-geometry.capnp
-	
+	devices/w7x.capnp	
 	devices/jtext.capnp
 )
 

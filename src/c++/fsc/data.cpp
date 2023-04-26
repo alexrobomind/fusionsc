@@ -146,9 +146,9 @@ LocalDataRef<capnp::Data> LocalDataService::publishFile(const kj::ReadableFile& 
 	auto fileData = file.stat();
 	kj::Array<const kj::byte> data = file.mmap(0, fileData.size);
 	
-	Temporary<DataRef<capnp::Data>::Metadata> metaData;
+	Temporary<DataRefMetadata> metaData;
 	metaData.setId(getActiveThread().randomID());
-	metaData.setTypeId(0);
+	metaData.getFormat().setUnknown();
 	metaData.setCapTableSize(0);
 	metaData.setDataSize(data.size());
 	metaData.setDataHash(fileHash);
@@ -177,8 +177,8 @@ Own<internal::LocalDataRefImpl> internal::LocalDataRefImpl::addRef() {
 	return kj::addRef(*this);
 }
 
-DataRef<capnp::AnyPointer>::Metadata::Reader internal::LocalDataRefImpl::localMetadata() {
-	return _metadata.getRoot<Metadata>();
+DataRefMetadata::Reader internal::LocalDataRefImpl::localMetadata() {
+	return _metadata.getRoot<DataRefMetadata>();
 }
 
 Promise<void> internal::LocalDataRefImpl::metaAndCapTable(MetaAndCapTableContext context) {
@@ -452,7 +452,7 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::downloa
 	});
 }
 
-LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRef<capnp::AnyPointer>::Metadata::Reader metaData, /*ArrayPtr<const byte> id, */Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable/*, uint64_t cpTypeId */) {
+LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRefMetadata::Reader metaData, /*ArrayPtr<const byte> id, */Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable/*, uint64_t cpTypeId */) {
 	// Check if we have the id already, if not, 
 	Own<const LocalDataStore::Entry> entry;
 	
@@ -467,7 +467,7 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRef<
 	metadata.setCapTableSize(capTable.size());
 	metadata.setDataSize(backend -> entryRef -> value.size());*/
 	backend -> _metadata.setRoot(metaData);
-	auto myMetaData = backend -> _metadata.getRoot<DataRef<capnp::AnyPointer>::Metadata>();
+	auto myMetaData = backend -> _metadata.getRoot<DataRefMetadata>();
 	
 	// Check if hash is nullptr. If yes, construct own.
 	if(metaData.getDataHash().size() == 0) {
@@ -953,7 +953,19 @@ namespace {
 		}
 		
 		kj::Array<const kj::byte> mmap(size_t start, size_t size) override {
-			return backend.slice(start, size).attach(kj::atomicAddRef(*this));
+			return backend.slice(start, start + size).attach(kj::atomicAddRef(*this));
+		}
+	};
+	
+	struct ConstantMappable : public internal::LocalDataServiceImpl::Mappable {
+		kj::ArrayPtr<const kj::byte> backend;
+		
+		ConstantMappable(kj::ArrayPtr<const kj::byte> backend) :
+			backend(mv(backend))
+		{}
+		
+		kj::Array<const kj::byte> mmap(size_t start, size_t size) override {
+			return backend.slice(start, start + size).attach();
 		}
 	};
 }
@@ -966,6 +978,11 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(c
 LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(kj::Array<const kj::byte> array, const capnp::ReaderOptions options) {
 	auto am = kj::atomicRefcounted<ArrayMappable>(mv(array));
 	return publishArchive(*am, mv(options));
+}
+
+LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishConstant(kj::ArrayPtr<const kj::byte> array, const capnp::ReaderOptions options) {
+	ConstantMappable cm(array);
+	return publishArchive(cm, mv(options));
 }
 
 LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(Mappable& f, const capnp::ReaderOptions options) {
@@ -1052,6 +1069,10 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(M
 	}
 	
 	KJ_IF_MAYBE(pRoot, root) {
+		if(pRoot -> getFormat().isUnknown()) {
+			KJ_LOG(WARNING, "The root node of the archive has an unspecified type. This will make loading the archive difficult on dynamically typed languages");
+		}
+		
 		return mv(*pRoot);
 	}
 	
@@ -1287,7 +1308,7 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(A
 			start = end;
 		}
 		
-		Temporary<DataRef<capnp::AnyPointer>::Metadata> metaData;
+		Temporary<DataRefMetadata> metaData;
 		metaData.setId(entry.getId());
 		metaData.setTypeId(entry.getTypeId());
 		metaData.setCapTableSize(capTableBuilder.size());
@@ -1417,7 +1438,7 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(c
 			outData = mv(mutableData);
 		}
 		
-		Temporary<DataRef<capnp::AnyPointer>::Metadata> metaData;
+		Temporary<DataRefMetadata> metaData;
 		metaData.setId(entry.getId());
 		metaData.setTypeId(entry.getTypeId());
 		metaData.setCapTableSize(capTableBuilder.size());
@@ -1465,13 +1486,14 @@ Promise<void> internal::LocalDataServiceImpl::store(StoreContext context) {
 	auto params = context.getParams();
 	
 	AnyPointer::Reader inData = params.getData();
-	uint64_t typeId = params.getTypeId();
+	// uint64_t typeId = params.getStructType();
+	auto schema = params.getSchema();
 	
 	Array<byte> data = nullptr;
 	
 	capnp::BuilderCapabilityTable capTable;
 	
-	if(typeId == 0) {
+	if(schema.isNull()) {
 		// typeId == 0 indicates raw byte data
 		
 		// Check format
@@ -1497,9 +1519,13 @@ Promise<void> internal::LocalDataServiceImpl::store(StoreContext context) {
 		data = wordsToBytes(capnp::messageToFlatArray(mb));
 	}
 		
-	Temporary<DataRef<capnp::AnyPointer>::Metadata> metaData;
+	Temporary<DataRefMetadata> metaData;
 	metaData.setId(params.getId());
-	metaData.setTypeId(typeId);
+	
+	if(schema.isNull())
+		metaData.getFormat().setRaw();
+	else
+		metaData.getFormat().initSchema().set(schema);
 	metaData.setCapTableSize(capTable.getTable().size());
 	metaData.setDataSize(data.size());
 

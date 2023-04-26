@@ -16,7 +16,7 @@ struct ArchiveInfo {
 		}
 	}
 	struct ObjectInfo {
-		metadata @0 : Data.DataRef(AnyPointer).Metadata;
+		metadata @0 : Data.DataRefMetadata;
 		dataId @1 : UInt64;
 		refs @2 : List(RefInfo);
 	}

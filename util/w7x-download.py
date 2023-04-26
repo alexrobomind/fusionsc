@@ -31,6 +31,9 @@ def download(args = None):
 		
 		if reader.which() == 'componentsDbAssembly':
 			assemblies.append(reader.componentsDBAssembly)
+		
+		if reader.which() == 'ref':
+			addParts(fsc.data.download(reader.ref))
 	
 	c = args.campaign
 	

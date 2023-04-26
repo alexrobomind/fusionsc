@@ -50,7 +50,7 @@ struct ObjectInfo {
 				downloading @3 : Void;
 				finished @4 : Void;
 			}
-			metadata @5 : Data.DataRef.Metadata;
+			metadata @5 : Data.DataRefMetadata;
 			capTable @6 : List(Object);
 		}
 		folder : group {

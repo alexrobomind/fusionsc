@@ -1210,4 +1210,13 @@ namespace cupnp {
 		
 		CUPNP_FUNCTION uint32_t size() { return backend.size(); }
 	};
+	
+	struct AnyPointer {
+		uint64_t structure;
+		cupnp::Location data;
+		
+		CUPNP_FUNCTION AnyPointer(uint64_t structure, cupnp::Location data) :
+			structure(structure), data(data)
+		{}
+	};
 }

@@ -8,6 +8,7 @@
 #include <kj/string-tree.h>
 
 #include <fsc/data.h>
+#include <fsc/typing.h>
 
 namespace fscpy {
 	struct Loader {		
@@ -59,7 +60,4 @@ namespace fscpy {
 	capnp::Schema Loader::importBuiltin() {
 		return import(capnp::Schema::from<T>());
 	}
-	
-	void extractBrand(capnp::Schema in, capnp::schema::Brand::Builder out);
-	void extractType(capnp::Type in, capnp::schema::Type::Builder out);
 }
