@@ -40,6 +40,25 @@ namespace {
 struct PromiseHandle {
 	py::object pyPromise;
 };
+	
+kj::String memberName(kj::StringPtr name) {
+	auto newName = kj::str(name);
+	
+	static const std::set<kj::StringPtr> reserved({
+		// Python keywords
+		"False", "None", "True", "and", "as", "assert", "break", "class", "continue", "def", "del", "elif", "else", "except",
+		"finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise",
+		"return", "try", "while", "witdh", "yield", "async",
+		
+		// Special member names
+		"get", "set", "adopt", "disown", "clone", "pretty", "totalSize", "visualize", "items"
+	});
+	
+	if(newName.endsWith("_") || newName.startsWith("init") || reserved.count(newName) > 0)
+		newName = kj::str(newName, "_");
+	
+	return newName;
+}
 
 struct TypeInference {	
 	kj::Vector<Maybe<capnp::Type>> paramBindings;
@@ -206,20 +225,22 @@ private:
 
 //! Handles the exposure of Cap'n'proto interface methods as python methods
 struct InterfaceMethod {
-	capnp::Method method;
+	capnp::InterfaceSchema::Method method;
 	
-	capnp::Type paramType;
-	capnp::Type resultType;
+	capnp::StructSchema paramType;
+	capnp::StructSchema resultType;
 	
 	kj::Vector<capnp::StructSchema::Field> argFields;
 	
 	capnp::SchemaLoader& loader;
 	
-	InterfaceMethod(capnp::Method method, capnp::SchemaLoader& loader) :
+	kj::String name;
+	
+	InterfaceMethod(capnp::InterfaceSchema::Method method, capnp::SchemaLoader& loader) :
 		method(method), loader(loader)
 	{
 		kj::StringPtr rawName = method.getProto().getName();
-		kj::String name = memberName(rawName);
+		name = memberName(rawName);
 				
 		auto makeDefaultBrand = [&loader](uint64_t nodeId, capnp::schema::Brand::Builder out) {
 			// Creates a default brand that binds each argument to a method parameter
@@ -262,18 +283,11 @@ struct InterfaceMethod {
 			if(field.getProto().which() != capnp::schema::Field::SLOT)
 				continue;
 			
-			auto slot = field.getProto().getSlot();
-			
-			auto name = field.getProto().getName();
-			auto type = field.getType();
-			
-			argumentDescs.add(strTree(typeName(type), " ", name));
-			types.add(type);
 			argFields.add(field);
 		}
 	}
 	
-	PromiseHandle operator()(capnp::DynamicCapability::Client self, py::args pyArgs, py::kwargs pyKwargs) mutable {	
+	PromiseHandle operator()(capnp::DynamicCapability::Client self, py::args pyArgs, py::kwargs pyKwargs) const {	
 		// auto request = self.newRequest(method);
 		capnp::Request<AnyPointer, AnyPointer> request = self.typelessRequest(
 			method.getContainingInterface().getProto().getId(), method.getOrdinal(), nullptr, capnp::Capability::Client::CallHints()
@@ -290,16 +304,15 @@ struct InterfaceMethod {
 			// Check whether the first argument has the correct type
 			auto argVal = pyArgs[0].cast<DynamicValue::Reader>();
 			
-			if(argVal.getType() == DynamicValue::STRUCT) {
+			if(argVal.getType() == DynamicValue::STRUCT && argVal.as<capnp::DynamicStruct>().getSchema().getProto().getId() == paramType.getProto().getId()) {
 				DynamicStruct::Reader asStruct = argVal.as<DynamicStruct>();
 				
-				if(typeInference.infer(asStruct.getSchema(), paramType, false)) {
-					request.setAs<DynamicStruct>(asStruct);
-					
-					requestBuilt = true;
-				} else {
-					typeInference.clear();
+				if(!typeInference.infer(asStruct.getSchema(), paramType, false)) {
+					KJ_FAIL_REQUIRE("Failed to match parameter type against target type", typeInference.errorMsg);
 				}
+				
+				request.setAs<DynamicStruct>(asStruct);
+				requestBuilt = true;
 			}
 		}
 			
@@ -308,7 +321,9 @@ struct InterfaceMethod {
 			// Parse positional arguments
 			KJ_REQUIRE(pyArgs.size() <= argFields.size(), "Too many arguments specified");
 			
-			bool inferTypes = paramType.isGeneric();
+			bool inferTypes = paramType.getProto().getParameters().size() > 0;
+			
+			auto nameList = py::list(pyKwargs);
 			
 			if(inferTypes) {
 				auto checkType = [&typeInference](capnp::Type dst, DynamicValue::Reader reader) {
@@ -341,7 +356,7 @@ struct InterfaceMethod {
 					checkType(field.getType(), (DynamicValue::Reader) readerCaster);
 				}
 				
-				auto inferEntry = [paramType, &checkType](kj::StringPtr name, DynamicValue::Reader value) mutable {
+				auto inferEntry = [this, &checkType](kj::StringPtr name, DynamicValue::Reader value) mutable {
 					KJ_IF_MAYBE(pField, paramType.findFieldByName(name)) {
 						checkType(pField -> getType(), value);
 					} else {
@@ -350,7 +365,6 @@ struct InterfaceMethod {
 				};
 				auto pyInferEntry = py::cpp_function(inferEntry);
 				
-				auto nameList = py::list(pyKwargs);
 				for(auto name : nameList) {
 					pyInferEntry(name, pyKwargs[name]);
 				}
@@ -370,7 +384,7 @@ struct InterfaceMethod {
 			}
 			
 			// Parse keyword arguments
-			auto processEntry = [&structRequest, specializedParamType](kj::StringPtr name, DynamicValue::Reader value) mutable {
+			auto processEntry = [&structRequest, &specializedParamType](kj::StringPtr name, DynamicValue::Reader value) mutable {
 				KJ_IF_MAYBE(pField, specializedParamType.findFieldByName(name)) {
 					structRequest.set(*pField, value);
 				} else {
@@ -462,6 +476,8 @@ struct InterfaceMethod {
 			"\n",
 			name, " : (", paramName.flatten(), ") -> ", resultName.flatten(), ".Promise"
 		);
+		
+		return functionDesc;
 	}
 };
 
@@ -483,25 +499,6 @@ namespace pybind11 { namespace detail {
 }}
 
 namespace {
-	
-kj::String memberName(kj::StringPtr name) {
-	auto newName = kj::str(name);
-	
-	static const std::set<kj::StringPtr> reserved({
-		// Python keywords
-		"False", "None", "True", "and", "as", "assert", "break", "class", "continue", "def", "del", "elif", "else", "except",
-		"finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise",
-		"return", "try", "while", "witdh", "yield", "async",
-		
-		// Special member names
-		"get", "set", "adopt", "disown", "clone", "pretty", "totalSize", "visualize", "items"
-	});
-	
-	if(newName.endsWith("_") || newName.startsWith("init") || reserved.count(newName) > 0)
-		newName = kj::str(newName, "_");
-	
-	return newName;
-}
 
 enum class FSCPyClassType {
 	BUILDER, READER, PIPELINE
@@ -744,11 +741,12 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		// auto name = method.getProto().getName();
 		auto method = methods[i];
 		
-		InterfaceMethod method(method, loader);
-		kj::StringTree desc = method.describe();
+		InterfaceMethod backend(method, loader);
+		kj::StringTree desc = backend.description();
+		kj::String name = kj::heapString(backend.name);
 				
 		auto pyFunction = py::cpp_function(
-			mv(method),
+			mv(backend),
 			py::return_value_policy::move,
 			py::doc(desc.flatten().cStr()),
 			py::arg("self")

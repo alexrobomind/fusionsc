@@ -128,5 +128,17 @@ for row, output in zip(rows.itertuples(), geoList):
 
 divertor.save("divertor.fsc")
 
-geo = fsc.geometry.Geometry.load("divertor.fsc")
-geo.ptree()
+import contextlib
+import time
+
+@contextlib.contextmanager
+def timer():
+	c1 = time.perf_counter()
+	yield None
+	c2 = time.perf_counter()
+	
+	print("Time [s]:", c2 - c1)
+	
+with timer():
+	geo = fsc.geometry.Geometry.load("divertor.fsc")
+	print(geo.geometry.which())

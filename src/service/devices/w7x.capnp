@@ -18,6 +18,12 @@ using BiotSavartSettings = Magnetics.BiotSavartSettings;
 using Geometry = import "../geometry.capnp";
 using Mesh = Geometry.Mesh;
 
+
+# OP2 W7-X geometry is stored by-piece, so we need an index
+const w7xOp21BafflesNoHoles : Data = embed "w7x-resources/baffles.fsc";
+const w7xOp21HeatShieldNoHoles : Data = embed "w7x-resources/heatShield.fsc";
+const w7xOp21Divertor : Data = embed "w7x-resources/divertor.fsc";
+
 const defaultGrid : Magnetics.ToroidalGrid = (
 	rMin = 4,
 	rMax = 7,
