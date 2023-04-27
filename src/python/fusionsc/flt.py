@@ -299,6 +299,38 @@ class FLT:
 		return np.asarray(response.pos), np.asarray(response.axis)
 	
 	@asyncFunction
+	async def findLCFS(self, field, geometry, p1, p2, grid = None, geometryGrid = None, stepSize = 0.01, tolerance = 0.001, nScan = 8, distanceLimit = 3e3):
+		resolvedField = await field.resolve.asnc()
+		resolvedGeometry = await geometry.resolve.asnc()
+		
+		if grid is None:
+			assert resolvedField.field.which() == 'computedField', 'Can only omit grid if field is pre-computed'
+			computedField = resolvedField.field.computedField
+		else:
+			computedField = (await self.calculator.compute(resolvedField.field, grid)).computedField
+		
+		if geometry is not None:	
+			if geometryGrid is None:
+				assert geometry.geometry.which() == 'indexed', 'Can only omit geometry grid if geometry is already indexed'
+				indexedGeometry = geometry.geometry.indexed
+			else:
+				indexedGeometry = (await self._indexGeometry.asnc(geometry, geometryGrid)).geometry.indexed
+		
+		request = service.FindLcfsRequest.newMessage()
+		request.p1 = p1
+		request.p2 = p2
+		request.stepSize = stepSize
+		request.tolerance = tolerance
+		request.field = computedField
+		request.geometry = indexedGeometry
+		request.nScan = nScan
+		request.distanceLimit = distanceLimit
+		
+		response = await self.tracer.findLcfs(request)
+		
+		return np.asarray(response.pos)
+	
+	@asyncFunction
 	async def axisCurrent(self, field, current, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10):
 		_, axis = await self.findAxis(field, grid, startPoint, stepSize, nTurns, nIterations)
 		

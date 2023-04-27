@@ -42,6 +42,20 @@ class Geometry:
 	async def resolve(self):
 		return Geometry(await resolve.resolveGeometry.asnc(self.geometry))
 	
+	@asyncFunction
+	async def merge(self, backend = None):
+		if backend is None:
+			backend = inProcess.root()
+			
+		lib = backend.newGeometryLib().service
+		
+		resolved = await self.resolve.asnc()
+		mergedRef = lib.merge(resolved.geometry).ref
+		
+		result = Geometry()
+		result.geometry.merged = mergedRef
+		return result
+	
 	def __add__(self, other):
 		if isinstance(other, int) and other == 0:
 			return self

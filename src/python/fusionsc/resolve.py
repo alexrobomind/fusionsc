@@ -14,6 +14,7 @@ fieldResolvers = [
 ]
 
 geometryResolvers = [
+	cppw7x.geometryResolver(),
 	cppjtext.geometryResolver()
 ]
 

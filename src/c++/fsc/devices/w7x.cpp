@@ -20,6 +20,10 @@ struct W7XFieldResolver : public FieldResolverBase {
 	// Helper function to handle the "coilsAndCurrents" type of W7-X magnetic config
 	void coilsAndCurrents(MagneticField::W7x::CoilsAndCurrents::Reader reader, MagneticField::Builder output, ResolveFieldContext context);
 };
+
+struct W7XGeometryResolver : public GeometryResolverBase {
+	Promise<void> processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context) override;
+};
 	
 /**
  * Magnetic field resolver that processes CoilsDB references.
@@ -65,7 +69,7 @@ struct ComponentsDBResolver : public GeometryResolverBase {
 	Promise<Array<uint64_t>> getAssembly(uint64_t cdbID);
 };
 
-// === class W7XResolver ===
+// === class W7XFieldResolver ===
 
 Promise<void> W7XFieldResolver::processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) {
 	if(!input.isW7x())
@@ -79,6 +83,40 @@ Promise<void> W7XFieldResolver::processField(MagneticField::Reader input, Magnet
 	}
 	
 	coilsAndCurrents(w7x.getCoilsAndCurrents(), output, context);
+	return READY_NOW;
+}
+
+// === class W7XGeometryResolver ===
+
+Promise<void> W7XGeometryResolver::processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context) {
+	if(!input.isW7x())
+		return GeometryResolverBase::processGeometry(input, output, context);
+	
+	using W7X = Geometry::W7x;
+	W7X::Reader w7x = input.getW7x();
+	
+	switch(w7x.which()) {
+		case W7X::OP21_DIVERTOR: {
+			auto ref = getActiveThread().dataService().publishConstant<Geometry>(W7X_OP21_DIVERTOR.get());
+			auto geometry = ref.get();
+			output.setNested(geometry);
+			return READY_NOW;
+		}
+		case W7X::OP21_BAFFLES: {
+			auto ref = getActiveThread().dataService().publishConstant<Geometry>(W7X_OP21_BAFFLES_NO_HOLES.get());
+			auto geometry = ref.get();
+			output.setNested(geometry);
+			return READY_NOW;
+		}
+		case W7X::OP21_HEAT_SHIELD: {
+			auto ref = getActiveThread().dataService().publishConstant<Geometry>(W7X_OP21_HEAT_SHIELD_NO_HOLES.get());
+			auto geometry = ref.get();
+			output.setNested(geometry);
+			return READY_NOW;
+		}
+	}
+	
+	output.setNested(input);
 	return READY_NOW;
 }
 
@@ -523,16 +561,20 @@ ComponentsDB::Client newComponentsDBFromWebservice(kj::StringPtr address) {
 	return kj::heap<ComponentsDBWebservice>(address);
 }
 
+FieldResolver::Client newW7xFieldResolver() {
+	return kj::heap<W7XFieldResolver>();
+}
+
+GeometryResolver::Client newW7xGeometryResolver() {
+	return kj::heap<W7XGeometryResolver>();
+}
+
 FieldResolver::Client newCoilsDBResolver(CoilsDB::Client coilsDB) {
 	return kj::heap<CoilsDBResolver>(coilsDB);
 }
 
 FieldResolver::Client newConfigDBResolver(CoilsDB::Client coilsDB) {
 	return kj::heap<CoilsDBResolver>(coilsDB);
-}
-
-FieldResolver::Client newW7xResolver() {
-	return kj::heap<W7XFieldResolver>();
 }
 
 GeometryResolver::Client newComponentsDBResolver(ComponentsDB::Client componentsDB) {
@@ -618,20 +660,6 @@ void buildCoilFields(W7XCoilSet::Reader in, W7XCoilSet::Fields::Builder output) 
 		auto filField = initField(controlFields[i_coil], nWindControl[i_coil], coils.getInvertControlCoils()[i_coil]);
 		getControlCoil(i_coil, filField.getFilament());
 	}
-}
-
-// built-in geometries
-
-DataRef<Geometry>::Client op21Divertor() {
-	return getActiveThread().dataService().publishConstant<Geometry>(W7X_OP21_DIVERTOR.get());
-}
-
-DataRef<Geometry>::Client op21Baffles() {
-	return getActiveThread().dataService().publishConstant<Geometry>(W7X_OP21_BAFFLES_NO_HOLES.get());
-}
-
-DataRef<Geometry>::Client op21HeatShield() {
-	return getActiveThread().dataService().publishConstant<Geometry>(W7X_OP21_HEAT_SHIELD_NO_HOLES.get());
 }
 	
 }}

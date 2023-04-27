@@ -776,6 +776,93 @@ struct FLTImpl : public FLT::Server {
 		
 		return nIterResult.then(mv(traceAxis));
 	}
+	
+	Promise<void> findLcfs(FindLcfsContext ctx) override {
+		auto params = ctx.getParams();
+		
+		struct Process {
+			FindLcfsContext ctx;
+			FLT::Client flt;
+			
+			Vec3d x1;
+			Vec3d x2;
+			
+			Process(FindLcfsContext ctx, FLT::Client _flt) :
+				ctx(ctx), flt(mv(_flt))
+			{
+				auto params = ctx.getParams();
+				
+				auto p1 = params.getP1();
+				auto p2 = params.getP2();
+				
+				KJ_REQUIRE(p1.size() == 3);
+				KJ_REQUIRE(p2.size() == 3);
+				
+				x1 = Vec3d(p1[0], p1[1], p1[2]);
+				x2 = Vec3d(p2[0], p2[1], p2[2]);
+			}
+			
+			Promise<void> run() {
+				auto params = ctx.getParams();
+				
+				double dist = (x2 - x1).norm();
+				if(dist <= params.getTolerance()) {
+					auto res = ctx.initResults();
+					auto pos = res.initPos(3);
+					for(unsigned int i = 0; i < 3; ++i)
+						pos.set(i, x2[i]);
+					
+					return READY_NOW;
+				}
+				
+				auto nScan = params.getNScan();
+				KJ_REQUIRE(nScan >= 2);
+				
+				auto request = flt.traceRequest();
+				request.setDistanceLimit(params.getDistanceLimit());
+				request.setStepSize(params.getStepSize());
+				request.setCollisionLimit(1);
+				request.setField(params.getField());
+				request.setGeometry(params.getGeometry());
+				
+				Tensor<double, 2> points(nScan, 3);
+				Vec3d dx = (x2 - x1) / (nScan + 1);
+				for(auto iScan : kj::range(0, nScan)) {
+					Vec3d xNew = x1 + dx * (iScan + 1);
+					for(unsigned int iDim = 0; iDim < 3; ++iDim)
+						points(iScan, iDim) = xNew(iDim);
+				}
+				
+				writeTensor(points, request.getStartPoints());
+				
+				return request.send()
+				.then([this, nScan, dx](auto response) {
+					auto stopReasons = response.getStopReasons().getData();
+					
+					uint32_t firstClosed = nScan;
+					for(auto i : kj::range(0, nScan)) {
+						if(stopReasons[i] == FLTStopReason::DISTANCE_LIMIT) {
+							firstClosed = i;
+							break;
+						}
+					}
+					for(auto sr : stopReasons) {
+						KJ_DBG(sr);
+					}
+					KJ_DBG(firstClosed);
+					
+					x2 = x1 + (firstClosed + 1) * dx;
+					x1 = x1 + firstClosed * dx;
+					
+					return run();
+				});
+			}
+		};
+		
+		auto proc = kj::heap<Process>(ctx, thisCap());
+		auto result = proc -> run();
+		return result.attach(mv(proc));
+	}
 };
 	
 }

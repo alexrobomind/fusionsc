@@ -32,7 +32,7 @@ interface HFCamProvider {
 		h : UInt32,
 		phi : Float64,
 		rTarget : Float64, zTarget: Float64,
-		inclination: Float64, distance: Float64,
+		inclination: Float64, horizontalInclination: Float64, distance: Float64,
 		viewportHeight: Float64, fieldOfView: Float64
 	) -> HFCamProjection;
 }

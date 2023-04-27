@@ -29,6 +29,7 @@ from . import resolve
 from . import magnetics
 from . import flt
 from . import geometry
+from . import hfcam
 
 # Load device-specifics
 from . import devices

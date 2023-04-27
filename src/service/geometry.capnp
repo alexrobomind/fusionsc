@@ -169,6 +169,10 @@ struct Geometry {
 		w7x : union {
 			componentsDbMesh     @8 : UInt64;
 			componentsDbAssembly @9 : UInt64;
+			
+			op21HeatShield @23 : Void;
+			op21Baffles @24 : Void;
+			op21Divertor @25 : Void;
 		}
 		
 		# ----------- J-TEXT ------------

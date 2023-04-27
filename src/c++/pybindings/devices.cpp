@@ -20,14 +20,13 @@ fsc::CartesianGrid::Reader w7xDefaultGeometryGrid() {
 namespace fscpy {
 	void initDevices(py::module_& root) {
 		py::module_ devices = root.def_submodule("devices");
+		
+		// ================ W7-X ==================
+		
 		py::module_ w7x = devices.def_submodule("w7x");
 		
 		w7x.def("defaultGrid", &w7xDefaultGrid);
-		w7x.def("defaultGeometryGrid", &w7xDefaultGeometryGrid);
-		
-		w7x.def("op21BafflesNoHoles", &devices::w7x::op21Baffles);
-		w7x.def("op21HeatShieldNoHoles", &devices::w7x::op21HeatShield);
-		w7x.def("op21Divertor", &devices::w7x::op21Divertor);		
+		w7x.def("defaultGeometryGrid", &w7xDefaultGeometryGrid);		
 		
 		w7x.def("webserviceCoilsDB", &fsc::devices::w7x::newCoilsDBFromWebservice);
 		w7x.def("webserviceComponentsDB", &fsc::devices::w7x::newComponentsDBFromWebservice);
@@ -36,9 +35,12 @@ namespace fscpy {
 		w7x.def("coilsDBResolver", &fsc::devices::w7x::newCoilsDBResolver);
 		w7x.def("configDBResolver", &fsc::devices::w7x::newCoilsDBResolver);
 		
-		w7x.def("fieldResolver", &fsc::devices::w7x::newW7xResolver);
+		w7x.def("geometryResolver", &fsc::devices::w7x::newW7xGeometryResolver);
+		w7x.def("fieldResolver", &fsc::devices::w7x::newW7xFieldResolver);
 		
 		w7x.def("buildCoilFields", &fsc::devices::w7x::buildCoilFields);
+		
+		// ================ J-TEXT ==================
 		
 		py::module_ jtext = devices.def_submodule("jtext");
 		

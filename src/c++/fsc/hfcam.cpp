@@ -61,24 +61,23 @@ Temporary<HFCamProjection> createProjection(
 Temporary<HFCamProjection> toroidalProjection(
 	uint32_t w, uint32_t h, // Screen space
 	double phi, double rTarget, double zTarget,
-	double inclination, double distance,
+	double inclination, double horzInclination, double distance,
 	double viewportHeight, double fieldOfView,
 	HFCamProjection::Builder result
 ) {
 	using std::sin;
 	using std::cos;
 	
-	Vec3d camEx(-sin(phi), cos(phi), 0);	
-	Vec3d camEy(cos(phi) * -sin(inclination), sin(phi) * -sin(inclination), cos(inclination));
+	double phiO = phi + horzInclination;
+	
+	Vec3d camEx(-sin(phiO), cos(phiO), 0);	
+	Vec3d camEy(cos(phiO) * -sin(inclination), sin(phiO) * -sin(inclination), cos(inclination));
 	
 	// Adjust ration between ex and ey to be inverse to w/h ratio
 	camEx *= ((double) h) / w;
-	
-	double zOrigin = zTarget + sin(inclination) * distance;
-	double rOrigin = rTarget + cos(inclination) * distance;
-	
-	Vec3d origin(cos(phi) * rOrigin, sin(phi) * rOrigin, zOrigin);
+		
 	Vec3d target(cos(phi) * rTarget, sin(phi) * rTarget, zTarget);
+	Vec3d origin = target + distance * Vec3d(cos(phiO) * cos(inclination), sin(phiO) * cos(inclination), sin(inclination));
 	
 	double invScaling = 0.5 * viewportHeight;
 	double projectivity = invScaling * sin(fieldOfView) / cos(fieldOfView);
@@ -177,18 +176,18 @@ void rasterizeTriangle(const HFProjectionStruct& projection, Eigen::MatrixXd& de
 	std::cout << p3.transpose() << " -> " << tp3.transpose() << std::endl;*/
 	
 	double xMin = std::min(std::min(tp1[0], tp2[0]), tp3[0]) - edgeTolerance;
-	double xMax = std::max(std::max(tp1[0], tp2[0]), tp3[0]) - edgeTolerance;
-	double yMin = std::min(std::min(tp1[1], tp2[1]), tp3[1]) + edgeTolerance;
+	double xMax = std::max(std::max(tp1[0], tp2[0]), tp3[0]) + edgeTolerance;
+	double yMin = std::min(std::min(tp1[1], tp2[1]), tp3[1]) - edgeTolerance;
 	double yMax = std::max(std::max(tp1[1], tp2[1]), tp3[1]) + edgeTolerance;
 	
 	if(yMax < 0 || xMax < 0)
 		return;
 		
-	uint32_t iMin = std::max((uint32_t) floor(xMin), (uint32_t) 0);
-	uint32_t jMin = std::max((uint32_t) floor(yMin), (uint32_t) 0);
+	int32_t iMin = std::max((int32_t) floor(xMin), (int32_t) 0);
+	int32_t jMin = std::max((int32_t) floor(yMin), (int32_t) 0);
 	// Remember: Eigen has column-major loadout, but on python side it's row major. indexing into buffers is reversed
-	uint32_t iMax = std::min((uint32_t) ceil(xMax), (uint32_t) depthBuffer.cols() - 1);
-	uint32_t jMax = std::min((uint32_t) ceil(yMax), (uint32_t) depthBuffer.rows() - 1);
+	int32_t iMax = std::min((int32_t) ceil(xMax), (int32_t) depthBuffer.cols() - 1);
+	int32_t jMax = std::min((int32_t) ceil(yMax), (int32_t) depthBuffer.rows() - 1);
 	
 	xMin = iMin;
 	xMax = iMax;
@@ -283,6 +282,13 @@ void rasterizeTriangle(const HFProjectionStruct& projection, Eigen::MatrixXd& de
 			double detRatio = totalDet / realspaceDet;
 			double depth = pScreenPreCorrection(2);
 			
+			// Get rid of NaN
+			if(depth != depth)
+				continue;
+			
+			if(detRatio != detRatio)
+				continue;
+			
 			double& bufferDepth = depthBuffer(j, i);
 			double& bufferDeterminant = determinantBuffer(j, i);
 			
@@ -351,6 +357,70 @@ void rasterizeGeometry(const HFProjectionStruct& projection, Eigen::MatrixXd& de
 	}
 }
 
+void rasterizePoint(Vec3d pObj, const HFProjectionStruct& projection, const Eigen::MatrixXd& depthBuffer, const Eigen::MatrixXd& determinantBuffer, double depthTol, double r, Eigen::MatrixXd& output) {
+	Vec3d pScreen = applyProjection(projection, pObj);
+	
+	if(pScreen(2) < projection.minDepth)
+		return;
+	
+	int32_t iCenter = (int32_t) floor(pScreen[0]);
+	int32_t jCenter = (int32_t) floor(pScreen[1]);
+	
+	if(iCenter < 0 || iCenter >= determinantBuffer.cols())
+		return;
+	
+	if(jCenter < 0 || jCenter >= determinantBuffer.rows())
+		return;
+	
+	double minDepth = depthBuffer(jCenter, iCenter) + depthTol;
+	double det = determinantBuffer(jCenter, iCenter);
+	
+	if(pScreen(2) > minDepth)
+		return;
+	
+	double sigma = r * sqrt(det);
+	double invSigma = 1 / sigma;
+	
+	auto clampI = [&](double i) {
+		return std::max(0, std::min((int32_t) round(i), (int32_t) determinantBuffer.cols()));
+	};
+	auto clampJ = [&](double j) {
+		return std::max(0, std::min((int32_t) round(j), (int32_t) determinantBuffer.rows()));
+	};
+	
+	int32_t i1 = clampI(iCenter - 3 * sigma);
+	int32_t i2 = clampI(iCenter + 3 * sigma);
+	int32_t j1 = clampJ(jCenter - 3 * sigma);
+	int32_t j2 = clampJ(jCenter + 3 * sigma);
+		
+	double cumWeight = 0;
+	for(auto i = i1; i <= i2; ++i) {
+		for(auto j = j1; j <= j2; ++j) {
+			auto dj = j - jCenter;
+			auto di = i - iCenter;
+			
+			double d = sqrt(di * di + dj * dj);
+			double dNorm = (d * invSigma) * (d * invSigma);
+			double weight = exp(-0.5 * dNorm);
+			cumWeight += weight;
+		}
+	}
+	
+	double invCumWeight = 1 / cumWeight;
+	
+	for(auto i = i1; i <= i2; ++i) {
+		for(auto j = j1; j <= j2; ++j) {
+			auto dj = j - jCenter;
+			auto di = i - iCenter;
+			
+			double d = sqrt(di * di + dj * dj);
+			double dNorm = (d * invSigma) * (d * invSigma);
+			double weight = exp(-0.5 * dNorm);
+			output(j, i) += weight * invCumWeight;
+		}
+	}
+}
+
 struct CamProvider : public HFCamProvider::Server {;
 	using Parent = HFCamProvider::Server;
 	
@@ -360,7 +430,7 @@ struct CamProvider : public HFCamProvider::Server {;
 		toroidalProjection(
 			params.getW(), params.getH(),
 			params.getPhi(), params.getRTarget(), params.getZTarget(),
-			params.getInclination(), params.getDistance(),
+			params.getInclination(), params.getHorizontalInclination(), params.getDistance(),
 			params.getViewportHeight(), params.getFieldOfView(),
 			context.initResults()
 		);

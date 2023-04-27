@@ -115,28 +115,7 @@ struct FLTRequest {
 }
 
 
-struct FLTResponse {
-	#struct Event {
-	#	location @0 : List(Float64);
-	#	step @1 : UInt32;
-	#	distance @2 : Float64;
-	#	turnNo @3 : UInt32;
-	#	
-	#	lcForward @4 : Float64:
-	#	lcBackward @5 : Float64;
-	#	
-	#	union {
-	#		planeIntersection : group {
-	#			planeNo @6 : UInt32;
-	#			turnNo @7 : UInt32;
-	#		}
-	#		geometryIntersection : group {
-	#			tags @8 : List(Geometry.Tag);
-	#			elementIdx @9 : UInt64;
-	#		}
-	#	}
-	#};
-	
+struct FLTResponse {	
 	# Maximum number of toroidal turns traversed by the fieldline
 	nTurns @0 : UInt32;
 	
@@ -172,9 +151,24 @@ struct FindAxisRequest {
 	nPhi @5 : UInt64 = 20;
 }
 
+struct FindLcfsRequest {
+	p1 @0 : List(Float64);
+	p2 @1 : List(Float64);
+	
+	tolerance @2 : Float64 = 0.001;
+	nScan @3 : UInt32 = 8;
+	
+	distanceLimit @4 : Float64;
+	stepSize @5 : Float64 = 0.001;
+	
+	field @6 : Magnetics.ComputedField;
+	geometry @7 : Geometry.IndexedGeometry;
+}
+
 interface FLT {
 	trace @0 FLTRequest -> FLTResponse;
 	findAxis @1 FindAxisRequest -> (pos : List(Float64), axis : Data.Float64Tensor, meanField : Float64);
+	findLcfs @2 FindLcfsRequest -> (pos : List(Float64));
 }
 
 struct MappingRequest {

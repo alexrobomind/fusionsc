@@ -23,17 +23,15 @@ static constexpr kj::StringPtr DEFAULT_COMPONENTSDB = "http://esb.ipp-hgw.mpg.de
 CoilsDB::Client newCoilsDBFromWebservice(kj::StringPtr addressPrefix);
 ComponentsDB::Client newComponentsDBFromWebservice(kj::StringPtr address);
 
-FieldResolver::Client newW7xResolver();
+FieldResolver::Client newW7xFieldResolver();
 FieldResolver::Client newCoilsDBResolver(CoilsDB::Client coilsDB);
 FieldResolver::Client newConfigDBResolver(CoilsDB::Client coilsDB);
 
+GeometryResolver::Client newW7xGeometryResolver();
 GeometryResolver::Client newComponentsDBResolver(ComponentsDB::Client componentsDB);
 
 void buildCoilFields(W7XCoilSet::Reader in, W7XCoilSet::Fields::Builder out);
 
-DataRef<Geometry>::Client op21Divertor();
-DataRef<Geometry>::Client op21Baffles();
-DataRef<Geometry>::Client op21HeatShield();
 
 }}
 
