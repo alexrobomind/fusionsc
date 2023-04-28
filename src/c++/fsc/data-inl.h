@@ -249,7 +249,7 @@ private:
 class LocalDataRefImpl : public DataRef<capnp::AnyPointer>::Server, public kj::Refcounted {
 public:
 	
-	using Metadata = typename DataRefMetadata;
+	using Metadata = DataRefMetadata;
 	
 	Own<LocalDataRefImpl> addRef();
 	

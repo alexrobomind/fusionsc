@@ -44,6 +44,9 @@ class Geometry:
 	
 	@asyncFunction
 	async def merge(self, backend = None):
+		if self.geometry.which() == 'merged':
+			return Geometry(self.geometry)
+			
 		if backend is None:
 			backend = inProcess.root()
 			
@@ -54,6 +57,29 @@ class Geometry:
 		
 		result = Geometry()
 		result.geometry.merged = mergedRef
+		return result
+	
+	@asyncFunction
+	async def index(self, geometryGrid, backend = None):
+		if geometryGrid is None:
+			assert self.geometry.which() == 'indexed', 'Must specify geometry grid or use pre-indexed geometry'
+			return Geometry(self.geometry)
+		
+		if backend is None:
+			backend = inProcess.root()
+			
+		lib = backend.newGeometryLib().service
+		
+		resolved = await self.resolve.asnc()
+		
+		result = Geometry()
+		indexed = result.geometry.initIndexed()
+		indexed.grid = geometryGrid
+		
+		indexPipeline = lib.index(resolved.geometry, geometryGrid).indexed
+		indexed.base = indexPipeline.base
+		indexed.data = indexPipeline.data
+		
 		return result
 	
 	def __add__(self, other):

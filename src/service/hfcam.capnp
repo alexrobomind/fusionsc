@@ -25,8 +25,20 @@ struct HFCamData {
 	depthBuffer @2 : Data.Float64Tensor;
 }
 
+interface HFCam {
+	clear @0 () -> ();
+	clone @1 () -> (cam : HFCam);
+	
+	# points.shape = [3, ...]
+	addPoints @2 (points : Data.Float64Tensor, r : Float64 = 0.005, depthTolerance : Float64 = 0.001) -> ();
+	get @3 () -> (image : Data.Float64Tensor);
+	
+	getData @4 () -> HFCamData;
+}
+
 interface HFCamProvider {
-	makeCamera @0 (projection: HFCamProjection, geometry : Geometry.Geometry, edgeTolerance : Float64 = 0.5, depthTolerance : Float64) -> HFCamData;
+	makeCamera @0 (projection: HFCamProjection, geometry : Geometry.Geometry, edgeTolerance : Float64 = 0.5, depthTolerance : Float64) -> (cam : HFCam);
+	
 	makeToroidalProjection @1 (
 		w: UInt32,
 		h : UInt32,

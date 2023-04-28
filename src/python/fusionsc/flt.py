@@ -132,16 +132,6 @@ class FLT:
 		return np.asarray(fieldData).transpose([3, 0, 1, 2])
 	
 	@asyncFunction
-	async def computeField(self, config, grid):		
-		resolved = await config.resolve.asnc()
-		computed = (await self.calculator.compute(resolved.field, grid)).computedField
-		
-		result = magnetics.MagneticConfig()
-		result.field.computedField = computed
-		
-		return result
-	
-	@asyncFunction
 	async def poincareInPhiPlanes(self, points, phiPlanes, turnLimit, config, **kwArgs):
 		result = await self.trace.asnc(points, config, turnLimit = turnLimit, phiPlanes = phiPlanes, **kwArgs)
 		return result["poincareHits"]
@@ -159,13 +149,8 @@ class FLT:
 		nPhi = 30, filamentLength = 5, cutoff = 1,
 		dx = 0.001
 	):
-		resolvedField = await config.resolve.asnc()
-		
-		if grid is None:
-			assert resolvedField.field.which() == 'computedField', 'Can only omit grid if field is pre-computed'
-			computedField = resolvedField.field.computedField
-		else:
-			computedField = (await self.calculator.compute(resolvedField.field, grid)).computedField
+		config = await config.compute.asnc(grid)
+		computedField = config.field.computedField
 		
 		# We use the request based API because tensor values are not yet supported for fields
 		request = service.MappingRequest.newMessage()
@@ -206,20 +191,12 @@ class FLT:
 		if isotropicDiffusionCoefficient is not None: 
 			assert parallelConvectionVelocity is not None or parallelDiffusionCoefficient is not None
 		
-		resolvedField = await config.resolve.asnc()
-		
-		if grid is None:
-			assert resolvedField.field.which() == 'computedField', 'Can only omit grid if field is pre-computed'
-			computedField = resolvedField.field.computedField
-		else:
-			computedField = (await self.calculator.compute(resolvedField.field, grid)).computedField
+		config = await config.compute.asnc(grid, backend = self.backend)
+		computedField = config.field.computedField
 		
 		if geometry is not None:	
-			if geometryGrid is None:
-				assert geometry.geometry.which() == 'indexed', 'Can only omit geometry grid if geometry is already indexed'
-				indexedGeometry = geometry.geometry.indexed
-			else:
-				indexedGeometry = (await self._indexGeometry.asnc(geometry, geometryGrid)).geometry.indexed
+			geometry = await geometry.index.asnc(geometryGrid, backend = self.backend)
+			indexedGeometry = geometry.geometry.indexed
 		
 		request = service.FLTRequest.newMessage()
 		request.startPoints = points
@@ -271,15 +248,9 @@ class FLT:
 		}
 	
 	@asyncFunction
-	async def findAxis(self, field, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10):
-		resolvedField = await field.resolve.asnc()
-		
-		if grid is None:
-			assert resolvedField.field.which() == 'computedField', 'Can only omit grid if field is pre-computed'
-			computedField = resolvedField.field.computedField
-			grid = computedField.grid
-		else:
-			computedField = (await self.calculator.compute(resolvedField.field, grid)).computedField
+	async def findAxis(self, field, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10):		
+		field = await field.compute.asnc(grid, backend = self.backend)
+		computed = field.field.computedField
 		
 		# If start point is not provided, use grid center
 		if startPoint is None:
@@ -300,21 +271,11 @@ class FLT:
 	
 	@asyncFunction
 	async def findLCFS(self, field, geometry, p1, p2, grid = None, geometryGrid = None, stepSize = 0.01, tolerance = 0.001, nScan = 8, distanceLimit = 3e3):
-		resolvedField = await field.resolve.asnc()
-		resolvedGeometry = await geometry.resolve.asnc()
+		field = await field.compute.asnc(grid, backend = self.backend)
+		computedField = field.field.computedField
 		
-		if grid is None:
-			assert resolvedField.field.which() == 'computedField', 'Can only omit grid if field is pre-computed'
-			computedField = resolvedField.field.computedField
-		else:
-			computedField = (await self.calculator.compute(resolvedField.field, grid)).computedField
-		
-		if geometry is not None:	
-			if geometryGrid is None:
-				assert geometry.geometry.which() == 'indexed', 'Can only omit geometry grid if geometry is already indexed'
-				indexedGeometry = geometry.geometry.indexed
-			else:
-				indexedGeometry = (await self._indexGeometry.asnc(geometry, geometryGrid)).geometry.indexed
+		geometry = await geometry.index.asnc(geometryGrid, backend = self.backend)
+		indexedGeometry = geometry.geometry.indexed
 		
 		request = service.FindLcfsRequest.newMessage()
 		request.p1 = p1
@@ -332,7 +293,7 @@ class FLT:
 	
 	@asyncFunction
 	async def axisCurrent(self, field, current, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10):
-		_, axis = await self.findAxis(field, grid, startPoint, stepSize, nTurns, nIterations)
+		_, axis = await self.findAxis.asnc(field, grid, startPoint, stepSize, nTurns, nIterations)
 		
 		result = MagneticField()
 		
@@ -341,25 +302,5 @@ class FLT:
 		filField.biotSavartSettings.stepSize = stepSize
 		filField.filament.inline = axis
 		
-		return result
-	
-	@asyncFunction
-	async def _mergeGeometry(self, geometry):
-		resolved  = await geometry.resolve.asnc()
-		mergedRef = self.geometryLib.merge(resolved.geometry).ref
-		
-		result = Geometry()
-		result.geometry.merged = mergedRef
-		return result
-	
-	@asyncFunction
-	async def _indexGeometry(self, geometry, grid):
-		from .geometry import Geometry
-		
-		resolved  = await geometry.resolve.asnc()
-		indexed	  = (await self.geometryLib.index(resolved.geometry, grid)).indexed
-		
-		result = Geometry()
-		result.geometry.indexed = indexed
 		return result
 	

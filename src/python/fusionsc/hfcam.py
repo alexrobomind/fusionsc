@@ -25,30 +25,53 @@ async def toroidalProjection(
 		viewportHeight, fieldOfView
 	)
 	return response
+	
+@asyncFunction
+async def make(
+	projection : service.HFCamProjection.Reader,
+	geometry,
+	backend = None,
+	edgeTolerance = 0.5,
+	depthTolerance = 0.5
+):
+	if backend is None:
+		backend = inProcess.root()
+	
+	provider = backend.newHFCamProvider().service
+	
+	resolved = await geometry.resolve.asnc()
+	cam = provider.makeCamera(projection, resolved.geometry, edgeTolerance, depthTolerance).cam
+	return HFCam(cam)
 
 class HFCam:
-	def __init__(self, data, backend):			
-		self.backend = backend
-		self.data = data
+	def __init__(self, cam):			
+		self.cam = cam
 	
 	@property
 	def provider(self):
 		return self.backend.newHFCamProvider().service
 	
 	@asyncFunction
-	@staticmethod
-	async def prepare(
-		projection : service.HFCamProjection.Reader,
-		geometry,
-		backend = None,
-		edgeTolerance = 0.5,
-		depthTolerance = 0.5
-	):
-		if backend is None:
-			backend = inProcess.root()
+	def getData(self):
+		return self.cam.getData()
+	
+	@asyncFunction
+	async def clear(self):
+		await self.cam.clear()
+	
+	def clone(self):
+		return HFCam(self.cam.clone().cam)
+	
+	@asyncFunction
+	async def addPoints(self, points, r, depthTolerance = 0.001):
+		req = service.HFCam.methods.addPoints.Params.newMessage()
+		req.points = points
+		req.r = r
+		req.depthTolerance = depthTolerance
 		
-		provider = backend.newHFCamProvider().service
-		
-		resolved = await geometry.resolve.asnc()
-		data = await provider.makeCamera(projection, resolved.geometry, edgeTolerance, depthTolerance)
-		return HFCam(data, backend)
+		await self.cam.addPoints(req)
+	
+	@asyncFunction
+	def get(self):
+		return self.cam.get_()
+	

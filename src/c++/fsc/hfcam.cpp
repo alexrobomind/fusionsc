@@ -375,17 +375,25 @@ void rasterizePoint(Vec3d pObj, const HFProjectionStruct& projection, const Eige
 	double minDepth = depthBuffer(jCenter, iCenter) + depthTol;
 	double det = determinantBuffer(jCenter, iCenter);
 	
-	if(pScreen(2) > minDepth)
+	if(pScreen(2) > minDepth + depthTol)
+		return;
+	
+	if(det == 0)
 		return;
 	
 	double sigma = r * sqrt(det);
 	double invSigma = 1 / sigma;
 	
+	if(sigma < 0.1) {
+		output(jCenter, iCenter) += det;
+		return;
+	}
+	
 	auto clampI = [&](double i) {
-		return std::max(0, std::min((int32_t) round(i), (int32_t) determinantBuffer.cols()));
+		return std::max(0, std::min((int32_t) round(i), (int32_t) determinantBuffer.cols() - 1));
 	};
 	auto clampJ = [&](double j) {
-		return std::max(0, std::min((int32_t) round(j), (int32_t) determinantBuffer.rows()));
+		return std::max(0, std::min((int32_t) round(j), (int32_t) determinantBuffer.rows() - 1));
 	};
 	
 	int32_t i1 = clampI(iCenter - 3 * sigma);
@@ -416,10 +424,99 @@ void rasterizePoint(Vec3d pObj, const HFProjectionStruct& projection, const Eige
 			double d = sqrt(di * di + dj * dj);
 			double dNorm = (d * invSigma) * (d * invSigma);
 			double weight = exp(-0.5 * dNorm);
-			output(j, i) += weight * invCumWeight;
+			output(j, i) += det * weight * invCumWeight;
 		}
 	}
 }
+
+struct HFCamImpl : public HFCam::Server {
+	Eigen::MatrixXd detBuffer;
+	Eigen::MatrixXd depthBuffer;
+	Eigen::MatrixXd accumBuffer;
+	
+	Temporary<HFCamProjection> projection;
+	
+	HFCamImpl(const HFCamImpl& other) :
+		HFCamImpl(other.detBuffer, other.depthBuffer, other.projection)
+	{
+		accumBuffer = other.accumBuffer;
+	}
+	
+	HFCamImpl(const Eigen::MatrixXd& detBuffer, const Eigen::MatrixXd& depthBuffer, HFCamProjection::Reader projection) :
+		detBuffer(detBuffer),
+		depthBuffer(depthBuffer),
+		projection(projection),
+		accumBuffer(detBuffer.rows(), detBuffer.cols())
+	{
+		accumBuffer.setConstant(0);
+	}
+	
+	Promise<void> clear(ClearContext ctx) {
+		accumBuffer.setConstant(0);
+		return READY_NOW;
+	}
+	
+	Promise<void> clone(CloneContext ctx) {
+		ctx.initResults().setCam(kj::heap<HFCamImpl>(*this));
+		return READY_NOW;
+	}
+	
+	Promise<void> addPoints(AddPointsContext ctx) {
+		auto params = ctx.getParams();
+		auto points = params.getPoints();
+		auto pShape = points.getShape();
+		auto pData = points.getData();
+		
+		KJ_REQUIRE(pShape.size() >= 1);
+		KJ_REQUIRE(pShape[0] == 3);
+		KJ_REQUIRE(pData.size() % 3 == 0);
+		
+		auto nPoints = pData.size() / 3;
+		
+		double dTol = params.getDepthTolerance();
+		double r = params.getR();
+		
+		HFProjectionStruct proj;
+		proj.load(projection.asReader());
+		
+		for(auto iPoint : kj::range(0, nPoints)) {
+			Vec3d p(pData[0 * nPoints + iPoint], pData[1 * nPoints + iPoint], pData[2 * nPoints + iPoint]);
+			rasterizePoint(
+				p,
+				proj, depthBuffer, detBuffer,
+				dTol, r,
+				accumBuffer
+			);
+		}
+		
+		return READY_NOW;
+	}
+	
+	Promise<void> get(GetContext ctx) {
+		auto image = ctx.initResults().getImage();
+		size_t nRows = accumBuffer.rows();
+		size_t nCols = accumBuffer.cols();
+		image.setShape({nCols, nRows});
+		image.setData(kj::ArrayPtr<const double>(accumBuffer.data(), accumBuffer.size()));
+		
+		return READY_NOW;
+	}
+	
+	Promise<void> getData(GetDataContext ctx) {
+		auto data = ctx.initResults();
+		data.setProjection(projection.asReader());
+		
+		auto detBuf = ctx.getResults().getDeterminantBuffer();
+		detBuf.setShape({(size_t ) detBuffer.cols(), (size_t) detBuffer.rows()});
+		detBuf.setData(kj::ArrayPtr<const double>(detBuffer.data(), detBuffer.size()));
+		
+		auto dBuf = ctx.getResults().getDepthBuffer();
+		dBuf.setShape({(size_t) depthBuffer.cols(), (size_t) depthBuffer.rows()});
+		dBuf.setData(kj::ArrayPtr<const double>(depthBuffer.data(), depthBuffer.size()));
+		
+		return READY_NOW;
+	}
+};
 
 struct CamProvider : public HFCamProvider::Server {;
 	using Parent = HFCamProvider::Server;
@@ -466,8 +563,7 @@ struct CamProvider : public HFCamProvider::Server {;
 			auto entries = mergedGeometry.getEntries();
 			for(auto iMesh : kj::indices(entries)) {
 				Promise<void> processMesh = kj::evalLater([iMesh, dBuf, detBuf, projection, entries, context]() mutable {
-					KJ_DBG("Processing mesh", iMesh, entries.size());
-					
+					KJ_DBG("Processing mesh", iMesh);
 					rasterizeGeometry(
 						projection,
 						*dBuf, *detBuf,
@@ -481,23 +577,10 @@ struct CamProvider : public HFCamProvider::Server {;
 			
 			return joinPromises(promises.releaseAsArray());
 		})
-		.then([detBuf, dBuf, context]() mutable {
-			auto results = context.initResults();
-			results.setProjection(context.getParams().getProjection());
-			
-			auto detBufTensor = results.initDeterminantBuffer();
-			auto dBufTensor = results.initDepthBuffer();
-			
-			uint32_t w = context.getParams().getProjection().getWidth();
-			uint32_t h = context.getParams().getProjection().getHeight();
-			detBufTensor.setShape({w, h});
-			dBufTensor.setShape({w, h});
-			
-			detBufTensor.setData(kj::arrayPtr(detBuf->data(), w * h));
-			dBufTensor.setData(kj::arrayPtr(dBuf->data(), w * h));
+		.then([detBuf, dBuf, context]() mutable {			
+			context.initResults().setCam(kj::heap<HFCamImpl>(*detBuf, *dBuf, context.getParams().getProjection()));
 		})
 		.attach(detBuf.x(), dBuf.x());
-	
 	}
 };
 

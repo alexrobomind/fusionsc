@@ -353,7 +353,7 @@ struct InterfaceMethod {
 					py::detail::type_caster<DynamicValue::Reader> readerCaster;
 					KJ_REQUIRE(readerCaster.load(pyArgs[i], false), "Failed to convert positional argument", i);
 					
-					checkType(field.getType(), (DynamicValue::Reader) readerCaster);
+					checkType(field.getType(), readerCaster.operator DynamicValue::Reader&());
 				}
 				
 				auto inferEntry = [this, &checkType](kj::StringPtr name, DynamicValue::Reader value) mutable {
@@ -380,7 +380,7 @@ struct InterfaceMethod {
 				
 				py::detail::type_caster<DynamicValue::Reader> readerCaster;
 				KJ_REQUIRE(readerCaster.load(pyArgs[i], false), "Failed to convert positional argument", i);
-				structRequest.set(field.getProto().getName(), (DynamicValue::Reader) readerCaster);
+				structRequest.set(field.getProto().getName(), readerCaster.operator DynamicValue::Reader&());
 			}
 			
 			// Parse keyword arguments

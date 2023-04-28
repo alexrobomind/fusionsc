@@ -37,7 +37,7 @@ kj::Array<double> parseDatFile(kj::StringPtr datFile) {
 	
 	p::IteratorInput<char, const char*> input(datFile.begin(), datFile.end());
 	auto maybeResult = numbers(input);
-	FSC_REQUIRE_MAYBE(pResult, maybeResult);
+	FSC_REQUIRE_MAYBE(pResult, maybeResult, "Failed to parse dat file");
 	
 	return mv(*pResult);
 }

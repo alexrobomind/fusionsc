@@ -45,6 +45,7 @@ def singleIslandCoil(i, current):
 	filField.biotSavartSettings.stepSize = 0.01
 	
 	filField.filament.initJtext().islandCoil = i
+	filField.current = current
 	
 	return result
 

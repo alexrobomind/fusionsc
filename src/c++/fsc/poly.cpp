@@ -107,12 +107,14 @@ Tensor<uint32_t, 2> triangulate(Tensor<double, 2> vertices) {
 				goto NEXT_ITERATION;
 			
 			// Skip all triangles containing one of the other edge points
-			PolyNode* pOther = current -> next -> next;
-			while(pOther != current -> prev) {
-				KJ_IF_MAYBE(pDontCare, locateInTriangle(current -> x, current -> prev -> x, current -> next -> x, pOther -> x)) {
-					goto NEXT_ITERATION;
+			{
+				PolyNode* pOther = current -> next -> next;
+				while(pOther != current -> prev) {
+					KJ_IF_MAYBE(pDontCare, locateInTriangle(current -> x, current -> prev -> x, current -> next -> x, pOther -> x)) {
+						goto NEXT_ITERATION;
+					}
+					pOther = pOther -> next;
 				}
-				pOther = pOther -> next;
 			}
 			
 			if(best == nullptr || area > bestArea) {
