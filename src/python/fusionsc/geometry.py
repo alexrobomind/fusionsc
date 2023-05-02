@@ -4,7 +4,7 @@
 from . import data
 from . import resolve
 from . import service
-from . import inProcess
+from . import backends
 
 from .asnc import asyncFunction
 
@@ -43,32 +43,22 @@ class Geometry:
 		return Geometry(await resolve.resolveGeometry.asnc(self.geometry))
 	
 	@asyncFunction
-	async def merge(self, backend = None):
+	async def merge(self):
 		if self.geometry.which() == 'merged':
 			return Geometry(self.geometry)
-			
-		if backend is None:
-			backend = inProcess.root()
-			
-		lib = backend.newGeometryLib().service
 		
 		resolved = await self.resolve.asnc()
-		mergedRef = lib.merge(resolved.geometry).ref
+		mergedRef = geometryLib().merge(resolved.geometry).ref
 		
 		result = Geometry()
 		result.geometry.merged = mergedRef
 		return result
 	
 	@asyncFunction
-	async def index(self, geometryGrid, backend = None):
+	async def index(self, geometryGrid):
 		if geometryGrid is None:
 			assert self.geometry.which() == 'indexed', 'Must specify geometry grid or use pre-indexed geometry'
 			return Geometry(self.geometry)
-		
-		if backend is None:
-			backend = inProcess.root()
-			
-		lib = backend.newGeometryLib().service
 		
 		resolved = await self.resolve.asnc()
 		
@@ -76,7 +66,7 @@ class Geometry:
 		indexed = result.geometry.initIndexed()
 		indexed.grid = geometryGrid
 		
-		indexPipeline = lib.index(resolved.geometry, geometryGrid).indexed
+		indexPipeline = geometryLib().index(resolved.geometry, geometryGrid).indexed
 		indexed.base = indexPipeline.base
 		indexed.data = indexPipeline.data
 		
@@ -278,9 +268,9 @@ def cuboid(x1, x2, tags = {}):
 	return result
 		
 
-def localGeoLib():
+def geometryLib():
 	"""Creates an in-thread GeometryLib instance"""
-	return inProcess.root().newGeometryLib().service
+	return backends.activeBackend().newGeometryLib().service
 
 @asyncFunction
 async def planarCut(geometry, phi = None, normal = None, center = None):
@@ -302,7 +292,7 @@ async def planarCut(geometry, phi = None, normal = None, center = None):
 	if center is not None:
 		plane.center = center
 	
-	response = await localGeoLib().planarCut(request)
+	response = await geometryLib().planarCut(request)
 	return np.asarray(response.edges).transpose([2, 0, 1])
 
 def plotCut(geometry, phi = 0, ax = None, plot = True, **kwArgs):
@@ -333,7 +323,7 @@ async def asPyvista(geometry):
 	
 	geometry = await geometry.resolve.asnc()
 	
-	geoLib = localGeoLib()
+	geoLib = geometryLib()
 	mergedRef = geoLib.merge(geometry.geometry).ref
 	mergedGeometry = await data.download.asnc(mergedRef)
 	

@@ -1,4 +1,4 @@
-from . import service, inProcess
+from . import service, backends
 from .asnc import asyncFunction
 
 from typing import Optional
@@ -16,7 +16,7 @@ async def toroidalProjection(
 	viewportHeight: float,
 	fieldOfView: float
 ):
-	provider = inProcess.root().newHFCamProvider().service
+	provider = activeBackend().newHFCamProvider().service
 	
 	response = await provider.makeToroidalProjection(
 		w, h, phi,
@@ -34,10 +34,7 @@ async def make(
 	edgeTolerance = 0.5,
 	depthTolerance = 0.5
 ):
-	if backend is None:
-		backend = inProcess.root()
-	
-	provider = backend.newHFCamProvider().service
+	provider = activeBackend().newHFCamProvider().service
 	
 	resolved = await geometry.resolve.asnc()
 	cam = provider.makeCamera(projection, resolved.geometry, edgeTolerance, depthTolerance).cam
@@ -46,10 +43,6 @@ async def make(
 class HFCam:
 	def __init__(self, cam):			
 		self.cam = cam
-	
-	@property
-	def provider(self):
-		return self.backend.newHFCamProvider().service
 	
 	@asyncFunction
 	def getData(self):

@@ -2,7 +2,7 @@ from . import data
 from . import service
 from . import capnp
 from . import resolve
-from . import inProcess
+from . import backends
 from . import efit
 
 from .asnc import asyncFunction
@@ -137,18 +137,16 @@ class MagneticConfig:
 		return MagneticConfig(await resolve.resolveField.asnc(self.field))
 	
 	@asyncFunction
-	async def compute(self, grid, backend = None):
+	async def compute(self, grid):
 		if grid is None:
 			assert self.field.which() == 'computedField', 'Must specify grid or use pre-computed field'
 			return MagneticConfig(self.field)
-			
-		if backend is None:
-			backend = inProcess.root()
 		
 		result = MagneticConfig()
 		
 		resolved = await self.resolve.asnc()
 		
+		backend = backends.activeBackend()
 		calculator = backend.newFieldCalculator().service
 		
 		comp = result.field.initComputedField()

@@ -1,5 +1,5 @@
 from . import native
-from . import inProcess
+from . import backends
 from . import service
 from . import asnc
 from . import capnp
@@ -18,7 +18,7 @@ def openArchive(filename: str) -> service.DataRef:
 	Returns:
 		A DataRef pointing to the file root that can be shared or opened using the 'download' method.
 	"""
-	return inProcess.localResources().openArchive(filename).ref
+	return backends.localResources().openArchive(filename).ref
 
 def publish(data: Union[capnp.DynamicStructReader, capnp.DataReader]) -> service.DataRef:
 	"""
@@ -31,7 +31,7 @@ def publish(data: Union[capnp.DynamicStructReader, capnp.DataReader]) -> service
 		A DataRef pointing to an in-memory copy of 'data'.
 	"""
 	inThreadRef = native.data.publish(data)
-	cloneResult = inProcess.localResources().download(inThreadRef)
+	cloneResult = backends.localResources().download(inThreadRef)
 	return cloneResult.ref
 
 @asyncFunction
@@ -62,7 +62,7 @@ def writeArchive(data: Union[capnp.DynamicStructReader, capnp.DynamicCapabilityC
 	else:
 		ref = publish(data)
 	
-	return inProcess.localResources().writeArchive(filename, ref)
+	return backends.localResources().writeArchive(filename, ref)
 
 @asyncFunction
 def readArchive(filename: str) -> asnc.Promise[Union[capnp.DynamicCapabilityClient, capnp.DynamicStructReader]]:

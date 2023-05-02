@@ -18,7 +18,8 @@ from .native import efit
 from . import asnc
 
 # Connect to local worker
-from . import inProcess
+from . import backends
+backends.connectLocal()
 
 # Load auxiliary modules
 from . import data
@@ -45,17 +46,4 @@ import threading
 __all__ = [
 	'run', 'asyncFunction', 'wait', 'importOfflineData', 'delay', 'Promise', 'MagneticConfig'
 ]
-
-def tracer(backend: Optional[service.RootService] = None) -> flt.FLT:
-	"""
-	Creates a new field line tracer backed by an FSC service. If
-	no backend is specified, creates a local backend.
-	"""
-	
-	if backend is None:
-		backend = local()
-			
-	return flt.FLT(backend)
-	
-	
 	

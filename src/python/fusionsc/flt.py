@@ -5,7 +5,7 @@ from . import data
 from . import service
 from . import capnp
 from . import resolve
-from . import inProcess
+from . import backends
 from . import efit
 from . import magnetics
 
@@ -92,215 +92,201 @@ async def visualizeMapping(mapping, nPoints = 50):
 		for filArray in [mapping.fwd.filaments, mapping.bwd.filaments]
 		for f in filArray
 	])
+	
+def calculator():
+	return backends.activeBackend().newFieldCalculator().service
 
-class FLT:
-	backend: service.RootService.Client
+def tracer():
+	return backends.activeBackend().newTracer().service
+
+def geometryLib():
+	return backends.activeBackend().newGeometryLib().service
+
+def mapper():
+	return backends.activeBackend().newMapper().service
+
+@asyncFunction
+async def fieldValues(config, grid):
+	"""
+	Returns an array of shape [3, grid.nPhi, grid.nZ, grid.nR] containing the magnetic field.
+	The directions along the first coordinate are phi, z, r
+	"""
+	import numpy as np
 	
-	def __init__(self, backend = None):
-		if backend is None:
-			backend = inProcess.root()
-			
-		self.backend = backend
+	field = await computeField.asnc(config, grid)
+	fieldData = await data.download.asnc(field.field.computedField.data)
 	
-	@property
-	def calculator(self):
-		return self.backend.newFieldCalculator().service
+	return np.asarray(fieldData).transpose([3, 0, 1, 2])
+
+@asyncFunction
+async def poincareInPhiPlanes(points, phiPlanes, turnLimit, config, **kwArgs):
+	result = await trace.asnc(points, config, turnLimit = turnLimit, phiPlanes = phiPlanes, **kwArgs)
+	return result["poincareHits"]
+
+@asyncFunction
+async def connectionLength(points, config, geometry, **kwargs):
+	result = await trace.asnc(points, config, geometry = geometry, collisionLimit = 1, **kwargs)
+	return result["endPoints"][3]
+
+
+@asyncFunction
+async def computeMapping(
+	startPoints, config, grid = None, 
+	nSym = 1, stepSize = 0.001, batchSize = 1000,
+	nPhi = 30, filamentLength = 5, cutoff = 1,
+	dx = 0.001
+):
+	config = await config.compute.asnc(grid)
+	computedField = config.field.computedField
 	
-	@property
-	def tracer(self):
-		return self.backend.newTracer().service
+	# We use the request based API because tensor values are not yet supported for fields
+	request = service.MappingRequest.newMessage()
+	request.startPoints = startPoints
+	request.field = computedField
+	request.dx = dx
+	request.filamentLength = filamentLength
+	request.cutoff = cutoff
+	request.nPhi = nPhi
+	request.nSym = nSym
+	request.stepSize = stepSize
+	request.batchSize = batchSize
 	
-	@property
-	def geometryLib(self):
-		return self.backend.newGeometryLib().service
+	response = mapper().computeMapping(request)
 	
-	@property
-	def mapper(self):
-		return self.backend.newMapper().service
+	return response.mapping
 	
-	@asyncFunction
-	async def fieldValues(self, config, grid):
-		"""
-		Returns an array of shape [3, grid.nPhi, grid.nZ, grid.nR] containing the magnetic field.
-		The directions along the first coordinate are phi, z, r
-		"""
-		import numpy as np
-		
-		field = await self.computeField.asnc(config, grid)
-		fieldData = await data.download.asnc(field.field.computedField.data)
-		
-		return np.asarray(fieldData).transpose([3, 0, 1, 2])
+@asyncFunction
+async def trace(
+	points, config,
+	geometry = None,
+	grid = None, geometryGrid = None,
+	mapping = None,
 	
-	@asyncFunction
-	async def poincareInPhiPlanes(self, points, phiPlanes, turnLimit, config, **kwArgs):
-		result = await self.trace.asnc(points, config, turnLimit = turnLimit, phiPlanes = phiPlanes, **kwArgs)
-		return result["poincareHits"]
+	# Limits to stop tracing
+	distanceLimit = 1e4, turnLimit = 0, stepLimit = 0, stepSize = 1e-3, collisionLimit = 0,
 	
-	@asyncFunction
-	async def connectionLength(self, points, config, geometry, **kwargs):
-		result = await self.trace.asnc(points, config, geometry = geometry, collisionLimit = 1, **kwargs)
-		return result["endPoints"][3]
+	# Plane intersections
+	phiPlanes = [],
 	
+	# Diffusive transport specification
+	isotropicDiffusionCoefficient = None,
+	parallelConvectionVelocity = None, parallelDiffusionCoefficient = None,
+	meanFreePath = 1, meanFreePathGrowth = 0
+):
+	"""Performs a custom trace with user-supplied parameters"""
+	assert parallelConvectionVelocity is None or parallelDiffusionCoefficient is None
+	if isotropicDiffusionCoefficient is not None: 
+		assert parallelConvectionVelocity is not None or parallelDiffusionCoefficient is not None
 	
-	@asyncFunction
-	async def computeMapping(self,
-		startPoints, config, grid = None, 
-		nSym = 1, stepSize = 0.001, batchSize = 1000,
-		nPhi = 30, filamentLength = 5, cutoff = 1,
-		dx = 0.001
-	):
-		config = await config.compute.asnc(grid)
-		computedField = config.field.computedField
-		
-		# We use the request based API because tensor values are not yet supported for fields
-		request = service.MappingRequest.newMessage()
-		request.startPoints = startPoints
-		request.field = computedField
-		request.dx = dx
-		request.filamentLength = filamentLength
-		request.cutoff = cutoff
-		request.nPhi = nPhi
-		request.nSym = nSym
-		request.stepSize = stepSize
-		request.batchSize = batchSize
-		
-		response = self.mapper.computeMapping(request)
-		
-		return response.mapping
-		
-	@asyncFunction
-	async def trace(self,
-		points, config,
-		geometry = None,
-		grid = None, geometryGrid = None,
-		mapping = None,
-		
-		# Limits to stop tracing
-		distanceLimit = 1e4, turnLimit = 0, stepLimit = 0, stepSize = 1e-3, collisionLimit = 0,
-		
-		# Plane intersections
-		phiPlanes = [],
-		
-		# Diffusive transport specification
-		isotropicDiffusionCoefficient = None,
-		parallelConvectionVelocity = None, parallelDiffusionCoefficient = None,
-		meanFreePath = 1, meanFreePathGrowth = 0
-	):
-		"""Performs a custom trace with user-supplied parameters"""
-		assert parallelConvectionVelocity is None or parallelDiffusionCoefficient is None
-		if isotropicDiffusionCoefficient is not None: 
-			assert parallelConvectionVelocity is not None or parallelDiffusionCoefficient is not None
-		
-		config = await config.compute.asnc(grid, backend = self.backend)
-		computedField = config.field.computedField
-		
-		if geometry is not None:	
-			geometry = await geometry.index.asnc(geometryGrid, backend = self.backend)
-			indexedGeometry = geometry.geometry.indexed
-		
-		request = service.FLTRequest.newMessage()
-		request.startPoints = points
-		request.field = computedField
-		request.stepSize = stepSize
-		
-		request.distanceLimit = distanceLimit
-		request.stepLimit = stepLimit
-		request.collisionLimit = collisionLimit
-		request.turnLimit = turnLimit
-				
-		# Diffusive transport model
-		if isotropicDiffusionCoefficient is not None:
-			request.perpendicularModel.isotropicDiffusionCoefficient = isotropicDiffusionCoefficient
-			
-			request.parallelModel.meanFreePath = meanFreePath
-			request.parallelModel.meanFreePathGrowth = meanFreePathGrowth
-			
-			if parallelConvectionVelocity is not None:
-				request.parallelModel.convectiveVelocity = parallelConvectionVelocity
-			else:
-				request.parallelModel.diffusionCoefficient = parallelDiffusionCoefficient
-		
-		if len(phiPlanes) > 0:
-			planes = request.initPlanes(len(phiPlanes))
-			
-			for plane, phi in zip(planes, phiPlanes):
-				plane.orientation.phi = phi
-		
-		if geometry is not None:
-			request.geometry = indexedGeometry
-		
-		if mapping is not None:
-			request.mapping = mapping
-		
-		response = await self.tracer.trace(request)
-		
-		endTags = {
-			str(tagName) : tagData
-			for tagName, tagData in zip(response.tagNames, np.asarray(response.endTags))
-		}
-		
-		return {
-			"endPoints" : np.asarray(response.endPoints),
-			"poincareHits" : np.asarray(response.poincareHits),
-			"stopReasons" : np.asarray(response.stopReasons),
-			"endTags" : endTags,
-			"responseSize" : capnp.totalSize(response)
-		}
+	config = await config.compute.asnc(grid)
+	computedField = config.field.computedField
 	
-	@asyncFunction
-	async def findAxis(self, field, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10):		
-		field = await field.compute.asnc(grid, backend = self.backend)
-		computed = field.field.computedField
-		
-		# If start point is not provided, use grid center
-		if startPoint is None:
-			startPoint = [0.5 * (grid.rMax + grid.rMin),
-				0, 0.5 * (grid.zMax + grid.zMin)
-			]
-		
-		request = service.FindAxisRequest.newMessage()
-		request.startPoint = startPoint
-		request.field = computedField
-		request.stepSize = stepSize
-		request.nTurns = nTurns
-		request.nIterations = nIterations
-		
-		response = await self.tracer.findAxis(request)
-		
-		return np.asarray(response.pos), np.asarray(response.axis)
-	
-	@asyncFunction
-	async def findLCFS(self, field, geometry, p1, p2, grid = None, geometryGrid = None, stepSize = 0.01, tolerance = 0.001, nScan = 8, distanceLimit = 3e3):
-		field = await field.compute.asnc(grid, backend = self.backend)
-		computedField = field.field.computedField
-		
-		geometry = await geometry.index.asnc(geometryGrid, backend = self.backend)
+	if geometry is not None:	
+		geometry = await geometry.index.asnc(geometryGrid)
 		indexedGeometry = geometry.geometry.indexed
+	
+	request = service.FLTRequest.newMessage()
+	request.startPoints = points
+	request.field = computedField
+	request.stepSize = stepSize
+	
+	request.distanceLimit = distanceLimit
+	request.stepLimit = stepLimit
+	request.collisionLimit = collisionLimit
+	request.turnLimit = turnLimit
+			
+	# Diffusive transport model
+	if isotropicDiffusionCoefficient is not None:
+		request.perpendicularModel.isotropicDiffusionCoefficient = isotropicDiffusionCoefficient
 		
-		request = service.FindLcfsRequest.newMessage()
-		request.p1 = p1
-		request.p2 = p2
-		request.stepSize = stepSize
-		request.tolerance = tolerance
-		request.field = computedField
+		request.parallelModel.meanFreePath = meanFreePath
+		request.parallelModel.meanFreePathGrowth = meanFreePathGrowth
+		
+		if parallelConvectionVelocity is not None:
+			request.parallelModel.convectiveVelocity = parallelConvectionVelocity
+		else:
+			request.parallelModel.diffusionCoefficient = parallelDiffusionCoefficient
+	
+	if len(phiPlanes) > 0:
+		planes = request.initPlanes(len(phiPlanes))
+		
+		for plane, phi in zip(planes, phiPlanes):
+			plane.orientation.phi = phi
+	
+	if geometry is not None:
 		request.geometry = indexedGeometry
-		request.nScan = nScan
-		request.distanceLimit = distanceLimit
-		
-		response = await self.tracer.findLcfs(request)
-		
-		return np.asarray(response.pos)
 	
-	@asyncFunction
-	async def axisCurrent(self, field, current, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10):
-		_, axis = await self.findAxis.asnc(field, grid, startPoint, stepSize, nTurns, nIterations)
-		
-		result = MagneticField()
-		
-		filField = result.initFilamentField()
-		filField.current = current
-		filField.biotSavartSettings.stepSize = stepSize
-		filField.filament.inline = axis
-		
-		return result
+	if mapping is not None:
+		request.mapping = mapping
 	
+	response = await tracer().trace(request)
+	
+	endTags = {
+		str(tagName) : tagData
+		for tagName, tagData in zip(response.tagNames, np.asarray(response.endTags))
+	}
+	
+	return {
+		"endPoints" : np.asarray(response.endPoints),
+		"poincareHits" : np.asarray(response.poincareHits),
+		"stopReasons" : np.asarray(response.stopReasons),
+		"endTags" : endTags,
+		"responseSize" : capnp.totalSize(response)
+	}
+
+@asyncFunction
+async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10):		
+	field = await field.compute.asnc(grid)
+	computed = field.field.computedField
+	
+	# If start point is not provided, use grid center
+	if startPoint is None:
+		startPoint = [0.5 * (grid.rMax + grid.rMin),
+			0, 0.5 * (grid.zMax + grid.zMin)
+		]
+	
+	request = service.FindAxisRequest.newMessage()
+	request.startPoint = startPoint
+	request.field = computedField
+	request.stepSize = stepSize
+	request.nTurns = nTurns
+	request.nIterations = nIterations
+	
+	response = await tracer().findAxis(request)
+	
+	return np.asarray(response.pos), np.asarray(response.axis)
+
+@asyncFunction
+async def findLCFS(field, geometry, p1, p2, grid = None, geometryGrid = None, stepSize = 0.01, tolerance = 0.001, nScan = 8, distanceLimit = 3e3):
+	field = await field.compute.asnc(grid)
+	computedField = field.field.computedField
+	
+	geometry = await geometry.index.asnc(geometryGrid)
+	indexedGeometry = geometry.geometry.indexed
+	
+	request = service.FindLcfsRequest.newMessage()
+	request.p1 = p1
+	request.p2 = p2
+	request.stepSize = stepSize
+	request.tolerance = tolerance
+	request.field = computedField
+	request.geometry = indexedGeometry
+	request.nScan = nScan
+	request.distanceLimit = distanceLimit
+	
+	response = await tracer().findLcfs(request)
+	
+	return np.asarray(response.pos)
+
+@asyncFunction
+async def axisCurrent(field, current, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10):
+	_, axis = await findAxis.asnc(field, grid, startPoint, stepSize, nTurns, nIterations)
+	
+	result = MagneticField()
+	
+	filField = result.initFilamentField()
+	filField.current = current
+	filField.biotSavartSettings.stepSize = stepSize
+	filField.filament.inline = axis
+	
+	return result
