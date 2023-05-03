@@ -260,16 +260,26 @@ void initAsync(py::module_& m) {
 
 kj::Exception convertPyError(py::error_already_set& e) {	
 	auto formatException = py::module_::import("traceback").attr("format_exception");
-	py::list formatted = formatException(e.type(), e.value(), e.trace());
-	
-	auto pythonException = kj::strTree();
-	for(auto s : formatted) {
-		pythonException = kj::strTree(mv(pythonException), py::cast<kj::StringPtr>(s), "\n");
+	try {
+		py::object t = e.type();
+		py::object v = e.value();
+		py::object tr = e.trace();
+		
+		py::list formatted = formatException(t, v, tr);
+		
+		auto pythonException = kj::strTree();
+		for(auto s : formatted) {
+			pythonException = kj::strTree(mv(pythonException), py::cast<kj::StringPtr>(s), "\n");
+		}
+		
+		// KJ_DBG("Formatted an exception as ", pythonException.flatten());
+		
+		return kj::Exception(::kj::Exception::Type::FAILED, __FILE__, __LINE__, pythonException.flatten());
+	} catch(std::exception e2) {
+		py::print("Failed to format exception", e.type(), e.value());
+		auto exc = kj::getCaughtExceptionAsKj();
+		return KJ_EXCEPTION(FAILED, "An underlying python exception could not be formatted due to the following error", exc);
 	}
-	
-	// KJ_DBG("Formatted an exception as ", pythonException.flatten());
-	
-	return kj::Exception(::kj::Exception::Type::FAILED, __FILE__, __LINE__, pythonException.flatten());
 }
 	
 }

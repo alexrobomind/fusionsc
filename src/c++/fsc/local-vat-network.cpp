@@ -2,6 +2,8 @@
 
 #include "local-vat-network.h"
 
+#include <capnp/rpc.capnp.h>
+
 #ifdef WIN32
 #include <io.h>
 #else
@@ -41,7 +43,10 @@ struct LocalVatNetwork::Connection::IncomingMessage : public capnp::IncomingRpcM
 	Message* msg;
 	
 	IncomingMessage(Message* msg) : msg(msg) {};
-	~IncomingMessage() { delete msg; };
+	~IncomingMessage() {		
+		if(--(msg -> refCount) == 0)
+			delete msg;
+	};
 	
 	capnp::AnyPointer::Reader getBody() override { return msg -> builder.getRoot<capnp::AnyPointer>(); }
 	size_t sizeInWords() override { return msg -> builder.sizeInWords(); }
@@ -55,13 +60,17 @@ struct LocalVatNetwork::Connection::OutgoingMessage : public capnp::OutgoingRpcM
 		conn(&conn),
 		msg(new Message(firstSegmentWordSize))
 	{}
-	~OutgoingMessage() { if(msg != nullptr) delete msg; }
+	
+	~OutgoingMessage() {	
+		if(--(msg -> refCount) == 0)
+			delete msg;
+	}
 	
 	capnp::AnyPointer::Builder getBody() override { return msg -> builder.getRoot<capnp::AnyPointer>(); }
 	void send() override {
 		KJ_IF_MAYBE(ppPeer, conn -> peer) {
+			++(msg -> refCount);
 			(*ppPeer) -> post(msg);
-			msg = nullptr;
 		}
 	}
 	size_t sizeInWords() override { return msg -> builder.sizeInWords(); }
@@ -75,8 +84,13 @@ struct LocalVatNetwork::Connection::OutgoingMessage : public capnp::OutgoingRpcM
 void LocalVatNetwork::Connection::post(Message* msg) const {
 	auto locked = data.lockExclusive();
 	
-	if(locked -> isClosed)
+	if(locked -> isClosed) {
+		// delete msg;
+		
+		// Delete message by putting it into a dummy receiver
+		IncomingMessage tmpHolder(msg);
 		return;
+	}
 	
 	locked -> queue.add(*msg);
 	

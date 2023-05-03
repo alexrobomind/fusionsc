@@ -436,6 +436,7 @@ struct InterfaceMethod {
 		
 		PromiseHandle handle;
 		handle.pyPromise = resultObject;
+		
 		return handle;
 	}
 	

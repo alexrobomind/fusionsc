@@ -6,6 +6,8 @@
 #include <capnp/rpc.h>
 #include <fsc/local-vat-network.capnp.h>
 
+#include <atomic>
+
 namespace fsc { 
 
 using LocalVatNetworkBase = capnp::VatNetwork<
@@ -67,6 +69,8 @@ private:
 		kj::Array<kj::AutoCloseFd> fds;
 		
 		Message(unsigned int firstSegmentSize);
+		
+		std::atomic<uint8_t> refCount = 1;
 	};
 
 	struct Connection : public LocalVatNetworkBase::Connection, public kj::AtomicRefcounted {
