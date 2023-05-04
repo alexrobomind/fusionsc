@@ -2,6 +2,10 @@ if(FSC_WITH_PYTHON)
 	pybind11_add_module(
 		fsc-python-bindings
 		
+		assign.cpp
+		graphviz.cpp
+		tensor.cpp		
+		
 		capnp.cpp
 		kj.cpp
 		fscpy.cpp

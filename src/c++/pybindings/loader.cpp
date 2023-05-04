@@ -1,7 +1,6 @@
 #include "fscpy.h"
 #include "async.h"
-#include "loader.h"
-
+#include "assign.h"
 
 #include <capnp/dynamic.h>
 #include <capnp/message.h>
@@ -205,7 +204,10 @@ private:
 							ptrOut[i].clear();
 						}
 					}
-				}					
+				} else {
+					KJ_LOG(WARNING, "A generic method type could not be deduced. This can happen if the relevant parameter is passed in as python types (dict, etc.). The following errors appeared during type deduction: ", errorMsg);
+					aptr.initUnconstrained().setAnyKind();
+				}
 			}
 		}
 	}
@@ -326,7 +328,7 @@ struct InterfaceMethod {
 			auto nameList = py::list(pyKwargs);
 			
 			if(inferTypes) {
-				auto checkType = [&typeInference](capnp::Type dst, DynamicValue::Reader reader) {
+				auto inferType = [&typeInference](capnp::Type dst, DynamicValue::Reader reader) {
 					Maybe<capnp::Type> asType;
 					if(dst.isStruct()) {
 						KJ_REQUIRE(reader.getType() == capnp::DynamicValue::STRUCT);	
@@ -340,9 +342,7 @@ struct InterfaceMethod {
 					}
 					
 					KJ_IF_MAYBE(pType, asType) {
-						if(!typeInference.infer(*pType, dst, false)) {
-							KJ_FAIL_REQUIRE("Failed to match types for parameter", reader, typeInference.errorMsg);
-						}
+						typeInference.infer(*pType, dst, false);
 					}
 				};
 				
@@ -353,12 +353,12 @@ struct InterfaceMethod {
 					py::detail::type_caster<DynamicValue::Reader> readerCaster;
 					KJ_REQUIRE(readerCaster.load(pyArgs[i], false), "Failed to convert positional argument", i);
 					
-					checkType(field.getType(), readerCaster.operator DynamicValue::Reader&());
+					inferType(field.getType(), readerCaster.operator DynamicValue::Reader&());
 				}
 				
-				auto inferEntry = [this, &checkType](kj::StringPtr name, DynamicValue::Reader value) mutable {
+				auto inferEntry = [this, &inferType](kj::StringPtr name, DynamicValue::Reader value) mutable {
 					KJ_IF_MAYBE(pField, paramType.findFieldByName(name)) {
-						checkType(pField -> getType(), value);
+						inferType(pField -> getType(), value);
 					} else {
 						KJ_FAIL_REQUIRE("Unknown named parameter", name);
 					}
@@ -372,28 +372,24 @@ struct InterfaceMethod {
 			
 			// Specialize types
 			auto specializedParamType = typeInference.specialize(paramType).asStruct();
-			
 			DynamicStruct::Builder structRequest = request.initAs<DynamicStruct>(specializedParamType);
 			
 			for(size_t i = 0; i < pyArgs.size(); ++i) {
 				auto field = argFields[i];
-				
-				py::detail::type_caster<DynamicValue::Reader> readerCaster;
-				KJ_REQUIRE(readerCaster.load(pyArgs[i], false), "Failed to convert positional argument", i);
-				structRequest.set(field.getProto().getName(), readerCaster.operator DynamicValue::Reader&());
+				assign(structRequest, field.getProto().getName(), pyArgs[i]);
 			}
 			
 			// Parse keyword arguments
-			auto processEntry = [&structRequest, &specializedParamType](kj::StringPtr name, DynamicValue::Reader value) mutable {
-				KJ_IF_MAYBE(pField, specializedParamType.findFieldByName(name)) {
-					structRequest.set(*pField, value);
-				} else {
-					KJ_FAIL_REQUIRE("Unknown named parameter", name);
-				}
-			};
-			auto pyProcessEntry = py::cpp_function(processEntry);
 			for(auto name : nameList) {
-				pyProcessEntry(name, pyKwargs[name]);
+				py::detail::make_caster<kj::StringPtr> nameCaster;
+				KJ_REQUIRE(nameCaster.load(name, false), "Could not convert kwarg name to C++ string");
+				kj::StringPtr kjName = nameCaster.operator kj::StringPtr&();
+				
+				KJ_IF_MAYBE(pField, specializedParamType.findFieldByName(kjName)) {
+					assign(structRequest, kjName, pyKwargs[name]);
+				} else {
+					KJ_FAIL_REQUIRE("Unknown named parameter", kjName);
+				}
 			}
 		}
 		
