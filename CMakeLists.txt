@@ -57,10 +57,6 @@ endif()
 #	message(STATUS "ccache not found")
 #endif()
 
-# Get dependencies via CPM
-include(CPM.cmake)
-
-
 include(src/cmake/AddVendoredDependency.cmake)
 
 find_package(OpenSSL COMPONENTS Crypto SSL)
