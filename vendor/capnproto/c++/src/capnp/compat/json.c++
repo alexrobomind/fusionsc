@@ -803,6 +803,7 @@ private:
     });
 
     KJ_REQUIRE(numArrayPtr.size() > 0, "Expected number in JSON input.");
+	KJ_DBG(numArrayPtr);
 
     kj::Vector<char> number;
     number.addAll(numArrayPtr);
