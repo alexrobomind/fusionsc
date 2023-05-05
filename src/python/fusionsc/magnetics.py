@@ -34,7 +34,7 @@ class CoilFilament:
 	
 	@asyncFunction
 	async def resolve(self):
-		return CoilFilament(await resolve.resolveFilament(self.filament))
+		return CoilFilament(await resolve.resolveFilament.asnc(self.filament))
 	
 	def ptree(self):
 		import printree
