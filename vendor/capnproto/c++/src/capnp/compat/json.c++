@@ -647,7 +647,7 @@ public:
       case '-': case '0': case '1': case '2': case '3':
       case '4': case '5': case '6': case '7': case '8':
       case '9': parseNumber(output); break;
-      default: KJ_FAIL_REQUIRE("Unexpected input in JSON message.", input.nextChar());
+      default: KJ_FAIL_REQUIRE("Unexpected input in JSON message.");
     }
   }
 
@@ -803,7 +803,6 @@ private:
     });
 
     KJ_REQUIRE(numArrayPtr.size() > 0, "Expected number in JSON input.");
-	KJ_DBG(numArrayPtr);
 
     kj::Vector<char> number;
     number.addAll(numArrayPtr);

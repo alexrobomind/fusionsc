@@ -2,6 +2,7 @@
 #include <capnp/compat/json.h>
 
 #include "w7x.h"
+#include "../yaml.h"
 
 namespace fsc {
 
@@ -458,7 +459,9 @@ struct ComponentsDBWebservice : public ComponentsDB::Server {
 			KJ_DBG(rawJson);		
 			
 			Temporary<ComponentsDBMesh> tmp;
-			JsonCodec().decode(rawJson, tmp);
+			// JsonCodec().decode(rawJson, tmp);
+			YAML::Node asYaml = YAML::Load(rawJson.cStr());
+			load(tmp.asBuilder(), asYaml);
 		
 			auto inMesh = tmp.getSurfaceMesh();
 			
