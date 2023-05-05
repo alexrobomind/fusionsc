@@ -143,6 +143,10 @@ void assign(const BuilderSlot& dst, py::object object) {
 				goto dict_assignment_failed;
 			}
 		}
+	} else {
+		if(!dst.type.isStruct()) {
+			assignmentFailureLog = strTree(mv(assignmentFailureLog), "Skipped assigning from dict because slot type is not struct\n");
+		}
 	}
 	
 	dict_assignment_failed:
