@@ -521,6 +521,16 @@ namespace pybind11 { namespace detail {
 				
 				capnp::InterfaceSchema staticSchema = fscpy::defaultLoader.importBuiltin<ClientFor>().asInterface();
 				
+				if(dynamic.getSchema() != staticSchema) {
+					Temporary<capnp::schema::Type> t1;
+					Temporary<capnp::Schema::Type> t2;
+					
+					extractType(dynamic.getSchema(), t1.asBuider());
+					extractType(staticSchema(), t2.asBuilder());
+					
+					KJ_DBG(t1.asReader(), t2.asReader());
+				}
+				
 				KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
 				capnp::Capability::Client any = dynamic;
 			
