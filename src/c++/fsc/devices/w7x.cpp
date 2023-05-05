@@ -131,10 +131,8 @@ Promise<void> CoilsDBResolver::processFilament(Filament::Reader input, Filament:
 	uint64_t coilId = w7x.getCoilsDb();
 	auto coil = getCoil(coilId);
 	
-	return coil.whenResolved().then(
-		[output, coil]() mutable { output.setRef(coil);  },
-		[output, coilId](kj::Exception e) mutable { output.initW7x().setCoilsDb(coilId); }
-	);
+	output.setRef(coil);
+	return coil.whenResolved();
 }
 
 DataRef<Filament>::Client CoilsDBResolver::getCoil(uint64_t cdbID) {
@@ -145,14 +143,20 @@ DataRef<Filament>::Client CoilsDBResolver::getCoil(uint64_t cdbID) {
 	auto coilRequest = backend.getCoilRequest();
 	coilRequest.setId(cdbID);
 	
-	DataRef<Filament>::Client newCoil = coilRequest.send().then([cdbID, this](auto filament) {
-		// auto filament = response.getFilament();
+	DataRef<Filament>::Client newCoil = coilRequest.send()
+	.then([cdbID, this](auto filament) -> DataRef<Filament>::Client {
 		auto ref = getActiveThread().dataService().publish(Filament::Reader(filament));
 		
+		KJ_IF_MAYBE(coilsRef, coils.findEntry(cdbID)) {
+			return coilsRef->value;
+		}
+			
+		coils.insert(cdbID, ref);
+		
 		return ref;
-	});
-	coils.insert(cdbID, newCoil);
-	// TODO: Install an error handler that clears the entry if the request fails
+	})
+	.attach(thisCap());
+	
 	return newCoil;
 }
 
@@ -344,8 +348,9 @@ DataRef<Mesh>::Client ComponentsDBResolver::getComponent(uint64_t id) {
 		
 		DataRef<Mesh>::Client published = getActiveThread().dataService().publish((Mesh::Reader&) response);
 		meshes.insert(id, published);
+		
 		return published;
-	});
+	}).attach(thisCap());
 }
 
 // CoilsDB implementation that downloads the coil from a remote location
