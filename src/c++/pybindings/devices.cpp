@@ -33,7 +33,7 @@ namespace fscpy {
 		
 		w7x.def("componentsDBResolver", &fsc::devices::w7x::newComponentsDBResolver);
 		w7x.def("coilsDBResolver", &fsc::devices::w7x::newCoilsDBResolver);
-		w7x.def("configDBResolver", &fsc::devices::w7x::newCoilsDBResolver);
+		w7x.def("configDBResolver", &fsc::devices::w7x::newConfigDBResolver);
 		
 		w7x.def("geometryResolver", &fsc::devices::w7x::newW7xGeometryResolver);
 		w7x.def("fieldResolver", &fsc::devices::w7x::newW7xFieldResolver);

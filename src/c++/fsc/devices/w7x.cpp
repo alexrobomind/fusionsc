@@ -279,6 +279,7 @@ Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geom
 				auto tags = output.initTags(1);
 				tags[0].setName(CDB_ID_TAG);
 				tags[0].initValue().setUInt64(id);
+				return READY_NOW;
 			}
 			
 			case Geometry::W7x::COMPONENTS_DB_ASSEMBLY: {
