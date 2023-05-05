@@ -160,6 +160,8 @@ capnp::DynamicValue::Reader openArchive(kj::StringPtr path) {
 	}
 	auto boundType = bindings[0].initType();
 	
+	KJ_DBG(boundType);
+	
 	capnp::InterfaceSchema dataRefSchema = defaultLoader.capnpLoader.get(DR_ID, brand.asReader()).asInterface();
 	
 	capnp::Capability::Client asAny = root;
