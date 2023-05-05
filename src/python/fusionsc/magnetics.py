@@ -70,6 +70,9 @@ class CoilFilament:
 		
 		return result
 	
+	def __radd__(self, other):
+		return self.__add__(other)
+	
 	def biotSavart(self, width: float = 0.01, stepSize: float = 0.01, current: float = 1, windingNo: int = 1):
 		result = MagneticConfig()
 		
@@ -199,6 +202,9 @@ class MagneticConfig:
 		result.field.sum = [self.field, other.field]
 		
 		return result
+	
+	def __radd__(self, other):
+		return self.__add__(other)
 		
 	def __sub__(self, other):
 		return self + (-other)

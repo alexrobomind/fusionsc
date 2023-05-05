@@ -96,6 +96,9 @@ class Geometry:
 		result.geometry.combined = [self.geometry, other.geometry]
 		return result
 	
+	def __radd__(self, other):
+		return self.__add__(other)
+	
 	def translate(self, dx):
 		result = Geometry()
 		
