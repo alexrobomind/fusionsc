@@ -6,6 +6,7 @@
 #include <capnp/any.h>
 #include <kj/common.h>
 
+#include <fsc/typing.h>
 #include <fsc/data.h>
 
 #include "loader.h"
@@ -525,8 +526,8 @@ namespace pybind11 { namespace detail {
 					Temporary<capnp::schema::Type> t1;
 					Temporary<capnp::Schema::Type> t2;
 					
-					extractType(dynamic.getSchema(), t1.asBuider());
-					extractType(staticSchema(), t2.asBuilder());
+					fsc::extractType(dynamic.getSchema(), t1.asBuider());
+					fsc::extractType(staticSchema(), t2.asBuilder());
 					
 					KJ_DBG(t1.asReader(), t2.asReader());
 				}
