@@ -283,7 +283,8 @@ Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geom
 				auto tags = output.initTags(1);
 				tags[0].setName(CDB_ID_TAG);
 				tags[0].initValue().setUInt64(id);
-				return READY_NOW;
+				
+				return output.getMesh().whenResolved();
 			}
 			
 			case Geometry::W7x::COMPONENTS_DB_ASSEMBLY: {
@@ -296,6 +297,8 @@ Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geom
 				.then([this, output](kj::Array<uint64_t> cids) mutable {
 					auto nodes = output.initCombined(cids.size());
 					
+					auto promises = kj::heapArrayBuilder<Promise<void>>(cids.size());
+					
 					for(auto i : kj::indices(cids)) {
 						auto node = nodes[i];
 						auto id = cids[i];
@@ -305,7 +308,11 @@ Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geom
 						auto tags = node.initTags(1);
 						tags[0].setName(CDB_ID_TAG);
 						tags[0].initValue().setUInt64(id);
+						
+						promises.add(node.getMesh().whenResolved());
 					}
+					
+					return kj::joinPromises(promises.finish());
 				});
 			}
 			
