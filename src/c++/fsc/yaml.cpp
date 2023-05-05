@@ -137,18 +137,18 @@ void load(DynamicStruct::Builder dst, YAML::Node src) {
 	// If the node is scalar, this means we set that field with default value
 	if(src.IsScalar()) {
 		auto field = dst.getSchema().getFieldByName(src.as<std::string>());
-		dst.init(field);
+		dst.clear(field);
 		
 		return;
 	}
+		
+	Maybe<kj::String> previouslySetUnionField = nullptr;
 	
 	// Interpret nodes as map
 	for(auto it = src.begin(); it != src.end(); ++it) {
 		// Extract key and value
 		std::string key = it -> first.as<std::string>();
 		YAML::Node val = it -> second;
-		
-		Maybe<kj::String> previouslySetUnionField = nullptr;
 		
 		// Check if we can match the field name
 		KJ_IF_MAYBE(pField, dst.getSchema().findFieldByName(key)) {
@@ -178,23 +178,23 @@ void load(DynamicStruct::Builder dst, YAML::Node src) {
 			if(type.isStruct()) {
 				auto fieldVal = dst.init(field).as<capnp::DynamicStruct>();
 				load(fieldVal, val);
-				return;
+				continue;
 			}
 			if(type.isList()) {
 				auto fieldVal = dst.init(field, val.size()).as<capnp::DynamicList>();
 				load(fieldVal, val);
-				return;
+				continue;
 			}
 			if(type.isData()) {
 				auto asBinary = val.as<YAML::Binary>();
 				capnp::Data::Reader dataPtr(asBinary.data(), asBinary.size());
 				dst.set(field, dataPtr);
-				return;
+				continue;
 			}
 			if(type.isText()) {				
 				auto asString = val.as<std::string>();
 				dst.set(field, capnp::Text::Reader(asString));
-				return;
+				continue;
 			}
 			
 			dst.set(field, parsePrimitive(type, val));

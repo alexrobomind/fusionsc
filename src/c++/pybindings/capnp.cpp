@@ -506,6 +506,7 @@ void bindStructClasses(py::module_& m) {
 	
 	// Conversion
 	
+	cDSR.def(py::init([](DSB& dsb) { return dsb.asReader(); }));
 	py::implicitly_convertible<DSB, DSR>();
 }
 
