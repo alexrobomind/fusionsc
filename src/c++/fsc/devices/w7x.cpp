@@ -458,9 +458,9 @@ struct ComponentsDBWebservice : public ComponentsDB::Server {
 		auto read = response.then([](auto response) { KJ_REQUIRE(response.statusCode == 200); return response.body->readAllText().attach(mv(response.body)); });
 		return read.then([context](kj::String rawJson) mutable {				
 			Temporary<ComponentsDBMesh> tmp;
-			// JsonCodec().decode(rawJson, tmp);
-			YAML::Node asYaml = YAML::Load(rawJson.cStr());
-			load(tmp.asBuilder(), asYaml);
+			JsonCodec().decode(rawJson, tmp);
+			// YAML::Node asYaml = YAML::Load(rawJson.cStr());
+			// load(tmp.asBuilder(), asYaml);
 		
 			auto inMesh = tmp.getSurfaceMesh();
 			
