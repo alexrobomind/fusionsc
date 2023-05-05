@@ -32,30 +32,30 @@ def importOfflineData(filename: str):
 @asyncFunction
 async def resolveField(field, followRefs: bool = False):		
 	for r in fieldResolvers:
-		try:
+		#try:
 			field = await r.resolveField(field, followRefs)
-		except:
-			pass
+		#except:
+		#	pass
 		
 	return field
 
 @asyncFunction
 async def resolveFilament(filament, followRefs: bool = False):		
 	for r in fieldResolvers:
-		try:
+		#try:
 			filament = await r.resolveFilament(filament, followRefs)
-		except:
-			pass
+		#except:
+		#	pass
 		
 	return filament
 	
 @asyncFunction
 async def resolveGeometry(geometry, followRefs: bool = False):		
 	for r in geometryResolvers:
-		try:
+		#try:
 			geometry = await r.resolveGeometry(geometry, followRefs)
-		except:
-			pass
+		#except:
+		#	pass
 		
 	return geometry
 
