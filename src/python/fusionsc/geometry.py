@@ -55,6 +55,16 @@ class Geometry:
 		return result
 	
 	@asyncFunction
+	async def reduce(self, maxVerts = 1000000, maxIndices = 1000000):
+		resolved = await self.resolve.asnc()
+		
+		reducedRef = geometryLib().reduce(resolved.geometry, maxVerts, maxIndices).ref
+		
+		result = Geometry()
+		result.geometry.merged = reducedRef
+		return result
+	
+	@asyncFunction
 	async def index(self, geometryGrid):
 		if geometryGrid is None:
 			assert self.geometry.which() == 'indexed', 'Must specify geometry grid or use pre-indexed geometry'
@@ -203,6 +213,117 @@ class Geometry:
 	async def save(self, filename):
 		await data.writeArchive.asnc(self.geometry, filename)
 
+	@asyncFunction
+	async def planarCut(geometry, phi = None, normal = None, center = None):
+		"""Computes a planar cut of the geometry along either a given plane or a given phi plane"""
+		assert phi is not None or normal is not None
+		assert phi is None or normal is None
+		
+		geometry = await geometry.resolve.asnc()
+		
+		request = service.GeometryLib.methods.planarCut.Params.newMessage()
+		request.geometry = geometry.geometry
+		
+		plane = request.plane
+		if phi is not None:
+			plane.orientation.phi = phi
+		if normal is not None:
+			plane.orientation.normal = normal
+		
+		if center is not None:
+			plane.center = center
+		
+		response = await geometryLib().planarCut(request)
+		return np.asarray(response.edges).transpose([2, 0, 1])
+
+	@asyncFunction
+	async def plotCut(geometry, phi = 0, ax = None, plot = True, **kwArgs):
+		"""Plot the phi cut of a given geometry in either the given axes or the current active matplotlib axes"""
+		import matplotlib.pyplot as plt
+		import matplotlib
+		
+		x, y, z = await geometry.planarCut.asnc(phi = phi)
+		r = np.sqrt(x**2 + y**2)
+		
+		linedata = np.stack([r, z], axis = -1)
+		
+		coll = matplotlib.collections.LineCollection(linedata, **kwArgs)
+		
+		if plot:
+			if ax is None:
+				ax = plt.gca()
+			
+			ax.add_collection(coll)
+		
+		return coll
+
+	@asyncFunction
+	async def asPyvista(geometry, reduce: bool = True):
+		"""Convert the given geometry into a PyVista / VTK mesh"""
+		import numpy as np
+		import pyvista as pv
+			
+		if reduce:
+			geometry = await geometry.reduce.asnc()
+		else:
+			geometry = await geometry.merge.asnc()
+		
+		mergedGeometry = await data.download.asnc(geometry.geometry.merged)
+		
+		def extractMesh(entry):
+			mesh = entry.mesh
+			
+			vertexArray = np.asarray(mesh.vertices)
+			indexArray	= np.asarray(mesh.indices)
+			
+			faces = []
+			
+			if mesh.which() == 'polyMesh':
+				polyRanges = mesh.polyMesh
+				
+				for iPoly in range(len(polyRanges) - 1):
+					start = polyRanges[iPoly]
+					end	  = polyRanges[iPoly + 1]
+					
+					faces.append(end - start)
+					faces.extend(indexArray[start:end])
+			elif mesh.which() == 'triMesh':
+				for offset in range(0, len(indexArray), 3):
+					start = offset
+					end	  = start + 3
+					
+					faces.append(end - start)
+					faces.extend(indexArray[start:end])
+			
+			mesh = pv.PolyData(vertexArray, faces)
+			return mesh
+		
+		def extractTags(entry):
+			return {
+				str(name) : entry.tags[iTag]
+				for iTag, name in enumerate(mergedGeometry.tagNames)
+			}
+		
+		def extractEntry(entry):
+			mesh = extractMesh(entry)
+			
+			for tagName, tagValue in extractTags(entry).items():
+				if tagValue.which() == 'text':
+					mesh.field_data[tagName] = [tagValue.text]
+				if tagValue.which() == 'uInt64':
+					mesh.field_data[tagName] = [tagValue.uInt64]
+					
+			return mesh
+		
+		dataSets = [
+			extractEntry(entry)
+			for entry in mergedGeometry.entries
+		]
+		
+		return pv.MultiBlock(dataSets)
+
+
+
 def asTagValue(x):
 	"""Convert a possible tag value into an instance of fsc.service.TagValue"""
 	result = service.TagValue.newMessage()
@@ -269,115 +390,7 @@ def cuboid(x1, x2, tags = {}):
 		outTags[i].value = asTagValue(tags[name])
 	
 	return result
-		
 
 def geometryLib():
 	"""Creates an in-thread GeometryLib instance"""
 	return backends.activeBackend().newGeometryLib().service
-
-@asyncFunction
-async def planarCut(geometry, phi = None, normal = None, center = None):
-	"""Computes a planar cut of the geometry along either a given plane or a given phi plane"""
-	assert phi is not None or normal is not None
-	assert phi is None or normal is None
-	
-	geometry = await geometry.resolve.asnc()
-	
-	request = service.GeometryLib.methods.planarCut.Params.newMessage()
-	request.geometry = geometry.geometry
-	
-	plane = request.plane
-	if phi is not None:
-		plane.orientation.phi = phi
-	if normal is not None:
-		plane.orientation.normal = normal
-	
-	if center is not None:
-		plane.center = center
-	
-	response = await geometryLib().planarCut(request)
-	return np.asarray(response.edges).transpose([2, 0, 1])
-
-def plotCut(geometry, phi = 0, ax = None, plot = True, **kwArgs):
-	"""Plot the phi cut of a given geometry in either the given axes or the current active matplotlib axes"""
-	import matplotlib.pyplot as plt
-	import matplotlib
-	
-	x, y, z = planarCut(geometry, phi = phi)
-	r = np.sqrt(x**2 + y**2)
-	
-	linedata = np.stack([r, z], axis = -1)
-	
-	coll = matplotlib.collections.LineCollection(linedata, **kwArgs)
-	
-	if plot:
-		if ax is None:
-			ax = plt.gca()
-		
-		ax.add_collection(coll)
-	
-	return coll
-
-@asyncFunction
-async def asPyvista(geometry):
-	"""Convert the given geometry into a PyVista / VTK mesh"""
-	import numpy as np
-	import pyvista as pv
-	
-	geometry = await geometry.resolve.asnc()
-	
-	geoLib = geometryLib()
-	mergedRef = geoLib.merge(geometry.geometry).ref
-	mergedGeometry = await data.download.asnc(mergedRef)
-	
-	def extractMesh(entry):
-		mesh = entry.mesh
-		
-		vertexArray = np.asarray(mesh.vertices)
-		indexArray	= np.asarray(mesh.indices)
-		
-		faces = []
-		
-		if mesh.which() == 'polyMesh':
-			polyRanges = mesh.polyMesh
-			
-			for iPoly in range(len(polyRanges) - 1):
-				start = polyRanges[iPoly]
-				end	  = polyRanges[iPoly + 1]
-				
-				faces.append(end - start)
-				faces.extend(indexArray[start:end])
-		elif mesh.which() == 'triMesh':
-			for offset in range(0, len(indexArray), 3):
-				start = offset
-				end	  = start + 3
-				
-				faces.append(end - start)
-				faces.extend(indexArray[start:end])
-		
-		mesh = pv.PolyData(vertexArray, faces)
-		return mesh
-	
-	def extractTags(entry):
-		return {
-			str(name) : entry.tags[iTag]
-			for iTag, name in enumerate(mergedGeometry.tagNames)
-		}
-	
-	def extractEntry(entry):
-		mesh = extractMesh(entry)
-		
-		for tagName, tagValue in extractTags(entry).items():
-			if tagValue.which() == 'text':
-				mesh.field_data[tagName] = [tagValue.text]
-			if tagValue.which() == 'uInt64':
-				mesh.field_data[tagName] = [tagValue.uInt64]
-				
-		return mesh
-	
-	dataSets = [
-		extractEntry(entry)
-		for entry in mergedGeometry.entries
-	]
-	
-	return pv.MultiBlock(dataSets)

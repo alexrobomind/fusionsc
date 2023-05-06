@@ -115,6 +115,8 @@ Promise<void> W7XGeometryResolver::processGeometry(Geometry::Reader input, Geome
 			output.setNested(geometry);
 			return READY_NOW;
 		}
+		default:
+			break;
 	}
 	
 	output.setNested(input);

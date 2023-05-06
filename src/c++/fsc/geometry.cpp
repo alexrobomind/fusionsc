@@ -128,6 +128,7 @@ struct GeometryLibImpl : public GeometryLib::Server {
 	Promise<void> merge(MergeContext context) override;
 	Promise<void> index(IndexContext context) override;
 	Promise<void> planarCut(PlanarCutContext context) override;
+	Promise<void> reduce(ReduceContext context) override;
 	
 private:
 	struct GeometryAccumulator {
@@ -772,6 +773,158 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 	
 	return promise.attach(tagNameTable.x(), geomAccum.x());
 }
+
+Promise<void> GeometryLibImpl::reduce(ReduceContext context) {
+	auto params = context.getParams();
+	
+	// Check if already merged
+	Geometry::Reader geometry = params.getGeometry();
+	while(geometry.isNested()) {
+		geometry = geometry.getNested();
+	}
+	
+	DataRef<MergedGeometry>::Client ref = nullptr;
+	switch(geometry.which()) {
+		case Geometry::INDEXED: {
+			ref = geometry.getIndexed().getBase();
+		}
+		case Geometry::MERGED: {
+			ref = geometry.getMerged();
+		}
+		default: {
+			auto mergeRequest = thisCap().mergeRequest();
+			mergeRequest.setNested(geometry);
+			ref = mergeRequest.sendForPipeline().getRef();
+		}
+	}
+	
+	return getActiveThread().dataService().download(ref)
+	.then([context, params](LocalDataRef<MergedGeometry> localRef) mutable {
+		KJ_DBG("Beginning reduce operation");
+		auto geometry = localRef.get();
+		
+		auto entries = geometry.getEntries();
+		kj::Vector<Temporary<Mesh>> meshesOut;
+		
+		uint32_t iEntry = 0;
+		
+		while(iEntry < entries.size()) {
+			kj::Vector<Mesh::Reader> meshes;
+			
+			uint32_t nVertTot = 0;
+			uint32_t nIndTot = 0;
+			
+			while(iEntry < entries.size()) {
+				auto mesh = entries[iEntry].getMesh();
+				
+				uint32_t nVert = mesh.getVertices().getShape()[0];
+				uint32_t nInd = mesh.getIndices().size();
+				
+				if(meshes.size() > 0) {
+					if(nVertTot + nVert > params.getMaxVertices())
+						break;
+					
+					if(nIndTot + nInd > params.getMaxIndices())
+						break;
+				}
+				
+				meshes.add(mesh);
+				nVertTot += nVert;
+				nIndTot  += nInd;
+				++iEntry;
+			}
+			
+			Temporary<Mesh> newMesh;
+			newMesh.initVertices().setShape({nVertTot, 3});
+			auto vertData = newMesh.getVertices().initData(3 * nVertTot);
+			auto indData = newMesh.initIndices(nIndTot);
+			{
+				uint32_t iVert = 0;
+				uint32_t iInd = 0;
+				
+				for(auto mesh : meshes) {
+					auto indIn = mesh.getIndices();
+					auto vertIn = mesh.getVertices().getData();
+					
+					// Copy indices with appropriate shift
+					for(auto i : kj::indices(mesh.getIndices())) {
+						indData.set(i + iInd, indIn[i] + iVert);
+					}
+					
+					// Copy vertices
+					for(auto i : kj::indices(vertIn)) {
+						vertData.set(i + 3 * iVert, vertIn[i]);
+					}
+					
+					uint32_t nInd = indIn.size();
+					uint32_t nVert = vertIn.size() / 3;
+					
+					iInd += nInd;
+					iVert += nVert;
+				}
+			}
+			
+			// Copy polygon information
+			bool allTri = true;
+			for(auto mesh : meshes) {
+				if(!mesh.isTriMesh()) {
+					allTri = false;
+					break;
+				}
+			}
+			
+			if(allTri) {
+				newMesh.setTriMesh();
+			} else {
+				// Meh, we need to copy all the polygon data
+				uint32_t polyCount = 0;
+				for(auto mesh : meshes) {
+					switch(mesh.which()) {
+						case Mesh::TRI_MESH:
+							polyCount += mesh.getIndices().size() / 3;
+							break;
+						case Mesh::POLY_MESH:
+							polyCount += mesh.getPolyMesh().size();
+							break;
+						default:
+							KJ_FAIL_REQUIRE("Unknown mesh type encountered in reduce operation");
+					}
+				}
+				
+				auto polys = newMesh.initPolyMesh(polyCount);
+				uint32_t iPoly = 0;
+				for(auto mesh : meshes) {
+					if(mesh.isTriMesh()) {
+						for(auto i : kj::range(0, mesh.getIndices().size() / 3)) {
+							polys.set(iPoly++, 3);
+						}
+					} else {
+						for(uint32_t poly : mesh.getPolyMesh()) {
+							polys.set(iPoly++, poly);
+						}
+					}
+				}
+			}
+			
+			meshesOut.add(mv(newMesh));
+		}
+		
+		KJ_DBG("Reduction complete, publishing results", entries.size(), meshesOut.size());
+		
+		Temporary<MergedGeometry> merged;
+		auto outEntries = merged.initEntries(meshesOut.size());
+		
+		for(auto i : kj::indices(outEntries)) {
+			outEntries[i].setMesh(meshesOut[i]);
+			meshesOut[i] = nullptr;
+		}
+		
+		context.initResults().setRef(getActiveThread().dataService().publish(mv(merged)));
+		KJ_DBG("Reduction published");
+	});
+}
+
+
 
 Promise<void> GeometryLibImpl::planarCut(PlanarCutContext context) {
 	auto mergeRequest = thisCap().mergeRequest();

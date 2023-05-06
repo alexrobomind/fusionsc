@@ -3,10 +3,14 @@
 #include "loader.h"
 
 #include <fsc/data.h>
+#include <fsc/services.h>
 
 using namespace fscpy;
 
 namespace {
+	
+void datarefType(DataRefMetadata::Format::Reader reader) {
+}
 
 PyPromise download(capnp::DynamicCapability::Client capability) {
 	using capnp::AnyPointer;
@@ -122,18 +126,16 @@ auto publish2(capnp::DynamicStruct::Builder dsb) {
 	return publish(dsb.asReader());
 }
 
-capnp::DynamicValue::Reader openArchive(kj::StringPtr path) {
+capnp::DynamicValue::Reader openArchive(kj::StringPtr path, LocalResources::Client localResources) {
 	using capnp::AnyPointer;
 	using capnp::DynamicCapability;
 	using capnp::DynamicStruct;
 	using capnp::DynamicList;
 	using capnp::DynamicValue;
 	
-	fscpy::PyContext::startEventLoop();
-	
+	// Open archive in this thread to determine type
 	//TODO: Put an injection context into Library
 	auto fs = kj::newDiskFilesystem();
-	
 	auto absPath = fs->getCurrentPath().evalNative(path);
 	auto file = fs->getRoot().openFile(absPath);
 	
@@ -158,13 +160,14 @@ capnp::DynamicValue::Reader openArchive(kj::StringPtr path) {
 	} else {
 		bindings[0].initType().setData();
 	}
-	auto boundType = bindings[0].initType();
-	
-	KJ_DBG(boundType);
 	
 	capnp::InterfaceSchema dataRefSchema = defaultLoader.capnpLoader.get(DR_ID, brand.asReader()).asInterface();
 	
-	capnp::Capability::Client asAny = root;
+	// Use localResources to open ref in other thread
+	auto request = localResources.openArchiveRequest();
+	request.setFilename(path);
+	capnp::Capability::Client asAny = request.sendForPipeline().getRef();
+	
 	return asAny.castAs<capnp::DynamicCapability>(dataRefSchema);
 }
 

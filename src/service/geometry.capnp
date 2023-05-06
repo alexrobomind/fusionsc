@@ -21,6 +21,8 @@ interface GeometryLib {
 	merge @0 Geometry -> (ref : DataRef(MergedGeometry));
 	index @1 (geometry : Geometry, grid : CartesianGrid) -> (indexed : IndexedGeometry);
 	planarCut @2 (geometry : Geometry, plane : Plane) -> (edges : Float64Tensor); # edges has shape [3, :, 2]
+	
+	reduce @3 (geometry : Geometry, maxVertices : UInt32 = 1000000, maxIndices : UInt32 = 1000000) -> (ref : DataRef(MergedGeometry));
 }
 
 struct TagValue {

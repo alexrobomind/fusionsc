@@ -524,12 +524,13 @@ namespace pybind11 { namespace detail {
 				
 				if(dynamic.getSchema() != staticSchema) {
 					fsc::Temporary<capnp::schema::Type> t1;
-					fsc::Temporary<capnp::Schema::Type> t2;
+					fsc::Temporary<capnp::schema::Type> t2;
 					
-					fsc::extractType(dynamic.getSchema(), t1.asBuider());
-					fsc::extractType(staticSchema(), t2.asBuilder());
+					fsc::extractType(dynamic.getSchema(), t1.asBuilder());
+					fsc::extractType(staticSchema, t2.asBuilder());
 					
-					KJ_DBG(t1.asReader(), t2.asReader());
+					KJ_DBG(t1.asReader());
+					KJ_DBG(t2.asReader());
 				}
 				
 				KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");

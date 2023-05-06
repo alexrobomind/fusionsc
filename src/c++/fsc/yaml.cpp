@@ -52,9 +52,16 @@ namespace {
 		
 		switch(type) {
 			// TODO: DataRefs
-			case DynamicValue::CAPABILITY:
-				emitter << "<capability>";
+			case DynamicValue::CAPABILITY: {
+				auto asCap = val.as<capnp::DynamicCapability>();
+				auto hook = capnp::ClientHook::from(kj::mv(asCap));
+				if(hook -> isNull())
+					emitter << "null";
+				else
+					emitter << "<capability>";
+				
 				break;
+			}
 			case DynamicValue::ANY_POINTER:
 				emitter << "<unknown>";
 				break;

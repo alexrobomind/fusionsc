@@ -28,7 +28,8 @@ def localResources():
 def localBackend():
 	assert isLocalConnected(), """
 		This thread is not connected to the local backend. Please call fusionsc.backends.connectLocal()
-		(which is automatically done for the main thread) or wrap your code in 'with fusionsc.backends.useBackend(...):'.
+		(which is automatically done for the main thread), wrap your code in 'with fusionsc.backends.useBackend(...):',
+		or call 'fusionsc.backends.alwaysUseBackend(...):'
 	"""
 	
 	return _threadLocal.root
@@ -57,3 +58,6 @@ def useBackend(newBackend):
 		del _threadLocal.active
 	else:
 		_threadLocal.active = prevBackend
+
+def alwaysUseBackend(newBackend):	
+	_threadLocal.active = newBackend

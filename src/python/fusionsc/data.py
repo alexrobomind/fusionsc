@@ -18,7 +18,15 @@ def openArchive(filename: str) -> service.DataRef:
 	Returns:
 		A DataRef pointing to the file root that can be shared or opened using the 'download' method.
 	"""
-	return backends.localResources().openArchive(filename).ref
+	# A naive approach would be:
+	#   return backends.localResources().openArchive(filename).ref
+	#
+	# However, direct requests do not carry the correct type
+	# We therefore go to a two-step process where we open the file in this thread
+	# to determine the type, then make a request to localResources to open it.
+	# This happens in the C++ library
+	return native.data.openArchive(filename, backends.localResources())
+	
 
 def publish(data: Union[capnp.DynamicStructReader, capnp.DataReader]) -> service.DataRef:
 	"""
