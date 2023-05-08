@@ -1,6 +1,7 @@
 import json
 import pandas as pd
 import numpy as np
+from intspan import intspan
 
 import fusionsc as fsc
 from fusionsc.devices import w7x
@@ -13,6 +14,8 @@ with open('components.json') as f:
 	
 components = pd.DataFrame.from_dict(componentsRaw)
 components['compID'] = np.arange(len(components))
+
+print("No of components: ", len(components))
 
 # New entries start at 599
 
@@ -29,6 +32,7 @@ rows = components[query]
 
 print("\tProcessing", len(rows), "entries")
 geoList = baffles.geometry.initCombined(len(rows))
+entries = intspan()
 
 for row, output in zip(rows.itertuples(), geoList):
 	module, bafRow, bafID = row.location.split(', ')
@@ -45,12 +49,17 @@ for row, output in zip(rows.itertuples(), geoList):
 	tags[2].value.text = bafRow
 	tags[3].name = 'tileNo'
 	tags[3].value.uInt64 = int(tileNo)
+	
+	entries.add(row.compID)
+
+print("Entries: ", entries)
 
 baffles.save("baffles.fsc")
 
 # Baffle geometry
 heatShield = fsc.geometry.Geometry()
 print("Processing heat shield")
+entries = intspan()
 
 query = (
 	components.name.str.endswith('LOD-holes-removed_sag-0.25_2022-09-01') &
@@ -63,33 +72,53 @@ print("\tProcessing", len(rows), "entries")
 geoList = heatShield.geometry.initCombined(len(rows))
 
 for row, output in zip(rows.itertuples(), geoList):
-	_, bafRow, bafID = row.location.split(', ')
-	
-	_, _, hm, _, _ = row.name.split(' # ')
-	_, bafNo = bafID.split(' ')
-	_, groupNo = bafRow.split(' ')
-	
-	assert hm[0:2] == 'HM'
-	assert hm[4:6] == '.1'
-	hm = int(hm[2:4])
-	
-	moduleNo = hm // 10
-	
-	output.initW7x().componentsDbMesh = row.compID
-	tags = output.initTags(4)
-	tags[0].name = 'moduleNo'
-	tags[0].value.uInt64 = int(moduleNo)
-	tags[1].name = 'halfModuleNo'
-	tags[1].value.uInt64 = hm
-	tags[2].name = 'wszGroupNo'
-	tags[2].value.uInt64 = int(groupNo)
-	tags[3].name = 'tileNo'
-	tags[3].name.uInt64 = int(bafNo)
+	#if(row.compID > 22107):
+	#	continue
+		
+	try:
+		_, bafRow, bafID = row.location.split(', ')
+		
+		_, _, hm, _, _ = row.name.split(' # ')
+		_, bafNo = bafID.split(' ')
+		_, groupNo = bafRow.split(' ')
+		
+		assert hm[0:2] == 'HM'
+		assert hm[4:6] == '.1'
+		hm = int(hm[2:4])
+		
+		moduleNo = hm // 10
+		
+		if groupNo == '':
+			# There are some entries missing in the components DB
+			# Fill them in by hand
+			if row.compID in range(22108, 22138):
+				groupNo = 11
+			else:
+				continue
+		
+		
+		output.initW7x().componentsDbMesh = row.compID
+		tags = output.initTags(4)
+		tags[0].name = 'moduleNo'
+		tags[0].value.uInt64 = int(moduleNo)
+		tags[1].name = 'halfModuleNo'
+		tags[1].value.uInt64 = hm
+		tags[2].name = 'wszGroupNo'
+		tags[2].value.uInt64 = int(groupNo)
+		tags[3].name = 'tileNo'
+		tags[3].name.uInt64 = int(bafNo)
+		
+		entries.add(row.compID)
+	except Exception as e:
+		raise Exception("When processing " + str(row.compID)) from e
+
+print("Entries: ", entries)
 	
 heatShield.save("heatShield.fsc")
 
 divertor = fsc.geometry.Geometry()
 print("Processing divertor")
+entries = intspan()
 
 query = (
 	components.name.str.endswith('0.25_2022-09-01') &
@@ -125,6 +154,10 @@ for row, output in zip(rows.itertuples(), geoList):
 	tags[3].value.text = compType
 	tags[4].name = 'componentNo'
 	tags[4].value.uInt64 = int(compId)
+	
+	entries.add(row.compID)
+
+print("Entries: ", entries)
 
 divertor.save("divertor.fsc")
 
