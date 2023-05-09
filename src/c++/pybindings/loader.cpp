@@ -658,11 +658,19 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 	}
 		
 	output.attr("newMessage") = py::cpp_function(
-		[schema]() mutable {
+		[schema](py::object copyFrom, size_t initialSize) mutable {
 			auto msg = new capnp::MallocMessageBuilder();
 			
 			// We use DynamicValue instead of DynamicStruct to engage our type-dependent dispatch
-			capnp::DynamicValue::Builder builder = msg->initRoot<capnp::DynamicStruct>(schema);			
+			capnp::DynamicValue::Builder builder;
+			
+			if(copyFrom.is_none()) {
+				builder = msg->initRoot<capnp::DynamicStruct>(schema);
+			} else {
+				// Let's try using our assignment logic
+				assign(*msg, schema, copyFrom);
+				builder = msg->getRoot<capnp::DynamicStruct>(schema);
+			}
 			py::object result = py::cast(builder);
 			
 			result.attr("_msg") = py::cast(msg, py::return_value_policy::take_ownership);
@@ -670,7 +678,9 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 			return result;
 		},
 		py::name("newMessage"),
-		py::scope(output)
+		py::scope(output),
+		py::arg("copyFrom") = py::none(),
+		py::arg("initialSize") = 1024
 	);
 		
 	output.attr("_initRootAs") = py::cpp_function(
