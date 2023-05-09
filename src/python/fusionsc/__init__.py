@@ -41,6 +41,7 @@ from typing import Optional
 import threading
 
 __all__ = [
+	'native',
 	'kj', 'capnp', 'schema', 'service', 'efit',
 	'asnc', 'backends', 'data', 'ipython_integration', 'resolve',
 	'magnetics', 'flt', 'hfcam', 'devices'

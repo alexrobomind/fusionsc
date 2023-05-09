@@ -100,7 +100,7 @@ def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coil
 	
 	config = MagneticConfig()
 	
-	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
+	cnc = config.field.initW7x().initCoilsAndCurrents()
 	cnc.coils = coils
 	
 	cnc.nonplanar = i_12345
