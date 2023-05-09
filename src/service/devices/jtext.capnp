@@ -3,6 +3,10 @@
 using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("fsc::devices::jtext");
 
+using Java = import "../java.capnp";
+$Java.package("org.fsc.devices");
+$Java.outerClassname("JText");
+
 using G = import "../geometry.capnp";
 using M = import "../magnetics.capnp";
 

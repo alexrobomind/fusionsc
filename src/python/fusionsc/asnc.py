@@ -26,7 +26,7 @@ import inspect
 T = TypeVar("T")
 P = ParamSpec("P")
 
-__all__ = ["Promise", "startEventLop", "stopEventLoop", "hasEventLoop", "FiberPool"]
+__all__ = ["Promise", "startEventLop", "stopEventLoop", "hasEventLoop", "FiberPool", "wait", "asyncFunction", "run"]
 
 class AsyncMethodDescriptor:
 	"""Helper class to implement asyncFunction"""

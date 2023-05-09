@@ -3,6 +3,10 @@
 using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("fsc::lvn");
 
+using Java = import "java.capnp";
+$Java.package("org.fsc.lvn");
+$Java.outerClassname("LocalVatNetwork");
+
 struct VatId {
 	key @0 : UInt64;
 }
