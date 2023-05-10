@@ -177,7 +177,7 @@ def components(ids = [], name = None) -> Geometry:
 	result = sum([component(id) for id in ids])
 	
 	if name:
-		tag = result.geometry.initTags(1)[0]
+		tag = result.data.initTags(1)[0]
 		tag.name = 'name'
 		tag.value.text = name
 		
@@ -193,7 +193,7 @@ def assemblies(ids = [], name = None) -> Geometry:
 	result = sum([assembly(id) for id in ids])
 	
 	if name:
-		tag = result.geometry.initTags(1)[0]
+		tag = result.data.initTags(1)[0]
 		tag.name = 'name'
 		tag.value.text = name
 		
