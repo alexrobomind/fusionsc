@@ -225,6 +225,20 @@ kj::String repr(DynamicStruct::Reader self) {
 	return toYaml(self, true);
 }
 
+kj::String typeStr1(DynamicStruct::Reader reader) {
+	capnp::Type type = reader.getSchema();
+	Temporary<capnp::schema::Type> typeProto;
+	extractType(type, typeProto);
+	return kj::str(typeProto.asReader());
+}
+
+kj::String typeStr2(DynamicCapability::Client clt) {
+	capnp::Type type = clt.getSchema();
+	Temporary<capnp::schema::Type> typeProto;
+	extractType(type, typeProto);
+	return kj::str(typeProto.asReader());
+}
+
 //! Defines the buffer protocol for a type T which must be a capnp::List<...>::{Builder, Reader}
 template<typename T>
 void defListBuffer(py::class_<T>& c, bool readOnly) {
@@ -586,6 +600,9 @@ void bindHelpers(py::module_& m) {
 	m.def("totalSize", &totalSize);
 	m.def("toYaml", &toYaml, py::arg("readerOrBuilder"), py::arg("flow") = false);
 	m.def("clone", &clone, py::arg("cloneFrom"));
+	
+	m.def("typeStr", &typeStr1);
+	m.def("typeStr", &typeStr2);
 	
 	m.def("prettyPrint", [](capnp::DynamicStruct::Reader& self) {
 		return capnp::prettyPrint(self).flatten();

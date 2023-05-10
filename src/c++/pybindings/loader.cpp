@@ -412,7 +412,7 @@ struct InterfaceMethod {
 		
 		// Extract pipeline
 		AnyPointer::Pipeline resultPipelineTypeless = mv(result);
-		py::object pyPipeline = py::cast(DynamicStructPipeline(mv(resultPipelineTypeless), resultType));
+		py::object pyPipeline = py::cast(DynamicStructPipeline(mv(resultPipelineTypeless), specializedResultType));
 		
 		// Check for PromiseForResult class for type
 		auto id = resultType.getProto().getId();

@@ -25,12 +25,15 @@ backends.connectLocal()
 from . import data
 from . import ipython_integration
 from . import resolve
+from . import wrappers
 
 # Load core services
 from . import magnetics
 from . import flt
 from . import geometry
 from . import hfcam
+
+from . import hint
 
 # Load device-specifics
 from . import devices

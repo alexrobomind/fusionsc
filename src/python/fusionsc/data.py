@@ -39,8 +39,8 @@ def publish(data: Union[capnp.DynamicStructReader, capnp.DataReader]) -> service
 		A DataRef pointing to an in-memory copy of 'data'.
 	"""
 	inThreadRef = native.data.publish(data)
-	cloneResult = backends.localResources().download(inThreadRef)
-	return cloneResult.ref
+	cloneResult = backends.localResources().download(inThreadRef).ref
+	return cloneResult
 
 @asyncFunction
 def download(ref: service.DataRef) -> asnc.Promise[Union[capnp.DynamicCapabilityClient, capnp.DynamicStructReader, capnp.DataReader]]:
