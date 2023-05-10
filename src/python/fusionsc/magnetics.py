@@ -4,47 +4,20 @@ from . import capnp
 from . import resolve
 from . import backends
 from . import efit
+from . import wrappers
 
 from .asnc import asyncFunction
 
 from typing import Optional
 
-class CoilFilament:
+class CoilFilament(wrappers.structWrapper(service.Filament)):
 	"""
 	Set of coils that can be associated with a current to compute magnetic fields.
 	"""
 	
-	_holder: service.Filament.Builder
-	
-	def __init__(self, filament = None):
-		self._holder = service.Filament.newMessage()
-		
-		if filament is None:
-			self._holder.initNested()
-		else:
-			self._holder.nested = filament
-	
-	@property
-	def filament(self):
-		return self._holder.nested
-	
-	@filament.setter
-	def filament(self, newVal):
-		self._holder.nested = newVal
-	
 	@asyncFunction
 	async def resolve(self):
-		return CoilFilament(await resolve.resolveFilament.asnc(self.filament))
-	
-	def ptree(self):
-		import printree
-		printree.ptree(self.field)
-	
-	def graph(self, **kwargs):
-		return capnp.visualize(self.field, **kwargs)
-		
-	def __repr__(self):
-		return str(self.filament)
+		return CoilFilament(await resolve.resolveFilament.asnc(self.data))
 	
 	def __add__(self, other):
 		if isinstance(other, int) and other == 0:
@@ -55,18 +28,18 @@ class CoilFilament:
 			
 		result = CoilFilament()
 		
-		if self.filament.which() == 'sum' and other.filament.which() == 'sum':
-			result.filament.sum = list(self.filament.sum) + list(other.filament.sum)
+		if self.data.which() == 'sum' and other.data.which() == 'sum':
+			result.data.sum = list(self.data.sum) + list(other.data.sum)
 			return result
 		
-		if self.filament.which() == 'sum':
-			result.filament.sum = list(self.filament.sum) + [other.filament]
+		if self.data.which() == 'sum':
+			result.data.sum = list(self.data.sum) + [other.data]
 			return result
 		
-		if other.filament.which() == 'sum':
-			result.filament.sum = [self.filament] + list(other.filament.sum)
+		if other.data.which() == 'sum':
+			result.data.sum = [self.data] + list(other.data.sum)
 		
-		result.filament.sum = [self.filament, other.filament]
+		result.data.sum = [self.data, other.data]
 		
 		return result
 	
@@ -80,7 +53,7 @@ class CoilFilament:
 		bs.current = current
 		bs.biotSavartSettings.stepSize = stepSize
 		bs.biotSavartSettings.width = width
-		bs.filament = self.filament
+		bs.filament = self.data
 		bs.windingNo = windingNo
 		
 		return result
@@ -104,46 +77,25 @@ class CoilFilament:
 		ref = data.publish(filament)
 		
 		result = CoilFilament()
-		result.filament.ref = ref
+		result.data.ref = ref
 		
 		return result
 
-class MagneticConfig:
+class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 	"""
 	Magnetic configuration class. Wraps an instance of fusionsc.service.MagneticField.Builder
 	and provides access to +, -, *, and / operators.
 	"""
 	
-	_holder: service.MagneticField.Builder
-	
-	def __init__(self, field = None):	
-		self._holder = service.MagneticField.newMessage()
-		
-		if field is None:
-			self._holder.initNested()
-		else:
-			self._holder.nested = field
-	
-	# Directly assigning python variables does not copy them, so we
-	# need to do a bit of propery magic to make sure we assign
-	# struct fields	
-	@property
-	def field(self):
-		return self._holder.nested
-	
-	@field.setter
-	def field(self, newVal):
-		self._holder.nested = newVal
-	
 	@asyncFunction
 	async def resolve(self):
-		return MagneticConfig(await resolve.resolveField.asnc(self.field))
+		return MagneticConfig(await resolve.resolveField.asnc(self.data))
 	
 	@asyncFunction
 	async def compute(self, grid):
 		if grid is None:
-			assert self.field.which() == 'computedField', 'Must specify grid or use pre-computed field'
-			return MagneticConfig(self.field)
+			assert self.data.which() == 'computedField', 'Must specify grid or use pre-computed field'
+			return MagneticConfig(self.data)
 		
 		result = MagneticConfig()
 		
@@ -152,31 +104,21 @@ class MagneticConfig:
 		backend = backends.activeBackend()
 		calculator = backend.newFieldCalculator().service
 		
-		comp = result.field.initComputedField()
+		comp = result.data.initComputedField()
 		comp.grid = grid
-		comp.data = calculator.compute(resolved.field, grid).computedField.data
+		comp.data = calculator.compute(resolved.data, grid).computedField.data
 		
 		return result
-	
-	def ptree(self):
-		import printree
-		printree.ptree(self.field)
-	
-	def graph(self, **kwargs):
-		return capnp.visualize(self.field, **kwargs)
-		
-	def __repr__(self):
-		return str(self.field)
 	
 	def __neg__(self):
 		result = MagneticConfig()
 		
 		# Remove double inversion
-		if self.field.which() == 'invert':
-			result.field = self.field.invert
+		if self.data.which() == 'invert':
+			result.data = self.data.invert
 			return result
 		
-		result.field.invert = self.field
+		result.data.invert = self.data
 		return result
 	
 	def __add__(self, other):
@@ -188,18 +130,18 @@ class MagneticConfig:
 			
 		result = MagneticConfig()
 		
-		if self.field.which() == 'sum' and other.field.which() == 'sum':
-			result.field.sum = list(self.field.sum) + list(other.field.sum)
+		if self.data.which() == 'sum' and other.data.which() == 'sum':
+			result.data.sum = list(self.data.sum) + list(other.data.sum)
 			return result
 		
-		if self.field.which() == 'sum':
-			result.field.sum = list(self.field.sum) + [other.field]
+		if self.data.which() == 'sum':
+			result.data.sum = list(self.data.sum) + [other.data]
 			return result
 		
-		if other.field.which() == 'sum':
-			result.field.sum = [self.field] + list(other.field.sum)
+		if other.data.which() == 'sum':
+			result.data.sum = [self.data] + list(other.data.sum)
 		
-		result.field.sum = [self.field, other.field]
+		result.data.sum = [self.data, other.data]
 		
 		return result
 	
@@ -217,12 +159,12 @@ class MagneticConfig:
 		
 		result = MagneticConfig()
 		
-		if self.field.which() == 'scaleBy':
-			result.field.scaleBy = self.field.scaleBy
-			result.field.scaleBy.factor *= factor
+		if self.data.which() == 'scaleBy':
+			result.data.scaleBy = self.data.scaleBy
+			result.data.scaleBy.factor *= factor
 		
-		scaleBy = result.field.initScaleBy()
-		scaleBy.field = self.field
+		scaleBy = result.data.initScaleBy()
+		scaleBy.field = self.data
 		scaleBy.factor = factor
 		
 		return result
@@ -233,16 +175,6 @@ class MagneticConfig:
 	def __truediv__(self, divisor):
 		return self * (1 / divisor)
 	
-	@asyncFunction
-	@staticmethod
-	async def load(filename):
-		field = await data.readArchive.asnc(filename)
-		return MagneticConfig(field)
-	
-	@asyncFunction
-	async def save(self, filename):
-		await data.writeArchive.asnc(self.field, filename)
-	
 	@staticmethod
 	def fromEFit(contents: Optional[str] = None, filename: Optional[str] = None):
 		assert contents or filename, "Must provide either GEqdsk file contents or filename"
@@ -251,10 +183,7 @@ class MagneticConfig:
 			with open(filename, "r") as f:
 				contents = f.read()
 			
-		result = MagneticConfig()
-		result.field.axisymmetricEquilibrium = axisymmetricEquilibrium = efit.eqFromGFile(contents)
-		
-		return result
+		return MagneticConfig({'axisymmetricEquilibrium' : efit.eqFromGFile(contents)})
 
 
 @asyncFunction
@@ -316,7 +245,7 @@ async def visualizeCoils(field):
 		print("Warning: Unresolved nodes can not be visualized")
 	
 	resolved = await field.resolve.asnc()
-	await process(resolved.field)
+	await process(resolved.data)
 	
 	def makeCoil(coil):
 		vertexArray = np.asarray(coil)

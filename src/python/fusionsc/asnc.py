@@ -42,7 +42,7 @@ class AsyncMethodDescriptor:
 		return run(coro)
 	
 	def __get__(self, obj, objtype = None):
-		return AsyncMethodDescriptor(self.f.__get__(obj, objtype))
+		return functools.wraps(self.f)(AsyncMethodDescriptor(self.f.__get__(obj, objtype)))
 	
 	@property
 	def __doc__(self):

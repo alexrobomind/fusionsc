@@ -5,78 +5,52 @@ from . import data
 from . import resolve
 from . import service
 from . import backends
+from . import wrappers
 
 from .asnc import asyncFunction
 
 import numpy as np
 
-class Geometry:
-	"""A pythonic wrapper around fusion.service.Geometry.Builder"""
-	def __init__(self, geo = None):
-		self._holder = service.Geometry.newMessage()
-		
-		if geo is None:
-			self._holder.initNested()
-		else:
-			self._holder.nested = geo
-	
-	@property
-	def geometry(self):
-		return self._holder.nested
-	
-	@geometry.setter
-	def geometry(self, newVal):
-		self._holder.nested = newVal
-	
-	def ptree(self):
-		import printree
-		printree.ptree(self.geometry)
-	
-	def graph(self, **kwargs):
-		return capnp.visualize(self.geometry, **kwargs)
-		
-	def __repr__(self):
-		return str(self.geometry)
-		
+class Geometry(wrappers.structWrapper(service.Geometry)):		
 	@asyncFunction
 	async def resolve(self):
-		return Geometry(await resolve.resolveGeometry.asnc(self.geometry))
+		return Geometry(await resolve.resolveGeometry.asnc(self.data))
 	
 	@asyncFunction
 	async def merge(self):
-		if self.geometry.which() == 'merged':
-			return Geometry(self.geometry)
+		if self.data.which() == 'merged':
+			return Geometry(self.data)
 		
 		resolved = await self.resolve.asnc()
-		mergedRef = geometryLib().merge(resolved.geometry).ref
+		mergedRef = geometryLib().merge(resolved.data).ref
 		
 		result = Geometry()
-		result.geometry.merged = mergedRef
+		result.data.merged = mergedRef
 		return result
 	
 	@asyncFunction
 	async def reduce(self, maxVerts = 1000000, maxIndices = 1000000):
 		resolved = await self.resolve.asnc()
 		
-		reducedRef = geometryLib().reduce(resolved.geometry, maxVerts, maxIndices).ref
+		reducedRef = geometryLib().reduce(resolved.data, maxVerts, maxIndices).ref
 		
 		result = Geometry()
-		result.geometry.merged = reducedRef
+		result.data.merged = reducedRef
 		return result
 	
 	@asyncFunction
 	async def index(self, geometryGrid):
 		if geometryGrid is None:
-			assert self.geometry.which() == 'indexed', 'Must specify geometry grid or use pre-indexed geometry'
-			return Geometry(self.geometry)
+			assert self.data.which() == 'indexed', 'Must specify geometry grid or use pre-indexed geometry'
+			return Geometry(self.data)
 		
 		resolved = await self.resolve.asnc()
 		
 		result = Geometry()
-		indexed = result.geometry.initIndexed()
+		indexed = result.data.initIndexed()
 		indexed.grid = geometryGrid
 		
-		indexPipeline = geometryLib().index(resolved.geometry, geometryGrid).indexed
+		indexPipeline = geometryLib().index(resolved.data, geometryGrid).indexed
 		indexed.base = indexPipeline.base
 		indexed.data = indexPipeline.data
 		
@@ -91,19 +65,19 @@ class Geometry:
 			
 		result = Geometry()
 		
-		if self.geometry.which() == 'combined' and other.geometry.which() == 'combined':
-			result.geometry.combined = list(self.geometry.combined) + list(other.geometry.combined)
+		if self.data.which() == 'combined' and other.data.which() == 'combined':
+			result.data.combined = list(self.data.combined) + list(other.data.combined)
 			return result
 		
-		if self.geometry.which() == 'combined':
-			result.geometry.combined = list(self.geometry.combined) + [other.geometry]
+		if self.data.which() == 'combined':
+			result.data.combined = list(self.data.combined) + [other.data]
 			return result
 		
-		if other.geometry.which() == 'combined':
-			result.geometry.combined = [self.geometry] + list(other.geometry.combined)
+		if other.data.which() == 'combined':
+			result.data.combined = [self.data] + list(other.data.combined)
 			return result
 		
-		result.geometry.combined = [self.geometry, other.geometry]
+		result.data.combined = [self.data, other.data]
 		return result
 	
 	def __radd__(self, other):
@@ -112,10 +86,10 @@ class Geometry:
 	def translate(self, dx):
 		result = Geometry()
 		
-		transformed = result.geometry.initTransformed()
+		transformed = result.data.initTransformed()
 		shifted = transformed.initShifted()
 		shifted.shift = dx
-		shifted.node.leaf = self.geometry
+		shifted.node.leaf = self.data
 		
 		return result
 	
@@ -134,9 +108,9 @@ class Geometry:
 	@asyncFunction
 	async def download(self):
 		if self.geometry.which() != 'ref':
-			return Geometry(self.geometry)
+			return Geometry(self.data)
 		
-		ref = self.geometry.ref
+		ref = self.data.ref
 		downloaded = await data.download.asnc(ref)
 		
 		return Geometry(downloaded)
@@ -177,21 +151,15 @@ class Geometry:
 		del mesh
 		
 		result = Geometry()
-		result.geometry.mesh = meshRef
+		result.data.mesh = meshRef
 		
 		return result
-	
-	@asyncFunction
-	@staticmethod
-	async def load(filename):
-		geo = await data.readArchive.asnc(filename)
-		return Geometry(geo)
 	
 	@staticmethod
 	def from2D(r, z, nPhi = 100, phi1 = None, phi2 = None, tags = {}, close = True):
 		result = Geometry()
 		
-		wt = result.geometry.initWrapToroidally()
+		wt = result.data.initWrapToroidally()
 		wt.nPhi = nPhi
 		wt.r = r
 		wt.z = z
@@ -208,21 +176,17 @@ class Geometry:
 			outTags[i].value = asTagValue(tags[name])
 		
 		return result
-	
-	@asyncFunction
-	async def save(self, filename):
-		await data.writeArchive.asnc(self.geometry, filename)
 
 	@asyncFunction
-	async def planarCut(geometry, phi = None, normal = None, center = None):
+	async def planarCut(self, phi = None, normal = None, center = None):
 		"""Computes a planar cut of the geometry along either a given plane or a given phi plane"""
 		assert phi is not None or normal is not None
 		assert phi is None or normal is None
 		
-		geometry = await geometry.resolve.asnc()
+		geometry = await self.resolve.asnc()
 		
 		request = service.GeometryLib.methods.planarCut.Params.newMessage()
-		request.geometry = geometry.geometry
+		request.geometry = geometry.data
 		
 		plane = request.plane
 		if phi is not None:
@@ -237,12 +201,12 @@ class Geometry:
 		return np.asarray(response.edges).transpose([2, 0, 1])
 
 	@asyncFunction
-	async def plotCut(geometry, phi = 0, ax = None, plot = True, **kwArgs):
+	async def plotCut(self, phi = 0, ax = None, plot = True, **kwArgs):
 		"""Plot the phi cut of a given geometry in either the given axes or the current active matplotlib axes"""
 		import matplotlib.pyplot as plt
 		import matplotlib
 		
-		x, y, z = await geometry.planarCut.asnc(phi = phi)
+		x, y, z = await self.planarCut.asnc(phi = phi)
 		r = np.sqrt(x**2 + y**2)
 		
 		linedata = np.stack([r, z], axis = -1)
@@ -258,17 +222,17 @@ class Geometry:
 		return coll
 
 	@asyncFunction
-	async def asPyvista(geometry, reduce: bool = True):
+	async def asPyvista(self, reduce: bool = True):
 		"""Convert the given geometry into a PyVista / VTK mesh"""
 		import numpy as np
 		import pyvista as pv
 			
 		if reduce:
-			geometry = await geometry.reduce.asnc()
+			geometry = await self.reduce.asnc()
 		else:
-			geometry = await geometry.merge.asnc()
+			geometry = await self.merge.asnc()
 		
-		mergedGeometry = await data.download.asnc(geometry.geometry.merged)
+		mergedGeometry = await data.download.asnc(geometry.data.merged)
 		
 		def extractMesh(entry):
 			mesh = entry.mesh
@@ -382,9 +346,9 @@ def cuboid(x1, x2, tags = {}):
 	# Put mesh reference & tags into geometry
 	import fsc
 	result = fsc.Geometry()
-	result.geometry.mesh = meshRef
+	result.data.mesh = meshRef
 	
-	outTags = result.geometry.initTags(len(tags))
+	outTags = result.data.initTags(len(tags))
 	for i, name in enumerate(tags):
 		outTags[i].name = name
 		outTags[i].value = asTagValue(tags[name])

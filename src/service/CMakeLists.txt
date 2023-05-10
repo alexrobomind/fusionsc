@@ -19,6 +19,7 @@ set(
 	geometry.capnp
 	
 	vmec.capnp
+	hint.capnp
 	
 	http.capnp
 	offline.capnp

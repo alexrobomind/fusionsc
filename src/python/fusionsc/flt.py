@@ -10,6 +10,7 @@ from . import efit
 from . import magnetics
 
 from .asnc import asyncFunction
+from .wrappers import unstableAPI
 
 import numpy as np
 import functools
@@ -40,6 +41,7 @@ def symmetrize(points, nSym = 1, stellaratorSymmetric = False):
 	return np.stack([x, y, z], axis = 0)
 
 @asyncFunction
+@unstableAPI
 async def visualizeMapping(mapping, nPoints = 50):
 	import numpy as np
 	import pyvista as pv
@@ -113,8 +115,8 @@ async def fieldValues(config, grid):
 	"""
 	import numpy as np
 	
-	field = await computeField.asnc(config, grid)
-	fieldData = await data.download.asnc(field.field.computedField.data)
+	field = await config.compute.asnc(grid)
+	fieldData = await data.download.asnc(field.data.computedField.data)
 	
 	return np.asarray(fieldData).transpose([3, 0, 1, 2])
 
@@ -137,7 +139,7 @@ async def computeMapping(
 	dx = 0.001
 ):
 	config = await config.compute.asnc(grid)
-	computedField = config.field.computedField
+	computedField = config.data.computedField
 	
 	# We use the request based API because tensor values are not yet supported for fields
 	request = service.MappingRequest.newMessage()
@@ -179,11 +181,11 @@ async def trace(
 		assert parallelConvectionVelocity is not None or parallelDiffusionCoefficient is not None
 	
 	config = await config.compute.asnc(grid)
-	computedField = config.field.computedField
+	computedField = config.data.computedField
 	
 	if geometry is not None:	
 		geometry = await geometry.index.asnc(geometryGrid)
-		indexedGeometry = geometry.geometry.indexed
+		indexedGeometry = geometry.data.indexed
 	
 	request = service.FLTRequest.newMessage()
 	request.startPoints = points
@@ -237,7 +239,7 @@ async def trace(
 @asyncFunction
 async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10):		
 	field = await field.compute.asnc(grid)
-	computed = field.field.computedField
+	computed = field.data.computedField
 	
 	# If start point is not provided, use grid center
 	if startPoint is None:
@@ -259,10 +261,10 @@ async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTur
 @asyncFunction
 async def findLCFS(field, geometry, p1, p2, grid = None, geometryGrid = None, stepSize = 0.01, tolerance = 0.001, nScan = 8, distanceLimit = 3e3):
 	field = await field.compute.asnc(grid)
-	computedField = field.field.computedField
+	computedField = field.data.computedField
 	
 	geometry = await geometry.index.asnc(geometryGrid)
-	indexedGeometry = geometry.geometry.indexed
+	indexedGeometry = geometry.data.indexed
 	
 	request = service.FindLcfsRequest.newMessage()
 	request.p1 = p1

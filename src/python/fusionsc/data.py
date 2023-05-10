@@ -19,7 +19,7 @@ def openArchive(filename: str) -> service.DataRef:
 		A DataRef pointing to the file root that can be shared or opened using the 'download' method.
 	"""
 	# A naive approach would be:
-	#   return backends.localResources().openArchive(filename).ref
+	#	return backends.localResources().openArchive(filename).ref
 	#
 	# However, direct requests do not carry the correct type
 	# We therefore go to a two-step process where we open the file in this thread

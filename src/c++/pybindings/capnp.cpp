@@ -386,15 +386,7 @@ void bindStructClasses(py::module_& m) {
 		return result;
 	});
 	
-	cDSB.def("clone", &clone);
 	cDSB.def("__repr__", &repr);
-	cDSB.def("yaml", &toYaml, py::arg("flow") = false);
-	
-	cDSB.def("pretty", [](DSB& self) {
-		return capnp::prettyPrint(self).flatten();
-	});
-	
-	m.def("totalSize", [](DSB& builder) { return builder.totalSize().wordCount * 8; });
 	
 	// ----------------- READER ------------------
 	
@@ -445,15 +437,7 @@ void bindStructClasses(py::module_& m) {
 		return result;
 	});
 	
-	cDSR.def("clone", &clone);
-	cDSB.def("yaml", &toYaml, py::arg("flow") = false);
 	cDSR.def("__repr__", &repr);
-	
-	cDSR.def("pretty", [](DSR& self) {
-		return capnp::prettyPrint(self).flatten();
-	});
-	
-	m.def("totalSize", [](DSR& reader) { return reader.totalSize().wordCount * 8; });
 	
 	// ----------------- PIPELINE ------------------
 	
@@ -600,6 +584,12 @@ uint64_t totalSize(capnp::DynamicStruct::Reader reader) {
 
 void bindHelpers(py::module_& m) {
 	m.def("totalSize", &totalSize);
+	m.def("toYaml", &toYaml, py::arg("readerOrBuilder"), py::arg("flow") = false);
+	m.def("clone", &clone, py::arg("cloneFrom"));
+	
+	m.def("prettyPrint", [](capnp::DynamicStruct::Reader& self) {
+		return capnp::prettyPrint(self).flatten();
+	});
 };
 
 }
