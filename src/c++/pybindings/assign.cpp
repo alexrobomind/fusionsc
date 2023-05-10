@@ -69,6 +69,42 @@ struct ListItemSlot : public BuilderSlot {
 	
 };
 
+struct MessageSlot : public BuilderSlot {
+	capnp::MessageBuilder& message;
+	mutable capnp::StructSchema schema;
+	
+	MessageSlot(capnp::MessageBuilder& nMessage, capnp::StructSchema nSchema) :
+		BuilderSlot(nSchema),
+		message(nMessage), schema(nSchema)
+	{}
+	
+	void set(DynamicValue::Reader newVal) const override {
+		KJ_REQUIRE(newVal.getType() == DynamicValue::STRUCT, "Can only assign struct values to messages");
+		auto structVal = newVal.as<capnp::DynamicStruct>();
+		
+		KJ_REQUIRE(structVal.getSchema() == schema);
+		message.setRoot(structVal);
+	}
+	void adopt(capnp::Orphan<DynamicValue>&& orphan) const override {
+		KJ_REQUIRE(orphan.getType() == DynamicValue::STRUCT, "Can only assign struct values to messages");
+		auto structOrphan = orphan.releaseAs<capnp::DynamicStruct>();
+		
+		KJ_REQUIRE(structOrphan.get().getSchema() == schema);
+		message.adoptRoot(mv(structOrphan));
+	}
+	DynamicValue::Builder get() const override {
+		return message.getRoot<capnp::DynamicStruct>(schema);
+	}
+	
+	DynamicValue::Builder init() const override {
+		return message.initRoot<capnp::DynamicStruct>(schema);
+	}
+	
+	DynamicValue::Builder init(unsigned int size) const override {
+		KJ_FAIL_REQUIRE("Messages may not be initialized with list content");
+	}
+};
+
 }
 
 void assign(const BuilderSlot& dst, py::object object) {
@@ -202,6 +238,10 @@ void assign(capnp::DynamicList::Builder list, uint32_t index, py::object value) 
 
 void assign(capnp::DynamicStruct::Builder builder, kj::StringPtr fieldName, py::object value) {
 	assign(FieldSlot(builder, builder.getSchema().getFieldByName(fieldName)), mv(value));
+}
+
+void assign(capnp::MessageBuilder& builder, capnp::StructSchema schema, py::object value) {
+	assign(MessageSlot(builder, mv(schema)), value);
 }
 
 }
