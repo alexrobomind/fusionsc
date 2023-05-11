@@ -192,11 +192,15 @@ struct CalculationSession : public FieldCalculator::Server {
 	}
 	
 	Promise<void> processFilament(FieldCalculation& calculator, Filament::Reader node, BiotSavartSettings::Reader settings, double scale) {
+		while(node.isNested()) {
+			node = node.getNested();
+		}
+		
 		switch(node.which()) {
 			case Filament::INLINE:
 				// The biot savart operation is chained by the calculator
 				calculator.biotSavart(scale, node.getInline(), settings);
-				return READY_NOW;
+				return READY_NOW;				
 				
 			case Filament::REF:
 				return getActiveThread().dataService().download(node.getRef()).then([&calculator, settings, scale, this](LocalDataRef<Filament> local) mutable {
@@ -214,17 +218,14 @@ struct CalculationSession : public FieldCalculator::Server {
 				return kj::joinPromises(arrBuilder.finish());
 			}
 			default:
-				KJ_FAIL_REQUIRE("Unknown filament node encountered. This either indicates that a device-specific node was not resolved, or a generic node from a future library version was presented");
+				KJ_FAIL_REQUIRE("Unknown filament node encountered. This either indicates that a device-specific node was not resolved, or a generic node from a future library version was presented", node);
 		}
 	}
 	
 	Promise<void> processField(FieldCalculation& calculator, MagneticField::Reader node, double scale) {
-		/*return ID::fromReaderWithRefs(node).then([this, &calculator, node, scale](ID id) -> Promise<void> {
-			// Check if the node is in the cache
-			KJ_IF_MAYBE(pFieldRef, cache.find(id)) {
-				calculator.add(scale, pFieldRef->get());
-				return READY_NOW;
-			}*/
+		while(node.isNested()) {
+			node = node.getNested();
+		}
 		
 		switch(node.which()) {
 			case MagneticField::SUM: {
@@ -298,7 +299,7 @@ struct CalculationSession : public FieldCalculator::Server {
 				return READY_NOW;
 			}
 			default:
-				KJ_FAIL_REQUIRE("Unknown magnetic field node encountered. This either indicates that a device-specific node was not resolved, or a generic node from a future library version was presented");
+				KJ_FAIL_REQUIRE("Unknown magnetic field node encountered. This either indicates that a device-specific node was not resolved, or a generic node from a future library version was presented", node);
 		}
 	//});
 	}

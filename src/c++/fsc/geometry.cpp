@@ -238,7 +238,7 @@ Promise<void> GeometryLibImpl::collectTagNames(Geometry::Reader input, kj::HashS
 			return READY_NOW;
 			
 		default:
-			KJ_FAIL_REQUIRE("Unknown geometry node type encountered during merge operation. Likely an unresolved node", input.which());
+			KJ_FAIL_REQUIRE("Unknown geometry node type encountered during merge operation. Likely an unresolved node", input);
 	}
 }
 
@@ -679,7 +679,7 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 				}}}
 			}
 			
-			KJ_DBG("Processed mesh", iEntry, input.getEntries().size());
+			// KJ_DBG("Processed mesh", iEntry, input.getEntries().size());
 		}
 		
 		// Set up output data. This creates a packed representation of the index
