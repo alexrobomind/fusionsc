@@ -15,6 +15,7 @@
 #include <fsc/services.h>
 #include <fsc/magnetics.h>
 #include <fsc/offline.capnp.h>
+#include <fsc/hint.capnp.h>
 
 using capnp::DynamicValue;
 using capnp::DynamicList;
@@ -94,7 +95,7 @@ namespace fscpy {
 		// Here we need to specify datatypes that need to be loaded because they are passed to the python interface
 		
 		#define FSC_BUILTIN_SCHEMAS FieldResolver, GeometryResolver, NetworkInterface, LocalResources, OfflineData, \
-			MergedGeometry, FLTStopReason, FieldlineMapping
+			MergedGeometry, FLTStopReason, FieldlineMapping, HintEquilibrium
 		
 		defaultLoader.addBuiltin<
 			capnp::schema::Node,

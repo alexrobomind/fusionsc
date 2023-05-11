@@ -75,5 +75,5 @@ if(FSC_WITH_PYTHON)
 		COMMAND ${CMAKE_COMMAND} -E env DOC_FSCPATH=${DOC_FSCPATH} sphinx-build -a ${CMAKE_CURRENT_SOURCE_DIR} ${DOC_SPHINXPATH}
 	)
 
-	add_dependencies(docs docs-setup1 docs-setup2 docs-prepare-java)
+	add_dependencies(docs docs-setup1 docs-setup2)# docs-prepare-java
 endif()

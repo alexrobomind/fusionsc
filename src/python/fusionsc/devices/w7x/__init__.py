@@ -100,7 +100,7 @@ def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coil
 	
 	config = MagneticConfig()
 	
-	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
+	cnc = config.data.initW7x().initCoilsAndCurrents()
 	cnc.coils = coils
 	
 	cnc.nonplanar = i_12345
@@ -114,7 +114,7 @@ def trimCoils(i_trim = [0, 0, 0, 0, 0], coils = None) -> MagneticConfig:
 	
 	config = MagneticConfig()
 	
-	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
+	cnc = config.data.initW7xMagneticConfig().initCoilsAndCurrents()
 	cnc.coils = coils
 	
 	cnc.trim = i_trim
@@ -127,7 +127,7 @@ def controlCoils(i_cc = [0, 0], coils = None) -> MagneticConfig:
 	
 	config = MagneticConfig()
 	
-	cnc = config.field.initW7xMagneticConfig().initCoilsAndCurrents()
+	cnc = config.data.initW7xMagneticConfig().initCoilsAndCurrents()
 	cnc.coils = coils
 	
 	cnc.control = i_cc
@@ -158,26 +158,26 @@ def processCoilConvention(convention):
 
 def coilsDBConfig(id: int) -> MagneticConfig:
 	result = fusionsc.magnetics.MagneticConfig()
-	result.field.initW7x().configurationDb = id
+	result.data.initW7x().configurationDb = id
 	
 	return result
 
 def coilsDBCoil(id: int) -> CoilFilament:
 	result = CoilFilament()
-	result.filament.initW7x().coilsDb = id
+	result.data.initW7x().coilsDb = id
 	
 	return result
 	
 def component(id) -> Geometry:
 	result = Geometry()
-	result.geometry.initW7x().componentsDbMesh = id
+	result.data.initW7x().componentsDbMesh = id
 	return result
 
 def components(ids = [], name = None) -> Geometry:
 	result = sum([component(id) for id in ids])
 	
 	if name:
-		tag = result.geometry.initTags(1)[0]
+		tag = result.data.initTags(1)[0]
 		tag.name = 'name'
 		tag.value.text = name
 		
@@ -185,7 +185,7 @@ def components(ids = [], name = None) -> Geometry:
 	
 def assembly(id) -> Geometry:
 	result = Geometry()
-	result.geometry.initW7x().componentsDbAssembly = id
+	result.data.initW7x().componentsDbAssembly = id
 	
 	return result
 
@@ -193,7 +193,7 @@ def assemblies(ids = [], name = None) -> Geometry:
 	result = sum([assembly(id) for id in ids])
 	
 	if name:
-		tag = result.geometry.initTags(1)[0]
+		tag = result.data.initTags(1)[0]
 		tag.name = 'name'
 		tag.value.text = name
 		
@@ -205,7 +205,7 @@ def divertor(campaign = 'OP21') -> Geometry:
 	
 	if campaign == 'OP21':
 		result = Geometry()
-		result.geometry.initW7x().op21Divertor = None
+		result.data.initW7x().op21Divertor = None
 		return result
 	
 	raise "Unknown campaign " + campaign
@@ -216,7 +216,7 @@ def baffles(campaign = 'OP21') -> Geometry:
 	
 	if campaign == 'OP21':
 		result = Geometry()
-		result.geometry.initW7x().op21Baffles = None
+		result.data.initW7x().op21Baffles = None
 		return result
 	
 	raise "Unknown campaign " + campaign
@@ -227,7 +227,7 @@ def heatShield(campaign = 'OP21') -> Geometry:
 	
 	if campaign == 'OP21':
 		result = Geometry()
-		result.geometry.initW7x().op21HeatShield = None
+		result.data.initW7x().op21HeatShield = None
 		return result
 	
 	raise "Unknown campaign " + campaign

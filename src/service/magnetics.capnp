@@ -28,6 +28,7 @@ struct ToroidalGrid {
 
 # Data shape is [phi, z, r, 3], C (row-major) ordering with last index stride 1
 # When interpreting column-major, data shape is [3, r, z, phi]
+# The field components are ordered Phi, Z, R
 struct ComputedField {
 	grid @0 : ToroidalGrid;
 	data @1 : DataRef(Float64Tensor);

@@ -6,16 +6,17 @@ Reference
    :recursive:
    :template: summary-module.rst
 
-   fsc
-   
-Service interface
------------------
+   fusionsc
 
-Java
-~~~~
+..
+  Service interface
+  -----------------
 
-.. toctree::
-  :glob:
-  :maxdepth: 2
+  Java
+  ~~~~
+
+  .. toctree::
+    :glob:
+    :maxdepth: 2
   
-  javadocs/*.package
+    javadocs/*.package
