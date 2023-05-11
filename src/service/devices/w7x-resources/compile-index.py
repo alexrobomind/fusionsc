@@ -17,6 +17,25 @@ components['compID'] = np.arange(len(components))
 
 print("No of components: ", len(components))
 
+# Baffle geometry
+closure = fsc.geometry.Geometry()
+print("Processing closure (not added to index)")
+
+query = (
+	components.name.str.contains('closure')
+)
+
+rows = components[query]
+
+print("\tProcessing", len(rows), "entries")
+geoList = closure.data.initCombined(len(rows))
+entries = intspan()
+
+for row, output in zip(rows.itertuples(), geoList):	
+	entries.add(row.compID)
+
+print("Entries: ", entries)
+
 # New entries start at 599
 
 # Baffle geometry
@@ -31,7 +50,7 @@ query = (
 rows = components[query]
 
 print("\tProcessing", len(rows), "entries")
-geoList = baffles.geometry.initCombined(len(rows))
+geoList = baffles.data.initCombined(len(rows))
 entries = intspan()
 
 for row, output in zip(rows.itertuples(), geoList):
@@ -69,7 +88,7 @@ query = (
 rows = components[query]
 
 print("\tProcessing", len(rows), "entries")
-geoList = heatShield.geometry.initCombined(len(rows))
+geoList = heatShield.data.initCombined(len(rows))
 
 for row, output in zip(rows.itertuples(), geoList):
 	#if(row.compID > 22107):
@@ -128,7 +147,7 @@ query = (
 rows = components[query]
 
 print("\tProcessing", len(rows), "entries")
-geoList = divertor.geometry.initCombined(len(rows))
+geoList = divertor.data.initCombined(len(rows))
 
 compTypes = {}
 
@@ -174,4 +193,4 @@ def timer():
 	
 with timer():
 	geo = fsc.geometry.Geometry.load("divertor.fsc")
-	print(geo.geometry.which())
+	print(geo.data.which())
