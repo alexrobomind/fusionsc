@@ -241,11 +241,14 @@ def steelPanels():
 def vessel():
 	return assemblies([9], 'Plasma Vessel')
 
+def toroidalClosure():
+	return components(range(325, 330), 'Toroidal closure')
+
 def op12Geometry():
-	return divertor() + baffles() + heatShield() + pumpSlits() + steelPanels() + vessel()
+	return divertor() + baffles() + heatShield() + pumpSlits() + steelPanels() + vessel() + toroidalClosure()
 
 def op21Geometry():
-	return divertor('OP21') + baffles('OP21') + heatShield('OP21') + pumpSlits() + steelPanels() + vessel()
+	return divertor('OP21') + baffles('OP21') + heatShield('OP21') + pumpSlits() + steelPanels() + vessel() + toroidalClosure()
 	
 # The W7XCoilSet type defaults to the W7-X coils 160 ... 230
 defaultCoils = cadCoils('archive')

@@ -62,7 +62,7 @@ def download(args = None):
 	if args.default:
 		coils.extend(range(160, 230)) # CAD main coils
 		coils.extend(range(230, 240)) # CAD control coils
-		coils.extend([350, 241, 351, 352, 353]) # CAD trim coils
+		coils.extend([350, 241, 351, 352, 535]) # CAD trim coils
 		
 		meshes.append(164) # Boundary
 		
@@ -72,6 +72,7 @@ def download(args = None):
 		addParts(w7x.pumpSlits())
 		addParts(w7x.vessel())
 		addParts(w7x.steelPanels())
+		addParts(w7x.toroidalClosure())
 	
 	# Perform downloads
 	geometriesOut = []
