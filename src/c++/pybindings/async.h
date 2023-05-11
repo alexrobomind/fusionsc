@@ -50,7 +50,7 @@ struct PythonWaitScope {
 		activeScope = nullptr;
 		KJ_DEFER({activeScope = restoreTo;});
 		
-		return promise.wait(activeScope -> waitScope);
+		return promise.wait(restoreTo -> waitScope);
 	}
 	
 	template<typename T>
