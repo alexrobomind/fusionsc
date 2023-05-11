@@ -9,16 +9,16 @@ using namespace fscpy;
 
 namespace {
 	fsc::LocalDataService& dataService()  {
-		return fscpy::PyContext::libraryThread()->dataService();
+		return fscpy::PythonContext::libraryThread()->dataService();
 	}
 
 	void atExitFunction() {
-		fscpy::PyContext::library()->setShutdownMode();
-		fscpy::PyContext::library()->stopSteward();
+		fscpy::PythonContext::library()->setShutdownMode();
+		fscpy::PythonContext::library()->stopSteward();
 	}
 	
 	void cycle() {
-		fscpy::PyContext::libraryThread()->waitScope().poll();
+		fscpy::PythonContext::libraryThread()->waitScope().poll();
 	}
 	
 	struct PyPromiseAwaitContext {
@@ -244,13 +244,15 @@ void initAsync(py::module_& m) {
 		perform other tasks while fiber is active (which eliminates the need for locking between fibers).
 	)")
 		.def(py::init<unsigned int>())
-		.def("startFiber", &startFiber)
+		.def("startFiber", &startFiber, py::keep_alive<0, 1>())
 	;
 	
-	asyncModule.def("startEventLoop", &PyContext::startEventLoop, "If the active thread has no active event loop, starts a new one");
-	asyncModule.def("stopEventLoop", &PyContext::stopEventLoop, "Stops the event loop on this thread if it is active.");
-	asyncModule.def("hasEventLoop", &PyContext::hasEventLoop, "Checks whether this thread has an active event loop");
+	asyncModule.def("startEventLoop", &PythonContext::startEventLoop, "If the active thread has no active event loop, starts a new one");
+	asyncModule.def("stopEventLoop", &PythonContext::stopEventLoop, "Stops the event loop on this thread if it is active.");
+	asyncModule.def("hasEventLoop", &PythonContext::hasEventLoop, "Checks whether this thread has an active event loop");
 	asyncModule.def("cycle", &cycle, "Cycles this thread's event loop a single time");
+	
+	asyncModule.def("canWait", &PythonWaitScope::canWait);
 	
 	asyncModule.def("run", &run, "Turns an awaitable (e.g. Promise or Coroutine) into a promise by running it on the active event loop");
 	

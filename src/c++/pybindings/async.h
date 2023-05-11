@@ -27,7 +27,52 @@ struct ScopeOverride {
 	static inline thread_local ScopeOverride* current = nullptr;
 };
 
-struct PyContext {
+struct PythonWaitScope {
+	inline PythonWaitScope(kj::WaitScope& ws, bool fiber = false) : waitScope(ws), isFiber(fiber) {
+		KJ_REQUIRE(
+			activeScope == nullptr,
+			"Trying to allocate a new PyWaitScope while another one is active."
+			" This is most likely an error internal to fusionsc, because it means that a C++-side code waited"
+			" on an event loop promise without releasing the active python scope"
+		);
+		activeScope = this;
+	}
+	
+	inline ~PythonWaitScope() {
+		activeScope = nullptr;
+	}
+	
+	template<typename T>
+	static T wait(Promise<T>&& promise) {
+		KJ_REQUIRE(canWait(), "Can not wait inside promises inside continuations or coroutines, and not in threads where no event loop was started.");
+		
+		auto restoreTo = activeScope;
+		activeScope = nullptr;
+		KJ_DEFER({activeScope = restoreTo;});
+		
+		return promise.wait(activeScope -> waitScope);
+	}
+	
+	template<typename T>
+	static bool poll(Promise<T>& promise) {
+		KJ_REQUIRE(canWait(), "Can not wait inside promises inside continuations or coroutines");
+		KJ_REQUIRE(!activeScope -> isFiber, "Can not poll promises inside fibers");
+		
+		return promise.poll(activeScope -> waitScope);
+	}	
+	
+	static inline bool canWait() {
+		return activeScope != nullptr;
+	}
+	
+private:
+	kj::WaitScope& waitScope;
+	bool isFiber;
+	
+	static inline thread_local PythonWaitScope* activeScope = nullptr;
+};
+
+struct PythonContext {
 	static inline Library library() {
 		{
 			auto locked = _library.lockShared();
@@ -47,21 +92,15 @@ struct PyContext {
 		return _libraryThread;
 	}
 	
-	static inline kj::WaitScope& waitScope() {
-		if(ScopeOverride::current != nullptr)
-			return ScopeOverride::current -> scope;
-		
-		startEventLoop();
-		return _libraryThread -> waitScope();
-	}
-	
 	static inline void startEventLoop() {
 		if(_libraryThread.get() == nullptr) {
 			_libraryThread = library() -> newThread();
+			rootScope.emplace(_libraryThread -> waitScope());
 		}
 	}
 	
 	static inline void stopEventLoop() {
+		rootScope = nullptr;
 		_libraryThread = nullptr;
 	}
 	
@@ -74,9 +113,11 @@ struct PyContext {
 		*locked = nullptr;
 	}
 	
-private:
+private:	
 	static inline kj::MutexGuarded<Library> _library = kj::MutexGuarded<Library>();
+	
 	static inline thread_local LibraryThread _libraryThread;
+	static inline thread_local Maybe<PythonWaitScope> rootScope = nullptr;
 };
 
 struct PyObjectHolder : public kj::Refcounted {
@@ -218,7 +259,7 @@ struct PyPromise {
 		
 		{
 			py::gil_scoped_release release_gil;
-			pyObjectHolder = holder.addBranch().wait(PyContext::waitScope());
+			pyObjectHolder = PythonWaitScope::wait(holder.addBranch());
 		}
 		
 		return pyObjectHolder -> content;
@@ -226,7 +267,7 @@ struct PyPromise {
 	
 	inline bool poll() {
 		py::gil_scoped_release release_gil;
-		return holder.addBranch().poll(PyContext::waitScope());
+		return PythonWaitScope::poll(holder.addBranch());
 	}
 	
 	inline PyPromise pyThen(py::function f) {

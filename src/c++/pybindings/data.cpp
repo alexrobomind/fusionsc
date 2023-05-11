@@ -19,7 +19,7 @@ PyPromise download(capnp::DynamicCapability::Client capability) {
 	using capnp::DynamicList;
 	using capnp::DynamicValue;
 	
-	fscpy::PyContext::startEventLoop();
+	fscpy::PythonContext::startEventLoop();
 	
 	constexpr uint64_t DR_ID = capnp::typeId<DataRef<capnp::AnyPointer>>();
 	
