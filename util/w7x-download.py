@@ -11,29 +11,50 @@ def download(args = None):
 			
 	# Connect to webservices
 	w7x.connectCoilsDB(args.coilsdb)
-	w7x.connectComponentsDB(args.componentsDB)
+	w7x.connectComponentsDB(args.componentsdb)
 	
 	coils = args.coil
 	assemblies = args.assembly
 	meshes = args.mesh
 	
+	# The OP2 geometries need to be run through a first-step
+	# resolver to get the initial part lists
+	baseResolver = fsc.native.devices.w7x.geometryResolver()
+	
 	# Extract parts from multi-part geometries
-	def addParts(reader):
+	@fsc.asnc.asyncFunction
+	async def addParts(reader):
 		if isinstance(reader, fsc.geometry.Geometry):
-			addParts(reader.geometry)
+			geo = reader.data
+			resolved = await baseResolver.resolveGeometry(geo)
+			await addParts.asnc(resolved)
+			return
 			
 		if reader.which() == 'combined':
 			for el in reader.combined:
-				addParts(el)
+				await addParts.asnc(el)
+			return
 		
-		if reader.which() == 'componentsDbMesh':
-			meshes.append(reader.componentsDBMesh)
-		
-		if reader.which() == 'componentsDbAssembly':
-			assemblies.append(reader.componentsDBAssembly)
+		if reader.which() == 'nested':
+			await addParts.asnc(reader.nested)
+			return
 		
 		if reader.which() == 'ref':
-			addParts(fsc.data.download(reader.ref))
+			await addParts.asnc(fsc.data.download(reader.ref))
+			return
+				
+		if reader.which() == 'w7x':
+			w7x = reader.w7x
+		
+			if w7x.which() == 'componentsDbMesh':
+				meshes.append(w7x.componentsDbMesh)
+			
+			if w7x.which() == 'componentsDbAssembly':
+				assemblies.append(w7x.componentsDbAssembly)
+			
+			return
+		
+		print(reader)
 	
 	c = args.campaign
 	
@@ -50,6 +71,7 @@ def download(args = None):
 		addParts(w7x.heatShield(c))
 		addParts(w7x.pumpSlits())
 		addParts(w7x.vessel())
+		addParts(w7x.steelPanels())
 	
 	# Perform downloads
 	geometriesOut = []
@@ -57,27 +79,27 @@ def download(args = None):
 	
 	for id in tqdm(assemblies, "Downloading assemblies"):
 		key = w7x.assembly(id)
-		geometriesOut.append({"key" : key.geometry, "val" : key.resolve().geometry})
+		geometriesOut.append({"key" : key.data, "val" : key.resolve().data})
 	
 	for id in tqdm(meshes, "Downloading meshes"):
 		key = w7x.component(id)
-		geometriesOut.append({"key" : key.geometry, "val" : key.resolve().geometry})
+		geometriesOut.append({"key" : key.data, "val" : key.resolve().data})
 	
 	for id in tqdm(coils, "Downloading coils"):
 		key = w7x.coilsDBCoil(id)
-		coilsOut.append({"key" : key.filament, "val" : key.resolve().filament})
+		coilsOut.append({"key" : key.data, "val" : key.resolve().data})
 	
 	print("Preparing root")
 	
 	# Prepare output
-	output = service.OfflineData.newMessage()
+	output = fsc.service.OfflineData.newMessage()
 	output.geometries = geometriesOut
 	output.coils = coilsOut
 	
 	print("Writing data")
 	
 	# Write output
-	data.writeArchive(output, args.output)
+	fsc.data.writeArchive(output, args.output)
 	
 	print("Done")
 	
