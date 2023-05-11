@@ -9,32 +9,32 @@ def defaultGeometryGrid() -> service.CartesianGrid.Reader:
 def firstWall():
 	result = geometry.Geometry()
 	result.data.initJtext().firstWall = None
-	return result
+	return result.withTags({'name': 'First Wall'})
 
 def hfsLimiter():
 	result = geometry.Geometry()
 	result.data.initJtext().hfsLimiter = None
-	return result
+	return result.withTags({'name': 'HFS Limiter'})
 
 def target():
 	result = geometry.Geometry()
 	result.data.initJtext().target = None
-	return result
+	return result.withTags({'name': 'HFS Target'})
 
 def lfsLimiter(pos):
 	result = geometry.Geometry()
 	result.data.initJtext().lfsLimiter = pos
-	return result
+	return result.withTags({'name': 'LFS Limiter'})
 
 def topLimiter(pos):
 	result = geometry.Geometry()
 	result.data.initJtext().topLimiter = pos
-	return result
+	return result.withTags({'name': 'Top Limiter'})
 
 def bottomLimiter(pos):
 	result = geometry.Geometry()
 	result.data.initJtext().bottomLimiter = pos
-	return result
+	return result.withTags({'name': 'Bottom Limiter'})
 
 def singleIslandCoil(i, current):
 	result = magnetics.MagneticConfig()

@@ -177,9 +177,7 @@ def components(ids = [], name = None) -> Geometry:
 	result = sum([component(id) for id in ids])
 	
 	if name:
-		tag = result.data.initTags(1)[0]
-		tag.name = 'name'
-		tag.value.text = name
+		result = result.withTags({'name' : name})
 		
 	return result
 	
@@ -193,9 +191,7 @@ def assemblies(ids = [], name = None) -> Geometry:
 	result = sum([assembly(id) for id in ids])
 	
 	if name:
-		tag = result.data.initTags(1)[0]
-		tag.name = 'name'
-		tag.value.text = name
+		result = result.withTags({'name' : name})
 		
 	return result
 
@@ -206,7 +202,7 @@ def divertor(campaign = 'OP21') -> Geometry:
 	if campaign == 'OP21':
 		result = Geometry()
 		result.data.initW7x().op21Divertor = None
-		return result
+		return result.withTags({'name' : 'OP2.1 Divertor'})
 	
 	raise "Unknown campaign " + campaign
 
@@ -217,7 +213,7 @@ def baffles(campaign = 'OP21') -> Geometry:
 	if campaign == 'OP21':
 		result = Geometry()
 		result.data.initW7x().op21Baffles = None
-		return result
+		return result.withTags({'name' : 'OP2.1 Baffles'})
 	
 	raise "Unknown campaign " + campaign
 
@@ -228,7 +224,7 @@ def heatShield(campaign = 'OP21') -> Geometry:
 	if campaign == 'OP21':
 		result = Geometry()
 		result.data.initW7x().op21HeatShield = None
-		return result
+		return result.withTags({'name' : 'OP2.1 Heat Shield'})
 	
 	raise "Unknown campaign " + campaign
 

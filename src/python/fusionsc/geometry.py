@@ -11,7 +11,7 @@ from .asnc import asyncFunction
 
 import numpy as np
 
-class Geometry(wrappers.structWrapper(service.Geometry)):		
+class Geometry(wrappers.structWrapper(service.Geometry)):	
 	@asyncFunction
 	async def resolve(self):
 		return Geometry(await resolve.resolveGeometry.asnc(self.data))
@@ -65,15 +65,20 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 			
 		result = Geometry()
 		
-		if self.data.which() == 'combined' and other.data.which() == 'combined':
+		# If the geometries have tags, we can not merge the lists either way.
+		# In this case, just return a simple sum
+		def canAbsorb(x):
+			return x.data.which() == 'combined' and len(x.data.tags) == 0
+		
+		if canAbsorb(self) and canAbsorb(other):
 			result.data.combined = list(self.data.combined) + list(other.data.combined)
 			return result
 		
-		if self.data.which() == 'combined':
+		if canAbsorb(self):
 			result.data.combined = list(self.data.combined) + [other.data]
 			return result
 		
-		if other.data.which() == 'combined':
+		if canAbsorb(other):
 			result.data.combined = [self.data] + list(other.data.combined)
 			return result
 		
@@ -102,6 +107,26 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		turned.angle = angle
 		turned.center = center
 		turned.node.leaf = self.geometry
+		
+		return result
+	
+	def withTags(self, extraTags):
+		result = Geometry(self.data)
+		
+		oldTags = { tag.name : tag.value for tag in self.data.tags }
+		newKeys = set(list(oldTags) + list(extraTags))
+		
+		result.data.tags = [
+			{
+				'name' : name,
+				'value' : (
+					asTagValue(extraTags[name])
+					if name in extraTags
+					else oldTags[name]
+				)
+			}
+			for name in newKeys
+		]
 		
 		return result
 	
@@ -156,7 +181,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		return result
 	
 	@staticmethod
-	def from2D(r, z, nPhi = 100, phi1 = None, phi2 = None, tags = {}, close = True):
+	def from2D(r, z, nPhi = 100, phi1 = None, phi2 = None, close = True):
 		result = Geometry()
 		
 		wt = result.data.initWrapToroidally()
@@ -169,13 +194,8 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 			range.phiStart = phi1
 			range.phiEnd = phi2
 			range.close = close
-	
-		outTags = result.geometry.initTags(len(tags))
-		for i, name in enumerate(tags):
-			outTags[i].name = name
-			outTags[i].value = asTagValue(tags[name])
-		
-		return result
+			
+		return result.withTags(tags)
 
 	@asyncFunction
 	async def planarCut(self, phi = None, normal = None, center = None):
