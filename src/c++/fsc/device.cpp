@@ -2,6 +2,8 @@
 #include "local.h"
 #include "eigen.h"
 
+#include <thread>
+
 namespace fsc {
 	
 // class DeviceBase
@@ -105,6 +107,10 @@ Own<DeviceBase> CPUDevice::addRef() {
 
 Promise<void> CPUDevice::emplaceBarrier() {
 	return READY_NOW;
+}
+
+unsigned int CPUDevice::estimateNumThreads() {
+	return std::thread::hardware_concurrency();
 }
 
 }

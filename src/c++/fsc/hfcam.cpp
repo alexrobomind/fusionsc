@@ -73,8 +73,8 @@ Temporary<HFCamProjection> toroidalProjection(
 	Vec3d camEx(-sin(phiO), cos(phiO), 0);	
 	Vec3d camEy(cos(phiO) * -sin(inclination), sin(phiO) * -sin(inclination), cos(inclination));
 	
-	// Adjust ration between ex and ey to be inverse to w/h ratio
-	camEx *= ((double) h) / w;
+	// Adjust ration between ex and ey to be w/h ratio
+	camEx *= ((double) w) / h;
 		
 	Vec3d target(cos(phi) * rTarget, sin(phi) * rTarget, zTarget);
 	Vec3d origin = target + distance * Vec3d(cos(phiO) * cos(inclination), sin(phiO) * cos(inclination), sin(inclination));

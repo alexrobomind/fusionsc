@@ -33,7 +33,9 @@ Own<DeviceBase> selectDevice(ComputationDeviceType preferredType) {
 	
 	#endif
 	
-	return kj::refcounted<CPUDevice>();
+	unsigned int cpuThreads = CPUDevice::estimateNumThreads();
+	KJ_DBG("Creating CPU device", cpuThreads);
+	return kj::refcounted<CPUDevice>(cpuThreads);
 }
 
 struct RootServer : public RootService::Server {

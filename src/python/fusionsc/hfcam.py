@@ -16,7 +16,7 @@ async def toroidalProjection(
 	viewportHeight: float,
 	fieldOfView: float
 ):
-	provider = activeBackend().newHFCamProvider().service
+	provider = backends.activeBackend().newHFCamProvider().service
 	
 	response = await provider.makeToroidalProjection(
 		w, h, phi,
@@ -30,14 +30,13 @@ async def toroidalProjection(
 async def make(
 	projection : service.HFCamProjection.Reader,
 	geometry,
-	backend = None,
 	edgeTolerance = 0.5,
 	depthTolerance = 0.5
 ):
-	provider = activeBackend().newHFCamProvider().service
+	provider = backends.activeBackend().newHFCamProvider().service
 	
 	resolved = await geometry.resolve.asnc()
-	cam = provider.makeCamera(projection, resolved.geometry, edgeTolerance, depthTolerance).cam
+	cam = provider.makeCamera(projection, resolved.data, edgeTolerance, depthTolerance).cam
 	return HFCam(cam)
 
 class HFCam:

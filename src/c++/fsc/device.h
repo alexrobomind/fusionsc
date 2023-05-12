@@ -108,7 +108,7 @@ struct DeviceMapping<kj::Array<const T>>;
 struct CPUDevice : public DeviceBase, public kj::Refcounted {
 	static int BRAND;
 	
-	CPUDevice(unsigned int numThreads = 8);
+	CPUDevice(unsigned int numThreads);
 	~CPUDevice();
 	
 	void updateDevice(kj::byte* devicePtr, const kj::byte* hostPtr, size_t size) override;
@@ -123,6 +123,8 @@ struct CPUDevice : public DeviceBase, public kj::Refcounted {
 	Own<DeviceBase> addRef() override;
 	
 	Own<Eigen::ThreadPoolDevice> eigenDevice;
+	
+	static unsigned int estimateNumThreads();
 
 private:
 	static Own<Eigen::ThreadPoolDevice> createEigenDevice(unsigned int numThreads);
