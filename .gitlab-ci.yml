@@ -72,15 +72,15 @@ build:gcc:
   <<: *build-linux
   <<: *linux
   variables:
-    CC: gcc
-    CXX: g++
+    CC: 'gcc'
+    CXX: 'g++'
 
 build:clang:
   <<: *build-linux
   <<: *linux
   variables:
-    CC: clang
-    CXX: clang++
+    CC: 'clang'
+    CXX: 'clang++'
 
 build:msvc:
   <<: *build-windows
