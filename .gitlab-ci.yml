@@ -54,7 +54,7 @@ stages:
   image: debian:bookworm
   before_script:
     - apt-get update --yes
-    - apt-get install --yes cmake python3 python3-pip pipx libssl-dev clang-14
+    - apt-get install --yes cmake python3 python3-pip python3-virtualenv libssl-dev clang-14
 
 .msvc: &msvc
   tags:
@@ -158,7 +158,9 @@ pages:
   needs: []
   
   script:
-  - pipx install sphinx myst_nb sphinx_rtd_theme numpy
+  - python -m venv build_venv
+  - source build_venv/bin/activate
+  - pip install sphinx myst_nb sphinx_rtd_theme numpy
   - mkdir build
   - cd build
   - cmake ..
