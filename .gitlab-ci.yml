@@ -123,7 +123,7 @@ pybuild:pybuild-linux:
   image: quay.io/pypa/manylinux2014_x86_64
   parallel:
     matrix:
-      - PYTHON: [cp37-cp37, cp38-cp38]
+      - PYTHON: [cp38-cp38, cp39-cp39, cp310-cp310, cp311-cp311]
   
   before_script:
     - yum install -y openssl-static
