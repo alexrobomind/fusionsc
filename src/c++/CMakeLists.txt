@@ -47,7 +47,9 @@ add_custom_target(
 	COMMAND capnp_tool id
 )
 
-add_custom_target(
-	copy-pybindings
-	COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:fsc-python-bindings> ${CMAKE_CURRENT_SOURCE_DIR}/../python/fusionsc
-)
+if(FSC_WITH_PYTHON)
+	add_custom_target(
+		copy-pybindings
+		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:fsc-python-bindings> ${CMAKE_CURRENT_SOURCE_DIR}/../python/fusionsc
+	)
+endif()

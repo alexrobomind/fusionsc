@@ -53,7 +53,7 @@ stages:
 .linux: &linux
   before_script:
     - apt-get update --yes
-    - apt-get install --yes cmake python3 python3-pip libssl-dev
+    - apt-get install -t bullseye-backports  --yes cmake python3 python3-pip libssl-dev
 
 .msvc: &msvc
   tags:
