@@ -75,6 +75,7 @@ stages:
   <<: *linux
   image: debian:bookworm
   before_script:
+    - apt-get update --yes
     - apt-get install --yes clang-14
 
 build:gcc:
