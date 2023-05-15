@@ -51,9 +51,10 @@ stages:
 
 
 .linux: &linux
+  image: debian:bookworm
   before_script:
     - apt-get update --yes
-    - apt-get install --yes cmake python3 python3-pip libssl-dev
+    - apt-get install --yes cmake python3 python3-pip libssl-dev clang-14
 
 .msvc: &msvc
   tags:
@@ -67,24 +68,19 @@ stages:
       when: manual
     - when: never
 
-.gcc: &gcc
-  <<: *linux
-  image: gcc
-
-.clang: &clang
-  <<: *linux
-  image: debian:bookworm
-  before_script:
-    - apt-get update --yes
-    - apt-get install --yes clang-14
-
 build:gcc:
   <<: *build-linux
-  <<: *gcc
+  <<: *linux
+  variables:
+    CC: gcc
+    CXX: g++
 
 build:clang:
   <<: *build-linux
-  <<: *clang
+  <<: *linux
+  variables:
+    CC: clang
+    CXX: clang++
 
 build:msvc:
   <<: *build-windows
