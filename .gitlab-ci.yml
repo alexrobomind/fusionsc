@@ -77,8 +77,8 @@ stages:
 .clang: &clang
   <<: *linux
   variables:
-    CC: clang
-    CXX: clang++
+    CC: clang-14
+    CXX: clang++-14
 
 build:gcc:
   <<: *build-linux
