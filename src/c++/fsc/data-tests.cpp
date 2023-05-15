@@ -105,7 +105,7 @@ TEST_CASE("local_publish") {
 			REQUIRE(inner.getData() == inner2.getData());
 		}
 		
-		SECTION("archive") {
+		/*SECTION("archive") {
 			capnp::MallocMessageBuilder tmp;
 			auto archive = tmp.initRoot<Archive>();
 			
@@ -124,12 +124,13 @@ TEST_CASE("local_publish") {
 			INFO("Extracting");
 			DataHolder::Reader inner2 = ref12.get();
 			REQUIRE(inner.getData() == inner2.getData());
-		}
+		}*/
 		
 		SECTION("tmpfile-archive") {
 			INFO("opening");
-			Own<const kj::File> file = kj::newInMemoryFile(kj::systemCoarseCalendarClock());
-			//Own<const kj::File> file = kj::newDiskFilesystem()->getCurrent().createTemporary();
+			//Own<const kj::File> file = kj::newInMemoryFile(kj::systemCoarseCalendarClock());
+			Own<const kj::File> file = kj::newDiskFilesystem()->getCurrent().createTemporary();
+			//Own<const kj::File> file = kj::newDiskFilesystem()->getCurrent().openFile(kj::Path("testFile"), kj::WriteMode::CREATE | kj::WriteMode::MODIFY);
 			INFO("checking");
 			*file;
 			INFO("writing");

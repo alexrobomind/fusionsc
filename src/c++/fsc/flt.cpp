@@ -24,89 +24,82 @@ void validateField(ToroidalGrid::Reader grid, Float64Tensor::Reader data) {
 	KJ_REQUIRE(data.getData().size() == shape[0] * shape[1] * shape[2] * shape[3]);	
 }
 
-template<typename Device>
 struct TraceCalculation {
 	constexpr static size_t STEPS_PER_ROUND = 1000;
 	constexpr static size_t EVENTBUF_SIZE = 2500;
-	
-	template<typename T>
-	using MappedMessage = MapToDevice<CupnpMessage<T>, Device>;
+	constexpr static size_t EVENTBUF_SIZE_NOGEO = 100;
 		
 	struct Round {
-		Temporary<FLTKernelData> kernelData;
-		Temporary<FLTKernelRequest> kernelRequest;
+		DeviceMappingType<CuTypedMessageBuilder<
+			FLTKernelData, cu::FLTKernelData
+		>> kernelData;
+		
+		DeviceMappingType<CuTypedMessageBuilder<
+			FLTKernelRequest, cu::FLTKernelRequest
+		>> kernelRequest;
 		
 		kj::Vector<size_t> participants;
 		
 		size_t upperBound;
 	};
 	
-	Device& device;
+	Own<DeviceBase> device;
 	Tensor<double, 2> positions;
 	
-	Own<TensorMap<const Tensor<double, 4>>> field;
-	MapToDevice<TensorMap<const Tensor<double, 4>>, Device> deviceField;
+	DeviceMappingType<Own<TensorMap<const Tensor<double, 4>>>> field;
 	
 	Temporary<FLTKernelRequest> request;
 	kj::Vector<Round> rounds;
 	
 	uint32_t ROUND_STEP_LIMIT = 1000000;
-	
-	Temporary<IndexedGeometry> geometryIndex;
-	Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData;
-	Maybe<LocalDataRef<MergedGeometry>> geometryData;
-	
-	Own<MappedMessage<const cu::IndexedGeometry>> mappedIndex;
-	Own<MappedMessage<const cu::IndexedGeometry::IndexData>> mappedIndexData;
-	Own<MappedMessage<const cu::MergedGeometry>> mappedGeometryData;
 		
-	const Operation& rootOp;
+	DeviceMappingType<CuTypedMessageBuilder<
+		IndexedGeometry, cu::IndexedGeometry
+	>> indexedGeometry;
 	
-	TraceCalculation(Device& device,
+	DeviceMappingType<CuTypedMessageReader<
+		IndexedGeometry::IndexData, cu::IndexedGeometry::IndexData
+	>> indexData;
+	
+	DeviceMappingType<CuTypedMessageReader<
+		MergedGeometry, cu::MergedGeometry
+	>> geometryData;
+	
+	DeviceMappingType<CuTypedMessageReader<
+		FieldlineMapping, cu::FieldlineMapping
+	>> mappingData;
+		
+	TraceCalculation(DeviceBase& device,
 		Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<const Tensor<double, 4>>> newField, Tensor<double, 2> positions,
 		IndexedGeometry::Reader geometryIndex, Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData, Maybe<LocalDataRef<MergedGeometry>> geometryData,
-		const Operation& rootOp
+		Maybe<LocalDataRef<FieldlineMapping>> mappingData
 	) :
-		device(device),
+		device(device.addRef()),
 		positions(mv(positions)),
 		
-		field(mv(newField)),
-		deviceField(mapToDevice(*field, device)),
+		field(mapToDevice(mv(newField), device, true)),
 		
 		request(mv(newRequest)),
 		
-		geometryIndex(geometryIndex),
-		indexData(indexData),
-		geometryData(geometryData),
-		
-		rootOp(rootOp)
-	{
-	
-		CupnpMessage<const cu::IndexedGeometry> geometryIndexMsg(this->geometryIndex);
-		CupnpMessage<const cu::IndexedGeometry::IndexData> indexDataMsg(nullptr);
-		CupnpMessage<const cu::MergedGeometry> geometryDataMsg(nullptr);
-		
-		// Extract message segments for geometry and index data
-		KJ_IF_MAYBE(pIndexData, indexData) {
-			indexDataMsg = CupnpMessage<const cu::IndexedGeometry::IndexData>(*pIndexData);
-		}
-		
-		KJ_IF_MAYBE(pGeometryData, geometryData) {
-			geometryDataMsg = CupnpMessage<const cu::MergedGeometry>(*pGeometryData);
-		}
-		
-		// Perform the actual device mapping for these messages
-		mappedIndex = kj::heap<MappedMessage<const cu::IndexedGeometry>>(geometryIndexMsg, device);
-		mappedIndexData = kj::heap<MappedMessage<const cu::IndexedGeometry::IndexData>>(indexDataMsg, device);
-		mappedGeometryData = kj::heap<MappedMessage<const cu::MergedGeometry>>(geometryDataMsg, device);
-		
-		mappedIndex -> updateDevice();
-		mappedIndexData -> updateDevice();
-		mappedGeometryData -> updateDevice();
-		deviceField.updateDevice();
-		
-		hostMemSynchronize(device, rootOp);
-		
+		indexedGeometry(mapToDevice(
+			cuBuilder<IndexedGeometry, cu::IndexedGeometry>(
+				Temporary<IndexedGeometry>(geometryIndex)
+			),
+			device, true
+		)),
+		indexData(mapToDevice(
+			cuReader<IndexedGeometry::IndexData, cu::IndexedGeometry::IndexData>(indexData),
+			device, true
+		)),
+		geometryData(mapToDevice(
+			cuReader<MergedGeometry, cu::MergedGeometry>(geometryData),
+			device, true
+		)),
+		mappingData(mapToDevice(
+			cuReader<FieldlineMapping, cu::FieldlineMapping>(mappingData),
+			device, true
+		))
+	{		
 		if(request.getServiceRequest().getRngSeed() == 0) {
 			uint64_t seed;
 			getActiveThread().rng().randomize(kj::ArrayPtr<unsigned char>(reinterpret_cast<unsigned char*>(&seed), sizeof(decltype(seed))));
@@ -119,14 +112,28 @@ struct TraceCalculation {
 	Round& prepareRound(size_t nParticipants) {
 		Round round;
 		
-		auto data = round.kernelData.initData(nParticipants);
+		Temporary<FLTKernelData> kDataIn;
+		
+		auto data = kDataIn.initData(nParticipants);
 		for(size_t i = 0; i < nParticipants; ++i) {
+			
 			data[i].initState();
-			auto events = data[i].initEvents(EVENTBUF_SIZE);
+			auto events = data[i].initEvents(/*request.getServiceRequest().hasGeometry() ? EVENTBUF_SIZE : EVENTBUF_SIZE_NOGEO*/EVENTBUF_SIZE);
 			
 			for(auto event : events)
 				event.initLocation(3);
 		}
+		
+		round.kernelData = mapToDevice(
+			cuBuilder<FLTKernelData, cu::FLTKernelData>(mv(kDataIn)),
+			*device, true
+		);
+		round.kernelRequest = mapToDevice(
+			cuBuilder<FLTKernelRequest, cu::FLTKernelRequest>(
+				Temporary<FLTKernelRequest>(request.asReader())
+			),
+			*device, true
+		);
 		
 		round.participants.reserve(nParticipants);
 		
@@ -145,7 +152,7 @@ struct TraceCalculation {
 		
 		std::mt19937_64 seedGenerator(request.getServiceRequest().getRngSeed());
 		
-		auto data = round.kernelData.getData();
+		auto data = round.kernelData -> getHost().getData();
 		for(size_t i = 0; i < nParticipants; ++i) {
 			auto state = data[i].initState();
 			
@@ -154,14 +161,21 @@ struct TraceCalculation {
 				pos.set(iDim, positions(iDim, i));
 			
 			state.setPhi0(std::atan2(pos[1], pos[0]));
+			state.setForward(request.getServiceRequest().getForward());
 			
 			fsc::MT19937::seed((uint32_t) seedGenerator(), state.getRngState());
 		}
 		
-		round.kernelRequest = request.asReader();
-		round.kernelRequest.getServiceRequest().setStepLimit(
+		round.kernelRequest -> getHost().getServiceRequest().setStepLimit(
 			request.getServiceRequest().getStepLimit() != 0 ? std::min(request.getServiceRequest().getStepLimit(), ROUND_STEP_LIMIT) : ROUND_STEP_LIMIT
 		);
+		
+		// Initialize device memory
+		indexedGeometry -> updateDevice();
+		indexData -> updateDevice();
+		geometryData -> updateDevice();
+		mappingData -> updateDevice();
+		field -> updateDevice();
 		
 		return round;
 	}
@@ -174,7 +188,7 @@ struct TraceCalculation {
 		
 		// Count unfinished participants
 		kj::Vector<size_t> unfinished;
-		auto kDataIn = prevRound -> kernelData.getData();
+		auto kDataIn = prevRound -> kernelData -> getHost().getData();
 		
 		KJ_REQUIRE(kDataIn.size() == prevRound -> participants.size());
 		
@@ -191,7 +205,7 @@ struct TraceCalculation {
 		Round& newRound = prepareRound(unfinished.size());
 		prevRound = &(rounds[rounds.size() - 2]);
 		
-		auto kDataOut = newRound.kernelData.getData();
+		auto kDataOut = newRound.kernelData -> getHost().getData();
 		for(size_t i = 0; i < unfinished.size(); ++i) {
 			// KJ_DBG(i, unfinished[i], prevRound -> participants.size());
 			
@@ -207,16 +221,15 @@ struct TraceCalculation {
 			// KJ_DBG(entryOut.getState());
 		}
 		
-		newRound.kernelRequest = request.asReader();
 		if(request.getServiceRequest().getStepLimit() != 0) {
-			newRound.kernelRequest.getServiceRequest().setStepLimit(
+			newRound.kernelRequest -> getHost().getServiceRequest().setStepLimit(
 				std::min(request.getServiceRequest().getStepLimit(), maxSteps + ROUND_STEP_LIMIT)
 			);
 		} else {
-			newRound.kernelRequest.getServiceRequest().setStepLimit(maxSteps + ROUND_STEP_LIMIT);
+			newRound.kernelRequest -> getHost().getServiceRequest().setStepLimit(maxSteps + ROUND_STEP_LIMIT);
 		}
 		
-		KJ_DBG("Relaunching", newRound.kernelRequest.asReader());
+		KJ_DBG("Relaunching", maxSteps, ROUND_STEP_LIMIT);
 		
 		return newRound;
 	}
@@ -230,18 +243,17 @@ struct TraceCalculation {
 		
 	
 	Promise<void> startRound(Round& r) {
-		CupnpMessage<cu::FLTKernelData> kernelData(r.kernelData);
-		CupnpMessage<cu::FLTKernelRequest> kernelRequest(r.kernelRequest);
+		r.kernelData -> updateStructureOnDevice();
+		r.kernelRequest -> updateStructureOnDevice();
 		
-		auto calcOp = FSC_LAUNCH_KERNEL(
-			fltKernel, device,
-			r.kernelData.getData().size(),
+		return FSC_LAUNCH_KERNEL(
+			fltKernel, *device,
+			r.kernelData -> getHost().getData().size(),
 			
-			kernelData, FSC_KARG(deviceField, NOCOPY), kernelRequest,
-			FSC_KARG(*mappedGeometryData, NOCOPY), FSC_KARG(*mappedIndex, NOCOPY), FSC_KARG(*mappedIndexData, NOCOPY)
+			r.kernelData, FSC_KARG(field, NOCOPY), r.kernelRequest,
+			FSC_KARG(geometryData, NOCOPY), FSC_KARG(indexedGeometry, NOCOPY), FSC_KARG(indexData, NOCOPY),
+			FSC_KARG(mappingData, NOCOPY)
 		);
-		calcOp -> attachDestroyAnywhere(rootOp.addRef());
-		return calcOp -> whenDone();
 	}
 	
 	bool isFinished(FLTKernelData::Entry::Reader entry) {
@@ -261,7 +273,7 @@ struct TraceCalculation {
 	}
 	
 	bool isFinished(Round& r) {
-		for(auto kDatum : r.kernelData.getData()) {
+		for(auto kDatum : r.kernelData -> getHost().getData()) {
 			if(!isFinished(kDatum))
 				return false;
 		}
@@ -306,7 +318,7 @@ struct TraceCalculation {
 		size_t nEvents = 0;
 		for(size_t i = 0; i < nRounds; ++i) {
 			KJ_IF_MAYBE(pIdx, participantIndices[i]) {
-				auto kData = rounds[i].kernelData.getData()[*pIdx];
+				auto kData = rounds[i].kernelData -> getHost().getData()[*pIdx];
 				size_t eventCount = kData.getState().getEventCount();
 				
 				nEvents += eventCount;
@@ -319,7 +331,7 @@ struct TraceCalculation {
 		size_t iEvent = 0;
 		for(size_t i = 0; i < nRounds; ++i) {
 			KJ_IF_MAYBE(pIdx, participantIndices[i]) {
-				auto kData = rounds[i].kernelData.getData()[*pIdx];
+				auto kData = rounds[i].kernelData -> getHost().getData()[*pIdx];
 				size_t eventCount = kData.getState().getEventCount();
 				
 				auto eventsIn = kData.getEvents();
@@ -340,14 +352,13 @@ struct TraceCalculation {
 	}
 };
 
-template<typename Device>
 struct FLTImpl : public FLT::Server {
-	Own<Device> device;
+	Own<DeviceBase> device;
 	
-	FLTImpl(Own<Device> device) : device(mv(device)) {}
+	FLTImpl(Own<DeviceBase> device) : device(mv(device)) {}
 	
 	Promise<void> trace(TraceContext ctx) override {
-		ctx.allowCancellation();
+		// ctx.allowCancellation();
 		auto request = ctx.getParams();
 		
 		// Request validation
@@ -371,19 +382,22 @@ struct FLTImpl : public FLT::Server {
 		
 		auto indexDataRef = request.getGeometry().getData();
 		auto geoDataRef = request.getGeometry().getBase();
+		auto mappingDataRef = request.getMapping();
 			
 		KJ_DBG("Initiating download processes");
 		
 		Promise<LocalDataRef<Float64Tensor>> downloadField = dataService.download(request.getField().getData()).eagerlyEvaluate(nullptr);
 		Promise<Maybe<LocalDataRef<IndexedGeometry::IndexData>>> downloadIndexData = dataService.downloadIfNotNull(indexDataRef);
 		Promise<Maybe<LocalDataRef<MergedGeometry>>> downloadGeometryData =	dataService.downloadIfNotNull(geoDataRef).eagerlyEvaluate(nullptr);
+		Promise<Maybe<LocalDataRef<FieldlineMapping>>> downloadMappingData = dataService.downloadIfNotNull(mappingDataRef).eagerlyEvaluate(nullptr);
 		KJ_DBG("Waiting download processes");
 		
 		// I WANT COROUTINES -.-
 		
-		return downloadIndexData.then([ctx, request, downloadGeometryData = mv(downloadGeometryData), downloadField = mv(downloadField), this](Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData) mutable {
-		return downloadGeometryData.then([ctx, request, indexData = mv(indexData), downloadField = mv(downloadField), this](Maybe<LocalDataRef<MergedGeometry>> geometryData) mutable {
-		return downloadField.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), this](LocalDataRef<Float64Tensor> fieldData) mutable {
+		return downloadIndexData.then([ctx, request, downloadGeometryData = mv(downloadGeometryData), downloadField = mv(downloadField), downloadMappingData = mv(downloadMappingData), this](Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData) mutable {
+		return downloadGeometryData.then([ctx, request, indexData = mv(indexData), downloadField = mv(downloadField), downloadMappingData = mv(downloadMappingData), this](Maybe<LocalDataRef<MergedGeometry>> geometryData) mutable {
+		return downloadField.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), downloadMappingData = mv(downloadMappingData), this](LocalDataRef<Float64Tensor> fieldData) mutable {
+		return downloadMappingData.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), fieldData = mv(fieldData), this](Maybe<LocalDataRef<FieldlineMapping>> mappingData) mutable {
 			
 			KJ_DBG("All required data downloaded");
 			
@@ -423,19 +437,16 @@ struct FLTImpl : public FLT::Server {
 			Tensor<double, 2> positions = mapTensor<Tensor<double, 2>>(reshapedStartPoints.asReader())
 				-> shuffle(Eigen::array<int, 2>{1, 0});
 			
-			auto rootOp = newOperation();
+			// KJ_UNIMPLEMENTED("Load mapping data");
 			
-			auto calc = heapHeld<TraceCalculation<Device>>(
+			auto calc = heapHeld<TraceCalculation>(
 				*device, mv(kernelRequest), mv(field), mv(positions),
 				request.getGeometry(), mv(indexData), geometryData,
-				
-				*rootOp
+				mappingData
 			);
 			
-			rootOp -> attachDestroyHere(thisCap(), cp(fieldData), calc.x());
-			
 			return calc->run()
-			.then([ctx, calc, request, startPointShape, nStartPoints, geometryData = mv(geometryData), rootOp = mv(rootOp)]() mutable {
+			.then([ctx, calc, request, startPointShape, nStartPoints, geometryData = mv(geometryData)]() mutable {
 				int64_t nTurns = 0;
 				
 				auto resultBuilder = kj::heapArrayBuilder<Temporary<FLTKernelData::Entry>>(nStartPoints);
@@ -497,6 +508,8 @@ struct FLTImpl : public FLT::Server {
 				auto stopReasonData = results.getStopReasons().initData(nStartPoints);
 				auto endTagData = results.getEndTags().getData();
 				
+				size_t nRecorded = 0;
+				
 				for(int64_t iStartPoint = 0; iStartPoint < nStartPoints; ++iStartPoint) {
 					auto entry = kData[iStartPoint].asReader();
 					auto state = entry.getState();
@@ -540,6 +553,8 @@ struct FLTImpl : public FLT::Server {
 						}
 					}
 					
+					size_t recordedForThis = 0;
+					
 					for(auto iEvt : kj::indices(events)) {
 						auto evt = events[iEvt];
 						
@@ -559,8 +574,12 @@ struct FLTImpl : public FLT::Server {
 							}
 							pcCuts(iTurn, iStartPoint, ppi.getPlaneNo(), 3) = forwardLCs[iEvt];
 							pcCuts(iTurn, iStartPoint, ppi.getPlaneNo(), 4) = backwardLCs[iEvt];
+						} else if(evt.isRecord()) {
+							++recordedForThis;
 						}
 					}
+					
+					nRecorded = kj::max(nRecorded, recordedForThis);
 					
 					auto stopLoc = state.getPosition();
 					for(int i = 0; i < 3; ++i) {
@@ -597,37 +616,260 @@ struct FLTImpl : public FLT::Server {
 				writeTensor(pcCuts, results.getPoincareHits());
 				writeTensor(endPoints, results.getEndPoints());
 				
+				if(nRecorded > 0) {
+					Tensor<double, 3> fieldLines(nRecorded, nStartPoints, 3);
+					fieldLines.setConstant(std::nan(""));
+					
+					Tensor<double, 2> fieldStrengths(nRecorded, nStartPoints);
+					fieldStrengths.setConstant(std::nan(""));
+					
+					for(auto iStartPoint : kj::range(0, nStartPoints)) {
+						auto entry = kData[iStartPoint].asReader();
+						auto events = entry.getEvents();
+						
+						int64_t iRecord = 0;
+						for(auto evt : events) {
+							// Process only "record" events
+							if(!evt.isRecord())
+								continue;
+							
+							auto loc = evt.getLocation();
+							for(int32_t iDim = 0; iDim < 3; ++iDim)
+								fieldLines(iRecord, iStartPoint, iDim) = loc[iDim];
+							
+							fieldStrengths(iRecord, iStartPoint) = evt.getRecord().getFieldStrength();
+							
+							++iRecord;
+						}
+					}
+					
+					writeTensor(fieldLines, results.getFieldLines());
+					writeTensor(fieldStrengths, results.getFieldStrengths());
+				}
+				
 				auto pcHitsShape = results.getPoincareHits().initShape(startPointShape.size() + 2);
 				pcHitsShape.set(0, 5);
 				pcHitsShape.set(1, nSurfs);
 				for(int i = 0; i < startPointShape.size() - 1; ++i)
 					pcHitsShape.set(i + 2, startPointShape[i + 1]);
 				pcHitsShape.set(startPointShape.size() + 1, nTurns);
+				
+				auto fieldLinesShape = results.getFieldLines().initShape(startPointShape.size() + 1);
+				for(auto i : kj::indices(startPointShape))
+					fieldLinesShape.set(i, startPointShape[i]);
+				fieldLinesShape.set(startPointShape.size(), nRecorded);
+				
+				auto fieldStrengthsShape = results.getFieldStrengths().initShape(startPointShape.size());
+				for(auto i : kj::range(0, startPointShape.size() - 1)) {
+					fieldStrengthsShape.set(i, startPointShape[i + 1]);
+				}
+				fieldStrengthsShape.set(startPointShape.size() - 1, nRecorded);
 
 				results.getEndPoints().setShape(startPointShape);
 				results.getEndPoints().getShape().set(0, 4);
-			}).attach(mv(rootOp));
+			}).attach(calc.x());
+		});
 		});
 		});
 		}).attach(thisCap());
 	}
+	
+	Promise<void> findAxis(FindAxisContext ctx) override {
+		struct IterResult {
+			double r;
+			double z;
+		};
+		
+		auto params = ctx.getParams();
+		auto xyz = params.getStartPoint();
+		
+		KJ_REQUIRE(xyz.size() == 3);
+		
+		double phi = atan2(xyz[1], xyz[0]);
+		
+		auto performIteration = [this, params, phi](IterResult iter) mutable {
+			double r = iter.r;
+			double z = iter.z;
+			
+			// Trace from starting position
+			auto req = thisCap().traceRequest();
+			auto sp = req.initStartPoints();
+			
+			sp.setShape({3});
+			sp.setData({r * cos(phi), r * sin(phi), z});
+			req.setTurnLimit(params.getNTurns());
+			req.setStepSize(params.getStepSize());
+			req.setField(params.getField());
+			
+			size_t nSym = params.getField().getGrid().getNSym();
+			auto planes = req.initPlanes(nSym);
+			for(auto i : kj::indices(planes)) {
+				planes[i].getOrientation().setPhi(phi + i * 2 * pi / nSym);
+			}
+			
+			return req.send()
+			.then([phi, nSym](capnp::Response<FLTResponse> response) mutable {
+				// After tracing, take mean of points
+				Tensor<double, 3> result;
+				readTensor(response.getPoincareHits(), result);
+				KJ_REQUIRE(result.dimension(1) == nSym);
+				KJ_REQUIRE(result.dimension(2) == 5);
+				
+				Tensor<double, 0> rMean = (result.chip(0, 2).square() + result.chip(1, 2).square()).sqrt().mean();
+				Tensor<double, 0> zMean = result.chip(2, 2).mean();
+				
+				return IterResult { rMean(), zMean() };
+			});
+		};
+		
+		auto traceAxis = [this, ctx, params, phi](IterResult iter) mutable {
+			double r = iter.r;
+			double z = iter.z;
+			
+			auto req = thisCap().traceRequest();
+			auto sp = req.initStartPoints();
+			sp.setShape({3});
+			sp.setData({r * cos(phi), r * sin(phi), z});
+			
+			// Copy position into output
+			ctx.getResults().setPos(sp.getData());
+			
+			req.setTurnLimit(1);
+			req.setStepSize(params.getStepSize());
+			req.setField(params.getField());
+			
+			req.setRecordEvery(1);
+			auto nPhi = params.getNPhi();
+			auto planes = req.initPlanes(nPhi);
+			for(auto i : kj::indices(planes))
+				planes[i].getOrientation().setPhi(2 * i * pi / nPhi);
+			
+			return req.send()
+			.then([ctx, nPhi](capnp::Response<FLTResponse> response) mutable {
+				// Extract field line
+				Tensor<double, 3> result;
+				readTensor(response.getPoincareHits(), result);
+				KJ_REQUIRE(result.dimension(0) == 1);    // nTurns
+				KJ_REQUIRE(result.dimension(1) == nPhi); // nPlanes
+				KJ_REQUIRE(result.dimension(2) == 5);    // x, y, z, lc_fwd, lc_bwd
+				
+				Tensor<double, 2> subRegion = result.chip(0, 0).slice(Eigen::array<int64_t, 2> {0, 0}, Eigen::array<int64_t, 2> {(int) nPhi, 3});
+				writeTensor(subRegion, ctx.getResults().getAxis());
+				
+				// Compute mean field along axis
+				double accum = 0;
+				for(double fs : response.getFieldStrengths().getData()) {
+					accum += fs;
+				}
+				ctx.getResults().setMeanField(accum / response.getFieldStrengths().getData().size());
+			});
+		};
+		
+		double r = sqrt(xyz[0] * xyz[0] + xyz[1] * xyz[1]);
+		double z = xyz[2];
+		
+		Promise<IterResult> nIterResult = IterResult { r, z };
+		
+		for(auto iteration : kj::range(0, params.getNIterations())) {
+			nIterResult = nIterResult.then(cp(performIteration));
+		}
+		
+		return nIterResult.then(mv(traceAxis));
+	}
+	
+	Promise<void> findLcfs(FindLcfsContext ctx) override {
+		auto params = ctx.getParams();
+		
+		struct Process {
+			FindLcfsContext ctx;
+			FLT::Client flt;
+			
+			Vec3d x1;
+			Vec3d x2;
+			
+			Process(FindLcfsContext ctx, FLT::Client _flt) :
+				ctx(ctx), flt(mv(_flt))
+			{
+				auto params = ctx.getParams();
+				
+				auto p1 = params.getP1();
+				auto p2 = params.getP2();
+				
+				KJ_REQUIRE(p1.size() == 3);
+				KJ_REQUIRE(p2.size() == 3);
+				
+				x1 = Vec3d(p1[0], p1[1], p1[2]);
+				x2 = Vec3d(p2[0], p2[1], p2[2]);
+			}
+			
+			Promise<void> run() {
+				auto params = ctx.getParams();
+				
+				double dist = (x2 - x1).norm();
+				if(dist <= params.getTolerance()) {
+					auto res = ctx.initResults();
+					auto pos = res.initPos(3);
+					for(unsigned int i = 0; i < 3; ++i)
+						pos.set(i, x2[i]);
+					
+					return READY_NOW;
+				}
+				
+				auto nScan = params.getNScan();
+				KJ_REQUIRE(nScan >= 2);
+				
+				auto request = flt.traceRequest();
+				request.setDistanceLimit(params.getDistanceLimit());
+				request.setStepSize(params.getStepSize());
+				request.setCollisionLimit(1);
+				request.setField(params.getField());
+				request.setGeometry(params.getGeometry());
+				
+				Tensor<double, 2> points(nScan, 3);
+				Vec3d dx = (x2 - x1) / (nScan + 1);
+				for(auto iScan : kj::range(0, nScan)) {
+					Vec3d xNew = x1 + dx * (iScan + 1);
+					for(unsigned int iDim = 0; iDim < 3; ++iDim)
+						points(iScan, iDim) = xNew(iDim);
+				}
+				
+				writeTensor(points, request.getStartPoints());
+				
+				return request.send()
+				.then([this, nScan, dx](auto response) {
+					auto stopReasons = response.getStopReasons().getData();
+					
+					uint32_t firstClosed = nScan;
+					for(auto i : kj::range(0, nScan)) {
+						if(stopReasons[i] == FLTStopReason::DISTANCE_LIMIT) {
+							firstClosed = i;
+							break;
+						}
+					}
+					for(auto sr : stopReasons) {
+						KJ_DBG(sr);
+					}
+					KJ_DBG(firstClosed);
+					
+					x2 = x1 + (firstClosed + 1) * dx;
+					x1 = x1 + firstClosed * dx;
+					
+					return run();
+				});
+			}
+		};
+		
+		auto proc = kj::heap<Process>(ctx, thisCap());
+		auto result = proc -> run();
+		return result.attach(mv(proc));
+	}
 };
-
-template struct TraceCalculation<Eigen::ThreadPoolDevice>;
 	
 }
 
 namespace fsc {	
 	// TODO: Make this accept data service instead	
-	FLT::Client newFLT(Own<Eigen::ThreadPoolDevice> device) {
-		return kj::heap<FLTImpl<Eigen::ThreadPoolDevice>>(mv(device));
+	FLT::Client newFLT(Own<DeviceBase> device) {
+		return kj::heap<FLTImpl>(mv(device));
 	}
-	
-	#ifdef FSC_WITH_CUDA
-	
-	FLT::Client newFLT(Own<Eigen::GpuDevice> device) {
-		return kj::heap<FLTImpl<Eigen::GpuDevice>>(mv(device));
-	}
-	
-	#endif
 }

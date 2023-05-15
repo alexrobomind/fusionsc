@@ -58,7 +58,7 @@ using References = typename internal::References_<T>::Type;
  * \tparam T Type of the root message stored in the data ref.
  *
  * The DataRef template is a special capability recognized all throughout the FSC library.
- * It represents a link to a data storage location (local or remote), associated with abort
+ * It represents a link to a data storage location (local or remote), associated with a
  * unique ID, which can be downloaded to local storage and accessed there. Locally downloaded
  * data are represented by the LocalDataRef class, which subclasses DataRef::Client.
  *
@@ -105,6 +105,9 @@ struct DataService {
 #endif
 
 constexpr capnp::ReaderOptions READ_UNLIMITED { std::numeric_limits<uint64_t>::max(), std::numeric_limits<int>::max() };
+
+//! Checks if the object in question represents a DataRef object
+Promise<bool> isDataRef(capnp::Capability::Client);
 
 //! Publishes and downloads data into LocalDataRef instances.
 /**
@@ -181,7 +184,7 @@ public:
 	 *          DataRef::Client.
 	 */
 	template<typename T = capnp::Data>
-	LocalDataRef<T> publish(typename DataRef<T>::Metadata::Reader metaData, Array<const byte> backingArray, ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable = kj::heapArrayBuilder<Maybe<Own<capnp::Capability::Client>>>(0).finish());
+	LocalDataRef<T> publish(typename DataRefMetadata::Reader metaData, Array<const byte> backingArray, ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable = kj::heapArrayBuilder<Maybe<Own<capnp::Capability::Client>>>(0).finish());
 	
 	//! Publishes Cap'n'proto message
 	/**
@@ -259,20 +262,26 @@ public:
 	template<typename T>
 	LocalDataRef<T> publishArchive(const kj::ReadableFile& in, const capnp::ReaderOptions readerOpts = READ_UNLIMITED);
 	
+	template<typename T>
+	LocalDataRef<T> publishArchive(kj::Array<const byte> in, const capnp::ReaderOptions readerOpts = READ_UNLIMITED);
+	
+	template<typename T>
+	LocalDataRef<T> publishConstant(kj::ArrayPtr<const byte> in);
+	
 	//! Write DataRef to an Archive::Builder
 	/**
 	 * Like writeArchive, but instead of writing to a file, stores the data in memory in the
 	 * provided Archive::Builder.
 	 */
-	template<typename Ref, typename T = References<Ref>>
-	Promise<void> buildArchive(Ref reference, Archive::Builder out, Maybe<Nursery&> nursery = Maybe<Nursery&>()) KJ_WARN_UNUSED_RESULT;
+	//template<typename Ref, typename T = References<Ref>>
+	//Promise<void> buildArchive(Ref reference, Archive::Builder out, Maybe<Nursery&> nursery = Maybe<Nursery&>()) KJ_WARN_UNUSED_RESULT;
 	
 	//! Publish the data in the given Archive::Reader as LocalDataRef
 	/**
 	 * Like publishArchive, but copies the data from the in-memory structure given
 	 */
-	template<typename T>
-	LocalDataRef<T> publishArchive(Archive::Reader in);
+	//template<typename T>
+	//LocalDataRef<T> publishArchive(Archive::Reader in);
 	
 	//! Publish the contents of a file as a data ref via mmap
 	LocalDataRef<capnp::Data> publishFile(const kj::ReadableFile& in, kj::ArrayPtr<const kj::byte> fileHash = nullptr);
@@ -366,9 +375,10 @@ public:
 
 	ArrayPtr<const byte> getID();
 	ArrayPtr<capnp::Capability::Client> getCapTable();
-	uint64_t getTypeID();
+	// uint64_t getTypeID();
+	DataRefMetadata::Format::Reader getFormat();
 	
-	typename DataRef<T>::Metadata::Reader getMetadata();
+	typename DataRefMetadata::Reader getMetadata();
 
 	// Non-const copy constructor
 	LocalDataRef(LocalDataRef<T>& other);
@@ -431,6 +441,11 @@ struct Temporary : public T::Builder {
 		Temporary(builder.asReader())
 	{}
 	
+	Temporary(Own<capnp::MessageBuilder> holder) :
+		T::Builder(holder->getRoot<T>()),
+		holder(mv(holder))
+	{}
+	
 	Temporary(Temporary<T>&&) = default;
 	Temporary<T>& operator=(Temporary<T>&& other) = default;
 	
@@ -449,7 +464,7 @@ struct Temporary : public T::Builder {
 	
 	operator capnp::MessageBuilder&() { return *holder; }
 	
-	Own<capnp::MallocMessageBuilder> holder;
+	Own<capnp::MessageBuilder> holder;
 };
 
 template<typename T>
@@ -501,21 +516,8 @@ bool hasMaximumOrdinal(T in, unsigned int maxOrdinal) {
 Promise<void> removeDatarefs(capnp::AnyPointer::Reader in, capnp::AnyPointer::Builder out);
 Promise<void> removeDatarefs(capnp::AnyStruct::Reader in, capnp::AnyStruct::Builder out);
 
-template<typename Key, typename T, template<typename, typename> typename Map = kj::TreeMap>
-struct Cache {
-	struct Holder;
-	struct Ref;
-	
-	struct InsertResult {
-		T& element;
-		Ref ref;
-	};
-	
-	InsertResult insert(Key key, T t);
-	Maybe<T&> find(Key key);
-	
-	Map<Key, Own<Holder>> map;
-};
+template<typename F>
+kj::PromiseForResult<F, void> withBackoff(kj::Duration min, kj::Duration max, uint64_t growth, F func);
 
 //! Creates ID from canonical representation of reader
 template<typename T>
@@ -534,7 +536,6 @@ Promise<ID> ID::fromReaderWithRefs(T t) {
 		return ID::fromReader(tmp.asReader());
 	});
 }
-
 
 }
 

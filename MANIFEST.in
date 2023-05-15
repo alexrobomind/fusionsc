@@ -1,0 +1,4 @@
+exclude src/service/devices/w7x-resources/components.json
+exclude src/service/devices/w7x-resources/compile-index.py
+exclude util/*
+exclude examples/*

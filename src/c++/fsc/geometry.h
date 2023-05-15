@@ -12,9 +12,11 @@
 
 
 namespace fsc {
+
+bool isBuiltin(Geometry::Reader);
 	
 struct GeometryResolverBase : public GeometryResolver::Server {
-	virtual Promise<void> resolveGeometry(ResolveGeometryContext context) override;
+	Promise<void> resolveGeometry(ResolveGeometryContext context) override;
 	
 	virtual Promise<void> processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context);
 	        Promise<void> processTransform(Transformed<Geometry>::Reader input, Transformed<Geometry>::Builder output, ResolveGeometryContext context);

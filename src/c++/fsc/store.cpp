@@ -7,6 +7,7 @@
 #include <exception>
 
 #include "store.h"
+#include "local.h"
 
 namespace {
 	kj::StringPtr STEWARD_STOPPED = "DataStore steward stopped"_kj;
@@ -37,90 +38,18 @@ LocalDataStore::Entry::Entry(
 	value(kj::mv(data))
 {}
 
-// === class LocalDataStore::Steward ===
-
-LocalDataStore::Steward::Steward(kj::MutexGuarded<LocalDataStore>& target) :
-	_store(target),
-	_gcRequest(kj::newPromiseAndFulfiller<void>()),
-	running(true),
-	_thread([this](){ _run(); })
-{}
-
-LocalDataStore::Steward::~Steward() {
-	stop();
-}
-
-void LocalDataStore::Steward::stop() {
-	auto locked = running.lockExclusive();
-	
-	if(*locked) {
-		getExecutor().executeSync([this](){
-			_canceler.cancel(STEWARD_STOPPED);
-		});
-		*locked = false;
-	}
-}
-
-const kj::Executor& LocalDataStore::Steward::getExecutor() {
-	auto locked = _executor.lockExclusive();
-	locked.wait([](const Own<const kj::Executor>& exec) { return exec != nullptr; });
-	return **locked;
-}
-
-void LocalDataStore::Steward::syncGC() {	
-	// Perform garbage collection
-	//std::list<Array<const byte>> orphans;
-	
+Promise<void> LocalDataStore::gcLoop(const kj::MutexGuarded<LocalDataStore>& store) {
 	{
-		auto lStore = _store.lockExclusive();
-		
-		/*for(auto pRow = lStore->table.begin(); pRow != lStore->table.end(); ++pRow) {
-			if((*pRow) -> isShared())
-				continue;
-			
-			orphans.push_back(mv((*pRow) -> value));
-		}*/
+		auto lStore = store.lockExclusive();
 		
 		auto predicate = [](Row& r) { return !r -> isShared(); };
 		lStore->table.eraseAll(predicate);
 	}
-}
-
-void LocalDataStore::Steward::asyncGC() {
-	getExecutor().executeSync([this](){
-		_gcRequest.fulfiller -> fulfill();
+	
+	return getActiveThread().timer().afterDelay(1 * kj::SECONDS)
+	.then([&store]() {
+		return gcLoop(store);
 	});
-}
-
-void LocalDataStore::Steward::_run() {	
-	// Set up the event loop
-	kj::AsyncIoContext aioCtx = kj::setupAsyncIo();
-	
-	// Store executor and gc request promise
-	_gcRequest = kj::newPromiseAndFulfiller<void>();
-	
-	{
-		auto locked = _executor.lockExclusive();
-		*locked = kj::getCurrentThreadExecutor().addRef();
-	}
-	
-	kj::Function<Promise<void>()> loop = [this, &aioCtx, &loop]() {
-		syncGC();
-		
-		// Schedule next GC
-		_gcRequest = kj::newPromiseAndFulfiller<void>();
-		
-		return _gcRequest.promise
-		.exclusiveJoin(aioCtx.provider -> getTimer().afterDelay(1 * kj::SECONDS))
-		.then(loop);
-	};
-	
-	try {
-		_canceler.wrap(kj::evalLater(loop)).wait(aioCtx.waitScope);
-	} catch(kj::Exception& e) {
-		if(e.getDescription() != STEWARD_STOPPED)
-			throw e;
-	}
 }
 
 // === class DataStoreMessageReader ===

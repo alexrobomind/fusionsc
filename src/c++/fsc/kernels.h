@@ -6,8 +6,8 @@
 	#include <omp.h>
 #endif
 
-#include "eigen.h"
-#include "operation.h"
+#include "device.h"
+#include "local.h"
 	
 #ifdef FSC_WITH_CUDA
 	#ifdef EIGEN_GPUCC
@@ -64,161 +64,22 @@ namespace fsc {
 		 *  The kernel will run asynchronously. It is guaranteed that it will not start before this function has returned.
 		 */
 		template<typename Kernel, Kernel f, typename... Params>
-		static Own<const Operation> launch(Device& device, size_t n, Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
+		static Promise<void> launch(Device& device, size_t n, Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
 			static_assert(sizeof(Device) == 0, "Kernel launcher not implemented / enabled for this device.");
-			return newOperation();
+			return READY_NOW;
 		}
 	};
 	
-	//! Synchronizes device-to-host copies
-	/**
-	 * \ingroup kernelAPI
-	 * \param device Device to synchronize memcopy on.
-	 * \returns a promise whose resolution indicates that the outputs
-	 * of all previously scheduled kernels have been copied back
-	 * to the host
-	 */
-	template<typename Device>
-	Promise<void> hostMemSynchronize(Device& device, const Operation& op) {
-		static_assert(sizeof(Device) == 0, "Memcpy synchronization not implemented for this device.");
-		return NEVER_DONE;
-	}
+	template<>
+	struct KernelLauncher<DeviceBase>;
 	
-	//! Synchronizes device-to-host copies
-	/**
-	 * \ingroup kernelAPI
-	 * \param device Device to synchronize memcopy on.
-	 */
-	/*template<typename Device>
-	void hostMemSynchronizeBlocking(Device& device) {
-		static_assert(sizeof(Device) == 0, "Memcpy synchronization not implemented for this device.");
-	}*/
-
-	//! \addtogroup kernelSupport
-	//! @{
-		
-	//! Class for allocating an array on a device and manage a host and device pointer simultaneously
-	template<typename T, typename Device>
-	struct MappedData {
-		using NonConst = kj::RemoveConst<T>;
-		
-		//! This helps us prevent our program from crashing. See inside ~MappedData
-		kj::UnwindDetector unwindDetector;
-		Device& device;
-		T* hostPtr;
-		NonConst* devicePtr;
-		size_t size;
-		
-		//! Construct a mapping using the given host- and device-pointers
-		/**
-		 * \warning Takes over ownership of the device pointer. The device pointer must
-		 *          be compatible with Device::deallocate().
-		 */
-		MappedData(Device& device, T* hostPtr, NonConst* devicePtr, size_t size);
-		
-		//! Allocate storage on the device to hold data specified by hostPtr (sizeof(T) * size)
-		MappedData(Device& device, T* hostPtr, size_t size);
-		
-		//! Create a mapping with no device storage
-		MappedData(Device& device);
-		
-		//! Take over the storage from another mapping
-		MappedData(MappedData&& other);
-		
-		//! Assign the storage from another mapping
-		MappedData& operator=(MappedData&& other);
-		
-		MappedData(const MappedData& other) = delete;
-		MappedData& operator=(const MappedData& other) = delete;
-		
-		~MappedData();
-		
-		//! Copy data from device array to host array
-		void updateHost();
-		
-		//! Copy data from host array to device array
-		void updateDevice();
-		
-		//! Allocates size * sizeof(T) bytes on the device
-		static NonConst* deviceAlloc(Device& device, size_t size);
-	};
+	template<>
+	struct KernelLauncher<CPUDevice>;
 	
-	//! Helper class template that maps a value to a target device.
-	/** 
-	 *  Specialize this template to override how a specified parameter gets converted
-	 *  into a device-located parameter.
-	 *
-	 *  The default implementation just leaves the transfer up to CUDA / HIP.
-	 */
-	template<typename T, typename Device, typename SFINAE = void>
-	struct MapToDevice {
-		inline MapToDevice(const T in, Device& device) :
-			value(in)
-		{}
-		
-		inline T get() { return value; }
-		
-		inline void updateDevice() {}
-		inline void updateHost() {}
-		
-	private:
-		T value;
-	};
-	
-	/** \brief Returns the type to be passed to the kernel for a given
-	 *         argument passed into launchKernel.
-	 * \ingroup kernelSupport
-	 */
-	template<typename T, typename Device>
-	using DeviceType = decltype(std::declval<MapToDevice<Decay<T>, Device>>().get());
-	
-	//! Method to return a device mapper for a given value
-	/**
-	 * \ingroup kernelAPI
-	 */
-	template<typename Device, typename T>
-	MapToDevice<T, Device> mapToDevice(T& in, Device& device) { return MapToDevice<T, Device>(in, device); }
-	
-	//! Instantiation of MapToDevice that allows reuse of existing mappings.
-	/**
-	 * \ingroup kernelSupport
-	 * \warning This uses a reference to the original mapping, so its lifetime
-	 * is bound by the original mapping. Care must be taken that the original
-	 * mapping object is kept alive until the scheduled kernel finishes execution.
-	 *
-	 */
-	template<typename T, typename Device>
-	struct MapToDevice<MapToDevice<T, Device>, Device> {
-		using Delegate = MapToDevice<T, Device>;
-		
-		//! LValue constructor for variables
-		inline MapToDevice(Delegate& delegate, Device& device) :
-			delegate(delegate)
-		{}
-		
-		//! RValue constructor for temporaries
-		inline MapToDevice(Delegate&& delegate, Device& device) :
-			delegate((Delegate&) delegate)
-		{}
-		
-		inline auto get() { return delegate.get(); }
-		inline void updateDevice() { delegate.updateDevice(); }
-		inline void updateHost() { delegate.updateHost(); }
-		
-	private:
-		Delegate& delegate;
-	};
-	
-	
-	//! Guard check against cross-device mapppings
-	template<typename T, typename Device, typename OtherDevice>
-	struct MapToDevice<MapToDevice<T, Device>, OtherDevice> {
-		static_assert(
-			sizeof(T) == 0, "It is illegal to use data mapped"
-			"to separate devices. We only check the static portion (device types),"
-			"so ensure carefully that the underlying error is fixed"
-		);
-	};
+	#ifdef FSC_WITH_GPU
+	template<>
+	struct KernelLauncher<GPUDevice>;
+	#endif
 	
 	//! Helper type that describes kernel arguments and their in/out semantics.
 	/**
@@ -226,36 +87,48 @@ namespace fsc {
 	 */
 	template<typename T>
 	struct KernelArg {
-		T& ref;
+		T target;
 		
 		bool copyToHost = true;
 		bool copyToDevice = true;
+		bool allowAlias = false;
 		
-		KernelArg(T& in, bool copyToHost, bool copyToDevice) :
-			ref(in), copyToHost(copyToHost), copyToDevice(copyToDevice)
+		KernelArg(T in, bool copyToHost, bool copyToDevice, bool allowAlias) :
+			target(mv(in)), copyToHost(copyToHost), copyToDevice(copyToDevice)
 		{}
 	};
 		
 	//! Specifies copy behavior for arguments around kernel invocation
 	enum class KernelArgType {
-		NOCOPY = 0, //!< Don't copy data between host and device for this invocation
-		IN = 1,     //!< Only copy data to the device before kernel invocation
-		OUT = 2,    //!< Copy data to host after kernel invocation
-		INOUT = 3   //!< Equivalent to IN and OUT
+		NOCOPY = 0,  //!< Don't copy data between host and device for this invocation
+		IN = 1,      //!< Only copy data to the device before kernel invocation
+		OUT = 2,     //!< Copy data to host after kernel invocation
+		INOUT = 3,   //!< Equivalent to IN and OUT
+		ALIAS_IN = 5,
+		ALIAS_OUT = 6,
+		ALIAS_INOUT = 7
 	};
 	
 	//! Allows to override the copy behavior on a specified argument
 	template<typename T>
-	KernelArg<T> kArg(T& in, bool copyToHost, bool copyToDevice) { return KernelArg<T>(in, copyToHost, copyToDevice); }
+	KernelArg<T> kArg(T in, bool copyToHost, bool copyToDevice, bool allowAlias) { return KernelArg<T>(mv(in), copyToHost, copyToDevice, allowAlias); }
 	
 	//! Allows to override the copy behavior on a specified argument
 	template<typename T>
-	KernelArg<T> kArg(T& in, KernelArgType type) {
+	KernelArg<T> kArg(T in, KernelArgType type) {
 		return kArg(
-			in,
+			mv(in),
 			static_cast<int>(type) & static_cast<int>(KernelArgType::OUT),
-			static_cast<int>(type) & static_cast<int>(KernelArgType::IN)
+			static_cast<int>(type) & static_cast<int>(KernelArgType::IN),
+			static_cast<int>(type) & 4
 		);
+	}
+	
+	//! Allows creation of a kernel arg form reference
+	template<typename T>
+	KernelArg<Own<DeviceMapping<T>>> kArg(Own<DeviceMapping<T>>& ref, KernelArgType type) {
+		Own<DeviceMappingBase> newRef = ref->addRef();
+		return kArg<Own<DeviceMapping<T>>>(newRef.downcast<DeviceMapping<T>>(), type);
 	}
 	
 	//! Convenience macro to wrap kernel arguments with the given type
@@ -275,49 +148,49 @@ namespace fsc {
 	 */
 	#define FSC_KARG(val, type) ::fsc::kArg(val, ::fsc::KernelArgType::type)
 	
-	template<typename T, typename Device>
-	struct MapToDevice<KernelArg<T>, Device>;
+	template<typename T>
+	struct DeviceMapping<KernelArg<T>>;
 	
-	namespace internal {			
-		extern thread_local kj::TaskSet kernelDaemon;
-		
+	namespace internal {					
 		/**
 		 * Helper function that actually launches the kernel. Needed to perform index expansion
 		 * over the parameter.
 		 */
 		template<typename Kernel, Kernel f, typename Device, typename... Params, size_t... i>
-		Own<Operation> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {
-			auto result = ownHeld(newOperation());
-			
+		Promise<void> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {		
 			// Create mappers for input
-			auto mappers = heapHeld<std::tuple<MapToDevice<Decay<Params>, Device>...>>(
-				MapToDevice<Decay<Params>, Device>(fwd<Params>(params), device)...
-			);
+			auto mappers = heapHeld<kj::Tuple<DeviceMappingType<Params>...>>(kj::tuple(
+				mapToDevice(fwd<Params>(params), device, true)...
+			));
 						
 			using givemeatype = int[];
 			
-			// Call kernel
-			Promise<void> task = prerequisite.then([mappers, n, cost, &device, result = result->addRef()]() mutable {
-			// Update device memory
+			return prerequisite.then([&device, mappers]() mutable {
+				// Update device memory
 				// Note: This is an extremely convoluted looking way of calling updateDevice on all tuple members
 				// C++ 17 has a neater way to do this, but we don't wanna require it just yet
-				(void) (givemeatype { 0, (std::get<i>(*mappers).updateDevice(), 0)... });
+				(void) (givemeatype { 0, (kj::get<i>(*mappers) -> updateDevice(), 0)... });
 				
-				auto kernelLaunchResult = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params, Device>...>(device, n, cost, std::get<i>(*mappers).get()...);
-				kernelLaunchResult -> attachDestroyAnywhere(mv(result));
-				return kernelLaunchResult -> whenDone();
-			}).then([device, mappers, result = result->addRef()]() mutable {
-				(void) (givemeatype { 0, (std::get<i>(*mappers).updateHost(), 0)... });
+				return device.barrier();
+			})
+			.then([&device, cost, n, mappers]() mutable {
+				// Call kernel
+				Promise<void> promise = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params>...>(device, n, cost, kj::get<i>(*mappers) -> get()...);
+				promise = promise.attach(device.addRef(), kj::get<i>(*mappers) -> addRef()...);
+				return getActiveThread().uncancelable(mv(promise));
+			}).then([&device, mappers]() mutable {
+				// Update host memory
+				(void) (givemeatype { 0, (kj::get<i>(*mappers) -> updateHost(), 0)... });
 				
-				return hostMemSynchronize(device, *result);
-			}).then([result = result->addRef()]() mutable {
-				result->done();
-			});
-			
-			result -> dependsOn(mv(task));			
-			result -> attachDestroyHere(mappers.x());
-			
-			return result.x();
+				return device.barrier();
+			})
+			.attach(mappers.x(), device.addRef());
+		}
+		
+		template<typename Kernel, Kernel f, typename Device, typename... Params, size_t... i>
+		Promise<void> auxKernelLaunch(const Own<Device>& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {		
+			static_assert(sizeof(Device) == 0, "Kernel launch requires Device as argument, not Own<Device>");
+			return READY_NOW;
 		}
 	}
 	
@@ -380,26 +253,26 @@ namespace fsc {
 	 *
 	 */
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Own<Operation> launchKernel(Device& device, const Eigen::TensorOpCost& cost, Promise<void> prerequisite, size_t n, Params&&... params) {
+	Promise<void> launchKernel(Device& device, const Eigen::TensorOpCost& cost, Promise<void> prerequisite, size_t n, Params&&... params) {
 		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, mv(prerequisite), cost, std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
 	}
 	
 	//! Version of launchKernel() without prerequisite
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Own<Operation> launchKernel(Device& device, const Eigen::TensorOpCost& cost, size_t n, Params&&... params) {
+	Promise<void> launchKernel(Device& device, const Eigen::TensorOpCost& cost, size_t n, Params&&... params) {
 		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, READY_NOW, cost, std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
 	}
 	
 	//! Version of launchKernel() without cost
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Own<Operation> launchKernel(Device& device, Promise<void> prerequisite, size_t n, Params&&... params) {
+	Promise<void> launchKernel(Device& device, Promise<void> prerequisite, size_t n, Params&&... params) {
 		Eigen::TensorOpCost expensive(1e16, 1e16, 1e16);
 		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, mv(prerequisite), expensive, std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
 	}
 	
 	//! Version of launchKernel() without prerequisite and cost
 	template<typename Kernel, Kernel f, typename Device, typename... Params>
-	Own<Operation> launchKernel(Device& device, size_t n, Params&&... params) {
+	Promise<void> launchKernel(Device& device, size_t n, Params&&... params) {
 		Eigen::TensorOpCost expensive(1e16, 1e16, 1e16);
 		return internal::auxKernelLaunch<Kernel, f, Device, Params...>(device, n, READY_NOW, expensive, std::make_index_sequence<sizeof...(params)>(), fwd<Params>(params)...);
 	}
@@ -409,70 +282,7 @@ namespace fsc {
 	 * \param f Kernel function
 	 * \param ... Parameters to pass to launchKernel()
 	 */
-	#define FSC_LAUNCH_KERNEL(f, ...) ::fsc::launchKernel<decltype(&f), &f>(__VA_ARGS__)
-	
-	//! Creates a thread pool device
-	Own<Eigen::ThreadPoolDevice> newThreadPoolDevice();
-	
-	//! Creates a thread pool device
-	Own<Eigen::DefaultDevice> newDefaultDevice();
-	
-	#ifdef FSC_WITH_CUDA
-	
-	//! Creates a GPU device
-	Own<Eigen::GpuDevice> newGpuDevice();
-	
-	#endif
-	
-	
-	//! @}
-	
-	//! \addtogroup kernelSupport
-	//! @{
-	
-	// === Specializations of kernel launcher ===
-	
-	template<>
-	struct KernelLauncher<Eigen::DefaultDevice>;
-	
-	template<>
-	struct KernelLauncher<Eigen::ThreadPoolDevice>;
-	
-	#ifdef FSC_WITH_CUDA
-	template<>
-	struct KernelLauncher<Eigen::GpuDevice>;
-	#endif
-	
-	/**
-	 * CPU devices dont need host memory synchronization, as all memcpy() calls are executed in-line on the main thread.
-	 */
-	template<>
-	inline Promise<void> hostMemSynchronize<Eigen::DefaultDevice>(Eigen::DefaultDevice& dev, const Operation& op) { return READY_NOW; }
-	/*template<>
-	inline void hostMemSynchronizeBlocking<Eigen::DefaultDevice>(Eigen::DefaultDevice& dev) {}*/
-	
-	/**
-	 * CPU devices dont need host memory synchronization, as all memcpy() calls are executed in-line on the main thread.
-	 */
-	template<>
-	inline Promise<void> hostMemSynchronize<Eigen::ThreadPoolDevice>(Eigen::ThreadPoolDevice& dev, const Operation& op) { return READY_NOW; }
-	/*template<>
-	inline void hostMemSynchronizeBlocking<Eigen::ThreadPoolDevice>(Eigen::ThreadPoolDevice& dev) {}*/
-	
-	#ifdef FSC_WITH_CUDA
-	
-	void synchronizeGpuDevice(Eigen::GpuDevice& device, const Operation& op);
-	//void synchronizeGpuDeviceBlocking(Eigen::GpuDevice& device);
-	
-	/**
-	 * GPU devices schedule an asynch memcpy onto their stream. We therefore need to wait until the stream has advanced past it.
-	 */
-	template<>
-	inline Promise<void> hostMemSynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& device, const Operation& op) { auto child = op.newChild(); synchronizeGpuDevice(device, *child); return child -> whenDone(); }
-	/*template<>
-	inline void hostMemSynchronizeBlocking<Eigen::GpuDevice>(Eigen::GpuDevice& device) { synchronizeGpuDeviceBlocking(device); }*/
-	
-	#endif
+	#define FSC_LAUNCH_KERNEL(f, ...) ::fsc::launchKernel<decltype(&f), &f>(__VA_ARGS__)	
 	
 	//! @}
 }
@@ -506,6 +316,32 @@ inline void potentiallySynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& d) {
 // Inline Implementation
 
 namespace fsc {
+
+template<typename T>
+struct DeviceMapping<KernelArg<T>> : public DeviceMappingBase {
+	DeviceMappingType<T> target;
+	bool copyToDevice;
+	bool copyToHost;
+
+	DeviceMapping(KernelArg<T>&& arg, DeviceBase& device, bool allowAlias__ignored) :
+		DeviceMappingBase(device),
+		target(mapToDevice(mv(arg.target), device, arg.allowAlias)),
+		copyToDevice(arg.copyToDevice),
+		copyToHost(arg.copyToHost)
+	{}
+	
+	void doUpdateHost() override {
+		if(copyToHost) target -> doUpdateHost();
+	}
+	
+	void doUpdateDevice() override {
+		if(copyToDevice) target -> doUpdateDevice();
+	}
+	
+	auto get() {
+		return target -> get();
+	}
+};
 	
 #ifdef FSC_WITH_CUDA
 #ifdef EIGEN_GPUCC
@@ -535,7 +371,7 @@ namespace internal {
 #endif // FSC_WITH_CUDA
 
 
-template<>
+/*template<>
 struct KernelLauncher<Eigen::DefaultDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
 	static Own<Operation> launch(Eigen::DefaultDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
@@ -550,44 +386,49 @@ struct KernelLauncher<Eigen::DefaultDevice> {
 		
 		return result;
 	}
-};
+};*/
 
 template<>
-struct KernelLauncher<Eigen::ThreadPoolDevice> {
+struct KernelLauncher<CPUDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
-	static Own<Operation> launch(Eigen::ThreadPoolDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
-		auto func = [params...](Eigen::Index start, Eigen::Index end) mutable {
-			for(Eigen::Index i = start; i < end; ++i)
-				f(i, params...);
+	static Promise<void> launch(CPUDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+		auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+		AtomicShared<kj::CrossThreadPromiseFulfiller<void>> fulfiller = mv(paf.fulfiller);
+		
+		struct Context {
+			kj::MutexGuarded<Maybe<kj::Exception>> exception;
 		};
+		AtomicShared<Context> ctx = kj::heap<Context>();
 		
-		auto result = newOperation();
-		
-		struct DoneFunctor {
-			Own<const Operation> op;
+		auto func = [ctx, params...](Eigen::Index start, Eigen::Index end) mutable {
+			auto maybeException = kj::runCatchingExceptions([params..., start, end]() {
+				for(Eigen::Index i = start; i < end; ++i)
+					f(i, params...);
+			});
 			
-			DoneFunctor(Own<const Operation> op) :
-				op(mv(op))
-			{}
-			
-			DoneFunctor(const DoneFunctor& other) :
-				op(other.op->addRef())
-			{}
-			
-			void operator()() {
-				op->done();
+			// If we failed, transfer exception
+			KJ_IF_MAYBE(pErr, maybeException) {
+				auto locked = ctx -> exception.lockExclusive();
+				
+				KJ_IF_MAYBE(pDontCare, *locked) {
+				} else {
+					*locked = *pErr;
+				}
 			}
 		};
 		
-		auto funcPtr = kj::heap<decltype(func)>(mv(func));
-		auto funcCopyable = [ptr = funcPtr.get()](Eigen::Index start, Eigen::Index end) {
-			(*ptr)(start, end);
+		auto whenDone = [fulfiller, ctx]() mutable {
+			auto locked = ctx -> exception.lockExclusive();
+			
+			KJ_IF_MAYBE(pErr, *locked) {
+				fulfiller -> reject(cp(*pErr));
+			} else {
+				fulfiller -> fulfill();
+			}
 		};
-		result->attachDestroyAnywhere(mv(funcPtr));
+		device.eigenDevice -> parallelForAsync(n, cost, func, whenDone);
 		
-		device.parallelForAsync(n, cost, funcCopyable, DoneFunctor(result->addRef()));
-		
-		return result;
+		return mv(paf.promise);
 	}
 };
 
@@ -596,7 +437,7 @@ struct KernelLauncher<Eigen::ThreadPoolDevice> {
 template<>
 struct KernelLauncher<Eigen::GpuDevice> {
 	template<typename Kernel, Kernel func, typename... Params>
-	static Own<Operation> launch(Eigen::GpuDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+	static Promise<void> launch(Eigen::GpuDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
 		internal::gpuLaunch<Kernel, func, Params...>(device, n, params...);
 		
 		auto streamStatus = cudaStreamQuery(device.stream());
@@ -617,106 +458,29 @@ struct KernelLauncher<Eigen::GpuDevice> {
 
 #endif // FSC_WITH_CUDA
 
-// MappedData
-	
-template<typename T, typename Device>
-MappedData<T, Device>::MappedData(Device& device, T* hostPtr, NonConst* devicePtr, size_t size) :
-	device(device),
-	hostPtr(hostPtr),
-	devicePtr(devicePtr),
-	size(size)
-{
-}
-
-template<typename T, typename Device>
-MappedData<T, Device>::MappedData(Device& device, T* hostPtr, size_t size) :
-	device(device),
-	hostPtr(hostPtr),
-	devicePtr(deviceAlloc(device, size)),
-	size(size)
-{
-}
-
-template<typename T, typename Device>
-MappedData<T, Device>::MappedData(Device& device) :
-	device(device),
-	hostPtr(nullptr),
-	devicePtr(nullptr),
-	size(0)
-{
-}
-
-
-template<typename T, typename Device>
-MappedData<T, Device>::MappedData(MappedData&& other) :
-	device(other.device),
-	hostPtr(other.hostPtr),
-	devicePtr(other.devicePtr),
-	size(other.size)
-{
-	other.devicePtr = nullptr;
-}
-
-template<typename T, typename Device>
-MappedData<T, Device>& MappedData<T, Device>::operator=(MappedData&& other)
-{
-	KJ_REQUIRE(&device == &other.device);
-	
-	hostPtr = other.hostPtr;
-	devicePtr = other.devicePtr;
-	size = other.size;
-	
-	other.devicePtr = nullptr;
-	
-	return *this;
-}
-
-template<typename T, typename Device>
-MappedData<T, Device>::~MappedData() {
-	if(devicePtr != nullptr) {
-		unwindDetector.catchExceptionsIfUnwinding([&, this]() {
-			device.deallocate(devicePtr);
-			// hostMemSynchronizeBlocking(device);
-		});
+// Multi-target launcher
+template<>
+struct KernelLauncher<DeviceBase> {
+	template<typename Kernel, Kernel func, typename... Params>
+	static Promise<void> launch(DeviceBase& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+		#define FSC_HANDLE_TYPE(DevType) \
+			if(device.brand == &DevType::BRAND) \
+				return KernelLauncher<DevType>::launch<Kernel, func, Params...>(static_cast<DevType&>(device), n, cost, fwd<Params>(params)...);
+				
+		FSC_HANDLE_TYPE(CPUDevice);
+		
+		#ifdef FSC_WITH_CUDA
+		FSC_HANDLE_TYPE(GpuDevice);
+		#endif
+		
+		#undef FSC_HANDLE_TYPE
+		
+		KJ_FAIL_REQUIRE(
+			"Unknown device brand. To launch kernels from a DeviceBase reference,"
+			" the device must be of one of the following types: fsc::CpuDevice"
+			" or fsc::GpuDevice"
+		);
 	}
-}
-
-template<typename T, typename Device>
-void MappedData<T, Device>::updateHost() {
-	KJ_REQUIRE(!kj::isConst<T>(), "Can not update host on a const type") {
-		return;
-	}
-	device.memcpyDeviceToHost(const_cast<NonConst*>(hostPtr), devicePtr, size * sizeof(T));
-}
-
-template<typename T, typename Device>
-void MappedData<T, Device>::updateDevice() {
-	device.memcpyHostToDevice(devicePtr, hostPtr, size * sizeof(T));
-}
-
-template<typename T, typename Device>
-RemoveConst<T>* MappedData<T, Device>::deviceAlloc(Device& device, size_t size) {
-	return (NonConst*) device.allocate(size * sizeof(T));
-}
-
-// Mapper specializations
-
-template<typename T, typename Device>
-struct MapToDevice<KernelArg<T>, Device> {
-	inline MapToDevice(KernelArg<T>&& in, Device& device) :
-		delegate(in.ref, device),
-		_updateDevice(in.copyToDevice),
-		_updateHost(in.copyToHost)
-	{}
-	
-	inline auto get() { return delegate.get(); }
-	inline void updateDevice() { if(_updateDevice) delegate.updateDevice(); }
-	inline void updateHost()   { if(_updateHost)   delegate.updateHost();   }
-	
-private:
-	MapToDevice<T, Device> delegate;
-	bool _updateDevice;
-	bool _updateHost;
 };
 
 }

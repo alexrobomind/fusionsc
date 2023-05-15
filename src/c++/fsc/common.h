@@ -10,15 +10,28 @@
 #include <kj/tuple.h>
 
 #include <kj/async.h>
+#include <kj/debug.h>
 
 #define FSC_MVCAP(obj) obj = ::kj::mv(obj)
+
+#define FSC_REQUIRE_MAYBE(result, maybe, ...) \
+	auto result = kj::_::readMaybe(maybe); \
+	KJ_REQUIRE(result, __VA_ARGS__);
+
+#define FSC_ASSERT_MAYBE(result, maybe, ...) \
+	auto result = kj::_::readMaybe(maybe); \
+	KJ_ASSERT(result, __VA_ARGS__);
+
+#define FSC_MAYBE_OR_RETURN(result, maybe, returnExpr) \
+	auto result = kj::_::readMaybe(maybe); \
+	if(!result) { return returnExpr; }
 
 namespace kj {
 	template<typename T>
 	class Promise;
 	
-	template<typename T>
-	class Own;
+	/*template<typename T, typename StaticDisposer>
+	class Own;*/
 }
 
 /**
@@ -256,12 +269,12 @@ struct Held {
 	Held(Held&& other) = default;
 	
 	~Held() {
-		if(owningPtr.get() != nullptr) {
-			KJ_LOG(WARNING, "Unwinding across a Held<...>. Application might segfault");
-		}
-		kj::UnwindDetector ud;
-		if(false/*!ud.isUnwinding()*/) {
+		if(!ud.isUnwinding()) {
 			KJ_REQUIRE(owningPtr.get() == nullptr, "Destroyed Held<...> without ownership transfer");
+		} else {
+			if(owningPtr.get() != nullptr) {
+				KJ_LOG(WARNING, "Unwinding across a Held<...>. Application might segfault");
+			}
 		}
 	}
 	
@@ -269,12 +282,18 @@ struct Held {
 	T* operator->() { return &ref; }
 	T* get() { return &ref; }
 	
-	Own<T> release() { return mv(owningPtr); }
-	Own<T> x() { return mv(owningPtr); }
+	template<typename... Params>
+	void attach(Params&&... params) {
+		owningPtr = owningPtr.attach(fwd<Params>(params)...);
+	}
+	
+	Own<T> release() { KJ_REQUIRE(owningPtr.get() == &ref, "Releasing already-released held"); return mv(owningPtr); }
+	Own<T> x() { return release(); }
 	
 private:
 	Own<T> owningPtr;
 	T& ref;
+	kj::UnwindDetector ud;
 };
 
 template<typename T, typename... Params>
@@ -286,6 +305,116 @@ template<typename T>
 Held<T> ownHeld(Own<T>&& src) {
 	return Held<T>(mv(src));
 }
+
+template<typename T>
+struct Shared {
+	using Payload = T;
+	
+	template<typename... Params>
+	Shared(Params&&... t) :
+		impl(kj::refcounted<Impl>(kj::fwd<Params>(t)...))
+	{}
+	
+	Shared(const Shared<T>& other) :
+		impl(other.impl -> addRef())
+	{}
+	
+	Shared(Shared<T>& other) :
+		impl(other.impl -> addRef())
+	{}
+	
+	Shared<T>& operator=(const Shared<T>& other) {
+		impl = other.impl -> addRef();
+	}
+	
+	Shared(Shared<T>&& other) = default;
+	Shared<T>& operator=(Shared<T>&& other) = default;
+	
+	T& get() { return *(impl -> payload); }
+	T& operator*() { return get(); }
+	T* operator->() { return &get(); }
+	
+	template<typename... Params>
+	void attach(Params&&... params) {
+		impl -> payload = impl -> payload.attach(fwd<Params>(params)...);
+	}
+	
+	Own<T> asOwn() { return kj::attachRef(get(), *this); }
+		
+private:
+	struct Impl : kj::Refcounted {
+		Own<Payload> payload;
+		
+		template<typename... Params>
+		Impl(Params&&... t) :
+			payload(kj::heap<Payload>(kj::fwd<Params>(t)...))
+		{}
+		
+		Impl(Own<Payload>&& payload) :
+			payload(mv(payload))
+		{}
+		
+		Own<Impl> addRef() {
+			return kj::addRef(*this);
+		}
+	};
+	
+	mutable Own<Impl> impl;
+};
+
+template<typename T>
+struct AtomicShared {
+	using Payload = T;
+	
+	template<typename... Params>
+	AtomicShared(Params&&... t) :
+		impl(kj::atomicRefcounted<Impl>(kj::fwd<Params>(t)...))
+	{}
+	
+	AtomicShared(const AtomicShared<T>& other) :
+		impl(other.impl -> addRef())
+	{}
+	
+	AtomicShared(AtomicShared<T>& other) :
+		impl(other.impl -> addRef())
+	{}
+	
+	AtomicShared<T>& operator=(const AtomicShared<T>& other) {
+		impl = other.impl -> addRef();
+	}
+	
+	AtomicShared(AtomicShared<T>&& other) = default;
+	AtomicShared<T>& operator=(AtomicShared<T>&& other) = default;
+	
+	T& get() { return *(impl -> payload); }
+	T& operator*() { return get(); }
+	T* operator->() { return &get(); }
+	
+	// no attach() since we assume Impl to be cross-thread and therefore
+	// unsafe to mutate
+	
+	Own<T> asOwn() { return kj::attachRef(get(), *this); }
+	
+private:
+	struct Impl : kj::AtomicRefcounted {
+		mutable Own<Payload> payload;
+		
+		template<typename... Params>
+		Impl(Params&&... t) :
+			payload(kj::heap<Payload>(kj::fwd<Params>(t)...))
+		{}
+		
+		Impl(Own<Payload>&& payload) :
+			payload(mv(payload))
+		{}
+		
+		Own<const Impl> addRef() const {
+			return kj::atomicAddRef(*this);
+		}
+	};
+	
+	mutable Own<const Impl> impl;
+};
 
 // === Inline implementation ===
 

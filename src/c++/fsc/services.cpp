@@ -4,59 +4,54 @@
 #include "geometry.h"
 #include "flt.h"
 #include "hfcam.h"
+#include "index.h"
+#include "fieldline-mapping.h"
+#include "local-vat-network.h"
+#include "ssh.h"
+#include "networking.h"
+
+#include <capnp/rpc-twoparty.h>
+#include <capnp/membrane.h>
 
 #include <kj/list.h>
 
-#include <capnp/rpc-twoparty.h>
+#include <fsc/jobs.capnp.h>
 
 using namespace fsc;
 
 namespace {
 	
-template<typename T>
-auto selectDevice(T t, WorkerType preferredType) {
+Own<DeviceBase> selectDevice(ComputationDeviceType preferredType) {
 	#ifdef FSC_WITH_CUDA
 	
 	try {
-		if(preferredType == WorkerType::GPU) {
-			return tuple(t(newGpuDevice()), WorkerType::GPU);
+		if(preferredType == ComputationDeviceType::GPU) {
+			return kj::refcounted<GPUDevice>();
 		}
 	} catch(kj::Exception& e) {
 	}
 	
 	#endif
 	
-	return tuple(t(newThreadPoolDevice()), WorkerType::CPU);
+	unsigned int cpuThreads = CPUDevice::estimateNumThreads();
+	KJ_DBG("Creating CPU device", cpuThreads);
+	return kj::refcounted<CPUDevice>(cpuThreads);
 }
 
 struct RootServer : public RootService::Server {
-	RootServer(RootConfig::Reader config) {}
+	RootServer(LocalConfig::Reader config) :
+		device(selectDevice(config.getPreferredDeviceType()))
+	{}
+	
+	Own<DeviceBase> device;
 	
 	Promise<void> newFieldCalculator(NewFieldCalculatorContext context) override {
-		auto factory = [this, context](auto device) mutable {
-			return ::fsc::newFieldCalculator(/*context.getParams().getGrid(), */mv(device));
-		};
-		
-		auto selectResult = selectDevice(factory, context.getParams().getPreferredDeviceType());
-		
-		auto results = context.getResults();
-		results.setService(kj::get<0>(selectResult));
-		results.setDeviceType(kj::get<1>(selectResult));
-		
+		context.initResults().setService(::fsc::newFieldCalculator(device -> addRef()));		
 		return READY_NOW;
 	}
 	
-	Promise<void> newTracer(NewTracerContext context) override {
-		auto factory = [this, context](auto device) mutable {
-			return ::fsc::newFLT(mv(device));
-		};
-		
-		auto selectResult = selectDevice(factory, context.getParams().getPreferredDeviceType());
-		
-		auto results = context.initResults();
-		results.setService(kj::get<0>(selectResult));
-		results.setDeviceType(kj::get<1>(selectResult));
-		
+	Promise<void> newTracer(NewTracerContext context) override {				
+		context.initResults().setService(newFLT(device -> addRef()));		
 		return READY_NOW;
 	}
 	
@@ -69,120 +64,91 @@ struct RootServer : public RootService::Server {
 		context.initResults().setService(fsc::newHFCamProvider());
 		return READY_NOW;
 	}
-};
-
-struct ResolverChainImpl : public virtual capnp::Capability::Server, public virtual ResolverChain::Server {
-	using capnp::Capability::Server::DispatchCallResult;
-	using ResolverChain::Server::RegisterContext;
 	
-	struct Registration {
-		ResolverChainImpl& parent;
-		kj::ListLink<Registration> link;
+	Promise<void> newKDTreeService(NewKDTreeServiceContext context) override {
+		context.initResults().setService(fsc::newKDTreeService());
+		return READY_NOW;
+	}
+	
+	Promise<void> newMapper(NewMapperContext ctx) override {
+		auto flt = thisCap().newTracerRequest().sendForPipeline().getService();
+		auto idx = thisCap().newKDTreeServiceRequest().sendForPipeline().getService();
 		
-		capnp::Capability::Client entry;
-
-		Registration(ResolverChainImpl& parent, capnp::Capability::Client entry);
-		~Registration();
-	};
+		ctx.initResults().setService(fsc::newMapper(mv(flt), mv(idx)));
+		return READY_NOW;
+	}
 	
-	kj::List<Registration, &Registration::link> registrations;
+	Promise<void> dataService(DataServiceContext ctx) override {
+		ctx.getResults().setService(getActiveThread().dataService());
+		return READY_NOW;
+	}
 	
-	Promise<void> register_(RegisterContext ctx) override {		
-		auto result = attach(
-			ResolverChain::Client(capnp::newBrokenCap(KJ_EXCEPTION(UNIMPLEMENTED, "Unimplemented"))),
-			
-			thisCap(),
-			kj::heap<Registration>(*this, ctx.getParams().getResolver())
-		);
-		ctx.initResults().setRegistration(mv(result));
+	Promise<void> getInfo(GetInfoContext ctx) override {
+		if(device -> brand == &CPUDevice::BRAND) {
+			ctx.getResults().setDeviceType(ComputationDeviceType::CPU);
+		#ifdef FSC_WITH_CUDA
+		} else if(device -> brand == &GPUDevice::BRAND) {
+			ctx.getResults().setDeviceType(ComputationDeviceType::GPU);
+		#endif
+		} else {
+			KJ_FAIL_REQUIRE("Unknown device type");
+		}
 		
 		return READY_NOW;
-	};
-	
-	DispatchCallResult dispatchCall(uint64_t interfaceId, uint16_t methodId, capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> ctx) override {
-		Promise<void> result = ResolverChain::Server::dispatchCall(interfaceId, methodId, ctx).promise
-		.catch_([=](kj::Exception&& exc) mutable -> Promise<void> {
-			using capnp::AnyStruct;
-			using capnp::AnyPointer;
-			
-			// We only handle generic methods if parent didnt have it implemented
-			if(exc.getType() != kj::Exception::Type::UNIMPLEMENTED) {
-				kj::throwRecoverableException(mv(exc));
-				return READY_NOW;
-			}
-			
-			// Updatable container on heap
-			auto paramMsg = heapHeld<Own<capnp::MallocMessageBuilder>>();
-			
-			// Fill initial value from context
-			*paramMsg = kj::heap<capnp::MallocMessageBuilder>();
-			(**paramMsg).setRoot(ctx.getParams());
-			ctx.releaseParams();
-			
-			// Check that first field is set
-			{
-				auto paramsStruct = (**paramMsg).getRoot<AnyStruct>();
-				auto pSec = paramsStruct.getPointerSection();
-				KJ_REQUIRE(pSec.size() > 0);
-			}
-			
-			Promise<void> result = READY_NOW;
-			for(auto& reg : registrations) {
-				result = result.then([=, e = cp(reg.entry)]() mutable {
-					auto params = (**paramMsg).getRoot<AnyPointer>();
-					
-					auto request = e.typelessRequest(
-						interfaceId, methodId, params.targetSize()
-					);
-					request.set(params);
-					
-					return request.send();
-				}).then([=](auto result) mutable {
-					// Copy old extra parameters into new message, but drop old result
-					{
-						auto paramsStruct = (**paramMsg).getRoot<AnyStruct>();
-						auto params       = (**paramMsg).getRoot<AnyPointer>();
-						
-						auto pSec = paramsStruct.getPointerSection();		
-						pSec[0].clear();
-						
-						auto newParamMsg = kj::heap<capnp::MallocMessageBuilder>();
-						newParamMsg->setRoot(params.asReader());
-						*paramMsg = mv(newParamMsg);
-					}
-					
-					// Copy result into params
-					auto paramsStruct = (**paramMsg).getRoot<AnyStruct>();
-					auto pSec = paramsStruct.getPointerSection();		
-					pSec[0].set(result);
-				}).catch_([](kj::Exception&& e) mutable {
-					KJ_LOG(WARNING, "Exception in resolver chain", mv(e));
-				});
-			}
-			
-			result = result.then([=]() mutable {
-				auto paramsStruct = (**paramMsg).getRoot<AnyStruct>();
-				auto pSec = paramsStruct.getPointerSection();
-				
-				ctx.getResults().set(pSec[0]);
-			});
-			
-			return result.attach(paramMsg.x(), thisCap());
-		});
-		
-		return { mv(result), false };
 	}
 };
 
-ResolverChainImpl::Registration::Registration(ResolverChainImpl& parent, capnp::Capability::Client entry) :
-	parent(parent), entry(entry)
-{
-	parent.registrations.add(*this);
-}
+// Networking implementation
 
-ResolverChainImpl::Registration::~Registration() {
-	parent.registrations.remove(*this);
-}
+
+
+struct LocalResourcesImpl : public LocalResources::Server, public LocalNetworkInterface {
+	Temporary<LocalConfig> config;
+	LocalResourcesImpl(LocalConfig::Reader config) :
+		config(config)
+	{}
+	
+	// Root service
+	
+	Promise<void> root(RootContext ctx) override {
+		ctx.getResults().setRoot(createRoot(config));
+		return READY_NOW;
+	}
+	
+	// File system access
+	
+	Promise<void> openArchive(OpenArchiveContext ctx) override {
+		auto fs = kj::newDiskFilesystem();
+		auto currentPath = fs -> getCurrentPath();
+		auto realPath = currentPath.eval(ctx.getParams().getFilename());
+		
+		Own<const kj::ReadableFile> file = fs -> getRoot().openFile(realPath);
+		auto result = getActiveThread().dataService().publishArchive<capnp::AnyPointer>(*file);
+		
+		ctx.getResults().setRef(mv(result));
+		return READY_NOW;
+	}
+	
+	Promise<void> writeArchive(WriteArchiveContext ctx) override {
+		auto fs = kj::newDiskFilesystem();
+		auto currentPath = fs -> getCurrentPath();
+		auto realPath = currentPath.eval(ctx.getParams().getFilename());
+		
+		Own<const kj::File> file = fs -> getRoot().openFile(realPath, kj::WriteMode::CREATE | kj::WriteMode::MODIFY | kj::WriteMode::CREATE_PARENT);
+		Promise<void> result = getActiveThread().dataService().writeArchive(ctx.getParams().getRef(), *file);
+		
+		return result.attach(mv(file));
+	}
+	
+	// Local data store access
+	
+	Promise<void> download(DownloadContext ctx) override {		
+		return getActiveThread().dataService().download(ctx.getParams().getRef())
+		.then([ctx](LocalDataRef<capnp::AnyPointer> ref) mutable {
+			ctx.getResults().setRef(mv(ref));
+		});
+	}
+};
 
 class DefaultErrorHandler : public kj::TaskSet::ErrorHandler {
 	void taskFailed(kj::Exception&& exception) override {
@@ -190,41 +156,66 @@ class DefaultErrorHandler : public kj::TaskSet::ErrorHandler {
 	}
 };
 
-struct InProcessServerImpl : public kj::AtomicRefcounted {
+struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::BootstrapFactory<lvn::VatId> {
 	using Service = capnp::Capability;
 	using Factory = kj::Function<Service::Client()>;
+	using VatId = fsc::lvn::VatId;
 	
 	Library library;
 	mutable Factory factory;
+	
+	Own<LocalVatHub> vatHub;
+	Own<LocalVatNetwork> vatNetwork;
+	
+	kj::MutexGuarded<bool> ready;
 		
 	// The desctructor of this joins the inner runnable. Everything above
 	// can be safely used from the inside.
 	kj::Thread thread;
 	
-	Own<const kj::Executor> executor;
-	kj::MutexGuarded<bool> ready;
-	
+	// Own<const kj::Executor> executor;
 	Own<CrossThreadPromiseFulfiller<void>> doneFulfiller;
 		
 	InProcessServerImpl(kj::Function<capnp::Capability::Client()> factory) :
 		library(getActiveThread().library()->addRef()),
 		factory(mv(factory)),
-		thread(KJ_BIND_METHOD(*this, run)),
-		ready(false)
+		
+		vatHub(newLocalVatHub()),
+		vatNetwork(kj::heap<LocalVatNetwork>(*vatHub)),
+		
+		ready(false),
+		thread(KJ_BIND_METHOD(*this, run))
 	{
 		auto locked = ready.lockExclusive();
 		locked.wait([](bool ready) { return ready; });
+		thread.detach();
 	}
 	
 	~InProcessServerImpl() {
 		doneFulfiller->fulfill();
-		
-		if(library -> inShutdownMode()) {
-			thread.detach();
-		}
 	}
 	
 	Own<const InProcessServerImpl> addRef() const { return kj::atomicAddRef(*this); }
+	
+	capnp::Capability::Client createFor(VatId::Reader clientId) {
+		return factory();
+	}
+	
+	//! Keep-alive membrane that maintains the connection as long as at least one instance is there
+	struct KeepaliveMembrane : public capnp::MembranePolicy, kj::Refcounted {
+		Own<void> keepAlive;
+		KeepaliveMembrane(Own<void> keepAlive) : keepAlive(mv(keepAlive)) {}
+		
+		Own<MembranePolicy> addRef() override { return kj::addRef(*this); }
+		
+		kj::Maybe<capnp::Capability::Client> inboundCall(uint64_t interfaceId, uint16_t methodId, capnp::Capability::Client target) override {
+			return nullptr;
+		}
+		
+		kj::Maybe<capnp::Capability::Client> outboundCall(uint64_t interfaceId, uint16_t methodId, capnp::Capability::Client target) override {
+			return nullptr;
+		}
+	};
 	
 	void run() {
 		// Initialize event loop
@@ -232,11 +223,19 @@ struct InProcessServerImpl : public kj::AtomicRefcounted {
 		auto lt = library -> newThread();
 		auto& ws = lt -> waitScope();
 		
+		// Create server
+		using capnp::RpcSystem;
+		using fsc::lvn::VatId;
+		
+		// Move vat network into local scope and shadow it
+		Own<LocalVatNetwork> vatNetwork = mv(this -> vatNetwork);
+		capnp::RpcSystem<VatId> rpcSystem(*vatNetwork, *this);
+		
 		Promise<void> donePromise = READY_NOW;
 		
 		{
 			auto locked = ready.lockExclusive();
-			executor = kj::getCurrentThreadExecutor().addRef();
+			// executor = kj::getCurrentThreadExecutor().addRef();
 			
 			auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
 			doneFulfiller = mv(paf.fulfiller);
@@ -249,37 +248,14 @@ struct InProcessServerImpl : public kj::AtomicRefcounted {
 	}
 	
 	Service::Client connect() const {
-		using capnp::TwoPartyVatNetwork;
 		using capnp::RpcSystem;
-		using capnp::rpc::twoparty::VatId;
-		using capnp::rpc::twoparty::Side;
 		
-		// auto pipe = getActiveThread().ioContext().provider->newTwoWayPipe();
-		auto pipe = newPipe();
-				
-		// Create server
-		auto serverRunnable = [stream = mv(pipe.ends[1]), srv = this->addRef()]() mutable -> Promise<void> {
-			// Create RPC server on stream
-			auto vatNetwork = heapHeld<TwoPartyVatNetwork>(*stream, Side::SERVER);
-			auto rpcSystem  = heapHeld<RpcSystem<VatId>>(capnp::makeRpcServer(*vatNetwork, srv->factory()));
-			
-			return vatNetwork->onDisconnect().attach(mv(srv), mv(stream), vatNetwork.x(), rpcSystem.x());
-		};
+		auto vatNetwork = heapHeld<LocalVatNetwork>(*vatHub);
+		auto rpcClient  = heapHeld<capnp::RpcSystem<VatId>>(*vatNetwork, nullptr);
+		auto client     = rpcClient -> bootstrap(LocalVatHub::INITIAL_VAT_ID);
 		
-		auto serverDone = executor->executeAsync(mv(serverRunnable));
-		
-		// Create connection
-		auto stream = mv(pipe.ends[0]);
-		
-		auto vatNetwork = heapHeld<TwoPartyVatNetwork>(*stream, Side::CLIENT);
-		auto rpcClient  = heapHeld<RpcSystem<VatId>>(capnp::makeRpcClient(*vatNetwork));
-		
-		// Retrieve server's bootstrap interface
-		Temporary<VatId> serverID;
-		serverID.setSide(Side::SERVER);
-		auto interface = rpcClient->bootstrap(serverID);
-		
-		return attach(interface, rpcClient.x(), vatNetwork.x(), mv(stream), mv(serverDone));
+		Own<void> attachments = kj::attachRef(client, vatNetwork.x(), rpcClient.x());
+		return capnp::membrane(mv(client), kj::refcounted<KeepaliveMembrane>(mv(attachments)));
 	}
 };
 
@@ -349,6 +325,16 @@ struct ServerImpl : public fsc::Server {
 
 }
 
+kj::ArrayPtr<uint64_t> fsc::protectedInterfaces() {
+	static kj::Array<uint64_t> result = kj::heapArray<uint64_t>({
+		capnp::typeId<LocalResources>(),
+		capnp::typeId<NetworkInterface>(),
+		capnp::typeId<JobScheduler>(),
+		capnp::typeId<SSHConnection>()
+	});
+	
+	return result.asPtr();
+}
 
 kj::Function<capnp::Capability::Client()> fsc::newInProcessServer(kj::Function<capnp::Capability::Client()> serviceFactory) {
 	auto server = kj::atomicRefcounted<InProcessServerImpl>(mv(serviceFactory));
@@ -358,12 +344,12 @@ kj::Function<capnp::Capability::Client()> fsc::newInProcessServer(kj::Function<c
 	};
 }
 
-RootService::Client fsc::createRoot(RootConfig::Reader config) {
-	return kj::heap<RootServer>(config);
+LocalResources::Client fsc::createLocalResources(LocalConfig::Reader config) {
+	return kj::heap<LocalResourcesImpl>(config);
 }
 
-ResolverChain::Client fsc::newResolverChain() {
-	return kj::heap<ResolverChainImpl>();
+RootService::Client fsc::createRoot(LocalConfig::Reader config) {
+	return kj::heap<RootServer>(config);
 }
 
 RootService::Client fsc::connectRemote(kj::StringPtr address, unsigned int portHint) {
@@ -397,7 +383,7 @@ RootService::Client fsc::connectRemote(kj::StringPtr address, unsigned int portH
 }
 
 Promise<Own<fsc::Server>> fsc::startServer(unsigned int portHint, kj::StringPtr address) {	
-	Temporary<RootConfig> rootConfig;
+	Temporary<LocalConfig> rootConfig;
 	auto rootInterface = createRoot(rootConfig);
 	
 	// Get root network

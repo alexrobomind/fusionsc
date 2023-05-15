@@ -6,11 +6,14 @@
 #include <kj/refcount.h>
 #include <kj/filesystem.h>
 
+#include <botan/hash.h>
+
 #include <utility>
 
 #include "common.h"
 #include "store.h"
 #include "random.h"
+#include "streams.h"
 
 namespace fsc {
 	class LocalDataService;
@@ -24,44 +27,9 @@ using Library = Own<const LibraryHandle>;
 class ThreadHandle;
 using LibraryThread = Own<ThreadHandle>;
 
-struct DaemonRunner : public kj::AtomicRefcounted {
-	DaemonRunner(const kj::Executor& target);
-	inline DaemonRunner() : DaemonRunner(kj::getCurrentThreadExecutor()) {}
-	
-	inline ~DaemonRunner() { disconnect(); }
-	
-	inline Own<const DaemonRunner> addRef() const { return kj::atomicAddRef(*this); }
-	
-	/**
-	 * Runs the given task in the event loop associated with this runner, if it is still available.
-	 * If the runner is disconnected, this function returns false.
-	 *
-	 * \returns true if the task could be scheduled to the target event loop, false if the runner
-	 *          is disconnected.
-	 */
-	bool run(kj::Function<Promise<void>()> func) const;
-		
-	/**
-	 * Disconnects the runner from the target thread. After returning, the target event loop can be
-	 * destroyed and existing references to this runner can safely outlive it. All attempts to schedule
-	 * tasks will fail by returning false, and the passed functions will be destroyed immediately.
-	 */
-	void disconnect() const;
-	
-	/**
-	 * Blocks the current thread until all daemon tasks have finished.
-	 * \note Since usually daemon tasks run forever or until cancelled,
-	 *       this method is intended mostly for debug purposes.
-	 */
-	Promise<void> whenDone() const;
-
-private:
-	struct Connection {
-		Own<const kj::Executor> executor;
-		Own<kj::TaskSet> tasks;
-	};
-	
-	kj::MutexGuarded<Maybe<Connection>> connection;
+struct NullErrorHandler : public kj::TaskSet::ErrorHandler {
+	static NullErrorHandler instance;
+	void taskFailed(kj::Exception&& e) override ;
 };
 
 /**
@@ -69,101 +37,155 @@ private:
  *  for objects that should be shared across all threads. Currently, this is only
  *  the local data store table and a shared daemon runner.
  */
-class LibraryHandle : public kj::AtomicRefcounted {
-public:
-	// Mutex protected local data store
-	kj::MutexGuarded<LocalDataStore> store;
+struct LibraryHandle : public kj::AtomicRefcounted {
+	LibraryHandle(bool elevated);
+	~LibraryHandle();
 	
 	// Creates an additional owning reference to this handle.
 	inline kj::Own<const LibraryHandle> addRef() const { return kj::atomicAddRef(*this); }
 	
-	// TODO: Currently the daemon runner uses the event loop of the steward. Refactor
-	//       the steward to be a daemon instead ...
+	// Mutex protected local data store
+	inline const kj::MutexGuarded<LocalDataStore>& store() const { return sharedData -> store; }
+	
+	const kj::Executor& steward() const ;
 	
 	inline LibraryThread newThread() const ;
 	void stopSteward() const;
 	
-	inline const DaemonRunner& daemonRunner() const { return *_daemonRunner; }
-	
 	inline bool inShutdownMode() const { return *(shutdownMode.lockShared()); }
 	inline void setShutdownMode() const { *(shutdownMode.lockExclusive()) = true; }
 	
+	std::unique_ptr<Botan::HashFunction> defaultHash() const;
+	
+	/**
+	 * Sets this FSC library instance to elevated mode. This causes the following changed:
+	 *  - On UNIX, installs a signal handler to handle SIGCHLD events. The handler is restricted
+	 *    to the event loop of the steward thread. Since SIGCHLD handlers tend to heavily interfere
+	 *    with each other, this action is restricted to on-demand.
+	 *
+	 * \warning You can only have one elevated instance per process.
+	 */
+	bool isElevated () const { return elevatedInstance == this; }
+	
 private:
-	inline LibraryHandle() :
-		storeSteward(store),
-		_daemonRunner(kj::atomicRefcounted<DaemonRunner>(storeSteward.getExecutor())),
-		shutdownMode(false)
-	{};
+	struct SharedData : public kj::AtomicRefcounted {
+		kj::MutexGuarded<LocalDataStore> store;
+	};
 	
-	inline ~LibraryHandle() {
-		_daemonRunner->disconnect();
-	}
+	//! Executes the steward thread
+	void runSteward(bool elevated);
 	
-	mutable LocalDataStore::Steward storeSteward;
-	Own<DaemonRunner> _daemonRunner;
 	kj::MutexGuarded<bool> shutdownMode;
+	Own<SharedData> sharedData;
+	
+	Own<kj::CrossThreadPromiseFulfiller<void>> stewardFulfiller;
+	kj::MutexGuarded<Maybe<Own<const kj::Executor>>> stewardExecutor;
+	kj::Thread stewardThread;
+	
+	// This loopback reference will be nulled by he steward once it has finished
+	// startup and the fulfiller is initialized. This ensures that the destructor
+	// is not called before the steward finishes booting up.
+	// Maybe<Own<const LibraryHandle>> loopbackReferenceForStewardStartup;
 	
 	friend Own<LibraryHandle> kj::atomicRefcounted<LibraryHandle>();
+	
+	static inline const LibraryHandle* elevatedInstance = nullptr;
+	friend class StewardContext;
 };
 
 
-inline Library newLibrary() {
-	return kj::atomicRefcounted<LibraryHandle>();
+inline Library newLibrary(bool elevated = false) {
+	return kj::atomicRefcounted<LibraryHandle>(elevated);
+}
+
+struct ThreadContext {
+	ThreadContext();
+	~ThreadContext();
+	
+	//! Access to executor from outside threads
+	virtual const Library& library() const = 0;
+	
+	virtual LocalDataService& dataService() = 0;
+	
+	inline const kj::Executor& executor() const {
+		return _executor;
+	}
+	inline kj::AsyncIoContext& ioContext() {
+		return _ioContext;
+	}
+	inline kj::WaitScope& waitScope() {
+		return ioContext().waitScope;
+	}
+	inline kj::Timer& timer() {
+		return ioContext().provider->getTimer();
+	}
+	inline CSPRNG& rng() {
+		return _rng;
+	}
+	inline kj::Network& network() {
+		return ioContext().provider -> getNetwork();
+	}
+	inline StreamConverter& streamConverter() {
+		return *_streamConverter;
+	}
+	inline kj::Filesystem& filesystem() {
+		return *_filesystem;
+	}
+	inline const kj::MutexGuarded<LocalDataStore>& store() const {
+		return library() -> store();
+	}
+	
+	inline kj::Array<const byte> randomID() {
+		auto result = kj::heapArray<byte>(16);
+		rng().randomize(result);
+		return result;
+	}
+	
+	template<typename T>
+	Promise<T> uncancelable(Promise<T> p);
+	
+	Promise<void> uncancelable(Promise<void> p);
+	
+	void detach(Promise<void> p);
+	Promise<void> drain();
+	
+private:
+	// Access to currenly active instance
+	inline static thread_local ThreadContext* current = nullptr;
+	friend ThreadContext& getActiveThread();
+	friend bool hasActiveThread();
+	
+	// Fields
+	kj::AsyncIoContext _ioContext;
+	CSPRNG _rng;
+	Own<kj::Filesystem> _filesystem;
+	Own<StreamConverter> _streamConverter;
+	const kj::Executor& _executor;
+
+protected:
+	kj::TaskSet detachedTasks;
+};
+
+inline ThreadContext& getActiveThread() {
+	KJ_REQUIRE(ThreadContext::current != nullptr, "No active thread");
+	return *ThreadContext::current;
+}
+
+inline bool hasActiveThread() {
+	return ThreadContext::current != nullptr;
 }
 
 /**
  * Thread-local library handle. This holds local infrastructure components required by the
  * library, but which may not be shared in-between threads.
  */
-class ThreadHandle /*: public kj::Refcounted*/ {
-public:
-	// Creates a new library handle from a library handle
+struct ThreadHandle : public ThreadContext {
+	// Creates a new thread handle from a library handle
 	ThreadHandle(Library lh);
 	~ThreadHandle();
 	
-	// Accessors for local use only
-	
-	// Convenience method to retrieve the wait scope from the io context
-	inline kj::WaitScope&      waitScope() { return _ioContext.waitScope; }
-	
-	/**
-	 * IO context. This object holds the event loop, its wait scope, and IO providers to
-	 * access network and the file system.
-	 */
-	inline kj::AsyncIoContext& ioContext() { return _ioContext; }
-	
-	/**
-	 * System clock timer
-	 */
-	inline kj::Timer& timer() { return _ioContext.provider->getTimer(); }
-		
-	/**
-	 * This thread's random number generator.
-	 */
-	inline CSPRNG&             rng()       { return _rng; }
-	
-	/**
-	 * Network interface routines
-	 */
-	inline kj::Network&        network()   { return _ioContext.provider -> getNetwork(); }
-	
-	kj::Array<const byte> randomID() {
-		auto result = kj::heapArray<byte>(16);
-		rng().randomize(result);
-		return result;
-	}
-	
-	LocalDataService& dataService() { return *_dataService; }
-	
-	kj::Filesystem& filesystem() { return *_filesystem; }
-	
-	// Accessors that may be used cross-thread
-	
-	// Convenience method to retrieve the local data store from the library
-	inline const Library&                          library()      const { return _library; }
-	inline const kj::MutexGuarded<LocalDataStore>& store()        const { return _library -> store; }
-	inline const kj::Executor&                     executor()     const { return _executor; }
-	inline const DaemonRunner&                     daemonRunner() const { return _library -> daemonRunner(); }
+	LocalDataService& dataService() override { return *_dataService; }
+	inline const Library& library() const override { return _library; }
 	
 	//! Creates a keep-alive reference to this thread
 	/**
@@ -175,21 +197,9 @@ public:
 	Own<const ThreadHandle> addRef() const;
 		
 private:
-	kj::AsyncIoContext _ioContext;
-	CSPRNG _rng;
-	
 	// Back-reference to the library handle.
 	Library _library;
-	
-	const kj::Executor& _executor;
-	
 	Own<LocalDataService> _dataService;
-	Own<kj::Filesystem> _filesystem;
-	
-	// Access to currenly active instance
-	inline static thread_local ThreadHandle* current = nullptr;
-	friend ThreadHandle& getActiveThread();
-	friend bool hasActiveThread();
 	
 	struct Ref;
 	struct RefData;
@@ -197,78 +207,25 @@ private:
 	kj::MutexGuarded<RefData>* refData;
 };
 
-inline ThreadHandle& getActiveThread() {
-	KJ_REQUIRE(ThreadHandle::current != nullptr, "No active thread");
-	return *ThreadHandle::current;
-}
-
-inline bool hasActiveThread() {
-	return ThreadHandle::current != nullptr;
-}
-
-
-/**
- * Class that can be used to connect two different threads with each other.
- * Must be constructed in the context of a running event loop. When both accept
- * and connect are called, their promises resolve to two ends of a local connection.
- * Each method can be called by any thread with an active event loop. Currently,
- * the local connection is implemented by a loopback network TCP/IP connection.
- *
- * The information required to connect to the other side (currently, the
- * accepting port number) is exchanged through the event loop present during the
- * constructor of CrossThreadConnection. This event loop must run until the port
- * information is exchanged, otherwise the promises will not resolve.
- *
- * accept() and connect() can be called in any order, just as their promises
- * can be waited on in any order. They can also be called from a single thread,
- * as long as this thread (obviously) doesn't wait() on any of the two promises
- * before having both methods called.
- *
- * WARNING: Currently, this object must be kept alive until the handshake is complete.
- * Preferably, this restriction will be lifted in the future.
- */
-class CrossThreadConnection {
-public:
-	CrossThreadConnection();
+struct StewardContext : public ThreadContext {
+	inline const Library& library() const override { KJ_FAIL_REQUIRE("Library instance not available from steward context"); }
+	inline LocalDataService& dataService() override { KJ_FAIL_REQUIRE("Data service not available from steward context"); }
 	
-	Promise<Own<kj::AsyncIoStream>> accept(ThreadHandle& h);
-	Promise<Own<kj::AsyncIoStream>> connect(ThreadHandle& h);
-	
-	// Size of the random security token transfered to validate the connection
-	static constexpr size_t tokenSize = 128;
-	
-private:
-	const kj::Executor& _exec;
-	kj::PromiseFulfillerPair<kj::uint> _port;
-	
-	bool _acceptCalled;
-	bool _connectCalled;
-	
-	FixedArray<byte, tokenSize> sendToken1;
-	FixedArray<byte, tokenSize> recvToken1;
-	
-	FixedArray<byte, tokenSize> sendToken2;
-	FixedArray<byte, tokenSize> recvToken2;
+	StewardContext();
+	~StewardContext();
 };
 
-kj::TwoWayPipe newPipe();
-
-template<typename Func>
-kj::Maybe<kj::Promise<UnwrapIfPromise<UnwrapMaybe<ReturnType<Func>>>>> executeMaybe(const kj::Executor& executor, Func&& func) {
-	using T = UnwrapIfPromise<UnwrapMaybe<decltype(func())>>;
-
-	// Run f on the other side to get the maybe
-	kj::Maybe<kj::Promise<T>> maybe = executor.executeSync(kj::fwd<Func>(func));
-	
-	KJ_IF_MAYBE(ptr, maybe) {
-		// If the maybe is not empty, use the executor to transfer the contained promise
-		return executor.executeAsync([&]() { return kj::mv(*ptr); });
-	} else {
-		return nullptr;
-	}
-}
-
 // Inline implementations
+
+template<typename T>
+Promise<T> ThreadContext::uncancelable(Promise<T> p) {
+	auto promiseTuple = p.then([](T t) {
+		return kj::tuple(t, 0);
+	}).split();
+	
+	detach(kj::get<1>(promiseTuple).ignoreResult());
+	return mv(kj::get<0>(promiseTuple));
+}
 
 LibraryThread LibraryHandle::newThread() const {
 	return kj::heap<ThreadHandle>(addRef());

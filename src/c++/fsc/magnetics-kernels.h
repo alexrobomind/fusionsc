@@ -4,9 +4,13 @@
 #include "tensor.h"
 #include "grids.h"
 #include "kernels.h"
+#include "cudata.h"
+#include "interpolation.h"
 
 #include <utility>
 #include <kj/function.h>
+
+#include <fsc/magnetics.capnp.cu.h>
 
 namespace fsc { namespace kernels {
 
@@ -199,7 +203,97 @@ EIGEN_DEVICE_FUNC inline void biotSavartKernel(const unsigned int idx, ToroidalG
 	outData[3 * idx + 2] += current * fieldR;
 }
 
+/**
+ \ingroup kernels
+ */
+EIGEN_DEVICE_FUNC inline void eqFieldKernel(const unsigned int idx, ToroidalGridStruct grid, CuPtr<const fsc::cu::AxisymmetricEquilibrium> equilibriumPtr, double scale, FieldRef out) {
+	int midx[3];
+	
+	{
+		// Decode index using column major layout
+		// in which the first index has stride 1
+		unsigned int tmp = idx;
+		for(int i = 0; i < 3; ++i) {
+			midx[i] = tmp % out.dimension(i+1);
+			tmp /= out.dimension(i+1);
+		}
+	}
+	
+	int i_r = midx[0];
+	int i_z   = midx[1];
+	int i_phi   = midx[2];
+	
+	double z = grid.z(i_z);
+	double r = grid.r(i_r);
+	Vec2d zr(z, r);
+	
+	auto equilibrium = *equilibriumPtr;
+	
+	using ADS = Eigen::AutoDiffScalar<Vec2d>;
+	
+	using InterpStrategy = C1CubicInterpolation<double>;
+	using DiffStrategy = C1CubicInterpolation<ADS>;
+	
+	auto psiIn = equilibrium.getPoloidalFlux();
+	uint32_t psiNZ = psiIn.getShape()[0];
+	uint32_t psiNR = psiIn.getShape()[1];
+	
+	auto bTorNormIn = equilibrium.getNormalizedToroidalField();
+	auto nPsiBtor = bTorNormIn.size();
+	
+	auto clamp = [](int in, int end) -> unsigned int {
+		if(in < 0) in = 0;
+		if(in >= end) in = end - 1;
+		return (unsigned int) in;
+	};
+	
+	auto psi = [&](int iZ, int iR) -> double {		
+		auto idx = psiNR * clamp(iZ, psiNZ) + clamp(iR, psiNR);
+		return psiIn.getData()[idx];
+	};
+	
+	auto bTorNorm = [&](int i) -> double {		
+		return bTorNormIn[clamp(i, nPsiBtor)];
+	};
+	
+	// Compute poloidal flux and derivative
+	double dPsi_dZ;
+	double dPsi_dR;
+	double psiVal;
+	{
+		using Interpolator = NDInterpolator<2, DiffStrategy>;
+		using Axis = Interpolator::Axis;
+		
+		Interpolator interp(DiffStrategy(), { Axis(equilibrium.getZMin(), equilibrium.getZMax(), psiNZ), Axis(equilibrium.getRMin(), equilibrium.getRMax(), psiNR) });
+		
+		ADS valueAndDeriv = interp(psi, { ADS(z, 2, 0), ADS(r, 2, 1) });
+		psiVal = valueAndDeriv.value();
+		dPsi_dZ = valueAndDeriv.derivatives()[0];
+		dPsi_dR = valueAndDeriv.derivatives()[1];
+	}
+	
+	// Compute Bt
+	double bTor;
+	{
+		using Interpolator = NDInterpolator<1, InterpStrategy>;
+		using Axis = Interpolator::Axis;
+		
+		Interpolator interp(InterpStrategy(), { Axis(equilibrium.getFluxAxis(), equilibrium.getFluxBoundary(), nPsiBtor) });
+		
+		bTor = interp(bTorNorm, Vec1d { psiVal }) / r;
+	}
+	
+	double bR = -dPsi_dZ / r;
+	double bZ =  dPsi_dR / r;
+	
+	double* outData = out.data();	
+	outData[3 * idx + 0] += scale * bTor;
+	outData[3 * idx + 1] += scale * bZ;
+	outData[3 * idx + 2] += scale * bR;
+}
+
 }}
 
 REFERENCE_KERNEL(fsc::kernels::addFieldKernel, fsc::kernels::FieldRef, fsc::kernels::FieldRef, double);
 REFERENCE_KERNEL(fsc::kernels::biotSavartKernel, fsc::ToroidalGridStruct, fsc::kernels::FilamentRef, double, double, double, fsc::kernels::FieldRef);
+REFERENCE_KERNEL(fsc::kernels::eqFieldKernel, ToroidalGridStruct, CuPtr<const fsc::cu::AxisymmetricEquilibrium>, double, FieldRef);

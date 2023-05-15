@@ -137,7 +137,7 @@ namespace cupnp {
 		
 		inline CUPNP_FUNCTION bool isValid(size_t size) {
 			if(ptr == nullptr)
-				return false;
+				return size == 0;
 			
 			if(segments == nullptr)
 				return true;
@@ -165,6 +165,10 @@ namespace cupnp {
 	template<typename T>
 	struct TypedLocation : public Location {
 		using Location::Location;
+		
+		TypedLocation(const Location& other) :
+			Location(other)
+		{}
 		
 		CUPNP_FUNCTION T operator*() { return getPointer<T>(*this); }
 	};
@@ -420,15 +424,15 @@ namespace cupnp {
 	 * (or out of bounds of the structure), the default value will be returned instread.
 	 */
 	template<typename T, uint32_t offset>
-	const CUPNP_FUNCTION T getPointerField(uint64_t structure, Location data, const capnp::word* defaultValue) {
-		uint16_t dataSectionSizeInWords = structure >> 32;
-		uint16_t pointerSectionSize = structure >> 48;
+	const CUPNP_FUNCTION T getPointerField(uint32_t dataSectionSize, uint16_t pointerSectionSize, Location data, const capnp::word* defaultValue) {
+		//uint16_t dataSectionSizeInWords = structure >> 32;
+		//uint16_t pointerSectionSize = structure >> 48;
 		
 		if(offset >= pointerSectionSize) {
 			return getDefaultValue<T>(defaultValue);
 		}
 		
-		Location ptrLoc = data + sizeof(capnp::word) * (dataSectionSizeInWords + offset);
+		Location ptrLoc = data + dataSectionSize + sizeof(capnp::word) * (offset);
 
 		bool isDefault = ptrLoc.read<uint64_t>() == 0;
 		if(isDefault) {
@@ -465,11 +469,11 @@ namespace cupnp {
 	 * Reads a primitive value from the wire data.
 	 */
 	template<typename T, uint32_t offset>
-	CUPNP_FUNCTION const T getPrimitiveField(uint64_t structure, Location data, T defaultValue) {
-		uint16_t dataSectionSizeInWords = structure >> 32;
+	CUPNP_FUNCTION const T getPrimitiveField(uint32_t dataSectionSize, Location data, T defaultValue) {
+		// uint16_t dataSectionSizeInWords = structure >> 32;
 		
 		// If the data section can not fully hold this value, retrn the default value instead
-		if(sizeof(T) * (offset + 1) > sizeof(capnp::word) * dataSectionSizeInWords) {
+		if(sizeof(T) * (offset + 1) > dataSectionSize) {
 			return defaultValue;
 		}
 		
@@ -485,11 +489,11 @@ namespace cupnp {
 	}
 	
 	template<typename T, uint32_t offset>
-	CUPNP_FUNCTION const T getPrimitiveField(uint64_t structure, Location data) {
-		uint16_t dataSectionSizeInWords = structure >> 32;
+	CUPNP_FUNCTION const T getPrimitiveField(uint32_t dataSectionSize, Location data) {
+		// uint16_t dataSectionSizeInWords = structure >> 32;
 		
 		// If the data section can not fully hold this value, retrn the default value instead
-		if(sizeof(T) * (offset + 1) > sizeof(capnp::word) * dataSectionSizeInWords) {
+		if(sizeof(T) * (offset + 1) > dataSectionSize) {
 			return 0;
 		}
 		
@@ -501,10 +505,10 @@ namespace cupnp {
 	}
 	
 	template<typename T, uint32_t offset>
-	CUPNP_FUNCTION void setPrimitiveField(uint64_t structure, Location data, T defaultValue, T value) {
-		uint16_t dataSectionSizeInWords = structure >> 32;
+	CUPNP_FUNCTION void setPrimitiveField(uint32_t dataSectionSize, Location data, T defaultValue, T value) {
+		// uint16_t dataSectionSizeInWords = structure >> 32;
 		
-		CUPNP_REQUIRE(sizeof(T) * (offset + 1) <= sizeof(capnp::word) * dataSectionSizeInWords) { return; }
+		CUPNP_REQUIRE(sizeof(T) * (offset + 1) <= dataSectionSize) { return; }
 		
 		EncodedType<T> wireData       = encodePrimitive(value);
 		
@@ -516,24 +520,24 @@ namespace cupnp {
 	}
 	
 	template<typename T, uint32_t offset>
-	CUPNP_FUNCTION void setPrimitiveField(uint64_t structure, Location data, T value) {
-		uint16_t dataSectionSizeInWords = structure >> 32;
+	CUPNP_FUNCTION void setPrimitiveField(uint32_t dataSectionSize, Location data, T value) {
+		// uint16_t dataSectionSizeInWords = structure >> 32;
 		
-		CUPNP_REQUIRE(sizeof(T) * (offset + 1) <= sizeof(capnp::word) * dataSectionSizeInWords) { return; }
+		CUPNP_REQUIRE(sizeof(T) * (offset + 1) <= dataSectionSize) { return; }
 		
 		EncodedType<T> wireData       = encodePrimitive(value);
 		(data + offset * sizeof(T)).write(wireData);
 	}
 	
 	template<uint32_t offset>
-	CUPNP_FUNCTION bool getBoolField(uint64_t structure, Location data, bool defaultValue) {
+	CUPNP_FUNCTION bool getBoolField(uint32_t dataSectionSize, Location data, bool defaultValue) {
 		constexpr uint32_t byteOffset = offset >> 3;
 		constexpr uint8_t  bitOffset  = offset & 7u;
 		constexpr uint8_t  bitMask    = 1u >> bitOffset;
 		
-		uint16_t dataSectionSizeInWords = structure >> 32;
+		// uint16_t dataSectionSizeInWords = structure >> 32;
 		
-		if(byteOffset + 1 > sizeof(capnp::word) * dataSectionSizeInWords)
+		if(byteOffset + 1 > dataSectionSize)
 			return defaultValue;
 		
 		uint8_t wireData = (data + byteOffset).read<uint8_t>();
@@ -544,14 +548,14 @@ namespace cupnp {
 		
 	
 	template<uint32_t offset>
-	CUPNP_FUNCTION bool getBoolField(uint64_t structure, Location data) {
+	CUPNP_FUNCTION bool getBoolField(uint32_t dataSectionSize, Location data) {
 		constexpr uint32_t byteOffset = offset >> 3;
 		constexpr uint8_t  bitOffset  = offset & 7u;
 		constexpr uint8_t  bitMask    = 1u >> bitOffset;
 		
-		uint16_t dataSectionSizeInWords = structure >> 32;
+		// uint16_t dataSectionSizeInWords = structure >> 32;
 		
-		if(byteOffset + 1 > sizeof(capnp::word) * dataSectionSizeInWords)
+		if(byteOffset + 1 > dataSectionSize)
 			return false;
 		
 		uint8_t wireData = (data + byteOffset).read<uint8_t>();
@@ -561,14 +565,14 @@ namespace cupnp {
 	}
 	
 	template<uint32_t offset>
-	CUPNP_FUNCTION void setBoolField(uint64_t structure, Location data, bool defaultValue, bool value) {
+	CUPNP_FUNCTION void setBoolField(uint32_t dataSectionSize, Location data, bool defaultValue, bool value) {
 		constexpr uint32_t byteOffset = offset >> 3;
 		constexpr uint8_t  bitOffset  = offset & 7u;
 		constexpr uint8_t  bitMask    = 1u >> bitOffset;
 		
-		uint16_t dataSectionSizeInWords = structure >> 32;
+		// uint16_t dataSectionSizeInWords = structure >> 32;
 		
-		CUPNP_REQUIRE(byteOffset + 1 <= sizeof(capnp::word) * dataSectionSizeInWords) { return; }
+		CUPNP_REQUIRE(byteOffset + 1 <= dataSectionSize) { return; }
 		
 		uint8_t wireData = (data + byteOffset).read<uint8_t>();
 		
@@ -582,14 +586,14 @@ namespace cupnp {
 	}
 	
 	template<uint32_t offset>
-	CUPNP_FUNCTION void setBoolField(uint64_t structure, Location data, bool value) {
+	CUPNP_FUNCTION void setBoolField(uint32_t dataSectionSize, Location data, bool value) {
 		constexpr uint32_t byteOffset = offset >> 3;
 		constexpr uint8_t  bitOffset  = offset & 7u;
 		constexpr uint8_t  bitMask    = 1u >> bitOffset;
 		
-		uint16_t dataSectionSizeInWords = structure >> 32;
+		// uint16_t dataSectionSizeInWords = structure >> 32;
 		
-		CUPNP_REQUIRE(byteOffset + 1 <= sizeof(capnp::word) * dataSectionSizeInWords) { return; }
+		CUPNP_REQUIRE(byteOffset + 1 <= dataSectionSize) { return; }
 		
 		uint8_t wireData = (data + byteOffset).read<uint8_t>();
 		
@@ -603,13 +607,13 @@ namespace cupnp {
 	}
 	
 	template<uint32_t offset>
-	CUPNP_FUNCTION const uint16_t getDiscriminant(uint64_t structure, Location data) {
-		return getPrimitiveField<uint16_t, offset>(structure, data);
+	CUPNP_FUNCTION const uint16_t getDiscriminant(uint32_t dataSectionSize, Location data) {
+		return getPrimitiveField<uint16_t, offset>(dataSectionSize, data);
 	}
 	
 	template<uint32_t offset>
-	CUPNP_FUNCTION const void setDiscriminant(uint64_t structure, Location data, uint16_t newVal) {
-		setPrimitiveField<uint16_t, offset>(structure, data, newVal);
+	CUPNP_FUNCTION const void setDiscriminant(uint32_t dataSectionSize, Location data, uint16_t newVal) {
+		setPrimitiveField<uint16_t, offset>(dataSectionSize, data, newVal);
 	}
 
 	/**
@@ -618,13 +622,13 @@ namespace cupnp {
 	 * is not mutable.
 	 */
 	template<typename T, uint32_t offset>
-	CUPNP_FUNCTION T mutatePointerField(uint64_t structure, Location data) {
-		uint16_t dataSectionSizeInWords = structure >> 32;
-		uint16_t pointerSectionSize = structure >> 48;
+	CUPNP_FUNCTION T mutatePointerField(uint32_t dataSectionSize, uint16_t pointerSectionSize, Location data) {
+		// uint16_t dataSectionSizeInWords = structure >> 32;
+		// uint16_t pointerSectionSize = structure >> 48;
 		
 		CUPNP_REQUIRE(offset < pointerSectionSize) { return getPointer<T>(nullptr); }
 		
-		Location ptrLoc = data + sizeof(capnp::word) * (dataSectionSizeInWords + offset);
+		Location ptrLoc = data + dataSectionSize + sizeof(capnp::word) * offset;
 		bool isDefault = ptrLoc.read<uint64_t>() == 0;
 		
 		CUPNP_REQUIRE(!isDefault);
@@ -632,14 +636,14 @@ namespace cupnp {
 	}
 	
 	template<uint32_t offset>
-	CUPNP_FUNCTION bool hasPointerField(uint64_t structure, Location data) {
-		uint16_t dataSectionSizeInWords = structure >> 32;
-		uint16_t pointerSectionSize = structure >> 48;
+	CUPNP_FUNCTION bool hasPointerField(uint32_t dataSectionSize, uint16_t pointerSectionSize, Location data) {
+		// uint16_t dataSectionSizeInWords = structure >> 32;
+		// uint16_t pointerSectionSize = structure >> 48;
 		
 		if(offset >= pointerSectionSize)
 			return false;
 		
-		Location ptrLoc = data + sizeof(capnp::word) * (dataSectionSizeInWords + offset);
+		Location ptrLoc = data + dataSectionSize + sizeof(capnp::word) * offset;
 		bool isDefault = ptrLoc.read<uint64_t>() == 0;
 		
 		return !isDefault;
@@ -690,8 +694,10 @@ namespace cupnp {
 	//! Copies data from struct src to struct dst
 	template<typename T1, typename T2>
 	CUPNP_FUNCTION inline void copyData(T1& dst, const T2& src) {
-		uint32_t dsSize1 = getDataSectionSizeInBytes(dst.structure);
-		uint32_t dsSize2 = getDataSectionSizeInBytes(src.structure);
+		/*uint32_t dsSize1 = getDataSectionSizeInBytes(dst.structure);
+		uint32_t dsSize2 = getDataSectionSizeInBytes(src.structure);*/
+		uint32_t dsSize1 = dst.dataSectionSize;
+		uint32_t dsSize2 = src.dataSectionSize;
 		
 		CUPNP_REQUIRE(dsSize1 >= dsSize2) { dsSize2 = dsSize1; }
 		
@@ -706,7 +712,7 @@ namespace cupnp {
 
 	template<typename T>
 	CUPNP_FUNCTION void swapData(T& t1, T& t2) {
-		uint16_t dsWords1 = getDataSectionSizeInWords(t1.structure);
+		/*uint16_t dsWords1 = getDataSectionSizeInWords(t1.structure);
 		uint16_t dsWords2 = getDataSectionSizeInWords(t2.structure);
 		
 		CUPNP_REQUIRE(dsWords1 == dsWords2);
@@ -717,13 +723,24 @@ namespace cupnp {
 		// CUPNP_REQUIRE(nPtr1 == nPtr2);
 		
 		uint16_t nWords = std::min(dsWords1, dsWords2);
-		// uint16_t nPtrs  = std::min(nPtr1, nPtr2);
+		// uint16_t nPtrs  = std::min(nPtr1, nPtr2);*/
 		
-		uint64_t* data1 = (uint64_t*) t1.data.ptr;
-		uint64_t* data2 = (uint64_t*) t2.data.ptr;
+		char* data1 = (char*) t1.data.ptr;
+		char* data2 = (char*) t2.data.ptr;
 		
-		for(uint16_t i = 0; i < nWords; ++i) {
+		/*for(uint16_t i = 0; i < nWords; ++i) {
 			uint64_t tmp = data1[i];
+			data1[i] = data2[i];
+			data2[i] = tmp;
+		}*/
+		
+		uint32_t dsBytes1 = t1.dataSectionSize;
+		uint32_t dsBytes2 = t2.dataSectionSize;
+		
+		uint32_t nBytes = std::min(dsBytes1, dsBytes2);
+		
+		for(uint32_t i = 0; i < nBytes; ++i) {
+			char tmp = data1[i];
 			data1[i] = data2[i];
 			data2[i] = tmp;
 		}
@@ -808,10 +825,20 @@ namespace cupnp {
 		CUPNP_REQUIRE(data.isValid((dataSectionSizeInWords + pointerSectionSize) * sizeof(capnp::word)));
 	}
 	
+	// Ensures that the location presented can hold enough data to support
+	// the data and pointer section size specified in "structure".
+	CUPNP_FUNCTION inline void validateStructPointer(uint32_t dataSectionSize, uint16_t pointerSectionSize, Location data) {
+		CUPNP_REQUIRE(data.isValid(dataSectionSize + pointerSectionSize * sizeof(capnp::word)));
+	}
+	
 	CUPNP_FUNCTION inline void validateInterfacePointer(uint64_t structure, Location data) {
 		uint8_t tag = structure & 3u;
 		CUPNP_REQUIRE(tag == 3);
 	}
+	
+	struct AnyData {
+		inline AnyData(uint64_t structure, cupnp::Location data) {}
+	};
 
 	template<typename T, Kind CPKind = kindFor<T>>
 	struct List {
@@ -822,16 +849,17 @@ namespace cupnp {
 		
 		capnp::ElementSize sizeEnum;
 		
-		uint64_t contentTag;
+		// uint64_t contentTag;
+		uint32_t dataSectionSize;
+		uint16_t pointerSectionSize;
 		
-		uint64_t structure;
+		// uint64_t structure;
 		cupnp::Location listStart;
 		
 		constexpr inline static uint64_t SINGLE_POINTER_TAG = ((uint64_t) 1) >> 48;
 		constexpr inline static uint64_t SINGLE_BYTE_TAG = ((uint64_t) 1) >> 32;
 		
-		CUPNP_FUNCTION List(uint64_t structure, cupnp::Location data) :
-			structure(structure)
+		CUPNP_FUNCTION List(uint64_t structure, cupnp::Location data)
 		{
 			uint8_t ptrTag = structure & 3u;
 			CUPNP_REQUIRE(ptrTag == 1 || structure == 0);
@@ -841,16 +869,27 @@ namespace cupnp {
 			
 			if(sizeEnum == capnp::ElementSize::INLINE_COMPOSITE) {
 				CUPNP_REQUIRE(data.isValid(sizeof(capnp::word)));
-				contentTag = data.read<uint64_t>();
+				uint64_t contentTag = data.read<uint64_t>();
+				
+				dataSectionSize = getDataSectionSizeInBytes(contentTag);
+				pointerSectionSize = getPointerSectionSize(contentTag);
 				
 				elementSize = computeContentSize(contentTag, data + sizeof(capnp::word));
 				listSize /= elementSize;
 				elementSize *= sizeof(capnp::word);
 				listStart = data + sizeof(capnp::word);
 			} else {
-				contentTag = makeContentTag(sizeEnum);
+				// contentTag = makeContentTag(sizeEnum);
 				listStart = data;
 				elementSize = getElementSize(sizeEnum);
+				
+				if(sizeEnum == capnp::ElementSize::POINTER) {
+					dataSectionSize = 0;
+					pointerSectionSize = 1;
+				} else {
+					dataSectionSize = elementSize;
+					pointerSectionSize = 0;
+				}				
 			}
 			
 			CUPNP_REQUIRE(listStart.isValid(listSize * elementSize));
@@ -874,7 +913,7 @@ namespace cupnp {
 			return 0;
 		}
 		
-		CUPNP_FUNCTION uint64_t makeContentTag(capnp::ElementSize listEnum) const {
+		/*CUPNP_FUNCTION uint64_t makeContentTag(capnp::ElementSize listEnum) const {
 			CUPNP_REQUIRE(listEnum <= capnp::ElementSize::POINTER);
 			
 			if(listEnum == capnp::ElementSize::POINTER) {
@@ -882,7 +921,7 @@ namespace cupnp {
 			}
 			
 			return ((uint64_t) getElementSize(listEnum)) >> 32;
-		}
+		}*/
 		
 		CUPNP_FUNCTION T operator[] (unsigned int i) {
 			CUPNP_REQUIRE(i < size());
@@ -910,6 +949,14 @@ namespace cupnp {
 		
 		CUPNP_FUNCTION const unsigned char* data() const {
 			return listStart.ptr;
+		}
+		
+		CUPNP_FUNCTION const List<T> slice(size_t begin, size_t end) const {
+			return List<T>(*this, begin, end);
+		}
+		
+		CUPNP_FUNCTION List<T> slice(size_t begin, size_t end) {
+			return List<T>(*this, begin, end);
 		}
 		
 		struct Iterator {
@@ -977,6 +1024,22 @@ namespace cupnp {
 		
 		ConstIterator begin() const { return ConstIterator(*this, 0); }
 		ConstIterator end() const { return ConstIterator(*this, size()); }
+	
+	private:
+		
+		CUPNP_FUNCTION List(const List<T>& other, uint32_t begin, uint32_t end) {
+			CUPNP_REQUIRE(begin < other.listSize);
+			CUPNP_REQUIRE(end <= other.listSize);
+			
+			sizeEnum = other.sizeEnum;
+			listSize = end - begin;
+			dataSectionSize = other.dataSectionSize;
+			pointerSectionSize = other.pointerSectionSize;
+			elementSize = other.elementSize;
+			
+			listStart = other.listStart + elementSize * begin;
+		}
+	
 	}; 
 	
 	// Structs are stored in-line in the list, and use a structure tag placed
@@ -985,11 +1048,11 @@ namespace cupnp {
 	template<typename T>
 	struct ListHelper<T, capnp::Kind::STRUCT> {
 		static CUPNP_FUNCTION T get(List<T>* list, uint32_t element) {
-			return T(list->contentTag, list->listStart + list->elementSize * element);
+			return T(list->dataSectionSize, list->pointerSectionSize, list->listStart + list->elementSize * element);
 		}
 		
 		static CUPNP_FUNCTION const T get(const List<T>* list, uint32_t element) {
-			return T(list->contentTag, list->listStart + list->elementSize * element);
+			return T(list->dataSectionSize, list->pointerSectionSize, list->listStart + list->elementSize * element);
 		}
 		
 		template<typename T2>
@@ -1112,7 +1175,8 @@ namespace cupnp {
 		List<uint8_t> backend;
 		
 		CUPNP_FUNCTION Data(uint64_t structure, cupnp::Location data) : backend(structure, data) {
-			CUPNP_REQUIRE(backend.contentTag == List<uint8_t>::SINGLE_BYTE_TAG);
+			// CUPNP_REQUIRE(backend.contentTag == List<uint8_t>::SINGLE_BYTE_TAG);
+			CUPNP_REQUIRE(backend.dataSectionSize == 1 && backend.pointerSectionSize == 0);
 		}
 
 		CUPNP_FUNCTION unsigned char* data() {
@@ -1132,7 +1196,8 @@ namespace cupnp {
 		List<uint8_t> backend;
 		
 		CUPNP_FUNCTION Text(uint64_t structure, cupnp::Location data) : backend(structure, data) {
-			CUPNP_REQUIRE(backend.contentTag == List<uint8_t>::SINGLE_BYTE_TAG);
+			CUPNP_REQUIRE(backend.dataSectionSize == 1 && backend.pointerSectionSize == 0);
+			// CUPNP_REQUIRE(backend.contentTag == List<uint8_t>::SINGLE_BYTE_TAG);
 		}
 
 		CUPNP_FUNCTION unsigned char* data() {
@@ -1144,5 +1209,14 @@ namespace cupnp {
 		}
 		
 		CUPNP_FUNCTION uint32_t size() { return backend.size(); }
+	};
+	
+	struct AnyPointer {
+		uint64_t structure;
+		cupnp::Location data;
+		
+		CUPNP_FUNCTION AnyPointer(uint64_t structure, cupnp::Location data) :
+			structure(structure), data(data)
+		{}
 	};
 }

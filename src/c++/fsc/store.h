@@ -45,8 +45,6 @@ public:
 		inline bool matches  (const Row& r, Key k) const;
 	};
 	
-	class Steward;
-	
 	// Data stores are intended to hold data across threads, so we avoid unneccessarily moving data between nodes & worker threads.
 	// Even though access to the store itself is usually mutex guarded, references to the data can be copied and removed
 	// without any further notice. Therefore, the arrays need to be held in a container with shared refcounting.
@@ -67,6 +65,8 @@ public:
 	kj::Own<const Entry> insertOrGet(const kj::ArrayPtr<const byte>& key, kj::Array<const byte>&& data);
 
 	Table table;
+	
+	static Promise<void> gcLoop(const kj::MutexGuarded<LocalDataStore>& store);
 };
 
 /**
@@ -84,37 +84,6 @@ public:
 	//kj::Array<const byte> key;
 	ID key;
 	kj::Array<const byte> value;
-};
-
-class LocalDataStore::Steward {
-public:
-	Steward(kj::MutexGuarded<LocalDataStore>& store);
-	~Steward();
-	
-	const kj::Executor& getExecutor();
-	
-	// Synchronously runs the GC and then returns
-	void syncGC();
-	
-	// Shift the next GC scheduled in the worker thread to "now"
-	void asyncGC();
-	
-	void stop();
-
-private:
-	struct PrivateVoid {};
-	
-	kj::MutexGuarded<LocalDataStore>& _store;
-	kj::Canceler _canceler;
-	
-	kj::PromiseFulfillerPair<void> _gcRequest;
-	kj::MutexGuarded<Own<const kj::Executor>> _executor;
-	
-	kj::MutexGuarded<bool> running;
-	
-	kj::Thread _thread;
-	
-	void _run();
 };
 
 // NOTE: This class might get removed. A message reader that can be created directly from data store rows. 

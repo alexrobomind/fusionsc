@@ -1,6 +1,7 @@
 stages:
   - build
   - test
+  - pybuild
   - doc
   - pages
 
@@ -50,9 +51,10 @@ stages:
 
 
 .linux: &linux
+  image: debian:bookworm
   before_script:
     - apt-get update --yes
-    - apt-get install --yes cmake python3 python3-pip
+    - apt-get install --yes cmake python3 python3-pip python3-virtualenv libssl-dev clang-14
 
 .msvc: &msvc
   tags:
@@ -68,11 +70,15 @@ stages:
 
 .gcc: &gcc
   <<: *linux
-  image: gcc
+  variables:
+    CC: gcc
+    CXX: g++
 
 .clang: &clang
   <<: *linux
-  image: silkeh/clang
+  variables:
+    CC: clang-14
+    CXX: clang++-14
 
 build:gcc:
   <<: *build-linux
@@ -105,25 +111,44 @@ test:msvc:
   <<: *msvc
   needs:
     - build:msvc
+    
+# Python build
 
+pybuild:pybuild-linux:
+  <<: *job
+  
+  stage: pybuild
+  needs: []
+  
+  image: quay.io/pypa/manylinux2014_x86_64
+  parallel:
+    matrix:
+      - PYTHON: [cp38-cp38, cp39-cp39, cp310-cp310, cp311-cp311]
+  
+  before_script:
+    - yum install -y openssl-static
+  script:
+    - /opt/python/$PYTHON/bin/python -m pip install build
+    - /opt/python/$PYTHON/bin/python -m build
+  
 
 # Documentation (stands separate from the compilation-related jobs)
 
-doc:
-  <<: *job
-  stage: doc
-  image: gcc
-
-  needs: []
-
-  script:
-    - apt-get update --yes
-    - apt-get install --yes doxygen graphviz
-    - doxygen Doxyfile
-  
-  artifacts:
-    paths:
-      - gendocs
+#doc:
+#  <<: *job
+#  stage: doc
+#  image: gcc
+#
+#  needs: []
+#
+#  script:
+#    - apt-get update --yes
+#    - apt-get install --yes doxygen graphviz
+#    - doxygen Doxyfile
+#  
+#  artifacts:
+#    paths:
+#      - gendocs
 
 pages:
   <<: *clang
@@ -133,7 +158,9 @@ pages:
   needs: []
   
   script:
-  - pip3 install sphinx myst_nb sphinx_rtd_theme numpy
+  - python3 -m virtualenv build_venv
+  - source build_venv/bin/activate
+  - pip install sphinx myst_nb sphinx_rtd_theme numpy
   - mkdir build
   - cd build
   - cmake ..

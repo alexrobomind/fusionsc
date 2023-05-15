@@ -1,8 +1,35 @@
 #include "geometry.h"
+#include "poly.h"
 
 #include <kj/map.h>
 
 namespace fsc {
+
+namespace {
+	double angle(Angle::Reader in) {
+		switch(in.which()) {
+			case Angle::RAD: return in.getRad();
+			case Angle::DEG: return pi / 180 * in.getDeg();
+		}
+		KJ_FAIL_REQUIRE("Unknown angle type");
+	}
+}
+
+bool isBuiltin(Geometry::Reader in) {
+	switch(in.which()) {
+		case Geometry::COMBINED:
+		case Geometry::TRANSFORMED:
+		case Geometry::REF:
+		case Geometry::NESTED:
+		case Geometry::MESH:
+		case Geometry::MERGED:
+		case Geometry::INDEXED:
+			return true;
+		
+		default:
+			return false;
+	}
+}
 	
 Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context) {
 	output.setTags(input.getTags());
@@ -101,6 +128,7 @@ struct GeometryLibImpl : public GeometryLib::Server {
 	Promise<void> merge(MergeContext context) override;
 	Promise<void> index(IndexContext context) override;
 	Promise<void> planarCut(PlanarCutContext context) override;
+	Promise<void> reduce(ReduceContext context) override;
 	
 private:
 	struct GeometryAccumulator {
@@ -206,9 +234,11 @@ Promise<void> GeometryLibImpl::collectTagNames(Geometry::Reader input, kj::HashS
 			return handleMerged(input.getMerged());
 		case Geometry::INDEXED:
 			return handleMerged(input.getIndexed().getBase());
+		case Geometry::WRAP_TOROIDALLY:
+			return READY_NOW;
 			
 		default:
-			KJ_FAIL_REQUIRE("Unknown geometry node type encountered during merge operation. Likely an unresolved node", input.which());
+			KJ_FAIL_REQUIRE("Unknown geometry node type encountered during merge operation. Likely an unresolved node", input);
 	}
 }
 
@@ -349,6 +379,119 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 		
 		case Geometry::INDEXED:
 			return handleMerged(input.getIndexed().getBase(), tagValues.asReader()).attach(mv(tagValues));
+		
+		case Geometry::WRAP_TOROIDALLY: {
+			auto wt = input.getWrapToroidally();
+			
+			double phiStart = 0;
+			double phiEnd = 2 * pi;
+			
+			uint32_t nPhi = wt.getNPhi();
+			KJ_REQUIRE(nPhi > 1);
+			
+			bool close = false;
+			if(wt.isPhiRange()) {
+				auto pr = wt.getPhiRange();
+				phiStart = angle(pr.getPhiStart());
+				phiEnd = angle(pr.getPhiEnd());
+				close = pr.getClose();
+			}
+			
+			auto r = wt.getR();
+			auto z = wt.getZ();
+			KJ_REQUIRE(z.size() == r.size());
+			
+			uint32_t nVerts = r.size();
+			KJ_REQUIRE(nVerts > 1);
+			
+			uint32_t nLines = nVerts - 1;
+			
+			// Create vertices
+			Tensor<double, 3> vertices(3, nVerts, nPhi + 1);
+			const double dPhi = (phiEnd - phiStart) / nPhi;
+			for(auto iPhi : kj::range(0, nPhi + 1)) {
+				double phi = iPhi * dPhi + phiStart;
+				
+				for(auto iVert : kj::indices(r)) {					
+					vertices(0, iVert, iPhi) = r[iVert] * cos(phi);
+					vertices(1, iVert, iPhi) = r[iVert] * sin(phi);
+					vertices(2, iVert, iPhi) = z[iVert];
+				}
+			}
+			KJ_DBG("Vertices generated");
+			
+			// Create triangles
+			Tensor<uint32_t, 4> triangles(3, 2, nLines, nPhi);
+			for(auto iPhi : kj::range(0, nPhi)) {
+				for(auto iLine : kj::range(0, nLines)) {
+					uint32_t v1 = iPhi * nVerts + iLine;
+					uint32_t v2 = v1 + 1;
+					uint32_t v3 = v2 + nVerts;
+					uint32_t v4 = v3 - 1;
+					
+					triangles(0, 0, iLine, iPhi) = v1;
+					triangles(1, 0, iLine, iPhi) = v2;
+					triangles(2, 0, iLine, iPhi) = v3;
+					
+					triangles(0, 1, iLine, iPhi) = v3;
+					triangles(1, 1, iLine, iPhi) = v4;
+					triangles(2, 1, iLine, iPhi) = v1;
+				}
+			}
+			KJ_DBG("Triangles generated");
+			
+			using A = Eigen::array<int64_t, 2>;
+			
+			Tensor<double, 2> flatVerts = vertices.reshape(A({3, nVerts * (nPhi + 1)}));
+			KJ_DBG("Verts reshaped");
+			
+			{
+				Temporary<Mesh> tmpMesh;
+				writeTensor(flatVerts, tmpMesh.getVertices());
+				
+				auto indices = tmpMesh.initIndices(3 * 2 * nLines * nPhi);
+				for(auto i : kj::indices(indices))
+					indices.set(i, triangles.data()[i]);
+				
+				tmpMesh.setTriMesh();
+				handleMesh(tmpMesh, tagValues);
+			}
+			
+			// Generate end caps
+			if(close) {
+				Tensor<double, 2> rz(nVerts, 2);
+				for(auto i : kj::range(0, nVerts)) {
+					rz(i, 0) = r[i];
+					rz(i, 1) = z[i];
+				}
+				
+				Tensor<uint32_t, 2> triangulation = triangulate(rz);
+				uint32_t numTriangles = triangulation.dimension(0);
+				
+				auto phis = kj::heapArray<double>({phiStart, phiEnd});
+				for(double phi : phis) {
+					Temporary<Mesh> tmpMesh;
+					Tensor<double, 2> vertices(3, nVerts);
+					for(auto iVert : kj::indices(r)) {					
+						vertices(0, iVert) = r[iVert] * cos(phi);
+						vertices(1, iVert) = r[iVert] * sin(phi);
+						vertices(2, iVert) = z[iVert];
+					}
+					writeTensor(vertices, tmpMesh.getVertices());
+				
+					auto indices = tmpMesh.initIndices(3 * numTriangles);
+					for(auto i : kj::range(0, numTriangles)) {						
+						indices.set(3 * i + 0, triangulation(i, 0));
+						indices.set(3 * i + 1, triangulation(i, 1));
+						indices.set(3 * i + 2, triangulation(i, 2));
+					}
+				
+					tmpMesh.setTriMesh();
+					handleMesh(tmpMesh, tagValues);
+				}
+			}
+			return READY_NOW;
+		}
 			
 		default:
 			KJ_FAIL_REQUIRE("Unknown geometry node type encountered during merge operation. Likely an unresolved node", input.which());
@@ -382,7 +525,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader inp
 			auto turned = input.getTurned();
 			auto inAxis = turned.getAxis();
 			auto inCenter = turned.getCenter();
-			double angle = turned.getAngle();
+			double ang = angle(turned.getAngle());
 			
 			KJ_REQUIRE(inAxis.size() == 3);
 			KJ_REQUIRE(inCenter.size() == 3);
@@ -390,7 +533,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader inp
 			Vec3d axis   { inAxis[0], inAxis[1], inAxis[2] };
 			Vec3d center { inCenter[0], inCenter[1], inCenter[2] };
 			
-			auto rotation = rotationAxisAngle(center, axis, angle);
+			auto rotation = rotationAxisAngle(center, axis, ang);
 			
 			KJ_IF_MAYBE(pTransform, transform) {
 				return mergeGeometries(turned.getNode(), tagTable, tagScope, (Mat4d)((*pTransform) * rotation), output);
@@ -536,7 +679,7 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 				}}}
 			}
 			
-			KJ_DBG("Processed mesh", iEntry, input.getEntries().size());
+			// KJ_DBG("Processed mesh", iEntry, input.getEntries().size());
 		}
 		
 		// Set up output data. This creates a packed representation of the index
@@ -630,6 +773,158 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 	
 	return promise.attach(tagNameTable.x(), geomAccum.x());
 }
+
+Promise<void> GeometryLibImpl::reduce(ReduceContext context) {
+	auto params = context.getParams();
+	
+	// Check if already merged
+	Geometry::Reader geometry = params.getGeometry();
+	while(geometry.isNested()) {
+		geometry = geometry.getNested();
+	}
+	
+	DataRef<MergedGeometry>::Client ref = nullptr;
+	switch(geometry.which()) {
+		case Geometry::INDEXED: {
+			ref = geometry.getIndexed().getBase();
+		}
+		case Geometry::MERGED: {
+			ref = geometry.getMerged();
+		}
+		default: {
+			auto mergeRequest = thisCap().mergeRequest();
+			mergeRequest.setNested(geometry);
+			ref = mergeRequest.sendForPipeline().getRef();
+		}
+	}
+	
+	return getActiveThread().dataService().download(ref)
+	.then([context, params](LocalDataRef<MergedGeometry> localRef) mutable {
+		KJ_DBG("Beginning reduce operation");
+		auto geometry = localRef.get();
+		
+		auto entries = geometry.getEntries();
+		kj::Vector<Temporary<Mesh>> meshesOut;
+		
+		uint32_t iEntry = 0;
+		
+		while(iEntry < entries.size()) {
+			kj::Vector<Mesh::Reader> meshes;
+			
+			uint32_t nVertTot = 0;
+			uint32_t nIndTot = 0;
+			
+			while(iEntry < entries.size()) {
+				auto mesh = entries[iEntry].getMesh();
+				
+				uint32_t nVert = mesh.getVertices().getShape()[0];
+				uint32_t nInd = mesh.getIndices().size();
+				
+				if(meshes.size() > 0) {
+					if(nVertTot + nVert > params.getMaxVertices())
+						break;
+					
+					if(nIndTot + nInd > params.getMaxIndices())
+						break;
+				}
+				
+				meshes.add(mesh);
+				nVertTot += nVert;
+				nIndTot  += nInd;
+				++iEntry;
+			}
+			
+			Temporary<Mesh> newMesh;
+			newMesh.initVertices().setShape({nVertTot, 3});
+			auto vertData = newMesh.getVertices().initData(3 * nVertTot);
+			auto indData = newMesh.initIndices(nIndTot);
+			{
+				uint32_t iVert = 0;
+				uint32_t iInd = 0;
+				
+				for(auto mesh : meshes) {
+					auto indIn = mesh.getIndices();
+					auto vertIn = mesh.getVertices().getData();
+					
+					// Copy indices with appropriate shift
+					for(auto i : kj::indices(mesh.getIndices())) {
+						indData.set(i + iInd, indIn[i] + iVert);
+					}
+					
+					// Copy vertices
+					for(auto i : kj::indices(vertIn)) {
+						vertData.set(i + 3 * iVert, vertIn[i]);
+					}
+					
+					uint32_t nInd = indIn.size();
+					uint32_t nVert = vertIn.size() / 3;
+					
+					iInd += nInd;
+					iVert += nVert;
+				}
+			}
+			
+			// Copy polygon information
+			bool allTri = true;
+			for(auto mesh : meshes) {
+				if(!mesh.isTriMesh()) {
+					allTri = false;
+					break;
+				}
+			}
+			
+			if(allTri) {
+				newMesh.setTriMesh();
+			} else {
+				// Meh, we need to copy all the polygon data
+				uint32_t polyCount = 0;
+				for(auto mesh : meshes) {
+					switch(mesh.which()) {
+						case Mesh::TRI_MESH:
+							polyCount += mesh.getIndices().size() / 3;
+							break;
+						case Mesh::POLY_MESH:
+							polyCount += mesh.getPolyMesh().size();
+							break;
+						default:
+							KJ_FAIL_REQUIRE("Unknown mesh type encountered in reduce operation");
+					}
+				}
+				
+				auto polys = newMesh.initPolyMesh(polyCount);
+				uint32_t iPoly = 0;
+				for(auto mesh : meshes) {
+					if(mesh.isTriMesh()) {
+						for(auto i : kj::range(0, mesh.getIndices().size() / 3)) {
+							polys.set(iPoly++, 3);
+						}
+					} else {
+						for(uint32_t poly : mesh.getPolyMesh()) {
+							polys.set(iPoly++, poly);
+						}
+					}
+				}
+			}
+			
+			meshesOut.add(mv(newMesh));
+		}
+		
+		KJ_DBG("Reduction complete, publishing results", entries.size(), meshesOut.size());
+		
+		Temporary<MergedGeometry> merged;
+		auto outEntries = merged.initEntries(meshesOut.size());
+		
+		for(auto i : kj::indices(outEntries)) {
+			outEntries[i].setMesh(meshesOut[i]);
+			meshesOut[i] = nullptr;
+		}
+		
+		context.initResults().setRef(getActiveThread().dataService().publish(mv(merged)));
+		KJ_DBG("Reduction published");
+	});
+}
+
+
 
 Promise<void> GeometryLibImpl::planarCut(PlanarCutContext context) {
 	auto mergeRequest = thisCap().mergeRequest();

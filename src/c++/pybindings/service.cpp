@@ -15,6 +15,7 @@
 #include <fsc/services.h>
 #include <fsc/magnetics.h>
 #include <fsc/offline.capnp.h>
+#include <fsc/hint.capnp.h>
 
 using capnp::DynamicValue;
 using capnp::DynamicList;
@@ -30,37 +31,14 @@ using namespace fscpy;
 
 namespace {
 
-RootService::Client connectSameThread1(RootConfig::Reader config) {
-	fscpy::PyContext::startEventLoop();
-	return createRoot(config);
+LocalResources::Client connectSameThread1(LocalConfig::Reader config) {
+	fscpy::PythonContext::startEventLoop();
+	return createLocalResources(config);
 }
 	
-RootService::Client connectSameThread2() {
-	Temporary<RootConfig> config;
+LocalResources::Client connectSameThread2() {
+	Temporary<LocalConfig> config;
 	return connectSameThread1(config);
-}
-
-RootService::Client connectRemote1(kj::StringPtr address, unsigned int port) {
-	fscpy::PyContext::startEventLoop();
-	KJ_UNIMPLEMENTED("Remote connection not implemented");
-	return connectRemote(address, port);
-}
-
-/*RootService::Client connectLocal1() {
-	fscpy::PyContext::startEventLoop();
-	auto serverFactory = newInProcessServer<RootService>([]() mutable {
-		Temporary<RootConfig> rootConfig;
-		return createRoot(rootConfig);
-	});
-	
-	auto server = serverFactory();
-	return attach(server, mv(serverFactory));
-}*/
-
-
-ResolverChain::Client newResolverChain1() {
-	fscpy::PyContext::startEventLoop();
-	return newResolverChain();
 }
 
 struct LocalRootServer {
@@ -68,15 +46,16 @@ struct LocalRootServer {
 	
 	LocalRootServer() :
 		clientFactory(
-			newInProcessServer<RootService>([]() mutable {
-				Temporary<RootConfig> rootConfig;
-				return createRoot(rootConfig);
+			newInProcessServer<LocalResources>([]() mutable {
+				Temporary<LocalConfig> rootConfig;
+				return createLocalResources(rootConfig);
 			})
 		)
 	{}
 	
-	RootService::Client connect() {
-		return clientFactory().castAs<RootService>();
+	LocalResources::Client connect() {
+		auto result = clientFactory().castAs<LocalResources>();
+		return result;
 	}
 };
 
@@ -86,10 +65,6 @@ namespace fscpy {
 	void initService(py::module_& m) {	
 		m.def("connectSameThread", &connectSameThread1);
 		m.def("connectSameThread", &connectSameThread2);
-		// m.def("connectLocal", &connectLocal1);
-		m.def("connectRemote", &connectRemote1, py::arg("address"), py::arg("port") = 0);
-		m.def("newResolverChain", &newResolverChain1);
-		m.def("newCache", &fsc::newCache);
 		
 		py::class_<LocalRootServer>(m, "LocalRootServer")
 			.def(py::init<>())
@@ -98,13 +73,14 @@ namespace fscpy {
 	}
 
 	void loadDefaultSchema(py::module_& m) {
+		// Here we need to specify datatypes that need to be loaded because they are passed to the python interface
+		
+		#define FSC_BUILTIN_SCHEMAS FieldResolver, GeometryResolver, NetworkInterface, LocalResources, OfflineData, \
+			MergedGeometry, FLTStopReason, FieldlineMapping, HintEquilibrium
+		
 		defaultLoader.addBuiltin<
 			capnp::schema::Node,
-			RootService,
-			OfflineData,
-			ResolverChain,
-			MergedGeometry,
-			FLTStopReason
+			FSC_BUILTIN_SCHEMAS
 		>();
 		
 		// Schema submodule
@@ -119,10 +95,11 @@ namespace fscpy {
 		
 		// Root module
 		{		
-			auto schemas = getBuiltinSchemas<FieldResolver, GeometryResolver, RootService, OfflineData, ResolverChain, MergedGeometry>();
+			auto schemas = getBuiltinSchemas<FSC_BUILTIN_SCHEMAS>();
+			py::module_ subM = m.def_submodule("service");
 				
 			for(auto node : schemas) {
-				defaultLoader.importNodeIfRoot(node.getId(), m);
+				defaultLoader.importNodeIfRoot(node.getId(), subM);
 			}
 		}
 	}

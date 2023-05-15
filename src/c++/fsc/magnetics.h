@@ -20,12 +20,16 @@ namespace fsc {
  * \snippet magnetics.capnp magnetics
  */
 
+bool isBuiltin(MagneticField::Reader);
+bool isBuiltin(Filament::Reader);
+
 ToroidalGridStruct readGrid(ToroidalGrid::Reader in, unsigned int maxOrdinal);
 void writeGrid(const ToroidalGridStruct& grid, ToroidalGrid::Builder out);
 
 class FieldResolverBase : public FieldResolver::Server {
 public:	
-	virtual Promise<void> resolveField(ResolveFieldContext context) override;
+	Promise<void> resolveField(ResolveFieldContext context) override;
+	Promise<void> resolveFilament(ResolveFilamentContext context) override;
 	
 	virtual Promise<void> processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context);
 	virtual Promise<void> processFilament(Filament::Reader input, Filament::Builder output, ResolveFieldContext context);
@@ -34,27 +38,12 @@ public:
 /**
  * Creates a new field calculator.
  */
-FieldCalculator::Client newFieldCalculator(/*ToroidalGrid::Reader grid, */kj::Own<Eigen::ThreadPoolDevice> device);
-
-/**
- * Creates a new field calculator.
- */
-FieldCalculator::Client newFieldCalculator(/*ToroidalGrid::Reader grid, */kj::Own<Eigen::DefaultDevice> device);
-
-#ifdef FSC_WITH_CUDA
-
-/**
- * Creates a new gpu-based field calculator.
- */
-FieldCalculator::Client newFieldCalculator(/*ToroidalGrid::Reader grid, */kj::Own<Eigen::GpuDevice> device);
-
-#endif
+FieldCalculator::Client newFieldCalculator(Own<DeviceBase> dev);
 
 /**
  * Creates a field resolver that will insert a cache instruction when detecting the passed field
  */
 FieldResolver::Client newCache(MagneticField::Reader field, ComputedField::Reader computed);
-
 /**
  * For testing
  */

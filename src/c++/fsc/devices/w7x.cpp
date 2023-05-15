@@ -2,6 +2,7 @@
 #include <capnp/compat/json.h>
 
 #include "w7x.h"
+#include "../yaml.h"
 
 namespace fsc {
 
@@ -13,32 +14,42 @@ constexpr static unsigned int N_MAIN_COILS = 7;
 constexpr static unsigned int N_MODULES = 10;
 constexpr static unsigned int N_TRIM_COILS = 5;
 constexpr static unsigned int N_CONTROL_COILS = 10;
+
+struct W7XFieldResolver : public FieldResolverBase {
+	Promise<void> processField   (MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) override;
+	
+	// Helper function to handle the "coilsAndCurrents" type of W7-X magnetic config
+	void coilsAndCurrents(MagneticField::W7x::CoilsAndCurrents::Reader reader, MagneticField::Builder output, ResolveFieldContext context);
+};
+
+struct W7XGeometryResolver : public GeometryResolverBase {
+	Promise<void> processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context) override;
+};
 	
 /**
- * Magnetic field resolver that processes W7-X configuration descriptions and
- * CoilsDB references.
+ * Magnetic field resolver that processes CoilsDB references.
  */
 struct CoilsDBResolver : public FieldResolverBase {	
-	
-	CoilsDBResolver(CoilsDB::Client backend);
+	CoilsDBResolver(CoilsDB::Client backend) : backend(mv(backend)) {}
 	
 	kj::TreeMap<uint64_t, DataRef<Filament>::Client> coils;
+	CoilsDB::Client backend;
+	
+	Promise<void> processFilament(Filament     ::Reader input, Filament     ::Builder output, ResolveFieldContext context) override;
+	
+	//! Loads the coils from the backend coilsDB. Caches the result
+	DataRef<Filament>::Client getCoil(uint64_t cdbID);	
+};
+	
+/**
+ * Magnetic field resolver that processes W7-X configuration descriptions
+ */
+struct ConfigDBResolver : public FieldResolverBase {
+	ConfigDBResolver(CoilsDB::Client backend) : backend(mv(backend)) {}
 	
 	CoilsDB::Client backend;
 	
-	Promise<void> processField   (MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) override;
-	Promise<void> processFilament(Filament     ::Reader input, Filament     ::Builder output, ResolveFieldContext context) override;
-	
-	// Extra function to handle the "coilsAndCurrents" type of W7-X magnetic config
-	void coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAndCurrents::Reader reader, MagneticField::Builder output, ResolveFieldContext context);
-	
-	// Returns a set of magnetic fields required for processing a configuration node.
-	// Caches the field set
-	// Promise<LocalDataRef<CoilFields>> getCoilFields(W7XCoilSet::Reader reader);
-	// static Temporary<CoilFields> buildCoilFields(W7XCoilSet::Reader reader);
-	
-	// Loads the coils from the backend coilsDB. Caches the result
-	DataRef<Filament>::Client getCoil(uint64_t cdbID);	
+	Promise<void> processField (MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) override;
 };
 
 struct ComponentsDBResolver : public GeometryResolverBase {
@@ -48,7 +59,6 @@ struct ComponentsDBResolver : public GeometryResolverBase {
 	ComponentsDBResolver(ComponentsDB::Client backend);
 	
 	kj::TreeMap<uint64_t, DataRef<Mesh>::Client> meshes;
-	
 	ComponentsDB::Client backend;
 	
 	Promise<void> processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context) override;
@@ -60,74 +70,139 @@ struct ComponentsDBResolver : public GeometryResolverBase {
 	Promise<Array<uint64_t>> getAssembly(uint64_t cdbID);
 };
 
-// === class CoilsDBResolver ===
-	
-CoilsDBResolver::CoilsDBResolver(CoilsDB::Client backend) :
-	backend(backend)
-{}
+// === class W7XFieldResolver ===
 
-Promise<void> CoilsDBResolver::processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) {
-	switch(input.which()) {
-		case MagneticField::W7X_MAGNETIC_CONFIG: {
-			auto w7xConfig = input.getW7xMagneticConfig();
-			
-			auto tmpField = heapHeld<Temporary<MagneticField>>();
-			Promise<void> inner = READY_NOW;
-			
-			switch(w7xConfig.which()) {
-				// The 'coils and currents' type of field is processed separately
-				case MagneticField::W7xMagneticConfig::COILS_AND_CURRENTS: {
-					coilsAndCurrents(w7xConfig.getCoilsAndCurrents(), *tmpField, context);
-					
-					break;
-				}
-					
-				// Send config requests to the W7-X Config DB
-				case MagneticField::W7xMagneticConfig::CONFIGURATION_D_B: {
-					auto cdbConfig = w7xConfig.getConfigurationDB();
-					
-					auto request = backend.getConfigRequest();
-					request.setId(cdbConfig.getConfigID());
-					auto coilsDBResponse = request.send();
-					
-					inner = coilsDBResponse.then([this, output, cdbConfig](auto config) mutable {						
-						auto coils = config.getCoils();
-						auto currents = config.getCurrents();
-						
-						double scale = config.getScale();
-						
-						unsigned int n_coils = coils.size();
-						KJ_REQUIRE(currents.size() == n_coils);
-						
-						auto sum = output.initSum(n_coils);
-						for(unsigned int i = 0; i < n_coils; ++i) {
-							auto filField = sum[i].initFilamentField();
-							filField.setCurrent(scale * currents[i]);
-							filField.setBiotSavartSettings(cdbConfig.getBiotSavartSettings());
-							filField.initFilament().setW7xCoilsDB(coils[i]);
-						}
-					}).catch_([input, tmpField](kj::Exception e) mutable {
-						(*tmpField) = input;
-					});
-					
-					break;
-				}
-				default:
-					break;
-			}
-			
-			// After pre-processing the field, process it with the parent method to resolve the coil references where possible
-			return inner.then([this, tmpField, output, context]() mutable {
-				return FieldResolverBase::processField(*tmpField, output, context);
-			}).attach(tmpField.x());
-		}
-		
-		default:
-			return FieldResolverBase::processField(input, output, context);
+Promise<void> W7XFieldResolver::processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) {
+	if(!input.isW7x())
+		return FieldResolverBase::processField(input, output, context);
+	
+	auto w7x = input.getW7x();
+	
+	if(!w7x.isCoilsAndCurrents()) {
+		output.setNested(input);
+		return READY_NOW;
 	}
+	
+	coilsAndCurrents(w7x.getCoilsAndCurrents(), output, context);
+	return READY_NOW;
 }
 
-void CoilsDBResolver::coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAndCurrents::Reader reader, MagneticField::Builder output, ResolveFieldContext context) {
+// === class W7XGeometryResolver ===
+
+Promise<void> W7XGeometryResolver::processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context) {
+	if(!input.isW7x())
+		return GeometryResolverBase::processGeometry(input, output, context);
+	
+	using W7X = Geometry::W7x;
+	W7X::Reader w7x = input.getW7x();
+	
+	switch(w7x.which()) {
+		case W7X::OP21_DIVERTOR: {
+			auto ref = getActiveThread().dataService().publishConstant<Geometry>(W7X_OP21_DIVERTOR.get());
+			auto geometry = ref.get();
+			output.setNested(geometry);
+			return READY_NOW;
+		}
+		case W7X::OP21_BAFFLES: {
+			auto ref = getActiveThread().dataService().publishConstant<Geometry>(W7X_OP21_BAFFLES_NO_HOLES.get());
+			auto geometry = ref.get();
+			output.setNested(geometry);
+			return READY_NOW;
+		}
+		case W7X::OP21_HEAT_SHIELD: {
+			auto ref = getActiveThread().dataService().publishConstant<Geometry>(W7X_OP21_HEAT_SHIELD_NO_HOLES.get());
+			auto geometry = ref.get();
+			output.setNested(geometry);
+			return READY_NOW;
+		}
+		default:
+			break;
+	}
+	
+	output.setNested(input);
+	return READY_NOW;
+}
+
+// === class CoilsDBResolver ===
+
+Promise<void> CoilsDBResolver::processFilament(Filament::Reader input, Filament::Builder output, ResolveFieldContext context) {
+	if(input.which() != Filament::W7X)
+		return FieldResolverBase::processFilament(input, output, context);
+	
+	auto w7x = input.getW7x();
+	uint64_t coilId = w7x.getCoilsDb();
+	auto coil = getCoil(coilId);
+	
+	output.setRef(coil);
+	return coil.whenResolved();
+}
+
+DataRef<Filament>::Client CoilsDBResolver::getCoil(uint64_t cdbID) {
+	KJ_IF_MAYBE(coilsRef, coils.findEntry(cdbID)) {
+		return coilsRef->value;
+	}
+	 
+	auto coilRequest = backend.getCoilRequest();
+	coilRequest.setId(cdbID);
+	
+	DataRef<Filament>::Client newCoil = coilRequest.send()
+	.then([cdbID, this](auto filament) -> DataRef<Filament>::Client {
+		auto ref = getActiveThread().dataService().publish(Filament::Reader(filament));
+		
+		KJ_IF_MAYBE(coilsRef, coils.findEntry(cdbID)) {
+			return coilsRef->value;
+		}
+			
+		coils.insert(cdbID, ref);
+		
+		return ref;
+	})
+	.attach(thisCap());
+	
+	return newCoil;
+}
+
+// === class ConfigDBResolver ===
+
+Promise<void> ConfigDBResolver::processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) {
+	if(input.which() != MagneticField::W7X)
+		return FieldResolverBase::processField(input, output, context);
+	
+	auto w7x = input.getW7x();
+	
+	if(!w7x.isConfigurationDb()) {
+		output.setNested(input);
+		return READY_NOW;
+	}
+	
+	auto cdbConfig = w7x.getConfigurationDb();
+	
+	auto request = backend.getConfigRequest();
+	request.setId(cdbConfig.getConfigId());
+	auto coilsDBResponse = request.send();
+	
+	return coilsDBResponse.then([this, output, cdbConfig](auto config) mutable {						
+		auto coils = config.getCoils();
+		auto currents = config.getCurrents();
+		
+		double scale = config.getScale();
+		
+		unsigned int n_coils = coils.size();
+		KJ_REQUIRE(currents.size() == n_coils);
+		
+		auto sum = output.initSum(n_coils);
+		for(unsigned int i = 0; i < n_coils; ++i) {
+			auto filField = sum[i].initFilamentField();
+			filField.setCurrent(scale * currents[i]);
+			filField.setBiotSavartSettings(cdbConfig.getBiotSavartSettings());
+			filField.initFilament().initW7x().setCoilsDb(coils[i]);
+		}
+	});
+}
+
+}
+
+void W7XFieldResolver::coilsAndCurrents(MagneticField::W7x::CoilsAndCurrents::Reader reader, MagneticField::Builder output, ResolveFieldContext context) {
 	output.initSum(N_MAIN_COILS + N_TRIM_COILS + N_CONTROL_COILS);
 	
 	// Transform coil fields into actual fields
@@ -186,41 +261,6 @@ void CoilsDBResolver::coilsAndCurrents(MagneticField::W7xMagneticConfig::CoilsAn
 	KJ_ASSERT(offset == output.getSum().size());
 }
 
-Promise<void> CoilsDBResolver::processFilament(Filament::Reader input, Filament::Builder output, ResolveFieldContext context) {
-	switch(input.which()) {
-		case Filament::W7X_COILS_D_B: {
-			uint64_t coilId = input.getW7xCoilsDB();
-			auto coil = getCoil(coilId);
-			return coil.whenResolved().then(
-				[output, coil]() mutable { output.setRef(coil);  },
-				[output, coilId](kj::Exception e) mutable { output.setW7xCoilsDB(coilId); }
-			);
-		}
-			
-		default:
-			return FieldResolverBase::processFilament(input, output, context);
-	}
-}
-
-DataRef<Filament>::Client CoilsDBResolver::getCoil(uint64_t cdbID) {
-	KJ_IF_MAYBE(coilsRef, coils.findEntry(cdbID)) {
-		return coilsRef->value;
-	}
-	 
-	auto coilRequest = backend.getCoilRequest();
-	coilRequest.setId(cdbID);
-	
-	DataRef<Filament>::Client newCoil = coilRequest.send().then([cdbID, this](auto filament) {
-		// auto filament = response.getFilament();
-		auto ref = getActiveThread().dataService().publish(Filament::Reader(filament));
-		
-		return ref;
-	});
-	coils.insert(cdbID, newCoil);
-	// TODO: Install an error handler that clears the entry if the request fails
-	return newCoil;
-}
-
 // === class ComponentsDBResolver ===
 
 constexpr kj::StringPtr ComponentsDBResolver::CDB_ID_TAG;
@@ -233,65 +273,49 @@ ComponentsDBResolver::ComponentsDBResolver(ComponentsDB::Client backend) :
 Promise<void> ComponentsDBResolver::processGeometry(Geometry::Reader input, Geometry::Builder output, ResolveGeometryContext context) {
 	return GeometryResolverBase::processGeometry(input, output, context)
 	.then([input, output, context, this]() mutable -> Promise<void> {
-		switch(input.which()) {
-			case Geometry::COMPONENTS_D_B_MESHES: {
-				auto ids = input.getComponentsDBMeshes();
-				auto n = ids.size();
-				auto nodes = output.initCombined(ids.size());
+		if(input.which() != Geometry::W7X)
+			return READY_NOW;
+		
+		auto w7x = input.getW7x();
+		switch(w7x.which()) {
+			case Geometry::W7x::COMPONENTS_DB_MESH: {
+				auto id = w7x.getComponentsDbMesh();
+				output.setMesh(getComponent(id));
+					
+				auto tags = output.initTags(1);
+				tags[0].setName(CDB_ID_TAG);
+				tags[0].initValue().setUInt64(id);
 				
-				auto subTasks = kj::heapArrayBuilder<Promise<void>>(n);
-				for(decltype(n) i = 0; i < n; ++i) {
-					auto node = nodes[i];
-					auto component = getComponent(ids[i]);
-					
-					subTasks.add(
-						component.whenResolved().then(
-							[node, component, id = ids[i]]() mutable {
-								node.setMesh(component);
-					
-								auto tags = node.initTags(1);
-								tags[0].setName(CDB_ID_TAG);
-								tags[0].initValue().setUInt64(id);
-							},
-							[node, id = ids[i]](kj::Exception e) mutable {
-								node.initComponentsDBMeshes(1).set(0, id);
-							}
-						)
-					);
-				}
-				return kj::joinPromises(subTasks.finish());
+				return output.getMesh().whenResolved();
 			}
 			
-			case Geometry::COMPONENTS_D_B_ASSEMBLIES: {
-				auto ids = input.getComponentsDBAssemblies();
-				auto n = ids.size();
-				auto nodes = output.initCombined(ids.size());
+			case Geometry::W7x::COMPONENTS_DB_ASSEMBLY: {
+				auto id = w7x.getComponentsDbAssembly();
+				auto tags = output.initTags(1);
+				tags[0].setName(CDB_ASID_TAG);
+				tags[0].initValue().setUInt64(id);
 				
-				auto subTasks = kj::heapArrayBuilder<Promise<void>>(n);
-				for(decltype(n) i = 0; i < n; ++i) {
-					auto node = nodes[i];
+				return getAssembly(id)
+				.then([this, output](kj::Array<uint64_t> cids) mutable {
+					auto nodes = output.initCombined(cids.size());
 					
-					subTasks.add(
-						getAssembly(ids[i]).then(
-							[node, context, id = ids[i], this](kj::Array<uint64_t> cids) mutable {
-								auto tags = node.initTags(1);
-								tags[0].setName(CDB_ASID_TAG);
-								tags[0].initValue().setUInt64(id);
-								
-								Temporary<Geometry> intermediate;
-								auto tmpIds = intermediate.initComponentsDBMeshes(cids.size());
-								for(unsigned int i = 0; i < cids.size(); ++i)
-									tmpIds.set(i, cids[i]);
-								
-								return processGeometry(intermediate, node, context).attach(mv(intermediate), thisCap());
-							},
-							[node, id = ids[i]](kj::Exception e) mutable {
-								node.initComponentsDBAssemblies(1).set(0, id);
-							}
-						)
-					);
-				}
-				return kj::joinPromises(subTasks.finish());
+					auto promises = kj::heapArrayBuilder<Promise<void>>(cids.size());
+					
+					for(auto i : kj::indices(cids)) {
+						auto node = nodes[i];
+						auto id = cids[i];
+						
+						node.setMesh(getComponent(id));
+							
+						auto tags = node.initTags(1);
+						tags[0].setName(CDB_ID_TAG);
+						tags[0].initValue().setUInt64(id);
+						
+						promises.add(node.getMesh().whenResolved());
+					}
+					
+					return kj::joinPromises(promises.finish());
+				});
 			}
 			
 			default:
@@ -333,8 +357,9 @@ DataRef<Mesh>::Client ComponentsDBResolver::getComponent(uint64_t id) {
 		
 		DataRef<Mesh>::Client published = getActiveThread().dataService().publish((Mesh::Reader&) response);
 		meshes.insert(id, published);
+		
 		return published;
-	});
+	}).attach(thisCap());
 }
 
 // CoilsDB implementation that downloads the coil from a remote location
@@ -445,9 +470,11 @@ struct ComponentsDBWebservice : public ComponentsDB::Server {
 		).response;
 		
 		auto read = response.then([](auto response) { KJ_REQUIRE(response.statusCode == 200); return response.body->readAllText().attach(mv(response.body)); });
-		return read.then([context](kj::String rawJson) mutable {			
+		return read.then([context](kj::String rawJson) mutable {				
 			Temporary<ComponentsDBMesh> tmp;
 			JsonCodec().decode(rawJson, tmp);
+			// YAML::Node asYaml = YAML::Load(rawJson.cStr());
+			// load(tmp.asBuilder(), asYaml);
 		
 			auto inMesh = tmp.getSurfaceMesh();
 			
@@ -544,93 +571,28 @@ struct ComponentsDBWebservice : public ComponentsDB::Server {
 	}
 };
 
-struct OfflineCoilsDB : public CoilsDB::Server {
-	LocalDataRef<OfflineData> offlineData;
-	
-	OfflineCoilsDB(LocalDataRef<OfflineData> offlineData) :
-		offlineData(mv(offlineData))
-	{}
-	
-	Promise<void> getCoil(GetCoilContext context) override {
-		for(auto coilEntry : offlineData.get().getW7xCoils()) {
-			if(coilEntry.getId() == context.getParams().getId()) {
-				context.setResults(coilEntry.getFilament());
-				
-				return kj::READY_NOW;
-			}
-		}
-		
-		KJ_FAIL_REQUIRE("Unknown coil");
-	}
-	
-	Promise<void> getConfig(GetConfigContext context) override {
-		for(auto configEntry : offlineData.get().getW7xConfigs()) {
-			if(configEntry.getId() == context.getParams().getId()) {
-				context.setResults(configEntry.getConfig());
-				return kj::READY_NOW;
-			}
-		}
-		
-		KJ_FAIL_REQUIRE("Unknown configuration");
-	}
-};
-
-struct OfflineComponentsDB : public ComponentsDB::Server {
-	LocalDataRef<OfflineData> offlineData;
-	
-	OfflineComponentsDB(LocalDataRef<OfflineData> offlineData) :
-		offlineData(mv(offlineData))
-	{}
-	
-	Promise<void> getMesh(GetMeshContext context) override {
-		for(auto componentEntry : offlineData.get().getW7xComponents()) {
-			if(componentEntry.getId() == context.getParams().getId()) {
-				context.setResults(componentEntry.getComponent());
-				return kj::READY_NOW;
-			}
-		}
-		
-		KJ_FAIL_REQUIRE("Unknown mesh");
-	}
-	
-	Promise<void> getAssembly(GetAssemblyContext context) override {
-		for(auto assemblyEntry : offlineData.get().getW7xAssemblies()) {
-			if(assemblyEntry.getId() == context.getParams().getId()) {
-				context.initResults().setComponents(assemblyEntry.getAssembly());
-				return kj::READY_NOW;
-			}
-		}
-		
-		KJ_FAIL_REQUIRE("Unknown assembly");
-	}
-};
-
-}
-
 CoilsDB::Client newCoilsDBFromWebservice(kj::StringPtr address) {
-	return CoilsDB::Client(kj::heap<CoilsDBWebservice>(address));
+	return kj::heap<CoilsDBWebservice>(address);
 }
 
 ComponentsDB::Client newComponentsDBFromWebservice(kj::StringPtr address) {
-	return ComponentsDB::Client(kj::heap<ComponentsDBWebservice>(address));
+	return kj::heap<ComponentsDBWebservice>(address);
 }
 
-CoilsDB::Client newCoilsDBFromOfflineData(DataRef<OfflineData>::Client offlineData) {
-	return getActiveThread().dataService().download(offlineData)
-	.then([](LocalDataRef<OfflineData> offlineData) {
-		return CoilsDB::Client(kj::heap<OfflineCoilsDB>(mv(offlineData)));
-	});
+FieldResolver::Client newW7xFieldResolver() {
+	return kj::heap<W7XFieldResolver>();
 }
 
-ComponentsDB::Client newComponentsDBFromOfflineData(DataRef<OfflineData>::Client offlineData) {
-	return getActiveThread().dataService().download(offlineData)
-	.then([](LocalDataRef<OfflineData> offlineData) {
-		return ComponentsDB::Client(kj::heap<OfflineComponentsDB>(mv(offlineData)));
-	});
+GeometryResolver::Client newW7xGeometryResolver() {
+	return kj::heap<W7XGeometryResolver>();
 }
 
 FieldResolver::Client newCoilsDBResolver(CoilsDB::Client coilsDB) {
-	return FieldResolver::Client(kj::heap<CoilsDBResolver>(coilsDB));
+	return kj::heap<CoilsDBResolver>(coilsDB);
+}
+
+FieldResolver::Client newConfigDBResolver(CoilsDB::Client coilsDB) {
+	return kj::heap<CoilsDBResolver>(coilsDB);
 }
 
 GeometryResolver::Client newComponentsDBResolver(ComponentsDB::Client componentsDB) {
@@ -653,12 +615,12 @@ void buildCoilFields(W7XCoilSet::Reader in, W7XCoilSet::Fields::Builder output) 
 	auto coils = in.getCoils();
 	
 	auto getMainCoil = [=](unsigned int i_mod, unsigned int i_coil, Filament::Builder out) {
-		if(coils.isCoilsDBSet()) {
-			unsigned int offset = coils.getCoilsDBSet().getMainCoilOffset();
+		if(coils.isCoilsDbSet()) {
+			unsigned int offset = coils.getCoilsDbSet().getMainCoilOffset();
 			unsigned int coilID = i_coil < 5
 				? offset + 5 * i_mod + i_coil
 				: offset + 2 * i_mod + (i_coil - 5) + 50;
-			out.setW7xCoilsDB(coilID);
+			out.initW7x().setCoilsDb(coilID);
 		} else {
 			KJ_REQUIRE(coils.isCustomCoilSet());
 			out.setRef(coils.getCustomCoilSet().getMainCoils()[N_MAIN_COILS * i_mod + i_coil]);
@@ -666,8 +628,8 @@ void buildCoilFields(W7XCoilSet::Reader in, W7XCoilSet::Fields::Builder output) 
 	};
 	
 	auto getTrimCoil = [=](unsigned int i_coil, Filament::Builder out) {
-		if(coils.isCoilsDBSet())
-			out.setW7xCoilsDB(coils.getCoilsDBSet().getTrimCoilIDs()[i_coil]);
+		if(coils.isCoilsDbSet())
+			out.initW7x().setCoilsDb(coils.getCoilsDbSet().getTrimCoilIDs()[i_coil]);
 		else {
 			KJ_REQUIRE(coils.isCustomCoilSet());
 			out.setRef(coils.getCustomCoilSet().getTrimCoils()[i_coil]);
@@ -675,8 +637,8 @@ void buildCoilFields(W7XCoilSet::Reader in, W7XCoilSet::Fields::Builder output) 
 	};
 	
 	auto getControlCoil = [=](unsigned int i_coil, Filament::Builder out) {
-		if(coils.isCoilsDBSet())
-			out.setW7xCoilsDB(coils.getCoilsDBSet().getControlCoilOffset() + i_coil);
+		if(coils.isCoilsDbSet())
+			out.initW7x().setCoilsDb(coils.getCoilsDbSet().getControlCoilOffset() + i_coil);
 		else {
 			KJ_REQUIRE(coils.isCustomCoilSet());
 			out.setRef(coils.getCustomCoilSet().getControlCoils()[i_coil]);

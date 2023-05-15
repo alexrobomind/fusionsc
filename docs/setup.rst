@@ -9,7 +9,7 @@ component / field resolution process, which will register it until your python i
 
 ::
 
-  import fsc
+  import fusionsc as fsc
   fsc.resolve.importOfflineData('yourDeviceFile.fsc')
 
 Wendelstein 7-X

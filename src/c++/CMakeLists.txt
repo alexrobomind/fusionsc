@@ -13,11 +13,26 @@ if(BUILD_TESTING)
 		OUTPUT_DIR ${SFC_TEST_DIR}
 		OUTPUT_SUFFIX ".xml"
 	)
+	
+	add_custom_target(
+		run-tests
+		COMMAND ctest .
+		DEPENDS tests
+	)
+	
+	# If we build ZLIB ourselves, we need to make sure that its test targets are also built
+	if(ZLIB_SOURCE_DIR)
+		# These two targets come from ZLIB (bleh, we're lucky there are no conflicts)
+		if(TARGET example)
+			add_dependencies(tests example)
+		endif()
+		if(TARGET example64)
+			add_dependencies(tests example64)
+		endif()
+	endif()
 endif()
 
-# First build the cupnp library / compiler
-add_subdirectory(cupnp)
-add_subdirectory(capnpc-java)
+# Cupnp is included from the root
 
 # Then build the fsc library
 add_subdirectory(fsc)
@@ -31,3 +46,10 @@ add_custom_target(
 	capnp-id
 	COMMAND capnp_tool id
 )
+
+if(FSC_WITH_PYTHON)
+	add_custom_target(
+		copy-pybindings
+		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:fsc-python-bindings> ${CMAKE_CURRENT_SOURCE_DIR}/../python/fusionsc
+	)
+endif()

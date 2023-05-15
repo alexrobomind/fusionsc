@@ -10,7 +10,11 @@
 #include "magnetics.h"
 #include "geometry.h"
 
+#include <iostream>
+
 using namespace fsc;
+
+namespace {
 
 void prepareToroidalField(ComputedField::Builder field) {
 	auto grid = field.initGrid();
@@ -34,16 +38,17 @@ void prepareToroidalField(ComputedField::Builder field) {
 	field.setData(getActiveThread().dataService().publish(fieldData.asReader()));
 }
 
+}
+
 TEST_CASE("flt") {
 	auto l = newLibrary();
 	auto lt = l->newThread();
 	
 	auto& ws = lt->waitScope();
 	
-	Temporary<RootConfig> config;
-	
+	Temporary<LocalConfig> config;
+	config.setPreferredDeviceType(ComputationDeviceType::CPU);
 	auto req = createRoot(config).newTracerRequest();
-	req.setPreferredDeviceType(WorkerType::CPU);
 	auto flt = req.send().getService();
 	
 	/*SECTION("basic-trace") {
@@ -74,6 +79,30 @@ TEST_CASE("flt") {
 		KJ_DBG("Done");
 		//KJ_DBG(response); // This currently can't be printed due to a Capnp bug
 	}
+}
+
+TEST_CASE("axis") {
+	auto l = newLibrary();
+	auto lt = l->newThread();
+	
+	auto& ws = lt->waitScope();
+	
+	Temporary<LocalConfig> config;
+	config.setPreferredDeviceType(ComputationDeviceType::CPU);
+	
+	auto req = createRoot(config).newTracerRequest();
+	auto flt = req.send().getService();
+	
+	auto axReq = flt.findAxisRequest();
+	axReq.setStartPoint({1.0, 0.0, 0.0});
+	prepareToroidalField(axReq.getField());
+	axReq.setStepSize(0.01);
+	auto response = axReq.send().wait(ws);
+	
+	Tensor<double, 2> data;
+	readTensor(response.getAxis(), data);
+	
+	std::cout << "Mean " << data.mean(Eigen::array<int, 1>({0})) << std::endl;
 }
 
 #ifdef FSC_WITH_CUDA

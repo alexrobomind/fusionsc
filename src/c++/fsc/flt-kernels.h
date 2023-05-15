@@ -5,6 +5,7 @@
 #include "interpolation.h"
 #include "geometry.h"
 #include "random-kernels.h"
+#include "fieldline-mapping.h"
 
 namespace fsc {
 	
@@ -69,15 +70,21 @@ namespace fsc {
 	 */
 	inline EIGEN_DEVICE_FUNC void fltKernel(
 		unsigned int idx,
+		
 		CuPtr<fsc::cu::FLTKernelData> pKernelData,
 		TensorMap<Tensor<double, 4>> fieldData,
 		CuPtr<fsc::cu::FLTKernelRequest> pRequest,
+		
 		CuPtr<const fsc::cu::MergedGeometry> pGeometry,
 		CuPtr<const fsc::cu::IndexedGeometry> pGeometryIndex,
-		CuPtr<const fsc::cu::IndexedGeometry::IndexData> pGeometryIndexData
+		CuPtr<const fsc::cu::IndexedGeometry::IndexData> pGeometryIndexData,
+		
+		CuPtr<const fsc::cu::FieldlineMapping> pFLMData
 	) {
 		using Num = double;
 		using V3 = Vec3<Num>;
+		using V2 = Vec2<Num>;
+		using V1 = Vec1<Num>;
 		
 		auto kernelData = *pKernelData;
 		auto kernelRequest   = *pRequest;
@@ -90,8 +97,11 @@ namespace fsc {
 		auto index = *pGeometryIndex;
 		auto indexData = *pGeometryIndexData;
 		
+		auto flmData = *pFLMData;
+		bool useFLM = flmData.getFwd().getFilaments().size() > 0;
+		
 		// printf("Hello there\n");
-		CUPNP_DBG("FLT kernel started", idx);
+		// CUPNP_DBG("FLT kernel started", idx, useFLM);
 		
 		// Extract local scratch space
 		fsc::cu::FLTKernelData::Entry myData = kernelData.mutateData()[idx];
@@ -111,14 +121,62 @@ namespace fsc {
 		MT19937 rng(state.getRngState());
 		
 		// Set up the magnetic field
-		using InterpolationStrategy = LinearInterpolation<Num>;
+		//using InterpolationStrategy = LinearInterpolation<Num>;
+		using InterpolationStrategy = C1CubicInterpolation<Num>;
 		
 		auto grid = request.getField().getGrid();
 		SlabFieldInterpolator<InterpolationStrategy> interpolator(InterpolationStrategy(), grid);
 		
+		// Set up the magnetic axis
+		cupnp::List<double> rAxis(0, nullptr);
+		cupnp::List<double> zAxis(0, nullptr);
+		auto rAxisAt = [&](int i) {
+			i %= rAxis.size();
+			i += rAxis.size();
+			i %= rAxis.size();
+			return rAxis[i];
+		};
+		auto zAxisAt = [&](int i) {
+			i %= zAxis.size();
+			i += zAxis.size();
+			i %= zAxis.size();
+			return zAxis[i];
+		};
+		
+		// Set up unwrapping configuration
+		const double iota = state.getIota();
+		double theta = state.getTheta();
+		uint32_t unwrapEvery = 0;
+		
+		using AxisInterpolator = NDInterpolator<1, C1CubicInterpolation<double>>;
+		AxisInterpolator axisInterpolator(C1CubicInterpolation<double>(), { AxisInterpolator::Axis(0, 2 * pi, rAxis.size()) });
+		
+		{
+			auto fla = request.getFieldLineAnalysis();
+			if(fla.isCalculateIota()) {
+				rAxis = fla.getCalculateIota().getRAxis();
+				zAxis = fla.getCalculateIota().getZAxis();
+				unwrapEvery = fla.getCalculateIota().getUnwrapEvery();
+			} else if(fla.isCalculateFourierModes()) {
+				rAxis = fla.getCalculateFourierModes().getRAxis();
+				zAxis = fla.getCalculateFourierModes().getZAxis();
+			}
+		}
+		
+		
 		bool processDisplacements = perpModel.hasIsotropicDiffusionCoefficient();
 		
-		uint8_t tracingDirection = state.getForward() ? 1 : -1;
+		// Compute tracing and field orientation
+		// Do we trace forward (+1) or backward (-1) ?
+		int8_t tracingDirection = state.getForward() ? 1 : -1;
+		
+		// Does the field point in CCW (+1) or CW (-1) direction ?
+		int8_t fieldOrientation;
+		{
+			double phi = atan2(x[1], x[0]);
+			V3 fieldValue = interpolator(fieldData, x);
+			fieldOrientation = (fieldValue[1] * cos(phi) - fieldValue[0] * sin(phi)) > 0 ? 1 : -1;
+		}
 		
 		auto rungeKuttaInput = [&](V3 x, Num t) -> V3 {
 			V3 fieldValue = interpolator(fieldData, x);
@@ -162,6 +220,13 @@ namespace fsc {
 			return myData.mutateEvents()[eventCount];
 		};
 		
+		FLM flm(flmData);
+		
+		// Initialize mapped position
+		if(useFLM) {
+			flm.map(x, state.getForward());
+		}
+		
 		// ... do the work ...
 		
 		while(true) {		
@@ -180,8 +245,33 @@ namespace fsc {
 			if(x != x)
 				FSC_FLT_RETURN(NAN_ENCOUNTERED);
 			
+			// Position recording
+			if(request.getRecordEvery() != 0 && (step % request.getRecordEvery() == 0)) {
+				auto rec = currentEvent().mutateRecord();
+				V3 fv = interpolator(fieldData, x);
+				rec.setFieldStrength(std::sqrt(fv[0] * fv[0] + fv[1] * fv[1] + fv[2] * fv[2]));
+				
+				FSC_FLT_LOG_EVENT(x)
+			}
+						
 			Num r = std::sqrt(x[0] * x[0] + x[1] * x[1]);
 			Num z = x[2];
+			
+			// Unwrapping of phase
+			if(unwrapEvery != 0 && (step % unwrapEvery == 0)) {
+				double phi = atan2(x[1], x[0]);
+				double rAxisVal = axisInterpolator(rAxisAt, V1(phi));
+				double zAxisVal = axisInterpolator(zAxisAt, V1(phi));
+				
+				double dr = r - rAxisVal;
+				double dz = z - zAxisVal;
+				
+				double newTheta = atan2(dz, dr);
+				double dTheta = newTheta - theta;
+				dTheta = fmod(dTheta + pi, 2 * pi) - pi;
+				
+				theta += dTheta;
+			}
 			
 			// KJ_DBG("In grid?", r, z, grid.getRMin(), grid.getRMax(), grid.getZMin(), grid.getZMax());
 			
@@ -198,6 +288,8 @@ namespace fsc {
 				if(distance > nextDisplacementStep)
 					displacementStep = true;
 			}
+			
+			// KJ_DBG(displacementStep);
 			
 			if(displacementStep) {
 				double prevFreePath = parModel.getMeanFreePath() + displacementCount * parModel.getMeanFreePathGrowth();
@@ -243,9 +335,18 @@ namespace fsc {
 				}
 				
 				++displacementCount;
-			} else {
-				// Regular tracing step
-				kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), rungeKuttaInput);
+				
+				if(useFLM) {
+					flm.map(x2, tracingDirection > 0);
+				}				
+			} else {				
+				if(useFLM) {					
+					double newPhi = flm.phi + fieldOrientation * tracingDirection * request.getStepSize() / r;
+					x2 = flm.advance(newPhi, tracingDirection == 1);
+				} else {
+					// Regular tracing step
+					kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), rungeKuttaInput);
+				}
 			}
 			
 			// KJ_DBG("Step advanced", x[0], x[1], x[2], x2[0], x2[1], x2[2]);
@@ -307,6 +408,13 @@ namespace fsc {
 				if(crossed) {
 					V3 xCross = crossedAt * x2 + (1. - crossedAt) * x;
 					
+					// If we use field-line mapping, the linear interpolation might be unreasonable
+					// due to large step sizes. Instead, use the mapping's spline interpolation
+					if(useFLM) {
+						double phiCross = crossedAt * kmath::wrap(phi2 - phi1) + phi1;
+						xCross = flm.unmap(flm.unwrap(phiCross));
+					}
+					
 					currentEvent().mutatePhiPlaneIntersection().setPlaneNo(iPlane);
 					FSC_FLT_LOG_EVENT(xCross);				
 				}
@@ -317,6 +425,11 @@ namespace fsc {
 			if(kmath::crossedPhi(phi1, phi2, phi0) && step > 1) {
 				auto l = kmath::wrap(phi0 - phi1) / kmath::wrap(phi2 - phi1);
 				V3 xCross = l * x2 + (1. - l) * x;
+				
+				// Same as above with the usual planes, interpolate if we are using the mapping
+				if(useFLM) {
+					xCross = flm.unmap(flm.unwrap(phi0));
+				}
 				
 				// printf("New turn\n");
 				
@@ -350,7 +463,7 @@ namespace fsc {
 				
 				eventCount = newEventCount;
 			}
-			
+						
 			// KJ_DBG("Phi cross checks passed");
 			
 			// --- Sort generated events ---
@@ -480,5 +593,7 @@ REFERENCE_KERNEL(
 	
 	fsc::CuPtr<const fsc::cu::MergedGeometry>,
 	fsc::CuPtr<const fsc::cu::IndexedGeometry>,
-	fsc::CuPtr<const fsc::cu::IndexedGeometry::IndexData>
+	fsc::CuPtr<const fsc::cu::IndexedGeometry::IndexData>,
+	
+	fsc::CuPtr<const fsc::cu::FieldlineMapping>
 );

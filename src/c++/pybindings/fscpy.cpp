@@ -144,6 +144,7 @@ PYBIND11_MODULE(native, m) {
 	initLoader(m);	
 	initDevices(m);
 	initService(m);
+	initHelpers(m);
 	
 	// Load built-in schema
 	loadDefaultSchema(m);

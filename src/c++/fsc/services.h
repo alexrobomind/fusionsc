@@ -17,9 +17,8 @@ kj::Function<typename T::Client()> newInProcessServer(kj::Function<typename T::C
 	};
 }
 
-RootService::Client createRoot(RootConfig::Reader config);
-
-ResolverChain::Client newResolverChain();
+RootService::Client createRoot(LocalConfig::Reader config);
+LocalResources::Client createLocalResources(LocalConfig::Reader config);
 
 RootService::Client connectRemote(kj::StringPtr address, unsigned int portHint = 0);
 
@@ -35,5 +34,8 @@ struct Server {
 Promise<Own<Server>> startServer(unsigned int portHint = 0, kj::StringPtr address = "0.0.0.0"_kj);
 
 inline constexpr kj::StringPtr MAGIC_TOKEN = "I am an FSC server"_kj;
+
+//! List of interface IDs that may not be called via network callss
+kj::ArrayPtr<uint64_t> protectedInterfaces();
 	
 }

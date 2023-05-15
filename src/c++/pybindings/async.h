@@ -5,10 +5,82 @@
 #include <fsc/local.h>
 
 #include <functional>
+#include <type_traits>
 
 namespace fscpy {
+	
+struct ScopeOverride {
+	inline ScopeOverride(kj::WaitScope& ws) :
+		scope(ws),
+		parent(current)
+	{
+		current = this;
+	}
+	
+	inline ~ScopeOverride() {
+		current = parent;
+	}
+	
+	ScopeOverride* parent;
+	kj::WaitScope& scope;
+	
+	static inline thread_local ScopeOverride* current = nullptr;
+};
 
-struct PyContext {
+struct PythonWaitScope {
+	inline PythonWaitScope(kj::WaitScope& ws, bool fiber = false) : waitScope(ws), isFiber(fiber) {
+		KJ_REQUIRE(
+			activeScope == nullptr,
+			"Trying to allocate a new PyWaitScope while another one is active."
+			" This is most likely an error internal to fusionsc, because it means that a C++-side code waited"
+			" on an event loop promise without releasing the active python scope"
+		);
+		activeScope = this;
+	}
+	
+	inline ~PythonWaitScope() {
+		activeScope = nullptr;
+	}
+	
+	template<typename T>
+	static T wait(Promise<T>&& promise) {
+		KJ_REQUIRE(canWait(), "Can not wait inside promises inside continuations or coroutines, and not in threads where no event loop was started.");
+		
+		auto restoreTo = activeScope;
+		activeScope = nullptr;
+		KJ_DEFER({activeScope = restoreTo;});
+		
+		return promise.wait(restoreTo -> waitScope);
+	}
+	
+	template<typename T>
+	static bool poll(Promise<T>& promise) {
+		KJ_REQUIRE(canWait(), "Can not wait inside promises inside continuations or coroutines");
+		KJ_REQUIRE(!activeScope -> isFiber, "Can not poll promises inside fibers");
+		
+		return promise.poll(activeScope -> waitScope);
+	}
+	
+	template<typename T>
+	static bool poll(Promise<T>&& promise) {
+		KJ_REQUIRE(canWait(), "Can not wait inside promises inside continuations or coroutines");
+		KJ_REQUIRE(!activeScope -> isFiber, "Can not poll promises inside fibers");
+		
+		return promise.poll(activeScope -> waitScope);
+	}	
+	
+	static inline bool canWait() {
+		return activeScope != nullptr;
+	}
+	
+private:
+	kj::WaitScope& waitScope;
+	bool isFiber;
+	
+	static inline thread_local PythonWaitScope* activeScope = nullptr;
+};
+
+struct PythonContext {
 	static inline Library library() {
 		{
 			auto locked = _library.lockShared();
@@ -28,18 +100,15 @@ struct PyContext {
 		return _libraryThread;
 	}
 	
-	static inline kj::WaitScope& waitScope() {
-		startEventLoop();
-		return _libraryThread -> waitScope();
-	}
-	
 	static inline void startEventLoop() {
 		if(_libraryThread.get() == nullptr) {
 			_libraryThread = library() -> newThread();
+			rootScope.emplace(_libraryThread -> waitScope());
 		}
 	}
 	
 	static inline void stopEventLoop() {
+		rootScope = nullptr;
 		_libraryThread = nullptr;
 	}
 	
@@ -52,9 +121,11 @@ struct PyContext {
 		*locked = nullptr;
 	}
 	
-private:
+private:	
 	static inline kj::MutexGuarded<Library> _library = kj::MutexGuarded<Library>();
+	
 	static inline thread_local LibraryThread _libraryThread;
+	static inline thread_local Maybe<PythonWaitScope> rootScope = nullptr;
 };
 
 struct PyObjectHolder : public kj::Refcounted {
@@ -81,6 +152,12 @@ struct PyPromise {
 	inline PyPromise(py::object obj) :
 		holder(nullptr)
 	{
+		PyPromise* asPromise = obj.cast<PyPromise*>();
+		if(asPromise != nullptr) {
+			this -> holder = asPromise -> holder.addBranch().fork();
+			return;
+		}
+		
 		auto holder = kj::refcounted<PyObjectHolder>(mv(obj));
 		Promise<Own<PyObjectHolder>> holderPromise = mv(holder);
 		
@@ -106,7 +183,7 @@ struct PyPromise {
 			.fork()
 		)
 	{
-		static_assert(!kj::isSameType<T, py::object>(), "Promise<py::object> is unsafe");
+		static_assert(!std::is_base_of<py::object, T>::value, "Promise<py::object> is unsafe");
 	}
 	
 	PyPromise(Promise<void> input) :
@@ -115,6 +192,16 @@ struct PyPromise {
 			.then([]() {
 				py::gil_scoped_acquire withGIL;
 				return kj::refcounted<PyObjectHolder>(py::none());
+			})
+			.fork()
+		)
+	{}
+	
+	PyPromise(Promise<PyPromise> input) :
+		holder(
+			input
+			.then([](PyPromise unwrapped) {
+				return unwrapped.holder.addBranch();
 			})
 			.fork()
 		)
@@ -161,7 +248,7 @@ struct PyPromise {
 	
 	template<typename T>
 	Promise<T> as() {
-		static_assert(!kj::isSameType<T, py::object>(), "Promise<py::object> is unsafe");
+		static_assert(!std::is_base_of<py::object, T>::value, "Promise<py::object> is unsafe");
 		
 		return then([](py::object pyObj) { return py::cast<T>(pyObj); });
 	}
@@ -180,7 +267,7 @@ struct PyPromise {
 		
 		{
 			py::gil_scoped_release release_gil;
-			pyObjectHolder = holder.addBranch().wait(PyContext::waitScope());
+			pyObjectHolder = PythonWaitScope::wait(holder.addBranch());
 		}
 		
 		return pyObjectHolder -> content;
@@ -188,13 +275,12 @@ struct PyPromise {
 	
 	inline bool poll() {
 		py::gil_scoped_release release_gil;
-		return holder.addBranch().poll(PyContext::waitScope());
+		return PythonWaitScope::poll(holder.addBranch());
 	}
 	
 	inline PyPromise pyThen(py::function f) {
-		return then([f = mv(f)](py::object o) {
-			py::object result = f(o);
-			return kj::refcounted<PyObjectHolder>(mv(result));
+		return then([f = mv(f)](py::object o) -> PyPromise {
+			return f(o);
 		});
 	}
 	

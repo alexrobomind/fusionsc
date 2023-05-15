@@ -9,16 +9,16 @@ using namespace fscpy;
 
 namespace {
 	fsc::LocalDataService& dataService()  {
-		return fscpy::PyContext::libraryThread()->dataService();
+		return fscpy::PythonContext::libraryThread()->dataService();
 	}
 
 	void atExitFunction() {
-		fscpy::PyContext::library()->setShutdownMode();
-		fscpy::PyContext::library()->stopSteward();
+		fscpy::PythonContext::library()->setShutdownMode();
+		fscpy::PythonContext::library()->stopSteward();
 	}
 	
 	void cycle() {
-		fscpy::PyContext::libraryThread()->waitScope().poll();
+		fscpy::PythonContext::libraryThread()->waitScope().poll();
 	}
 	
 	struct PyPromiseAwaitContext {
@@ -158,11 +158,20 @@ namespace {
 		}	
 	};
 	
-	Promise<void> delay(double seconds) {
-		uint64_t timeInNS = (uint64_t) seconds * 1e9;
-		auto targetPoint = kj::systemPreciseMonotonicClock().now() + timeInNS * kj::NANOSECONDS;
+	PyPromise startFiber(kj::FiberPool& fiberPool, py::object callable) {
+		auto func = [callable = mv(callable)](kj::WaitScope& ws) mutable -> PyPromise {			
+			// Override default wait scope
+			ScopeOverride overrideWS(ws);
+			
+			py::gil_scoped_acquire withGIL;
+			
+			// Delete object while in GIL scope
+			KJ_DEFER({callable = py::object();});
+			
+			return callable();
+		};
 		
-		return getActiveThread().timer().atTime(targetPoint);
+		return fiberPool.startFiber(mv(func));
 	}
 }
 
@@ -191,7 +200,13 @@ void initAsync(py::module_& m) {
 	
 	py::object promiseParam = pyTypeVar("T", py::arg("covariant") = true);
 	
-	py::class_<PyPromise>(asyncModule, "Promise", py::multiple_inheritance(), py::metaclass(*baseMetaType))
+	py::class_<PyPromise>(asyncModule, "Promise", py::multiple_inheritance(), py::metaclass(*baseMetaType), R"(
+		Asynchronous promise to a future value being computed by the event loop. The computation will eventually
+		either resolve or throw an exception. The promise can either be awaited using the wait() method, or using
+		the await keyword in asynchronous functions. The "poll" method can be used to check the promise for completion
+		(or failure) without blocking, while the "then" function can be used to register a continuation function
+		(though we recommend the usage of "await" and coroutines).
+	)")
 		.def(py::init([](PyPromise& other) { return PyPromise(other); }))
 		.def(py::init([](py::object o) { return PyPromise(o); }))
 		.def("wait", &PyPromise::wait)
@@ -217,15 +232,29 @@ void initAsync(py::module_& m) {
 		.def("throw", &PyPromiseAwaitContext::throw_)
 	;
 	
-	asyncModule.def("startEventLoop", &PyContext::startEventLoop, "If the active thread has no active event loop, starts a new one");
-	asyncModule.def("stopEventLoop", &PyContext::stopEventLoop, "Stops the event loop on this thread if it is active.");
-	asyncModule.def("hasEventLoop", &PyContext::hasEventLoop, "Checks whether this thread has an active event loop");
+	py::class_<kj::FiberPool>(asyncModule, "FiberPool", R"(
+		Despite python's extensive support for coroutines, it can sometimes be neccessary to use the blocking Promise.wait(...)
+		function inside a coroutine (e.g. if using an external library, which commonly is not directly compatible with event-
+		loops). Since this would block the very event loop that processes the promise, this is not possible.
+		
+		Fiber pools resolve this issue by allowing to start a callable as a pseudo-thread (referred to as a "fiber"), which
+		maintains its own stack, but is otherwise contained in the active thread and follows the same cooperative scheduling.
+		Calling "wait" on any promise inside the fiber will suspend the fiber and continue event loop scheduling until the
+		promise resolved, at which point the fiber will continue execution. Like with coroutines, the active thread will not
+		perform other tasks while fiber is active (which eliminates the need for locking between fibers).
+	)")
+		.def(py::init<unsigned int>())
+		.def("startFiber", &startFiber, py::keep_alive<0, 1>())
+	;
+	
+	asyncModule.def("startEventLoop", &PythonContext::startEventLoop, "If the active thread has no active event loop, starts a new one");
+	asyncModule.def("stopEventLoop", &PythonContext::stopEventLoop, "Stops the event loop on this thread if it is active.");
+	asyncModule.def("hasEventLoop", &PythonContext::hasEventLoop, "Checks whether this thread has an active event loop");
 	asyncModule.def("cycle", &cycle, "Cycles this thread's event loop a single time");
 	
-	asyncModule.def("run", &run, "Turns an awaitable (e.g. Promise or Coroutine) into a promise by running it on the active event loop");
+	asyncModule.def("canWait", &PythonWaitScope::canWait);
 	
-	py::module_ timerModule = m.def_submodule("timer");
-	timerModule.def("delay", &delay, "Creates a promise resolving at a defined delay (in seconds) after this function is called");
+	asyncModule.def("run", &run, "Turns an awaitable (e.g. Promise or Coroutine) into a promise by running it on the active event loop");
 	
 	auto atexitModule = py::module_::import("atexit");
 	atexitModule.attr("register")(py::cpp_function(&atExitFunction));
@@ -233,16 +262,26 @@ void initAsync(py::module_& m) {
 
 kj::Exception convertPyError(py::error_already_set& e) {	
 	auto formatException = py::module_::import("traceback").attr("format_exception");
-	py::list formatted = formatException(e.type(), e.value(), e.trace());
-	
-	auto pythonException = kj::strTree();
-	for(auto s : formatted) {
-		pythonException = kj::strTree(mv(pythonException), py::cast<kj::StringPtr>(s), "\n");
+	try {
+		py::object t = e.type();
+		py::object v = e.value();
+		py::object tr = e.trace();
+		
+		py::list formatted = formatException(t, v, tr);
+		
+		auto pythonException = kj::strTree();
+		for(auto s : formatted) {
+			pythonException = kj::strTree(mv(pythonException), py::cast<kj::StringPtr>(s), "\n");
+		}
+		
+		// KJ_DBG("Formatted an exception as ", pythonException.flatten());
+		
+		return kj::Exception(::kj::Exception::Type::FAILED, __FILE__, __LINE__, pythonException.flatten());
+	} catch(std::exception e2) {
+		py::print("Failed to format exception", e.type(), e.value());
+		auto exc = kj::getCaughtExceptionAsKj();
+		return KJ_EXCEPTION(FAILED, "An underlying python exception could not be formatted due to the following error", exc);
 	}
-	
-	// KJ_DBG("Formatted an exception as ", pythonException.flatten());
-	
-	return kj::Exception(::kj::Exception::Type::FAILED, __FILE__, __LINE__, pythonException.flatten());
 }
 	
 }

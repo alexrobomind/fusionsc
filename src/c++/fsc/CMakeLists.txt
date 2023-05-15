@@ -1,80 +1,11 @@
-# Set up capnpc options
-set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/genapi/fsc) # Set output dir
-
-# Create output for .capnp files
-file(MAKE_DIRECTORY ${CAPNPC_OUTPUT_DIR})
-
-set(
-	FSC_CAPNP_SOURCES
-	
-	data.capnp
-	index.capnp
-	
-	magnetics.capnp
-	geometry.capnp
-	
-	http.capnp
-	offline.capnp
-	
-	random.capnp
-	flt.capnp
-	hfcam.capnp
-	
-	services.capnp
-	
-	java.capnp
-	
-	devices/w7x.capnp
-)
-
-set(
-	FSC_CAPNP_TEST_SOURCES
-	
-	data-test.capnp
-	magnetics-test.capnp
-	geometry-test.capnp
-	devices/w7x-test.capnp
-)
-	
-	
-
-CAPNP_GENERATE_CPP(
-	FSC_CP_SRC
-	FSC_CP_HEADERS
-	
-	${FSC_CAPNP_SOURCES}
-	${FSC_CAPNP_TEST_SOURCES}
-)
-
-CUPNP_GEN(
-	FSC_CP_CUHEADERS
-	
-	${FSC_CAPNP_SOURCES}
-)
-
-set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/java-classes/org/fsc) # Set output dir
-file(MAKE_DIRECTORY ${CAPNPC_OUTPUT_DIR})
-
-CAPNP_GEN_JAVA(
-	java-classes
-	
-	${FSC_CAPNP_SOURCES}
-)
-
-set_property(TARGET java-classes PROPERTY FSC_JAVA_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/java-classes)
-set_property(TARGET java-classes APPEND PROPERTY EXPORT_PROPERTIES FSC_JAVA_SOURCES)
-	
-# Unset capnpc options
-unset(CAPNPC_OUTPUT_DIR)
-unset(CAPNPC_FLAGS)
-
-list(GET ${FSC_CP_HEADERS} 0 FSC_CP_HEADER1)
-
 add_library(
 	fsc
 	
 	common.h
 	common.cpp
+	
+	typing.h
+	typing.cpp
 	
 	local.h
 	local.cpp
@@ -82,10 +13,50 @@ add_library(
 	store.h
 	store.cpp
 	
+	ssh.h
+	ssh.cpp
+	
+	streams.h
+	streams.cpp
+	
 	data.h
 	data.cpp
 	
+	yaml.h
+	yaml.cpp
+	
+	networking.h
+	networking.cpp
+	
+	cudata.h
+	cudata.cpp
+	
+	compression.h
+	compression.cpp
+	
+	jobs.h
+	jobs.cpp
+	jobs-unix.cpp
+	jobs-win32.cpp
+	jobs-slurm.cpp
+	
+	db.h
+	db.cpp
+	
+	odb.h
+	odb.cpp
+	
+	local-vat-network.h
+	local-vat-network.cpp
+	
+	index.h
 	index.cpp
+	
+	vmec.h
+	vmec.cpp
+	
+	efit.h
+	efit.cpp
 	
 	geometry.h
 	geometry.cpp
@@ -93,6 +64,12 @@ add_library(
 	magnetics.h
 	magnetics-kernels.h
 	magnetics.cpp
+	
+	device.h
+	device.cpp
+	
+	offline.h
+	offline.cpp
 	
 	flt.h
 	flt-kernels.h
@@ -104,14 +81,17 @@ add_library(
 	hfcam.h
 	hfcam.cpp
 	
+	poly.h
+	poly.cpp
+	
 	http.h
 	http.cpp
 	
-	operation.h
-	operation.cpp
-	
 	devices/w7x.h
 	devices/w7x.cpp
+	
+	devices/jtext.h
+	devices/jtext.cpp
 	
 	grids.h
 	tensor.h
@@ -121,55 +101,42 @@ add_library(
 	
 	random.h
 	
+	interpolation.h
 	
-	${FSC_CP_HEADERS}
-	${FSC_CP_SRC}
-	${FSC_CP_CUHEADERS}
+	fieldline-mapping.h
+	fieldline-mapping.cpp
 )
 
-set_property(
-	TARGET fsc
-	PROPERTY CP_HEADERS ${FSC_CP_HEADERS}
-)
-
-set_property(
-	TARGET fsc
-	PROPERTY CP_SRC ${FSC_CP_SRC}
-)
-
-set_property(
-	TARGET fsc
-	PROPERTY CP_CUHEADERS ${FSC_CP_CUHEADERS}
-)
-
-set_property(
-	TARGET fsc
-	PROPERTY SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
-target_link_libraries(fsc PUBLIC deps cupnp)
+target_link_libraries(fsc PUBLIC deps cupnp fsc-service-genapi)
 target_include_directories(
 	fsc
 	PUBLIC
-	$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/genapi>
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
-	# TODO $<INSTALL_INTERFACE:???>
+	$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 if(BUILD_TESTING)
 	target_sources(
 		tests
 		PUBLIC
+		poly-tests.cpp
 		local-tests.cpp
+		jobs-tests.cpp
 		random-tests.cpp
 		data-tests.cpp
+		odb-tests.cpp
 		geometry-tests.cpp
 		magnetics-tests.cpp
 		http-tests.cpp
 		services-tests.cpp
 		flt-tests.cpp
-		operation-tests.cpp
+		interpolation-tests.cpp
+		fieldline-mapping-tests.cpp
+		
+		efit-tests.cpp
+		
 		devices/w7x-test.cpp
+		devices/jtext-test.cpp
 	)
 	target_link_libraries(tests PUBLIC fsc)
 endif()
@@ -201,4 +168,9 @@ if(FSC_WITH_CUDA)
 	set_target_properties(tests PROPERTIES LINKER_LANGUAGE CUDA)
 endif()
 
-INSTALL(TARGETS fsc LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+# Built in src/c++/fsc
+INSTALL(TARGETS deps EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+# FSC headers
+# - Source headers
+INSTALL(DIRECTORY src/c++/fsc/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")

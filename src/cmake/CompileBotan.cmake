@@ -1,10 +1,6 @@
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
-message(STATUS "Botan not found. Fetching and building from repository")
-message(STATUS "  Step 1: Download")
-FetchContent_MakeAvailable(Botan)
-
-message(STATUS "  Step 2: Amalgamation build")
+message(STATUS "  Building botan from source")
 if(MSVC)
 	set(BOTAN_XARGS "--cc" "msvc")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -17,19 +13,27 @@ endif()
 
 # Note: FetchContent explicitly creates lower-case named variables
 add_custom_command(
-	OUTPUT "${botan_SOURCE_DIR}/botan_all.cpp"
+	OUTPUT "${Botan_BINARY_DIR}/botan_all.cpp"
 	COMMAND ${Python3_EXECUTABLE}
-	"${botan_SOURCE_DIR}/configure.py"
+	"${Botan_SOURCE_DIR}/configure.py"
 	"--minimized-build"
 	"--enable-modules=auto_rng,blake2,sha2_32,sha2_64,system_rng"
 	"--amalgamation"
 	"--disable-shared"
 	"--cc-bin" "${CMAKE_CXX_COMPILER}"
+	"--with-build-dir" "${Botan_BINARY_DIR}"
 	${BOTAN_XARGS}
-	WORKING_DIRECTORY ${botan_SOURCE_DIR}
+	
+	COMMAND ${CMAKE_COMMAND} -E copy "${Botan_SOURCE_DIR}/botan_all.h" "${Botan_BINARY_DIR}/botan_all.h"
+	COMMAND ${CMAKE_COMMAND} -E copy "${Botan_SOURCE_DIR}/botan_all.cpp" "${Botan_BINARY_DIR}/botan_all.cpp"
+	
+	WORKING_DIRECTORY ${Botan_SOURCE_DIR}
 )
 
-add_library(botan_selfbuilt "${botan_SOURCE_DIR}/botan_all.cpp")
-target_include_directories(botan_selfbuilt INTERFACE "${botan_SOURCE_DIR}/build/include")
+add_library(botan_selfbuilt "${Botan_BINARY_DIR}/botan_all.cpp")
+target_include_directories(botan_selfbuilt INTERFACE "$<BUILD_INTERFACE:${Botan_BINARY_DIR}/build/include>")
+target_include_directories(botan_selfbuilt INTERFACE "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
+set_property(TARGET botan_selfbuilt PROPERTY BUILT_HEADERS "${Botan_BINARY_DIR}/build/include")
+
 
 add_library(Botan::botan ALIAS botan_selfbuilt)

@@ -6,6 +6,7 @@
 #include <capnp/any.h>
 #include <kj/common.h>
 
+#include <fsc/typing.h>
 #include <fsc/data.h>
 
 #include "loader.h"
@@ -478,7 +479,7 @@ namespace pybind11 { namespace detail {
 			
 			py::handle builder = type_caster<capnp::DynamicValue::Builder>::cast(dynamic, policy, parent);
 			
-			auto holder = new fscpy::UnknownHolder<kj::Own<capnp::MallocMessageBuilder>>(mv(src.holder));
+			auto holder = new fscpy::UnknownHolder<kj::Own<capnp::MessageBuilder>>(mv(src.holder));
 			py::object msg = py::cast((fscpy::UnknownObject*) holder);
 			builder.attr("_msg") = msg;
 			
@@ -520,6 +521,17 @@ namespace pybind11 { namespace detail {
 				capnp::DynamicCapability::Client dynamic = (capnp::DynamicCapability::Client&) subCaster;
 				
 				capnp::InterfaceSchema staticSchema = fscpy::defaultLoader.importBuiltin<ClientFor>().asInterface();
+				
+				if(dynamic.getSchema() != staticSchema) {
+					fsc::Temporary<capnp::schema::Type> t1;
+					fsc::Temporary<capnp::schema::Type> t2;
+					
+					fsc::extractType(dynamic.getSchema(), t1.asBuilder());
+					fsc::extractType(staticSchema, t2.asBuilder());
+					
+					KJ_DBG(t1.asReader());
+					KJ_DBG(t2.asReader());
+				}
 				
 				KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
 				capnp::Capability::Client any = dynamic;
