@@ -158,7 +158,7 @@ pages:
   needs: []
   
   script:
-  - python -m venv build_venv
+  - python3 -m venv build_venv
   - source build_venv/bin/activate
   - pip install sphinx myst_nb sphinx_rtd_theme numpy
   - mkdir build
