@@ -54,7 +54,7 @@ stages:
   image: debian:bookworm
   before_script:
     - apt-get update --yes
-    - apt-get install --yes cmake python3 python3-pip libssl-dev clang-14
+    - apt-get install --yes cmake python3 python3-pip pipx libssl-dev clang-14
 
 .msvc: &msvc
   tags:
@@ -126,43 +126,29 @@ pybuild:pybuild-linux:
       - PYTHON: [cp37-cp37, cp38-cp38]
   
   before_script:
-    - /opt/python/$PYTHON/bin/pip install build
-    #- yum install -y perl-IPC-Cmd
-    #
-    #- mkdir _openssl
-    #- cd _openssl
-    #- git clone git://git.openssl.org/openssl.git
-    #- cd openssl
-    #- ./Configure no-shared
-    #- make -j 8
-    #- make install
-    #- cd ../..
-    #- rm -r _openssl
     - yum install -y openssl-static
   script:
-    #- export OPENSSL_ROOT_DIR=/usr/local/ssl
-    #- echo $OPENSSL_ROOT_DIR
-    #- ls -R $OPENSSL_ROOT_DIR
+    - /opt/python/$PYTHON/bin/python -m pip install build
     - /opt/python/$PYTHON/bin/python -m build
   
 
 # Documentation (stands separate from the compilation-related jobs)
 
-doc:
-  <<: *job
-  stage: doc
-  image: gcc
-
-  needs: []
-
-  script:
-    - apt-get update --yes
-    - apt-get install --yes doxygen graphviz
-    - doxygen Doxyfile
-  
-  artifacts:
-    paths:
-      - gendocs
+#doc:
+#  <<: *job
+#  stage: doc
+#  image: gcc
+#
+#  needs: []
+#
+#  script:
+#    - apt-get update --yes
+#    - apt-get install --yes doxygen graphviz
+#    - doxygen Doxyfile
+#  
+#  artifacts:
+#    paths:
+#      - gendocs
 
 pages:
   <<: *clang
@@ -172,7 +158,7 @@ pages:
   needs: []
   
   script:
-  - pip3 install sphinx myst_nb sphinx_rtd_theme numpy
+  - pipx install sphinx myst_nb sphinx_rtd_theme numpy
   - mkdir build
   - cd build
   - cmake ..
