@@ -68,19 +68,25 @@ stages:
       when: manual
     - when: never
 
-build:gcc:
-  <<: *build-linux
+.gcc: &gcc
   <<: *linux
   variables:
-    CC: 'gcc'
-    CXX: 'g++'
+    CC: gcc
+    CXX: g++
+
+.clang: &clang
+  <<: *linux
+  variables:
+    CC: clang
+    CXX: clang++
+
+build:gcc:
+  <<: *build-linux
+  <<: *gcc
 
 build:clang:
   <<: *build-linux
-  <<: *linux
-  variables:
-    CC: 'clang'
-    CXX: 'clang++'
+  <<: *clang
 
 build:msvc:
   <<: *build-windows
