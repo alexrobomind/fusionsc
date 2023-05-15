@@ -59,6 +59,14 @@ struct PythonWaitScope {
 		KJ_REQUIRE(!activeScope -> isFiber, "Can not poll promises inside fibers");
 		
 		return promise.poll(activeScope -> waitScope);
+	}
+	
+	template<typename T>
+	static bool poll(Promise<T>&& promise) {
+		KJ_REQUIRE(canWait(), "Can not wait inside promises inside continuations or coroutines");
+		KJ_REQUIRE(!activeScope -> isFiber, "Can not poll promises inside fibers");
+		
+		return promise.poll(activeScope -> waitScope);
 	}	
 	
 	static inline bool canWait() {
