@@ -134,7 +134,7 @@ pybuild:pybuild-manylinux:
     - /opt/python/$PYTHON/bin/python -m pip install build
     - /opt/python/$PYTHON/bin/python -m build
     - |+
-      for FILE in "dist/*"
+      for FILE in "dist/*.whl"
       do
         auditwheel show $FILE
       done
