@@ -126,7 +126,7 @@ pybuild:pybuild-manylinux:
       - PYTHON: [cp38-cp38, cp39-cp39, cp310-cp310, cp311-cp311]
   
   rules:
-    when: manual
+    - when: manual
   
   before_script:
     - yum install -y openssl-static
