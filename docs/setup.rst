@@ -1,8 +1,8 @@
-Setting up FSC for your device
+Setting up FusionSC for your device
 ==============================
 
-FSC supports high-level descriptions for magnetic configurations and geometries. However, the data backing these fields
-or components are often restricted by team membership limitations, and can therefore usually not be shipped inside FSC.
+FusionSC supports high-level descriptions for magnetic configurations and geometries. However, the data backing these fields
+or components are often restricted by team membership limitations, and can therefore usually not be shipped inside FusionSC.
 Instead, in addition to connecting to the official databases (which requires on-premise network access), we support the
 usage of `offline device files` that can be taken off-site and opened there. You can open a device file for usage in the
 component / field resolution process, which will register it until your python interpreter / kernel is destroyed:
@@ -23,7 +23,7 @@ bases for resolution directly.
 
 ::
 
-  import fsc.devices.w7x as w7x
+  import fusionsc.devices.w7x as w7x
   w7x.connectIPPSite()
 
 Off-site
@@ -46,8 +46,8 @@ First, select the grid you want to calculate your coil fields over
 
 ::
 
-  import fsc
-  from fsc.devices import w7x
+  import fusionsc as fsc
+  from fusionsc.devices import w7x
   
   grid = w7x.defaultGrid()
   grid.nR = 128
@@ -66,15 +66,15 @@ Finally, compute and save your coil fields:
 ::
 
   precomputedCoils = w7x.computeCoilFields(tracer.calculator, w7x.cadCoils())
-  fsc.data.writeArchive(precomputedCoils, 'coils.fsc')
+  precomputedCoils.save('coils.fsc')
 
 Later, you can then load the pre-computed coil fields and can use them as coil set arguments:
 ::
 
-  import fsc
-  from fsc.devices import w7x
+  import fusionsc as fsc
+  from fusionsc.devices import w7x
   
-  loadedCoils = fsc.data.loadArchive('coils.fsc')
+  loadedCoils = w7x.CoilSet.load(fsc.data.loadArchive('coils.fsc')
   config = w7x.op12Standard(coils = loadedCoils) + w7x.controlCoils([200, -200], coils = loadedCoils)
   
   # Don-t forget to re-load the grid

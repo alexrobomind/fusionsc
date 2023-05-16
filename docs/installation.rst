@@ -6,7 +6,7 @@ To install, simply run
 
 ::
 
-  pip install pyfsc
+  pip install fusionsc
 
 Alternatively, you can download fsc from the repository and install a chosen version from source:
 
@@ -19,8 +19,8 @@ Alternatively, you can download fsc from the repository and install a chosen ver
 Verifying the installation
 --------------------------
 
-To verify the installation, validate that you can import the `fsc` python module
+To verify the installation, validate that you can import the `fusionsc` python module
 
 ::
 
-  >>> import fsc
+  >>> import fusionsc as fsc

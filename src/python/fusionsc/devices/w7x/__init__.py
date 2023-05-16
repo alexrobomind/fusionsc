@@ -1,4 +1,4 @@
-from ... import service, resolve
+from ... import service, resolve, wrappers
 
 from ...magnetics import MagneticConfig, CoilFilament
 from ...geometry import Geometry
@@ -38,8 +38,11 @@ def connectIPPSite():
 	connectCoilsDB("http://esb.ipp-hgw.mpg.de:8280/services/CoilsDBRest")
 	connectComponentsDB("http://esb.ipp-hgw.mpg.de:8280/services/ComponentsDbRest")
 
+class CoilPack(wrappers.structWrapper(service.W7XCoilSet)):
+	pass
+
 @asyncFunction
-async def computeCoilFields(calculator, coils: Union[service.W7XCoilSet.Builder, service.W7XCoilSet.Reader], grid = None) -> service.W7XCoilSet.Builder:
+async def computeCoilFields(calculator, coils: Union[service.W7XCoilSet.Builder, service.W7XCoilSet.Reader], grid = None) -> CoilPack:
 	if grid is None:
 		grid = defaultGrid
 	
@@ -75,9 +78,9 @@ async def computeCoilFields(calculator, coils: Union[service.W7XCoilSet.Builder,
 		print("CC", i)
 		fields.controlFields[i].computedField = await resolveAndCompute(fields.controlFields[i])
 	
-	return result
+	return CoilPack(result)
 
-def cadCoils(convention = '1-AA-R0004.5') -> service.W7XCoilSet:
+def cadCoils(convention = '1-AA-R0004.5') -> CoilPack:
 	"""
 	Returns the coil pack for the standard W7-X CAD coils. The winding direction
 	of the main coils is adjusted to the requested convention.
@@ -92,7 +95,7 @@ def cadCoils(convention = '1-AA-R0004.5') -> service.W7XCoilSet:
 	else:
 		coilPack.coils.invertMainCoils = False
 	
-	return coilPack
+	return CoilPack(coilPack)
 
 def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coils = None) -> MagneticConfig:
 	if coils is None:
@@ -101,7 +104,7 @@ def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coil
 	config = MagneticConfig()
 	
 	cnc = config.data.initW7x().initCoilsAndCurrents()
-	cnc.coils = coils
+	cnc.coils = coils.data
 	
 	cnc.nonplanar = i_12345
 	cnc.planar = i_ab
@@ -115,7 +118,7 @@ def trimCoils(i_trim = [0, 0, 0, 0, 0], coils = None) -> MagneticConfig:
 	config = MagneticConfig()
 	
 	cnc = config.data.initW7xMagneticConfig().initCoilsAndCurrents()
-	cnc.coils = coils
+	cnc.coils = coils.data
 	
 	cnc.trim = i_trim
 	
@@ -128,7 +131,7 @@ def controlCoils(i_cc = [0, 0], coils = None) -> MagneticConfig:
 	config = MagneticConfig()
 	
 	cnc = config.data.initW7xMagneticConfig().initCoilsAndCurrents()
-	cnc.coils = coils
+	cnc.coils = coils.data
 	
 	cnc.control = i_cc
 	
