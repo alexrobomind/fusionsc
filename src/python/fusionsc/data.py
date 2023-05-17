@@ -1,3 +1,4 @@
+"""Processing of DataRefs for distributed data (archives, ref publication, ref downloading)"""
 from . import native
 from . import backends
 from . import service

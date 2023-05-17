@@ -12,10 +12,10 @@ import sys
 if 'DOC_FSCPATH' not in os.environ:
 	raise 'Use the CMake target "docs" to build the documentation'
 
-project = 'FSC'
-copyright = '2022, Forschungszentrum Juelich GmbH, Germany'
+project = 'FusionSC'
+copyright = '2022 - 2023, Forschungszentrum Jülich GmbH, Jülich, Germany'
 author = 'Alexander Knieps'
-release = '0.1'
+release = '1.0'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

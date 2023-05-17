@@ -50,6 +50,7 @@ if(FSC_WITH_PYTHON)
 	file(MAKE_DIRECTORY ${DOC_FSCPATH}/fsc)
 
 	set(DOC_SPHINXPATH ${CMAKE_CURRENT_BINARY_DIR}/sphinx_docs)
+	set(DOC_TOCTREE_PATH ${CMAKE_CURRENT_BINARY_DIR}/sphinx_toctrees)
 
 	add_custom_target(
 		docs-setup1
@@ -72,7 +73,7 @@ if(FSC_WITH_PYTHON)
 
 	add_custom_target(
 		docs
-		COMMAND ${CMAKE_COMMAND} -E env DOC_FSCPATH=${DOC_FSCPATH} sphinx-build -a ${CMAKE_CURRENT_SOURCE_DIR} ${DOC_SPHINXPATH}
+		COMMAND ${CMAKE_COMMAND} -E env DOC_FSCPATH=${DOC_FSCPATH} sphinx-build -a -d ${DOC_TOCTREE_PATH} ${CMAKE_CURRENT_SOURCE_DIR} ${DOC_SPHINXPATH}
 	)
 
 	add_dependencies(docs docs-setup1 docs-setup2)# docs-prepare-java

@@ -1,3 +1,5 @@
+"""W7-X parts and IPP site helpers"""
+
 from ... import service, resolve, wrappers
 
 from ...magnetics import MagneticConfig, CoilFilament
@@ -35,14 +37,17 @@ def connectComponentsDB(address: str):
 	return componentsDB
 
 def connectIPPSite():
+	"""Connects the resolve module to standard IPP coils DB and components DB"""
 	connectCoilsDB("http://esb.ipp-hgw.mpg.de:8280/services/CoilsDBRest")
 	connectComponentsDB("http://esb.ipp-hgw.mpg.de:8280/services/ComponentsDbRest")
 
 class CoilPack(wrappers.structWrapper(service.W7XCoilSet)):
+	"""Set of coils that can be used to obtain W7-X specific configurations"""
 	pass
 
 @asyncFunction
 async def computeCoilFields(calculator, coils: CoilPack, grid = None) -> CoilPack:
+	"""Pre-computes the a W7-X coil set on the given grid to be used for different configurations"""
 	if grid is None:
 		grid = defaultGrid
 	

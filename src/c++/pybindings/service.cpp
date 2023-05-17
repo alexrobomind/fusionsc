@@ -86,7 +86,7 @@ namespace fscpy {
 		// Schema submodule
 		{
 			auto schemas = getBuiltinSchemas<capnp::schema::Node>();
-			py::module_ subM = m.def_submodule("schema");
+			py::module_ subM = m.def_submodule("schema", "Cap'n'proto structs describing Cap'n'proto types and schemas");
 			
 			for(auto node : schemas) {
 				defaultLoader.importNodeIfRoot(node.getId(), subM);
@@ -96,7 +96,7 @@ namespace fscpy {
 		// Root module
 		{		
 			auto schemas = getBuiltinSchemas<FSC_BUILTIN_SCHEMAS>();
-			py::module_ subM = m.def_submodule("service");
+			py::module_ subM = m.def_submodule("service", "Cap'n'proto service interface for fusionsc library");
 				
 			for(auto node : schemas) {
 				defaultLoader.importNodeIfRoot(node.getId(), subM);

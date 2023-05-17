@@ -1,3 +1,5 @@
+"""Helpers to describe and load HINT equilibria"""
+
 from . import service, magnetics, wrappers, data
 
 from .asnc import asyncFunction
@@ -10,6 +12,7 @@ import scipy.io
 
 class HintEquilibrium(wrappers.structWrapper(service.HintEquilibrium)):	
 	def asField(self):
+		"""Extracts a magnetic configuration from the equilibrium"""
 		result = magnetics.MagneticConfig()
 		
 		comp = result.data.initComputedField()
@@ -20,6 +23,7 @@ class HintEquilibrium(wrappers.structWrapper(service.HintEquilibrium)):
 	
 
 def loadNetcdfFile(filename):	
+	"""Creates a HINT equilibrium from the given netCDF HINT file"""
 	with netCDF4.Dataset(filename) as f:
 		m_tor = f.variables['mtor'][...].item()
 		rminb = f.variables['rminb'][...].item()
@@ -71,7 +75,8 @@ def loadNetcdfFile(filename):
 		)
 
 @wrappers.untested
-def loadFortranSnapfile(filename, big_endian = True, real_bytes = 8):	
+def loadFortranSnapfile(filename, big_endian = True, real_bytes = 8):
+	"""Creates a HINT equilibrium from the given HINT FORTRAN file."""
 	# Define types
 	if big_endian:
 		int_type = '>i4'

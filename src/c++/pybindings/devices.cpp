@@ -19,11 +19,11 @@ fsc::CartesianGrid::Reader w7xDefaultGeometryGrid() {
 
 namespace fscpy {
 	void initDevices(py::module_& root) {
-		py::module_ devices = root.def_submodule("devices");
+		py::module_ devices = root.def_submodule("devices", "Device-specific native functions");
 		
 		// ================ W7-X ==================
 		
-		py::module_ w7x = devices.def_submodule("w7x");
+		py::module_ w7x = devices.def_submodule("w7x", "W7-X specific native functions");
 		
 		w7x.def("defaultGrid", &w7xDefaultGrid);
 		w7x.def("defaultGeometryGrid", &w7xDefaultGeometryGrid);		
@@ -42,7 +42,7 @@ namespace fscpy {
 		
 		// ================ J-TEXT ==================
 		
-		py::module_ jtext = devices.def_submodule("jtext");
+		py::module_ jtext = devices.def_submodule("jtext", "J-TEXT specific native functions");
 		
 		jtext.def("geometryResolver", &fsc::devices::jtext::newGeometryResolver);
 		jtext.def("fieldResolver", &fsc::devices::jtext::newFieldResolver);

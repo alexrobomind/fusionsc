@@ -1,3 +1,5 @@
+"""Resolution helpers to obtain computable fields and geometries from high-level descriptions"""
+
 from . import native, data
 from .asnc import asyncFunction, startEventLoop
 
@@ -32,35 +34,27 @@ def importOfflineData(filename: str):
 @asyncFunction
 async def resolveField(field, followRefs: bool = False):		
 	for r in fieldResolvers:
-		#try:
-			field = await r.resolveField(field, followRefs)
-		#except:
-		#	pass
+		field = await r.resolveField(field, followRefs)
 		
 	return field
 
 @asyncFunction
 async def resolveFilament(filament, followRefs: bool = False):		
 	for r in fieldResolvers:
-		#try:
-			filament = await r.resolveFilament(filament, followRefs)
-		#except:
-		#	pass
+		filament = await r.resolveFilament(filament, followRefs)
 		
 	return filament
 	
 @asyncFunction
 async def resolveGeometry(geometry, followRefs: bool = False):		
 	for r in geometryResolvers:
-		#try:
-			geometry = await r.resolveGeometry(geometry, followRefs)
-		#except:
-		#	pass
+		geometry = await r.resolveGeometry(geometry, followRefs)
 		
 	return geometry
 
 @contextlib.contextmanager
 def backupResolvers():
+	"""A context manager that, upon exiting, restores the resolver lists to their state when entered"""
 	global fieldResolvers
 	global geometryResolvers
 	

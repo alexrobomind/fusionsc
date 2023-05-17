@@ -24,13 +24,13 @@ namespace {
 }
 
 void initHelpers(py::module_& m) {
-	py::module_ timerModule = m.def_submodule("timer");
+	py::module_ timerModule = m.def_submodule("timer", "Timer helpers");
 	timerModule.def("delay", &delay, "Creates a promise resolving at a defined delay (in seconds) after this function is called");
 	
-	py::module_ efitModule = m.def_submodule("efit");
+	py::module_ efitModule = m.def_submodule("efit", "EFIT processing helpers");
 	efitModule.def("eqFromGFile", &parseGFile, "Creates an axisymmetric equilibrium from an EFIT GFile");
 	
-	py::module_ offlineModule = m.def_submodule("offline");
+	py::module_ offlineModule = m.def_submodule("offline", "Offline data processing");
 	
 	offlineModule.def("fieldResolver", &newOfflineFieldResolver);
 	offlineModule.def("geometryResolver", &newOfflineGeometryResolver);

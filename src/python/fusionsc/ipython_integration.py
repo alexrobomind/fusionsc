@@ -1,3 +1,5 @@
+"""Integration with IPython and Jupyter"""
+
 from .native.timer import delay
 from .asnc import FiberPool, asyncFunction
 
@@ -29,7 +31,7 @@ if hasIPython:
 	
 	@register_integration('fsc')
 	def kernel_integration(kernel):
-		"""IPython kernel integration"""
+		"""IPython kernel integration (use with `%gui fsc`)"""
 		
 		# Modify the event loop to allow nesting
 		nest_asyncio.apply()
@@ -60,7 +62,7 @@ if hasIPython:
 	# root scope.
 	
 	def terminal_inputhook(context):
-		"""IPython terminal integration"""
+		"""IPython terminal integration (use with `%gui fsc`)"""
 		
 		while not context.input_is_ready():
 			# Cycle the event loop for 0.05s

@@ -1,3 +1,5 @@
+"""Frontend module for magnetic field calculations"""
+
 from . import data
 from . import service
 from . import capnp
@@ -17,6 +19,7 @@ class CoilFilament(wrappers.structWrapper(service.Filament)):
 	
 	@asyncFunction
 	async def resolve(self):
+		"""Resolves all coils contained in the coil description"""
 		return CoilFilament(await resolve.resolveFilament.asnc(self.data))
 	
 	def __add__(self, other):
@@ -47,6 +50,7 @@ class CoilFilament(wrappers.structWrapper(service.Filament)):
 		return self.__add__(other)
 	
 	def biotSavart(self, width: float = 0.01, stepSize: float = 0.01, current: float = 1, windingNo: int = 1):
+		"""Creates a magnetic field by applying the BiotSavart law to the contained coil filaments"""
 		result = MagneticConfig()
 		
 		bs = result.field.initFilamentField()
@@ -89,10 +93,12 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 	
 	@asyncFunction
 	async def resolve(self):
+		"""Resolves contained coils and magnetic configurations contained in this object (returned in a new instance)"""
 		return MagneticConfig(await resolve.resolveField.asnc(self.data))
 	
 	@asyncFunction
 	async def compute(self, grid):
+		"""Computes the magnetic field on the specified grid."""
 		if grid is None:
 			assert self.data.which() == 'computedField', 'Must specify grid or use pre-computed field'
 			return MagneticConfig(self.data)
@@ -177,6 +183,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 	
 	@staticmethod
 	def fromEFit(contents: Optional[str] = None, filename: Optional[str] = None):
+		"""Creates a magnetic equilibrium field form an EFit file"""
 		assert contents or filename, "Must provide either GEqdsk file contents or filename"
 		
 		if contents is None:

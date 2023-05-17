@@ -1,5 +1,4 @@
-"""Geometry processing
-"""
+"""Geometry processing"""
 
 from . import data
 from . import resolve
@@ -14,10 +13,12 @@ import numpy as np
 class Geometry(wrappers.structWrapper(service.Geometry)):	
 	@asyncFunction
 	async def resolve(self):
+		"""Returns a new geometry with all unresolved nodes replaced by their resolved equivalents."""
 		return Geometry(await resolve.resolveGeometry.asnc(self.data))
 	
 	@asyncFunction
 	async def merge(self):
+		"""Creates a merged geometry (all meshes combined into one big message)"""
 		if self.data.which() == 'merged':
 			return Geometry(self.data)
 		
@@ -30,6 +31,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 	
 	@asyncFunction
 	async def reduce(self, maxVerts = 1000000, maxIndices = 1000000):
+		"""Creates a new geometry with small meshes combined into a small number of large meshes"""
 		resolved = await self.resolve.asnc()
 		
 		reducedRef = geometryLib().reduce(resolved.data, maxVerts, maxIndices).ref
@@ -40,6 +42,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 	
 	@asyncFunction
 	async def index(self, geometryGrid):
+		"""Computes an indexed geometry for accelerated intersection tests"""
 		if geometryGrid is None:
 			assert self.data.which() == 'indexed', 'Must specify geometry grid or use pre-indexed geometry'
 			return Geometry(self.data)
@@ -89,6 +92,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		return self.__add__(other)
 	
 	def translate(self, dx):
+		"""Returns a new geometry shifted by the given vector"""
 		result = Geometry()
 		
 		transformed = result.data.initTransformed()
@@ -99,6 +103,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		return result
 	
 	def rotate(self, angle, axis, center = [0, 0, 0]):
+		"""Returns a new geometry rotated around the prescribed axis and center point"""
 		result = Geometry()
 		
 		transformed = result.geometry.initTransformed()
@@ -111,6 +116,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		return result
 	
 	def withTags(self, extraTags):
+		"""Returns a new geometry with the given tags"""
 		result = Geometry(self.data)
 		
 		oldTags = { tag.name : tag.value for tag in self.data.tags }
@@ -132,6 +138,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 	
 	@asyncFunction
 	async def download(self):
+		"""For a geometry of 'ref' type, downloads the contents of the referenced geometry and wraps them in a new Geometry instance"""
 		if self.geometry.which() != 'ref':
 			return Geometry(self.data)
 		
@@ -182,6 +189,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 	
 	@staticmethod
 	def from2D(r, z, nPhi = 100, phi1 = None, phi2 = None, close = True):
+		"""Creates a geometry out of a 2D RZ array by wrapping it toroidally"""
 		result = Geometry()
 		
 		wt = result.data.initWrapToroidally()

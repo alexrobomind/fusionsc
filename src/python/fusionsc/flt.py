@@ -24,11 +24,13 @@ def symmetrize(points, nSym = 1, stellaratorSymmetric = False):
 	Takes a point-cloud and creates a new point cloud obeying the prescribed discrete
 	symmetry by applying all corresponding discrete transformations (phi-shifts and flips).
 	
-	:param points: A numpy-array of shape [3, ...] (at least 1D) with the points in x, y, z coordinates.
-	:param nSym: Toroidal symmetry to be applied to the cloud.
-	:param stellaratorSymmetric: Whether to apply the Stellarator symmetry (phi -> -phi, z -> -z, r -> r) as well.
+	Parameters:
+		- points: A numpy-array of shape [3, ...] (at least 1D) with the points in x, y, z coordinates.
+		- nSym: Toroidal symmetry to be applied to the cloud.
+		- stellaratorSymmetric: Whether to apply the Stellarator symmetry (phi -> -phi, z -> -z, r -> r) as well.
 	
-	:returns: An array of shape [3, nTotalSym] + points.shape[1:] containing the new point cloud
+	Returns:
+		An array of shape [3, nTotalSym] + points.shape[1:] containing the new point cloud
 		with nTotalSym = 2 * nSym if stellaratorSymmetric else nSym
 	"""
 	x, y, z = points
@@ -121,13 +123,13 @@ async def fieldValues(config, grid):
 	"""
 	Obtains the magnetic field of a configuration on a specific grid.
 	
-	:param config: Description of the magnetic field
-	:type config: MagneticConfig
-	:param grid: Grid to compute the field on.
-	:type grid: service.ToroidalGrid.Reader or service.ToroidalGrid.Builder
+	Parameters:
+		- config: Description of the magnetic field
+		- grid: Grid to compute the field on.
 	
-	:return: An array of shape [3, grid.nPhi, grid.nZ, grid.nR] containing the magnetic field.
-		The directions along the first coordinate are phi, z, r
+	Returns:
+		An array of shape [3, grid.nPhi, grid.nZ, grid.nR] containing the magnetic field.
+		The directions along the first coordinate are phi, z, r.
 	"""
 	import numpy as np
 	
@@ -137,19 +139,19 @@ async def fieldValues(config, grid):
 	return np.asarray(fieldData).transpose([3, 0, 1, 2])
 
 @asyncFunction
-async def poincareInPhiPlanes(points, phiPlanes, turnLimit, config, **kwArgs):
+async def poincareInPhiPlanes(points, config, phiPlanes, turnLimit, **kwArgs):
 	"""
 	Computes the Poincaré map starting from a given set of points on a config.
 	
 	Mostly equivalent to :code:`trace(points, config, phiPlanes = phiPlanes, turnLimit = turnLimit, **kwArgs)["poincareHits"]`.
 	
-	:param points: Starting points for the trace. Can be any shape, but the first dimension must have a size of 3 (x, y, z).
-	:type points: Numpy array-like.
-	:param phiPlanes: 1D list of intersection plane angles (in radian)
-	:param turnLimit: Maximum number of turns to trace.
-	:param config: Magnetic configuration. If this is not yet computed, you also need to specify the 'grid' parameter (see the documentation of trace).
-	:type config: MagneticConfig
-	:return: An array of shape [5, len(phiPlanes)] + points.shape[1:] + [turnLimit].
+	Parameters:
+		- points: Starting points for the trace. Can be any shape, but the first dimension must have a size of 3 (x, y, z).
+		- phiPlanes: 1D list of intersection plane angles (in radian)
+		- config: Magnetic configuration. If this is not yet computed, you also need to specify the 'grid' parameter (see the documentation of trace).
+	
+	Returns:
+		An array of shape [5, len(phiPlanes)] + points.shape[1:] + [turnLimit].
 		The entries in dimension 1 are [x, y, z, forward connection length, backward connection length].
 		If the forward- or backward-going field lines from this point hit no geometry, the returned length will be negative
 		and its absolute magnitude will indicate the remaining field line length in that direction.
@@ -166,13 +168,13 @@ async def connectionLength(points, config, geometry, **kwargs):
 	
 	Mostly equivalent to :code:`trace.asnc(points, config, geometry = geometry, collisionLimit = 1, **kwargs)["endPoints"][3]`.
 	
-	:param points: Starting points for the trace. Can be any shape, but the first dimension must have a size of 3 (x, y, z).
-	:type points: Numpy array-like.
-	:param config: Magnetic configuration. If this is not yet computed, you also need to specify the 'grid' parameter.
-	:type config: MagneticConfig
-	:param geometry: Device geometry. If this is not yet indexed, you need to specify the 'geometryGrid' parameter (see the documentation of trace).
-	:type geometry: Geometry
-	
+	Parameters:
+		- points: Starting points for the trace. Can be any shape, but the first dimension must have a size of 3 (x, y, z).
+		- config: Magnetic configuration. If this is not yet computed, you also need to specify the 'grid' parameter.
+		- geometry: Device geometry. If this is not yet indexed, you need to specify the 'geometryGrid' parameter (see the documentation of trace).
+
+	Returns:
+		An array of shape `points.shape[1:]` indicating the forward connection length of the given point.
 	"""
 	result = await trace.asnc(points, config, geometry = geometry, collisionLimit = 1, **kwargs)
 	return result["endPoints"][3]
@@ -228,53 +230,49 @@ async def trace(
 	"""
 	Performs a tracing request.
 	
-	:param points: Starting points. Array-like of shape [3, ...] (must be at least 1D, first dimension is x, y, z).
-	:type points: Array-like
-	:param config: Magnetic configuration. If this is not yet computed, you must specify the 'grid' parameter.
-	:type config: MagneticConfig
-	:param geometry: Geometry to use for intersection tests of field lines. If this is not yet indexed, you must specify the 'geometryGrid' parameters.
-	:type geometry: Geometry
-	:param grid: Toroidal grid to compute the magnetic field on prior to tracing.
-	:type grid: service.ToroidalGrid.Reader or service.ToroidalGrid.Builder
-	:param geometryGrid: Cartesian grid to index the geometry triangles on (used to accelerate intersection computations).
-	:type geometryGrid: service.CartesiaGrid.Reader or service.CartesianGrid.Builder
+	Parameters:
+		- points: Starting points. Array-like of shape [3, ...] (must be at least 1D, first dimension is x, y, z).
+		- config (magnetics.MagneticConfig): Magnetic configuration. If this is not yet computed, you must specify the 'grid' parameter.
+		- geometry (geometry.Geometry): Geometry to use for intersection tests of field lines. If this is not yet indexed, you must specify the 'geometryGrid' parameters.
+		- grid (service.ToroidalGrid.Reader or service.ToroidalGrid.Builder): Toroidal grid to compute the magnetic field on prior to tracing.
+		- geometryGrid (service.CartesiaGrid.Reader or service.CartesianGrid.Builder): Cartesian grid to index the geometry triangles on (used to accelerate intersection computations).
 	
-	:param mapping: EXPERIMENTAL, DO NOT USE - Field line mapping to accelerate tracing. Behaves poorly currently, not ready for production use.
+		- distanceLimit: Maximum field line tracing length. 0 or negative interpreted as infinity.
+		- turnLimit: Maximum number of device turn to trace field line for. 0 or negative interpreted as infinity.
+		- stepLimit: Maximum number of steps to trace for. 0 interpreted as infinity. May not be negative.
+		- stepSize: Step size for each tracing step (in meters).
+		- collisionLimit: Maximum number of collisions a field line may perform (e.g. 1 = termination at first collision. 2 at second collision etc.). Must not be negative.
+		  0 interpreted as infinity.
+		- phiPlanes (list(float)): Phi values (in radians) at which to record field line intersections (usually for the purpose of Poincaré maps).
 	
-	:param distanceLimit: Maximum field line tracing length. 0 or negative interpreted as infinity.
-	:param turnLimit: Maximum number of device turn to trace field line for. 0 or negative interpreted as infinity.
-	:param stepLimit: Maximum number of steps to trace for. 0 interpreted as infinity. May not be negative.
-	:param stepSize: Step size for each tracing step (in meters).
-	:param collisionLimit: Maximum number of collisions a field line may perform (e.g. 1 = termination at first collision. 2 at second collision etc.). Must not be negative.
-		0 interpreted as infinity.
-	:param phiPlanes: Phi values (in radians) at which to record field line intersections (usually for the purpose of Poincaré maps).
-	:type phiPlanes: list(int)
+		- isotropicDiffusionCoefficient: If set, enables diffusive tracing and specifies the isotropic / perpendicular diffusion coefficient to use in the
+		  underlying diffusive tracing model. If set, either parallelConvectionVelocity or parallelDiffusionCoefficient must also be specified.
+		- parallelConvectionVelocity: Parallel streaming velocity to assume for a single-directional diffusive tracing model.
+		- parallelDiffusionCoefficient: Parallel diffusion coefficient to assume for a fully bidireactional doubly-diffusive tracing model.
 	
-	:param isotropicDiffusionCoefficient: If set, enables diffusive tracing and specifies the isotropic / perpendicular diffusion coefficient to use in the
-		underlying diffusive tracing model. If set, either parallelConvectionVelocity or parallelDiffusionCoefficient must also be specified.
-	:type Optional(float):
-	:param parallelConvectionVelocity: Parallel streaming velocity to assume for a single-directional diffusive tracing model.
-	:param parallelDiffusionCoefficient: Parallel diffusion coefficient to assume for a fully bidireactional doubly-diffusive tracing model.
+		- meanFreePath: Mean (not fixed!) free path to use to sample the tracing distance between diffusive displacement steps.
+		- meanFreePathGrowth: Amount by which to increase the mean free path after every displacement step. This parameter prevents
+		  extreme growths of computing costs at low perpendicular diffusion coefficients.
 	
-	:meanFreePath: Mean (not fixed!) free path to use to sample the tracing distance between diffusive displacement steps.
-	:meanFreePathGrowth: Amount by which to increase the mean free path after every displacement step. This parameter prevents
-		extreme growths of computing costs at low perpendicular diffusion coefficients.
+		- mapping: EXPERIMENTAL, DO NOT USE - Field line mapping to accelerate tracing. Behaves poorly currently, not ready for production use.
 	
-	:return: A dictionary holding the following entries (more can be added in future versions):
-		- *endPoints*: A numpy array of shape [4] + startPoints.shape[1:]. The first 3 components are the x, y, and z positions of
-			the field lines' end points. The 4th component is the total length of the field line.
-		- *poincareHits*: A numpy array of shape [5, len(phiPlanes)] + startPoints.shape[1:] + [maxTurns] with maxTurns being a number <=
-			turnLimit indicating the maximum turn count of any field line. The first 3 components of the first dimension are the x, y, and z
-			coordinates of the phi plane intersections (commonly used for Poincaré maps). The next two components indicate the forward and backward
-			connection lengths respectively to the next geometry collision along the field line. If the field line ends in that direction without
-			a collision (e.g. closed field line, or no geometry specified), a negative number is returned whose absolute value corresponds to the
-			remaining length in that direction. Non-existing points (due to field lines not all having same turn counts) have their values set to
-			NaN.
-		- *stopReasons*: A numpy array of shape startPoints.shape[1:] that indicates for each point the final reason why the trace was stopped.
-			The dtype of the array is fusionsc.service.FLTStopReason.
+	Returns:
+		A dictionary holding the following entries (more can be added in future versions)
+		
+		- *endPoints*: A numpy array of shape `[4] + startPoints.shape[1:]`. The first 3 components are the x, y, and z positions of
+		  the field lines' end points. The 4th component is the total length of the field line.
+		- *poincareHits*: A numpy array of shape `[5, len(phiPlanes)] + startPoints.shape[1:] + [maxTurns]` with maxTurns being a number <=
+		  turnLimit indicating the maximum turn count of any field line. The first 3 components of the first dimension are the x, y, and z
+		  coordinates of the phi plane intersections (commonly used for Poincaré maps). The next two components indicate the forward and backward
+		  connection lengths respectively to the next geometry collision along the field line. If the field line ends in that direction without
+		  a collision (e.g. closed field line, or no geometry specified), a negative number is returned whose absolute value corresponds to the
+		  remaining length in that direction. Non-existing points (due to field lines not all having same turn counts) have their values set to
+		  NaN.
+		- *stopReasons*: A numpy array of shape `startPoints.shape[1:]` that indicates for each point the final reason why the trace was stopped.
+		  The dtype of the array is fusionsc.service.FLTStopReason.
 		- *endTags*: A dict containing a numpy array of type fusionsc.service.TagValue for each tag name present in the geometry. Each array is
-			of shape startPoints.shape[1:], and its values indicate the tags associated with the final geometry hit. This gives information
-			about the meshes impacted by the field lines.
+		  of shape `startPoints.shape[1:]`, and its values indicate the tags associated with the final geometry hit. This gives information
+		  about the meshes impacted by the field lines.
 		- *responseSize*: The total size of the response size in bytes (mainly for profiling purposes).
 	"""
 	assert parallelConvectionVelocity is None or parallelDiffusionCoefficient is None
@@ -341,9 +339,10 @@ async def trace(
 async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10):
 	"""
 	Computes the magnetic axis by repeatedly tracing a Poincaré map and averaging the points.
-	:return: A tuple holding the xyz-position of the axis starting point and a numpy array holding the field line
+	
+	Returns:
+		A tuple holding the xyz-position of the axis starting point and a numpy array holding the field line
 		corresponding to the magnetic axis.
-	:rtype: tuple
 	"""
 	field = await field.compute.asnc(grid)
 	computed = field.data.computedField
@@ -398,8 +397,8 @@ async def axisCurrent(field, current, grid = None, startPoint = None, stepSize =
 	This function computes the magnetic axis of a magnetic configuration, interprets it as a coil, and
 	creates a magnetic configuration with a given current specified on this axis.
 	
-	:return: The magnetic configuration corresponding to the on-axis current's field.
-	:rtype: MagneticConfig
+	Returns:
+		The magnetic configuration corresponding to the on-axis current's field.
 	"""
 	_, axis = await findAxis.asnc(field, grid, startPoint, stepSize, nTurns, nIterations)
 	

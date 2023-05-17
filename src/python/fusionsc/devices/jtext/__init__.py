@@ -1,3 +1,4 @@
+"""J-TEXT parts"""
 from ... import service, geometry, magnetics, native
 
 def defaultGrid() -> service.ToroidalGrid.Reader:
