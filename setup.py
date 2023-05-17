@@ -3,7 +3,7 @@ from setuptools import find_packages
 
 setup(
 	name = 'fusionsc',
-	version = '0.1',
+	version = '1.0.0',
 	packages = ['fusionsc', 'fusionsc.devices', 'fusionsc.devices.w7x', 'fusionsc.devices.jtext'],
 	package_dir = {"" : "src/python"},
 	cmake_install_target = "fsc-install-skbuild",
@@ -18,6 +18,7 @@ setup(
 		"numpy>=1.19.5 ; python_version < '3.10'",
 		"numpy>=1.23.4 ; python_version >= '3.10'",
         "nest-asyncio",
-		"netCDF4"
+		"netCDF4",
+		"scipy"
 	]
 )
