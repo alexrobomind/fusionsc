@@ -42,19 +42,16 @@ class CoilPack(wrappers.structWrapper(service.W7XCoilSet)):
 	pass
 
 @asyncFunction
-async def computeCoilFields(calculator, coils: Union[service.W7XCoilSet.Builder, service.W7XCoilSet.Reader], grid = None) -> CoilPack:
+async def computeCoilFields(calculator, coils: CoilPack, grid = None) -> CoilPack:
 	if grid is None:
 		grid = defaultGrid
 	
 	result = service.W7XCoilSet.newMessage()
-	w7xnative.buildCoilFields(coils, result.initFields())
+	w7xnative.buildCoilFields(coils.data, result.initFields())
 	
 	async def resolveAndCompute(x):
 		x = await resolve.resolveField.asnc(x)
 		
-		#x = (await calculator.compute(x, grid)).computedField
-		
-		# Cheatycheat cheatie
 		# Computed field is two part: Grid and data ref
 		# To hide latency, we extract the reference directly
 		
@@ -67,15 +64,12 @@ async def computeCoilFields(calculator, coils: Union[service.W7XCoilSet.Builder,
 	fields = result.fields
 	
 	for i in range(7):
-		print("Main", i)
 		fields.mainFields[i].computedField = await resolveAndCompute(fields.mainFields[i])
 	
 	for i in range(5):
-		print("Trim", i)
 		fields.trimFields[i].computedField = await resolveAndCompute(fields.trimFields[i])
 	
 	for i in range(10):
-		print("CC", i)
 		fields.controlFields[i].computedField = await resolveAndCompute(fields.controlFields[i])
 	
 	return CoilPack(result)

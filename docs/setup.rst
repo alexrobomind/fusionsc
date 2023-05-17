@@ -12,6 +12,12 @@ component / field resolution process, which will register it until your python i
   import fusionsc as fsc
   fsc.resolve.importOfflineData('yourDeviceFile.fsc')
 
+J-Text
+------
+
+J-Text should be fully bundled inside the library and no actions should be neccessary. Use the coils and geometries in the
+fusionsc.devices.jtext module.
+
 Wendelstein 7-X
 ---------------
 
@@ -32,15 +38,13 @@ Off-site
 Simply use an offline data file as outlined above.
 
 Pre-calculating fields for Biot-Savart calculation
---------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A generally expensive calculation is the Biot-Savart rule to obtain the magnetic field from the coil geometries. For select
 devices, there is a high-level support to precompute the coil fields. These fields can then be saved and loaded later for
 usage. When using precomputed coil fields, the offline data files are not required (unless required for other reasons, such
-as geometry data or other field information).
-
-Wendelstein 7-X
-~~~~~~~~~~~~~~~
+as geometry data or other field information). W7-X has special support to pre-compute all coils so that they can be re-used
+later.
 
 First, select the grid you want to calculate your coil fields over
 
@@ -78,6 +82,11 @@ Later, you can then load the pre-computed coil fields and can use them as coil s
   config = w7x.op12Standard(coils = loadedCoils) + w7x.controlCoils([200, -200], coils = loadedCoils)
   
   # Don-t forget to re-load the grid
-  grid = w7x.defaultGrid()
+  grid = fsc.capnp.clone(w7x.defaultGrid)
   grid.nR = 128
   grid.nZ = 128
+
+Other
+-----
+
+Currently we have no specific support for additional devices, but you can always load custom coils and geometries to use them in calculations.

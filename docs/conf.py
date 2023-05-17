@@ -27,7 +27,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 
 autosummary_ignore_module_all = False
-autosummary_imported_members = True
+autosummary_imported_members = False
 
 
 # -- Options for HTML output -------------------------------------------------
