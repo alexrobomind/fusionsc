@@ -31,7 +31,10 @@ struct OfflineFieldResolver : public FieldResolverBase {
 				continue;
 			}
 			
-			fields.insert(ID::fromReader(key), val);
+			ID id = ID::fromReader(key);
+			if(fields.find(id) == nullptr) {
+				fields.insert(id, val);
+			}
 		}
 		
 		for(auto e : data.getCoils()) {
@@ -43,7 +46,10 @@ struct OfflineFieldResolver : public FieldResolverBase {
 				continue;
 			}
 			
-			filaments.insert(ID::fromReader(key), val);
+			ID id = ID::fromReader(key);
+			if(filaments.find(id) == nullptr) {
+				filaments.insert(id, val);
+			}
 		}
 	}
 	
@@ -105,7 +111,10 @@ struct OfflineGeometryResolver : public GeometryResolverBase {
 				continue;
 			}
 			
-			geometries.insert(asKey(key), val);
+			ID id = asKey(key);
+			if(geometries.find(id) == nullptr) {
+				geometries.insert(id, val);
+			}
 		}
 	}
 	

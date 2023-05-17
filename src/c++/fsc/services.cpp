@@ -34,7 +34,7 @@ Own<DeviceBase> selectDevice(ComputationDeviceType preferredType) {
 	#endif
 	
 	unsigned int cpuThreads = CPUDevice::estimateNumThreads();
-	KJ_DBG("Creating CPU device", cpuThreads);
+	// KJ_DBG("Creating CPU device", cpuThreads);
 	return kj::refcounted<CPUDevice>(cpuThreads);
 }
 
