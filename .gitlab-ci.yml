@@ -63,7 +63,7 @@ stages:
   # Currently we only have windows builds available only for protected branches
   rules:
     - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == "main"'
+    #- if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_REF_PROTECTED == "true"'
       when: manual
     - when: never
