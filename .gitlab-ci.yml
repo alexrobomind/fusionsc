@@ -139,6 +139,10 @@ pybuild:pybuild-manylinux:
         auditwheel show $FILE
       done
   
+  artifacts:
+    paths:
+      - dist/*.whl
+  
 
 # Documentation (stands separate from the compilation-related jobs)
 
