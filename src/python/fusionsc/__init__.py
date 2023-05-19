@@ -21,6 +21,9 @@ from . import asnc
 from . import backends
 backends.connectLocal()
 
+# Load remote connection module
+from . import remote
+
 # Load auxiliary modules
 from . import data
 from . import ipython_integration

@@ -6,6 +6,7 @@
 #include <capnp/message.h>
 #include <capnp/schema.h>
 #include <capnp/schema-loader.h>
+#include <capnp/any.h>
 
 #include <kj/string-tree.h>
 
@@ -682,6 +683,28 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		py::arg("copyFrom") = py::none(),
 		py::arg("initialSize") = 1024
 	);
+	
+	output.attr("castAs") = py::cpp_function(
+		[schema](py::object input) -> py::object {
+			py::detail::make_caster<capnp::DynamicStruct::Reader> readerCaster;
+			py::detail::make_caster<capnp::DynamicStruct::Builder> builderCaster;
+			
+			py::object result;
+			
+			if(builderCaster.load(input, false)) {
+				capnp::AnyStruct::Builder asBuilder = builderCaster.operator capnp::DynamicStruct::Builder&();
+				result = py::cast(asBuilder.as<capnp::DynamicStruct>(schema));
+			} else if(readerCaster.load(input, false)) {
+				capnp::AnyStruct::Reader asReader = readerCaster.operator capnp::DynamicStruct::Reader&();
+				result = py::cast(asReader.as<capnp::DynamicStruct>(schema));
+			} else {
+				KJ_FAIL_REQUIRE("Object is not a struct reader or builder");
+			}
+			
+			result.attr("_castFrom") = input;
+			return result;
+		}
+	);
 		
 	output.attr("_initRootAs") = py::cpp_function(
 		[schema](py::object src) mutable {
@@ -803,6 +826,13 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 			return untyped.castAs<capnp::DynamicCapability>(schema);
 		},
 		py::arg("disconnectReason") = "disconnected"
+	);
+	
+	outerAttrs["castAs"] = py::cpp_function(
+		[schema](capnp::DynamicCapability::Client input) {
+			capnp::Capability::Client asGeneric(mv(input));
+			return asGeneric.castAs<capnp::DynamicCapability>(schema);
+		}
 	);
 	
 	/*py::print("Extracting surrounding module");

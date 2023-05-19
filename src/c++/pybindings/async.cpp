@@ -97,7 +97,7 @@ namespace {
 		}
 		
 		Promise<Own<PyObjectHolder>> doThrow(kj::Exception e) {
-			KJ_DBG("Passing error into awaitable", e);
+			// KJ_DBG("Passing error into awaitable", e);
 			py::object excType = py::reinterpret_borrow<py::object>(PyExc_RuntimeError);
 			
 			py::object argTuple = py::make_tuple(mv(excType), py::cast(kj::str(e)), py::none());
@@ -267,7 +267,11 @@ kj::Exception convertPyError(py::error_already_set& e) {
 		py::object v = e.value();
 		py::object tr = e.trace();
 		
-		py::list formatted = formatException(t, v, tr);
+		py::list formatted;
+		if(t && tr)
+			formatted = formatException(t, v, tr);
+		else
+			formatted = formatException(v);
 		
 		auto pythonException = kj::strTree();
 		for(auto s : formatted) {
