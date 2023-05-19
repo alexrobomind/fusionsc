@@ -76,7 +76,6 @@ namespace pybind11 { namespace detail {
 		
 		static handle cast(capnp::DynamicCapability::Client src, return_value_policy policy, handle parent) {
 			auto typeId = src.getSchema().getProto().getId();
-			KJ_DBG(src.getSchema().getProto(), typeId);
 			
 			// Special handling for normal Capability::Client
 			/*KJ_IF_MAYBE(pythonSchema, ::fscpy::defaultLoader.capnpLoader.tryGet(typeId)) {
@@ -105,7 +104,6 @@ namespace pybind11 { namespace detail {
 				return result.inc_ref();
 			}
 			
-			KJ_DBG("Returning untyped capability");
 			return baseClient.inc_ref();
 		}
 	};

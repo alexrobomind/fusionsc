@@ -7,6 +7,15 @@
 #include <capnp/schema.h>
 
 namespace fscpy {
+	
+struct DynamicValuePipeline;
+
+namespace internal {
+	template<typename T>
+	struct GetPipelineAsImpl {
+		static_assert(sizeof(T) == 0, "Unsupported type for Pipeline::getAs");
+	};
+}
 
 //! Conversion helper to obtain DynamicValue from Python and NumPy scalar types
 Maybe<capnp::DynamicValue::Reader> dynamicValueFromScalar(py::handle handle);
@@ -30,9 +39,15 @@ struct DynamicValuePipeline {
 	{}
 	
 	inline DynamicValuePipeline(DynamicValuePipeline&& other) = default;
+	inline DynamicValuePipeline& operator=(DynamicValuePipeline&& other) = default;
 	
 	DynamicStructPipeline asStruct();
 	capnp::DynamicCapability::Client asCapability();
+	
+	template<typename T>
+	auto getAs() {
+		return internal::GetPipelineAsImpl<T>::apply(*this);
+	}
 };
 
 struct DynamicStructPipeline {
@@ -58,5 +73,21 @@ struct DynamicStructPipeline {
 	DynamicValuePipeline get(capnp::StructSchema::Field field);
 	DynamicValuePipeline get(kj::StringPtr fieldName);
 };
+
+namespace internal {
+	template<>
+	struct GetPipelineAsImpl<capnp::DynamicCapability> {
+		static inline capnp::DynamicCapability::Client apply(DynamicValuePipeline& pipeline) {
+			return pipeline.asCapability();
+		}
+	};
+	
+	template<>
+	struct GetPipelineAsImpl<capnp::DynamicStruct> {
+		static inline DynamicStructPipeline apply(DynamicValuePipeline& pipeline) {
+			return pipeline.asStruct();
+		}
+	};
+}
 
 }

@@ -65,30 +65,59 @@ py::object getField(py::object self, py::object field) {
  * their parent to keep their data alive.
  */
 template<typename T>
-bool installBackReference(T&& t) {
+bool installBackReference(T&& t, capnp::Type type) {
+	// Unconstrained capability types need no back reference because
+	// of conversion logic.
+	if(t.getType() == capnp::DynamicValue::ANY_POINTER) {
+		if(type.isAnyPointer() && type.whichAnyPointerKind() == capnp::schema::Type::AnyPointer::Unconstrained::CAPABILITY)
+			return false;
+	}
+	
 	return needsBackReference(t.getType());
 }
 
 //! Pipelines have their own keep-alive through PipelineHooks
 template<>
-bool installBackReference<DynamicValuePipeline>(DynamicValuePipeline&& t) {
+bool installBackReference<DynamicValuePipeline>(DynamicValuePipeline&& t, capnp::Type type) {
 	return false;
 }
 
 //! Pipelines have their own keep-alive through PipelineHooks
 template<>
-bool installBackReference<DynamicValuePipeline&>(DynamicValuePipeline& t) {
+bool installBackReference<DynamicValuePipeline&>(DynamicValuePipeline& t, capnp::Type type) {
 	return false;
+}
+
+DynamicValuePipeline anyPtrToInterface(DynamicValuePipeline&& pipeline, capnp::InterfaceSchema schema) {
+	// The AnyPtr -> interface conversion is done by DynamicStructPipeline::get(...)
+	return pipeline;
+}
+
+DynamicValue::Reader anyPtrToInterface(DynamicValue::Reader&& reader, capnp::InterfaceSchema schema) {
+	capnp::AnyPointer::Reader anyReader = reader.as<capnp::AnyPointer>();
+	return anyReader.getAs<capnp::DynamicCapability>(schema.asInterface());
+}
+
+DynamicValue::Builder anyPtrToInterface(DynamicValue::Builder&& builder, capnp::InterfaceSchema schema) {
+	capnp::AnyPointer::Builder anyBuilder = builder.as<capnp::AnyPointer>();
+	return anyBuilder.getAs<capnp::DynamicCapability>(schema.asInterface());
 }
 
 /**
  * Implementation for _get used by getField, which determines, based on type
  * dispatch, whether the returned value needs a back-reference.
  */
-template<typename T, typename Field>
-py::tuple underscoreGet(T& ds, Field field) {
+template<typename T>
+py::tuple underscoreGet(T& ds, kj::StringPtr field) {
 	auto cppValue = ds.get(field);
-	bool nbr = installBackReference(cppValue);
+	auto fieldType = ds.getSchema().getFieldByName(field).getType();
+	bool nbr = installBackReference(cppValue, fieldType);
+	
+	// Fields of constrained AnyPointer type need to be adjusted
+	if(fieldType.isAnyPointer() && fieldType.whichAnyPointerKind() == capnp::schema::Type::AnyPointer::Unconstrained::CAPABILITY) {
+		auto schema = defaultLoader.importBuiltin<capnp::Capability>();
+		cppValue = anyPtrToInterface(mv(cppValue), schema.asInterface());
+	}
 	
 	// We REALLY don't want pybind11 to try to copy this
 	// auto pCppValue = new decltype(cppValue)(mv(cppValue));
@@ -294,8 +323,8 @@ void bindListClasses(py::module_& m) {
 //! Defines the _get methods needed by all accessors, as well as the dynamic "get" and "__getitem__" methods
 template<typename T, typename... Extra>
 void defGet(py::class_<T, Extra...>& c) {
-	c.def("_get", [](T& self, capnp::StructSchema::Field field) { return underscoreGet<T, kj::StringPtr>(self, field.getProto().getName()); });
-	c.def("_get", &underscoreGet<T, kj::StringPtr>);
+	c.def("_get", [](T& self, capnp::StructSchema::Field field) { return underscoreGet<T>(self, field.getProto().getName()); });
+	c.def("_get", &underscoreGet<T>);
 	
 	auto genericGet = [](py::object ds, py::object field) { return getField(ds, field); };
 	
@@ -493,9 +522,7 @@ void bindStructClasses(py::module_& m) {
 	
 	
 	// ----------------- OTHERS ------------------
-	
-	py::class_<capnp::Response<AnyPointer>>(m, "DynamicResponse");
-	
+		
 	py::class_<capnp::Orphan<DynamicValue>>(m, "DynamicOrphan", py::dynamic_attr())
 		.def_property_readonly("val", [](capnp::Orphan<DynamicValue>& self) { return self.get(); }, py::keep_alive<0, 1>())
 	;
@@ -590,6 +617,12 @@ void bindSchemaClasses(py::module_& m) {
 	py::class_<capnp::Schema>(m, "Schema");
 	py::class_<capnp::StructSchema, capnp::Schema>(m, "StructSchema");
 	py::class_<capnp::InterfaceSchema, capnp::Schema>(m, "InterfaceSchema");
+}
+
+void bindAnyClasses(py::module_& m) {
+	py::class_<capnp::AnyPointer::Builder>(m, "AnyBuilder");
+	py::class_<capnp::AnyPointer::Reader>(m, "AnyReader");
+	py::class_<capnp::Response<AnyPointer>>(m, "AnyResponse");
 }
 
 uint64_t totalSize(capnp::DynamicStruct::Reader reader) {
@@ -712,6 +745,8 @@ void initCapnp(py::module_& m) {
 		throw py::error_already_set();
 	}
 	
+	defaultLoader.addBuiltin<capnp::Capability>();
+	
 	py::module_ mcapnp = m.def_submodule("capnp", "Python bindings for Cap'n'proto classes (excluding KJ library)");
 	
 	bindListClasses(mcapnp);
@@ -723,6 +758,7 @@ void initCapnp(py::module_& m) {
 	bindEnumClasses(mcapnp);
 	bindSchemaClasses(mcapnp);
 	bindHelpers(mcapnp);
+	bindAnyClasses(mcapnp);
 	
 	m.add_object("void", py::cast(capnp::DynamicValue::Reader(capnp::Void())));
 	
@@ -760,17 +796,25 @@ DynamicValuePipeline DynamicStructPipeline::get(capnp::StructSchema::Field field
 	
 	auto fieldType = field.getType();
 	
-	KJ_REQUIRE(fieldType.isStruct() || fieldType.isInterface());
+	KJ_REQUIRE(fieldType.isStruct() || fieldType.isInterface() || fieldType.isAnyPointer());
 	
 	if(fieldType.isStruct()) {
 		return DynamicValuePipeline(
 			mv(typelessValue), field.getType().asStruct()
 		);
-	} else {
+	} else if(fieldType.isInterface()) {
 		return DynamicValuePipeline(
 			mv(typelessValue), field.getType().asInterface()
 		);
-	}	
+	} else {
+		// AnyStruct fields are not accessible
+		KJ_REQUIRE(fieldType.whichAnyPointerKind() == capnp::schema::Type::AnyPointer::Unconstrained::CAPABILITY);
+		
+		auto schema = defaultLoader.importBuiltin<capnp::Capability>().asInterface();
+		return DynamicValuePipeline(
+			mv(typelessValue), mv(schema)
+		);
+	}
 }
 
 DynamicValuePipeline DynamicStructPipeline::get(kj::StringPtr name) {
