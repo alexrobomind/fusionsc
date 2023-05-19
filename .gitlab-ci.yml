@@ -137,6 +137,7 @@ pybuild:pybuild-manylinux:
       for FILE in "dist/*.whl"
       do
         auditwheel show $FILE
+        auditwheel repair $FILE
       done
   
   artifacts:
