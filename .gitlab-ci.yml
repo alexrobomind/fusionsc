@@ -143,6 +143,7 @@ pybuild:pybuild-manylinux:
   artifacts:
     paths:
       - dist/*.whl
+      - wheelhouse/*
   
 
 # Documentation (stands separate from the compilation-related jobs)
