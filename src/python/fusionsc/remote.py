@@ -51,15 +51,12 @@ async def connect(url : str, tunnel = None, ServiceType = service.RootService):
 	return ServiceType.castAs(backend.remote)
 
 @asnc.asyncFunction
-async def serve(target = None, host = "0.0.0.0", port = None, tunnel = None):
+async def serve(target, host = "0.0.0.0", port = None, tunnel = None):
 	"""Serves the given object (or the active backend) on the given host and port, optionally over the specified connection"""
 	networkInterface = tunnel
 	
 	if networkInterface is None:
 		networkInterface = backends.localResources()
-	
-	if target is None:
-		target = backends.activeBackend()
 	
 	serveResponse = await networkInterface.serve(
 		host, port if port is not None else 0, target

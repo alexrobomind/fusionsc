@@ -54,6 +54,8 @@ interface RootService {
 const computeNodeProfile : LocalConfig = (enableStorage = false, preferredDeviceType = gpu);
 const loginNodeProfile : LocalConfig = (enableCompute = false, jobScheduler = (slurm = void));
 
+const fscProtocolVersion : UInt64 = 1;
+
 
 # Extended local interface to provide access to the local file system and network connections
 #

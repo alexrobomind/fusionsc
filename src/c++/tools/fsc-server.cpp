@@ -85,13 +85,17 @@ struct MainCls {
 			load(loadedConfig, root);
 		} else if(config.is<LocalConfig::Reader>()) {
 			loadedConfig = config.get<LocalConfig::Reader>();
+		} else {
+			std::cout << "No configuration specified, using default configuration." << std::endl
+				<< "See the '--help' option to check how to override the configuration." << std::endl
+				<< std::endl;
 		}
 		
 		// Dump configuration to console
-		std::cout << "Configuration: " << std::endl;
+		std::cout << " --- Configuration --- " << std::endl << std::endl;
 		YAML::Emitter emitter(std::cout);
 		emitter << loadedConfig.asReader();
-		std::cout << std::endl;
+		std::cout << std::endl << std::endl;
 		
 		NetworkInterface::Client networkInterface = kj::heap<LocalNetworkInterface>();
 		
@@ -105,6 +109,7 @@ struct MainCls {
 		auto openPort = listenRequest.sendForPipeline().getOpenPort();
 		auto info = openPort.getInfoRequest().send().wait(ws);
 		
+		std::cout << "Serving protocol version " << FSC_PROTOCOL_VERSION << std::endl;
 		std::cout << "Listening on port " << info.getPort() << std::endl;
 		
 		while(true) {
@@ -124,10 +129,15 @@ struct MainCls {
 	}
 	
 	auto getMain() {
-		return kj::MainBuilder(context, "FSC server", "Creates an FSC server")
-			.addOptionWithArg({"-a", "address"}, KJ_BIND_METHOD(*this, setAddress), "<address>", "Address to listen on, defaults to 0.0.0.0")
-			.addOptionWithArg({"-p", "port"}, KJ_BIND_METHOD(*this, setPort), "<port>", "Port to listen on, defaults to system-assigned")
-			.addOptionWithArg({"-b", "builtin"}, KJ_BIND_METHOD(*this, setBuiltin), "<built-in>", "Name of built-in profile, either 'computeNode' or 'loginNode'")
+		auto infoString = kj::str(
+			"FusionSC server\n",
+			"Protocol version ", FSC_PROTOCOL_VERSION, "\n"
+		);
+		
+		return kj::MainBuilder(context, infoString, "Creates an FSC server")
+			.addOptionWithArg({'a', "address"}, KJ_BIND_METHOD(*this, setAddress), "<address>", "Address to listen on, defaults to 0.0.0.0")
+			.addOptionWithArg({'p', "port"}, KJ_BIND_METHOD(*this, setPort), "<port>", "Port to listen on, defaults to system-assigned")
+			.addOptionWithArg({'b', "builtin"}, KJ_BIND_METHOD(*this, setBuiltin), "<built-in>", "Name of built-in profile, either 'computeNode' or 'loginNode'")
 			.expectOptionalArg("<settings file>", KJ_BIND_METHOD(*this, setFile))
 			.callAfterParsing(KJ_BIND_METHOD(*this, run))
 			.build();
