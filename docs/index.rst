@@ -12,6 +12,7 @@ Welcome to FusionSC's documentation!
    
    installation
    setup
+   architecture
    
    howto/index
    
