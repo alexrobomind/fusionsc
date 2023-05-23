@@ -270,6 +270,7 @@ struct PyPromise {
 			pyObjectHolder = PythonWaitScope::wait(holder.addBranch());
 		}
 		
+		// py::print("Wait result:", pyObjectHolder -> content);
 		return pyObjectHolder -> content;
 	}
 	

@@ -349,13 +349,15 @@ async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTur
 	
 	# If start point is not provided, use grid center
 	if startPoint is None:
-		startPoint = [0.5 * (grid.rMax + grid.rMin),
-			0, 0.5 * (grid.zMax + grid.zMin)
+		fieldGrid = computed.grid
+		
+		startPoint = [0.5 * (fieldGrid.rMax + fieldGrid.rMin),
+			0, 0.5 * (fieldGrid.zMax + fieldGrid.zMin)
 		]
 	
 	request = service.FindAxisRequest.newMessage()
 	request.startPoint = startPoint
-	request.field = computedField
+	request.field = computed
 	request.stepSize = stepSize
 	request.nTurns = nTurns
 	request.nIterations = nIterations
@@ -400,13 +402,14 @@ async def axisCurrent(field, current, grid = None, startPoint = None, stepSize =
 	Returns:
 		The magnetic configuration corresponding to the on-axis current's field.
 	"""
-	_, axis = await findAxis.asnc(field, grid, startPoint, stepSize, nTurns, nIterations)
+	result = await findAxis.asnc(field, grid, startPoint, stepSize, nTurns, nIterations)
+	_, axis = result
 	
-	result = MagneticField()
+	result = magnetics.MagneticConfig()
 	
-	filField = result.initFilamentField()
+	filField = result.data.initFilamentField()
 	filField.current = current
 	filField.biotSavartSettings.stepSize = stepSize
-	filField.filament.inline = axis
+	filField.filament.inline = axis.T
 	
 	return result

@@ -116,7 +116,7 @@ def trimCoils(i_trim = [0, 0, 0, 0, 0], coils = None) -> MagneticConfig:
 	
 	config = MagneticConfig()
 	
-	cnc = config.data.initW7xMagneticConfig().initCoilsAndCurrents()
+	cnc = config.data.initW7x().initCoilsAndCurrents()
 	cnc.coils = coils.data
 	
 	cnc.trim = i_trim
@@ -129,7 +129,7 @@ def controlCoils(i_cc = [0, 0], coils = None) -> MagneticConfig:
 	
 	config = MagneticConfig()
 	
-	cnc = config.data.initW7xMagneticConfig().initCoilsAndCurrents()
+	cnc = config.data.initW7x().initCoilsAndCurrents()
 	cnc.coils = coils.data
 	
 	cnc.control = i_cc

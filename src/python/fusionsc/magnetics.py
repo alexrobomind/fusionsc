@@ -256,6 +256,7 @@ async def visualizeCoils(field):
 	
 	def makeCoil(coil):
 		vertexArray = np.asarray(coil)
+		print(vertexArray.shape)
 		nPoints = vertexArray.shape[0]
 		
 		indices = [nPoints] + list(range(nPoints))

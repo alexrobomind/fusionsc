@@ -1,25 +1,24 @@
-from . import asnc
-
+import fusionsc as fsc
 import time
 
 from pytest import approx, fixture
 
 @fixture
 def fiberPool():
-	return asnc.FiberPool(1024 * 1024)
+	return fsc.asnc.FiberPool(1024 * 1024)
 
-@asnc.asyncFunction
+@fsc.asnc.asyncFunction
 async def test_timer():
 	t1 = time.time()
-	await asnc.delay(0.1)
+	await fsc.asnc.delay(0.1)
 	t2 = time.time()
 	
 	assert (t2 - t1) == approx(0.1, abs=0.1)
 
-@asnc.asyncFunction
+@fsc.asnc.asyncFunction
 async def test_fiberPool(fiberPool):
 	await fiberPool.startFiber(test_timer)
 
-@asnc.asyncFunction
+@fsc.asnc.asyncFunction
 async def test_await():
 	await test_timer.asnc()

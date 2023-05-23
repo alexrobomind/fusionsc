@@ -691,6 +691,8 @@ struct FLTImpl : public FLT::Server {
 			double r = iter.r;
 			double z = iter.z;
 			
+			KJ_DBG("FLT::findAxis iteration", r, z);
+			
 			// Trace from starting position
 			auto req = thisCap().traceRequest();
 			auto sp = req.initStartPoints();

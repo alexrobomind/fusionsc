@@ -21,6 +21,23 @@ namespace {
 		fscpy::PythonContext::libraryThread()->waitScope().poll();
 	}
 	
+	/**
+	 * Generator to be returned by 'await' statements on PyPromises.
+	 *
+	 * A little semantics: When calling 'await' in a coroutine, Python obtains a generator
+	 * from the awaitable. The generator is then called once (via next()) and the returned
+	 * object is passed to the coroutine runner, which sends back (via the outer coroutine-generated
+	 * generator the object to be returned in place). The unwrap-and-send procedure continues
+	 * as long as the "send" method returns and ends when a "StopIteration" is raised, at which
+	 * point the coroutine will take the value given there as return value and continue the coroutine.
+	 *
+	 * The coroutine runner of FusionSC currently only accepts promises, runs them via the event loop,
+	 * and then feeds back the result object. That means for await contexts on promises, we need the
+	 * following procedure:
+	 * - The initial next() / send(None) call must return the promise itself to be unwrapped.
+	 * - A second send() call will return the result object, which must be "returned" with a StopIteration
+	 *   exception.
+	 */	 
 	struct PyPromiseAwaitContext {
 		PyPromise promise;
 		bool consumed = false;
@@ -35,7 +52,13 @@ namespace {
 				return promise;
 			}
 			
-			PyErr_SetObject(PyExc_StopIteration, value.ptr());
+			// py::print("Coroutine await result", value);
+			
+			// PySetObject has a lot of weird and partially undocumented behavior, which might change in future versions
+			// The safest approach is to actually construct a PyExc_StopIteration object directly
+			auto stopIterCls = py::reinterpret_borrow<py::object>(PyExc_StopIteration);
+			PyErr_SetObject(PyExc_StopIteration, stopIterCls(mv(value)).ptr());
+			
 			throw py::error_already_set();
 		}
 		
@@ -91,6 +114,7 @@ namespace {
 		Promise<Own<PyObjectHolder>> doSend(py::object input) {
 			py::object argTuple = py::make_tuple(input);
 			
+			// py::print("ArgTuple for send", argTuple);
 			PyObject* sendReturn = PyObject_Call(send.ptr(), argTuple.ptr(), nullptr);
 			
 			return handleReturn(sendReturn);
@@ -119,6 +143,7 @@ namespace {
 				if(PyErr_GivenExceptionMatches(error.type().ptr(), PyExc_StopIteration)) {
 					KJ_REQUIRE((bool) error.value(), "Internal error: result null in stop iteration");
 					
+					// py::print("Received coroutine result", (py::object) error.value().attr("value"));
 					return kj::refcounted<PyObjectHolder>((py::object) error.value().attr("value"));
 				}
 				
@@ -142,6 +167,7 @@ namespace {
 			.then(
 				[this](py::object input) mutable {
 					py::gil_scoped_acquire withGIL;
+					// py::print("Received object", input);
 					return this->doSend(mv(input));
 				},
 				[this](kj::Exception e) mutable {
