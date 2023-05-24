@@ -154,10 +154,10 @@ pybuild:pybuild-windows:
   
   parallel:
     matrix:
-      - PYVERSION: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+      - PYVERSION: ["7", "8", "9", "10", "11"]
   
   script:
-    - py -$env:PYVERSION -m build -w
+    - py -3.$env:PYVERSION -m build -w
   
   artifacts:
     paths:
@@ -167,11 +167,11 @@ pybuild:pybuild-all:
   stage: pybuild
   
   dependencies:
-    - "pybuild:pybuild-windows: [3.7]"
-    - "pybuild:pybuild-windows: [3.8]"
-    - "pybuild:pybuild-windows: [3.9]"
-    - "pybuild:pybuild-windows: [3.10]"
-    - "pybuild:pybuild-windows: [3.11]"
+    - "pybuild:pybuild-windows: [7]"
+    - "pybuild:pybuild-windows: [8]"
+    - "pybuild:pybuild-windows: [9]"
+    - "pybuild:pybuild-windows: [10]"
+    - "pybuild:pybuild-windows: [11]"
     - "pybuild:pybuild-manylinux: [cp38-cp38]"
     - "pybuild:pybuild-manylinux: [cp39-cp39]"
     - "pybuild:pybuild-manylinux: [cp310-cp310]"
