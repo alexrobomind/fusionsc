@@ -153,7 +153,7 @@ pybuild:pybuild-windows:
   
   parallel:
     matrix:
-      - PYVERSION: [3.7, 3.8, 3.9, 3.10, 3.11]
+      - PYVERSION: ["3.7", "3.8", "3.9", "3.10", "3.11"]
   
   script:
     - py -$env:PYVERSION -m build -w
