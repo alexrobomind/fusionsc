@@ -142,9 +142,37 @@ pybuild:pybuild-manylinux:
   
   artifacts:
     paths:
-      - dist/*.whl
       - wheelhouse/*
+
+pybuild:pybuild-windows
+  <<: *job
+  <<: *msvc
   
+  stage: pybuild
+  needs: []
+  
+  parallel:
+    matrix:
+      - PYVERSION: [3.7, 3.8, 3.9, 3.10, 3.11]
+  
+  script:
+    - py -$env:PYVERSION% -m build -w
+  
+  artifacts:
+    paths:
+      - dist/*.whl
+
+pybuild:pybuild-all:
+  dependencies:
+    - pybuild-manylinux
+    - pybuild-windows
+  
+  script:
+    - mv wheelhouse/*.whl dist
+    
+  artifacts:
+    paths:
+      - dist
 
 # Documentation (stands separate from the compilation-related jobs)
 
