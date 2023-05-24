@@ -163,24 +163,24 @@ pybuild:pybuild-windows:
     paths:
       - dist/*.whl
 
-#pybuild:pybuild-all:
-#  dependencies:
-#    - "pybuild-windows: [3.7]"
-#    - "pybuild-windows: [3.8]"
-#    - "pybuild-windows: [3.9]"
-#    - "pybuild-windows: [3.10]"
-#    - "pybuild-windows: [3.11]"
-#    - "pybuild-manylinux: [cp38-cp38]"
-#    - "pybuild-manylinux: [cp39-cp39]"
-#    - "pybuild-manylinux: [cp310-cp310]"
-#    - "pybuild-manylinux: [cp311-cp311]"
-#  
-#  script:
-#    - mv wheelhouse/*.whl dist
-#    
-#  artifacts:
-#    paths:
-#      - dist
+pybuild:pybuild-all:
+  dependencies:
+    - "pybuild:pybuild-windows: [3.7]"
+    - "pybuild:pybuild-windows: [3.8]"
+    - "pybuild:pybuild-windows: [3.9]"
+    - "pybuild:pybuild-windows: [3.10]"
+    - "pybuild:pybuild-windows: [3.11]"
+    - "pybuild:pybuild-manylinux: [cp38-cp38]"
+    - "pybuild:pybuild-manylinux: [cp39-cp39]"
+    - "pybuild:pybuild-manylinux: [cp310-cp310]"
+    - "pybuild:pybuild-manylinux: [cp311-cp311]"
+  
+  script:
+    - mv wheelhouse/*.whl dist
+    
+  artifacts:
+    paths:
+      - dist
 
 # Documentation (stands separate from the compilation-related jobs)
 
