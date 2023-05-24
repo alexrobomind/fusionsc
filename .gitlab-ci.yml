@@ -144,7 +144,7 @@ pybuild:pybuild-manylinux:
     paths:
       - wheelhouse/*
 
-pybuild:pybuild-windows
+pybuild:pybuild-windows:
   <<: *job
   <<: *msvc
   
@@ -156,7 +156,7 @@ pybuild:pybuild-windows
       - PYVERSION: [3.7, 3.8, 3.9, 3.10, 3.11]
   
   script:
-    - py -$env:PYVERSION% -m build -w
+    - py -$env:PYVERSION -m build -w
   
   artifacts:
     paths:
