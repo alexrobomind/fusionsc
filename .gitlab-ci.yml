@@ -2,7 +2,6 @@ stages:
   - build
   - test
   - pybuild
-  - pybuild-all
   - doc
   - pages
 
@@ -164,7 +163,9 @@ pybuild:pybuild-windows:
     paths:
       - dist/*.whl
 
-pybuild-all:pybuild-all:
+pybuild:pybuild-all:
+  stage: pybuild
+  
   dependencies:
     - "pybuild:pybuild-windows: [3.7]"
     - "pybuild:pybuild-windows: [3.8]"
