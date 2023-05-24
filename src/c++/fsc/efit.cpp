@@ -69,8 +69,6 @@ void parseGeqdsk(AxisymmetricEquilibrium::Builder out, kj::StringPtr geqdsk) {
 	size_t nR = kj::get<0>(*pHeader);
 	size_t nZ = kj::get<1>(*pHeader);
 	
-	KJ_DBG(nR, nZ);
-	
 	double rDim = readFloat(input);
 	double zDim = readFloat(input);
 	double rCentral = readFloat(input);
@@ -99,7 +97,6 @@ void parseGeqdsk(AxisymmetricEquilibrium::Builder out, kj::StringPtr geqdsk) {
 	readFloats(input, nR);; // q(Psi)
 	
 	// We ignore the rest of the file, as we don't care about the boundary
-	KJ_DBG(kj::heapString(input.getPosition(), 200));
 	
 	// Store ranges
 	out.setRMin(rLeft);

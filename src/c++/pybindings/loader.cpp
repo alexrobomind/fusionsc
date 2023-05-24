@@ -565,7 +565,14 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 				
 				if(type.isList() || type.isData() || type.isText()) {
 					attributes[str("init", nameUpper).cStr()] =  methodDescriptor(py::cpp_function(
-						[field](DynamicStruct::Builder builder, size_t n) { return builder.init(field.getProto().getName(), n); }
+						[field](py::object self, size_t n) {
+							DynamicStruct::Builder builder = py::cast<DynamicStruct::Builder>(self);
+							
+							py::object result = py::cast(builder.init(field.getProto().getName(), n));
+							result.attr("_parent") = self;
+							
+							return result;
+						}
 					));
 				}
 			}
@@ -587,7 +594,14 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 				
 				if(type.isStruct()) {
 					attributes[str("init", nameUpper).cStr()] =  methodDescriptor(py::cpp_function(
-						[field](DynamicStruct::Builder builder) { return DynamicValue::Builder(builder.init(field.getProto().getName())); }
+						[field](py::object self) {
+							DynamicStruct::Builder builder = py::cast<DynamicStruct::Builder>(self);
+							
+							py::object result = py::cast(builder.init(field.getProto().getName()));
+							result.attr("_parent") = self;
+							
+							return result;
+						}
 					));
 				}
 			}
@@ -660,6 +674,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		
 	output.attr("newMessage") = py::cpp_function(
 		[schema](py::object copyFrom, size_t initialSize) mutable {
+			// auto msg = new TrackedMessageBuilder();
 			auto msg = new capnp::MallocMessageBuilder();
 			
 			// We use DynamicValue instead of DynamicStruct to engage our type-dependent dispatch

@@ -74,6 +74,14 @@ struct DynamicStructPipeline {
 	DynamicValuePipeline get(kj::StringPtr fieldName);
 };
 
+struct TrackedMessageBuilder : public capnp::MallocMessageBuilder {
+	using MallocMessageBuilder::MallocMessageBuilder;
+	
+	inline ~TrackedMessageBuilder() {
+		py::print("Message deleted");
+	}
+};
+
 namespace internal {
 	template<>
 	struct GetPipelineAsImpl<capnp::DynamicCapability> {

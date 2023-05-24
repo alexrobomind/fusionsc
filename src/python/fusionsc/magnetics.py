@@ -253,19 +253,14 @@ async def visualizeCoils(field):
 	
 	resolved = await field.resolve.asnc()
 	await process(resolved.data)
-	
+		
 	def makeCoil(coil):
-		vertexArray = np.asarray(coil)
-		print(vertexArray.shape)
-		nPoints = vertexArray.shape[0]
-		
-		indices = [nPoints] + list(range(nPoints))
-		
-		return pv.PolyData(vertexArray, lines = np.asarray(indices))
+		result = pv.lines_from_points(coil)
+		return result
 		
 	dataSets = [
 		makeCoil(coil)
 		for coil in coils
 	]
-	
+		
 	return pv.MultiBlock(dataSets)

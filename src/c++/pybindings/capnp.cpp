@@ -54,8 +54,10 @@ py::object getField(py::object self, py::object field) {
 	py::object fieldValue  = getResult[py::cast(0)];
 	bool backReference = py::cast<bool>(getResult[1]);
 	
-	if(backReference)
+	if(backReference) {
 		fieldValue.attr("_parent") = self;
+		// py::print("Installed BR", self, fieldValue.attr("_parent"));
+	}
 	
 	return fieldValue;
 }
@@ -153,28 +155,50 @@ void bindBlobClasses(py::module_& m) {
 
 template<typename List>
 struct Iterator {
+	py::object pyList;
 	List& list;
 	size_t pos;
 	
-	Iterator(List& list, size_t pos) : list(list), pos(pos) {}
+	Iterator(py::object pyList, List& list, size_t pos) : pyList(mv(pyList)), list(list), pos(pos) {}
 	
 	bool operator==(Iterator other) { return pos == other.pos; }
 	bool operator!=(Iterator other) { return pos != other.pos; }
 	Iterator& operator++() { ++pos; return *this; }
 	
-	auto operator*() { return list[pos]; }
+	py::object operator*() {
+		auto result = list[pos];
+		
+		py::object pyResult = py::cast(result);
+		
+		if(installBackReference(result, list.getSchema().getElementType()))
+			pyResult.attr("_parent") = pyList;
+		
+		return pyResult;
+	}
 };
 
 template<typename T>
 void defGetItemAndLen(py::class_<T>& c) {
-	c.def("__getitem__", [](T& list, size_t idx) { return list[idx]; });
+	//c.def("__getitem__", [](T& list, size_t idx) { return list[idx]; }, py::keep_alive<0, 1>());
+	c.def("__getitem__", [](py::object pyList, size_t idx) {
+		T& list = py::cast<T&>(pyList);
+		
+		auto result = list[idx];
+		py::object pyResult = py::cast(result);
+		
+		if(installBackReference(result, list.getSchema().getElementType()))
+			pyResult.attr("_parent") = pyList;
+		
+		return pyResult;		
+	});
 	c.def("__len__", [](T& list) { return list.size(); });
 	c.def("__iter__",
-		[](T& list) {
-			//TODO: This relies on internals, but the default way looks bugged
+		[](py::object pyList) {
+			T& list = py::cast<T&>(pyList);
 			
-			Iterator begin(list, 0);
-			Iterator end(list, list.size());
+			//TODO: This relies on internals, but the default way looks bugged
+			Iterator begin(pyList, list, 0);
+			Iterator end(mv(pyList), list, list.size());
 			
 			return py::make_iterator(begin, end);
 		},
@@ -374,10 +398,10 @@ void bindStructClasses(py::module_& m) {
 	cDSB.def("set", &setField);
 	cDSB.def("set", &setFieldByName);
 	
-	cDSB.def("init", &initField);
-	cDSB.def("init", &initFieldByName);
-	cDSB.def("init", &initList);
-	cDSB.def("init", &initListByName);
+	//cDSB.def("init", &initField);
+	//cDSB.def("init", &initFieldByName);
+	//cDSB.def("init", &initList);
+	//cDSB.def("init", &initListByName);
 		
 	cDSB.def("__setitem__", &setField);
 	cDSB.def("__setitem__", &setFieldByName);
@@ -393,16 +417,17 @@ void bindStructClasses(py::module_& m) {
 		return result;
 	});
 	
-	cDSB.def("items", [](DSB& reader) {
+	cDSB.def("items", [](py::object pyBuilder) {
+		DSB& builder = py::cast<DSB&>(pyBuilder);
 		py::list result;
 		
-		auto schema = reader.getSchema();
+		auto schema = builder.getSchema();
 		
 		for(auto field : schema.getNonUnionFields())
-			result.append(py::make_tuple(field.getProto().getName(), reader.get(field)));
+			result.append(py::make_tuple(field.getProto().getName(), getField(pyBuilder, py::cast(field))));
 		
-		KJ_IF_MAYBE(pField, reader.which()) {
-			result.append(py::make_tuple(pField->getProto().getName(), reader.get(*pField)));
+		KJ_IF_MAYBE(pField, builder.which()) {
+			result.append(py::make_tuple(pField->getProto().getName(), getField(pyBuilder, py::cast(*pField))));
 		}
 		
 		return result;
@@ -465,16 +490,17 @@ void bindStructClasses(py::module_& m) {
 		return py::eval("iter")(result);
 	});
 	
-	cDSR.def("items", [](DSR& reader) {
+	cDSR.def("items", [](py::object pyReader) {
+		DSR& reader = py::cast<DSR&>(pyReader);
 		py::list result;
 		
 		auto schema = reader.getSchema();
 		
 		for(auto field : schema.getNonUnionFields())
-			result.append(py::make_tuple(field.getProto().getName(), reader.get(field)));
+			result.append(py::make_tuple(field.getProto().getName(), getField(pyReader, py::cast(field))));
 		
 		KJ_IF_MAYBE(pField, reader.which()) {
-			result.append(py::make_tuple(pField->getProto().getName(), reader.get(*pField)));
+			result.append(py::make_tuple(pField->getProto().getName(), getField(pyReader, py::cast(*pField))));
 		}
 		
 		return result;
@@ -509,13 +535,15 @@ void bindStructClasses(py::module_& m) {
 		return py::eval("iter")(result);
 	});
 	
-	cDSP.def("items", [](DSP& reader) {
+	cDSP.def("items", [](py::object pyPipeline) {
+		DSP& reader = py::cast<DSP&>(pyPipeline);
+		
 		py::list result;
 		
 		auto schema = reader.getSchema();
 		
 		for(auto field : schema.getNonUnionFields())
-			result.append(py::make_tuple(field.getProto().getName(), reader.get(field)));
+			result.append(py::make_tuple(field.getProto().getName(), getField(pyPipeline, py::cast(field))));
 		
 		return result;
 	});
@@ -579,6 +607,9 @@ void bindMessageBuilders(py::module_& m) {
 		})
 	;
 	py::class_<capnp::MallocMessageBuilder, capnp::MessageBuilder>(m, "MallocMessageBuilder")
+		.def(py::init())
+	;
+	py::class_<TrackedMessageBuilder, capnp::MallocMessageBuilder>(m, "TrackedMessageBuilder")
 		.def(py::init())
 	;
 }
