@@ -201,6 +201,8 @@ add_vendored_dependency(
 	VERSION 1.10
 )
 
+	
+
 #CPMAddPackage(
 #	NAME Libssh2
 #	GIT_REPOSITORY https://github.com/libssh2/libssh2
@@ -208,8 +210,9 @@ add_vendored_dependency(
 #	VERSION        1.10.0
 #)
 
-if(TARGET libssh2)
+if(Libssh2_VENDORED)
 	add_library(Libssh2::libssh2 ALIAS libssh2)
+	target_compile_definitions(libssh2 PRIVATE LIBSSH2DEBUG)
 	
 	# TODO: Install rules?
 endif()

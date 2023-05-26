@@ -516,8 +516,19 @@ Promise<bool> SSHSessionImpl::authenticatePubkeyData(kj::StringPtr user, kj::Str
 		
 		if(rc == 0)
 			return true;
-		if(rc == LIBSSH2_ERROR_AUTHENTICATION_FAILED )
+		if(rc == LIBSSH2_ERROR_AUTHENTICATION_FAILED) {
+			char* errMsg;
+			libssh2_session_last_error(session, &errMsg, nullptr, false);
+			KJ_DBG(errMsg);
 			return false;
+		}
+		
+		if(rc != LIBSSH2_ERROR_EAGAIN) {
+			char* errMsg;
+			libssh2_session_last_error(session, &errMsg, nullptr, false);
+			KJ_DBG(errMsg);
+			return false;
+		}
 		
 		KJ_REQUIRE(rc == LIBSSH2_ERROR_EAGAIN, "Error during authentication");
 		return nullptr;

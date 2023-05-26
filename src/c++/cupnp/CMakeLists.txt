@@ -2,7 +2,7 @@ include(cupnp_gen.cmake)
 
 add_executable(cupnpc cupnpc.cpp)
 
-target_link_libraries(cupnpc deps)
+target_link_libraries(cupnpc CapnProto::kj CapnProto::capnp)
 
 add_library(cupnp INTERFACE)
 target_include_directories(
