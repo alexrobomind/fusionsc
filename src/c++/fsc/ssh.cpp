@@ -23,7 +23,7 @@ struct LibSSH2 {
 	}
 	
 	~LibSSH2() {
-		libssh2_exit(); 
+		libssh2_exit();
 	}
 	
 	auto createSession(void* userData) {
@@ -144,6 +144,7 @@ struct SSHSessionImpl : public SSHSession, public kj::Refcounted {
 	Promise<Own<SSHChannelListener>> listen(kj::StringPtr host = "0.0.0.0"_kj, Maybe<int> port = nullptr) override ;
 	Promise<bool> authenticatePassword(kj::StringPtr user, kj::StringPtr password) override;
 	Promise<bool> authenticatePubkeyFile(kj::StringPtr user, kj::StringPtr pubkeyFile, kj::StringPtr privkeyFile, kj::StringPtr passPhrase) override;
+	Promise<bool> authenticatePubkeyData(kj::StringPtr user, kj::StringPtr pubkeyData, kj::StringPtr privkeyData, kj::StringPtr passPhrase) override;
 	bool isAuthenticated() override;
 	void close() override ;
 	bool isOpen() override ;
@@ -254,9 +255,12 @@ SSHSessionImpl::SSHSessionImpl(Own<kj::AsyncIoStream> stream) :
 	
 	// Set session to non-blocking operation
 	libssh2_session_set_blocking(session, 0);
+	
+	libssh2_trace(session, LIBSSH2_TRACE_ERROR | LIBSSH2_TRACE_PUBLICKEY);
 }
 
 SSHSessionImpl::~SSHSessionImpl() noexcept {
+	KJ_DBG("Closing session");
 	// Terminate the keep-alive loop
 	keepAliveTask = READY_NOW;
 	
@@ -279,6 +283,7 @@ SSHSessionImpl::~SSHSessionImpl() noexcept {
 		libssh2_session_free(session);
 		session = nullptr;
 	}
+	KJ_DBG("Session closed");
 }
 
 Promise<void> SSHSessionImpl::startup() {
@@ -489,6 +494,35 @@ Promise<bool> SSHSessionImpl::authenticatePubkeyFile(kj::StringPtr user, kj::Str
 		KJ_REQUIRE(rc == LIBSSH2_ERROR_EAGAIN, "Error during authentication");
 		return nullptr;
 	});
+}
+
+Promise<bool> SSHSessionImpl::authenticatePubkeyData(kj::StringPtr user, kj::StringPtr pubkeyData, kj::StringPtr privkeyData, kj::StringPtr passPhrase) {
+	return queueOp<bool>([
+		this,
+		user = kj::heapString(user),
+		pubData = kj::heapString(pubkeyData),
+		privData= kj::heapString(privkeyData),
+		passPhrase = kj::heapString(passPhrase)
+	]() -> Maybe<bool> {
+		auto rc = libssh2_userauth_publickey_frommemory(
+			session,
+			user.cStr(), user.size(),
+			pubData.cStr(), pubData.size(),
+			privData.cStr(), privData.size(),
+			passPhrase.cStr()
+		);
+		
+		KJ_DBG(pubData, privData, passPhrase);
+		
+		if(rc == 0)
+			return true;
+		if(rc == LIBSSH2_ERROR_AUTHENTICATION_FAILED )
+			return false;
+		
+		KJ_REQUIRE(rc == LIBSSH2_ERROR_EAGAIN, "Error during authentication");
+		return nullptr;
+	});
+	
 }
 
 bool SSHSessionImpl::isAuthenticated() {

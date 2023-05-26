@@ -14,7 +14,18 @@ class Server(paramiko.ServerInterface):
 		return paramiko.AUTH_FAILED
 
 	def get_allowed_auths(self, username):
-		return 'password'
+		return 'password,publickey'
+	
+	def check_auth_publickey(self, username, key):
+		if username != "testuser":
+			return paramiko.AUTH_FAILED
+		
+		referenceKey = paramiko.RSAKey.from_private_key_file("test-key", "testpass")
+		
+		if key.fingerprint == referenceKey.fingerprint:
+			return paramiko.AUTH_SUCCESSFUL
+		
+		return paramiko.AUTH_FAILED
 	
 	def __init__(self):
 		self.event = threading.Event()
@@ -22,7 +33,7 @@ class Server(paramiko.ServerInterface):
 def listener():
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-	sock.bind(('', 2222))
+	sock.bind(('127.0.0.1', 2222))
 	sock.settimeout(0.2)
 
 	sock.listen(100)

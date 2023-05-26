@@ -38,6 +38,7 @@ struct SSHSession {
 	
 	virtual Promise<bool> authenticatePassword(kj::StringPtr user, kj::StringPtr password) = 0;
 	virtual Promise<bool> authenticatePubkeyFile(kj::StringPtr user, kj::StringPtr pubkeyFile, kj::StringPtr privkeyFile, kj::StringPtr passPhrase = nullptr) = 0;
+	virtual Promise<bool> authenticatePubkeyData(kj::StringPtr user, kj::StringPtr pubkeyData, kj::StringPtr privkeyData, kj::StringPtr passPhrase) = 0;
 	virtual bool isAuthenticated() = 0;
 	
 	virtual void close() = 0;

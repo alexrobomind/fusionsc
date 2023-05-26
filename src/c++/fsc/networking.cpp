@@ -91,10 +91,25 @@ struct SSHConnectionImpl : public SSHConnection::Server, public NetworkInterface
 	}
 	
 	Promise<void> authenticateKeyFile(AuthenticateKeyFileContext ctx) override {
+		// At the moment, this is disabled since it can read the local file system
+		// and is not tested yet
+		KJ_UNIMPLEMENTED("Not supported");
+		
 		auto params = ctx.getParams();
 		return session -> authenticatePubkeyFile(
 			params.getUser(), params.getPubKeyFile(),
 			params.getPrivKeyFile(), params.getKeyPass()
+		)
+		.then([](bool result) {
+			KJ_REQUIRE(result, "Authentication failed");
+		});
+	}
+	
+	Promise<void> authenticateKeyData(AuthenticateKeyDataContext ctx) override {
+		auto params = ctx.getParams();
+		return session -> authenticatePubkeyData(
+			params.getUser(), params.getPubKey(),
+			params.getPrivKey(), params.getKeyPass()
 		)
 		.then([](bool result) {
 			KJ_REQUIRE(result, "Authentication failed");
