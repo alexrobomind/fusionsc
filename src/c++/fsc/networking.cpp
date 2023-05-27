@@ -90,11 +90,7 @@ struct SSHConnectionImpl : public SSHConnection::Server, public NetworkInterface
 		});
 	}
 	
-	Promise<void> authenticateKeyFile(AuthenticateKeyFileContext ctx) override {
-		// At the moment, this is disabled since it can read the local file system
-		// and is not tested yet
-		KJ_UNIMPLEMENTED("Not supported");
-		
+	Promise<void> authenticateKeyFile(AuthenticateKeyFileContext ctx) override {		
 		auto params = ctx.getParams();
 		return session -> authenticatePubkeyFile(
 			params.getUser(), params.getPubKeyFile(),
@@ -105,7 +101,8 @@ struct SSHConnectionImpl : public SSHConnection::Server, public NetworkInterface
 		});
 	}
 	
-	Promise<void> authenticateKeyData(AuthenticateKeyDataContext ctx) override {
+	// The following function will be enabled once https://github.com/libssh2/libssh2/issues/1047 is resolved.
+	/*Promise<void> authenticateKeyData(AuthenticateKeyDataContext ctx) override {
 		auto params = ctx.getParams();
 		return session -> authenticatePubkeyData(
 			params.getUser(), params.getPubKey(),
@@ -114,7 +111,7 @@ struct SSHConnectionImpl : public SSHConnection::Server, public NetworkInterface
 		.then([](bool result) {
 			KJ_REQUIRE(result, "Authentication failed");
 		});
-	}
+	}*/
 };
 
 struct StreamNetworkConnection : public MembranePolicy, capnp::BootstrapFactory<capnp::rpc::twoparty::VatId>, Refcounted, public NetworkInterface::Connection::Server {

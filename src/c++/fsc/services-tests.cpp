@@ -83,28 +83,23 @@ TEST_CASE("ssh-auth", "[.][ssh]") {
 	auto conn = req.send().wait(thread->waitScope()).getConnection();
 	
 	SECTION("badauth") {
-		KJ_DBG("Testing wrong password");
 		auto req = conn.authenticatePasswordRequest();
 		req.setUser("testuser");
 		req.setPassword("wrongPassword");
 		REQUIRE_THROWS(req.send().wait(thread -> waitScope()));
-		KJ_DBG("OK");
 	}
 	
 	SECTION("password") {
-		KJ_DBG("Testing right password");
 		auto req = conn.authenticatePasswordRequest();
 		req.setUser("testuser");
 		req.setPassword("testpass");
 		req.send().wait(thread -> waitScope());
-		KJ_DBG("OK");
 	}
 	
-	SECTION("keyfile") {
-		KJ_DBG("Testing pubkey");
-		kj::StringPtr pubKeyFile = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCgsTMSpKv2sximRc3vJAOSkeI2B4qYL1E3uUelS7q0SaSA2vqxUDA+ipO1wxZvB82bS4KMX5KXna8q41RNpsK0mwyfE6ftQy8c1loDGzwt6NZuBvlN9zGzbD2tTVpFo+rfHvlhsFalIiJdzsfIF/xoTHHeFyLEweLzhamLp/X7JKrau2pm5TkiUknYYR0MXhCfx714yGdDRCtCNXQvJ1ouXiKA5+XMjpb4GY2+qXdwW3LIug1YzV9cd1FCBi9C1maDSOVBD77Syztgs9kI23xwmB1ImkVbHiorOdgRnsD+s+EU/HnVPCQtidnkE+Tbt5ZkZ4mqWHtaJdmekkBakyF3"_kj;
+	SECTION("pubkey") {
+		kj::StringPtr pubKeyData = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCgsTMSpKv2sximRc3vJAOSkeI2B4qYL1E3uUelS7q0SaSA2vqxUDA+ipO1wxZvB82bS4KMX5KXna8q41RNpsK0mwyfE6ftQy8c1loDGzwt6NZuBvlN9zGzbD2tTVpFo+rfHvlhsFalIiJdzsfIF/xoTHHeFyLEweLzhamLp/X7JKrau2pm5TkiUknYYR0MXhCfx714yGdDRCtCNXQvJ1ouXiKA5+XMjpb4GY2+qXdwW3LIug1YzV9cd1FCBi9C1maDSOVBD77Syztgs9kI23xwmB1ImkVbHiorOdgRnsD+s+EU/HnVPCQtidnkE+Tbt5ZkZ4mqWHtaJdmekkBakyF3"_kj;
 		
-		kj::StringPtr privKeyFile =
+		kj::StringPtr privKeyData =
 R"(-----BEGIN RSA PRIVATE KEY-----
 Proc-Type: 4,ENCRYPTED
 DEK-Info: DES-EDE3-CBC,D5A4738309691E79
@@ -136,16 +131,29 @@ aB4siibQxg61FFNxR/eg8d44XZUVrQ91rqch48yHmOkJRWzTOhg6MVAbcONtXBVw
 TxbJOr1B1BvMKM+VXSQ6eOUrNblFlagl9d7qj+rJUo3OgLYFz47c9w==
 -----END RSA PRIVATE KEY-----)"_kj;
 
-		kj::StringPtr pass = "testpass"_kj; // Encryption password for private key
-		
-		auto req = conn.authenticateKeyDataRequest();
-		req.setUser("testuser");
-		req.setPubKey(pubKeyFile);
-		req.setPrivKey(privKeyFile);
-		req.setKeyPass(pass);
-		
-		req.send().wait(thread -> waitScope());
-		KJ_DBG("OK");
+		SECTION("keyfile") {
+			auto fs = kj::newDiskFilesystem();
+			kj::StringPtr pubKeyFilename = "tmp-pubkey";
+			kj::StringPtr privKeyFilename = "tmp-privkey";
+			
+			auto write = [&](kj::StringPtr name, kj::StringPtr data) {
+				auto f = fs -> getCurrent().openFile(kj::Path(name), kj::WriteMode::CREATE | kj::WriteMode::MODIFY);
+				f -> writeAll(data);
+			};
+			
+			write(pubKeyFilename, pubKeyData);
+			write(privKeyFilename, privKeyData);
+
+			kj::StringPtr pass = "testpass"_kj; // Encryption password for private key
+			
+			auto req = conn.authenticateKeyFileRequest();
+			req.setUser("testuser");
+			req.setPubKeyFile(pubKeyFilename);
+			req.setPrivKeyFile(privKeyFilename);
+			req.setKeyPass(pass);
+			
+			req.send().wait(thread -> waitScope());
+		}
 	}
 }
 

@@ -37,5 +37,9 @@ interface SSHConnection extends(NetworkInterface) {
 	close @0 () -> ();
 	authenticatePassword @1 (user : Text, password : Text) -> ();
 	authenticateKeyFile @2 (user : Text, pubKeyFile : Text, privKeyFile : Text, keyPass : Text) -> ();
-	authenticateKeyData @3 (user : Text, pubKey : Text, privKey : Text, keyPass : Text) -> ();
+	
+	# This function is not yet available due to a bug in the libssh2 library preventing encrypted keys
+	# in in-memory PEM data.
+	# See https://github.com/libssh2/libssh2/issues/1047
+	# authenticateKeyData @3 (user : Text, pubKey : Text, privKey : Text, keyPass : Text) -> ();
 }

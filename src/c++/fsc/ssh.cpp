@@ -474,8 +474,8 @@ Promise<bool> SSHSessionImpl::authenticatePubkeyFile(kj::StringPtr user, kj::Str
 	auto fs = kj::newDiskFilesystem();
 	auto curPath = fs -> getCurrentPath();
 	
-	auto pubPath = curPath.evalNative(pubkeyFile).toNativeString();
-	auto privPath = curPath.evalNative(privkeyFile).toNativeString();
+	auto pubPath = curPath.evalNative(pubkeyFile).toNativeString(true);
+	auto privPath = curPath.evalNative(privkeyFile).toNativeString(true);
 	
 	return queueOp<bool>([
 		this,
