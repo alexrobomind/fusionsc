@@ -7,5 +7,6 @@ This section contains various demonstration examples.
   Poincare
   Connection Length
   Heat Load Calculation
+  JText
   Server
   Client

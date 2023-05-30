@@ -740,7 +740,7 @@ struct FLTImpl : public FLT::Server {
 			req.setStepSize(params.getStepSize());
 			req.setField(params.getField());
 			
-			req.setRecordEvery(1);
+			// req.setRecordEvery(1);
 			auto nPhi = params.getNPhi();
 			auto planes = req.initPlanes(nPhi);
 			for(auto i : kj::indices(planes))

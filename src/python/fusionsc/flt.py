@@ -336,7 +336,7 @@ async def trace(
 	}
 
 @asyncFunction
-async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10):
+async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = "ccw"):
 	"""
 	Computes the magnetic axis by repeatedly tracing a Poincaré map and averaging the points.
 	
@@ -344,6 +344,8 @@ async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTur
 		A tuple holding the xyz-position of the axis starting point and a numpy array holding the field line
 		corresponding to the magnetic axis.
 	"""
+	assert direction in ["cw", "ccw", "field"]
+	
 	field = await field.compute.asnc(grid)
 	computed = field.data.computedField
 	
@@ -361,10 +363,23 @@ async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTur
 	request.stepSize = stepSize
 	request.nTurns = nTurns
 	request.nIterations = nIterations
+	request.nPhi = nPhi
 	
 	response = await _tracer().findAxis(request)
 	
-	return np.asarray(response.pos), np.asarray(response.axis)
+	axis = np.asarray(response.axis)
+	x, y, z = axis
+	phiVals = np.arctan2(y, x)
+	dPhi = phiVals[1] - phiVals[0]
+	dPhi = ((dPhi + np.pi) % (2 * np.pi)) - np.pi
+	
+	if dPhi > 0 and direction == "cw":
+		axis = axis[::-1]
+	
+	if dPhi < 0 and direction == "ccw":
+		axis = axis[::-1]
+	
+	return np.asarray(response.pos), axis
 
 @asyncFunction
 async def findLCFS(field, geometry, p1, p2, grid = None, geometryGrid = None, stepSize = 0.01, tolerance = 0.001, nScan = 8, distanceLimit = 3e3):
@@ -392,7 +407,7 @@ async def findLCFS(field, geometry, p1, p2, grid = None, geometryGrid = None, st
 	return np.asarray(response.pos)
 
 @asyncFunction
-async def axisCurrent(field, current, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10):
+async def axisCurrent(field, current, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = "ccw"):
 	"""
 	Configuration that places a current on the axis of a given magnetic configuration.
 	
@@ -402,7 +417,7 @@ async def axisCurrent(field, current, grid = None, startPoint = None, stepSize =
 	Returns:
 		The magnetic configuration corresponding to the on-axis current's field.
 	"""
-	result = await findAxis.asnc(field, grid, startPoint, stepSize, nTurns, nIterations)
+	result = await findAxis.asnc(field, grid, startPoint, stepSize, nTurns, nIterations, nPhi, direction)
 	_, axis = result
 	
 	result = magnetics.MagneticConfig()
