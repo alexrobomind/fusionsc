@@ -17,7 +17,7 @@ interface GeometryResolver {
 	resolveGeometry @0 (geometry : Geometry, followRefs : Bool = false) -> Geometry;
 }
 
-interface GeometryLib {
+interface GeometryLib $Cxx.allowCancellation {
 	merge @0 Geometry -> (ref : DataRef(MergedGeometry));
 	index @1 (geometry : Geometry, grid : CartesianGrid) -> (indexed : IndexedGeometry);
 	planarCut @2 (geometry : Geometry, plane : Plane) -> (edges : Float64Tensor); # edges has shape [3, :, 2]

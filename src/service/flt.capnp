@@ -54,6 +54,27 @@ struct FieldlineMapping {
 	bwd @1 : Direction;
 }
 
+struct ReversibleFieldLineMapping {
+	struct Section {
+		# Tensors of identical shape [nPhi, nZMap, nRMap] which contain R, Z,
+		# and forward length values of mapping points.
+		r @0 : Data.Float64Tensor;
+		z @1 : Data.Float64Tensor;
+		traceLen @2 : Data.Float64Tensor;
+	}
+	
+	# List of phi angles (in radians) corresponding to mapping surfaces
+	surfaces @0 : List(Float64);
+	
+	# List of mapping sections, each covering surface[i] to surface[(i + 1) % surfaces.size()]
+	sections @1 : List(Section);
+		
+	# How many phi sections at start and end point past the end of the phi range
+	# axis. These can be used for higher-order interpolation methods to estimate
+	# correct derivative values.
+	nPad @2 : UInt64;
+}
+
 struct FLTRequest {
 	# Tensor of shape [3, ...] indicating tracing start points
 	startPoints @0 : Data.Float64Tensor;
@@ -112,6 +133,11 @@ struct FLTRequest {
 			mMax @27 : UInt32 = 0;
 		}
 	}
+	
+	forwardDirection : union {
+		field @28 : Void;
+		ccw @29 : Void;
+	}
 }
 
 
@@ -165,7 +191,7 @@ struct FindLcfsRequest {
 	geometry @7 : Geometry.IndexedGeometry;
 }
 
-interface FLT {
+interface FLT $Cxx.allowCancellation {
 	trace @0 FLTRequest -> FLTResponse;
 	findAxis @1 FindAxisRequest -> (pos : List(Float64), axis : Data.Float64Tensor, meanField : Float64);
 	findLcfs @2 FindLcfsRequest -> (pos : List(Float64));
@@ -186,6 +212,13 @@ struct MappingRequest {
 	nSym @7 : UInt32 = 1;
 	
 	batchSize @8 : UInt32 = 1000;
+}
+
+struct RFLMRequest {
+	mappingPlanes @0 : List(Float64);
+	
+	gridR @1 : List(Float64);
+	gridZ @2 : List(Float64);
 }
 
 interface Mapper {

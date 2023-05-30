@@ -344,7 +344,7 @@ async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTur
 		A tuple holding the xyz-position of the axis starting point and a numpy array holding the field line
 		corresponding to the magnetic axis.
 	"""
-	assert direction in ["cw", "ccw", "field"]
+	assert direction in ["cw", "ccw", "co-field", "counter-field"]
 	
 	field = await field.compute.asnc(grid)
 	computed = field.data.computedField
@@ -373,11 +373,19 @@ async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTur
 	dPhi = phiVals[1] - phiVals[0]
 	dPhi = ((dPhi + np.pi) % (2 * np.pi)) - np.pi
 	
+	swap = False
+	
 	if dPhi > 0 and direction == "cw":
-		axis = axis[::-1]
+		swap = True
 	
 	if dPhi < 0 and direction == "ccw":
-		axis = axis[::-1]
+		swap = True
+	
+	if direction == "counter-field":
+		swap = True
+	
+	if swap:
+		axis = axis[:, ::-1]
 	
 	return np.asarray(response.pos), axis
 

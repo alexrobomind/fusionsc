@@ -106,6 +106,8 @@ struct TraceCalculation {
 			
 			request.getServiceRequest().setRngSeed(seed);
 		}
+		
+		KJ_REQUIRE(request.getServiceRequest().getForwardDirection().which() < 2, "Unknown forward direction type specified. This likely means that this library version is too old to understand your request");
 	}
 	
 	// Prepares the memory structure for a round

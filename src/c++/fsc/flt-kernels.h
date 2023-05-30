@@ -178,9 +178,18 @@ namespace fsc {
 			fieldOrientation = (fieldValue[1] * cos(phi) - fieldValue[0] * sin(phi)) > 0 ? 1 : -1;
 		}
 		
+		int8_t forwardDirection;
+		if(request.getForwardDirection().hasField()) {
+			forwardDirection = fieldOrientation;
+		} else {
+			forwardDirection = 1;
+		}
+		
+		int8_t forwardDirectionRelField = forwardDirection * fieldOrientation;
+		
 		auto rungeKuttaInput = [&](V3 x, Num t) -> V3 {
 			V3 fieldValue = interpolator(fieldData, x);
-			auto result = fieldValue / fieldValue.norm() * tracingDirection;
+			auto result = fieldValue / fieldValue.norm() * tracingDirection * forwardDirectionRelField;
 			
 			/*if(step % 10 == 0) {
 				KJ_DBG(result[0], result[1], result[2], result.norm());
@@ -341,7 +350,7 @@ namespace fsc {
 				}				
 			} else {				
 				if(useFLM) {					
-					double newPhi = flm.phi + fieldOrientation * tracingDirection * request.getStepSize() / r;
+					double newPhi = flm.phi + forwardDirection * tracingDirection * request.getStepSize() / r;
 					x2 = flm.advance(newPhi, tracingDirection == 1);
 				} else {
 					// Regular tracing step

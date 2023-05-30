@@ -317,6 +317,134 @@ namespace {
 			});
 		}
 	};
+	
+	struct RFLMSectionTrace {
+		double phi1;
+		double phi2;
+		
+		size_t numTracingPlanes;
+		size_t numPaddingPlanes;
+		
+		kj::Array<double> rVals;
+		kj::Array<double> zVals;
+		
+		FLT::Client flt;
+		
+		ReversibleFieldLineMapping::Section::Builder output;
+		
+		static double halfPhi(double phi1, double phi2) {
+			double dPhi = phi2 - phi1;
+			dPhi += pi;
+			dPhi /= 2 * pi;
+			dPhi -= pi;
+			
+			return phi1 + dPhi / 2;
+		}
+		
+		size_t numPlanesTot() {
+			return 1 + 2 * (numTracingPlanes + numPaddingPlanes);
+		}
+		
+		void buildStartPoints(Float64Tensor::Builder out) {
+			Tensor<double, 3> data(rVals.size(), zVals.size(), 3);
+			
+			const double phi = halfPhi(phi1, phi2);
+			
+			for(auto iR : kj::indices(rVals)) {
+				for(auto iZ : kj::indices(zVals)) {
+					data(iR, iZ, 0) = cos(phi) * rVals[iR];
+					data(iR, iZ, 1) = sin(phi) * rVals[iR];
+					data(iR, iZ, 2) = zVals[iZ];
+				}
+			}
+			
+			writeTensor(data, out);
+		}
+		
+		auto traceDirection(bool ccw) {
+			double phiStart = halfPhi(phi1, phi2);
+			double phiEnd = ccw ? phi2 : phi1;
+			
+			double dPhi = phiEnd - phiStart / (numTracingPlanes);
+			
+			auto req = flt.traceRequest();
+			req.setForward(ccw);
+			req.getForwardDirection().setCcw();
+			
+			// Note that our planes can go past the range of the section. This is because
+			// we have padding planes on both sides used to extend the interpolation region.
+			auto planes = req.initPlanes(numTracingPlanes + numPaddingPlanes);
+			for(auto iPlane : kj::indices(planes)) {
+				auto plane = planes[iPlane];
+				plane.getOrientation().setPhi(phiStart + iPlane * dPhi);
+			}
+			buildStartPoints(req.getStartPoints());
+			
+			return req.send().dropPipeline();
+		}
+		
+		void processTraces(Float64Tensor::Reader fwdTensorR, Float64Tensor::Reader bwdTensorR) {
+			int64_t nPhiTot = numPlanesTot();
+			Tensor<double, 3> rOut(rVals.size(), zVals.size(), nPhiTot);
+			Tensor<double, 3> zOut(rVals.size(), zVals.size(), nPhiTot);
+			Tensor<double, 3> lenOut(rVals.size(), zVals.size(), nPhiTot);
+			
+			auto pFwdTensor = fsc::mapTensor<Tensor<double, 4>>(fwdTensorR);
+			auto pBwdTensor = fsc::mapTensor<Tensor<double, 4>>(bwdTensorR);
+			
+			auto& fwdTensor = *pFwdTensor;
+			auto& bwdTensor = *pBwdTensor;
+			
+			for(int64_t iPhi : kj::range(0, numTracingPlanes + numPaddingPlanes)) {
+				for(int64_t iR : kj::indices(rVals)) {
+					for(int64_t iZ : kj::indices(zVals)) {
+						double xFwd = fwdTensor(0, iR, iZ, 0);
+						double yFwd = fwdTensor(0, iR, iZ, 1);
+						double zFwd = fwdTensor(0, iR, iZ, 2);
+						double lFwd = std::abs(fwdTensor(0, iR, iZ, 4));
+						
+						double xBwd = bwdTensor(0, iR, iZ, 0);
+						double yBwd = bwdTensor(0, iR, iZ, 1);
+						double zBwd = bwdTensor(0, iR, iZ, 2);
+						double lBwd = std::abs(bwdTensor(0, iR, iZ, 4));
+						
+						double rFwd = sqrt(xFwd * xFwd + yFwd * yFwd);
+						double rBwd = sqrt(xBwd * xBwd + yBwd * yBwd);
+						
+						rOut(iR, iZ, nPhiTot - iPhi - 1) = rBwd;
+						zOut(iR, iZ, nPhiTot - iPhi - 1) = zBwd;
+						lenOut(iR, iZ, nPhiTot - iPhi - 1) = -lBwd;
+						
+						rOut(iR, iZ, nPhiTot + iPhi + 1) = rFwd;
+						zOut(iR, iZ, nPhiTot + iPhi + 1) = zFwd;
+						lenOut(iR, iZ, nPhiTot + iPhi + 1) = lFwd;
+					}
+				}
+			}
+			
+			for(auto iR : kj::indices(rVals)) {
+				for(auto iZ : kj::indices(zVals)) {
+					rOut(iR, iZ, nPhiTot) = rVals[iR];
+					zOut(iR, iZ, nPhiTot) = zVals[iZ];
+					lenOut(iR, iZ, nPhiTot) = 0;
+				}
+			}
+			
+			writeTensor(rOut, output.getR());
+			writeTensor(zOut, output.getZ());
+			writeTensor(lenOut, output.getTraceLen());			
+		}
+		
+		Promise<void> run() {
+			return traceDirection(false)
+			.then([this](auto cwResponse) {
+				return traceDirection(true)
+				.then([this, cwResponse = mv(cwResponse)](auto ccwResponse) {
+					processTraces(ccwResponse.getPoincareHits(), cwResponse.getPoincareHits());
+				});
+			});
+		}
+	};
 }
 	
 struct MapperImpl : public Mapper::Server {

@@ -43,7 +43,7 @@ interface FieldResolver {
 
 # Interface for the computation of magnetic fields
 
-interface FieldCalculator {
+interface FieldCalculator $Cxx.allowCancellation {
 	compute @0 (field : MagneticField, grid : ToroidalGrid) -> (computedField : ComputedField);
 	evaluateXYZ @1 (field : ComputedField, points : Float64Tensor) -> (values : Float64Tensor);
 }

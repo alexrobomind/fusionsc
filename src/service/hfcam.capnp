@@ -25,7 +25,7 @@ struct HFCamData {
 	depthBuffer @2 : Data.Float64Tensor;
 }
 
-interface HFCam {
+interface HFCam $Cxx.allowCancellation {
 	clear @0 () -> ();
 	clone @1 () -> (cam : HFCam);
 	
@@ -36,7 +36,7 @@ interface HFCam {
 	getData @4 () -> HFCamData;
 }
 
-interface HFCamProvider {
+interface HFCamProvider $Cxx.allowCancellation {
 	makeCamera @0 (projection: HFCamProjection, geometry : Geometry.Geometry, edgeTolerance : Float64 = 0.5, depthTolerance : Float64) -> (cam : HFCam);
 	
 	makeToroidalProjection @1 (
