@@ -385,6 +385,8 @@ struct FLTImpl : public FLT::Server {
 		auto indexDataRef = request.getGeometry().getData();
 		auto geoDataRef = request.getGeometry().getBase();
 		auto mappingDataRef = request.getMapping();
+		
+		KJ_REQUIRE(request.hasField(), "Must specify a magnetic field");
 			
 		KJ_DBG("Initiating download processes");
 		

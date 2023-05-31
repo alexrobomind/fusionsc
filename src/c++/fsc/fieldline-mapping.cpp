@@ -325,20 +325,35 @@ namespace {
 		size_t numTracingPlanes;
 		size_t numPaddingPlanes;
 		
-		kj::Array<double> rVals;
-		kj::Array<double> zVals;
+		capnp::List<double>::Reader rVals;
+		capnp::List<double>::Reader zVals;
 		
 		FLT::Client flt;
 		
+		RFLMRequest::Reader input;
 		ReversibleFieldLineMapping::Section::Builder output;
+		
+		RFLMSectionTrace(FLT::Client nFlt, RFLMRequest::Reader input, ReversibleFieldLineMapping::Section::Builder output) : flt(mv(nFlt)), input(mv(input)), output(mv(output)) {
+		}
 		
 		static double halfPhi(double phi1, double phi2) {
 			double dPhi = phi2 - phi1;
-			dPhi += pi;
-			dPhi /= 2 * pi;
-			dPhi -= pi;
+			dPhi = fmod(dPhi, 2 * pi);
+			dPhi += 2 * pi;
+			dPhi = fmod(dPhi, 2 * pi);
 			
 			return phi1 + dPhi / 2;
+		}
+		
+		double computeWidth() {
+			double dPhi = phi2 - phi1;
+			dPhi = fmod(dPhi, 2 * pi);
+			dPhi += 2 * pi;
+			dPhi = fmod(dPhi, 2 * pi);
+			
+			if(dPhi == 0)
+				return 2 * pi;
+			return dPhi;
 		}
 		
 		size_t numPlanesTot() {
@@ -348,7 +363,7 @@ namespace {
 		void buildStartPoints(Float64Tensor::Builder out) {
 			Tensor<double, 3> data(rVals.size(), zVals.size(), 3);
 			
-			const double phi = halfPhi(phi1, phi2);
+			const double phi = phi1 + 0.5 * computeWidth();
 			
 			for(auto iR : kj::indices(rVals)) {
 				for(auto iZ : kj::indices(zVals)) {
@@ -362,22 +377,27 @@ namespace {
 		}
 		
 		auto traceDirection(bool ccw) {
-			double phiStart = halfPhi(phi1, phi2);
-			double phiEnd = ccw ? phi2 : phi1;
+			double width = computeWidth();
+			double phiStart = phi1 + 0.5 * width;
+			double span = ccw ? 0.5 * width : -0.5 * width;			
+			double dPhi = span / numTracingPlanes;
 			
-			double dPhi = phiEnd - phiStart / (numTracingPlanes);
+			auto hook = capnp::ClientHook::from(cp(flt));
 			
 			auto req = flt.traceRequest();
 			req.setForward(ccw);
 			req.getForwardDirection().setCcw();
+			req.setField(input.getField());
+			req.setTurnLimit(1);
 			
 			// Note that our planes can go past the range of the section. This is because
 			// we have padding planes on both sides used to extend the interpolation region.
 			auto planes = req.initPlanes(numTracingPlanes + numPaddingPlanes);
 			for(auto iPlane : kj::indices(planes)) {
 				auto plane = planes[iPlane];
-				plane.getOrientation().setPhi(phiStart + iPlane * dPhi);
+				plane.getOrientation().setPhi(phiStart + (iPlane + 1) * dPhi);
 			}
+			KJ_DBG(ccw, req);
 			buildStartPoints(req.getStartPoints());
 			
 			return req.send().dropPipeline();
@@ -389,8 +409,12 @@ namespace {
 			Tensor<double, 3> zOut(rVals.size(), zVals.size(), nPhiTot);
 			Tensor<double, 3> lenOut(rVals.size(), zVals.size(), nPhiTot);
 			
-			auto pFwdTensor = fsc::mapTensor<Tensor<double, 4>>(fwdTensorR);
-			auto pBwdTensor = fsc::mapTensor<Tensor<double, 4>>(bwdTensorR);
+			int64_t halfPoint = numTracingPlanes + numPaddingPlanes;
+			
+			// KJ_DBG(fwdTensorR);
+			
+			auto pFwdTensor = fsc::mapTensor<Tensor<double, 5>>(fwdTensorR);
+			auto pBwdTensor = fsc::mapTensor<Tensor<double, 5>>(bwdTensorR);
 			
 			auto& fwdTensor = *pFwdTensor;
 			auto& bwdTensor = *pBwdTensor;
@@ -398,35 +422,35 @@ namespace {
 			for(int64_t iPhi : kj::range(0, numTracingPlanes + numPaddingPlanes)) {
 				for(int64_t iR : kj::indices(rVals)) {
 					for(int64_t iZ : kj::indices(zVals)) {
-						double xFwd = fwdTensor(0, iR, iZ, 0);
-						double yFwd = fwdTensor(0, iR, iZ, 1);
-						double zFwd = fwdTensor(0, iR, iZ, 2);
-						double lFwd = std::abs(fwdTensor(0, iR, iZ, 4));
+						double xFwd = fwdTensor(0, iR, iZ, iPhi, 0);
+						double yFwd = fwdTensor(0, iR, iZ, iPhi, 1);
+						double zFwd = fwdTensor(0, iR, iZ, iPhi, 2);
+						double lFwd = std::abs(fwdTensor(0, iR, iZ, iPhi, 4));
 						
-						double xBwd = bwdTensor(0, iR, iZ, 0);
-						double yBwd = bwdTensor(0, iR, iZ, 1);
-						double zBwd = bwdTensor(0, iR, iZ, 2);
-						double lBwd = std::abs(bwdTensor(0, iR, iZ, 4));
+						double xBwd = bwdTensor(0, iR, iZ, iPhi, 0);
+						double yBwd = bwdTensor(0, iR, iZ, iPhi, 1);
+						double zBwd = bwdTensor(0, iR, iZ, iPhi, 2);
+						double lBwd = std::abs(bwdTensor(0, iR, iZ, iPhi, 4));
 						
 						double rFwd = sqrt(xFwd * xFwd + yFwd * yFwd);
 						double rBwd = sqrt(xBwd * xBwd + yBwd * yBwd);
 						
-						rOut(iR, iZ, nPhiTot - iPhi - 1) = rBwd;
-						zOut(iR, iZ, nPhiTot - iPhi - 1) = zBwd;
-						lenOut(iR, iZ, nPhiTot - iPhi - 1) = -lBwd;
+						rOut(iR, iZ, halfPoint - iPhi - 1) = rBwd;
+						zOut(iR, iZ, halfPoint - iPhi - 1) = zBwd;
+						lenOut(iR, iZ, halfPoint - iPhi - 1) = -lBwd;
 						
-						rOut(iR, iZ, nPhiTot + iPhi + 1) = rFwd;
-						zOut(iR, iZ, nPhiTot + iPhi + 1) = zFwd;
-						lenOut(iR, iZ, nPhiTot + iPhi + 1) = lFwd;
+						rOut(iR, iZ, halfPoint + iPhi + 1) = rFwd;
+						zOut(iR, iZ, halfPoint + iPhi + 1) = zFwd;
+						lenOut(iR, iZ, halfPoint + iPhi + 1) = lFwd;
 					}
 				}
 			}
 			
 			for(auto iR : kj::indices(rVals)) {
 				for(auto iZ : kj::indices(zVals)) {
-					rOut(iR, iZ, nPhiTot) = rVals[iR];
-					zOut(iR, iZ, nPhiTot) = zVals[iZ];
-					lenOut(iR, iZ, nPhiTot) = 0;
+					rOut(iR, iZ, halfPoint) = rVals[iR];
+					zOut(iR, iZ, halfPoint) = zVals[iZ];
+					lenOut(iR, iZ, halfPoint) = 0;
 				}
 			}
 			
@@ -466,6 +490,8 @@ struct MapperImpl : public Mapper::Server {
 	Promise<void> computeMapping(ComputeMappingContext ctx) {		
 		auto params = ctx.getParams();
 		
+		KJ_REQUIRE(params.hasField(), "Must specify magnetic field");
+		
 		Temporary<FieldlineMapping> result;
 
 		auto promise = computeDirection(params, true, result.getFwd())
@@ -479,6 +505,46 @@ struct MapperImpl : public Mapper::Server {
 		});
 		
 		return promise;
+	}
+	
+	Promise<void> computeRFLM(ComputeRFLMContext ctx) {
+		auto params = ctx.getParams();
+		auto planes = params.getMappingPlanes();
+		
+		KJ_REQUIRE(params.hasField(), "Must specify magnetic field");
+		
+		Temporary<ReversibleFieldLineMapping> result;
+		result.setSurfaces(planes);
+		result.setNPad(params.getNumPaddingPlanes());
+		
+		auto promiseBuilder = kj::heapArrayBuilder<Promise<void>>(planes.size());
+		
+		auto sections = result.initSections(planes.size());
+		
+		double totalWidth = 0;
+		for(size_t i1 : kj::indices(planes)) {
+			size_t i2 = (i1 + 1) % planes.size();
+			
+			auto trace = heapHeld<RFLMSectionTrace>(flt, params, sections[i1]);
+			
+			trace -> phi1 = planes[i1];
+			trace -> phi2 = planes[i2];
+			trace -> numTracingPlanes = params.getNumPlanes();
+			trace -> numPaddingPlanes = params.getNumPaddingPlanes();
+			trace -> rVals = params.getGridR();
+			trace -> zVals = params.getGridZ();
+			
+			totalWidth += trace -> computeWidth();
+			
+			promiseBuilder.add(trace -> run().attach(trace.x()));
+		}
+		
+		KJ_REQUIRE(std::abs(totalWidth - 2 * pi) < pi, "Sections must be of non-zero width, and angles must be specified in counter-clockwise direction");
+				
+		auto joined = kj::joinPromises(promiseBuilder.finish());
+		return joined.then([ctx = mv(ctx), result = mv(result)]() mutable {
+			ctx.initResults().setMapping(getActiveThread().dataService().publish(mv(result)));
+		});
 	}
 };
 

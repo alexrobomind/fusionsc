@@ -219,10 +219,16 @@ struct RFLMRequest {
 	
 	gridR @1 : List(Float64);
 	gridZ @2 : List(Float64);
+	
+	numPlanes @3 : UInt32 = 20;
+	numPaddingPlanes @4 : UInt32 = 1;
+	
+	field @5 : Magnetics.ComputedField;
 }
 
 interface Mapper {
 	computeMapping @0 MappingRequest -> (mapping : Data.DataRef(FieldlineMapping));
+	computeRFLM @1 RFLMRequest -> (mapping : Data.DataRef(ReversibleFieldLineMapping));
 }
 
 
