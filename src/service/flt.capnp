@@ -61,6 +61,9 @@ struct ReversibleFieldLineMapping {
 		r @0 : Data.Float64Tensor;
 		z @1 : Data.Float64Tensor;
 		traceLen @2 : Data.Float64Tensor;
+		
+		phiStart @3 : Float64;
+		phiEnd @4 : Float64;
 	}
 	
 	# List of phi angles (in radians) corresponding to mapping surfaces

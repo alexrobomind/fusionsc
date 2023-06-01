@@ -456,7 +456,7 @@ namespace {
 			
 			writeTensor(rOut, output.getR());
 			writeTensor(zOut, output.getZ());
-			writeTensor(lenOut, output.getTraceLen());			
+			writeTensor(lenOut, output.getTraceLen());
 		}
 		
 		Promise<void> run() {
