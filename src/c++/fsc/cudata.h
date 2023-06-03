@@ -139,7 +139,7 @@ struct DeviceMapping<CuTypedMessageBuilder<HostType, CupnpType>> : public Device
 	{}
 	
 	cupnp::Location getUntyped() { return Parent::get(); }
-	CuPtr<CupnpType> get() { return getUntyped(); }
+	CuPtr<CupnpType> get() { return CuPtr<CupnpType>(getUntyped()); }
 	
 	capnp::MessageBuilder& getHostUntyped() { return Parent::getHost(); }
 	typename HostType::Builder getHost() { return Parent::getHost().template getRoot<HostType>(); }
@@ -154,7 +154,7 @@ struct DeviceMapping<CuTypedMessageReader<HostType, CupnpType>> : public DeviceM
 	{}
 	
 	cupnp::Location getUntyped() { return Parent::get(); }
-	CuPtr<CupnpType> get() { return getUntyped(); }
+	CuPtr<const CupnpType> get() { return CuPtr<const CupnpType>(getUntyped()); }
 	
 	capnp::MessageReader& getHostUntyped() { return Parent::getHost(); }
 	typename HostType::Reader getHost() { return Parent::getHost().template getRoot<HostType>(); }

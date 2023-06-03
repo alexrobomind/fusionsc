@@ -284,8 +284,9 @@ namespace fsc {
 			
 			// KJ_DBG("In grid?", r, z, grid.getRMin(), grid.getRMax(), grid.getZMin(), grid.getZMax());
 			
-			if(r <= grid.getRMin() || r >= grid.getRMax() || z <= grid.getZMin() || z >= grid.getZMax())
+			if(r <= grid.getRMin() || r >= grid.getRMax() || z <= grid.getZMin() || z >= grid.getZMax()) {
 				FSC_FLT_RETURN(OUT_OF_GRID);
+			}
 			
 			// KJ_DBG("Limits passed");
 			
@@ -352,7 +353,7 @@ namespace fsc {
 				if(useFLM) {
 					flm.setFieldlinePosition(0);
 					double newPhi = flm.phi + forwardDirection * tracingDirection * request.getStepSize() / r;
-					x2 = flm.advance(newPhi, tracingDirection == 1);
+					x2 = flm.advance(newPhi);
 				} else {
 					// Regular tracing step
 					kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), rungeKuttaInput);
@@ -423,7 +424,7 @@ namespace fsc {
 					double crossDist = 0;
 					if(useFLM && !displacementStep && orientation.hasPhi()) {
 						double phiCross = crossedAt * kmath::wrap(phi2 - phi1) + phi1;
-						xCross = flm.unmap(flm.unwrap(phiCross));
+						xCross = flm.unmap(phiCross);
 						crossDist = fabs(flm.getFieldlinePosition(phiCross));
 					} else {
 						crossDist = (xCross - x).norm();
@@ -443,7 +444,7 @@ namespace fsc {
 				// Same as above with the usual planes, interpolate if we are using the mapping
 				double crossDist = 0;
 				if(useFLM && !displacementStep) {
-					xCross = flm.unmap(flm.unwrap(phi0));
+					xCross = flm.unmap(phi0);
 					crossDist = flm.getFieldlinePosition(phi0);
 				} else {
 					crossDist = (xCross - x).norm();

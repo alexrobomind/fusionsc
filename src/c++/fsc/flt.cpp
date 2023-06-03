@@ -66,13 +66,13 @@ struct TraceCalculation {
 	>> geometryData;
 	
 	DeviceMappingType<CuTypedMessageReader<
-		FieldlineMapping, cu::FieldlineMapping
+		ReversibleFieldlineMapping, cu::ReversibleFieldlineMapping
 	>> mappingData;
 		
 	TraceCalculation(DeviceBase& device,
 		Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<const Tensor<double, 4>>> newField, Tensor<double, 2> positions,
 		IndexedGeometry::Reader geometryIndex, Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData, Maybe<LocalDataRef<MergedGeometry>> geometryData,
-		Maybe<LocalDataRef<FieldlineMapping>> mappingData
+		Maybe<LocalDataRef<ReversibleFieldlineMapping>> mappingData
 	) :
 		device(device.addRef()),
 		positions(mv(positions)),
@@ -96,7 +96,7 @@ struct TraceCalculation {
 			device, true
 		)),
 		mappingData(mapToDevice(
-			cuReader<FieldlineMapping, cu::FieldlineMapping>(mappingData),
+			cuReader<ReversibleFieldlineMapping, cu::ReversibleFieldlineMapping>(mappingData),
 			device, true
 		))
 	{		
@@ -393,7 +393,7 @@ struct FLTImpl : public FLT::Server {
 		Promise<LocalDataRef<Float64Tensor>> downloadField = dataService.download(request.getField().getData()).eagerlyEvaluate(nullptr);
 		Promise<Maybe<LocalDataRef<IndexedGeometry::IndexData>>> downloadIndexData = dataService.downloadIfNotNull(indexDataRef);
 		Promise<Maybe<LocalDataRef<MergedGeometry>>> downloadGeometryData =	dataService.downloadIfNotNull(geoDataRef).eagerlyEvaluate(nullptr);
-		Promise<Maybe<LocalDataRef<FieldlineMapping>>> downloadMappingData = dataService.downloadIfNotNull(mappingDataRef).eagerlyEvaluate(nullptr);
+		Promise<Maybe<LocalDataRef<ReversibleFieldlineMapping>>> downloadMappingData = dataService.downloadIfNotNull(mappingDataRef).eagerlyEvaluate(nullptr);
 		KJ_DBG("Waiting download processes");
 		
 		// I WANT COROUTINES -.-
@@ -401,7 +401,7 @@ struct FLTImpl : public FLT::Server {
 		return downloadIndexData.then([ctx, request, downloadGeometryData = mv(downloadGeometryData), downloadField = mv(downloadField), downloadMappingData = mv(downloadMappingData), this](Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData) mutable {
 		return downloadGeometryData.then([ctx, request, indexData = mv(indexData), downloadField = mv(downloadField), downloadMappingData = mv(downloadMappingData), this](Maybe<LocalDataRef<MergedGeometry>> geometryData) mutable {
 		return downloadField.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), downloadMappingData = mv(downloadMappingData), this](LocalDataRef<Float64Tensor> fieldData) mutable {
-		return downloadMappingData.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), fieldData = mv(fieldData), this](Maybe<LocalDataRef<FieldlineMapping>> mappingData) mutable {
+		return downloadMappingData.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), fieldData = mv(fieldData), this](Maybe<LocalDataRef<ReversibleFieldlineMapping>> mappingData) mutable {
 			
 			KJ_DBG("All required data downloaded");
 			

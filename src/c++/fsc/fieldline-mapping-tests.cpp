@@ -59,6 +59,11 @@ TEST_CASE("flm") {
 	auto result = mappingRequest.send().wait(ws);
 	// KJ_DBG(result);
 	
+	// Note: Old filament-based mappings are no longer supported by the tracing
+	// kernel (they were always experimental and didn't perform adequately) and
+	// are now supplanted by the well-tested "reversible field line mapping"
+	// approach pioneered by Yuhe Feng.
+	/*
 	auto resultData = lt -> dataService().download(result.getMapping()).wait(ws);
 	// KJ_DBG(resultData.get());
 	
@@ -83,7 +88,7 @@ TEST_CASE("flm") {
 	KJ_DBG("Sending request");
 	auto response = traceReq.send().wait(ws);
 	
-	// KJ_DBG(response.getPoincareHits());
+	// KJ_DBG(response.getPoincareHits());*/
 }
 
 TEST_CASE("rflm") {
@@ -97,15 +102,35 @@ TEST_CASE("rflm") {
 	auto mapper = req.send().getService();
 	
 	auto rflmRequest = mapper.computeRFLMRequest();
-	//rflmRequest.setGridR({0.51, 1.0, 1.49});
-	//rflmRequest.setGridZ({-0.49, -0.25, 0, 0.25, 0.49});
-	rflmRequest.setGridR({1});
-	rflmRequest.setGridZ({0});
+	rflmRequest.setGridR({0.51, 1.0, 1.49});
+	rflmRequest.setGridZ({-0.49, -0.25, 0, 0.25, 0.49});
 	rflmRequest.setMappingPlanes({0});
 	
 	prepareToroidalField(rflmRequest.getField());
 	
 	auto mapping = rflmRequest.sendForPipeline().getMapping();
 	auto data = lt->dataService().download(mapping).wait(ws);
-	KJ_DBG(data.get());
+	// KJ_DBG(data.get());
+	
+	auto fltReq = createRoot(config).newTracerRequest();
+	auto flt = fltReq.send().getService();
+	
+	auto traceReq = flt.traceRequest();
+	prepareToroidalField(traceReq.getField());
+	
+	traceReq.getStartPoints().setShape({3});
+	traceReq.getStartPoints().setData({1.0, 0.0, 0.0});
+	
+	traceReq.setMapping(mapping);
+	
+	auto planes = traceReq.initPlanes(1);
+	planes[0].getOrientation().setPhi(3.141592);
+	
+	traceReq.setTurnLimit(1000);
+	traceReq.setDistanceLimit(0);
+	traceReq.setStepSize(0.1);
+	
+	KJ_DBG("Sending request");
+	auto response = traceReq.send().wait(ws);
+	// KJ_DBG(response.getPoincareHits());
 }

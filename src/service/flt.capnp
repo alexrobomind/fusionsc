@@ -54,7 +54,7 @@ struct FieldlineMapping {
 	bwd @1 : Direction;
 }
 
-struct ReversibleFieldLineMapping {
+struct ReversibleFieldlineMapping {
 	struct Section {
 		# Tensors of identical shape [nPhi, nZMap, nRMap] which contain R, Z,
 		# and forward length values of mapping points.
@@ -110,7 +110,7 @@ struct FLTRequest {
 	
 	rngSeed @15 : UInt64;
 	
-	mapping @16 : Data.DataRef(FieldlineMapping);
+	mapping @16 : Data.DataRef(ReversibleFieldlineMapping);
 	forward @17 : Bool = true;
 	
 	recordEvery @18 : UInt32;
@@ -231,7 +231,7 @@ struct RFLMRequest {
 
 interface Mapper {
 	computeMapping @0 MappingRequest -> (mapping : Data.DataRef(FieldlineMapping));
-	computeRFLM @1 RFLMRequest -> (mapping : Data.DataRef(ReversibleFieldLineMapping));
+	computeRFLM @1 RFLMRequest -> (mapping : Data.DataRef(ReversibleFieldlineMapping));
 }
 
 

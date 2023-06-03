@@ -166,9 +166,17 @@ namespace cupnp {
 	struct TypedLocation : public Location {
 		using Location::Location;
 		
-		TypedLocation(const Location& other) :
+		explicit TypedLocation(const Location& other) :
 			Location(other)
 		{}
+		
+		TypedLocation<const T> asConst() const {
+			return TypedLocation<const T>(*this);
+		}
+		
+		operator TypedLocation<const T>() const {
+			return asConst();
+		}
 		
 		CUPNP_FUNCTION T operator*() { return getPointer<T>(*this); }
 	};
