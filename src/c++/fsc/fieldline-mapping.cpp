@@ -331,9 +331,9 @@ namespace {
 		FLT::Client flt;
 		
 		RFLMRequest::Reader input;
-		ReversibleFieldLineMapping::Section::Builder output;
+		ReversibleFieldlineMapping::Section::Builder output;
 		
-		RFLMSectionTrace(FLT::Client nFlt, RFLMRequest::Reader input, ReversibleFieldLineMapping::Section::Builder output) : flt(mv(nFlt)), input(mv(input)), output(mv(output)) {
+		RFLMSectionTrace(FLT::Client nFlt, RFLMRequest::Reader input, ReversibleFieldlineMapping::Section::Builder output) : flt(mv(nFlt)), input(mv(input)), output(mv(output)) {
 		}
 		
 		static double halfPhi(double phi1, double phi2) {
@@ -513,7 +513,7 @@ struct MapperImpl : public Mapper::Server {
 		
 		KJ_REQUIRE(params.hasField(), "Must specify magnetic field");
 		
-		Temporary<ReversibleFieldLineMapping> result;
+		Temporary<ReversibleFieldlineMapping> result;
 		result.setSurfaces(planes);
 		result.setNPad(params.getNumPaddingPlanes());
 		

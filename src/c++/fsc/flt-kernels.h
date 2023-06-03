@@ -79,7 +79,7 @@ namespace fsc {
 		CuPtr<const fsc::cu::IndexedGeometry> pGeometryIndex,
 		CuPtr<const fsc::cu::IndexedGeometry::IndexData> pGeometryIndexData,
 		
-		CuPtr<const fsc::cu::FieldlineMapping> pFLMData
+		CuPtr<const fsc::cu::ReversibleFieldlineMapping> pFLMData
 	) {
 		using Num = double;
 		using V3 = Vec3<Num>;
@@ -98,7 +98,7 @@ namespace fsc {
 		auto indexData = *pGeometryIndexData;
 		
 		auto flmData = *pFLMData;
-		bool useFLM = flmData.getFwd().getFilaments().size() > 0;
+		bool useFLM = flmData.getSections().size() > 0;
 		
 		// printf("Hello there\n");
 		// CUPNP_DBG("FLT kernel started", idx, useFLM);
@@ -206,7 +206,7 @@ namespace fsc {
 		// Event logging
 		// As this involves our return macro, it can't go
 		// into a lambda
-		#define FSC_FLT_LOG_EVENT(x) {\
+		#define FSC_FLT_LOG_EVENT(x, evtDist) {\
 			if(eventCount >= myData.getEvents().size() - 1) { \
 				FSC_FLT_RETURN(EVENT_BUFFER_FULL); \
 			} \
@@ -214,7 +214,7 @@ namespace fsc {
 			{\
 				auto evt = currentEvent(); \
 				evt.setStep(step); \
-				evt.setDistance(distance); \
+				evt.setDistance(evtDist); \
 				\
 				auto loc = evt.mutateLocation(); \
 				for(int i = 0; i < 3; ++i) {\
@@ -229,7 +229,7 @@ namespace fsc {
 			return myData.mutateEvents()[eventCount];
 		};
 		
-		FLM flm(flmData);
+		RFLM flm(flmData);
 		
 		// Initialize mapped position
 		if(useFLM) {
@@ -260,7 +260,7 @@ namespace fsc {
 				V3 fv = interpolator(fieldData, x);
 				rec.setFieldStrength(std::sqrt(fv[0] * fv[0] + fv[1] * fv[1] + fv[2] * fv[2]));
 				
-				FSC_FLT_LOG_EVENT(x)
+				FSC_FLT_LOG_EVENT(x, distance)
 			}
 						
 			Num r = std::sqrt(x[0] * x[0] + x[1] * x[1]);
@@ -349,7 +349,8 @@ namespace fsc {
 					flm.map(x2, tracingDirection > 0);
 				}				
 			} else {				
-				if(useFLM) {					
+				if(useFLM) {
+					flm.setFieldlinePosition(0);
 					double newPhi = flm.phi + forwardDirection * tracingDirection * request.getStepSize() / r;
 					x2 = flm.advance(newPhi, tracingDirection == 1);
 				} else {
@@ -419,13 +420,17 @@ namespace fsc {
 					
 					// If we use field-line mapping, the linear interpolation might be unreasonable
 					// due to large step sizes. Instead, use the mapping's spline interpolation
-					if(useFLM) {
+					double crossDist = 0;
+					if(useFLM && !displacementStep && orientation.hasPhi()) {
 						double phiCross = crossedAt * kmath::wrap(phi2 - phi1) + phi1;
 						xCross = flm.unmap(flm.unwrap(phiCross));
+						crossDist = fabs(flm.getFieldlinePosition(phiCross));
+					} else {
+						crossDist = (xCross - x).norm();
 					}
 					
 					currentEvent().mutatePhiPlaneIntersection().setPlaneNo(iPlane);
-					FSC_FLT_LOG_EVENT(xCross);				
+					FSC_FLT_LOG_EVENT(xCross, distance + crossDist);				
 				}
 			}
 			
@@ -436,8 +441,12 @@ namespace fsc {
 				V3 xCross = l * x2 + (1. - l) * x;
 				
 				// Same as above with the usual planes, interpolate if we are using the mapping
-				if(useFLM) {
+				double crossDist = 0;
+				if(useFLM && !displacementStep) {
 					xCross = flm.unmap(flm.unwrap(phi0));
+					crossDist = flm.getFieldlinePosition(phi0);
+				} else {
+					crossDist = (xCross - x).norm();
 				}
 				
 				// printf("New turn\n");
@@ -445,7 +454,7 @@ namespace fsc {
 				// KJ_DBG(idx, state.getTurnCount());
 				
 				currentEvent().setNewTurn(state.getTurnCount() + 1);
-				FSC_FLT_LOG_EVENT(xCross);		
+				FSC_FLT_LOG_EVENT(xCross, distance + crossDist);		
 				
 				state.setTurnCount(state.getTurnCount() + 1);		
 			}
@@ -542,10 +551,15 @@ namespace fsc {
 			
 			// --- Advance the step after all events are processed ---
 			
-			if(!displacementStep)
-				distance += std::abs(request.getStepSize());
-			else
+			if(!displacementStep) {
+				if(useFLM) {
+					distance += fabs(flm.getFieldlinePosition(flm.phi));
+				} else {
+					distance += std::abs(request.getStepSize());
+				}
+			} else {
 				distance += (x2 - x).norm();
+			}
 			
 			x = x2;
 			
@@ -604,5 +618,5 @@ REFERENCE_KERNEL(
 	fsc::CuPtr<const fsc::cu::IndexedGeometry>,
 	fsc::CuPtr<const fsc::cu::IndexedGeometry::IndexData>,
 	
-	fsc::CuPtr<const fsc::cu::FieldlineMapping>
+	fsc::CuPtr<const fsc::cu::ReversibleFieldlineMapping>
 );

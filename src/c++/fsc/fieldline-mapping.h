@@ -51,12 +51,16 @@ struct RFLM {
 	//! Unwraps the given phi value to be near the currently stored position.
 	inline EIGEN_DEVICE_FUNC double unwrap(double phiIn);
 	
-	inline EIGEN_DEVICE_FUNC RFLM(cu::ReversibleFieldLineMapping mapping);
+	inline EIGEN_DEVICE_FUNC double getFieldlinePosition(double phi);
+	inline EIGEN_DEVICE_FUNC void setFieldlinePosition(double newValue);
 	
-	cu::ReversibleFieldLineMapping mapping;
+	inline EIGEN_DEVICE_FUNC RFLM(cu::ReversibleFieldlineMapping mapping);
+	
+	cu::ReversibleFieldlineMapping mapping;
 	Vec2d uv;
 	uint64_t currentSection;
 	double phi;
+	double lenOffset;
 	
 	uint32_t nPad;
 	
@@ -92,23 +96,41 @@ struct RFLM {
 
 private:
 	void activateSection(uint64_t iSection);
-	cu::ReversibleFieldLineMapping::Section activeSection();
+	cu::ReversibleFieldlineMapping::Section activeSection();
 	
 	inline EIGEN_DEVICE_FUNC void interpolate(double phi, Vec2d& rz, Mat2d& jacobian);
 };
 
 // === class RFLM ===
 
-EIGEN_DEVICE_FUNC RFLM::RFLM(cu::ReversibleFieldLineMapping mapping) :
+EIGEN_DEVICE_FUNC RFLM::RFLM(cu::ReversibleFieldlineMapping mapping) :
 	mapping(mapping),
 	uv(0.5, 0.5),
 	currentSection(0),
-	phi(0),
+	phi(0), lenOffset(0),
 	
 	nPad(mapping.getNPad()),
 	
 	nPhi(0), nZ(0), nR(0)
 {}
+
+EIGEN_DEVICE_FUNC double RFLM::getFieldlinePosition(double phi) {
+	using Strategy = C1CubicInterpolation<double>;
+	using Interpolator = NDInterpolator<3, Strategy>;
+	TensorField lenField(activeSection().getTraceLen(), *this);
+	
+	Interpolator interpolator(
+		Strategy(),
+		{ Interpolator::Axis(phi1, phi2, nPhi - 2 * nPad - 1), Interpolator::Axis(0, 1, nZ - 1), Interpolator::Axis(0, 1, nR - 1) }
+	);
+	
+	Vec3d interpCoords(phi, uv(0), uv(1));
+	return interpolator(lenField, interpCoords) + lenOffset;
+}
+
+EIGEN_DEVICE_FUNC void RFLM::setFieldlinePosition(double newVal) {
+	lenOffset += newVal - getFieldlinePosition(this -> phi);
+}
 
 EIGEN_DEVICE_FUNC Vec3d RFLM::unmap(double phi) {
 	using Strategy = C1CubicInterpolation<double>;
@@ -217,8 +239,11 @@ EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi, bool fwd) {
 		
 		if(remap) {
 			Vec3d tmp = unmap(phiClamped);
+			double len = getFieldlinePosition(phiClamped);
 			map(tmp, fwd);
+			setFieldlinePosition(len);
 		} else {
+			phi = newPhi;
 			return unmap(newPhi);
 		}
 	}
