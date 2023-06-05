@@ -423,9 +423,10 @@ namespace fsc {
 					// due to large step sizes. Instead, use the mapping's spline interpolation
 					double crossDist = 0;
 					if(useFLM && !displacementStep && orientation.hasPhi()) {
-						double phiCross = crossedAt * kmath::wrap(phi2 - phi1) + phi1;
-						xCross = flm.unmap(phiCross);
-						crossDist = fabs(flm.getFieldlinePosition(phiCross));
+						RFLM flm2 = flm;
+						double phiCross = (1 - crossedAt) * kmath::wrap(phi1 - phi2) + flm2.phi;
+						xCross = flm2.advance(phiCross);
+						crossDist = fabs(flm2.getFieldlinePosition(phiCross));
 					} else {
 						crossDist = (xCross - x).norm();
 					}
@@ -444,8 +445,11 @@ namespace fsc {
 				// Same as above with the usual planes, interpolate if we are using the mapping
 				double crossDist = 0;
 				if(useFLM && !displacementStep) {
-					xCross = flm.unmap(phi0);
-					crossDist = flm.getFieldlinePosition(phi0);
+					RFLM flm2 = flm;
+					// KJ_DBG("Pre advance", flm2.uv(0), flm2.uv(1));
+					xCross = flm2.advance(flm2.phi + kmath::wrap(phi0 - phi2));
+					// KJ_DBG("Post advance", flm2.uv(0), flm2.uv(1));
+					crossDist = flm2.getFieldlinePosition(phi1 + kmath::wrap(phi0 - phi1));
 				} else {
 					crossDist = (xCross - x).norm();
 				}

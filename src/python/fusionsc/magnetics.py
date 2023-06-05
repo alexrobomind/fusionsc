@@ -207,7 +207,7 @@ async def visualizeCoils(field):
 			return
 		
 		if coil.which() == 'ref':
-			local = await data.download(coil.ref)
+			local = await data.download.asnc(coil.ref)
 			await processCoil(local)
 			return
 		
@@ -215,7 +215,8 @@ async def visualizeCoils(field):
 			await processCoil(coil.nested)
 			return
 		
-		print("Warning: Unresolved nodes can not be visualized")
+		print("Warning: Unresolved node can not be visualized")
+		print(coil)
 			
 	
 	async def process(field):

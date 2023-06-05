@@ -11,3 +11,4 @@ This section contains various demonstration examples.
   JText
   Server
   Client
+  Mapping

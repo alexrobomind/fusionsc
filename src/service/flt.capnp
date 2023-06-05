@@ -178,6 +178,8 @@ struct FindAxisRequest {
 	nTurns @3 : UInt32 = 10;
 	nIterations @4 : UInt32 = 10;
 	nPhi @5 : UInt64 = 20;
+	
+	mapping @6 : Data.DataRef(ReversibleFieldlineMapping);
 }
 
 struct FindLcfsRequest {
@@ -192,6 +194,8 @@ struct FindLcfsRequest {
 	
 	field @6 : Magnetics.ComputedField;
 	geometry @7 : Geometry.IndexedGeometry;
+	
+	mapping @8 : Data.DataRef(ReversibleFieldlineMapping);
 }
 
 interface FLT $Cxx.allowCancellation {
@@ -227,6 +231,9 @@ struct RFLMRequest {
 	numPaddingPlanes @4 : UInt32 = 1;
 	
 	field @5 : Magnetics.ComputedField;
+	
+	distanceLimit @6 : Float64 = 1e3;
+	stepSize @7 : Float64 = 0.001;
 }
 
 interface Mapper {

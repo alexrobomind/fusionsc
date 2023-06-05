@@ -179,6 +179,8 @@ async def connectionLength(points, config, geometry, **kwargs):
 	result = await trace.asnc(points, config, geometry = geometry, collisionLimit = 1, **kwargs)
 	return result["endPoints"][3]
 
+"""
+This function was removed in favor of a reversible field line mapping approach shown below.
 
 @asyncFunction
 async def computeMapping(
@@ -187,9 +189,6 @@ async def computeMapping(
 	nPhi = 30, filamentLength = 5, cutoff = 1,
 	dx = 0.001
 ):
-	"""
-	EXPERIMENTAL UNSTABLE FEATURE. DO NOT USE IN PRODUCTION CODE.
-	"""
 	config = await config.compute.asnc(grid)
 	computedField = config.data.computedField
 	
@@ -208,6 +207,7 @@ async def computeMapping(
 	response = _mapper().computeMapping(request)
 	
 	return response.mapping
+"""
 	
 @asyncFunction
 async def trace(
@@ -336,7 +336,7 @@ async def trace(
 	}
 
 @asyncFunction
-async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = "ccw"):
+async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = "ccw", mapping = None):
 	"""
 	Computes the magnetic axis by repeatedly tracing a Poincaré map and averaging the points.
 	
@@ -365,6 +365,9 @@ async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTur
 	request.nIterations = nIterations
 	request.nPhi = nPhi
 	
+	if mapping is not None:
+		request.mapping = mapping
+	
 	response = await _tracer().findAxis(request)
 	
 	axis = np.asarray(response.axis)
@@ -390,7 +393,7 @@ async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTur
 	return np.asarray(response.pos), axis
 
 @asyncFunction
-async def findLCFS(field, geometry, p1, p2, grid = None, geometryGrid = None, stepSize = 0.01, tolerance = 0.001, nScan = 8, distanceLimit = 3e3):
+async def findLCFS(field, geometry, p1, p2, grid = None, geometryGrid = None, stepSize = 0.01, tolerance = 0.001, nScan = 8, distanceLimit = 3e3, mapping = None):
 	"""
 	Compute the position of the last closed flux surface
 	"""
@@ -410,12 +413,15 @@ async def findLCFS(field, geometry, p1, p2, grid = None, geometryGrid = None, st
 	request.nScan = nScan
 	request.distanceLimit = distanceLimit
 	
+	if mapping is not None:
+		request.mapping = mapping
+	
 	response = await _tracer().findLcfs(request)
 	
 	return np.asarray(response.pos)
 
 @asyncFunction
-async def axisCurrent(field, current, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = "ccw"):
+async def axisCurrent(field, current, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = "ccw", mapping = None):
 	"""
 	Configuration that places a current on the axis of a given magnetic configuration.
 	
@@ -425,7 +431,7 @@ async def axisCurrent(field, current, grid = None, startPoint = None, stepSize =
 	Returns:
 		The magnetic configuration corresponding to the on-axis current's field.
 	"""
-	result = await findAxis.asnc(field, grid, startPoint, stepSize, nTurns, nIterations, nPhi, direction)
+	result = await findAxis.asnc(field, grid, startPoint, stepSize, nTurns, nIterations, nPhi, direction, mapping)
 	_, axis = result
 	
 	result = magnetics.MagneticConfig()
@@ -436,3 +442,23 @@ async def axisCurrent(field, current, grid = None, startPoint = None, stepSize =
 	filField.filament.inline = axis.T
 	
 	return result
+
+@asyncFunction
+async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit = 1e3, padding = 2, numPlanes = 20, stepSize = 0.001):
+	field = await field.compute.asnc(grid)
+	computedField = field.data.computedField
+	
+	backend = backends.activeBackend()
+	mapper = backend.newMapper().service
+	
+	request = service.RFLMRequest.newMessage()
+	request.gridR = r
+	request.gridZ = z
+	request.mappingPlanes = mappingPlanes
+	request.field = computedField
+	request.numPlanes = numPlanes
+	request.numPaddingPlanes = padding
+	request.distanceLimit = distanceLimit
+	request.stepSize = stepSize
+	
+	return mapper.computeRFLM(request).mapping

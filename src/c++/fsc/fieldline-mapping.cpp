@@ -389,6 +389,8 @@ namespace {
 			req.getForwardDirection().setCcw();
 			req.setField(input.getField());
 			req.setTurnLimit(1);
+			req.setDistanceLimit(input.getDistanceLimit());
+			req.setStepSize(input.getStepSize());
 			
 			// Note that our planes can go past the range of the section. This is because
 			// we have padding planes on both sides used to extend the interpolation region.

@@ -52,6 +52,7 @@ struct RFLM {
 	inline EIGEN_DEVICE_FUNC void setFieldlinePosition(double newValue);
 	
 	inline EIGEN_DEVICE_FUNC RFLM(cu::ReversibleFieldlineMapping mapping);
+	inline EIGEN_DEVICE_FUNC RFLM(const RFLM& other) = default;
 	
 	cu::ReversibleFieldlineMapping mapping;
 	Vec2d uv;
@@ -87,6 +88,11 @@ struct RFLM {
 			if(iR >= parent.nR) iR = parent.nR - 1;
 			
 			int iLinear = iR + parent.nR * (iZ + parent.nZ * iPhi);
+			
+			if(iLinear >= reader.getData().size()) {
+				KJ_DBG("Bad iLinear", iLinear, reader.getData().size(), iZ, iR, iPhi);
+			}
+			
 			return reader.getData()[iLinear];
 		}
 	};
@@ -98,6 +104,8 @@ private:
 	inline EIGEN_DEVICE_FUNC void interpolate(double phi, Vec2d& rz, Mat2d& jacobian);
 	
 	inline static double unwrap(double phiWrapped);
+	
+	static constexpr double SECTION_TOL = 0.001;
 };
 
 // === class RFLM ===
@@ -156,7 +164,9 @@ EIGEN_DEVICE_FUNC double RFLM::getFieldlinePosition(double phi) {
 		{ Interpolator::Axis(0, phi2 - phi1, nPhi - 2 * nPad - 1), Interpolator::Axis(0, 1, nZ - 1), Interpolator::Axis(0, 1, nR - 1) }
 	);
 	
-	Vec3d interpCoords(unwrap(phi - phi1), uv(0), uv(1));
+	double phiCoord = unwrap(phi - phi1 + 2 * SECTION_TOL) - 2 * SECTION_TOL;
+	
+	Vec3d interpCoords(phiCoord, uv(0), uv(1));
 	return interpolator(lenField, interpCoords) + lenOffset;
 }
 
@@ -176,7 +186,9 @@ EIGEN_DEVICE_FUNC Vec3d RFLM::unmap(double phi) {
 		{ Interpolator::Axis(0, phi2 - phi1, nPhi - 2 * nPad - 1), Interpolator::Axis(0, 1, nZ - 1), Interpolator::Axis(0, 1, nR - 1) }
 	);
 	
-	Vec3d interpCoords(unwrap(phi - phi1), uv(0), uv(1));
+	double phiCoord = unwrap(phi - phi1 + 2 * SECTION_TOL) - 2 * SECTION_TOL;
+	
+	Vec3d interpCoords(phiCoord, uv(0), uv(1));
 	double rVal = interpolator(rField, interpCoords);
 	double zVal = interpolator(zField, interpCoords);
 	
@@ -189,6 +201,17 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 	// --- Select active section for inversion ---
 	phi = atan2(x[1], x[0]);
 	
+	// Safe handling for "NaN" case
+	if(phi != phi) {
+		activateSection(0);
+		uv(0) = phi;
+		uv(1) = phi;
+		return;
+	}
+	
+	uv(0) = 0.5;
+	uv(1) = 0.5;
+	
 	auto phiPlanes = mapping.getSurfaces();
 	
 	// KJ_DBG("Selecting section");
@@ -198,7 +221,7 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 		// travelling towards, and shrinking it in the other. This guarantees that
 		// right on the mapping planes, we always map into the adequate section
 		// for the direction we are going towards.
-		double dirShift = ccw ? 0.001 : -0.001;
+		double dirShift = ccw ? -SECTION_TOL : SECTION_TOL;
 		double phiStart = phiPlanes[iSection] + dirShift;
 		double phiEnd = phiPlanes[(iSection + 1) % phiPlanes.size()] + dirShift;
 		
@@ -231,9 +254,11 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 	double rRef = sqrt(x[0] * x[0] + x[1] * x[1]);
 	double zRef = x[2];
 	
-	for(size_t i = 0; i < 10; ++i) {
+	double phiCoord = unwrap(phi - phi1 + 2 * SECTION_TOL) - 2 * SECTION_TOL;
+	
+	for(size_t i = 0; i < 50; ++i) {
 		// Calculate values and derivatives for r and z
-		Vec3<ADS> interpCoords(unwrap(phi - phi1), ADS(uv(0), 2, 0), ADS(uv(1), 2, 1));
+		Vec3<ADS> interpCoords(phiCoord, ADS(uv(0), 2, 0), ADS(uv(1), 2, 1));
 		ADS rVal = interpolator(rField, interpCoords);
 		ADS zVal = interpolator(zField, interpCoords);
 		
@@ -248,11 +273,21 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 		double du = invDet * (dx(0) * dzdv - dx(1) * drdv);
 		double dv = invDet * (drdu * dx(1) - dzdu * dx(0));
 		
-		uv(0) += du;
-		uv(1) += dv;
+		//double scale = std::min(((double) i + 1) / 20, 1.0);
+		double scale = 0.05 / sqrt(du * du + dv * dv);
+		if(scale > 1)
+			scale = 1;
+		
+		
+		uv(0) += scale * du;
+		uv(1) += scale * dv;
+		
+		if(dx.norm() < 1e-12)
+			break;
+		// KJ_DBG(du, dv, dx(0), dx(1), rVal.value(), zVal.value());
 	}
 	
-	// KJ_DBG("Map completed", uv(0), uv(1), phi);
+	// KJ_DBG("Map completed", rRef, zRef, uv(0), uv(1), phi);
 }
 
 EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi) {
@@ -271,6 +306,7 @@ EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi) {
 			double dToTarget = newPhi - phi;
 			
 			if(dToEnd < dToTarget) {
+				// KJ_DBG(phi, newPhi, dToEnd, dToTarget);
 				phiClamped = phi + dToEnd + shiftTol;
 				remap = true;
 			}
@@ -279,6 +315,7 @@ EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi) {
 			double dToTarget = phi - newPhi;
 			
 			if(dToStart < dToTarget) {
+				// KJ_DBG(phi, newPhi, dToStart, dToTarget);
 				phiClamped = phi - dToStart - shiftTol;
 				remap = true;
 			}

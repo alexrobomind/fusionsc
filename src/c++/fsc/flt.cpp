@@ -707,6 +707,9 @@ struct FLTImpl : public FLT::Server {
 			req.setStepSize(params.getStepSize());
 			req.setField(params.getField());
 			
+			if(params.hasMapping())
+				req.setMapping(params.getMapping());
+			
 			size_t nSym = params.getField().getGrid().getNSym();
 			auto planes = req.initPlanes(nSym);
 			for(auto i : kj::indices(planes)) {
@@ -743,6 +746,9 @@ struct FLTImpl : public FLT::Server {
 			req.setTurnLimit(1);
 			req.setStepSize(params.getStepSize());
 			req.setField(params.getField());
+			
+			if(params.hasMapping())
+				req.setMapping(params.getMapping());
 			
 			// req.setRecordEvery(1);
 			auto nPhi = params.getNPhi();
@@ -830,6 +836,9 @@ struct FLTImpl : public FLT::Server {
 				request.setCollisionLimit(1);
 				request.setField(params.getField());
 				request.setGeometry(params.getGeometry());
+				
+				if(params.hasMapping())
+					request.setMapping(params.getMapping());
 				
 				Tensor<double, 2> points(nScan, 3);
 				Vec3d dx = (x2 - x1) / (nScan + 1);
