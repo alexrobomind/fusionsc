@@ -53,65 +53,6 @@ def symmetrize(points, nSym = 1, stellaratorSymmetric = False):
 	
 	return np.stack([x, y, z], axis = 0)
 
-@asyncFunction
-@unstableAPI
-async def visualizeMapping(mapping, nPoints = 50):
-	"""
-	EXPERIMENTAL UNSTABLE FEATURE. Do not use in production code.
-	Visualizes the filaments of a field line mapping as a PyVista mesh.
-	"""
-	import numpy as np
-	import pyvista as pv
-	
-	mapping = await data.download.asnc(mapping)
-	
-	def vizFilament(filament):
-		filData = np.asarray(filament.data).reshape([-1, 6])
-				
-		if len(filData) == 0:
-			return pv.MultiBlock([])
-			
-		
-		phi = np.linspace(filament.phiStart, filament.phiEnd, filament.nIntervals + 1)
-		r = filData[:, 0]
-		z = filData[:, 1]
-		
-		x = np.cos(phi) * r
-		y = np.sin(phi) * r
-		
-		xyz = np.stack([x, y, z], axis = 1)
-		
-		objects = []
-		
-		spline = pv.Spline(xyz, nPoints)
-		objects.append(spline)
-		
-		for i in []: #range(0, filament.nIntervals):
-			phi0 = phi[i]
-			r0 = filData[i, 0]
-			z0 = filData[i, 1]
-			
-			for j in [0, 1]:
-				dr = filData[i, 2 + 2 * j]
-				dz = filData[i, 2 + 2 * j + 1]
-				
-				x0 = r0 * np.cos(phi0)
-				y0 = r0 * np.sin(phi0)
-				
-				dx = dr * np.cos(phi0)
-				dy = dr * np.sin(phi0)
-				
-				arrow = pv.Arrow(start = [x0, y0, z0], direction = [dx, dy, dz], scale = 'auto')
-				objects.append(arrow)
-		
-		return pv.MultiBlock(objects)
-	
-	return pv.MultiBlock([
-		vizFilament(f)
-		for filArray in [mapping.fwd.filaments, mapping.bwd.filaments]
-		for f in filArray
-	])
-
 def _tracer():
 	return backends.activeBackend().newTracer().service
 
@@ -178,36 +119,6 @@ async def connectionLength(points, config, geometry, **kwargs):
 	"""
 	result = await trace.asnc(points, config, geometry = geometry, collisionLimit = 1, **kwargs)
 	return result["endPoints"][3]
-
-"""
-This function was removed in favor of a reversible field line mapping approach shown below.
-
-@asyncFunction
-async def computeMapping(
-	startPoints, config, grid = None, 
-	nSym = 1, stepSize = 0.001, batchSize = 1000,
-	nPhi = 30, filamentLength = 5, cutoff = 1,
-	dx = 0.001
-):
-	config = await config.compute.asnc(grid)
-	computedField = config.data.computedField
-	
-	# We use the request based API because tensor values are not yet supported for fields
-	request = service.MappingRequest.newMessage()
-	request.startPoints = startPoints
-	request.field = computedField
-	request.dx = dx
-	request.filamentLength = filamentLength
-	request.cutoff = cutoff
-	request.nPhi = nPhi
-	request.nSym = nSym
-	request.stepSize = stepSize
-	request.batchSize = batchSize
-	
-	response = _mapper().computeMapping(request)
-	
-	return response.mapping
-"""
 	
 @asyncFunction
 async def trace(
@@ -445,6 +356,29 @@ async def axisCurrent(field, current, grid = None, startPoint = None, stepSize =
 
 @asyncFunction
 async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit = 1e3, padding = 2, numPlanes = 20, stepSize = 0.001):
+	"""
+	Computes a reversible field line mapping. This mapping type divides the device into toroidal
+	sections. Each section is covered by a curved conforming hexahedral grid. The "mapping planes"
+	define the toroidal sections at which the different sections meet. Within a sections, field lines
+	can be interpolated in the r-z plane using phi-independent u,v coordinates on the grid. When crossing
+	into other sections, the field line mapping must be inverted to construct new grid coordinates.
+	
+	The tracing of the sections is started from planes lying in-between the mapping planes.
+	
+	Parameters:
+		- field: A magnetic field to create the mapping over.
+		- mappingPlanes: An array-like of radial angles. Must be in counterclockwise order (but can start and stop anywhere)
+		- r: Major radius values of the starting points to trace the grid from
+		- z: Z coordinate values of the starting points to trace the grid from
+		- grid: Grid to use for field computation (if field is not computed yet)
+		- distanceLimit: Maximum field line length to trace. Can often be reduced aggressively.
+		- padding: Number of planes to add beyond the mapping planes on each section. Currently must be at least 2.
+		- numPlanes: Number of planes to record for each half-section trace.
+		- stepSize: Step size to use for tracing.
+	
+	Returns:
+		A DataRef pointing to a to-be-initialized field line mapping.
+	"""
 	field = await field.compute.asnc(grid)
 	computedField = field.data.computedField
 	

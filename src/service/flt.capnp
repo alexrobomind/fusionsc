@@ -28,32 +28,6 @@ enum FLTStopReason {
 	couldNotStep @8;
 }
 
-struct FieldlineMapping {
-	struct MappingFilament {
-		data @0 : List(Float64);
-		# Numerical data of the mapping filament.
-		# Contains, per phi plane, six numbers.
-		# - Numbers 1 and 2 are the r and z coordinates of the
-		#   associated mapping point.
-		# - Numbers 3 to 6 are, in column-major order, a transformation
-		#   matrix from a local UV coordinate system to the RZ coordinates.
-		#   which tracks the orientation and shear of the magnetic planes.
-		
-		# Phi grid information
-		phiStart @1 : Float64;
-		phiEnd @2 : Float64;
-		nIntervals @3 : UInt64;
-	}
-	
-	struct Direction {
-		filaments @0 : List(MappingFilament);
-		index @1 : Index.KDTree;
-	}
-	
-	fwd @0 : Direction;
-	bwd @1 : Direction;
-}
-
 struct ReversibleFieldlineMapping {
 	struct Section {
 		# Tensors of identical shape [nPhi, nZMap, nRMap] which contain R, Z,
@@ -204,23 +178,6 @@ interface FLT $Cxx.allowCancellation {
 	findLcfs @2 FindLcfsRequest -> (pos : List(Float64));
 }
 
-struct MappingRequest {
-	startPoints @0 : Data.Float64Tensor;
-	field @1 : Magnetics.ComputedField;
-	
-	nPhi @2 : UInt64;
-	
-	filamentLength @3 : Float64 = 5;
-	cutoff @4 : Float64 = 1;
-	stepSize @5 : Float64 = 0.001;
-	
-	dx @6 : Float64 = 0.001;
-	
-	nSym @7 : UInt32 = 1;
-	
-	batchSize @8 : UInt32 = 1000;
-}
-
 struct RFLMRequest {
 	mappingPlanes @0 : List(Float64);
 	
@@ -237,8 +194,7 @@ struct RFLMRequest {
 }
 
 interface Mapper {
-	computeMapping @0 MappingRequest -> (mapping : Data.DataRef(FieldlineMapping));
-	computeRFLM @1 RFLMRequest -> (mapping : Data.DataRef(ReversibleFieldlineMapping));
+	computeRFLM @0 RFLMRequest -> (mapping : Data.DataRef(ReversibleFieldlineMapping));
 }
 
 

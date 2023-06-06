@@ -35,62 +35,6 @@ void prepareToroidalField(ComputedField::Builder field) {
 
 }
 
-TEST_CASE("flm") {
-	Library l = newLibrary();
-	LibraryThread lt = l -> newThread();
-	auto& ws = lt -> waitScope();
-	
-	Temporary<LocalConfig> config;
-	config.setPreferredDeviceType(ComputationDeviceType::CPU);
-	auto req = createRoot(config).newMapperRequest();
-	auto mapper = req.send().getService();
-	
-	auto mappingRequest = mapper.computeMappingRequest();
-	
-	Tensor<double, 2> startPoints(1, 3);
-	startPoints(0, 0) = 1; startPoints(0, 1) = 0; startPoints(0, 2) = 0;
-	writeTensor(startPoints, mappingRequest.getStartPoints());
-	
-	prepareToroidalField(mappingRequest.getField());
-	mappingRequest.setNPhi(100);
-	mappingRequest.setFilamentLength(10);
-	mappingRequest.setCutoff(1);
-	
-	auto result = mappingRequest.send().wait(ws);
-	// KJ_DBG(result);
-	
-	// Note: Old filament-based mappings are no longer supported by the tracing
-	// kernel (they were always experimental and didn't perform adequately) and
-	// are now supplanted by the well-tested "reversible field line mapping"
-	// approach pioneered by Yuhe Feng.
-	/*
-	auto resultData = lt -> dataService().download(result.getMapping()).wait(ws);
-	// KJ_DBG(resultData.get());
-	
-	auto fltReq = createRoot(config).newTracerRequest();
-	auto flt = fltReq.send().getService();
-	
-	auto traceReq = flt.traceRequest();
-	prepareToroidalField(traceReq.getField());
-	
-	traceReq.getStartPoints().setShape({3});
-	traceReq.getStartPoints().setData({1.0, 0.0, 0.0});
-	
-	traceReq.setMapping(resultData);
-	
-	auto planes = traceReq.initPlanes(1);
-	planes[0].getOrientation().setPhi(3.141592);
-	
-	traceReq.setTurnLimit(10000);
-	// traceReq.setStepLimit(10000);
-	traceReq.setStepSize(0.1);
-	
-	KJ_DBG("Sending request");
-	auto response = traceReq.send().wait(ws);
-	
-	// KJ_DBG(response.getPoincareHits());*/
-}
-
 TEST_CASE("rflm") {
 	Library l = newLibrary();
 	LibraryThread lt = l -> newThread();

@@ -54,7 +54,11 @@ interface RootService {
 const computeNodeProfile : LocalConfig = (enableStorage = false, preferredDeviceType = gpu);
 const loginNodeProfile : LocalConfig = (enableCompute = false, jobScheduler = (slurm = void));
 
-const fscProtocolVersion : UInt64 = 1;
+# Changes 1 -> 2:	Removed old field line mapping in favor of reversible mapping. This is a
+#					formally incompatible change but the feature was explicitly marked as
+#					unstable and experimental. The change is a pointer -> pointer change,
+#					so the protocol remains fully compatible in all other aspects.
+const fscProtocolVersion : UInt64 = 2;
 
 
 # Extended local interface to provide access to the local file system and network connections

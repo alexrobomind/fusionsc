@@ -76,7 +76,7 @@ namespace fscpy {
 		// Here we need to specify datatypes that need to be loaded because they are passed to the python interface
 		
 		#define FSC_BUILTIN_SCHEMAS FieldResolver, GeometryResolver, NetworkInterface, LocalResources, OfflineData, \
-			MergedGeometry, FLTStopReason, FieldlineMapping, HintEquilibrium, ReversibleFieldlineMapping
+			MergedGeometry, FLTStopReason, HintEquilibrium, ReversibleFieldlineMapping
 		
 		defaultLoader.addBuiltin<
 			capnp::schema::Node,
