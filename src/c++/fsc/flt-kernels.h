@@ -101,7 +101,7 @@ namespace fsc {
 		bool useFLM = flmData.getSections().size() > 0;
 		
 		// printf("Hello there\n");
-		// CUPNP_DBG("FLT kernel started", idx, useFLM);
+		//CUPNP_DBG("FLT kernel started", idx, useFLM);
 		
 		// Extract local scratch space
 		fsc::cu::FLTKernelData::Entry myData = kernelData.mutateData()[idx];
