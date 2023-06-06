@@ -171,7 +171,13 @@ namespace cupnp {
 		{}
 		
 		TypedLocation<const T> asConst() const {
-			return TypedLocation<const T>(*this);
+			// Without the explicit cast here, this call gets interpreted differently
+			// by different compilers. MSVC implicitly converts the reference and
+			// resolves to the copy constructor (as I intended), but GCC (which
+			// is likely more correct) calls the user-defined conversion operator
+			// (which results in a recursive call). To resolve this, the first
+			// behavior is explicitly requested.
+			return TypedLocation<const T>((const Location&) *this);
 		}
 		
 		operator TypedLocation<const T>() const {
