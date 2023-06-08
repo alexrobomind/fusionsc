@@ -187,11 +187,21 @@ struct MapperImpl : public Mapper::Server {
 		
 		auto sections = result.initSections(planes.size());
 		
+		auto u0 = params.getU0();
+		auto v0 = params.getV0();
+		
+		KJ_REQUIRE(u0.size() == 1 || u0.size() == planes.size(), "Size of u0 must be 1 or no. of planes", u0.size(), planes.size());
+		KJ_REQUIRE(v0.size() == 1 || v0.size() == planes.size(), "Size of v0 must be 1 or no. of planes", v0.size(), planes.size());
+		
 		double totalWidth = 0;
 		for(size_t i1 : kj::indices(planes)) {
+			auto section = sections[i1];
+			section.setU0(u0.size() == 1 ? u0[0] : u0[i1]);
+			section.setV0(v0.size() == 1 ? v0[0] : v0[i1]);
+			
 			size_t i2 = (i1 + 1) % planes.size();
 			
-			auto trace = heapHeld<RFLMSectionTrace>(flt, params, sections[i1]);
+			auto trace = heapHeld<RFLMSectionTrace>(flt, params, section);
 			
 			trace -> phi1 = planes[i1];
 			trace -> phi2 = planes[i2];

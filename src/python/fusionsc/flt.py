@@ -355,7 +355,7 @@ async def axisCurrent(field, current, grid = None, startPoint = None, stepSize =
 	return result
 
 @asyncFunction
-async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit = 1e3, padding = 2, numPlanes = 20, stepSize = 0.001):
+async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit = 1e3, padding = 2, numPlanes = 20, stepSize = 0.001, u0 = [0.5], v0 = [0.5]):
 	"""
 	Computes a reversible field line mapping. This mapping type divides the device into toroidal
 	sections. Each section is covered by a curved conforming hexahedral grid. The "mapping planes"
@@ -375,10 +375,14 @@ async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit 
 		- padding: Number of planes to add beyond the mapping planes on each section. Currently must be at least 2.
 		- numPlanes: Number of planes to record for each half-section trace.
 		- stepSize: Step size to use for tracing.
+		- u0 (number or sequence of numbers, ranging from 0 to 1): Per-section starting grid coordinates for mapping, radial component
+		- v0 (number or sequence of numbers, ranging from 0 to 1): Per-section starting grid coordinates for mapping, vertical component
 	
 	Returns:
 		A DataRef pointing to a to-be-initialized field line mapping.
 	"""
+	import numbers
+	
 	field = await field.compute.asnc(grid)
 	computedField = field.data.computedField
 	
@@ -394,5 +398,8 @@ async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit 
 	request.numPaddingPlanes = padding
 	request.distanceLimit = distanceLimit
 	request.stepSize = stepSize
+	
+	request.u0 = [u0] if isinstance(u0, numbers.Number) else u0
+	request.v0 = [v0] if isinstance(v0, numbers.Number) else v0
 	
 	return mapper.computeRFLM(request).mapping

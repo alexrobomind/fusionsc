@@ -183,9 +183,6 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 		return;
 	}
 	
-	uv(0) = 0.5;
-	uv(1) = 0.5;
-	
 	auto phiPlanes = mapping.getSurfaces();
 	
 	// KJ_DBG("Selecting section");
@@ -211,6 +208,10 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 		
 	// KJ_DBG(iSection);
 	activateSection(iSection);
+	
+	
+	uv(0) = activeSection().getU0();
+	uv(1) = activeSection().getV0();
 	
 	// --- Perform Newton-style inversion in active section ---
 	using ADS = Eigen::AutoDiffScalar<Vec2d>;

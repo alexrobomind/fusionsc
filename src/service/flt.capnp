@@ -38,6 +38,9 @@ struct ReversibleFieldlineMapping {
 		
 		phiStart @3 : Float64;
 		phiEnd @4 : Float64;
+		
+		u0 @5 : Float64;
+		v0 @6 : Float64;
 	}
 	
 	# List of phi angles (in radians) corresponding to mapping surfaces
@@ -191,6 +194,9 @@ struct RFLMRequest {
 	
 	distanceLimit @6 : Float64 = 1e3;
 	stepSize @7 : Float64 = 0.001;
+	
+	u0 @8 : List(Float64) = [0.5];
+	v0 @9 : List(Float64) = [0.5];
 }
 
 interface Mapper {
