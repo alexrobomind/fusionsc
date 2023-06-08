@@ -144,10 +144,10 @@ def highMirror(bAx = 2.72, coils = None) -> MagneticConfig:
 	return mainField([13000 * a, 13260 * a, 14040 * a, 12090 * a, 10959 * a], [0] * 2, coils = coils)
 
 def highIota(bAx = 2.72, coils = None) -> MagneticConfig:
-	return mainField([14814.81 * field / 2.43] * 5, [-10222.22 * field / 2.43] * 2, coils = coils)
+	return mainField([14814.81 * bAx / 2.43] * 5, [-10222.22 * bAx / 2.43] * 2, coils = coils)
 
 def lowIota(bAx = 2.72, coils = None) -> MagneticConfig:
-	return mainField([12222.22 * field / 2.45] * 5, [9166.67 * field / 2.45] * 2, coils = coils)
+	return mainField([12222.22 * bAx / 2.45] * 5, [9166.67 * bAx / 2.45] * 2, coils = coils)
 
 coil_conventions = ['coilsdb', '1-AA-R0004.5', 'archive']
 def processCoilConvention(convention):
