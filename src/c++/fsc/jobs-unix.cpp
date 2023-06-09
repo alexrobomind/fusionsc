@@ -11,7 +11,7 @@
 
 #include <kj/async-unix.h>
 #include <sys/wait.h>
-#include <linux/wait.h> // Linux-specific extension to wait on process file descriptors
+// #include <linux/wait.h> // Linux-specific extension to wait on process file descriptors
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <signal.h>
@@ -156,16 +156,9 @@ struct UnixProcessJobScheduler : public JobScheduler::Server {
 		]() {
 			proc = kj::heap<TrackedProcess>();
 			
-			// Note: Since we use PID FDs, th cloned process does not need to send a
-			// SIGCHLD signal upon termination, which frees us from having to mess with
-			// signal handler potentially installed by other libraries.
-			// int clonedFD;
-			
-			// Clone is nicer, but valgrind can't do it. So we use vfork() instead.
+			// Clone is nicer, but valgrind can't do it. So we use fork() instead.
 			pid_t pid;
 			pid = fork();
-			// SYSCALL check is done below once we are sure we are not the child process
-			// (if the check fails on the child for some reason
 			
 			if(pid == 0) {
 				// Child process
@@ -184,15 +177,9 @@ struct UnixProcessJobScheduler : public JobScheduler::Server {
 			close(stdin);
 			close(stdout);
 			close(stderr);
-		
-			// Check for result now after vfork
-			// KJ_SYSCALL(pid);
-			// KJ_REQUIRE(pid > 0);
 			
 			proc -> pid = pid;
 			proc -> retCode = getActiveThread().ioContext().unixEventPort.onChildExit(proc -> pid);
-			
-			// KJ_DBG(pid);
 		});
 				
 		auto job = kj::heap<UnixProcessJob>(mv(proc));
