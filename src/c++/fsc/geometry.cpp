@@ -749,13 +749,13 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 	.then([context, geomAccum, tagNameTable, this]() mutable {
 		Temporary<capnp::List<TagValue>> tagScope(tagNameTable->size());
 		
-		KJ_LOG(WARNING, "Beginning merge operation");
+		KJ_DBG("Beginning merge operation");
 		return mergeGeometries(context.getParams(), *tagNameTable, tagScope, nullptr, *geomAccum);
 	})
 	
 	// Finally, copy the data from the accumulator into the output
 	.then([context, geomAccum, tagNameTable, this]() mutable {
-		KJ_LOG(WARNING, "Merge complete");
+		KJ_DBG("Merge complete");
 		// Copy data over
 		Temporary<MergedGeometry> output;
 		geomAccum->finish(output);
