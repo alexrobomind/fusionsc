@@ -13,7 +13,7 @@ following features are intended to be added into the code rather sooner than lat
   * Field line tracing, field line diffusion, and heat flux inversion services
   * Multi-threaded CPU worker implementation
 	
-* Version 1.1 (in testing):
+* Version 1.1 (released):
   Remote connection facilities
 
   * Connection to remote worker instances

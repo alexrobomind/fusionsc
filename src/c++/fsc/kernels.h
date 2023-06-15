@@ -401,9 +401,7 @@ struct KernelLauncher<CPUDevice> {
 		AtomicShared<Context> ctx = kj::heap<Context>();
 		
 		auto func = [ctx, params...](Eigen::Index start, Eigen::Index end) mutable {
-			KJ_DBG("Function handler", start, end);
 			auto maybeException = kj::runCatchingExceptions([params..., start, end]() mutable {
-				KJ_DBG("Inner handler");
 				for(Eigen::Index i = start; i < end; ++i)
 					f(i, params...);
 			});
