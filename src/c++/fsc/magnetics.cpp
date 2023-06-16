@@ -251,7 +251,15 @@ struct CalculationSession : public FieldCalculator::Server {
 				auto cField = node.getComputedField();
 				auto grid = cField.getGrid();
 				
-				KJ_REQUIRE(ID::fromReader(grid) == ID::fromReader(calculator.gridReader));
+				KJ_REQUIRE(
+					ID::fromReader(grid) == ID::fromReader(calculator.gridReader),
+					"The field you are using as input and the field you are trying to calculate "
+					"have differing grids. Currently, interpolation between different magnetic "
+					"grids is not yet implemented. If you really need this, please contact the "
+					"authors and request implementation of cross-grid interpolation. Following "
+					"are the two grids as interpreted by this code.",
+					grid, calculator.gridReader
+				);
 				
 				// Then download data				
 				return getActiveThread().dataService().download(cField.getData())
