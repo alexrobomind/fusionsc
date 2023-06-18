@@ -190,8 +190,12 @@ struct MapperImpl : public Mapper::Server {
 		auto u0 = params.getU0();
 		auto v0 = params.getV0();
 		
+		KJ_REQUIRE(hasMaximumOrdinal(params, 9), "You are trying to use features that this server version does not support");
+		
 		KJ_REQUIRE(u0.size() == 1 || u0.size() == planes.size(), "Size of u0 must be 1 or no. of planes", u0.size(), planes.size());
 		KJ_REQUIRE(v0.size() == 1 || v0.size() == planes.size(), "Size of v0 must be 1 or no. of planes", v0.size(), planes.size());
+		KJ_REQUIRE(params.getGridR().size() >= 2, "Must specify at least 2 R values");
+		KJ_REQUIRE(params.getGridZ().size() >= 2, "Must specify at least 2 Z values");
 		
 		double totalWidth = 0;
 		for(size_t i1 : kj::indices(planes)) {
