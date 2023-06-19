@@ -192,6 +192,9 @@ struct CalculationSession : public FieldCalculator::Server {
 	}
 	
 	Promise<void> processFilament(FieldCalculation& calculator, Filament::Reader node, BiotSavartSettings::Reader settings, double scale) {
+		if(scale == 0)
+			return READY_NOW;
+		
 		while(node.isNested()) {
 			node = node.getNested();
 		}
@@ -222,7 +225,10 @@ struct CalculationSession : public FieldCalculator::Server {
 		}
 	}
 	
-	Promise<void> processField(FieldCalculation& calculator, MagneticField::Reader node, double scale) {
+	Promise<void> processField(FieldCalculation& calculator, MagneticField::Reader node, double scale) {	
+		if(scale == 0)
+			return READY_NOW;
+		
 		while(node.isNested()) {
 			node = node.getNested();
 		}
@@ -275,9 +281,6 @@ struct CalculationSession : public FieldCalculator::Server {
 			}
 			case MagneticField::SCALE_BY: {
 				auto scaleBy = node.getScaleBy();
-				
-				if(scaleBy.getFactor() == 0)
-					return READY_NOW;
 				
 				return processField(calculator, scaleBy.getField(), scale * scaleBy.getFactor());
 			}

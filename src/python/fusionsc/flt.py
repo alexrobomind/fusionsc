@@ -136,7 +136,10 @@ async def trace(
 	# Diffusive transport specification
 	isotropicDiffusionCoefficient = None,
 	parallelConvectionVelocity = None, parallelDiffusionCoefficient = None,
-	meanFreePath = 1, meanFreePathGrowth = 0
+	meanFreePath = 1, meanFreePathGrowth = 0,
+	
+	# Direction change
+	direction = "forward"
 ):
 	"""
 	Performs a tracing request.
@@ -206,6 +209,22 @@ async def trace(
 	request.stepLimit = stepLimit
 	request.collisionLimit = collisionLimit
 	request.turnLimit = turnLimit
+	
+	assert direction in ["forward", "backward", "cw", "ccw"]
+	
+	if direction == "field":
+		request.forward = True
+	
+	if direction == "backward":
+		request.forward = False
+	
+	if direction == "cw":
+		request.forwardDirection = "ccw"
+		request.forward = False
+	
+	if direction == "ccw":
+		request.forwardDirection = "ccw"
+		request.forward = True
 			
 	# Diffusive transport model
 	if isotropicDiffusionCoefficient is not None:
