@@ -107,7 +107,7 @@ async def connectionLength(points, config, geometry, **kwargs):
 	"""
 	Computes the connection-length of the given points in a certain geometry.
 	
-	Mostly equivalent to :code:`trace.asnc(points, config, geometry = geometry, collisionLimit = 1, **kwargs)["endPoints"][3]`.
+	Mostly equivalent to :code:`trace(points, config, geometry = geometry, collisionLimit = 1, **kwargs)["endPoints"][3]`.
 	
 	Parameters:
 		- points: Starting points for the trace. Can be any shape, but the first dimension must have a size of 3 (x, y, z).
@@ -116,7 +116,7 @@ async def connectionLength(points, config, geometry, **kwargs):
 
 	Returns:
 		An array of shape `points.shape[1:]` indicating the forward connection length of the given point.
-	"""
+	""" 
 	result = await trace.asnc(points, config, geometry = geometry, collisionLimit = 1, **kwargs)
 	return result["endPoints"][3]
 	
