@@ -141,7 +141,7 @@ struct CalculationSession : public FieldCalculator::Server {
 	//! Handles compute request
 	Promise<void> compute(ComputeContext context) {
 		// context.allowCancellation(); // NOTE: In capnproto 0.11, this has gone away
-		KJ_REQUIRE("Processing compute request");
+		KJ_DBG("Initiating field computation");
 		
 		// Copy input field (so that call context can be released)
 		auto field = heapHeld<Temporary<MagneticField>>(context.getParams().getField());
@@ -166,8 +166,6 @@ struct CalculationSession : public FieldCalculator::Server {
 		.attach(thisCap(), field.x(), grid.x()).eagerlyEvaluate(nullptr);
 		
 		compField.setData(mv(data));
-		
-		KJ_REQUIRE("Compute request finished");
 		return READY_NOW;
 	}
 	
@@ -181,6 +179,7 @@ struct CalculationSession : public FieldCalculator::Server {
 			auto result = heapHeld<Temporary<Float64Tensor>>();	
 			
 			auto publish = newCalculator->finish(*result).then([result, this]() mutable {
+				KJ_DBG("Field computation complete");
 				return getActiveThread().dataService().publish(result->asReader());
 			})
 			.eagerlyEvaluate(nullptr)

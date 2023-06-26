@@ -183,7 +183,8 @@ struct MapperImpl : public Mapper::Server {
 		result.setSurfaces(planes);
 		result.setNPad(params.getNumPaddingPlanes());
 		
-		auto promiseBuilder = kj::heapArrayBuilder<Promise<void>>(planes.size());
+		// auto promiseBuilder = kj::heapArrayBuilder<Promise<void>>(planes.size());
+		Promise<void> computationPromise = READY_NOW;
 		
 		auto sections = result.initSections(planes.size());
 		
@@ -216,13 +217,16 @@ struct MapperImpl : public Mapper::Server {
 			
 			totalWidth += trace -> computeWidth();
 			
-			promiseBuilder.add(trace -> run().attach(trace.x()));
+			computationPromise = computationPromise.then([trace]() mutable {
+				return trace -> run();
+			}).attach(trace.x());
+			// promiseBuilder.add(trace -> run().attach(trace.x()));
 		}
 		
 		KJ_REQUIRE(std::abs(totalWidth - 2 * pi) < pi, "Sections must be of non-zero width, and angles must be specified in counter-clockwise direction");
 				
-		auto joined = kj::joinPromises(promiseBuilder.finish());
-		return joined.then([ctx = mv(ctx), result = mv(result)]() mutable {
+		// auto joined = kj::joinPromises(promiseBuilder.finish());
+		return computationPromise.then([ctx = mv(ctx), result = mv(result)]() mutable {
 			ctx.initResults().setMapping(getActiveThread().dataService().publish(mv(result)));
 		});
 	}

@@ -189,6 +189,15 @@ async def trace(
 		  about the meshes impacted by the field lines.
 		- *responseSize*: The total size of the response size in bytes (mainly for profiling purposes).
 	"""
+	
+	if stepSize < 0.05 and mapping is not None:
+		import warnings
+		warnings.warn(
+"""Note: You are using a mapping, but still have a rather small step size. For better performance, you might consider increasing the step size to
+a larger value so that you can take advantage of the stable long-range calculation (your step size limit should be defined by the required accuracy
+for geometry intersection tests, the magnetic field tracing accuracy should not degrade at large steps when using a field line mapping"""
+		)
+		
 	assert parallelConvectionVelocity is None or parallelDiffusionCoefficient is None
 	if isotropicDiffusionCoefficient is not None: 
 		assert parallelConvectionVelocity is not None or parallelDiffusionCoefficient is not None
@@ -351,16 +360,50 @@ async def findLCFS(field, geometry, p1, p2, grid = None, geometryGrid = None, st
 	return np.asarray(response.pos)
 
 @asyncFunction
-async def axisCurrent(field, current, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = "ccw", mapping = None):
+async def axisCurrent(field, current, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = None, mapping = None):
 	"""
 	Configuration that places a current on the axis of a given magnetic configuration.
 	
 	This function computes the magnetic axis of a magnetic configuration, interprets it as a coil, and
 	creates a magnetic configuration with a given current specified on this axis.
 	
+	Parameters:
+		field: Magnetic field configuration
+		current: On-axis current to apply
+		grid: Grid to use for magnetic field calculation if the field is not yet computed
+	
 	Returns:
 		The magnetic configuration corresponding to the on-axis current's field.
 	"""
+	
+	assert field.data.which() == "computed" or grid is not None, "The magnetic field must either be precomputed or a grid must be specified."
+	
+	if direction is None:
+		direction = "ccw"
+		
+		import warnings
+		warnings.warn(
+""" !!! No direction convention specified, default unsuitable for W7-X !!!
+
+You have specified no direction convention for the on-axis plasma current. By default, the fusionsc.flt.axisCurrent
+assumes a counter-clockwise current (mathematically positive). The W7-X convention specifies a clock-wise current.
+Please use the argument 'direction = "ccw"' or use the fusionsc.devices.w7x.axisCurrent function instead (which also takes
+care of the starting point)."""
+		)
+	
+	if startPoint is None:
+		direction = "ccw"
+		
+		import warnings
+		warnings.warn(
+""" !!! No starting point specified, default unsuitable for W7-X !!!
+
+You have specified no start point for the magnetic axis search. The default value (which starts at the grid center at phi == 0)
+is poorly suited for W7-X. Consider using 'startPoint = [6, 0, 0]' or using fusionsc.devices.w7x.axisCurrent, which has W7-X-tailored
+default values."""
+		)
+	
+	
 	result = await findAxis.asnc(field, grid, startPoint, stepSize, nTurns, nIterations, nPhi, direction, mapping)
 	_, axis = result
 	
