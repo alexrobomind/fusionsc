@@ -1,6 +1,6 @@
 """W7-X parts and IPP site helpers"""
 
-from ... import service, resolve, wrappers
+from ... import service, resolve, wrappers, flt
 
 from ...magnetics import MagneticConfig, CoilFilament
 from ...geometry import Geometry
@@ -10,6 +10,7 @@ from ...native.devices import w7x as w7xnative
 from ...data import asyncFunction
 
 from typing import Union
+import numpy as np
 
 # Databases
 
@@ -148,6 +149,7 @@ def highIota(bAx = 2.72, coils = None) -> MagneticConfig:
 
 def lowIota(bAx = 2.72, coils = None) -> MagneticConfig:
 	return mainField([12222.22 * bAx / 2.45] * 5, [9166.67 * bAx / 2.45] * 2, coils = coils)
+	
 
 coil_conventions = ['coilsdb', '1-AA-R0004.5', 'archive']
 def processCoilConvention(convention):
@@ -253,3 +255,38 @@ defaultCoils = cadCoils('archive')
 
 defaultGrid = w7xnative.defaultGrid()
 defaultGeometryGrid = w7xnative.defaultGeometryGrid()
+
+@asyncFunction
+def axisCurrent(field, current, grid = None, startPoint = [6.0, 0, 0], stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = "cw", mapping = None):
+	"""
+	Variant of fsc.flt.axisCurrent with more reasonable W7-X-tailored default values.
+	"""
+	if field.data.which() != 'computedField' and grid is None:
+		grid = defaultGrid
+		
+	return flt.axisCurrent.asnc(field, current, grid, startPoint, stepSize, nTurns, nIterations, nPhi, direction, mapping)
+
+@asyncFunction
+def computeMapping(
+	field,
+	mappingPlanes = np.radians(72 * np.arange(0, 5)),
+	r = np.linspace(4, 7, 200), z = np.linspace(-1.5, 1.5, 200),
+	grid = None,
+	distanceLimit = 7 * 2 * np.pi / 8,
+	padding = 2, numPlanes = 20,
+	stepSize = 0.01,
+	u0 = [0.5], v0 = [0.5]
+):
+	"""
+	Variant of fsc.flt.computeMapping with more reasonable W7-X-tailored default values.
+	"""
+	if field.data.which() != 'computedField' and grid is None:
+		grid = defaultGrid
+		
+	return flt.computeMapping.asnc(
+		field,
+		mappingPlanes,
+		r, z, grid,
+		distanceLimit, padding, numPlanes,
+		stepSize, u0, v0
+	)

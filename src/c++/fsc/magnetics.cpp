@@ -141,7 +141,7 @@ struct CalculationSession : public FieldCalculator::Server {
 	//! Handles compute request
 	Promise<void> compute(ComputeContext context) {
 		// context.allowCancellation(); // NOTE: In capnproto 0.11, this has gone away
-		KJ_REQUIRE("Processing compute request");
+		KJ_DBG("Initiating field computation");
 		
 		// Copy input field (so that call context can be released)
 		auto field = heapHeld<Temporary<MagneticField>>(context.getParams().getField());
@@ -166,8 +166,6 @@ struct CalculationSession : public FieldCalculator::Server {
 		.attach(thisCap(), field.x(), grid.x()).eagerlyEvaluate(nullptr);
 		
 		compField.setData(mv(data));
-		
-		KJ_REQUIRE("Compute request finished");
 		return READY_NOW;
 	}
 	
@@ -181,6 +179,7 @@ struct CalculationSession : public FieldCalculator::Server {
 			auto result = heapHeld<Temporary<Float64Tensor>>();	
 			
 			auto publish = newCalculator->finish(*result).then([result, this]() mutable {
+				KJ_DBG("Field computation complete");
 				return getActiveThread().dataService().publish(result->asReader());
 			})
 			.eagerlyEvaluate(nullptr)
@@ -192,6 +191,9 @@ struct CalculationSession : public FieldCalculator::Server {
 	}
 	
 	Promise<void> processFilament(FieldCalculation& calculator, Filament::Reader node, BiotSavartSettings::Reader settings, double scale) {
+		if(scale == 0)
+			return READY_NOW;
+		
 		while(node.isNested()) {
 			node = node.getNested();
 		}
@@ -222,7 +224,10 @@ struct CalculationSession : public FieldCalculator::Server {
 		}
 	}
 	
-	Promise<void> processField(FieldCalculation& calculator, MagneticField::Reader node, double scale) {
+	Promise<void> processField(FieldCalculation& calculator, MagneticField::Reader node, double scale) {	
+		if(scale == 0)
+			return READY_NOW;
+		
 		while(node.isNested()) {
 			node = node.getNested();
 		}
@@ -251,7 +256,15 @@ struct CalculationSession : public FieldCalculator::Server {
 				auto cField = node.getComputedField();
 				auto grid = cField.getGrid();
 				
-				KJ_REQUIRE(ID::fromReader(grid) == ID::fromReader(calculator.gridReader));
+				KJ_REQUIRE(
+					ID::fromReader(grid) == ID::fromReader(calculator.gridReader),
+					"The field you are using as input and the field you are trying to calculate "
+					"have differing grids. Currently, interpolation between different magnetic "
+					"grids is not yet implemented. If you really need this, please contact the "
+					"authors and request implementation of cross-grid interpolation. Following "
+					"are the two grids as interpreted by this code.",
+					grid, calculator.gridReader
+				);
 				
 				// Then download data				
 				return getActiveThread().dataService().download(cField.getData())
@@ -267,9 +280,6 @@ struct CalculationSession : public FieldCalculator::Server {
 			}
 			case MagneticField::SCALE_BY: {
 				auto scaleBy = node.getScaleBy();
-				
-				if(scaleBy.getFactor() == 0)
-					return READY_NOW;
 				
 				return processField(calculator, scaleBy.getField(), scale * scaleBy.getFactor());
 			}

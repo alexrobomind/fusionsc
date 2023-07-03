@@ -29,9 +29,9 @@ const defaultGrid : Magnetics.ToroidalGrid = (
 	rMax = 7,
 	zMin = -1.5,
 	zMax = 1.5,
-	nR = 256,
-	nZ = 256,
-	nPhi = 128,
+	nR = 128,
+	nZ = 128,
+	nPhi = 64,
 	nSym = 5
 );
 

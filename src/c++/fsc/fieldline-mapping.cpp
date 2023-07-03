@@ -183,15 +183,20 @@ struct MapperImpl : public Mapper::Server {
 		result.setSurfaces(planes);
 		result.setNPad(params.getNumPaddingPlanes());
 		
-		auto promiseBuilder = kj::heapArrayBuilder<Promise<void>>(planes.size());
+		// auto promiseBuilder = kj::heapArrayBuilder<Promise<void>>(planes.size());
+		Promise<void> computationPromise = READY_NOW;
 		
 		auto sections = result.initSections(planes.size());
 		
 		auto u0 = params.getU0();
 		auto v0 = params.getV0();
 		
+		KJ_REQUIRE(hasMaximumOrdinal(params, 9), "You are trying to use features that this server version does not support");
+		
 		KJ_REQUIRE(u0.size() == 1 || u0.size() == planes.size(), "Size of u0 must be 1 or no. of planes", u0.size(), planes.size());
 		KJ_REQUIRE(v0.size() == 1 || v0.size() == planes.size(), "Size of v0 must be 1 or no. of planes", v0.size(), planes.size());
+		KJ_REQUIRE(params.getGridR().size() >= 2, "Must specify at least 2 R values");
+		KJ_REQUIRE(params.getGridZ().size() >= 2, "Must specify at least 2 Z values");
 		
 		double totalWidth = 0;
 		for(size_t i1 : kj::indices(planes)) {
@@ -212,13 +217,16 @@ struct MapperImpl : public Mapper::Server {
 			
 			totalWidth += trace -> computeWidth();
 			
-			promiseBuilder.add(trace -> run().attach(trace.x()));
+			computationPromise = computationPromise.then([trace]() mutable {
+				return trace -> run();
+			}).attach(trace.x());
+			// promiseBuilder.add(trace -> run().attach(trace.x()));
 		}
 		
 		KJ_REQUIRE(std::abs(totalWidth - 2 * pi) < pi, "Sections must be of non-zero width, and angles must be specified in counter-clockwise direction");
 				
-		auto joined = kj::joinPromises(promiseBuilder.finish());
-		return joined.then([ctx = mv(ctx), result = mv(result)]() mutable {
+		// auto joined = kj::joinPromises(promiseBuilder.finish());
+		return computationPromise.then([ctx = mv(ctx), result = mv(result)]() mutable {
 			ctx.initResults().setMapping(getActiveThread().dataService().publish(mv(result)));
 		});
 	}

@@ -388,13 +388,13 @@ struct FLTImpl : public FLT::Server {
 		
 		KJ_REQUIRE(request.hasField(), "Must specify a magnetic field");
 			
-		KJ_DBG("Initiating download processes");
+		KJ_DBG("Initiating download of required data");
 		
 		Promise<LocalDataRef<Float64Tensor>> downloadField = dataService.download(request.getField().getData()).eagerlyEvaluate(nullptr);
 		Promise<Maybe<LocalDataRef<IndexedGeometry::IndexData>>> downloadIndexData = dataService.downloadIfNotNull(indexDataRef);
 		Promise<Maybe<LocalDataRef<MergedGeometry>>> downloadGeometryData =	dataService.downloadIfNotNull(geoDataRef).eagerlyEvaluate(nullptr);
 		Promise<Maybe<LocalDataRef<ReversibleFieldlineMapping>>> downloadMappingData = dataService.downloadIfNotNull(mappingDataRef).eagerlyEvaluate(nullptr);
-		KJ_DBG("Waiting download processes");
+		KJ_DBG("Awaiting download processes");
 		
 		// I WANT COROUTINES -.-
 		
@@ -696,6 +696,12 @@ struct FLTImpl : public FLT::Server {
 			double z = iter.z;
 			
 			KJ_DBG("FLT::findAxis iteration", r, z);
+			
+			bool isNan = false;
+			if(r != r) isNan = true;
+			if(z != z) isNan = true;
+			
+			KJ_REQUIRE(!isNan, "The magnetic axis search failed to converge. This likely means the starting point lies outside the magnetic surface domains. Please specify a different starting point.");
 			
 			// Trace from starting position
 			auto req = thisCap().traceRequest();
