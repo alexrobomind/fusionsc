@@ -46,6 +46,8 @@ if(FSC_WITH_PYTHON)
 			set(INSTALL_DIR ${Python_SITEARCH})
 		endif()
 		
+		message(STATUS "Python package installation root: ${INSTALL_DIR}")
+		
 		INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION ${INSTALL_DIR}/fusionsc)
 		INSTALL(DIRECTORY src/python/ DESTINATION ${INSTALL_DIR} FILES_MATCHING PATTERN "*.py")
 	endif()
