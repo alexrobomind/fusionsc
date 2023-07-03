@@ -152,6 +152,12 @@ add_vendored_dependency(
 
 if(yaml-cpp_VENDORED)
 	INSTALL(TARGETS yaml-cpp EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+else()
+	# Pre 0.7.1-versions do not export the yaml-cpp target with a namespace
+	# This adds an alias to fix
+	if(NOT TARGET yaml-cpp::yaml-cpp)
+		add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp)
+	endif()
 endif()
 
 #CPMAddPackage(
