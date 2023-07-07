@@ -115,6 +115,7 @@ namespace fsc {
 		
 		uint32_t step = state.getNumSteps();
 		uint32_t eventCount = state.getEventCount();
+		uint32_t turn = state.getTurnCount();
 		Num distance = state.getDistance();
 		double nextDisplacementStep = state.getNextDisplacementAt();
 		uint32_t displacementCount = state.getDisplacementCount();
@@ -164,7 +165,7 @@ namespace fsc {
 		}
 		
 		
-		bool processDisplacements = perpModel.hasIsotropicDiffusionCoefficient();
+		bool processDisplacements = perpModel.hasIsotropicDiffusionCoefficient() || perpModel.hasRzDiffusionCoefficient();
 		
 		// Compute tracing and field orientation
 		// Do we trace forward (+1) or backward (-1) ?
@@ -233,7 +234,15 @@ namespace fsc {
 		
 		// Initialize mapped position
 		if(useFLM) {
-			flm.map(x, state.getForward());
+			flm.map(x, tracingDirection * forwardDirection > 0);
+			
+			/*if(idx == 0) {
+				V3 x2 = flm.unmap(flm.phi);
+				KJ_DBG(step);
+				KJ_DBG(x[0], x2[0]);
+				KJ_DBG(x[1], x2[1]);
+				KJ_DBG(x[2], x2[2]);
+			}*/
 		}
 		
 		// ... do the work ...
@@ -248,7 +257,7 @@ namespace fsc {
 			if(distance >= request.getDistanceLimit() && request.getDistanceLimit() > 0)
 				FSC_FLT_RETURN(DISTANCE_LIMIT);
 			
-			if(state.getTurnCount() >= request.getTurnLimit() && request.getTurnLimit() > 0)
+			if(turn >= request.getTurnLimit() && request.getTurnLimit() > 0)
 				FSC_FLT_RETURN(TURN_LIMIT);
 			
 			if(x != x)
@@ -337,26 +346,44 @@ namespace fsc {
 				}
 					
 				// Perform displacement
-				double isoDisplacement = std::sqrt(deltaT * perpModel.getIsotropicDiffusionCoefficient());
-				// KJ_DBG(idx, isoDisplacement);
-								
-				for(int i = 0; i < 3; ++i) {
-					x2[i] += isoDisplacement * normalDistributed[i];
+				
+				if(perpModel.hasIsotropicDiffusionCoefficient()) {
+					double isoDisplacement = std::sqrt(deltaT * perpModel.getIsotropicDiffusionCoefficient());
+					// KJ_DBG(idx, isoDisplacement);
+									
+					for(int i = 0; i < 3; ++i) {
+						x2[i] += isoDisplacement * normalDistributed[i];
+					}
+				} else if(perpModel.hasRzDiffusionCoefficient()) {
+					double rzDisplacement = std::sqrt(deltaT * perpModel.getRzDiffusionCoefficient());
+					
+					double dr = rzDisplacement * normalDistributed[0];
+					double dz = rzDisplacement * normalDistributed[1];
+					
+					double invR = 1 / r;
+					x2[0] += x2[0] * invR * dr;
+					x2[1] += x2[1] * invR * dr;
+					x2[2] += dz;
 				}
 				
 				++displacementCount;
 				
 				if(useFLM) {
-					flm.map(x2, tracingDirection > 0);
+					flm.map(x2, tracingDirection * forwardDirection > 0);
 				}				
-			} else {				
+			} else {
+				double stepSize = request.getStepSize();
+				if(processDisplacements) {
+					stepSize = std::min(stepSize, nextDisplacementStep - distance + 0.001);
+				}
+				
 				if(useFLM) {
 					flm.setFieldlinePosition(0);
-					double newPhi = flm.phi + forwardDirection * tracingDirection * request.getStepSize() / r;
+					double newPhi = flm.phi + forwardDirection * tracingDirection * stepSize / r;
 					x2 = flm.advance(newPhi);
 				} else {
 					// Regular tracing step
-					kmath::runge_kutta_4_step(x2, .0, request.getStepSize(), rungeKuttaInput);
+					kmath::runge_kutta_4_step(x2, .0, stepSize, rungeKuttaInput);
 				}
 			}
 			
@@ -425,6 +452,7 @@ namespace fsc {
 					if(useFLM && !displacementStep && orientation.hasPhi()) {
 						RFLM flm2 = flm;
 						double phiCross = (1 - crossedAt) * kmath::wrap(phi1 - phi2) + flm2.phi;
+						
 						xCross = flm2.advance(phiCross);
 						crossDist = fabs(flm2.getFieldlinePosition(phiCross));
 					} else {
@@ -432,6 +460,7 @@ namespace fsc {
 					}
 					
 					currentEvent().mutatePhiPlaneIntersection().setPlaneNo(iPlane);
+										
 					FSC_FLT_LOG_EVENT(xCross, distance + crossDist);				
 				}
 			}
@@ -458,10 +487,10 @@ namespace fsc {
 				
 				// KJ_DBG(idx, state.getTurnCount());
 				
-				currentEvent().setNewTurn(state.getTurnCount() + 1);
+				currentEvent().setNewTurn(turn + 1);
 				FSC_FLT_LOG_EVENT(xCross, distance + crossDist);		
 				
-				state.setTurnCount(state.getTurnCount() + 1);		
+				++turn;		
 			}
 			
 			// --- Check for collisions ---
@@ -570,6 +599,7 @@ namespace fsc {
 			
 			state.setEventCount(eventCount);
 			state.setCollisionCount(state.getCollisionCount() + numCollisions);
+			state.setTurnCount(turn);
 			
 			if(displacementStep) {
 				state.setDisplacementCount(displacementCount);

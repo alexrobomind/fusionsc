@@ -84,6 +84,8 @@ struct FieldCalculation {
 		KJ_REQUIRE(stepSize != 0, "Please specify a step size in the Biot-Savart settings");
 		
 		calculation = calculation.then([this, filament = mv(filament), coilWidth, stepSize, current]() mutable {
+			KJ_DBG("Processing coil", current, coilWidth, stepSize, filament.dimension(1));
+			
 			// Launch calculation
 			return FSC_LAUNCH_KERNEL(
 				kernels::biotSavartKernel,

@@ -563,14 +563,17 @@ struct FLTImpl : public FLT::Server {
 						auto evt = events[iEvt];
 						
 						KJ_REQUIRE(!evt.isNotSet(), "Internal error: Event not set", iStartPoint, iEvt);
-						
-						// KJ_DBG(evt);
 												
 						if(evt.isNewTurn()) {
 							iTurn = evt.getNewTurn();
 						} else if(evt.isPhiPlaneIntersection()) {
+							// It can happen that a phi intersection event lying after
+							// the last turn increment is emitted (due to event sorting)
+							// These need to be clipped from the result tensor.
+							if(iTurn >= nTurns)
+								continue;
+							
 							auto ppi = evt.getPhiPlaneIntersection();
-							// KJ_DBG(iTurn, ppi.getPlaneNo());
 							
 							auto loc = evt.getLocation();
 							for(int64_t iDim = 0; iDim < 3; ++iDim) {

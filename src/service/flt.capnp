@@ -83,6 +83,7 @@ struct FLTRequest {
 	perpendicularModel : union {
 		noDisplacement @13 : Void;
 		isotropicDiffusionCoefficient @14 : Float64;
+		rzDiffusionCoefficient @30 : Float64;
 	}
 	
 	rngSeed @15 : UInt64;

@@ -134,7 +134,7 @@ async def trace(
 	phiPlanes = [],
 	
 	# Diffusive transport specification
-	isotropicDiffusionCoefficient = None,
+	isotropicDiffusionCoefficient = None, rzDiffusionCoefficient = None,
 	parallelConvectionVelocity = None, parallelDiffusionCoefficient = None,
 	meanFreePath = 1, meanFreePathGrowth = 0,
 	
@@ -161,6 +161,7 @@ async def trace(
 	
 		- isotropicDiffusionCoefficient: If set, enables diffusive tracing and specifies the isotropic / perpendicular diffusion coefficient to use in the
 		  underlying diffusive tracing model. If set, either parallelConvectionVelocity or parallelDiffusionCoefficient must also be specified.
+		- rzDiffusionCoefficient: Similar to isotropicDiffusionCoefficient, but displacements are only done in the rz plane
 		- parallelConvectionVelocity: Parallel streaming velocity to assume for a single-directional diffusive tracing model.
 		- parallelDiffusionCoefficient: Parallel diffusion coefficient to assume for a fully bidireactional doubly-diffusive tracing model.
 	
@@ -236,8 +237,13 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 		request.forward = True
 			
 	# Diffusive transport model
-	if isotropicDiffusionCoefficient is not None:
-		request.perpendicularModel.isotropicDiffusionCoefficient = isotropicDiffusionCoefficient
+	if isotropicDiffusionCoefficient is not None or rzDiffusionCoefficient is not None:
+		assert isotropicDiffusionCoefficient is None or rzDiffusionCoefficient is None, "Only one of isotropic or rz diffusion can be specified"
+		
+		if isotropicDiffusionCoefficient is not None:
+			request.perpendicularModel.isotropicDiffusionCoefficient = isotropicDiffusionCoefficient
+		else:
+			request.perpendicularModel.rzDiffusionCoefficient = rzDiffusionCoefficient
 		
 		request.parallelModel.meanFreePath = meanFreePath
 		request.parallelModel.meanFreePathGrowth = meanFreePathGrowth
