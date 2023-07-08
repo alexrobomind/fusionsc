@@ -90,7 +90,7 @@ struct PythonContext {
 		}
 		
 		auto locked = _library.lockExclusive();
-		*locked = newLibrary();
+		*locked = newLibrary(true);
 		
 		return locked->get()->addRef();
 	}

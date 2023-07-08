@@ -145,8 +145,17 @@ struct SlurmJob : public Job::Server {
 		});
 	}
 	
-	Promise<void> attach(AttachContext ctx) {
-		return completionPromise.addBranch()
+	Promise<void> whenRunning() {
+		if(state != Job::State::PENDING)
+			return READY_NOW;
+		
+		return getActiveThread().timer().afterDelay(1 * kj::SECONDS)
+		.then([this]() mutable { return whenRunning(); });
+	}
+		
+	
+	Promise<void> attach(AttachContext ctx) override {
+		return whenRunning()
 		.then([this, ctx]() mutable {
 			auto sattachRequest = systemLauncher.runRequest();
 			sattachRequest.setCommand("sattach");
@@ -157,19 +166,15 @@ struct SlurmJob : public Job::Server {
 		});
 	}
 	
-	Promise<void> whenCompleted(WhenCompletedContext ctx) {
+	Promise<void> whenCompleted(WhenCompletedContext ctx) override {
 		return completionPromise.addBranch();
 	}
 	
-	Promise<void> whenRunning(WhenRunningContext ctx) {
-		if(state != Job::State::PENDING)
-			return READY_NOW;
-		
-		return getActiveThread().timer().afterDelay(1 * kj::SECONDS)
-		.then([this, ctx]() mutable { return whenRunning(ctx); });
+	Promise<void> whenRunning(WhenRunningContext ctx) override {
+		return whenRunning();
 	}
 	
-	Promise<void> cancel(CancelContext ctx) {
+	Promise<void> cancel(CancelContext ctx) override {
 		auto cancelReq = systemLauncher.runRequest();
 		cancelReq.setCommand("scancel");
 		cancelReq.setArguments({kj::str(jobId)});
@@ -180,6 +185,10 @@ struct SlurmJob : public Job::Server {
 
 struct SlurmJobLauncher : public JobScheduler::Server {
 	JobScheduler::Client systemLauncher;
+	
+	SlurmJobLauncher(JobScheduler::Client sysLauncher) :
+		systemLauncher(mv(sysLauncher))
+	{}
 	
 	Promise<void> run(RunContext ctx) override {
 		auto params = ctx.getParams();
@@ -211,6 +220,11 @@ struct SlurmJobLauncher : public JobScheduler::Server {
 };
 
 }
+
+JobScheduler::Client newSlurmScheduler() {
+	return kj::heap<SlurmJobLauncher>(newProcessScheduler());
+}
+	
 
 namespace internal {
 	kj::TreeMap<kj::String, kj::Array<kj::String>> testSControlParser(kj::StringPtr example) {

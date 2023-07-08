@@ -72,7 +72,7 @@ struct MainCls {
 	}
 		
 	bool run() {
-		auto l = newLibrary();
+		auto l = newLibrary(true);
 		auto lt = l -> newThread();
 		auto& ws = lt->waitScope();
 		

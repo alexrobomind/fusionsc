@@ -14,6 +14,7 @@ using HFCam = import "hfcam.capnp";
 using Index = import "index.capnp";
 using Data = import "data.capnp";
 using Networking = import "networking.capnp";
+using Vmec = import "vmec.capnp";
 
 enum ComputationDeviceType {
 	cpu @0;

@@ -9,6 +9,7 @@
 #include "local-vat-network.h"
 #include "ssh.h"
 #include "networking.h"
+#include "jobs.h"
 
 #include <capnp/rpc-twoparty.h>
 #include <capnp/membrane.h>
@@ -40,10 +41,24 @@ Own<DeviceBase> selectDevice(ComputationDeviceType preferredType) {
 
 struct RootServer : public RootService::Server {
 	RootServer(LocalConfig::Reader config) :
+		config(config),
 		device(selectDevice(config.getPreferredDeviceType()))
 	{}
 	
+	Temporary<LocalConfig> config;
 	Own<DeviceBase> device;
+	
+	JobScheduler::Client selectScheduler() {
+		// Select correct scheduler
+		switch(config.getJobScheduler().which()) {
+			case LocalConfig::JobScheduler::SYSTEM:
+				return newProcessScheduler();
+			case LocalConfig::JobScheduler::SLURM:
+				return newSlurmScheduler();
+			default:
+				KJ_UNIMPLEMENTED("Unknown scheduler type requested.");
+		}
+	}
 	
 	Promise<void> newFieldCalculator(NewFieldCalculatorContext context) override {
 		context.initResults().setService(::fsc::newFieldCalculator(device -> addRef()));		
