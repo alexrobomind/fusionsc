@@ -78,6 +78,30 @@ struct SControlParser {
 	}
 };
 
+kj::StringTree escapeForBash(kj::StringPtr input) {
+	auto result = kj::strTree("'");
+	
+	while(true) {
+		KJ_IF_MAYBE(pIdx, input.findFirst('\'')) {
+			result = kj::strTree(mv(result), kj::heapString(input.slice(0, *pIdx)), "'\\''");
+			input = input.slice(*pIdx + 1);
+		} else {
+			break;
+		}
+	}
+	
+	result = kj::strTree(mv(result), "'");
+	return result;
+}
+
+kj::String wrapCommand(kj::StringPtr command, capnp::List<capnp::Text>::Reader arguments) {
+	auto result = kj::strTree(escapeForBash(command));
+	for(auto arg : arguments) {
+		result = kj::strTree(mv(result), " ", escapeForBash(arg));
+	}
+	return result.flatten();
+}
+
 struct SlurmJob : public Job::Server {
 	JobScheduler::Client systemLauncher;
 	unsigned int jobId;
@@ -194,11 +218,13 @@ struct SlurmJobLauncher : public JobScheduler::Server {
 		auto params = ctx.getParams();
 		
 		auto runRequest = systemLauncher.runRequest();
-		runRequest.setCommand("slurm");
+		runRequest.setCommand("sbatch");
+		
 		runRequest.setArguments({
 			"--parsable",
 			"--ntasks", kj::str(params.getNumTasks()),
-			"--cpus-per-task", kj::str(params.getNumCpusPerTask())
+			"--cpus-per-task", kj::str(params.getNumCpusPerTask()),
+			"--wrap", wrapCommand(params.getCommand(), params.getArguments())
 		});
 		
 		auto job = runRequest.sendForPipeline().getJob();
