@@ -7,11 +7,96 @@
 
 using namespace fscpy;
 
-namespace {
+namespace fscpy {
 	
-void datarefType(DataRefMetadata::Format::Reader reader) {
+capnp::Type getRefPayload(capnp::InterfaceSchema refSchema) {
+	constexpr uint64_t DR_ID = capnp::typeId<DataRef<capnp::AnyPointer>>();
+	
+	KJ_REQUIRE(
+		refSchema.getProto().getId() == DR_ID,
+		"Type must be a DataRef instance"
+	);
+	
+	return refSchema.getBrandArgumentsAtScope(DR_ID)[0];
 }
 
+capnp::InterfaceSchema createRefSchema(capnp::Type payloadType) {
+	constexpr uint64_t DR_ID = capnp::typeId<DataRef<capnp::AnyPointer>>();
+	Temporary<capnp::schema::Brand> brand;
+	auto scope = brand.initScopes(1)[0];
+	scope.setScopeId(DR_ID);
+	
+	extractType(payloadType, scope.initBind(1)[0].initType());
+	
+	return defaultLoader.capnpLoader.get(DR_ID, brand.asReader()).asInterface();
+}
+
+Maybe<capnp::Type> getPayloadType(LocalDataRef<> dataRef) {
+	auto format = localRef.getFormat();
+	
+	if(format.isRaw()) {
+		return capnp::Type(capnp::schema::Type::DATA);
+	} else if(format.isSchema()) {
+		return defaultLoader.capnpLoader.getType(format.getSchema().getAs<capnp::schema::Type>());
+	} else if(format.isUnknown()) {
+		return nullptr;
+	} else {
+		KJ_FAIL_REQUIRE("Unknown payload type");
+	}
+}
+	
+py::object openRef(capnp::Type payloadType, LocalDataRef<> dataRef) {
+	// Because async execution usually happens outside the GIL, we need to re-acquire it here
+	py::gil_scoped_acquire withPythonGIL;
+	
+	// Create a keepAlive object
+	py::object keepAlive = py::cast((UnknownObject*) new UnknownHolder<LocalDataRef<AnyPointer>>(localRef));
+	
+	auto inferredType = getPayloadType(dataRef);
+	if(payloadType.isAnyPointer()) {
+		KJ_IF_MAYBE(inferredType) {
+			payloadType = inferredType;
+		} else {
+			KJ_FAIL_REQUIRE("Could not deduce the content type. A static type was not given (or set as AnyPointer) and the format type of the loaded data is 'unknown'");
+		}
+	} else {
+		KJ_IF_MAYBE(inferredType) {
+			KJ_REQUIRE(payloadType == inferredType, "Static and dynamic type do not match");
+		}
+	}
+	
+	// "Data" type payloads do not have a root pointer. They are NO capnp messages.
+	if(payloadType.isData()) {
+		KJ_REQUIRE(!format.isSchema());
+		
+		py::object result = py::cast(localRef.getRaw());
+		result.attr("_ref") = keepAlive;
+		return kj::refcounted<PyObjectHolder>(mv(result));
+	} else {
+		AnyPointer::Reader root = localRef.get();
+		
+		KJ_REQUIRE(!localRef.getFormat().isRaw());
+		
+		if(payloadType.isInterface()) {
+			auto schema = payloadType.asInterface();
+			
+			DynamicValue::Reader asDynamic = root.getAs<DynamicCapability>(schema);
+			return kj::refcounted<PyObjectHolder>(py::cast(asDynamic));
+		}
+		if(payloadType.isStruct()) {
+			auto schema = payloadType.asStruct();
+			
+			DynamicValue::Reader asDynamic = root.getAs<DynamicStruct>(schema);
+			
+			py::object result = py::cast(asDynamic);
+			result.attr("_ref") = keepAlive;
+			return kj::refcounted<PyObjectHolder>(mv(result));
+		}
+		
+		KJ_FAIL_REQUIRE("DataRefs can only carry interface, struct or data types (or AnyPointer if unknown)");
+	}
+}
+	
 PyPromise download(capnp::DynamicCapability::Client capability) {
 	using capnp::AnyPointer;
 	using capnp::DynamicCapability;
@@ -21,112 +106,32 @@ PyPromise download(capnp::DynamicCapability::Client capability) {
 	
 	fscpy::PythonContext::startEventLoop();
 	
-	constexpr uint64_t DR_ID = capnp::typeId<DataRef<capnp::AnyPointer>>();
-	
-	capnp::InterfaceSchema refSchema = capability.getSchema();
-	
-	KJ_REQUIRE(
-		refSchema.getProto().getId() == DR_ID,
-		"Can only download DataRef types"
-	);
-	
 	DataRef<AnyPointer>::Client dataRef = capability.castAs<DataRef<AnyPointer>>();
-	
-	capnp::Type payloadType = refSchema.getBrandArgumentsAtScope(DR_ID)[0];
-	KJ_REQUIRE(payloadType.isInterface() || payloadType.isStruct() || payloadType.isData() || payloadType.isAnyPointer(), "DataRefs can only carry interface, struct or data types (or AnyPointer if unknown)");
-	
 	auto promise = getActiveThread().dataService().download(dataRef)
-	.then([payloadType](LocalDataRef<AnyPointer> localRef) mutable {
-		// Because async execution usually happens outside the GIL, we need to re-acquire it here
-		py::gil_scoped_acquire withPythonGIL;
-		
-		// Create a keepAlive object
-		py::object keepAlive = py::cast((UnknownObject*) new UnknownHolder<LocalDataRef<AnyPointer>>(localRef));
-		
-		auto format = localRef.getFormat();
-		
-		// If the type is "AnyPointer", we need to deduce it from the local ref
-		if(payloadType.isAnyPointer()) {
-			// Retrieve target type
-			if(format.isRaw()) {
-				payloadType = capnp::Type(capnp::schema::Type::DATA);
-			} else {
-				payloadType = defaultLoader.capnpLoader.getType(format.getSchema().getAs<capnp::schema::Type>());
-			}
-		}
-		
-		// "Data" type payloads do not have a root pointer. They are NO capnp messages.
-		if(payloadType.isData()) {
-			KJ_REQUIRE(!format.isSchema());
-			
-			py::object result = py::cast(localRef.getRaw());
-			result.attr("_ref") = keepAlive;
-			return kj::refcounted<PyObjectHolder>(mv(result));
-		} else {
-			AnyPointer::Reader root = localRef.get();
-			
-			KJ_REQUIRE(!localRef.getFormat().isRaw());
-			
-			if(format.isSchema()) {
-				auto type = defaultLoader.capnpLoader.getType(format.getSchema().getAs<capnp::schema::Type>());
-				KJ_REQUIRE(payloadType == type);
-			}
-			
-			if(payloadType.isInterface()) {
-				auto schema = payloadType.asInterface();
-				
-				DynamicValue::Reader asDynamic = root.getAs<DynamicCapability>(schema);
-				return kj::refcounted<PyObjectHolder>(py::cast(asDynamic));
-			}
-			if(payloadType.isStruct()) {
-				auto schema = payloadType.asStruct();
-				
-				DynamicValue::Reader asDynamic = root.getAs<DynamicStruct>(schema);
-				
-				py::object result = py::cast(asDynamic);
-				result.attr("_ref") = keepAlive;
-				return kj::refcounted<PyObjectHolder>(mv(result));
-			}
-		}
-		
-		KJ_FAIL_REQUIRE("Internal error");
+	.then([payloadType = getRefPayload(capability.getSchema())](LocalDataRef<AnyPointer> localRef) mutable {
+		return openRef(payloadType, mv(localRef));
 	}).eagerlyEvaluate(nullptr);
 	
 	return promise;
 }
 
-capnp::DynamicCapability::Client publish(capnp::DynamicStruct::Reader value) {
-	auto schema = value.getSchema();
-	uint64_t id = schema.getProto().getId();
-	
-	// Retrieve brand of published value
-	Temporary<capnp::schema::Brand> valueBrand;
-	extractBrand(schema, valueBrand);
-	
-	// Create brand for DataRef with single struct binding 
-	constexpr uint64_t DR_ID = capnp::typeId<DataRef<capnp::AnyPointer>>();
-	Temporary<capnp::schema::Brand> brand;
-	auto scope = brand.initScopes(1)[0];
-	scope.setScopeId(DR_ID);
-	auto boundStruct = scope.initBind(1)[0].initType().initStruct();
-	
-	// Bind single binding slot to published type
-	boundStruct.setTypeId(id);
-	boundStruct.setBrand(valueBrand.asReader());
-	
-	// Create branded DataRef schema
-	auto dataRefSchema = defaultLoader.capnpLoader.get(DR_ID, brand.asReader());
+capnp::DynamicCapability::Client publishReader(capnp::DynamicStruct::Reader value) {	
+	auto dataRefSchema = createRefSchema(value.getSchema());
 	
 	// Publish DataRef and convert to correct type
 	capnp::Capability::Client asAny = getActiveThread().dataService().publish(value);
-	return asAny.castAs<capnp::DynamicCapability>(dataRefSchema.asInterface());
+	return asAny.castAs<capnp::DynamicCapability>(dataRefSchema);
 }
 
-auto publish2(capnp::DynamicStruct::Builder dsb) {
-	return publish(dsb.asReader());
+capnp::DynamicCapability::Client publishBuilder(capnp::DynamicStruct::Builder dsb) {
+	return publishReader(dsb.asReader());
 }
 
-capnp::DynamicValue::Reader openArchive(kj::StringPtr path, LocalResources::Client localResources) {
+}
+
+namespace {
+	
+py::object openArchive(kj::StringPtr path, LocalResources::Client localResources) {
 	using capnp::AnyPointer;
 	using capnp::DynamicCapability;
 	using capnp::DynamicStruct;
@@ -145,23 +150,11 @@ capnp::DynamicValue::Reader openArchive(kj::StringPtr path, LocalResources::Clie
 	auto format = root.getFormat();
 	if(format.isSchema()) {
 		type = defaultLoader.capnpLoader.getType(format.getSchema().getAs<capnp::schema::Type>());
+	} else if(format.isUnknown()) {
+		KJ_FAIL_REQUIRE("Internal error: The root of the archive file has no format specified. This should not be the case");
 	}
 	
-	constexpr uint64_t DR_ID = capnp::typeId<DataRef<capnp::AnyPointer>>();
-	
-	Temporary<capnp::schema::Brand> brand;
-	auto scopes = brand.initScopes(1);
-	auto scope = scopes[0];
-	scope.setScopeId(DR_ID);
-	
-	auto bindings = scope.initBind(1);
-	if(format.isSchema()) {
-		bindings[0].setType(format.getSchema().getAs<capnp::schema::Type>());
-	} else {
-		bindings[0].initType().setData();
-	}
-	
-	capnp::InterfaceSchema dataRefSchema = defaultLoader.capnpLoader.get(DR_ID, brand.asReader()).asInterface();
+	auto dataRefSchema = createRefSchema(type);
 	
 	// Use localResources to open ref in other thread
 	auto request = localResources.openArchiveRequest();
@@ -186,14 +179,6 @@ Promise<void> writeArchive1(capnp::DynamicCapability::Client ref, kj::StringPtr 
 }
 
 Promise<void> writeArchive2(capnp::DynamicStruct::Reader root, kj::StringPtr path) {
-	/*auto ref = getActiveThread().dataService().publish(getActiveThread().randomID(), root);
-	
-	auto fs = kj::newDiskFilesystem();
-	
-	auto absPath = fs->getCurrentPath().evalNative(path);
-	auto file = fs->getRoot().openFile(absPath, kj::WriteMode::CREATE | kj::WriteMode::MODIFY);
-	
-	return getActiveThread().dataService().writeArchive(ref, *file).attach(mv(file));*/
 	return writeArchive1(publish(root), path);
 }
 
@@ -209,8 +194,8 @@ void initData(py::module_& m) {
 	py::module_ dataModule = m.def_submodule("data", "Distributed data processing");
 	
 	dataModule.def("downloadAsync", &download, "Starts a download for the given DataRef and returns a promise for its contents");
-	dataModule.def("publish", &publish, "Creates a DataRef containing the given data");
-	dataModule.def("publish", &publish2, "Creates a DataRef containing the given data");
+	dataModule.def("publish", &publishBuilder, "Creates a DataRef containing the given data");
+	dataModule.def("publish", &publishReader, "Creates a DataRef containing the given data");
 	
 	dataModule.def("openArchive", &openArchive, "Opens an archive file and returns a DataRef to its root");
 	

@@ -7,6 +7,7 @@
 #include "loader.h"
 #include "assign.h"
 #include "graphviz.h"
+#include "data.h"
 
 #include <pybind11/pybind11.h>
 #include <pybind11/cast.h>
@@ -148,8 +149,17 @@ void bindBlobClasses(py::module_& m) {
 	using DB = capnp::Data::Builder;
 	using DP = capnp::Data::Pipeline;
 	
-	py::class_<DR>(m, "DataReader", py::dynamic_attr());
-	py::class_<DB>(m, "DataBuilder", py::dynamic_attr());
+	py::class_<DR>(m, "DataReader", py::dynamic_attr())
+		.def_buffer([](DR& dr) {
+			return py::buffer_info(dr.begin(), dr.size(), true);
+		})
+	;
+	py::class_<DB>(m, "DataBuilder", py::dynamic_attr())
+		.def_buffer([](DR& dr) {
+			return py::buffer_info(dr.begin(), dr.size(), false);
+		})
+	;
+	
 	py::class_<DP>(m, "DataPipeline", py::dynamic_attr());
 }
 
@@ -375,6 +385,115 @@ void defWhich(py::class_<T, Extra...>& c) {
 		}
 		
 		return py::none();
+	});
+}
+
+// Pickling support
+
+kj::Array<const byte> fromPythonBuffer(py::buffer buf) {
+	auto bufInfo = buf.request();
+	
+	kj::ArrayPtr<const byte> ptr((const byte*) bufInfo.ptr, bufInfo.itemsize * bufInfo.size);
+	
+	// Add a deleter for the buffer info that deletes inside the GIL
+	Maybe<py::buffer_info> deletable = mv(bufInfo);
+	return ptr.attach(kj::defer([deletable = mv(deletable)]() mutable {
+		py::gil_scoped_acquire withGil;
+		deletable = nullptr;
+	}));
+}
+
+py::list flattenDataRef(uint32_t pickleVersion, DynamicCapabilityClient dynamicRef) {
+	auto payloadType = getRefPayload(dynamicRef.getSchema());
+	
+	auto data = PythonWaitScope::wait(getActiveThread().dataService().downloadFlat(dynamicRef.castAs<DataRef<>>()));
+	
+	py::list result(data.size());
+	for(auto i : kj::indices(data)) {
+		auto asReader = kj::heap<capnp::Data::Reader>(data[i].asPtr());
+		asReader = asReader.attach(mv(data[i]));
+		
+		result[i] = mv(asReader);
+	}
+	
+	return result;
+}
+
+LocalDataRef<> unflattenDataRef(py::list input) {
+	auto arrayBuilder = kj::heapArrayBuilder<kj::Array<const byte>>(input.size());
+	
+	for(auto i : kj::indices(input)) {
+		arrayBuilder.add(fromPythonBuffer(py::reinterpret_borrow<py::buffer>(input[i])));
+	}
+	
+	LocalDataRef<> result = getActiveThread().dataService().publishFlat(arrayBuilder.finish());
+}
+
+void bindPickle(py::class_<DynamicCapabilityClient> cls) {
+	cls.def_static("_unpickle", [](uint32_t pickleVersion, uint32_t version, py::list data) -> DynamicCapabilityClient {
+		KJ_REQUIRE(version == 1, "Only version 1 representation supported");
+		return unflattenDataRef(data);
+	});
+	cls.def_static("__reduce_ex__", [cls](DynamicCapabilityClient src, uint32_t pickleVersion) {
+		return py::tuple(
+			py::getattr(cls, "_unpickle"),
+			py::tuple(
+				pickleVersion,
+				1,
+				flattenDataRef(pickleVersion, src)
+			)
+		);
+	});
+}
+
+void bindPickle(py::class_<DynamicStructReader> cls) {
+	cls.def_static("_unpickle", [](uint32_t pickleVersion, uint32_t version, py::list data) -> DynamicCapabilityClient {
+		KJ_REQUIRE(version == 1, "Only version 1 representation supported");
+		auto ref = unflattenDataRef(data);
+		return openRef(capnp::Type::from<capnp::AnyPointer>(), mv(ref));
+	});
+	cls.def_static("__reduce_ex__", [](DynamicCapabilityClient src, uint32_t pickleVersion) {
+		return py::tuple(
+			py::getattr(cls, "_unpickle"),
+			py::tuple(
+				pickleVersion,
+				1,
+				flattenDataRef(pickleVersion, publishReader(src))
+			)
+		);
+	});
+}
+
+void bindPickle(py::class_<DynamicStructBuilder> cls) {
+	cls.def_static("_unpickle", [](uint32_t pickleVersion, uint32_t version, py::list data) -> DynamicCapabilityClient {
+		KJ_REQUIRE(version == 1, "Only version 1 representation supported");
+		auto ref = unflattenDataRef(data);
+		
+		KJ_IF_MAYBE(pPayloadType, getPayloadType(ref)) {
+			auto msgBuilder = kj::heap<capnp::MallocMessageBuilder>();
+			msgBuilder -> setRoot(ref.get());
+			
+			capnp::DynamicStruct::Builder dynamic = msgBuilder -> getRoot<capnp::DynamicStruct>(pPayloadType -> asStruct());
+			py::object result = py::cast(dynamic);
+			
+			auto holder = new fscpy::UnknownHolder<kj::Own<capnp::MessageBuilder>>(mv(src.holder));
+			py::object msg = py::cast((fscpy::UnknownObject*) holder);
+			result.attr("_msg") = msg;
+			
+			return result;
+		} else {
+			KJ_FAIL_REQUIRE("Payload type missing, can't unpickle");
+		}
+	});
+	cls.def_static("__reduce_ex__", [](DynamicCapabilityClient src, uint32_t pickleVersion) {
+		return py::tuple(
+			py::getattr(cls, "_unpickle"),
+			py::tuple(
+				pickleVersion,
+				1,
+				flattenDataRef(pickleVersion, publishBuilder(src))
+			)
+		);
 	});
 }
 
