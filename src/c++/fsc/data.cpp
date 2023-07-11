@@ -1685,7 +1685,9 @@ Promise<kj::Array<kj::Array<const byte>>> LocalDataServiceImpl::downloadFlat(Dat
 		}
 		
 		auto result = kj::heapArrayBuilder<kj::Array<const byte>>(data -> data.size() + 1);
-		result.add(buildData<ArchiveInfo>(graphRepr, capnp::BuilderCapabilityTable()));
+		
+		capnp::BuilderCapabilityTable tmpCapTable; // Unused anyway
+		result.add(buildData<ArchiveInfo>(graphRepr, tmpCapTable));
 		
 		for(auto& arr : data -> data)
 			result.add(mv(arr));

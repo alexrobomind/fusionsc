@@ -449,14 +449,14 @@ LocalDataRef<T> LocalDataService::publishFlat(kj::Array<kj::Array<const byte>> d
 	return impl -> publishFlat(mv(data)).as<T>();
 }
 
-template<typename T>
-Promise<kj::Array<kj::Array<const byte>>> LocalDataService::downloadFlat(typename DataRef<T>::Client ref) {
-	return impl -> downloadFlat(ref.castAs<capnp::AnyPointer>());
+template<typename C, typename T>
+Promise<kj::Array<kj::Array<const byte>>> LocalDataService::downloadFlat(C ref) {
+	return impl -> downloadFlat(ref.template castAs<DataRef<>>());
 }
 
 template<typename T>
 Promise<kj::Array<kj::Array<const byte>>> LocalDataService::downloadFlat(LocalDataRef<T> ref) {
-	return impl -> downloadFlat(ref.as<capnp::AnyPointer>());
+	return impl -> downloadFlat(ref.template as<capnp::AnyPointer>());
 }
 
 // === class LocalDataRefImpl ===

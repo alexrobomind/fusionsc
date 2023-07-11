@@ -155,7 +155,7 @@ void bindBlobClasses(py::module_& m) {
 		})
 	;
 	py::class_<DB>(m, "DataBuilder", py::dynamic_attr())
-		.def_buffer([](DR& dr) {
+		.def_buffer([](DB& dr) {
 			return py::buffer_info(dr.begin(), dr.size(), false);
 		})
 	;
@@ -403,7 +403,7 @@ kj::Array<const byte> fromPythonBuffer(py::buffer buf) {
 	}));
 }
 
-py::list flattenDataRef(uint32_t pickleVersion, DynamicCapabilityClient dynamicRef) {
+py::list flattenDataRef(uint32_t pickleVersion, capnp::DynamicCapability::Client dynamicRef) {
 	auto payloadType = getRefPayload(dynamicRef.getSchema());
 	
 	auto data = PythonWaitScope::wait(getActiveThread().dataService().downloadFlat(dynamicRef.castAs<DataRef<>>()));
@@ -426,18 +426,18 @@ LocalDataRef<> unflattenDataRef(py::list input) {
 		arrayBuilder.add(fromPythonBuffer(py::reinterpret_borrow<py::buffer>(input[i])));
 	}
 	
-	LocalDataRef<> result = getActiveThread().dataService().publishFlat(arrayBuilder.finish());
+	return getActiveThread().dataService().publishFlat<capnp::AnyPointer>(arrayBuilder.finish());
 }
 
-void bindPickle(py::class_<DynamicCapabilityClient> cls) {
-	cls.def_static("_unpickle", [](uint32_t pickleVersion, uint32_t version, py::list data) -> DynamicCapabilityClient {
+void bindPickleRef(py::class_<capnp::DynamicCapability::Client> cls) {
+	cls.def_static("_unpickle", [](uint32_t pickleVersion, uint32_t version, py::list data) -> capnp::DynamicCapability::Client {
 		KJ_REQUIRE(version == 1, "Only version 1 representation supported");
 		return unflattenDataRef(data);
 	});
-	cls.def_static("__reduce_ex__", [cls](DynamicCapabilityClient src, uint32_t pickleVersion) {
-		return py::tuple(
+	cls.def_static("__reduce_ex__", [cls](capnp::DynamicCapability::Client src, uint32_t pickleVersion) {
+		return py::make_tuple(
 			py::getattr(cls, "_unpickle"),
-			py::tuple(
+			py::make_tuple(
 				pickleVersion,
 				1,
 				flattenDataRef(pickleVersion, src)
@@ -446,16 +446,16 @@ void bindPickle(py::class_<DynamicCapabilityClient> cls) {
 	});
 }
 
-void bindPickle(py::class_<DynamicStructReader> cls) {
-	cls.def_static("_unpickle", [](uint32_t pickleVersion, uint32_t version, py::list data) -> DynamicCapabilityClient {
+void bindPickleReader(py::class_<capnp::DynamicStruct::Reader> cls) {
+	cls.def_static("_unpickle", [](uint32_t pickleVersion, uint32_t version, py::list data) {
 		KJ_REQUIRE(version == 1, "Only version 1 representation supported");
 		auto ref = unflattenDataRef(data);
-		return openRef(capnp::Type::from<capnp::AnyPointer>(), mv(ref));
+		return openRef(capnp::schema::Type::AnyPointer::Unconstrained::STRUCT, mv(ref));
 	});
-	cls.def_static("__reduce_ex__", [](DynamicCapabilityClient src, uint32_t pickleVersion) {
-		return py::tuple(
+	cls.def_static("__reduce_ex__", [cls](capnp::DynamicStruct::Reader src, uint32_t pickleVersion) mutable {
+		return py::make_tuple(
 			py::getattr(cls, "_unpickle"),
-			py::tuple(
+			py::make_tuple(
 				pickleVersion,
 				1,
 				flattenDataRef(pickleVersion, publishReader(src))
@@ -464,8 +464,8 @@ void bindPickle(py::class_<DynamicStructReader> cls) {
 	});
 }
 
-void bindPickle(py::class_<DynamicStructBuilder> cls) {
-	cls.def_static("_unpickle", [](uint32_t pickleVersion, uint32_t version, py::list data) -> DynamicCapabilityClient {
+void bindPickleBuilder(py::class_<capnp::DynamicStruct::Builder> cls) {
+	cls.def_static("_unpickle", [](uint32_t pickleVersion, uint32_t version, py::list data) {
 		KJ_REQUIRE(version == 1, "Only version 1 representation supported");
 		auto ref = unflattenDataRef(data);
 		
@@ -476,7 +476,7 @@ void bindPickle(py::class_<DynamicStructBuilder> cls) {
 			capnp::DynamicStruct::Builder dynamic = msgBuilder -> getRoot<capnp::DynamicStruct>(pPayloadType -> asStruct());
 			py::object result = py::cast(dynamic);
 			
-			auto holder = new fscpy::UnknownHolder<kj::Own<capnp::MessageBuilder>>(mv(src.holder));
+			auto holder = new fscpy::UnknownHolder<kj::Own<capnp::MessageBuilder>>(mv(msgBuilder));
 			py::object msg = py::cast((fscpy::UnknownObject*) holder);
 			result.attr("_msg") = msg;
 			
@@ -485,10 +485,10 @@ void bindPickle(py::class_<DynamicStructBuilder> cls) {
 			KJ_FAIL_REQUIRE("Payload type missing, can't unpickle");
 		}
 	});
-	cls.def_static("__reduce_ex__", [](DynamicCapabilityClient src, uint32_t pickleVersion) {
-		return py::tuple(
+	cls.def_static("__reduce_ex__", [cls](capnp::DynamicStruct::Builder src, uint32_t pickleVersion) mutable {
+		return py::make_tuple(
 			py::getattr(cls, "_unpickle"),
-			py::tuple(
+			py::make_tuple(
 				pickleVersion,
 				1,
 				flattenDataRef(pickleVersion, publishBuilder(src))

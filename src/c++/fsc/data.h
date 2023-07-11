@@ -238,8 +238,8 @@ public:
 	//! \name Flat representation
 	///@{
 	
-	template<typename T>
-	Promise<kj::Array<kj::Array<const byte>>> downloadFlat(typename DataRef<T>::Client src);
+	template<typename Client, typename T = capnp::FromClient<Client>>
+	Promise<kj::Array<kj::Array<const byte>>> downloadFlat(Client src);
 	
 	template<typename T>
 	Promise<kj::Array<kj::Array<const byte>>> downloadFlat(LocalDataRef<T> src);
