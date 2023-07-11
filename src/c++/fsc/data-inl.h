@@ -199,9 +199,7 @@ public:
 	
 	LocalDataRef<capnp::AnyPointer> publish(DataRefMetadata::Reader metaData, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable);
 	
-	//Promise<void> buildArchive(DataRef<capnp::AnyPointer>::Client ref, Archive::Builder out, Maybe<Nursery&> nursery);
 	Promise<void> writeArchive(DataRef<capnp::AnyPointer>::Client ref, const kj::File& out);
-	//LocalDataRef<capnp::AnyPointer> publishArchive(Archive::Reader archive);
 	
 	struct Mappable {
 		virtual kj::Array<const kj::byte> mmap(size_t start, size_t size) = 0;
@@ -212,6 +210,9 @@ public:
 	LocalDataRef<capnp::AnyPointer> publishArchive(const kj::ReadableFile& f, const capnp::ReaderOptions options);
 	LocalDataRef<capnp::AnyPointer> publishArchive(const kj::Array<const kj::byte> f, const capnp::ReaderOptions options);
 	LocalDataRef<capnp::AnyPointer> publishConstant(const kj::ArrayPtr<const kj::byte> f, const capnp::ReaderOptions options);
+	
+	Promise<kj::Array<kj::Array<const byte>>> downloadFlat(DataRef<>::Client src);
+	LocalDataRef<> publishFlat(kj::Array<kj::Array<const byte>> data);
 		
 	Promise<void> clone(CloneContext context) override;
 	Promise<void> store(StoreContext context) override;
@@ -224,8 +225,6 @@ public:
 	Promise<Maybe<LocalDataRef<capnp::AnyPointer>>> unwrap(DataRef<capnp::AnyPointer>::Client ref);
 	
 private:
-	//Promise<Archive::Entry::Builder> createArchiveEntry(DataRef<capnp::AnyPointer>::Client ref, kj::TreeMap<ID, capnp::Orphan<Archive::Entry>>& entries, capnp::Orphanage orphanage, Maybe<Nursery&> nursery);
-
 	capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> serverSet;
 	Library library;
 	
@@ -353,7 +352,7 @@ struct References_<LocalDataRef<T>> { using Type = T; };
 // === class LocalDataService ===
 
 template<typename Reader, typename T>
-LocalDataRef<T> LocalDataService::publish(/*ArrayPtr<const byte> id, */Reader data) {
+LocalDataRef<T> LocalDataService::publish(Reader data) {
 	capnp::BuilderCapabilityTable capTable;
 	
 	Array<const byte> byteData = internal::buildData<T>(data, capTable);
@@ -379,23 +378,6 @@ LocalDataRef<T> LocalDataService::publish(/*ArrayPtr<const byte> id, */Reader da
 		capTable.getTable()
 	).template as<T>();
 }
-
-/*template<typename Reader, typename IDReader, typename T, typename T2>
-Promise<LocalDataRef<T>> LocalDataService::publish(IDReader dataForID, Reader data, kj::StringPtr hashFunction) {
-	Promise<ID> id = ID::fromReaderWithRefs(dataForID);
-	
-	return id.then([this, data, dataForID, hashFunction = kj::heapString(hashFunction)](ID id) {
-		auto hash = Botan::HashFunction::create(hashFunction.cStr());
-		
-		hash->update_le(internal::capnpTypeId<capnp::FromAny<IDReader>>(dataForID));
-		hash->update(id.data.begin(), id.data.size());
-		
-		auto newId = kj::heapArray<byte>(hash->output_length());
-		hash->final(newId.begin());
-		
-		return publish(newId, data);
-	});
-}*/
 
 template<typename T>
 LocalDataRef<T> LocalDataService::publish(
@@ -462,6 +444,21 @@ LocalDataRef<T> LocalDataService::publishConstant(kj::ArrayPtr<const byte> in) {
 	return impl -> publishConstant(mv(in), READ_UNLIMITED).as<T>();
 }
 
+template<typename T>
+LocalDataRef<T> LocalDataService::publishFlat(kj::Array<kj::Array<const byte>> data) {
+	return impl -> publishFlat(mv(data)).as<T>();
+}
+
+template<typename T>
+Promise<kj::Array<kj::Array<const byte>>> LocalDataService::downloadFlat(typename DataRef<T>::Client ref) {
+	return impl -> downloadFlat(ref.castAs<capnp::AnyPointer>());
+}
+
+template<typename T>
+Promise<kj::Array<kj::Array<const byte>>> LocalDataService::downloadFlat(LocalDataRef<T> ref) {
+	return impl -> downloadFlat(ref.as<capnp::AnyPointer>());
+}
+
 // === class LocalDataRefImpl ===
 
 template<typename T>
@@ -518,6 +515,11 @@ ArrayPtr<const byte> LocalDataRef<T>::getRaw() {
 }
 
 template<typename T>
+Array<const byte> LocalDataRef<T>::forkRaw() {
+	return backend -> addRefRaw();
+}
+
+template<typename T>
 typename T::Reader LocalDataRef<T>::get(const capnp::ReaderOptions& options) {
 	return backend -> get<T>(options);
 }
@@ -537,12 +539,6 @@ template<typename T>
 ArrayPtr<capnp::Capability::Client> LocalDataRef<T>::getCapTable() {
 	return backend -> capTableClients.asPtr();
 }
-/*
-template<typename T>
-uint64_t LocalDataRef<T>::getTypeID() {
-	return backend -> localMetadata().getTypeId();
-}*/
-
 
 template<typename T>
 DataRefMetadata::Format::Reader LocalDataRef<T>::getFormat() {

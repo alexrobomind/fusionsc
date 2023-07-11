@@ -147,11 +147,18 @@ TEST_CASE("local_publish") {
 			REQUIRE(inner.getData() == inner2.getData());
 		}
 		
-		/*capnp::MallocMessageBuilder tmp;
-		Archive::Builder archive = tmp.initRoot<Archive>();
-		ds.buildArchive<LocalDataRef<DDH>, DDH>(ref2, archive).wait(ws);
-		
-		KJ_LOG(WARNING, capnp::TextCodec().encode(archive));*/
+		SECTION("flatrep") {
+			auto asFlat = ds.downloadFlat(ref2).wait(ws);
+			
+			Library l2 = newLibrary();
+			LocalDataService ds2(l2);
+			
+			LocalDataRef<DDH> ref22 = ds2.publishFlat<DDH>(mv(asFlat));
+			LocalDataRef<DataHolder> ref12 = ds2.download(ref22.get().getRef()).wait(ws);
+			
+			DataHolder::Reader inner2 = ref12.get();
+			REQUIRE(inner.getData() == inner2.getData());
+		}
 	}
 }
 

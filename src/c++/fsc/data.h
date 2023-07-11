@@ -198,47 +198,9 @@ public:
 	 * hosted by the DataRef.
 	 */
 	template<typename Reader, typename T = capnp::FromAny<Reader>>
-	LocalDataRef<T> publish(/*ArrayPtr<const byte> id, */Reader reader);
+	LocalDataRef<T> publish(Reader reader);
 	
 	LocalDataRef<capnp::Data> publish(kj::ArrayPtr<const byte> bytes);
-	
-	//! Publishes method with ID derived from first argument
-	/**
-	 * Creates a local data reference by copying the contents of the second argument.
-	 * The ID of the reference is derived from the first argument. This process requires
-	 * inspecting the ID of DataRef instances contained in the first argument, which might
-	 * involve remote calls. Therefore, only a promise is returned.
-	 *
-	 * \warning The second argument must be a valid until the returned promise resolves, as it
-	 * is only copied for publication after the ID is computed.
-	 *
-	 * \param dataForID Input from which the ID of this object will be derived. While this
-	 *        reader may contain DataRef s, no other type of Capability may be stored in
-	 *        its message. Currently, the following information is hashed to obtain the stored ID:
-	 *         - The Cap'n'Proto type ID of the given reader
-	 *         - The canonical representation of the reader, after replacing all
-	 *           contained DataRef instances with their IDs.
-	 * \param data The data to be stored under the ID computed from the first argument.
-	 
-	 * \param hashFunction The name of the hash function to be used for ID computation. Must be
-	 *        a valid hash function name for the Botan library.
-	 *
-	 * \returns A promise to a LocalDataRef, which will resolve once the information to compute
-	 *          the ID has been obtained.
-	 */
-	// template<typename Reader, typename IDReader, typename T = capnp::FromAny<Reader>, typename T2 = capnp::FromAny<IDReader>>
-	// Promise<LocalDataRef<T>> publish(IDReader dataForID, Reader data, kj::StringPtr hashFunction = "SHA-256"_kj) KJ_WARN_UNUSED_RESULT;
-	
-	
-	//! Shorthand for publish(data, data, hashFunction)
-	/**
-	 * Creates a local data reference with an ID derived from the contents.
-	 * WARNING: The first argument must be kept alive until the returned promise resolves.
-	 */
-	// template<typename Reader, typename T = capnp::FromAny<Reader>>
-	// KJ_WARN_UNUSED_RESULT Promise<LocalDataRef<T>> publish(Reader data, kj::StringPtr hashFunction = "SHA-256"_kj) {
-	// 	return publish(data, data, hashFunction);
-	// }
 	
 	///@}
 	
@@ -268,23 +230,22 @@ public:
 	template<typename T>
 	LocalDataRef<T> publishConstant(kj::ArrayPtr<const byte> in);
 	
-	//! Write DataRef to an Archive::Builder
-	/**
-	 * Like writeArchive, but instead of writing to a file, stores the data in memory in the
-	 * provided Archive::Builder.
-	 */
-	//template<typename Ref, typename T = References<Ref>>
-	//Promise<void> buildArchive(Ref reference, Archive::Builder out, Maybe<Nursery&> nursery = Maybe<Nursery&>()) KJ_WARN_UNUSED_RESULT;
-	
-	//! Publish the data in the given Archive::Reader as LocalDataRef
-	/**
-	 * Like publishArchive, but copies the data from the in-memory structure given
-	 */
-	//template<typename T>
-	//LocalDataRef<T> publishArchive(Archive::Reader in);
-	
 	//! Publish the contents of a file as a data ref via mmap
 	LocalDataRef<capnp::Data> publishFile(const kj::ReadableFile& in, kj::ArrayPtr<const kj::byte> fileHash = nullptr);
+	
+	///@}
+	
+	//! \name Flat representation
+	///@{
+	
+	template<typename T>
+	Promise<kj::Array<kj::Array<const byte>>> downloadFlat(typename DataRef<T>::Client src);
+	
+	template<typename T>
+	Promise<kj::Array<kj::Array<const byte>>> downloadFlat(LocalDataRef<T> src);
+	
+	template<typename T>
+	LocalDataRef<T> publishFlat(kj::Array<kj::Array<const byte>> data);
 	
 	///@}
 	
@@ -346,7 +307,7 @@ private:
  * it into a local reference. If this ref and the other DataServce share the same
  * data store, the underlying data will not be copied, but shared between the references.
  */
-template<typename T>
+template<typename T = capnp::AnyPointer>
 class LocalDataRef : public DataRef<T>::Client {
 public:
 	using typename DataRef<T>::Client::Calls;
@@ -356,6 +317,11 @@ public:
 	 * with this data reference.
 	 */
 	ArrayPtr<const byte> getRaw();
+	
+	/**
+	 * Same as getRaw(), but provides an owning reference (that can be passed across threads)
+	 */
+	Array<const byte> forkRaw();
 	
 	/**
 	 * Provides a structured view of the underlying data. If T is capnp::Data,
@@ -375,7 +341,6 @@ public:
 
 	ArrayPtr<const byte> getID();
 	ArrayPtr<capnp::Capability::Client> getCapTable();
-	// uint64_t getTypeID();
 	DataRefMetadata::Format::Reader getFormat();
 	
 	typename DataRefMetadata::Reader getMetadata();
