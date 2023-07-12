@@ -13,6 +13,9 @@ from .native import service
 
 from .native import efit
 
+# Load helpers for pickling
+from . import pickle_support
+
 # Load asynchronous subprocessing module
 # (this also imports relevant portions of native.asnc)
 from . import asnc
