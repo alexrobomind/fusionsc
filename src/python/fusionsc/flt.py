@@ -119,6 +119,26 @@ async def connectionLength(points, config, geometry, **kwargs):
 	""" 
 	result = await trace.asnc(points, config, geometry = geometry, collisionLimit = 1, **kwargs)
 	return result["endPoints"][3]
+
+@asyncFunction
+async def followFieldlines(points, config, recordEvery = 1, **kwargs):
+	"""
+	Follows magnetic field lines.
+	
+	Mostly equivalent to :code:`(lambda x: return x["fieldLines"], x["fieldStrengths"])(trace(points, config, recordEvery, **kwargs))`.
+	
+	Parameters:
+		- points: Starting points for the trace. Can be any shape, but the first dimension must have a size of 3 (x, y, z).
+		- config: Magnetic configuration. If this is not yet computed, you also need to specify the 'grid' parameter.
+		- recordEvery: Number of tracing steps between each recorded point.
+
+	Returns:
+		A tuple holding:
+		- An array of shape `points.shape     + [max. field line length]` indicating the field line point locations
+		- An array of shape `points.shape[1:] + [max. field line length]` indicating the field strength at those points
+	""" 
+	result = await trace.asnc(points, config, recordEvery = recordEvery, **kwargs)
+	return result["fieldLines"], result["fieldStrengths"]
 	
 @asyncFunction
 async def trace(
@@ -139,7 +159,10 @@ async def trace(
 	meanFreePath = 1, meanFreePathGrowth = 0,
 	
 	# Direction change
-	direction = "forward"
+	direction = "forward",
+	
+	# Direction recording
+	recordEvery = 0
 ):
 	"""
 	Performs a tracing request.
@@ -169,7 +192,11 @@ async def trace(
 		- meanFreePathGrowth: Amount by which to increase the mean free path after every displacement step. This parameter prevents
 		  extreme growths of computing costs at low perpendicular diffusion coefficients.
 	
-		- mapping: EXPERIMENTAL, DO NOT USE - Field line mapping to accelerate tracing. Behaves poorly currently, not ready for production use.
+		- mapping: Field line mapping to accelerate tracing.
+		
+		- direction: Indicates the tracing direction. One of "forward" (field direction), "backward" (against field), "cw" (clockwise), or "ccw" (counter-clockwise)
+		
+		- recordEvery: When set to > 0, instructs the tracer to record the fieldline every "recordEvery"-th step.
 	
 	Returns:
 		A dictionary holding the following entries (more can be added in future versions)
@@ -185,6 +212,10 @@ async def trace(
 		  NaN.
 		- *stopReasons*: A numpy array of shape `startPoints.shape[1:]` that indicates for each point the final reason why the trace was stopped.
 		  The dtype of the array is fusionsc.service.FLTStopReason.
+		- *fieldLines*: A numpy array of shape `startPoints.shape + [max. field line length]` containing steps recorded at specified intervals
+		  (see parameter `recordEvery. Padded with NaN.
+		- *fieldStrengths*: A numpy array of shape `startPoints.shape[1:] + [max. field line length]` holding the absolute magnetic field
+		  strength at the recorded field line points. Padded with 0.
 		- *endTags*: A dict containing a numpy array of type fusionsc.service.TagValue for each tag name present in the geometry. Each array is
 		  of shape `startPoints.shape[1:]`, and its values indicate the tags associated with the final geometry hit. This gives information
 		  about the meshes impacted by the field lines.
@@ -253,11 +284,16 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 		else:
 			request.parallelModel.diffusionCoefficient = parallelDiffusionCoefficient
 	
+	# Poincare maps
 	if len(phiPlanes) > 0:
 		planes = request.initPlanes(len(phiPlanes))
 		
 		for plane, phi in zip(planes, phiPlanes):
 			plane.orientation.phi = phi
+	
+	# Field line following
+	if recordEvery > 0:
+		request.recordEvery = recordEvery
 	
 	if geometry is not None:
 		request.geometry = indexedGeometry
@@ -276,6 +312,8 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 		"endPoints" : np.asarray(response.endPoints),
 		"poincareHits" : np.asarray(response.poincareHits),
 		"stopReasons" : np.asarray(response.stopReasons),
+		"fieldLines" : np.asarray(response.fieldLines),
+		"fieldStrengths" : np.asarray(response.fieldStrengths),
 		"endTags" : endTags,
 		"responseSize" : capnp.totalSize(response)
 	}
