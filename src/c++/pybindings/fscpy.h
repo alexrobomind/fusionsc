@@ -7,6 +7,8 @@
 
 PYBIND11_DECLARE_HOLDER_TYPE(T, kj::Own<T>);
 
+#define FSC_NATIVE_MODULE "fusionsc.native"
+
 namespace py = pybind11;
 
 namespace fscpy {
@@ -25,6 +27,12 @@ namespace fscpy {
 	
 	template<typename T>
 	UnknownObject* eraseType(T t) { return new UnknownHolder<T>(mv(t)); }
+	
+	template<typename T>
+	py::object unknownObject(T ref) {
+		auto holder = new UnknownHolder(mv(ref));
+		return py::cast((fscpy::UnknownObject*) holder);
+	}		
 	
 	struct ContiguousCArray {
 		kj::Array<unsigned char> data;

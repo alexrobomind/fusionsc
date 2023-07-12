@@ -1,6 +1,7 @@
 #include "fscpy.h"
 #include "async.h"
 #include "loader.h"
+#include "data.h"
 
 #include <fsc/data.h>
 #include <fsc/services.h>

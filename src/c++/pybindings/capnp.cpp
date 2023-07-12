@@ -149,12 +149,12 @@ void bindBlobClasses(py::module_& m) {
 	using DB = capnp::Data::Builder;
 	using DP = capnp::Data::Pipeline;
 	
-	py::class_<DR>(m, "DataReader", py::dynamic_attr())
+	py::class_<DR>(m, "DataReader", py::dynamic_attr(), py::buffer_protocol())
 		.def_buffer([](DR& dr) {
 			return py::buffer_info(dr.begin(), dr.size(), true);
 		})
 	;
-	py::class_<DB>(m, "DataBuilder", py::dynamic_attr())
+	py::class_<DB>(m, "DataBuilder", py::dynamic_attr(), py::buffer_protocol())
 		.def_buffer([](DB& dr) {
 			return py::buffer_info(dr.begin(), dr.size(), false);
 		})
@@ -409,11 +409,21 @@ py::list flattenDataRef(uint32_t pickleVersion, capnp::DynamicCapability::Client
 	auto data = PythonWaitScope::wait(getActiveThread().dataService().downloadFlat(dynamicRef.castAs<DataRef<>>()));
 	
 	py::list result(data.size());
-	for(auto i : kj::indices(data)) {
-		auto asReader = kj::heap<capnp::Data::Reader>(data[i].asPtr());
-		asReader = asReader.attach(mv(data[i]));
-		
-		result[i] = mv(asReader);
+	
+	if(pickleVersion <= 4) {
+		// Version with copying
+		for(auto i : kj::indices(data)) {
+			result[i] = py::bytes((const char*) data[i].begin(), (uint64_t) data[i].size());
+		}
+	} else {
+		// Zero-copy version
+		auto pbCls = py::module_::import("pickle").attr("PickleBuffer");
+		for(auto i : kj::indices(data)) {
+			py::object asPy = py::cast(capnp::Data::Reader(data[i].asPtr()));
+			asPy.attr("_backingArray") = unknownObject(mv(data[i]));
+			
+			result[i] = pbCls(mv(asPy));
+		}
 	}
 	
 	return result;
@@ -429,14 +439,20 @@ LocalDataRef<> unflattenDataRef(py::list input) {
 	return getActiveThread().dataService().publishFlat<capnp::AnyPointer>(arrayBuilder.finish());
 }
 
-void bindPickleRef(py::class_<capnp::DynamicCapability::Client> cls) {
-	cls.def_static("_unpickle", [](uint32_t pickleVersion, uint32_t version, py::list data) -> capnp::DynamicCapability::Client {
+void bindPickleRef(py::module_& m, py::class_<capnp::DynamicCapability::Client> cls) {
+	// Note: pybind11 generates incorrect qualnames for functions
+	// Therefore, we need to define unpicklers and then call them via a
+	// wrapper defined by python itself.
+	
+	m.def("_unpickleRefInner", [](uint32_t pickleVersion, uint32_t version, py::list data) -> capnp::DynamicCapability::Client {
 		KJ_REQUIRE(version == 1, "Only version 1 representation supported");
 		return unflattenDataRef(data);
 	});
-	cls.def_static("__reduce_ex__", [cls](capnp::DynamicCapability::Client src, uint32_t pickleVersion) {
+	auto unpickler = py::getattr(m, "_unpickleRef");
+	
+	cls.def("__reduce_ex__", [cls, unpickler](capnp::DynamicCapability::Client src, uint32_t pickleVersion) {
 		return py::make_tuple(
-			py::getattr(cls, "_unpickle"),
+			unpickler,
 			py::make_tuple(
 				pickleVersion,
 				1,
@@ -446,15 +462,21 @@ void bindPickleRef(py::class_<capnp::DynamicCapability::Client> cls) {
 	});
 }
 
-void bindPickleReader(py::class_<capnp::DynamicStruct::Reader> cls) {
-	cls.def_static("_unpickle", [](uint32_t pickleVersion, uint32_t version, py::list data) {
+void bindPickleReader(py::module_& m, py::class_<capnp::DynamicStruct::Reader> cls) {
+	// Note: pybind11 generates incorrect qualnames for functions
+	// Therefore, we need to define unpicklers and then call them via a
+	// wrapper defined by python itself.
+	
+	m.def("_unpickleReaderInner", [](uint32_t pickleVersion, uint32_t version, py::list data) {
 		KJ_REQUIRE(version == 1, "Only version 1 representation supported");
 		auto ref = unflattenDataRef(data);
 		return openRef(capnp::schema::Type::AnyPointer::Unconstrained::STRUCT, mv(ref));
 	});
-	cls.def_static("__reduce_ex__", [cls](capnp::DynamicStruct::Reader src, uint32_t pickleVersion) mutable {
+	auto unpickler = py::getattr(m, "_unpickleReader");
+	
+	cls.def("__reduce_ex__", [unpickler, cls](capnp::DynamicStruct::Reader src, uint32_t pickleVersion) mutable {
 		return py::make_tuple(
-			py::getattr(cls, "_unpickle"),
+			unpickler,
 			py::make_tuple(
 				pickleVersion,
 				1,
@@ -464,8 +486,12 @@ void bindPickleReader(py::class_<capnp::DynamicStruct::Reader> cls) {
 	});
 }
 
-void bindPickleBuilder(py::class_<capnp::DynamicStruct::Builder> cls) {
-	cls.def_static("_unpickle", [](uint32_t pickleVersion, uint32_t version, py::list data) {
+void bindPickleBuilder(py::module_& m, py::class_<capnp::DynamicStruct::Builder> cls) {
+	// Note: pybind11 generates incorrect qualnames for functions
+	// Therefore, we need to define unpicklers and then call them via a
+	// wrapper defined by python itself.
+	
+	m.def("_unpickleBuilderInner", [](uint32_t pickleVersion, uint32_t version, py::list data) {
 		KJ_REQUIRE(version == 1, "Only version 1 representation supported");
 		auto ref = unflattenDataRef(data);
 		
@@ -476,18 +502,18 @@ void bindPickleBuilder(py::class_<capnp::DynamicStruct::Builder> cls) {
 			capnp::DynamicStruct::Builder dynamic = msgBuilder -> getRoot<capnp::DynamicStruct>(pPayloadType -> asStruct());
 			py::object result = py::cast(dynamic);
 			
-			auto holder = new fscpy::UnknownHolder<kj::Own<capnp::MessageBuilder>>(mv(msgBuilder));
-			py::object msg = py::cast((fscpy::UnknownObject*) holder);
-			result.attr("_msg") = msg;
+			result.attr("_msg") = unknownObject(mv(msgBuilder));
 			
 			return result;
 		} else {
 			KJ_FAIL_REQUIRE("Payload type missing, can't unpickle");
 		}
 	});
-	cls.def_static("__reduce_ex__", [cls](capnp::DynamicStruct::Builder src, uint32_t pickleVersion) mutable {
+	
+	auto unpickler = py::getattr(m, "_unpickleBuilder");
+	cls.def("__reduce_ex__", [unpickler, cls](capnp::DynamicStruct::Builder src, uint32_t pickleVersion) mutable {
 		return py::make_tuple(
-			py::getattr(cls, "_unpickle"),
+			unpickler,
 			py::make_tuple(
 				pickleVersion,
 				1,
@@ -575,6 +601,8 @@ void bindStructClasses(py::module_& m) {
 	
 	cDSB.def("__repr__", &repr);
 	
+	bindPickleBuilder(m, cDSB);
+	
 	// ----------------- READER ------------------
 	
 	py::class_<DSR> cDSR(m, "DynamicStructReader", py::dynamic_attr(), py::multiple_inheritance(), py::metaclass(*baseMetaType), py::buffer_protocol());
@@ -626,6 +654,8 @@ void bindStructClasses(py::module_& m) {
 	});
 	
 	cDSR.def("__repr__", &repr);
+	
+	bindPickleReader(m, cDSR);
 	
 	// ----------------- PIPELINE ------------------
 	
@@ -734,9 +764,11 @@ void bindMessageBuilders(py::module_& m) {
 }
 
 void bindCapClasses(py::module_& m) {
-	py::class_<capnp::DynamicCapability::Client>(m, "DynamicCapabilityClient", py::multiple_inheritance(), py::metaclass(*baseMetaType))
+	auto cDCC = py::class_<capnp::DynamicCapability::Client>(m, "DynamicCapabilityClient", py::multiple_inheritance(), py::metaclass(*baseMetaType))
 		.def(py::init([](capnp::DynamicCapability::Client src) { return src; }))
 	;
+	
+	bindPickleRef(m, cDCC);
 	py::class_<capnp::DynamicCapability::Server>(m, "DynamicCapabilityServer", py::multiple_inheritance(), py::metaclass(*baseMetaType));
 }
 
@@ -898,6 +930,20 @@ void initCapnp(py::module_& m) {
 	defaultLoader.addBuiltin<capnp::Capability>();
 	
 	py::module_ mcapnp = m.def_submodule("capnp", "Python bindings for Cap'n'proto classes (excluding KJ library)");
+	
+	py::object scope = mcapnp.attr("__dict__");
+	py::exec(
+		"def _unpickleReader(pickleVersion, version, data):\n"
+		"	return _unpickleReaderInner(pickleVersion, version, data)\n"
+		"\n"
+		"def _unpickleBuilder(pickleVersion, version, data):\n"
+		"	return _unpickleBuilderInner(pickleVersion, version, data)\n"
+		"\n"
+		"def _unpickleRef(pickleVersion, version, data):\n"
+		"	return _unpickleRefInner(pickleVersion, version, data)\n"
+		"\n",
+		scope
+	);
 	
 	bindListClasses(mcapnp);
 	bindBlobClasses(mcapnp);
