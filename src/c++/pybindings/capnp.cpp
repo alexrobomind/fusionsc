@@ -444,7 +444,7 @@ void bindPickleRef(py::module_& m, py::class_<capnp::DynamicCapability::Client> 
 	// Therefore, we need to define unpicklers and then call them via a
 	// wrapper defined by python itself.
 	
-	m.def("_unpickleRef", [](uint32_t pickleVersion, uint32_t version, py::list data) -> capnp::DynamicCapability::Client {
+	m.def("_unpickleRef", [](uint32_t version, py::list data) -> capnp::DynamicCapability::Client {
 		KJ_REQUIRE(version == 1, "Only version 1 representation supported");
 		return unflattenDataRef(data);
 	});
@@ -454,7 +454,6 @@ void bindPickleRef(py::module_& m, py::class_<capnp::DynamicCapability::Client> 
 		return py::make_tuple(
 			unpickler,
 			py::make_tuple(
-				pickleVersion,
 				1,
 				flattenDataRef(pickleVersion, src)
 			)
@@ -467,7 +466,7 @@ void bindPickleReader(py::module_& m, py::class_<capnp::DynamicStruct::Reader> c
 	// Therefore, we need to define unpicklers and then call them via a
 	// wrapper defined by python itself.
 	
-	m.def("_unpickleReader", [](uint32_t pickleVersion, uint32_t version, py::list data) {
+	m.def("_unpickleReader", [](uint32_t version, py::list data) {
 		KJ_REQUIRE(version == 1, "Only version 1 representation supported");
 		auto ref = unflattenDataRef(data);
 		return mv(openRef(capnp::schema::Type::AnyPointer::Unconstrained::STRUCT, mv(ref)) -> content);
@@ -478,7 +477,6 @@ void bindPickleReader(py::module_& m, py::class_<capnp::DynamicStruct::Reader> c
 		return py::make_tuple(
 			unpickler,
 			py::make_tuple(
-				pickleVersion,
 				1,
 				flattenDataRef(pickleVersion, publishReader(src))
 			)
@@ -491,7 +489,7 @@ void bindPickleBuilder(py::module_& m, py::class_<capnp::DynamicStruct::Builder>
 	// Therefore, we need to define unpicklers and then call them via a
 	// wrapper defined by python itself.
 	
-	m.def("_unpickleBuilder", [](uint32_t pickleVersion, uint32_t version, py::list data) {
+	m.def("_unpickleBuilder", [](uint32_t version, py::list data) {
 		KJ_REQUIRE(version == 1, "Only version 1 representation supported");
 		auto ref = unflattenDataRef(data);
 		
@@ -510,13 +508,11 @@ void bindPickleBuilder(py::module_& m, py::class_<capnp::DynamicStruct::Builder>
 		}
 	});
 	
-	auto unpickler = py::getattr(m, "_unpickleBuilder");
 	cls.def("__reduce_ex__", [cls](capnp::DynamicStruct::Builder src, uint32_t pickleVersion) mutable {
 		auto unpickler = py::module_::import("fusionsc").attr("pickle_support").attr("unpickleBuilder");
 		return py::make_tuple(
 			unpickler,
 			py::make_tuple(
-				pickleVersion,
 				1,
 				flattenDataRef(pickleVersion, publishBuilder(src))
 			)
