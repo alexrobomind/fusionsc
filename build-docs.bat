@@ -2,14 +2,13 @@
 :: Builds from 'docs' to 'docs' (because of github pages limitations)
 
 git checkout pages
-rmdir /s /q docs
 git reset --hard main
-cd build
-cmake --build . --target docs --config Release
-cd ..
+
 rmdir /s /q docs
-mkdir docs
-xcopy /f /s build\docs\sphinx_docs docs
+cd build
+cmake --build . --target copy-docs --config Release
+cd ..
+
 git add -A docs
 git commit -m "Documentation update"
 git push -f origin pages

@@ -59,7 +59,7 @@ if(FSC_WITH_PYTHON)
 
 	add_custom_target(
 		docs-setup2
-		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:fsc-python-bindings> ${DOC_FSCPATH}/fsc
+		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:fsc-python-bindings> ${DOC_FSCPATH}/fusionsc
 	)
 
 	set(DOC_JAVADOCS ${CMAKE_CURRENT_SOURCE_DIR}/javadocs)
@@ -70,11 +70,18 @@ if(FSC_WITH_PYTHON)
 		COMMAND Python::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/javadoc.py $<TARGET_PROPERTY:java-classes,FSC_JAVA_SOURCES> ${DOC_JAVADOCS}
 		DEPENDS java-classes
 	)
-
+	
 	add_custom_target(
 		docs
 		COMMAND ${CMAKE_COMMAND} -E env DOC_FSCPATH=${DOC_FSCPATH} sphinx-build -a -d ${DOC_TOCTREE_PATH} ${CMAKE_CURRENT_SOURCE_DIR} ${DOC_SPHINXPATH}
 	)
 
-	add_dependencies(docs docs-setup1 docs-setup2)# docs-prepare-java
+	add_custom_target(
+		copy-docs
+		COMMAND ${CMAKE_COMMAND} -E copy_directory ${DOC_SPHINXPATH} ${PROJECT_SOURCE_DIR}/docs
+	)
+
+	add_dependencies(docs-setup2 docs-setup1)
+	add_dependencies(docs docs-setup1 docs-setup2)
+	add_dependencies(copy-docs docs)
 endif()
