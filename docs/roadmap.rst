@@ -25,10 +25,12 @@ following features are intended to be added into the code rather sooner than lat
   
   * Spack build
   * System launcher
-  * ObjectDB (database with mutable folder strucure to store result data)
+  * Field line following
+  * Pickling support
 	  
 * Version 1.3:
 
+  * ObjectDB (database with mutable folder strucure to store result data)
   * VMEC support
   
     * NetCDF support library in extended mode build
