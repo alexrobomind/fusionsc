@@ -7,4 +7,4 @@ dist/
 *.pyd
 *.egg-info/
 w7x.fsc
-docs/_*
+docs/

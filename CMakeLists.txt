@@ -336,7 +336,7 @@ add_subdirectory(src/service)
 add_subdirectory(src/c++)
 
 # Build the documentation
-add_subdirectory(docs)
+add_subdirectory(src/docs)
 
 # Coverage testing
 option(FSC_WITH_INSTRUMENTATION "Whether to perform instrumentation")
