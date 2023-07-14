@@ -12,6 +12,10 @@
 using namespace fsc;
 
 namespace {
+
+std::array<double, 3> getEventLocation(FLTKernelEvent::Reader e) {
+	return {e.getX(), e.getY(), e.getZ()};
+}
 	
 void validateField(ToroidalGrid::Reader grid, Float64Tensor::Reader data) {	
 	auto shape = data.getShape();
@@ -68,6 +72,8 @@ struct TraceCalculation {
 	DeviceMappingType<CuTypedMessageReader<
 		ReversibleFieldlineMapping, cu::ReversibleFieldlineMapping
 	>> mappingData;
+	
+	uint32_t eventBufferSize = 0;
 		
 	TraceCalculation(DeviceBase& device,
 		Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<const Tensor<double, 4>>> newField, Tensor<double, 2> positions,
@@ -109,6 +115,31 @@ struct TraceCalculation {
 		}
 		
 		KJ_REQUIRE(request.getServiceRequest().getForwardDirection().which() < 2, "Unknown forward direction type specified. This likely means that this library version is too old to understand your request");
+		
+		eventBufferSize = computeBufferSize(config.getEventBuffer(), positions.dimension(1));
+	}
+	
+	uint32_t computeBufferSize(FLTConfig::EventBuffer::Reader config, uint32_t nPoints) {
+		uint32_t wordBudget = config.getTargetTotalMb() * 1024 * 128; // 1024 kB per MB, 128 words per MB
+		
+		// We need one word per process for list headers
+		if(wordBudget < nPoints)
+			return 0;
+		wordBudget -= nPoints;
+		
+		auto structSchema = capnp::StructSchema::from<FLTKernelEvent>();
+		auto structInfo = structSchema.getProto().getStruct();
+		uint32_t structSizeInWords = structInfo.getDataWordCount() + structInfo.getPointerCount();
+		
+		uint32_t size = wordBudget / structSizeInWords;
+		
+		if(size < config.getMinSize())
+			return config.getMinSize();
+		
+		if(size > config.getMaxSize())
+			return config.getMaxSize();
+		
+		return size;
 	}
 	
 	// Prepares the memory structure for a round
@@ -121,10 +152,7 @@ struct TraceCalculation {
 		for(size_t i = 0; i < nParticipants; ++i) {
 			
 			data[i].initState();
-			auto events = data[i].initEvents(/*request.getServiceRequest().hasGeometry() ? EVENTBUF_SIZE : EVENTBUF_SIZE_NOGEO*/EVENTBUF_SIZE);
-			
-			for(auto event : events)
-				event.initLocation(3);
+			auto events = data[i].initEvents(eventBufferSize);
 		}
 		
 		round.kernelData = mapToDevice(
@@ -578,7 +606,7 @@ struct FLTImpl : public FLT::Server {
 							
 							auto ppi = evt.getPhiPlaneIntersection();
 							
-							auto loc = evt.getLocation();
+							auto loc = getEventLocation(evt);
 							for(int64_t iDim = 0; iDim < 3; ++iDim) {
 								pcCuts(iTurn, iStartPoint, ppi.getPlaneNo(), iDim) = loc[iDim];
 							}
@@ -643,7 +671,7 @@ struct FLTImpl : public FLT::Server {
 							if(!evt.isRecord())
 								continue;
 							
-							auto loc = evt.getLocation();
+							auto loc = getEventLocation(evt);
 							for(int32_t iDim = 0; iDim < 3; ++iDim)
 								fieldLines(iRecord, iStartPoint, iDim) = loc[iDim];
 							
@@ -896,7 +924,7 @@ struct FLTImpl : public FLT::Server {
 
 namespace fsc {	
 	// TODO: Make this accept data service instead	
-	FLT::Client newFLT(Own<DeviceBase> device) {
+	FLT::Client newFLT(Own<DeviceBase> device, FLTConfig::Reader config) {
 		return kj::heap<FLTImpl>(mv(device), config);
 	}
 }

@@ -78,7 +78,7 @@ private:
 	kj::MutexGuarded<bool> shutdownMode;
 	Own<SharedData> sharedData;
 	
-	Own<kj::CrossThreadPromiseFulfiller<void>> stewardFulfiller;
+	Own<kj::CrossThreadPromiseFulfiller<bool>> stewardFulfiller;
 	kj::MutexGuarded<Maybe<Own<const kj::Executor>>> stewardExecutor;
 	kj::Thread stewardThread;
 	
@@ -148,6 +148,9 @@ struct ThreadContext {
 	
 	void detach(Promise<void> p);
 	Promise<void> drain();
+
+protected:
+	bool fastShutdown = false;
 	
 private:
 	// Access to currenly active instance
@@ -210,6 +213,8 @@ private:
 struct StewardContext : public ThreadContext {
 	inline const Library& library() const override { KJ_FAIL_REQUIRE("Library instance not available from steward context"); }
 	inline LocalDataService& dataService() override { KJ_FAIL_REQUIRE("Data service not available from steward context"); }
+	
+	void shutdownFast();
 	
 	StewardContext();
 	~StewardContext();

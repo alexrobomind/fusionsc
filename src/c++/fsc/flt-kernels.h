@@ -216,11 +216,9 @@ namespace fsc {
 				auto evt = currentEvent(); \
 				evt.setStep(step); \
 				evt.setDistance(evtDist); \
-				\
-				auto loc = evt.mutateLocation(); \
-				for(int i = 0; i < 3; ++i) {\
-					loc.set(i, x[i]); \
-				}\
+				evt.setX(x[0]); \
+				evt.setY(x[1]); \
+				evt.setZ(x[2]); \
 			}\
 			\
 			++eventCount; \
@@ -530,15 +528,6 @@ namespace fsc {
 						
 						if(event1.getDistance() > event2.getDistance()) {
 							cupnp::swapData(event1, event2);
-							
-							auto loc1 = event1.mutateLocation();
-							auto loc2 = event2.mutateLocation();
-							
-							for(int i = 0; i < 3; ++i) {
-								double tmp = loc1[i];
-								loc1.set(i, loc2[i]);
-								loc2.set(i, tmp);
-							}
 						}
 					}
 				}
@@ -562,10 +551,9 @@ namespace fsc {
 						if(++collisionCounter >= collisionLimit) {
 							// We have found our final event
 							// Copy out distance and location and finish
-							
-							auto loc = evt.getLocation();
-							for(int i = 0; i < 3; ++i)
-								x[i] = loc[i];
+							x[0] = evt.getX();
+							x[1] = evt.getY();
+							x[2] = evt.getZ();
 							distance = evt.getDistance();
 							
 							++eventOffset;

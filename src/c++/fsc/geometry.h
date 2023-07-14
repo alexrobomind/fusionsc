@@ -180,11 +180,10 @@ inline EIGEN_DEVICE_FUNC uint32_t intersectGeometryAllEvents(
 		if(lCast < lMax) { \
 			auto event = currentEvent(); \
 			event.setDistance(distanceP1P2 * lCast); \
+			event.setX(p1[0] + lCast * dp[0]); \
+			event.setY(p1[1] + lCast * dp[1]); \
+			event.setZ(p1[2] + lCast * dp[2]); \
 			\
-			auto loc = event.mutateLocation(); \
-			for(int i = 0; i < 3; ++i) { \
-				loc.set(i, p1[i] + lCast * dp[i]); \
-			} \
 			auto geoHit = event.mutateGeometryHit(); \
 			geoHit.setMeshIndex(meshIdx); \
 			geoHit.setElementIndex(elementIdx); \

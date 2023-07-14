@@ -44,7 +44,7 @@ LibraryHandle::~LibraryHandle() {
 }
 
 void LibraryHandle::stopSteward() const {
-	stewardFulfiller -> fulfill();
+	stewardFulfiller -> fulfill(inShutdownMode());
 }
 
 std::unique_ptr<Botan::HashFunction> LibraryHandle::defaultHash() const {
@@ -82,13 +82,16 @@ void LibraryHandle::runSteward(bool elevated) {
 	}
 	
 	// Register fulfiller for shutdown	
-	auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+	auto paf = kj::newPromiseAndCrossThreadFulfiller<bool>();
 	stewardFulfiller = mv(paf.fulfiller);
 
-	auto runPromise = paf.promise.catch_([](kj::Exception&& e) {});
+	auto runPromise = mv(paf.promise);
 
 	// loopbackReferenceForStewardStartup = nullptr;
-	runPromise.wait(ctx.waitScope());
+	bool fastShutdown = runPromise.wait(ctx.waitScope());
+	if(fastShutdown)
+		ctx.shutdownFast();
+	
 	// DO NOT USE this PAST THIS POINT
 }
 
@@ -115,6 +118,12 @@ ThreadContext::ThreadContext() :
 ThreadContext::~ThreadContext() {
 	KJ_REQUIRE(current == this, "Destroying LibraryThread in wrong thread");
 	current = nullptr;
+	
+	if(fastShutdown) {
+		// To avoid errors in kj due to the unclean shutdown
+		auto leakCtx = new kj::AsyncIoContext(mv(_ioContext));
+		(void) leakCtx;
+	}
 }
 
 
@@ -212,9 +221,8 @@ ThreadHandle::~ThreadHandle() {
 		if(canDeleteRefdata)
 			delete refData;
 		
-		// To avoid errors in kj due to the unclean shutdown
-		auto leakCtx = new kj::AsyncIoContext(mv(_ioContext));
-		(void) leakCtx;
+		// Tell the thread context that we are doing a fast shutdown
+		ThreadContext::fastShutdown = true;
 	}
 }
 
@@ -232,5 +240,9 @@ StewardContext::StewardContext() {};
 StewardContext::~StewardContext() {
 	detachedTasks.clear();
 };
+
+void StewardContext::shutdownFast() {
+	ThreadContext::fastShutdown = true;
+}
 
 }

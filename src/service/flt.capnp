@@ -214,7 +214,7 @@ struct FLTConfig {
 	eventBuffer : group {
 		minSize @0 : UInt32 = 100;
 		maxSize @1 : UInt32 = 2500;
-		targetTotalMB @2 : UInt64 = 500;
+		targetTotalMb @2 : UInt64 = 500;
 	}
 }
 
@@ -245,22 +245,25 @@ struct FLTKernelState {
 }
 
 struct FLTKernelEvent {
-	location @0 : List(Float64);
-	step @1 : UInt32;
-	distance @2 : Float64;
+	x @0 : Float64;
+	y @1 : Float64;
+	z @2 : Float64;
+	
+	step @3 : UInt32;
+	distance @4 : Float64;
 
 	union {
-		notSet @3 : Void;
+		notSet @5 : Void;
 		phiPlaneIntersection : group {
-			planeNo @4 : UInt32;
+			planeNo @6 : UInt32;
 		}
-		newTurn @5 : UInt32;
+		newTurn @7 : UInt32;
 		geometryHit : group {
-			meshIndex @6 : UInt64;
-			elementIndex @7 : UInt64;
+			meshIndex @8 : UInt64;
+			elementIndex @9 : UInt64;
 		}
 		record : group {
-			fieldStrength @8 : Float64;
+			fieldStrength @10 : Float64;
 		}
 	}
 }

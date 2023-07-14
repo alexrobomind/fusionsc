@@ -66,7 +66,7 @@ struct RootServer : public RootService::Server {
 	}
 	
 	Promise<void> newTracer(NewTracerContext context) override {				
-		context.initResults().setService(newFLT(device -> addRef()));		
+		context.initResults().setService(newFLT(device -> addRef(), config.getFlt()));		
 		return READY_NOW;
 	}
 	
