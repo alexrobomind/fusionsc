@@ -204,6 +204,20 @@ interface Mapper {
 	computeRFLM @0 RFLMRequest -> (mapping : Data.DataRef(ReversibleFieldlineMapping));
 }
 
+# ==================================== FLT configuration ============================
+
+struct FLTConfig {
+	# Settings regarding the size tuning of the event buffer
+	# targetTotalMB is used to compute an estimated buffer size
+	# dependent on the number of start points. minSize and maxSize
+	# are then used to clamp the computed value.
+	eventBuffer : group {
+		minSize @0 : UInt32 = 100;
+		maxSize @1 : UInt32 = 2500;
+		targetTotalMB @2 : UInt64 = 500;
+	}
+}
+
 
 # ============================== Kernel interface ===================================
 

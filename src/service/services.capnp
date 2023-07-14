@@ -30,6 +30,9 @@ struct LocalConfig {
 		system @3 : Void;
 		slurm @4 : Void;
 	}
+	
+	# Configuration settings for the field line tracer
+	flt @5 : FLT.FLTConfig;
 }
 
 struct NodeInfo {

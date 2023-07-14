@@ -6,5 +6,5 @@
 #include <fsc/flt.capnp.h>
 
 namespace fsc {	
-	FLT::Client newFLT(Own<DeviceBase> device);
+	FLT::Client newFLT(Own<DeviceBase> device, FLTConfig::Reader config = nullptr);
 }

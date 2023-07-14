@@ -211,6 +211,10 @@ ThreadHandle::~ThreadHandle() {
 		
 		if(canDeleteRefdata)
 			delete refData;
+		
+		// To avoid errors in kj due to the unclean shutdown
+		auto leakCtx = new kj::AsyncIoContext(mv(_ioContext));
+		(void) leakCtx;
 	}
 }
 

@@ -72,7 +72,8 @@ struct TraceCalculation {
 	TraceCalculation(DeviceBase& device,
 		Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<const Tensor<double, 4>>> newField, Tensor<double, 2> positions,
 		IndexedGeometry::Reader geometryIndex, Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData, Maybe<LocalDataRef<MergedGeometry>> geometryData,
-		Maybe<LocalDataRef<ReversibleFieldlineMapping>> mappingData
+		Maybe<LocalDataRef<ReversibleFieldlineMapping>> mappingData,
+		FLTConfig::Reader config
 	) :
 		device(device.addRef()),
 		positions(mv(positions)),
@@ -356,8 +357,9 @@ struct TraceCalculation {
 
 struct FLTImpl : public FLT::Server {
 	Own<DeviceBase> device;
+	Temporary<FLTConfig> config;
 	
-	FLTImpl(Own<DeviceBase> device) : device(mv(device)) {}
+	FLTImpl(Own<DeviceBase> device, FLTConfig::Reader config) : device(mv(device)), config(config) {}
 	
 	Promise<void> trace(TraceContext ctx) override {
 		// ctx.allowCancellation();
@@ -446,7 +448,8 @@ struct FLTImpl : public FLT::Server {
 			auto calc = heapHeld<TraceCalculation>(
 				*device, mv(kernelRequest), mv(field), mv(positions),
 				request.getGeometry(), mv(indexData), geometryData,
-				mappingData
+				mappingData,
+				config
 			);
 			
 			return calc->run()
@@ -894,6 +897,6 @@ struct FLTImpl : public FLT::Server {
 namespace fsc {	
 	// TODO: Make this accept data service instead	
 	FLT::Client newFLT(Own<DeviceBase> device) {
-		return kj::heap<FLTImpl>(mv(device));
+		return kj::heap<FLTImpl>(mv(device), config);
 	}
 }
