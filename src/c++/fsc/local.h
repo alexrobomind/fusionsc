@@ -148,6 +148,8 @@ struct ThreadContext {
 	
 	void detach(Promise<void> p);
 	Promise<void> drain();
+	
+	kj::Promise<void> lifetimeScope();
 
 protected:
 	bool fastShutdown = false;
@@ -164,6 +166,8 @@ private:
 	Own<kj::Filesystem> _filesystem;
 	Own<StreamConverter> _streamConverter;
 	const kj::Executor& _executor;
+	
+	kj::Canceler scopeProvider;
 
 protected:
 	kj::TaskSet detachedTasks;

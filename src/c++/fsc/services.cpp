@@ -218,8 +218,10 @@ struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::Bootstra
 	
 	//! Keep-alive membrane that maintains the connection as long as at least one instance is there
 	struct KeepaliveMembrane : public capnp::MembranePolicy, kj::Refcounted {
-		Own<void> keepAlive;
-		KeepaliveMembrane(Own<void> keepAlive) : keepAlive(mv(keepAlive)) {}
+		ForkedPromise<void> lifetime;
+		KeepaliveMembrane(Promise<void> lifetime) :
+			lifetime(lifetime.fork())
+		{}
 		
 		Own<MembranePolicy> addRef() override { return kj::addRef(*this); }
 		
@@ -229,6 +231,10 @@ struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::Bootstra
 		
 		kj::Maybe<capnp::Capability::Client> outboundCall(uint64_t interfaceId, uint16_t methodId, capnp::Capability::Client target) override {
 			return nullptr;
+		}
+		
+		kj::Maybe<Promise<void>> onRevoked() override {
+			return lifetime.addBranch();
 		}
 	};
 	
@@ -270,7 +276,8 @@ struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::Bootstra
 		auto client     = rpcClient -> bootstrap(LocalVatHub::INITIAL_VAT_ID);
 		
 		Own<void> attachments = kj::attachRef(client, vatNetwork.x(), rpcClient.x());
-		return capnp::membrane(mv(client), kj::refcounted<KeepaliveMembrane>(mv(attachments)));
+		Promise<void> lifetimeScope = getActiveThread().lifetimeScope().attach(mv(attachments));
+		return capnp::membrane(mv(client), kj::refcounted<KeepaliveMembrane>(mv(lifetimeScope)));
 	}
 };
 

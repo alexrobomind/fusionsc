@@ -117,6 +117,9 @@ ThreadContext::ThreadContext() :
 
 ThreadContext::~ThreadContext() {
 	KJ_REQUIRE(current == this, "Destroying LibraryThread in wrong thread");
+	
+	scopeProvider.cancel("Thread context destroyed");
+	
 	current = nullptr;
 	
 	if(fastShutdown) {
@@ -139,6 +142,10 @@ Promise<void> ThreadContext::uncancelable(Promise<void> p) {
 	auto forked = p.fork();
 	detach(forked.addBranch());
 	return forked.addBranch();
+}
+
+Promise<void> ThreadContext::lifetimeScope() {
+	return scopeProvider.wrap(Promise<void>(NEVER_DONE));
 }
 	
 // === class ThreadHandle ===
