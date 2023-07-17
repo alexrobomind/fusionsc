@@ -116,6 +116,28 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		
 		return result
 	
+	@asyncFunction
+	async def interpolateXyz(self, points, grid = None):
+		"""
+		Evaluates the magnetic field in the given coordinates. Outside the grid, the field will use the constant
+		values (in slab coordinates) at the grid boundary.
+	
+		Parameters:
+			- points: A numpy-array of shape [3, ...] (at least 1D) with the points in x, y, z coordinates.
+			- grid: An optional grid parameter required if the field is not yet computed. The grid
+		
+		Returns:
+			A numpy array of shape points.shape with the field as x, y, z field.
+		"""
+		compField = self.compute(grid).data.computedField
+		
+		backend = backends.activeBackend()
+		calculator = backend.newFieldCalculator().service
+		
+		response = await calculator.evaluateXyz(compField, points)
+		return np.asarray(response.values)
+		
+	
 	def __neg__(self):
 		result = MagneticConfig()
 		

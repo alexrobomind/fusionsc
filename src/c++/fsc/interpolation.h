@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fsc/magnetics.capnp.cu.h>
+#include <fsc/magnetics.capnp.h>
 
 #include "tensor.h"
 
@@ -228,7 +229,17 @@ struct SlabFieldInterpolator {
 	{
 	}
 	
-	EIGEN_DEVICE_FUNC Vec<Scalar, 3> operator()(const TensorMap<Tensor<Scalar, 4>>& fieldData, const Vec<Scalar, 3>& xyz) {
+	// Host-only interpolator
+	SlabFieldInterpolator(const Strategy& strategy, ToroidalGrid::Reader grid) :
+		interpolator(strategy, {
+			Axis(0, 2 * fsc::pi / grid.getNSym(), grid.getNPhi()),
+			Axis(grid.getZMin(), grid.getZMax(), grid.getNZ() - 1),
+			Axis(grid.getRMin(), grid.getRMax(), grid.getNR() - 1),
+		})
+	{
+	}
+	
+	EIGEN_DEVICE_FUNC Vec<Scalar, 3> operator()(const TensorMap<const Tensor<Scalar, 4>>& fieldData, const Vec<Scalar, 3>& xyz) {
 		Scalar x = xyz[0];
 		Scalar y = xyz[1];
 		Scalar z = xyz[2];
@@ -266,6 +277,10 @@ struct SlabFieldInterpolator {
 			bR * eR[1] + bPhi * ePhi[1],
 			bZ
 		};
+	}
+	
+	EIGEN_DEVICE_FUNC Vec<Scalar, 3> operator()(const TensorMap<Tensor<Scalar, 4>>& fieldData, const Vec<Scalar, 3>& xyz) {
+		return operator()(TensorMap<Tensor<Scalar, 4>>(fieldData.data(), fieldData.dimensions()), xyz);
 	}
 };
 

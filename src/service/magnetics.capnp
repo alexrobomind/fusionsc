@@ -45,7 +45,9 @@ interface FieldResolver {
 
 interface FieldCalculator $Cxx.allowCancellation {
 	compute @0 (field : MagneticField, grid : ToroidalGrid) -> (computedField : ComputedField);
-	evaluateXYZ @1 (field : ComputedField, points : Float64Tensor) -> (values : Float64Tensor);
+	
+	# Evaluate field at position. Points must be of shape [3, ...].
+	evaluateXyz @1 (field : ComputedField, points : Float64Tensor) -> (values : Float64Tensor);
 }
 
 struct BiotSavartSettings {
