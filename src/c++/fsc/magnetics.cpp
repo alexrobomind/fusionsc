@@ -171,6 +171,47 @@ struct CalculationSession : public FieldCalculator::Server {
 		return READY_NOW;
 	}
 	
+	Promise<void> evaluateXyz(EvaluateXyzContext ctx) {
+		auto params = ctx.getParams();
+		
+		auto field = params.getField();
+		auto points = params.getPoints();
+		
+		auto shape = points.getShape();
+		KJ_REQUIRE(shape.size() >= 1);
+		KJ_REQUIRE(shape[0] == 3);
+		
+		return getActiveThread().dataService().download(field.getData())
+		.then([ctx, points, field](auto localRef) mutable {			
+			auto result = ctx.initResults();
+			result.getValues().setShape(points.getShape());
+			
+			auto dataIn = points.getData();
+			auto dataOut = result.getValues().initData(dataIn.size());
+			
+			KJ_REQUIRE(dataIn.size() % 3 == 0, "Data size not divisible by 3");
+			
+			// Prepare interpolator
+			using InterpolationStrategy = C1CubicInterpolation<double>;
+			auto grid = field.getGrid();
+			SlabFieldInterpolator<InterpolationStrategy> interpolator(InterpolationStrategy(), field.getGrid());
+			
+			Own<TensorMap<const Tensor<double, 4>>> fieldTensor = mapTensor<Tensor<double, 4>>(localRef.get());
+			
+			uint64_t offset = dataIn.size() / 3;
+			for(auto i : kj::range(0, offset)) {
+				Vec3d fieldValue = interpolator(
+					*fieldTensor,
+					Vec3d(dataIn[i], dataIn[i + offset], dataIn[i + 2 * offset])
+				);
+				
+				dataOut.set(i, fieldValue(0));
+				dataOut.set(i + offset, fieldValue(1));
+				dataOut.set(i + 2 * offset, fieldValue(2));
+			}
+		});
+	}
+	
 	//! Processes a root node of a magnetic field (creates calculator)
 	Promise<LocalDataRef<Float64Tensor>> processRoot(MagneticField::Reader node, ToroidalGrid::Reader grid) {		
 		auto newCalculator = heapHeld<FieldCalculation>(grid, *device);

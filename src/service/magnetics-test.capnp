@@ -12,7 +12,7 @@ const testGrid : ToroidalGrid = (
 	zMin = -1,
 	zMax = 1,
 	nSym = 1,
-	nR = 4,
+	nR = 16,
 	nZ = 10,
 	nPhi = 16
 );
