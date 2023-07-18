@@ -120,6 +120,10 @@ ThreadContext::~ThreadContext() {
 	
 	scopeProvider.cancel("Thread context destroyed");
 	
+	// We need to turn the event loop so that we can make sure the cancellations
+	// have propagated.
+	waitScope().poll();
+	
 	current = nullptr;
 	
 	if(fastShutdown) {
