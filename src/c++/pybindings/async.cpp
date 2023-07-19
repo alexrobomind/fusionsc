@@ -202,6 +202,363 @@ namespace {
 }
 
 namespace fscpy {
+
+// class AsyncioEventPort
+
+AsyncioEventPort::AsyncioEventPort() {
+	eventLoop = py::module_::import("asyncio").attr("get_event_loop")();
+	loopRunner = py::cpp_function([this]() {
+		activeRunner = py::none();
+		Promise<void> p = NEVER_DONE;
+		PythonWaitScope::poll(p);
+	});
+	activeRunner = py::none();
+}
+
+AsyncioEventPort::~AsyncioEventPort() {
+	py::gil_scoped_acquire withGil;
+	
+	// Running the loopRunner after the event port is destroyed
+	// is a really really bad idea.
+	cancelRunner();
+}
+
+bool AsyncioEventPort::poll() {
+	// Let's take an opportunity for a context switch
+	{
+		py::gil_scoped_release releaseGil;
+	}
+	
+	py::gil_scoped_acquire withGil;
+	
+	if(woken) {
+		woken = false;
+		return true;
+	}
+	
+	return false;
+}
+
+void AsyncioEventPort::setRunnable(bool newVal) {
+	py::gil_scoped_acquire withGil;
+	
+	runnable = newVal;
+	
+	if(newVal) {
+		scheduleRunner();
+	}
+}
+
+void AsyncioEventPort::wake() const {
+	py::gil_scoped_acquire withGil;
+	
+	if(!woken) {
+		woken = true; 
+		scheduleRunner();
+	}
+}
+
+void AsyncioEventPort::cancelRunner() {
+	if(!activeRunner.is_none()) {
+		activeRunner.attr("cancel")();
+		activeRunner = py::none();
+	}
+}
+
+void AsyncioEventPort::scheduleRunner() {
+	if(activeRunner.is_none()) {
+		activeRunner = eventLoop.attr("call_soon")(loopRunner);
+	}
+}
+
+void AsyncioEventPort::scheduleRunner() const {
+	if(activeRunner.is_none()) {
+		activeRunner = eventLoop.attr("call_soon_threadsafe")(loopRunner);
+	}
+}
+	
+
+
+// class AsyncioFutureAdapter
+
+namespace {
+
+struct AsyncioFutureAdapter {
+	struct FulfillerCallback : public kj::Refcounted {
+		bool valid = true;
+		AsyncioFutureAdapter& parent;
+		
+		void call(py::object future) {
+			if(!valid)
+				return;
+			
+			parent.fulfiller.rejectIfThrows([this, future]() mutable {
+				parent.fulfiller.fulfill(future.attr("result")());
+			});
+		}
+		
+		FulfillerCallback(AsyncioFutureAdapter& parent) :
+			parent(parent)
+		{}
+	};
+	
+	AsyncioFutureAdapter(kj::PromiseFulfiller<py::object>& fulfiller, py::object future):
+		fulfiller(fulfiller),
+		future(future)
+	{
+		cppCallback = kj::refcounted<FulfillerCallback>(*this);
+		pythonCallback = py::cpp_function([target = kj::addRef(*cppCallback)](py::object future) mutable {
+			target -> call(future);
+		});
+		
+		future.attr("add_done_callback")(pythonCallback);
+	}
+	
+	~AsyncioFutureAdapter(){
+		future.attr("remove_done_callback")(pythonCallback);
+		cppCallback -> valid = false;
+	}
+	
+private:
+	PromiseFulfiller<py::object>& fulfiller;
+	
+	Own<FulfillerCallback> cppCallback;
+	py::object pythonCallback;
+	py::object future;
+};
+
+struct AsyncioFutureLike {
+	struct Cancelled {
+		kj::String msg;
+		
+		Cancelled(kj::String msg) :
+			msg(mv(msg))
+		{}
+	};
+	
+	struct Running {
+		ForkedPromise<py::object> directPath;
+		Promise<void> resolveTask;
+	};
+	
+	OneOf<Running, Cancelled, py::object, kj::Exception> contents;
+	
+	py::object loop;
+	py::list doneCallbacks;
+	bool asyncioFutureBlocking = false; 
+	
+	kj::Canceler canceler;
+	
+	AsyncioFutureLike(Promise<py::object> promise) :
+		contents(py::object()), doneCallbacks()
+	{
+		auto forked = promise.fork();
+		Promise<void> resolveTask = forked.addBranch().then(
+			[this](py::object result) mutable {
+				contents = mv(result);
+			},
+			[this](kj::Exception e) mutable {
+				contents = e;
+				whenDone();
+			}
+		);
+		
+		Running r = { mv(forked), mv(resolveTask) };
+		contents = mv(r);
+	}
+	
+	AsyncioFutureLike(AsyncioFutureLike& other) :
+		AsyncioFutureLike(other.asPromise())
+	{}
+	
+	~AsyncioFutureLike() {
+		canceler.release();
+	}
+		
+	py::object result() {
+		if(contents.is<Running>()) {
+			py::object excType = py::module_::import("asyncio").attr("InvalidStateError");
+			PyErr_SetString(excType.ptr(), "Attempting to access result of incomplete promise");
+			throw py::error_already_set();
+		} else if(contents.is<py::object>()) {
+			return contents.get<py::object>();
+		} else if(contents.is<kj::Exception>()) {
+			raiseInPython(contents.get<kj::Exception>());
+			throw py::error_already_set();
+		} else if(contents.is<Cancelled>()) {
+			py::object excType = py::module_::import("asyncio").attr("CancelledError");
+			PyErr_SetString(excType.ptr(), contents.get<Cancelled>().msg.cStr());
+			throw py::error_already_set();
+		}
+		
+		KJ_UNREACHABLE;
+	}
+	
+	void setResult(py::object result) {
+		KJ_FAIL_REQUIRE("Setting results directly on promise-derived futures is prohibited");
+	}
+	
+	void setException(py::object exception) {
+		KJ_FAIL_REQUIRE("Setting results directly on promise-derived futures is prohibited");
+	}
+	
+	bool done() {
+		return !contents.is<Running>();
+	}
+	
+	bool cancelled() {
+		return contents.is<Cancelled>();
+	}
+	
+	void addDoneCallback(py::object cb) {
+		doneCallbacks.append(mv(cb));
+		
+		if(done())
+			whenDone();
+	}
+	
+	uint64_t removeDoneCallback(py::object cb) {
+		py::list newCallbacks;
+		for(py::handle e : doneCallbacks) {
+			if(e == cb)
+				continue;
+			newCallbacks.append(e);
+		}
+		
+		uint64_t removed = doneCallbacks.size() - newCallbacks.size();
+		doneCallbacks = mv(newCallbacks);
+		return removed;
+	}
+	
+	bool cancel(py::object msg) {
+		if(done())
+			return false;
+		
+		kj::String msgStr = kj::str("Cancelled");
+		
+		if(!msg.is_none()) {
+			msgStr = kj::heapString(py::cast<kj::StringPtr>(msg));
+		}
+		
+		canceler.cancel(msgStr);
+		contents.init<Cancelled>(mv(msgStr));
+		
+		whenDone();
+		return true;
+	}
+	
+	py::handle exception() {
+		if(contents.is<Running>()) {
+			py::object excType = py::module_::import("asyncio").attr("InvalidStateError");
+			PyErr_SetString(excType.ptr(), "Attempting to access result of incomplete promise");
+			throw py::error_already_set();
+		} else if(contents.is<py::object>()) {
+			return py::none();
+		} else if(contents.is<kj::Exception>()) {
+			raiseInPython(contents.get<kj::Exception>());
+		} else if(contents.is<Cancelled>()) {
+			py::object excType = py::module_::import("asyncio").attr("CancelledError");
+			PyErr_SetString(excType.ptr(), contents.get<Cancelled>().msg.cStr());
+			throw py::error_already_set();
+		}
+		
+		py::error_already_set eas;
+		return eas.value();
+	}
+	
+	py::object getLoop() {
+		return loop;
+	}
+	
+	Promise<py::object> asPromise() {
+		if(contents.is<Running>()) {
+			return canceler.wrap(contents.get<Running>().directPath.addBranch());
+		} else if(contents.is<py::object>()) {
+			return contents.get<py::object>();
+		} else if(contents.is<kj::Exception>()) {
+			return cp(contents.get<kj::Exception>());
+		} else if(contents.is<Cancelled>()) {
+			return kj::evalNow([this]() -> py::object {
+				KJ_FAIL_REQUIRE(contents.get<Cancelled>().msg);
+			});
+		}
+	}
+	
+	//! Iterator to satisfy the iterator protocol
+	struct FutureIterator {
+		FutureIterator(AsyncioFutureLike& parent) :
+			parent(parent)
+		{}
+		
+		AsyncioFutureLike& send(py::object value) {
+			if(!consumed) {
+				consumed = true;
+				parent.asyncioFutureBlocking = true;
+				return parent;
+			}
+			
+			KJ_REQUIRE(!parent.asyncioFutureBlocking, "Future was not consumed by asyncio");
+			KJ_REQUIRE(parent.done(), "Future was not completed");
+			
+			// Throw a StopIteration containing the reflected value given by asyncio
+			auto stopIterCls = py::reinterpret_borrow<py::object>(PyExc_StopIteration);
+			PyErr_SetObject(PyExc_StopIteration, stopIterCls(mv(value)).ptr());
+			
+			throw py::error_already_set();
+		}
+		
+		AsyncioFutureLike& next() {
+			return send(py::none());
+		}
+		
+		void throw_(py::object excType, py::object value, py::object stackTrace) {
+			KJ_REQUIRE(consumed, "Protocol error: Exception passed into unconsumed iterator on step 1");
+			
+			PyErr_Restore(excType.inc_ref().ptr(), value.inc_ref().ptr(), stackTrace.inc_ref().ptr());
+			throw py::error_already_set();
+		}
+	
+	private:
+		AsyncioFutureLike& parent;
+		bool consumed = false;
+	};
+	
+	FutureIterator* await() {
+		return new FutureIterator(*this);
+	}
+
+private:
+	void whenDone() {		
+		auto scheduler = loop.attr("call_soon");
+		
+		for(py::handle e : doneCallbacks)
+			scheduler(e);
+		
+		doneCallbacks = py::list();
+	}
+};
+
+}
+
+Promise<py::object> adaptAsyncioFuture(py::object future) {
+	py::detail::make_caster<AsyncioFutureLike> caster;
+	if(caster.load(future, false)) {
+		return ((AsyncioFutureLike&) caster).asPromise();
+	}
+	
+	return kj::newAdaptedPromise<py::object, AsyncioFutureAdapter>(mv(future));
+}
+
+py::object convertToAsyncioFuture(Promise<py::object> promise) {
+	return py::cast(new AsyncioFutureLike(mv(promise)));
+}
+
+void raiseInPython(const kj::Exception& e) {
+	// TODO: This is extremely primitive and custom exception types would be
+	// warranted.
+	
+	PyErr_SetString(PyExc_RuntimeError, kj::str(e).cStr());
+}
 	
 PyPromise run(PythonAwaitable obj) {
 	py::object generator = obj.await();
@@ -271,6 +628,31 @@ void initAsync(py::module_& m) {
 	)")
 		.def(py::init<unsigned int>())
 		.def("startFiber", &startFiber, py::keep_alive<0, 1>())
+	;
+	
+	py::class_<AsyncioFutureLike> futureCls(asyncModule, "Future", "AsyncIO-style future");
+	
+	futureCls
+		.def("result", &AsyncioFutureLike::result)
+		.def("set_result", &AsyncioFutureLike::setResult)
+		.def("set_exception", &AsyncioFutureLike::setException)
+		.def("done", &AsyncioFutureLike::done)
+		.def("cancelled", &AsyncioFutureLike::cancelled)
+		.def("add_done_callback", &AsyncioFutureLike::addDoneCallback)
+		.def("remove_done_callback", &AsyncioFutureLike::removeDoneCallback)
+		.def("cancel", &AsyncioFutureLike::cancel)
+		.def("exception", &AsyncioFutureLike::exception)
+		.def("get_loop", &AsyncioFutureLike::getLoop)
+		
+		.def("__await__", &AsyncioFutureLike::await, py::keep_alive<0, 1>())
+		
+		.def_readwrite("_asyncio_future_blocking", &AsyncioFutureLike::asyncioFutureBlocking)
+	;
+	
+	py::class_<AsyncioFutureLike::FutureIterator>(futureCls, "_Iterator")
+		.def("__next__", &AsyncioFutureLike::FutureIterator::next)
+		.def("send", &AsyncioFutureLike::FutureIterator::send)
+		.def("throw", &AsyncioFutureLike::FutureIterator::throw_)
 	;
 	
 	asyncModule.def("startEventLoop", &PythonContext::startEventLoop, "If the active thread has no active event loop, starts a new one");
