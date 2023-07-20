@@ -198,7 +198,8 @@ ThreadHandle::Ref::~Ref() {
 	}
 }
 
-ThreadHandle::ThreadHandle(Library l) :
+ThreadHandle::ThreadHandle(Library l, Maybe<kj::EventPort&> eventPort) :
+	ThreadContext(eventPort),
 	_library(l -> addRef()),
 	_dataService(kj::heap<LocalDataService>(l)),
 	refData(new kj::MutexGuarded<RefData>())

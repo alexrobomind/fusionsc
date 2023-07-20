@@ -49,7 +49,7 @@ struct LibraryHandle : public kj::AtomicRefcounted {
 	
 	const kj::Executor& steward() const ;
 	
-	inline LibraryThread newThread() const ;
+	inline LibraryThread newThread(Maybe<kj::EventPort&> eventPort = nullptr) const ;
 	void stopSteward() const;
 	
 	inline bool inShutdownMode() const { return *(shutdownMode.lockShared()); }
@@ -206,7 +206,7 @@ inline bool hasActiveThread() {
  */
 struct ThreadHandle : public ThreadContext {
 	// Creates a new thread handle from a library handle
-	ThreadHandle(Library lh);
+	ThreadHandle(Library lh, Maybe<kj::EventPort&> eventPort = nullptr);
 	~ThreadHandle();
 	
 	LocalDataService& dataService() override { return *_dataService; }
@@ -254,8 +254,8 @@ Promise<T> ThreadContext::uncancelable(Promise<T> p) {
 	return mv(kj::get<0>(promiseTuple));
 }
 
-LibraryThread LibraryHandle::newThread() const {
-	return kj::heap<ThreadHandle>(addRef());
+LibraryThread LibraryHandle::newThread(Maybe<kj::EventPort&> eventPort) const {
+	return kj::heap<ThreadHandle>(addRef(), mv(eventPort));
 }
 
 } // namespace fsc
