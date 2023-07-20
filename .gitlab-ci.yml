@@ -1,16 +1,25 @@
+variables:
+  PIPELINE_NAME: 'Pipeline'  # A default is not required.
+
+workflow:
+  name: '$PIPELINE_NAME'
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      variables:
+        PIPELINE_NAME: 'MR pipeline: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME'
+    - when: always
+
+
 stages:
   - build
   - test
   - pybuild
-  - doc
-  - pages
 
 # Build stage
 
 .jtpl: &job
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH == "main"'
     - when: manual
 
 .build: &build
@@ -62,8 +71,6 @@ stages:
   
   # Currently we only have windows builds available only for protected branches
   rules:
-    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "merge_request_event"'
-    #- if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_REF_PROTECTED == "true"'
       when: manual
     - when: never
@@ -131,7 +138,7 @@ pybuild:pybuild-manylinux:
   before_script:
     - yum install -y openssl-static
   script:
-    - /opt/python/$PYTHON/bin/python -m pip install build
+    - /opt/python/$PYTHON/bin/python -m pip install build twine
     - /opt/python/$PYTHON/bin/python -m build
     - |+
       for FILE in "dist/*.whl"
@@ -139,6 +146,7 @@ pybuild:pybuild-manylinux:
         auditwheel show $FILE
         auditwheel repair $FILE
       done
+    - /opt/python/$PYTHON/bin/python -m twine upload -u __token__ -p $PYPI_TOKEN --non-interactive --verbose wheelhouse/*.whl
   
   artifacts:
     paths:
@@ -158,69 +166,8 @@ pybuild:pybuild-windows:
   
   script:
     - py -3.$env:PYVERSION -m build -w
+    - twine upload -u __token__ -p $PYPI_TOKEN --non-interactive --verbose wheelhouse/*.whl
   
   artifacts:
     paths:
       - dist/*.whl
-
-pybuild:pybuild-all:
-  stage: pybuild
-  
-  dependencies:
-    - "pybuild:pybuild-windows: [7]"
-    - "pybuild:pybuild-windows: [8]"
-    - "pybuild:pybuild-windows: [9]"
-    - "pybuild:pybuild-windows: [10]"
-    - "pybuild:pybuild-windows: [11]"
-    - "pybuild:pybuild-manylinux: [cp38-cp38]"
-    - "pybuild:pybuild-manylinux: [cp39-cp39]"
-    - "pybuild:pybuild-manylinux: [cp310-cp310]"
-    - "pybuild:pybuild-manylinux: [cp311-cp311]"
-  
-  script:
-    - mv wheelhouse/*.whl dist
-    
-  artifacts:
-    paths:
-      - dist
-
-# Documentation (stands separate from the compilation-related jobs)
-
-#doc:
-#  <<: *job
-#  stage: doc
-#  image: gcc
-#
-#  needs: []
-#
-#  script:
-#    - apt-get update --yes
-#    - apt-get install --yes doxygen graphviz
-#    - doxygen Doxyfile
-#  
-#  artifacts:
-#    paths:
-#      - gendocs
-
-pages:
-  <<: *clang
-  <<: *job
-  stage: pages
-  
-  needs: []
-  
-  script:
-  - python3 -m virtualenv build_venv
-  - source build_venv/bin/activate
-  - pip install sphinx myst_nb sphinx_rtd_theme numpy
-  - mkdir build
-  - cd build
-  - cmake ..
-  - cmake --build . --target docs
-  - cd ..
-  - mkdir public
-  - cp -R build/docs/sphinx_docs public
-  
-  artifacts:
-    paths:
-      - public

@@ -8,7 +8,8 @@
 #include <type_traits>
 
 namespace fscpy {
-	
+
+//! A class that can be instantiated on the stack to override the current WaitScope
 struct ScopeOverride {
 	inline ScopeOverride(kj::WaitScope& ws) :
 		scope(ws),
@@ -79,6 +80,38 @@ private:
 	
 	static inline thread_local PythonWaitScope* activeScope = nullptr;
 };
+
+struct AsyncioEventPort : public kj::EventPort {
+	AsyncioEventPort();
+	~AsyncioEventPort();
+	
+	inline bool wait() override { KJ_UNIMPLEMENTED("Waiting from the C++ side is currently unsupported in asyncio-integrated threads"); }
+	
+	bool poll() override;
+	
+	void setRunnable(bool) override;
+	void wake() const override;
+	
+private:
+	void cancelRunner();
+	
+	void scheduleRunner();
+	void scheduleRunner() const ;
+	
+	bool runnable = false;
+	
+	py::object eventLoop;
+	py::object loopRunner;
+	
+	mutable py::object activeRunner; // Protected by GIL
+	mutable bool woken = false;      // Protected by GIL
+};
+
+Promise<py::object> adaptAsyncioFuture(py::object future);
+py::object convertToAsyncioFuture(Promise<py::object> promise);
+
+//! Raises an KJ exception in python
+void raiseInPython(const kj::Exception& e);
 
 struct PythonContext {
 	static inline Library library() {

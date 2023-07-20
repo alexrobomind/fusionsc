@@ -1369,54 +1369,6 @@ Promise<void> ObjectDB::drain() {
 	});
 }
 	
-/*	// Remember that we are downloading this capability into the given address
-	// This will prevent starting double-downloads until the hash is actually
-	// present in our blob db.
-	ClientHook* inner = ClientHook::from(cp(object)).get();
-	while(true) {
-		KJ_IF_MAYBE(pHook, inner -> getResolved()) {
-			inner = pHook;
-		} else {
-			break;
-		}
-	}
-	activeDownloads.insert({inner, id});
-	
-	// Start the download task
-	ForkedPromise<void> exportTask = downloadTask(object.castAs<DataRef<AnyPointer>>(), id)
-	
-	// If the download fails, store the failure
-	.catch_([this, id](kj::Exception&& e) mutable {
-		return withODBBackoff([this, e = mv(e), id]() mutable {
-			/*if(e.getType() == kj::Exception::Type::UNIMPLEMENTED)
-				dbObject -> info.setUnknownObject();
-			else
-				dbObject -> info.setException(toProto(e));*//*
-			auto t = conn -> beginTransaction();
-			auto dbObject = open(id);
-			dbObject -> info.setException(toProto(e));
-			// TODO: Make prettier error message
-			
-			dbObject -> save();
-		});
-	})
-	// If the failure storage also fails, discard the error, database is probably
-	// having larger issues right now anyway
-	.catch_([](kj::Exception&& e) {})
-	
-	// Remove exported hook after conclusion
-	.then([this, id, inner]() {
-		activeDownloads.erase(inner);
-		whenResolved.erase(id);
-	})
-	.fork();
-	
-	whenResolved.insert({id, exportTask.addBranch().fork()});
-	downloadTasks.add(exportTask.addBranch());
-	
-	return open(id);
-}*/
-
 Promise<void> ObjectDB::downloadTask(DataRef<AnyPointer>::Client src, int64_t id) {
 	using RemoteRef = DataRef<AnyPointer>;
 	using MetaCPResponse = Response<RemoteRef::MetaAndCapTableResults>;

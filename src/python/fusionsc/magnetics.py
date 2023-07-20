@@ -10,6 +10,8 @@ from . import wrappers
 
 from .asnc import asyncFunction
 
+import numpy as np
+
 from typing import Optional
 
 class CoilFilament(wrappers.structWrapper(service.Filament)):
@@ -129,7 +131,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		Returns:
 			A numpy array of shape points.shape with the field as x, y, z field.
 		"""
-		compField = self.compute(grid).data.computedField
+		compField = (await self.compute.asnc(grid)).data.computedField
 		
 		backend = backends.activeBackend()
 		calculator = backend.newFieldCalculator().service

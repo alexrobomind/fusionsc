@@ -180,6 +180,8 @@ kj::StringTree generateVmecInput(VmecRequest::Reader request) {
 	result = kj::strTree(
 		"&INDATA\n", mv(result), "/\n"
 	);
+	
+	return result;
 }
 
 }

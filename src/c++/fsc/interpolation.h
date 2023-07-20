@@ -280,7 +280,7 @@ struct SlabFieldInterpolator {
 	}
 	
 	EIGEN_DEVICE_FUNC Vec<Scalar, 3> operator()(const TensorMap<Tensor<Scalar, 4>>& fieldData, const Vec<Scalar, 3>& xyz) {
-		return operator()(TensorMap<Tensor<Scalar, 4>>(fieldData.data(), fieldData.dimensions()), xyz);
+		return operator()(TensorMap<const Tensor<Scalar, 4>>(fieldData.data(), fieldData.dimensions()), xyz);
 	}
 };
 

@@ -4,12 +4,13 @@ How to
 This section contains various demonstration examples.
 
 .. toctree::
+  W7X Current Scan
+  JText
+  Field Interpolation
   Field Line Following
   Poincare
   Connection Length
   Heat Load Calculation
-  W7X Current Scan
-  JText
   Server
   Client
   Mapping
