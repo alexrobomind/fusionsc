@@ -309,8 +309,9 @@ namespace {
 				size_t n = shape[0];
 				size_t tNDims = shape[1];
 				
-				if(!pointMode)
+				if(!pointMode) {
 					KJ_REQUIRE(shape[2] == 3);
+				}
 				
 				if(first) {
 					nDims = tNDims;
