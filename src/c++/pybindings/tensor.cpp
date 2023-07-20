@@ -39,16 +39,14 @@ py::buffer_info getBoolTensor(DynamicStruct::Reader tensor) {
 	auto shape = tensor.get("shape").as<capnp::List<uint64_t>>();
 	auto data  = tensor.get("data").as<capnp::DynamicList>();
 	
-	auto resultHolder = new ContiguousCArray();
-	
-	auto outData = resultHolder -> alloc<uint8_t>(shape);
-	resultHolder -> format = kj::str("?");
+	auto resultHolder = ContiguousCArray::alloc<uint8_t>(shape, "?");
+	auto outData = resultHolder.as<uint8_t>();
 	
 	for(auto i : kj::indices(data)) {
 		outData[i] = data[i].as<bool>() ? 1 : 0;
 	}
 	
-	py::buffer asPyBuffer = py::cast(resultHolder);
+	py::buffer asPyBuffer = py::cast(mv(resultHolder));
 	return asPyBuffer.request(true);
 }
 
@@ -57,10 +55,8 @@ py::buffer_info getObjectTensor(py::object pySelf, DynamicStruct::Reader tensor)
 	auto shape = tensor.get("shape").as<capnp::List<uint64_t>>();
 	auto data  = tensor.get("data").as<capnp::DynamicList>();
 	
-	auto resultHolder = new ContiguousCArray();
-	
-	auto outData = resultHolder -> alloc<PyObject*>(shape);
-	resultHolder -> format = kj::str("O");
+	auto resultHolder = ContiguousCArray::alloc<PyObject*>(shape, "O");
+	auto outData = resultHolder.as<PyObject*>();
 	
 	for(auto i : kj::indices(data)) {
 		py::object outObject = py::cast(data[i]);

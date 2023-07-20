@@ -6,6 +6,8 @@
 #include <kj/array.h>
 #include <kj/string.h>
 
+#include "kj.h"
+
 // This file contains the following type caster specializations:
 //
 //   kj::StringPtr
@@ -13,17 +15,7 @@
 
 namespace fscpy {
 
-struct DynamicConstArray {
-	virtual size_t size() = 0;
-	virtual py::object get(size_t i) = 0;
-	virtual ~DynamicConstArray() = 0;
-};
-	
-struct DynamicArray : public DynamicConstArray {
-	virtual void set(size_t i, py::object val) = 0;
-};
-
-template<typename T, typename SFINAE = void>
+template<typename T>
 struct DynamicArrayImpl : public DynamicArray {
 	kj::ArrayPtr<T> asPtr;
 	

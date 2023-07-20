@@ -15,25 +15,19 @@ namespace fscpy {
 	using namespace fsc;
 
 	struct UnknownObject {
+		const int* type = nullptr;
 		inline virtual ~UnknownObject() {};
 	};
-
-	template<typename T>
-	struct UnknownHolder : public UnknownObject {
-		T val;
-		UnknownHolder(T t) : val(mv(t)) {}
-		~UnknownHolder () noexcept {}
-	};
 	
 	template<typename T>
-	UnknownObject* eraseType(T t) { return new UnknownHolder<T>(mv(t)); }
+	UnknownObject* eraseType(T&& t);
 	
 	template<typename T>
-	py::object unknownObject(T ref) {
-		auto holder = new UnknownHolder(mv(ref));
-		return py::cast((fscpy::UnknownObject*) holder);
-	}		
+	Maybe<T&> checkType(UnknownObject& o);
 	
+	template<typename T>
+	py::object unknownObject(T&& ref);
+		
 	struct ContiguousCArray {
 		kj::Array<unsigned char> data;
 		
@@ -41,23 +35,13 @@ namespace fscpy {
 		size_t elementSize = 0;
 		kj::String format;
 		
-		template<typename T, typename ShapeContainer>
-		ArrayPtr<T> alloc(ShapeContainer& requestedShape) {
-			size_t shapeProd = 1;
-			
-			shape.resize(requestedShape.size());
-			for(auto i : kj::indices(requestedShape)) {
-				shape[i] = requestedShape[i];
-				shapeProd *= shape[i];
-			}
-			
-			elementSize = sizeof(T);
-			
-			data = kj::heapArray<unsigned char>(shapeProd * elementSize);
-			return kj::ArrayPtr<T>((T*) data.begin(), shapeProd);
-		}
-		
 		py::buffer_info getBuffer();
+		
+		template<typename T, typename ShapeContainer>
+		static ContiguousCArray alloc(ShapeContainer& requestedShape, kj::StringPtr formatCode);
+		
+		template<typename T>
+		kj::ArrayPtr<T> as();
 	};
 	
 	// Init methods for various components
@@ -85,6 +69,10 @@ namespace fscpy {
 extern kj::Own<py::dict> globalClasses;
 extern kj::Own<py::type> baseType;
 extern kj::Own<py::type> baseMetaType;
+
+#include "fscpy-inl.h"
+
+#include "kj.h"
 
 // Custom type casters
 #include "typecast_kj.h"

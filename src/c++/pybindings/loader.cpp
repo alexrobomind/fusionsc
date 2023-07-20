@@ -399,7 +399,7 @@ struct InterfaceMethod {
 		auto specializedResultType = typeInference.specialize(resultType).asStruct();
 		
 		// Extract promise
-		PyPromise resultPromise = result.then([specializedResultType](capnp::Response<AnyPointer> response) {
+		auto resultPromise = result.then([specializedResultType](capnp::Response<AnyPointer> response) -> py::object {
 			py::gil_scoped_acquire withGIL;
 			
 			DynamicValue::Reader structReader = response.getAs<DynamicStruct>(specializedResultType);
@@ -408,7 +408,7 @@ struct InterfaceMethod {
 			py::object pyResponse = py::cast(mv(response));
 			pyReader.attr("_response") = pyResponse;
 			
-			return kj::refcounted<PyObjectHolder>(mv(pyReader));
+			return pyReader;
 		});
 		
 		// Extract pipeline
@@ -651,12 +651,12 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 	{
 		py::dict attributes;
 		
-		py::type promiseBase = py::type::of<PyPromise>();
+		py::type promiseBase = futureType();
 		py::type pipelineBase = output.attr("Pipeline");
 		
 		attributes["__init__"] = fscpy::methodDescriptor(py::cpp_function(
-			[promiseBase, pipelineBase](py::object self, PyPromise& pyPromise, py::object pipeline) {
-				promiseBase.attr("__init__")(self, pyPromise);
+			[promiseBase, pipelineBase](py::object self, py::object future, py::object pipeline) {
+				promiseBase.attr("__init__")(self, future);
 				pipelineBase.attr("__init__")(self, pipeline);
 			}
 		));
@@ -823,14 +823,8 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 	}
 	
 	outerAttrs["newDeferred"] = py::cpp_function(
-		[schema](PyPromise promise) {
-			auto untypedPromise = promise.as<capnp::DynamicCapability::Client>()
-			.then([](capnp::DynamicCapability::Client typed) mutable -> capnp::Capability::Client {
-				return mv(typed);
-			});
-			
-			capnp::Capability::Client untyped = mv(untypedPromise);
-			
+		[schema](Promise<capnp::DynamicCapability::Client> promise) {			
+			capnp::Capability::Client untyped = mv(promise);
 			return untyped.castAs<capnp::DynamicCapability>(schema);
 		}
 	);

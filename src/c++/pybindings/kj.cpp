@@ -2,58 +2,98 @@
 
 #include <kj/common.h>
 
-using namespace fscpy;
-
-namespace {
-
-/*template<typename T>
-struct ArraySetDefinition {
-	template<typename T2>
-	static void def(T2& pyClass) {
-		pyClass.def("__setitem__", [](Array<T>& arr, size_t i, T newVal) { arr[i] = newVal; });
-	}
-};
-
-template<typename T>
-struct ArraySetDefinition<const T> {
-	template<typename... T2>
-	static void def(T2&...) {}
-};
-
-template<typename T>
-struct ArrayPtrSetDefinition {
-	template<typename T2>
-	static void def(T2& pyClass) {
-		pyClass.def("__setitem__", [](ArrayPtr<T>& arr, size_t i, T newVal) { arr[i] = newVal; });
-	}
-};
-
-template<typename T>
-struct ArrayPtrSetDefinition<const T> {
-	template<typename... T2>
-	static void def(T2&...) {}
-};
-
-template<typename T>
-void defArray(kj::StringPtr name, py::module_ m) {	
-	py::class_<kj::Array<T>> pyClass(m, name.cStr());
-	py::class_<kj::ArrayPtr<T>> pyClass2(m, kj::str(name, "Ptr").cStr());
-	
-	pyClass.def("__getitem__", [](Array<T>& arr, size_t i) -> T { return arr[i]; });
-	pyClass2.def("__getitem__", [](ArrayPtr<T>& arr, size_t i) -> T { return arr[i]; });
-	
-	ArraySetDefinition<T>::def(pyClass);
-	ArrayPtrSetDefinition<T>::def(pyClass2);
-}*/
-
-}
-
 namespace fscpy {
+	namespace {
+		void logInfo(bool enable) {
+			if(enable)
+				kj::_::Debug::setLogLevel(kj::LogSeverity::INFO);
+			else
+				kj::_::Debug::setLogLevel(kj::LogSeverity::WARNING);
+		}
+	}
+
+	void raiseInPython(const kj::Exception& e) {	
+		#define HANDLE_CASE(x) case kj::Exception::Type::x
+		
+		switch(e.getType()) {
+			HANDLE_CASE(FAILED):
+				PyErr_SetString(PyExc_RuntimeError, kj::str(e).cStr());
+				return;
+			
+			HANDLE_CASE(OVERLOADED):
+				excOverloaded(e.getDescription().cStr());
+				return;
+			
+			HANDLE_CASE(DISCONNECTED):
+				excDisconnected(e.getDescription().cStr());
+				return;
+			
+			HANDLE_CASE(UNIMPLEMENTED):
+				excUnimplemented(e.getDescription().cStr());
+				return;
+		}
+		
+		#undef HANDLE_CASE
+		
+		KJ_UNREACHABLE
+	}
+
+	kj::Exception convertPyError(py::error_already_set& e) {	
+		auto formatException = py::module_::import("traceback").attr("format_exception");
+		try {
+			py::object t = e.type();
+			py::object v = e.value();
+			py::object tr = e.trace();
+			
+			kj::Exception::Type cppType = kj::Exception::Type::FAILED;
+			
+			if(t.is(excOverloaded)) {
+				cppType = kj::Exception::Type::OVERLOADED;
+			} else if(t.is(excDisconnected)) {
+				cppType = kj::Exception::Type::DISCONNECTED;
+			} else if(t.is(excUnimplemented)) {
+				cppType = kj::Exception::Type::UNIMPLEMENTED;
+			}
+			
+			auto pythonException = kj::strTree();
+			
+			switch(cppType) {
+				case kj::Exception::Type::FAILED: {
+					py::list formatted;
+					if(t && tr)
+						formatted = formatException(t, v, tr);
+					else
+						formatted = formatException(v);
+					
+					for(auto s : formatted) {
+						pythonException = kj::strTree(mv(pythonException), py::cast<kj::StringPtr>(s), "\n");
+					}
+					
+					break;
+				}
+				
+				default:
+					pythonException = kj::strTree(e.what());
+			}
+			
+			return kj::Exception(::kj::Exception::Type::FAILED, __FILE__, __LINE__, pythonException.flatten());
+		} catch(std::exception e2) {
+			py::print("Failed to format exception", e.type(), e.value());
+			auto exc = kj::getCaughtExceptionAsKj();
+			return KJ_EXCEPTION(FAILED, "An underlying python exception could not be formatted due to the following error", exc);
+		}
+	}
+	
+	py::exception<kj::Exception> excOverloaded;
+	py::exception<kj::Exception> excDisconnected;
+	py::exception<kj::Exception> excUnimplemented;
+
 	void initKj(py::module_& m) {
 		py::module_ mkj = m.def_submodule("kj", "Python bindings for Cap'n'proto's 'kj' utility library");
 		
-		//defArray<kj::byte>("ByteArray", mkj);
-		//defArray<const kj::byte>("ConstByteArray", mkj);
+		excOverloaded = py::exception<kj::Exception>(m, "OverloadError");
+		excDisconnected = py::exception<kj::Exception>(m, "DisconnectError");
+		excUnimplemented = py::exception<kj::Exception>(m, "Unimplemented");
 		
 		py::class_<kj::StringPtr>(mkj, "StringPtr", "C++ string container. Generally not returned, but can be subclassed")
 			.def("__str__", [](kj::StringPtr ptr) { return ptr.cStr(); })
@@ -83,6 +123,8 @@ namespace fscpy {
 				PyErr_SetString(PyExc_RuntimeError, description.cStr());
 			}
 		});
+		
+		mkj.def("logInfo", &logInfo);
 	}
 	
 	DynamicConstArray::~DynamicConstArray() {}

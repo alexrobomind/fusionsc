@@ -11,9 +11,9 @@ capnp::InterfaceSchema createRefSchema(capnp::Type payloadType);
 
 Maybe<capnp::Type> getPayloadType(LocalDataRef<> dataRef);
 	
-kj::Own<PyObjectHolder> openRef(capnp::Type payloadType, LocalDataRef<> dataRef);
+py::object openRef(capnp::Type payloadType, LocalDataRef<> dataRef);
 	
-PyPromise download(capnp::DynamicCapability::Client capability);
+Promise<py::object> download(capnp::DynamicCapability::Client capability);
 
 capnp::DynamicCapability::Client publishReader(capnp::DynamicStruct::Reader value);
 capnp::DynamicCapability::Client publishBuilder(capnp::DynamicStruct::Builder dsb);

@@ -46,12 +46,9 @@ Maybe<capnp::Type> getPayloadType(LocalDataRef<> dataRef) {
 	}
 }
 	
-kj::Own<PyObjectHolder> openRef(capnp::Type payloadType, LocalDataRef<> dataRef) {
-	// Because async execution usually happens outside the GIL, we need to re-acquire it here
-	py::gil_scoped_acquire withPythonGIL;
-	
+py::object openRef(capnp::Type payloadType, LocalDataRef<> dataRef) {	
 	// Create a keepAlive object
-	py::object keepAlive = py::cast((UnknownObject*) new UnknownHolder<LocalDataRef<>>(dataRef));
+	py::object keepAlive = unknownObject(dataRef);
 	
 	auto inferredType = getPayloadType(dataRef);
 	if(payloadType.isAnyPointer()) {
@@ -70,7 +67,7 @@ kj::Own<PyObjectHolder> openRef(capnp::Type payloadType, LocalDataRef<> dataRef)
 	if(payloadType.isData()) {		
 		py::object result = py::cast(dataRef.getRaw());
 		result.attr("_ref") = keepAlive;
-		return kj::refcounted<PyObjectHolder>(mv(result));
+		return result;
 	} else {
 		capnp::AnyPointer::Reader root = dataRef.get();
 		
@@ -78,7 +75,7 @@ kj::Own<PyObjectHolder> openRef(capnp::Type payloadType, LocalDataRef<> dataRef)
 			auto schema = payloadType.asInterface();
 			
 			capnp::DynamicValue::Reader asDynamic = root.getAs<capnp::DynamicCapability>(schema);
-			return kj::refcounted<PyObjectHolder>(py::cast(asDynamic));
+			return py::cast(asDynamic);
 		}
 		if(payloadType.isStruct()) {
 			auto schema = payloadType.asStruct();
@@ -87,21 +84,19 @@ kj::Own<PyObjectHolder> openRef(capnp::Type payloadType, LocalDataRef<> dataRef)
 			
 			py::object result = py::cast(asDynamic);
 			result.attr("_ref") = keepAlive;
-			return kj::refcounted<PyObjectHolder>(mv(result));
+			return result;
 		}
 		
 		KJ_FAIL_REQUIRE("DataRefs can only carry interface, struct or data types (or AnyPointer if unknown)");
 	}
 }
 	
-PyPromise download(capnp::DynamicCapability::Client capability) {
+Promise<py::object> download(capnp::DynamicCapability::Client capability) {
 	using capnp::AnyPointer;
 	using capnp::DynamicCapability;
 	using capnp::DynamicStruct;
 	using capnp::DynamicList;
 	using capnp::DynamicValue;
-	
-	fscpy::PythonContext::startEventLoop();
 	
 	DataRef<AnyPointer>::Client dataRef = capability.castAs<DataRef<AnyPointer>>();
 	auto promise = getActiveThread().dataService().download(dataRef)

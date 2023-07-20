@@ -469,7 +469,7 @@ void bindPickleReader(py::module_& m, py::class_<capnp::DynamicStruct::Reader> c
 	m.def("_unpickleReader", [](uint32_t version, py::list data) {
 		KJ_REQUIRE(version == 1, "Only version 1 representation supported");
 		auto ref = unflattenDataRef(data);
-		return mv(openRef(capnp::schema::Type::AnyPointer::Unconstrained::STRUCT, mv(ref)) -> content);
+		return openRef(capnp::schema::Type::AnyPointer::Unconstrained::STRUCT, mv(ref));
 	});
 	
 	cls.def("__reduce_ex__", [cls](capnp::DynamicStruct::Reader src, uint32_t pickleVersion) mutable {

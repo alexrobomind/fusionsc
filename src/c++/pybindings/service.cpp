@@ -32,7 +32,7 @@ using namespace fscpy;
 namespace {
 
 LocalResources::Client connectSameThread1(LocalConfig::Reader config) {
-	fscpy::PythonContext::startEventLoop();
+	fscpy::PythonContext::start();
 	return createLocalResources(config);
 }
 	
