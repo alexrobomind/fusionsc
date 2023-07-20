@@ -104,8 +104,8 @@ NullErrorHandler NullErrorHandler::instance;
 
 // === class ThreadContext ===
 
-ThreadContext::ThreadContext() :
-	_ioContext(kj::setupAsyncIo()),
+ThreadContext::ThreadContext(Maybe<kj::EventPort&> port) :
+	asyncInfrastructure(makeAsyncInfrastructure(port)),
 	_executor(kj::getCurrentThreadExecutor()),
 	_filesystem(kj::newDiskFilesystem()),
 	_streamConverter(newStreamConverter()),
@@ -124,8 +124,16 @@ ThreadContext::~ThreadContext() {
 	
 	if(fastShutdown) {
 		// To avoid errors in kj due to the unclean shutdown
-		auto leakCtx = new kj::AsyncIoContext(mv(_ioContext));
+		auto leakCtx = new OneOf<kj::AsyncIoContext, CustomEventPort>(mv(asyncInfrastructure));
 		(void) leakCtx;
+	}
+}
+
+OneOf<kj::AsyncIoContext, ThreadContext::CustomEventPort> ThreadContext::makeAsyncInfrastructure(Maybe<kj::EventPort&> port) {
+	KJ_IF_MAYBE(pPort, port) {
+		return CustomEventPort(*pPort);
+	} else {
+		return kj::setupAsyncIo();
 	}
 }
 
@@ -147,6 +155,11 @@ Promise<void> ThreadContext::uncancelable(Promise<void> p) {
 Promise<void> ThreadContext::lifetimeScope() {
 	return scopeProvider.wrap(Promise<void>(NEVER_DONE));
 }
+
+ThreadContext::CustomEventPort::CustomEventPort(kj::EventPort& port) :
+	loop(kj::heap<kj::EventLoop>(port)),
+	waitScope(kj::heap<kj::WaitScope>(*loop))
+{}
 	
 // === class ThreadHandle ===
 
