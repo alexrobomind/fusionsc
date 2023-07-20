@@ -146,7 +146,7 @@ pybuild:pybuild-manylinux:
         auditwheel show $FILE
         auditwheel repair $FILE
       done
-    - twine upload -u __token__ -p $PYPI_TOKEN --non-interactive --verbose wheelhouse/*.whl
+    - /opt/python/$PYTHON/bin/python -m twine upload -u __token__ -p $PYPI_TOKEN --non-interactive --verbose wheelhouse/*.whl
   
   artifacts:
     paths:
