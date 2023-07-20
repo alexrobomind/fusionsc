@@ -99,7 +99,7 @@ inline Library newLibrary(bool elevated = false) {
 }
 
 struct ThreadContext {
-	ThreadContext();
+	ThreadContext(Maybe<kj::EventPort&> = nullptr);
 	~ThreadContext();
 	
 	//! Access to executor from outside threads
@@ -111,12 +111,18 @@ struct ThreadContext {
 		return _executor;
 	}
 	inline kj::AsyncIoContext& ioContext() {
-		return _ioContext;
+		KJ_REQUIRE(asyncInfrastructure.is<kj::AsyncIoContext>(), "Can only perform async IO in a thread with a default event port");
+		
+		return asyncInfrastructure.get<kj::AsyncIoContext>();
 	}
 	inline kj::WaitScope& waitScope() {
-		return ioContext().waitScope;
+		if(asyncInfrastructure.is<kj::AsyncIoContext>())
+			return asyncInfrastructure.get<kj::AsyncIoContext>().waitScope;
+		else
+			return *asyncInfrastructure.get<CustomEventPort>().waitScope;
 	}
 	inline kj::Timer& timer() {
+		KJ_REQUIRE(asyncInfrastructure.is<kj::AsyncIoContext>(), "Can only perform timer creation in a thread with a default event port");
 		return ioContext().provider->getTimer();
 	}
 	inline CSPRNG& rng() {
@@ -155,13 +161,25 @@ protected:
 	bool fastShutdown = false;
 	
 private:
+	struct CustomEventPort {
+		Own<kj::EventLoop> loop;
+		Own<kj::WaitScope> waitScope;
+		
+		CustomEventPort(kj::EventPort& port);
+		
+		/*CustomEventPort(const CustomEventPort&) = delete;
+		CustomEventPort(CustomEventPort&&) = default;*/
+	};
+	
 	// Access to currenly active instance
 	inline static thread_local ThreadContext* current = nullptr;
 	friend ThreadContext& getActiveThread();
 	friend bool hasActiveThread();
 	
+	OneOf<kj::AsyncIoContext, CustomEventPort> makeAsyncInfrastructure(Maybe<kj::EventPort&> port);
+	
 	// Fields
-	kj::AsyncIoContext _ioContext;
+	OneOf<kj::AsyncIoContext, CustomEventPort> asyncInfrastructure;
 	CSPRNG _rng;
 	Own<kj::Filesystem> _filesystem;
 	Own<StreamConverter> _streamConverter;
