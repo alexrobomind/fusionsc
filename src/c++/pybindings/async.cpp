@@ -327,7 +327,7 @@ struct AsyncioFutureLike {
 	uint64_t removeDoneCallback(py::object cb) {
 		py::list newCallbacks;
 		for(py::handle e : doneCallbacks) {
-			if(e == cb)
+			if(e.is(cb))
 				continue;
 			newCallbacks.append(e);
 		}
