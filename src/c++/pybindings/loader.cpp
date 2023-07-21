@@ -656,8 +656,10 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		
 		attributes["__init__"] = fscpy::methodDescriptor(py::cpp_function(
 			[promiseBase, pipelineBase](py::object self, py::object future, py::object pipeline) {
+				KJ_DBG("RemotePromise constructor");
 				promiseBase.attr("__init__")(self, future);
 				pipelineBase.attr("__init__")(self, pipeline);
+				KJ_DBG("RemotePromise constructor finished");
 			}
 		));
 		

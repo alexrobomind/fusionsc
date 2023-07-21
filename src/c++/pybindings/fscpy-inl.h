@@ -2,7 +2,7 @@ namespace fscpy {
 
 template<typename T>
 struct UnknownHolder : public UnknownObject {
-	static const int typeSlot = 0;
+	static inline const int typeSlot = 0;
 	T val;
 	
 	template<typename T2>

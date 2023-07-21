@@ -48,7 +48,6 @@ PythonWaitScope::PythonWaitScope(kj::WaitScope& ws, bool fiber) : waitScope(ws),
 		" on an event loop promise without releasing the active python scope"
 	);
 	activeScope = this;
-	asyncioLoop = py::module_::import("asyncio").attr("get_event_loop")();
 }
 
 PythonWaitScope::~PythonWaitScope() {
@@ -56,14 +55,21 @@ PythonWaitScope::~PythonWaitScope() {
 }
 
 void PythonWaitScope::turnLoop() {	
+	if(activeScope == nullptr) {
+		// Either we have no active event loop, or this is a reentrant
+		// call to the C++ event loop from a C++ wait. Case 1 there
+		// is nothing to do, case 2 the event loop is already turning.
+		
+		return;
+	}
+	
 	KJ_REQUIRE(
-		activeScope != nullptr,
-		"Trying to turn the event loop outside an active wait scope."
-		" This means that either no event loop was started on this thread,"
-		" or that the event loop is currently already turning and this function"
-		" was called from the inside of a coroutine driven by the C++ loop."
+		!activeScope->isFiber,
+		"Calling the asyncio event loop from a fiber is not possible, because"
+		" the fiber needs to yield, which would likely leave the asyncio event"
+		" loop in an invalid state. In a fiber, use the fsc.asnc.wait() method"
+		" instead, which handles this case properly"
 	);
-	KJ_REQUIRE(!activeScope->isFiber, "Can not turn the event loop inside a fiber");
 	
 	auto restoreTo = activeScope;
 	activeScope = nullptr;
@@ -80,12 +86,19 @@ bool PythonWaitScope::canWait() {
 // class AsyncioEventPort
 
 AsyncioEventPort::AsyncioEventPort() {
-	eventLoop = py::module_::import("asyncio").attr("get_event_loop")();
-	loopRunner = py::cpp_function([this]() {
-		activeRunner = py::none();
+	auto asyncio = py::module_::import("asyncio");
+	
+	eventLoop = asyncio.attr("get_event_loop")();
+	
+	loopRunner = py::cpp_function([this](py::object promise) {
+		// Set up a new runner & ready promise
+		prepareRunner();
+		
+		// Try to turn the event loop
 		PythonWaitScope::turnLoop();
 	});
-	activeRunner = py::none();
+	
+	prepareRunner();
 }
 
 AsyncioEventPort::~AsyncioEventPort() {
@@ -93,7 +106,7 @@ AsyncioEventPort::~AsyncioEventPort() {
 	
 	// Running the loopRunner after the event port is destroyed
 	// is a really really bad idea.
-	cancelRunner();
+	activeRunner.attr("cancel")();
 }
 
 bool AsyncioEventPort::poll() {
@@ -101,9 +114,7 @@ bool AsyncioEventPort::poll() {
 	{
 		py::gil_scoped_release releaseGil;
 	}
-	
-	py::gil_scoped_acquire withGil;
-	
+		
 	if(woken) {
 		woken = false;
 		return true;
@@ -112,48 +123,69 @@ bool AsyncioEventPort::poll() {
 	return false;
 }
 
+bool AsyncioEventPort::wait() {
+	// Jump back into the python event loop until there
+	// is nothing left to do.
+	KJ_DBG("Calling into asyncio event loop");
+	py::print(eventLoop);
+	py::print(readyFuture);
+	eventLoop.attr("run_until_complete")(readyFuture);
+	KJ_DBG("Asyncio event loop returned");
+		
+	return poll();
+}
+
 void AsyncioEventPort::setRunnable(bool newVal) {
+	KJ_DBG("AsyncioEventPort::setRunnable", newVal);
 	py::gil_scoped_acquire withGil;
 	
 	runnable = newVal;
 	
 	if(newVal) {
-		scheduleRunner();
+		armRunner();
 	}
 }
 
 void AsyncioEventPort::wake() const {
-	py::gil_scoped_acquire withGil;
-	
 	if(!woken) {
 		woken = true; 
-		scheduleRunner();
+		armRunner();
 	}
 }
 
-void AsyncioEventPort::cancelRunner() {
-	if(!activeRunner.is_none()) {
-		activeRunner.attr("cancel")();
-		activeRunner = py::none();
-	}
+void AsyncioEventPort::prepareRunner() {
+	readyFuture = eventLoop.attr("create_future")();
+	activeRunner = readyFuture.attr("add_done_callback")(loopRunner);
 }
 
-void AsyncioEventPort::scheduleRunner() {
-	if(activeRunner.is_none()) {
-		activeRunner = eventLoop.attr("call_soon")(loopRunner);
+void AsyncioEventPort::armRunner() {
+	if(!py::bool_(readyFuture.attr("done")())) {
+		KJ_DBG("Setting ready future");
+		readyFuture.attr("set_result")(py::none());
 	}
+	KJ_DBG("Runner armed");
+	py::print(readyFuture, readyFuture.attr("done")());
 }
 
-void AsyncioEventPort::scheduleRunner() const {
-	if(activeRunner.is_none()) {
-		activeRunner = eventLoop.attr("call_soon_threadsafe")(loopRunner);
-	}
+void AsyncioEventPort::armRunner() const {
+	py::gil_scoped_acquire withGil;
+	
+	eventLoop.attr("call_soon_threadsafe")(py::cpp_function(
+		[readyFuture = readyFuture]() {
+			if(!py::bool_(readyFuture.attr("done")())) {
+				KJ_DBG("Setting ready future");
+				readyFuture.attr("set_result")(py::none());
+			}
+		}
+	));
+	KJ_DBG("Runner armed from another thread");
 }
 
 // class PythonContext
 
 PythonContext::Instance::Instance() :
-	thread(library() -> newThread()),
+	eventPort(),
+	thread(library() -> newThread(eventPort)),
 	rootScope(thread -> waitScope())
 {}
 
@@ -196,12 +228,14 @@ struct AsyncioFutureAdapter {
 		AsyncioFutureAdapter& parent;
 		
 		void call(py::object future) {
+			KJ_DBG("Fulfiller callback called");
 			if(!valid)
 				return;
 			
 			parent.fulfiller.rejectIfThrows([this, future]() mutable {
 				parent.fulfiller.fulfill(future.attr("result")());
 			});
+			KJ_DBG("Fulfiller callback completed");
 		}
 		
 		FulfillerCallback(AsyncioFutureAdapter& parent) :
@@ -219,6 +253,7 @@ struct AsyncioFutureAdapter {
 		});
 		
 		future.attr("add_done_callback")(pythonCallback);
+		KJ_DBG("Fulfiller callback created & registered");
 	}
 	
 	~AsyncioFutureAdapter(){
@@ -245,10 +280,10 @@ struct AsyncioFutureLike {
 	
 	struct Running {
 		ForkedPromise<py::object> directPath;
-		Promise<void> resolveTask;
 	};
 	
 	OneOf<Running, Cancelled, py::object, kj::Exception> contents;
+	Maybe<Promise<void>> resolveTask;
 	
 	py::object loop;
 	py::list doneCallbacks;
@@ -256,33 +291,41 @@ struct AsyncioFutureLike {
 	
 	kj::Canceler canceler;
 	
-	AsyncioFutureLike(Promise<py::object> promise) :
-		contents(py::object()), doneCallbacks()
+	AsyncioFutureLike(py::object loop, Promise<py::object> promise) :
+		contents(py::object()), loop(mv(loop)), doneCallbacks()
 	{
 		auto forked = promise.fork();
-		Promise<void> resolveTask = forked.addBranch().then(
+		resolveTask = forked.addBranch().then(
 			[this](py::object result) mutable {
+				py::print("Result:", py::type::of(result));
+				
 				contents = mv(result);
+				whenDone();
+				KJ_DBG("C++ -> Python future finished");
 			},
 			[this](kj::Exception e) mutable {
 				contents = e;
 				whenDone();
+				KJ_DBG("C++ -> Python future failed", e);
 			}
-		);
+		).eagerlyEvaluate(nullptr);
 		
-		Running r = { mv(forked), mv(resolveTask) };
+		Running r = { mv(forked) };
 		contents = mv(r);
 	}
 	
 	AsyncioFutureLike(AsyncioFutureLike& other) :
-		AsyncioFutureLike(other.asPromise())
-	{}
+		AsyncioFutureLike(other.loop, other.asPromise())
+	{
+		KJ_DBG("FutureLike copy constructed");
+	}
 	
 	~AsyncioFutureLike() {
 		canceler.release();
 	}
 		
 	py::object result() {
+		KJ_DBG("AsyncioFutureLike::result()");
 		if(contents.is<Running>()) {
 			py::object excType = py::module_::import("asyncio").attr("InvalidStateError");
 			PyErr_SetString(excType.ptr(), "Attempting to access result of incomplete promise");
@@ -317,8 +360,8 @@ struct AsyncioFutureLike {
 		return contents.is<Cancelled>();
 	}
 	
-	void addDoneCallback(py::object cb) {
-		doneCallbacks.append(mv(cb));
+	void addDoneCallback(py::object cb, py::object context) {
+		doneCallbacks.append(py::make_tuple(mv(cb), mv(context)));
 		
 		if(done())
 			whenDone();
@@ -327,8 +370,11 @@ struct AsyncioFutureLike {
 	uint64_t removeDoneCallback(py::object cb) {
 		py::list newCallbacks;
 		for(py::handle e : doneCallbacks) {
-			if(e.is(cb))
+			auto asTuple = py::reinterpret_borrow<py::tuple>(e);
+			
+			if(cb.is(asTuple[0]))
 				continue;
+			
 			newCallbacks.append(e);
 		}
 		
@@ -347,6 +393,7 @@ struct AsyncioFutureLike {
 			msgStr = kj::heapString(py::cast<kj::StringPtr>(msg));
 		}
 		
+		resolveTask = nullptr;
 		canceler.cancel(msgStr);
 		contents.init<Cancelled>(mv(msgStr));
 		
@@ -354,7 +401,8 @@ struct AsyncioFutureLike {
 		return true;
 	}
 	
-	py::handle exception() {
+	py::object exception() {
+		KJ_DBG("AsyncioFutureLike::exception()");
 		if(contents.is<Running>()) {
 			py::object excType = py::module_::import("asyncio").attr("InvalidStateError");
 			PyErr_SetString(excType.ptr(), "Attempting to access result of incomplete promise");
@@ -370,7 +418,7 @@ struct AsyncioFutureLike {
 		}
 		
 		py::error_already_set eas;
-		return eas.value();
+		return py::reinterpret_borrow<py::object>(eas.value());
 	}
 	
 	py::object getLoop() {
@@ -452,13 +500,19 @@ struct AsyncioFutureLike {
 	}
 
 private:
-	void whenDone() {		
+	void whenDone() {
+		KJ_DBG("Scheduling callbacks", doneCallbacks.size());
+		
 		auto scheduler = loop.attr("call_soon");
 		
-		for(py::handle e : doneCallbacks)
-			scheduler(e);
+		for(py::handle e : doneCallbacks) {
+			auto asTuple = py::reinterpret_borrow<py::tuple>(e);
+			
+			scheduler(asTuple[0], this, py::arg("context") = asTuple[1]);
+		}
 		
 		doneCallbacks = py::list();
+		KJ_DBG("Callbacks scheduled");
 	}
 };
 
@@ -470,11 +524,26 @@ Promise<py::object> adaptAsyncioFuture(py::object future) {
 		return ((AsyncioFutureLike&) caster).asPromise();
 	}
 	
+	KJ_DBG("Object is not an fsc.asnc.Future. Creating adapter");
+	
+	
+	// Python awaitables can be wrapped in tasks
+	if(!hasattr(future, "_asyncio_future_blocking")) {
+		KJ_DBG("Scheduling asyncio task");
+		auto loop = py::module_::import("asyncio").attr("get_event_loop")();
+		future = loop.attr("create_task")(mv(future));
+		KJ_DBG("Asyncio task schedules");
+	}
+	
 	return kj::newAdaptedPromise<py::object, AsyncioFutureAdapter>(mv(future));
 }
 
 py::object convertToAsyncioFuture(Promise<py::object> promise) {
-	return py::cast(new AsyncioFutureLike(mv(promise)));
+	KJ_DBG("Converting promise to asyncio future");
+	auto loop = py::module_::import("asyncio").attr("get_event_loop")();
+	auto result = py::cast(new AsyncioFutureLike(loop, mv(promise)));
+	KJ_DBG("Conversion complete");
+	return result;
 }
 
 py::type futureType() {
@@ -510,6 +579,9 @@ void initAsync(py::module_& m) {
 		"AsyncIO-style future"
 	);
 	
+	// Constructor
+	futureCls.def(py::init<AsyncioFutureLike&>());
+	
 	// Define template specialization mechanism
 	// Allows expressions like "Future[T]"
 	futureCls
@@ -527,7 +599,7 @@ void initAsync(py::module_& m) {
 		.def("set_exception", &AsyncioFutureLike::setException)
 		.def("done", &AsyncioFutureLike::done)
 		.def("cancelled", &AsyncioFutureLike::cancelled)
-		.def("add_done_callback", &AsyncioFutureLike::addDoneCallback)
+		.def("add_done_callback", &AsyncioFutureLike::addDoneCallback, py::arg("callback"), py::kw_only(), py::arg("context") = py::none())
 		.def("remove_done_callback", &AsyncioFutureLike::removeDoneCallback)
 		.def("cancel", &AsyncioFutureLike::cancel)
 		.def("exception", &AsyncioFutureLike::exception)
@@ -550,6 +622,12 @@ void initAsync(py::module_& m) {
 	asyncModule.def("cycle", &PythonWaitScope::turnLoop, "Turns the C++ event loop until it becomes empty.");
 	
 	asyncModule.def("canWait", &PythonWaitScope::canWait);
+	asyncModule.def("wait", [](Promise<py::object> promise) {
+		KJ_DBG("Native conversion successful, entering C++ event loop");
+		auto result = PythonWaitScope::wait(mv(promise));
+		KJ_DBG("C++ loop finished");
+		return result;
+	});
 		
 	auto atexitModule = py::module_::import("atexit");
 	atexitModule.attr("register")(py::cpp_function(&atExitFunction));

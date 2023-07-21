@@ -6,15 +6,20 @@
 
 #include <functional>
 #include <type_traits>
+#include <atomic>
 
 namespace fscpy {
 
+//! Manages the active wait scope to be used by the asyncio event loop.
 struct PythonWaitScope {
 	PythonWaitScope(kj::WaitScope& ws, bool fiber = false);
 	~PythonWaitScope();
 	
 	template<typename T>
 	static T wait(Promise<T>&& promise);
+	
+	template<typename P>
+	static bool poll(P&& promise);
 	
 	static bool canWait();
 	static void turnLoop();
@@ -24,15 +29,13 @@ private:
 	bool isFiber;
 	
 	static inline thread_local PythonWaitScope* activeScope = nullptr;
-	
-	py::object asyncioLoop;
 };
 
 struct AsyncioEventPort : public kj::EventPort {
 	AsyncioEventPort();
 	~AsyncioEventPort();
 	
-	inline bool wait() override { KJ_UNIMPLEMENTED("Waiting from the C++ side is currently unsupported in asyncio-integrated threads"); }
+	inline bool wait() override;
 	
 	bool poll() override;
 	
@@ -40,18 +43,20 @@ struct AsyncioEventPort : public kj::EventPort {
 	void wake() const override;
 	
 private:
-	void cancelRunner();
+	void prepareRunner();
 	
-	void scheduleRunner();
-	void scheduleRunner() const ;
+	void armRunner();
+	void armRunner() const ;
 	
 	bool runnable = false;
 	
 	py::object eventLoop;
 	py::object loopRunner;
+	py::object readyFuture;
 	
-	mutable py::object activeRunner; // Protected by GIL
-	mutable bool woken = false;      // Protected by GIL
+	py::object activeRunner; // Protected by GIL
+	
+	mutable std::atomic<bool> woken = false;
 };
 
 Promise<py::object> adaptAsyncioFuture(py::object future);
@@ -71,6 +76,7 @@ private:
 	struct Instance {
 		Instance();
 		
+		AsyncioEventPort eventPort;
 		LibraryThread thread;
 		PythonWaitScope rootScope;
 	};

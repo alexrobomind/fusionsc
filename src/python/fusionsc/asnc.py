@@ -3,7 +3,7 @@ Asynchronous processing (promises, coroutines)
 """
 
 from .native.asnc import (
-	Promise, # This class is untyped in the C++ library, when referring to it in type hints, use Strings
+	Future, # This class is untyped in the C++ library, when referring to it in type hints, use Strings
 	
 	startEventLoop,
 	stopEventLoop,
@@ -11,10 +11,11 @@ from .native.asnc import (
 	cycle,
 	
 	canWait,
-	run,
 	
 	FiberPool
 )
+
+from .native.asnc import wait as nativeWait
 
 from .native.timer import delay
 
@@ -23,11 +24,12 @@ from typing_extensions import ParamSpec
 
 import functools
 import inspect
+import asyncio
 
 T = TypeVar("T")
 P = ParamSpec("P")
 
-__all__ = ["Promise", "startEventLop", "stopEventLoop", "hasEventLoop", "FiberPool", "wait", "asyncFunction", "run"]
+__all__ = ["Future", "startEventLop", "stopEventLoop", "hasEventLoop", "FiberPool", "wait", "asyncFunction", "run"]
 
 class AsyncMethodDescriptor:
 	"""Helper class to implement asyncFunction"""
@@ -44,13 +46,12 @@ class AsyncMethodDescriptor:
 			"(which gets a new stack) which can suspend synchronous-style."
 		)
 		
-		coro = self.f(*args, **kwargs)
-		return run(coro).wait()
+		future = self.asnc(*args, **kwargs)
+		return wait(future)
 	
 	def asnc(self, *args, **kwargs):
 		assert hasEventLoop(), "Asynchronous objects can only be used in threads with an active event loop. Create one for your thread with fsc.asnc.startEventLoop()"
-		coro = self.f(*args, **kwargs)
-		return run(coro)
+		return self.f(*args, **kwargs)
 	
 	def __get__(self, obj, objtype = None):
 		return functools.wraps(self.f)(AsyncMethodDescriptor(self.f.__get__(obj, objtype)))
@@ -95,7 +96,8 @@ def wait(awaitable: Awaitable[T]) -> T:
 		"are inside a call by an external library that has doesn't accept awaitables), then use the class fsc.asnc.FiberPool to start a new fiber "
 		"(which gets a new stack) which can suspend synchronous-style."
 	)
-	return run(awaitable).wait()
+			
+	return nativeWait(awaitable)
 
 def asyncFunction(f: Callable[P, Awaitable[T]]) -> Callable[P, T]:
 	"""

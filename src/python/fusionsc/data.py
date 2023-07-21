@@ -44,7 +44,7 @@ def publish(data: Union[capnp.DynamicStructReader, capnp.DataReader]) -> service
 	return cloneResult
 
 @asyncFunction
-def download(ref: service.DataRef) -> asnc.Promise[Union[capnp.DynamicCapabilityClient, capnp.DynamicStructReader, capnp.DataReader]]:
+def download(ref: service.DataRef) -> asnc.Future[Union[capnp.DynamicCapabilityClient, capnp.DynamicStructReader, capnp.DataReader]]:
 	"""
 	Retrieves a local copy of the information stored in 'ref'. If possible, transfer of data will be avoided. The retrieved data
 	are immutable and the backing storage is shared across all users in this process. If 'ref' was obtained from an archive file,
@@ -74,7 +74,7 @@ def writeArchive(data: Union[capnp.DynamicStructReader, capnp.DynamicCapabilityC
 	return backends.localResources().writeArchive(filename, ref)
 
 @asyncFunction
-def readArchive(filename: str) -> asnc.Promise[Union[capnp.DynamicCapabilityClient, capnp.DynamicStructReader]]:
+def readArchive(filename: str) -> asnc.Future[Union[capnp.DynamicCapabilityClient, capnp.DynamicStructReader]]:
 	"""
 	Opens the given archive file, maps the root node into memory and returns a typed view to the memory-mapped data.
 	

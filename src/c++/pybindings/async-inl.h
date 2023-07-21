@@ -9,14 +9,11 @@ struct type_caster<kj::Promise<py::object>> {
 	{}
 	
 	bool load(handle src, bool convert) {
-		// Can only load from future-like objects
-		if(!hasattr(src, "_asyncio_future_blocking")) {
-			if(!hasattr(src, "__await__"))
-				return false;
-			
-			// Python awaitables can be wrapped in tasks
-			src = py::module_::import("asyncio").attr("create_task")(src).inc_ref();
-		}
+		// Can only load from future-like objects or awaitables
+		if(!hasattr(src, "_asyncio_future_blocking") && !hasattr(src, "__await__"))
+			return false;
+		
+		KJ_DBG("Object seems suitable for conversion to promise. Beginning adaptation");
 		
 		value = fscpy::adaptAsyncioFuture(reinterpret_borrow<py::object>(src));
 		return true;
@@ -61,7 +58,7 @@ struct type_caster<kj::Promise<T>> {
 
 template<>
 struct type_caster<kj::Promise<void>> {
-	PYBIND11_TYPE_CASTER(kj::Promise<void>, const_name("fsc.native.asnc.Promise[NoneType]"));
+	PYBIND11_TYPE_CASTER(kj::Promise<void>, const_name("fsc.native.asnc.Future[NoneType]"));
 	
 	using GenericPromise = kj::Promise<py::object>;
 	
@@ -102,6 +99,18 @@ T PythonWaitScope::wait(Promise<T>&& promise) {
 	KJ_DEFER({activeScope = restoreTo;});
 	
 	return promise.wait(restoreTo -> waitScope);
+}
+
+template<typename P>
+bool PythonWaitScope::poll(P&& promise) {
+	KJ_REQUIRE(canWait(), "Can not wait inside promises inside continuations or coroutines, and not in threads where no event loop was started.");
+	KJ_REQUIRE(!activeScope->isFiber, "Can not poll promises inside fibers");
+	
+	auto restoreTo = activeScope;
+	activeScope = nullptr;
+	KJ_DEFER({activeScope = restoreTo;});
+	
+	return promise.poll(restoreTo -> waitScope);
 }
 
 }
