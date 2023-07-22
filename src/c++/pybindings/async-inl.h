@@ -98,6 +98,13 @@ T PythonWaitScope::wait(Promise<T>&& promise) {
 	activeScope = nullptr;
 	KJ_DEFER({activeScope = restoreTo;});
 	
+	if(restoreTo -> isFiber)
+		return promise.wait(restoreTo -> waitScope);
+	
+	while(!promise.poll(restoreTo -> waitScope)) {
+		AsyncioEventPort::waitForEvents();
+	}
+	
 	return promise.wait(restoreTo -> waitScope);
 }
 

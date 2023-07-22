@@ -35,7 +35,8 @@ struct AsyncioEventPort : public kj::EventPort {
 	AsyncioEventPort();
 	~AsyncioEventPort();
 	
-	inline bool wait() override;
+	bool wait() override;
+	static void waitForEvents();
 	
 	bool poll() override;
 	
@@ -46,7 +47,6 @@ private:
 	void prepareRunner();
 	
 	void armRunner();
-	void armRunner() const ;
 	
 	bool runnable = false;
 	
@@ -57,6 +57,11 @@ private:
 	py::object activeRunner; // Protected by GIL
 	
 	mutable std::atomic<bool> woken = false;
+	
+	struct WakeHelper;
+	Own<const WakeHelper> wakeHelper;
+	
+	inline static thread_local AsyncioEventPort* instance = nullptr;
 };
 
 Promise<py::object> adaptAsyncioFuture(py::object future);
@@ -81,10 +86,16 @@ private:
 		PythonWaitScope rootScope;
 	};
 	
+	struct InstanceHolder {
+		Maybe<Own<Instance>> value;
+		
+		~InstanceHolder();
+	};
+	
 	static Instance& getInstance();
 	
 	static inline kj::MutexGuarded<Library> _library = kj::MutexGuarded<Library>();
-	static thread_local inline Maybe<Instance> instance = nullptr;
+	static thread_local inline InstanceHolder instanceHolder = InstanceHolder();
 };
 
 }
