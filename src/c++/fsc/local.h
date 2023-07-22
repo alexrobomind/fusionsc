@@ -155,7 +155,7 @@ struct ThreadContext {
 	void detach(Promise<void> p);
 	Promise<void> drain();
 	
-	kj::Promise<void> lifetimeScope();
+	kj::Canceler& lifetimeScope();
 
 protected:
 	bool fastShutdown = false;

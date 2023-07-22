@@ -276,7 +276,7 @@ struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::Bootstra
 		auto client     = rpcClient -> bootstrap(LocalVatHub::INITIAL_VAT_ID);
 		
 		Own<void> attachments = kj::attachRef(client, vatNetwork.x(), rpcClient.x());
-		Promise<void> lifetimeScope = getActiveThread().lifetimeScope().attach(mv(attachments));
+		Promise<void> lifetimeScope = getActiveThread().lifetimeScope().wrap(Promise<void>(NEVER_DONE)).attach(mv(attachments));
 		return capnp::membrane(mv(client), kj::refcounted<KeepaliveMembrane>(mv(lifetimeScope)));
 	}
 };

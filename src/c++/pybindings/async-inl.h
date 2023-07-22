@@ -93,6 +93,7 @@ namespace fscpy {
 template<typename T>
 T PythonWaitScope::wait(Promise<T>&& promise) {
 	KJ_REQUIRE(canWait(), "Can not wait inside promises inside continuations or coroutines, and not in threads where no event loop was started.");
+	KJ_REQUIRE(PyGILState_Check(), "Can only wait inside GIL");
 	
 	auto restoreTo = activeScope;
 	activeScope = nullptr;
@@ -112,6 +113,7 @@ template<typename P>
 bool PythonWaitScope::poll(P&& promise) {
 	KJ_REQUIRE(canWait(), "Can not wait inside promises inside continuations or coroutines, and not in threads where no event loop was started.");
 	KJ_REQUIRE(!activeScope->isFiber, "Can not poll promises inside fibers");
+	KJ_REQUIRE(PyGILState_Check(), "Can only wait inside GIL");
 	
 	auto restoreTo = activeScope;
 	activeScope = nullptr;

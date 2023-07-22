@@ -399,9 +399,7 @@ struct InterfaceMethod {
 		auto specializedResultType = typeInference.specialize(resultType).asStruct();
 		
 		// Extract promise
-		auto resultPromise = result.then([specializedResultType](capnp::Response<AnyPointer> response) -> py::object {
-			py::gil_scoped_acquire withGIL;
-			
+		auto resultPromise = result.then([specializedResultType](capnp::Response<AnyPointer> response) -> py::object {			
 			DynamicValue::Reader structReader = response.getAs<DynamicStruct>(specializedResultType);
 			py::object pyReader = py::cast(structReader);
 			

@@ -59,7 +59,7 @@ private:
 	mutable std::atomic<bool> woken = false;
 	
 	struct WakeHelper;
-	Own<const WakeHelper> wakeHelper;
+	Own<WakeHelper> wakeHelper;
 	
 	inline static thread_local AsyncioEventPort* instance = nullptr;
 };
@@ -80,22 +80,19 @@ struct PythonContext {
 private:
 	struct Instance {
 		Instance();
+		~Instance();
 		
 		AsyncioEventPort eventPort;
 		LibraryThread thread;
 		PythonWaitScope rootScope;
 	};
 	
-	struct InstanceHolder {
-		Maybe<Own<Instance>> value;
-		
-		~InstanceHolder();
-	};
-	
 	static Instance& getInstance();
 	
 	static inline kj::MutexGuarded<Library> _library = kj::MutexGuarded<Library>();
-	static thread_local inline InstanceHolder instanceHolder = InstanceHolder();
+	static thread_local inline Maybe<Instance> instance = nullptr;
+	
+	static inline py::object atExitCallback;
 };
 
 }

@@ -118,19 +118,11 @@ ThreadContext::ThreadContext(Maybe<kj::EventPort&> port) :
 ThreadContext::~ThreadContext() {
 	KJ_REQUIRE(current == this, "Destroying LibraryThread in wrong thread");
 	
-	if(fastShutdown) {
-		scopeProvider.release();
-		
-		// To avoid errors in kj due to the unclean shutdown
-		auto leakCtx = new OneOf<kj::AsyncIoContext, CustomEventPort>(mv(asyncInfrastructure));
-		(void) leakCtx;
-	} else {
-		scopeProvider.cancel("Thread context destroyed");
-		
-		// We need to turn the event loop so that we can make sure the cancellations
-		// have propagated.
-		waitScope().poll();
-	}
+	scopeProvider.cancel("Thread context destroyed");
+
+	// We need to turn the event loop so that we can make sure the cancellations
+	// have propagated.
+	waitScope().poll();
 	
 	current = nullptr;
 }
@@ -158,9 +150,7 @@ Promise<void> ThreadContext::uncancelable(Promise<void> p) {
 	return forked.addBranch();
 }
 
-Promise<void> ThreadContext::lifetimeScope() {
-	return scopeProvider.wrap(Promise<void>(NEVER_DONE));
-}
+kj::Canceler& ThreadContext::lifetimeScope() { return scopeProvider; }
 
 ThreadContext::CustomEventPort::CustomEventPort(kj::EventPort& port) :
 	loop(kj::heap<kj::EventLoop>(port)),
