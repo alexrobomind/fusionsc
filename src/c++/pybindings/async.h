@@ -10,6 +10,8 @@
 
 namespace fscpy {
 
+class AsyncioEventPort;
+
 //! Manages the active wait scope to be used by the asyncio event loop.
 struct PythonWaitScope {
 	PythonWaitScope(kj::WaitScope& ws, bool fiber = false);
@@ -29,6 +31,8 @@ private:
 	bool isFiber;
 	
 	static inline thread_local PythonWaitScope* activeScope = nullptr;
+	
+	friend class AsyncioEventPort;
 };
 
 struct AsyncioEventPort : public kj::EventPort {
@@ -64,6 +68,9 @@ private:
 	Own<WakeHelper> wakeHelper;
 	
 	inline static thread_local AsyncioEventPort* instance = nullptr;
+	
+	friend class PythonWaitScope;
+	bool waitingForEvents = false;
 };
 
 Promise<py::object> adaptAsyncioFuture(py::object future);

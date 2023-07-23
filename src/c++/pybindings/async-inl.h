@@ -107,6 +107,12 @@ T PythonWaitScope::wait(Promise<T>&& promise) {
 	AsyncioEventPort::adjustEventLoop(eventLoop);
 	
 	while(!promise.poll(restoreTo -> waitScope)) {
+		// While the python event loop runs, we can wait inside it again
+		// This way, we can do reentrant waits on the Python side.
+		//
+		// Note: On the C++ side, we still need fibers though.
+		activeScope = restoreTo;
+		KJ_DEFER({activeScope = nullptr;});
 		AsyncioEventPort::waitForEvents();
 	}
 	

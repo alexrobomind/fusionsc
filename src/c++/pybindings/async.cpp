@@ -188,7 +188,8 @@ AsyncioEventPort::AsyncioEventPort() {
 		if(!PythonWaitScope::canWait())
 			return;
 		
-		KJ_DBG("Running");
+		if(AsyncioEventPort::instance -> waitingForEvents)
+			return;
 		
 		// Try to turn the event loop
 		PythonWaitScope::turnLoop();
@@ -252,8 +253,15 @@ void AsyncioEventPort::waitForEvents() {
 	// Jump back into the python event loop until there
 	// is work for the C++ loop.
 	
+	auto loop = py::module_::import("asyncio").attr("get_event_loop")();
+	adjustEventLoop(mv(loop));
+	
 	if(py::bool_(instance -> eventLoop.attr("is_closed")()))
 		return;
+	
+	bool restoreTo = instance -> waitingForEvents;
+	instance -> waitingForEvents = true;
+	KJ_DEFER({ instance -> waitingForEvents = restoreTo; });
 	
 	instance -> eventLoop.attr("run_until_complete")(instance -> readyFuture);
 	instance -> prepareRunner();
@@ -289,6 +297,8 @@ void AsyncioEventPort::adjustEventLoop(py::object newLoop) {
 	
 	if(instance -> eventLoop.is(newLoop))
 		return;
+	
+	KJ_REQUIRE(!instance -> waitingForEvents, "Can not switch to a new event loop while already waiting for another");
 	
 	instance -> eventLoop = newLoop;
 	instance -> prepareRunner();
@@ -695,8 +705,11 @@ py::object convertToAsyncioFuture(Promise<py::object> promise) {
 	auto result = py::cast(new AsyncioFutureLike(loop, mv(promise)));
 	
 	// It might be that the asyncio port is currently using a different 
-	// event loop. This will cause issues when running. Check and potentially
-	// adjust the port to this event loop.
+	// event loop. If the asyncio loop is in charge, and the KJ loop
+	// transitions to 'ready', the readyness signal will be sent to the
+	// wrong event loop, and the KJ loop will never be started by
+	// asyncio. To avoid this, we need to adjust now, when we have the
+	// correct loop at hand.
 	AsyncioEventPort::adjustEventLoop(loop);
 	
 	// Check if we need to adjust the event loop of the EventPort 
