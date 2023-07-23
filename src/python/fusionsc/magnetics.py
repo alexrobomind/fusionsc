@@ -33,15 +33,15 @@ class CoilFilament(wrappers.structWrapper(service.Filament)):
 			
 		result = CoilFilament()
 		
-		if self.data.which() == 'sum' and other.data.which() == 'sum':
+		if self.data.which_() == 'sum' and other.data.which_() == 'sum':
 			result.data.sum = list(self.data.sum) + list(other.data.sum)
 			return result
 		
-		if self.data.which() == 'sum':
+		if self.data.which_() == 'sum':
 			result.data.sum = list(self.data.sum) + [other.data]
 			return result
 		
-		if other.data.which() == 'sum':
+		if other.data.which_() == 'sum':
 			result.data.sum = [self.data] + list(other.data.sum)
 		
 		result.data.sum = [self.data, other.data]
@@ -102,7 +102,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 	async def compute(self, grid):
 		"""Computes the magnetic field on the specified grid."""
 		if grid is None:
-			assert self.data.which() == 'computedField', 'Must specify grid or use pre-computed field'
+			assert self.data.which_() == 'computedField', 'Must specify grid or use pre-computed field'
 			return MagneticConfig(self.data)
 		
 		result = MagneticConfig()
@@ -144,7 +144,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		result = MagneticConfig()
 		
 		# Remove double inversion
-		if self.data.which() == 'invert':
+		if self.data.which_() == 'invert':
 			result.data = self.data.invert
 			return result
 		
@@ -160,15 +160,15 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			
 		result = MagneticConfig()
 		
-		if self.data.which() == 'sum' and other.data.which() == 'sum':
+		if self.data.which_() == 'sum' and other.data.which_() == 'sum':
 			result.data.sum = list(self.data.sum) + list(other.data.sum)
 			return result
 		
-		if self.data.which() == 'sum':
+		if self.data.which_() == 'sum':
 			result.data.sum = list(self.data.sum) + [other.data]
 			return result
 		
-		if other.data.which() == 'sum':
+		if other.data.which_() == 'sum':
 			result.data.sum = [self.data] + list(other.data.sum)
 		
 		result.data.sum = [self.data, other.data]
@@ -189,7 +189,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		
 		result = MagneticConfig()
 		
-		if self.data.which() == 'scaleBy':
+		if self.data.which_() == 'scaleBy':
 			result.data.scaleBy = self.data.scaleBy
 			result.data.scaleBy.factor *= factor
 		
@@ -226,16 +226,16 @@ async def visualizeCoils(field):
 	coils = []
 	
 	async def processCoil(coil):
-		if coil.which() == 'inline':
+		if coil.which_() == 'inline':
 			coils.append(np.asarray(coil.inline))
 			return
 		
-		if coil.which() == 'ref':
+		if coil.which_() == 'ref':
 			local = await data.download.asnc(coil.ref)
 			await processCoil(local)
 			return
 		
-		if coil.which() == 'nested':
+		if coil.which_() == 'nested':
 			await processCoil(coil.nested)
 			return
 		
@@ -244,33 +244,33 @@ async def visualizeCoils(field):
 			
 	
 	async def process(field):
-		if field.which() == 'sum':
+		if field.which_() == 'sum':
 			for x in field.sum:
 				await process(x)
 			return
 		
-		if field.which() == 'ref':
+		if field.which_() == 'ref':
 			local = await data.download(field.ref)
 			await process(local)
 			return
 		
-		if field.which() == 'scaleBy':
+		if field.which_() == 'scaleBy':
 			await process(field.scaleBy.field)
 			return
 		
-		if field.which() == 'invert':
+		if field.which_() == 'invert':
 			await process(field.invert)
 			return
 		
-		if field.which() == 'nested':
+		if field.which_() == 'nested':
 			await process(field.nested)
 			return
 		
-		if field.which() == 'cached':
+		if field.which_() == 'cached':
 			await process(field.cached.nested)
 			return
 		
-		if field.which() == 'filamentField':
+		if field.which_() == 'filamentField':
 			await processCoil(field.filamentField.filament)
 			return
 		

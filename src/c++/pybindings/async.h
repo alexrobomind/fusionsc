@@ -36,12 +36,14 @@ struct AsyncioEventPort : public kj::EventPort {
 	~AsyncioEventPort();
 	
 	bool wait() override;
-	static void waitForEvents();
 	
 	bool poll() override;
 	
 	void setRunnable(bool) override;
 	void wake() const override;
+	
+	static void waitForEvents();
+	static void adjustEventLoop(py::object newLoop);
 	
 private:
 	void prepareRunner();

@@ -418,7 +418,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 					vertices(2, iVert, iPhi) = z[iVert];
 				}
 			}
-			KJ_DBG("Vertices generated");
+			KJ_LOG(INFO, "Vertices generated");
 			
 			// Create triangles
 			Tensor<uint32_t, 4> triangles(3, 2, nLines, nPhi);
@@ -438,12 +438,12 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 					triangles(2, 1, iLine, iPhi) = v1;
 				}
 			}
-			KJ_DBG("Triangles generated");
+			KJ_LOG(INFO, "Triangles generated");
 			
 			using A = Eigen::array<int64_t, 2>;
 			
 			Tensor<double, 2> flatVerts = vertices.reshape(A({3, nVerts * (nPhi + 1)}));
-			KJ_DBG("Verts reshaped");
+			KJ_LOG(INFO, "Verts reshaped");
 			
 			{
 				Temporary<Mesh> tmpMesh;
@@ -583,7 +583,7 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 	// First we need to download the geometry we want to index
 	return getActiveThread().dataService().download(merged)
 	.then([this, context](LocalDataRef<MergedGeometry> inputRef) mutable {
-		KJ_DBG("Beginning indexing operation");
+		KJ_LOG(INFO, "Beginning indexing operation");
 		
 		// Create output temporary and read information about input
 		auto output = context.getResults().initIndexed();
@@ -679,7 +679,7 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 				}}}
 			}
 			
-			// KJ_DBG("Processed mesh", iEntry, input.getEntries().size());
+			// KJ_LOG(INFO, "Processed mesh", iEntry, input.getEntries().size());
 		}
 		
 		// Set up output data. This creates a packed representation of the index
@@ -749,13 +749,13 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 	.then([context, geomAccum, tagNameTable, this]() mutable {
 		Temporary<capnp::List<TagValue>> tagScope(tagNameTable->size());
 		
-		KJ_DBG("Beginning merge operation");
+		KJ_LOG(INFO, "Beginning merge operation");
 		return mergeGeometries(context.getParams(), *tagNameTable, tagScope, nullptr, *geomAccum);
 	})
 	
 	// Finally, copy the data from the accumulator into the output
 	.then([context, geomAccum, tagNameTable, this]() mutable {
-		KJ_DBG("Merge complete");
+		KJ_LOG(INFO, "Merge complete");
 		// Copy data over
 		Temporary<MergedGeometry> output;
 		geomAccum->finish(output);
@@ -800,7 +800,7 @@ Promise<void> GeometryLibImpl::reduce(ReduceContext context) {
 	
 	return getActiveThread().dataService().download(ref)
 	.then([context, params](LocalDataRef<MergedGeometry> localRef) mutable {
-		KJ_DBG("Beginning reduce operation");
+		KJ_LOG(INFO, "Beginning reduce operation");
 		auto geometry = localRef.get();
 		
 		auto entries = geometry.getEntries();
@@ -909,7 +909,7 @@ Promise<void> GeometryLibImpl::reduce(ReduceContext context) {
 			meshesOut.add(mv(newMesh));
 		}
 		
-		KJ_DBG("Reduction complete, publishing results", entries.size(), meshesOut.size());
+		KJ_LOG(INFO, "Reduction complete, publishing results", entries.size(), meshesOut.size());
 		
 		Temporary<MergedGeometry> merged;
 		auto outEntries = merged.initEntries(meshesOut.size());
@@ -920,7 +920,7 @@ Promise<void> GeometryLibImpl::reduce(ReduceContext context) {
 		}
 		
 		context.initResults().setRef(getActiveThread().dataService().publish(mv(merged)));
-		KJ_DBG("Reduction published");
+		KJ_LOG(INFO, "Reduction published");
 	});
 }
 

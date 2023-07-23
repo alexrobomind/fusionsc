@@ -362,22 +362,34 @@ void defGet(py::class_<T, Extra...>& c) {
 	
 	auto genericGet = [](py::object ds, py::object field) { return getField(ds, field); };
 	
-	c.def("get", genericGet);
 	c.def("__getitem__", genericGet);
 	
-	// Register class as ABC
-	auto abcModule = py::module_::import("collections.abc");
-	abcModule.attr("Mapping").attr("register")(c);
+	c.def("toDict_", [](py::object pythonObject) {
+		T& builderOrReader = py::cast<T&>(pythonObject);
+		py::dict result;
+		
+		auto schema = builderOrReader.getSchema();
+		
+		for(auto field : schema.getNonUnionFields())
+			result[field.getProto().getName().cStr()] = getField(pythonObject, py::cast(field));
+		
+		KJ_IF_MAYBE(pField, builderOrReader.which()) {
+			auto& field = *pField;
+			result[field.getProto().getName().cStr()] = getField(pythonObject, py::cast(field));
+		}
+		
+		return result;
+	});
 }
 
 template<typename T, typename... Extra>
 void defHas(py::class_<T, Extra...>& c) {
-	c.def("has", [](T& ds, kj::StringPtr name) { return ds.has(name); });
+	c.def("has_", [](T& ds, kj::StringPtr name) { return ds.has(name); });
 }
 
 template<typename T, typename... Extra>
 void defWhich(py::class_<T, Extra...>& c) {
-	c.def("which", [](T& ds) -> py::object {
+	c.def("which_", [](T& ds) -> py::object {
 		auto maybeField = ds.which();
 		
 		KJ_IF_MAYBE(pField, maybeField) {
@@ -536,15 +548,7 @@ void bindStructClasses(py::module_& m) {
 	defWhich(cDSB);
 	
 	defTensorBuffer(cDSB, false);
-	
-	cDSB.def("set", &setField);
-	cDSB.def("set", &setFieldByName);
-	
-	//cDSB.def("init", &initField);
-	//cDSB.def("init", &initFieldByName);
-	//cDSB.def("init", &initList);
-	//cDSB.def("init", &initListByName);
-		
+			
 	cDSB.def("__setitem__", &setField);
 	cDSB.def("__setitem__", &setFieldByName);
 		
@@ -559,7 +563,7 @@ void bindStructClasses(py::module_& m) {
 		return result;
 	});
 	
-	cDSB.def("items", [](py::object pyBuilder) {
+	cDSB.def("items_", [](py::object pyBuilder) {
 		DSB& builder = py::cast<DSB&>(pyBuilder);
 		py::list result;
 		
@@ -589,7 +593,7 @@ void bindStructClasses(py::module_& m) {
 		return py::eval("iter")(result);
 	});
 	
-	cDSB.def("disown", [](py::object self, kj::StringPtr field) {
+	cDSB.def("disown_", [](py::object self, kj::StringPtr field) {
 		DSB builder = py::cast<DSB>(self);
 		py::object result = py::cast(builder.disown(field));
 		result.attr("_src") = self;

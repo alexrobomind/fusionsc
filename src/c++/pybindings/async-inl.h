@@ -13,8 +13,6 @@ struct type_caster<kj::Promise<py::object>> {
 		if(!hasattr(src, "_asyncio_future_blocking") && !hasattr(src, "__await__"))
 			return false;
 		
-		KJ_DBG("Object seems suitable for conversion to promise. Beginning adaptation");
-		
 		value = fscpy::adaptAsyncioFuture(reinterpret_borrow<py::object>(src));
 		return true;
 	}
@@ -101,6 +99,9 @@ T PythonWaitScope::wait(Promise<T>&& promise) {
 	
 	if(restoreTo -> isFiber)
 		return promise.wait(restoreTo -> waitScope);
+	
+	auto eventLoop = py::module_::import("asyncio").attr("get_event_loop")();
+	AsyncioEventPort::adjustEventLoop(eventLoop);
 	
 	while(!promise.poll(restoreTo -> waitScope)) {
 		AsyncioEventPort::waitForEvents();

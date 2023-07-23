@@ -521,9 +521,9 @@ kj::String sanitizedStructName(kj::StringPtr input) {
 }
 
 // Declaration for recursive calls
-py::object interpretSchema(capnp::SchemaLoader& loader, uint64_t id, py::object scope);
+py::object interpretSchema(capnp::SchemaLoader& loader, uint64_t id, py::object rootScope, Maybe<py::object> methodScope = nullptr);
 
-py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchema schema, py::object scope) {	
+py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchema schema, py::object rootScope, py::object scope) {	
 	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
 	auto structName = sanitizedStructName(schema.getUnqualifiedName());
 	
@@ -539,6 +539,9 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 	});
 	
 	py::object output = (*baseMetaType)(structName, py::make_tuple(), attrs);
+	
+	// Prevent recursion
+	(*globalClasses)[py::cast(schema.getProto().getId())] = output;
 	
 	// Create Builder, Reader, and Pipeline classes
 	for(int i = 0; i < 3; ++i) {
@@ -654,10 +657,8 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		
 		attributes["__init__"] = fscpy::methodDescriptor(py::cpp_function(
 			[promiseBase, pipelineBase](py::object self, py::object future, py::object pipeline) {
-				KJ_DBG("RemotePromise constructor");
 				promiseBase.attr("__init__")(self, future);
 				pipelineBase.attr("__init__")(self, pipeline);
-				KJ_DBG("RemotePromise constructor finished");
 			}
 		));
 		
@@ -747,7 +748,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		switch(field.getProto().which()) {
 			case Field::GROUP: {
 				capnp::StructSchema subType = field.getType().asStruct();
-				output.attr(name.cStr()) = interpretSchema(loader, subType.getProto().getId(), output);
+				output.attr(name.cStr()) = interpretSchema(loader, subType.getProto().getId(), rootScope);
 				break;
 			}
 			
@@ -758,7 +759,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 	return output;
 }
 
-py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::InterfaceSchema schema, py::object scope) {		
+py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::InterfaceSchema schema, py::object rootScope, py::object scope) {		
 	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
 	auto methods = schema.getMethods();
 	
@@ -810,8 +811,8 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		holder.attr("__module__") = moduleName;
 		holder.attr("desc") = str("Auxiliary classes (Params and/or Results) for method ", name);
 		
-		py::object pyParamType = interpretSchema(loader, method.getParamType().getProto().getId(), holder);
-		py::object pyResultType = interpretSchema(loader, method.getResultType().getProto().getId(), holder);
+		py::object pyParamType = interpretSchema(loader, method.getParamType().getProto().getId(), rootScope, holder);
+		py::object pyResultType = interpretSchema(loader, method.getResultType().getProto().getId(), rootScope, holder);
 		
 		KJ_REQUIRE(!pyParamType.is_none());
 		KJ_REQUIRE(!pyResultType.is_none());
@@ -877,7 +878,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 	return outerCls;
 }
 
-py::object interpretSchema(capnp::SchemaLoader& loader, uint64_t id, py::object scope) {	
+py::object interpretSchema(capnp::SchemaLoader& loader, uint64_t id, py::object rootScope, Maybe<py::object> methodScope) {	
 	if(globalClasses->contains(id))
 		return (*globalClasses)[py::cast(id)];
 	
@@ -886,44 +887,69 @@ py::object interpretSchema(capnp::SchemaLoader& loader, uint64_t id, py::object 
 		return py::none();
 	}
 	
-	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
-	
 	capnp::Schema schema = loader.get(id);
+		
+	// Find parent object
+	py::object parent;
+	{
+		uint64_t scopeId = schema.getProto().getScopeId();
+		if(scopeId != 0) {
+			parent = interpretSchema(loader, scopeId, rootScope);
+						
+			// Interpreting the parent schema can cause the node to
+			// be generated. Re-check the dict.
+			if(globalClasses->contains(id))
+				return (*globalClasses)[py::cast(id)];
+		} else {
+			KJ_IF_MAYBE(pMethodScope, methodScope) {
+				parent = *pMethodScope;
+			} else {
+				parent = rootScope;
+			}
+		}
+	}
 	
+	if(parent.is_none())
+		parent = rootScope;
+	
+	py::str moduleName = py::hasattr(parent, "__module__") ? parent.attr("__module__") : parent.attr("__name__");
 	py::object output = py::none();
 	
 	switch(schema.getProto().which()) {
 		case capnp::schema::Node::STRUCT:
-			output = interpretStructSchema(loader, schema.asStruct(), scope);
+			output = interpretStructSchema(loader, schema.asStruct(), rootScope, parent);
 			break;
 		case capnp::schema::Node::INTERFACE:
-			output = interpretInterfaceSchema(loader, schema.asInterface(), scope);
+			output = interpretInterfaceSchema(loader, schema.asInterface(), rootScope, parent);
+			break;
+		case capnp::schema::Node::FILE:
+			output = rootScope;
 			break;
 		
 		default:
 			py::dict attrs;
-			attrs["__qualname__"] = qualName(scope, schema.getUnqualifiedName()).asPtr();
+			attrs["__qualname__"] = qualName(parent, schema.getUnqualifiedName()).asPtr();
 			attrs["__module__"] = moduleName;
 			
 			output = (*baseMetaType)(schema.getUnqualifiedName().cStr(), py::make_tuple(), attrs);
 			break;
 	}
 	
-	if(output.is_none())
-		return output;
+	KJ_REQUIRE(!output.is_none(), "Failed to interpret node, schema is incomplete", id);
 	
+	// Remember the class before interpreting children to make sure we don't recurse
+	(*globalClasses)[py::cast(id)] = output;
+		
 	// Interpret child objects
 	for(auto nestedNode : schema.getProto().getNestedNodes()) {
-		py::object subObject = interpretSchema(loader, nestedNode.getId(), output);
+		py::object subObject = interpretSchema(loader, nestedNode.getId(), rootScope);
 		
 		if(subObject.is_none())
 			continue;
 			
 		output.attr(nestedNode.getName().cStr()) = subObject;
 	}
-	
-	(*globalClasses)[py::cast(id)] = output;
-	
+		
 	return output;
 }
 

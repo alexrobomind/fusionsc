@@ -420,7 +420,7 @@ async def axisCurrent(field, current, grid = None, startPoint = None, stepSize =
 		The magnetic configuration corresponding to the on-axis current's field.
 	"""
 	
-	assert field.data.which() == "computed" or grid is not None, "The magnetic field must either be precomputed or a grid must be specified."
+	assert field.data.which_() == "computed" or grid is not None, "The magnetic field must either be precomputed or a grid must be specified."
 	
 	if direction is None:
 		direction = "ccw"

@@ -72,6 +72,8 @@ struct DynamicStructPipeline {
 	
 	DynamicValuePipeline get(capnp::StructSchema::Field field);
 	DynamicValuePipeline get(kj::StringPtr fieldName);
+	
+	inline Maybe<capnp::StructSchema::Field> which() { return nullptr; }
 };
 
 struct TrackedMessageBuilder : public capnp::MallocMessageBuilder {

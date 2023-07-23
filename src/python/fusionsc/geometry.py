@@ -19,13 +19,11 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 	@asyncFunction
 	async def merge(self):
 		"""Creates a merged geometry (all meshes combined into one big message)"""
-		if self.data.which() == 'merged':
+		if self.data.which_() == 'merged':
 			return Geometry(self.data)
 		
 		resolved = await self.resolve.asnc()
-		#print("Merged: ", mergedRef)
 		mergedRef = geometryLib().merge(resolved.data).ref
-		print("Merged: ", mergedRef)
 		
 		result = Geometry()
 		result.data.merged = mergedRef
@@ -46,7 +44,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 	async def index(self, geometryGrid):
 		"""Computes an indexed geometry for accelerated intersection tests"""
 		if geometryGrid is None:
-			assert self.data.which() == 'indexed', 'Must specify geometry grid or use pre-indexed geometry'
+			assert self.data.which_() == 'indexed', 'Must specify geometry grid or use pre-indexed geometry'
 			return Geometry(self.data)
 		
 		resolved = await self.resolve.asnc()
@@ -73,7 +71,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		# If the geometries have tags, we can not merge the lists either way.
 		# In this case, just return a simple sum
 		def canAbsorb(x):
-			return x.data.which() == 'combined' and len(x.data.tags) == 0
+			return x.data.which_() == 'combined' and len(x.data.tags) == 0
 		
 		if canAbsorb(self) and canAbsorb(other):
 			result.data.combined = list(self.data.combined) + list(other.data.combined)
@@ -141,7 +139,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 	@asyncFunction
 	async def download(self):
 		"""For a geometry of 'ref' type, downloads the contents of the referenced geometry and wraps them in a new Geometry instance"""
-		if self.geometry.which() != 'ref':
+		if self.geometry.which_() != 'ref':
 			return Geometry(self.data)
 		
 		ref = self.data.ref
@@ -272,7 +270,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 			
 			faces = []
 			
-			if mesh.which() == 'polyMesh':
+			if mesh.which_() == 'polyMesh':
 				polyRanges = mesh.polyMesh
 				
 				for iPoly in range(len(polyRanges) - 1):
@@ -281,7 +279,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 					
 					faces.append(end - start)
 					faces.extend(indexArray[start:end])
-			elif mesh.which() == 'triMesh':
+			elif mesh.which_() == 'triMesh':
 				for offset in range(0, len(indexArray), 3):
 					start = offset
 					end	  = start + 3
@@ -302,9 +300,9 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 			mesh = extractMesh(entry)
 			
 			for tagName, tagValue in extractTags(entry).items():
-				if tagValue.which() == 'text':
+				if tagValue.which_() == 'text':
 					mesh.field_data[tagName] = [tagValue.text]
-				if tagValue.which() == 'uInt64':
+				if tagValue.which_() == 'uInt64':
 					mesh.field_data[tagName] = [tagValue.uInt64]
 					
 			return mesh

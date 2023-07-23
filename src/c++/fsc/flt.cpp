@@ -227,7 +227,7 @@ struct TraceCalculation {
 			if(!isFinished(kDataIn[i])) unfinished.add(i);
 		}
 		
-		KJ_DBG(prevRound -> participants, unfinished);
+		KJ_LOG(INFO,prevRound -> participants, unfinished);
 		
 		KJ_REQUIRE(unfinished.size() > 0, "Internal error");
 		
@@ -238,7 +238,7 @@ struct TraceCalculation {
 		
 		auto kDataOut = newRound.kernelData -> getHost().getData();
 		for(size_t i = 0; i < unfinished.size(); ++i) {
-			// KJ_DBG(i, unfinished[i], prevRound -> participants.size());
+			// KJ_LOG(INFO,i, unfinished[i], prevRound -> participants.size());
 			
 			newRound.participants.add(prevRound -> participants[unfinished[i]]);
 			
@@ -249,7 +249,7 @@ struct TraceCalculation {
 			entryOut.getState().setEventCount(0);
 			
 			maxSteps = std::max(maxSteps, entryOut.getState().getNumSteps());
-			// KJ_DBG(entryOut.getState());
+			// KJ_LOG(INFO,entryOut.getState());
 		}
 		
 		if(request.getServiceRequest().getStepLimit() != 0) {
@@ -260,7 +260,7 @@ struct TraceCalculation {
 			newRound.kernelRequest -> getHost().getServiceRequest().setStepLimit(maxSteps + ROUND_STEP_LIMIT);
 		}
 		
-		KJ_DBG("Relaunching", maxSteps, ROUND_STEP_LIMIT);
+		KJ_LOG(INFO,"Relaunching", maxSteps, ROUND_STEP_LIMIT);
 		
 		return newRound;
 	}
@@ -325,7 +325,7 @@ struct TraceCalculation {
 		auto& round = rounds[rounds.size() - 1];
 			
 		if(isFinished(round)) {
-			KJ_DBG("Trace Finished");
+			KJ_LOG(INFO,"Trace Finished");
 			return READY_NOW;
 		}
 		
@@ -417,24 +417,18 @@ struct FLTImpl : public FLT::Server {
 		auto mappingDataRef = request.getMapping();
 		
 		KJ_REQUIRE(request.hasField(), "Must specify a magnetic field");
-			
-		KJ_DBG("Initiating download of required data");
 		
 		Promise<LocalDataRef<Float64Tensor>> downloadField = dataService.download(request.getField().getData()).eagerlyEvaluate(nullptr);
 		Promise<Maybe<LocalDataRef<IndexedGeometry::IndexData>>> downloadIndexData = dataService.downloadIfNotNull(indexDataRef);
 		Promise<Maybe<LocalDataRef<MergedGeometry>>> downloadGeometryData =	dataService.downloadIfNotNull(geoDataRef).eagerlyEvaluate(nullptr);
 		Promise<Maybe<LocalDataRef<ReversibleFieldlineMapping>>> downloadMappingData = dataService.downloadIfNotNull(mappingDataRef).eagerlyEvaluate(nullptr);
-		KJ_DBG("Awaiting download processes");
 		
 		// I WANT COROUTINES -.-
 		
 		return downloadIndexData.then([ctx, request, downloadGeometryData = mv(downloadGeometryData), downloadField = mv(downloadField), downloadMappingData = mv(downloadMappingData), this](Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData) mutable {
 		return downloadGeometryData.then([ctx, request, indexData = mv(indexData), downloadField = mv(downloadField), downloadMappingData = mv(downloadMappingData), this](Maybe<LocalDataRef<MergedGeometry>> geometryData) mutable {
 		return downloadField.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), downloadMappingData = mv(downloadMappingData), this](LocalDataRef<Float64Tensor> fieldData) mutable {
-		return downloadMappingData.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), fieldData = mv(fieldData), this](Maybe<LocalDataRef<ReversibleFieldlineMapping>> mappingData) mutable {
-			
-			KJ_DBG("All required data downloaded");
-			
+		return downloadMappingData.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), fieldData = mv(fieldData), this](Maybe<LocalDataRef<ReversibleFieldlineMapping>> mappingData) mutable {			
 			// Extract kernel request
 			Temporary<FLTKernelRequest> kernelRequest;
 			/*kernelRequest.setPhiPlanes(request.getPoincarePlanes());
@@ -729,7 +723,7 @@ struct FLTImpl : public FLT::Server {
 			double r = iter.r;
 			double z = iter.z;
 			
-			KJ_DBG("FLT::findAxis iteration", r, z);
+			KJ_LOG(INFO,"FLT::findAxis iteration", r, z);
 			
 			bool isNan = false;
 			if(r != r) isNan = true;
@@ -901,10 +895,6 @@ struct FLTImpl : public FLT::Server {
 							break;
 						}
 					}
-					for(auto sr : stopReasons) {
-						KJ_DBG(sr);
-					}
-					KJ_DBG(firstClosed);
 					
 					x2 = x1 + (firstClosed + 1) * dx;
 					x1 = x1 + firstClosed * dx;
