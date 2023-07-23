@@ -90,6 +90,9 @@ namespace fscpy {
 
 template<typename T>
 T PythonWaitScope::wait(Promise<T>&& promise) {
+	// TODO: Check if an event port exists (instead of requiring canWait).
+	// TODO: If we have no WaitScope, delegate execution to the asyncio event loop and pray.
+	
 	KJ_REQUIRE(canWait(), "Can not wait inside promises inside continuations or coroutines, and not in threads where no event loop was started.");
 	KJ_REQUIRE(PyGILState_Check(), "Can only wait inside GIL");
 	
