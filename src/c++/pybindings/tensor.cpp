@@ -50,20 +50,17 @@ py::buffer_info getBoolTensor(DynamicStruct::Reader tensor) {
 	return asPyBuffer.request(true);
 }
 
-py::buffer_info getObjectTensor(py::object pySelf, DynamicStruct::Reader tensor) {
+template<typename T>
+py::buffer_info getObjectTensor(T tensor) {
 	// Extract shape and dat
-	auto shape = tensor.get("shape").as<capnp::List<uint64_t>>();
-	auto data  = tensor.get("data").as<capnp::DynamicList>();
+	auto shape = tensor.get("shape").asList().as<capnp::List<uint64_t>>();
+	auto data  = tensor.get("data").asList();
 	
 	auto resultHolder = ContiguousCArray::alloc<PyObject*>(shape, "O");
 	auto outData = resultHolder.as<PyObject*>();
 	
 	for(auto i : kj::indices(data)) {
-		py::object outObject = py::cast(data[i]);
-		
-		if(needsBackReference(data[i].getType()))
-			outObject.attr("_parent") = pySelf;
-		
+		py::object outObject = py::cast(data[i]);		
 		outData[i] = outObject.inc_ref().ptr();
 	}
 	
@@ -71,14 +68,17 @@ py::buffer_info getObjectTensor(py::object pySelf, DynamicStruct::Reader tensor)
 	return asPyBuffer.request(true);
 }
 
-py::buffer_info getDataTensor(DynamicStruct::Reader tensor, bool readOnly) {
+template<typename T>
+py::buffer_info getDataTensor(T tensor) {
+	constexpr bool readOnly = !isBuilder<T>();
+	
 	try {
 		// Extract shape and dat
-		auto shape = tensor.get("shape").as<capnp::List<uint64_t>>();
-		auto data  = tensor.get("data").as<capnp::DynamicList>();
+		auto shape = tensor.get("shape").asList().as<capnp::List<uint64_t>>();
+		auto data  = tensor.get("data").asList();
 				
 		// Extract raw data
-		kj::ArrayPtr<const byte> rawBytes = AnyList::Reader(data).getRawBytes();
+		kj::ArrayPtr<const byte> rawBytes = AnyList::Reader(toReader(data.wrapped())).getRawBytes();
 		byte* bytesPtr = const_cast<byte*>(rawBytes.begin());
 				
 		// Extract format
@@ -107,7 +107,11 @@ py::buffer_info getDataTensor(DynamicStruct::Reader tensor, bool readOnly) {
 		}
 		
 		return py::buffer_info(
-			(void*) bytesPtr, elementSize, std::string(formatString.cStr()), shape.size(), outShape, strides, readOnly
+			(void*) bytesPtr,
+			elementSize,
+			std::string(formatString.cStr()),
+			shape.size(), outShape, strides,
+			readOnly
 		);
 	} catch(kj::Exception& error) {
 		KJ_LOG(ERROR, "Failed to create python buffer. See below error\n", error);
@@ -397,22 +401,28 @@ py::buffer getAsBufferViaNumpy(py::object input, capnp::Type type, int minDims, 
 	return py::reinterpret_steal<py::buffer>(arrayObject);
 }
 
-
-py::buffer_info getTensor(py::object self, bool readOnly) {
-	DynamicStruct::Reader tensor = py::cast<DynamicStruct::Reader>(self);
-	
+template<typename T>
+py::buffer_info getTensorImpl(T tensor) {	
 	auto schema = tensor.getSchema();
 	auto scalarType = schema.getFieldByName("data").getType().asList().getElementType();
 	
 	if(isObjectType(scalarType)) {
-		return getObjectTensor(self, tensor);
+		return getObjectTensor(tensor);
 	}
 	
 	if(scalarType.isBool()) {
-		return getBoolTensor(tensor);
+		return getBoolTensor(toReader(tensor.wrapped()));
 	}
 	
-	return getDataTensor(tensor, readOnly);
+	return getDataTensor(tensor);
+}
+
+py::buffer_info getTensor(DynamicStructInterface<capnp::DynamicStruct::Reader> reader) {
+	return getTensorImpl(reader);
+}
+
+py::buffer_info getTensor(DynamicStructInterface<capnp::DynamicStruct::Builder> reader) {
+	return getTensorImpl(reader);
 }
 
 

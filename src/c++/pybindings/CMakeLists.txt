@@ -6,7 +6,9 @@ if(FSC_WITH_PYTHON)
 		graphviz.cpp
 		tensor.cpp		
 		
-		capnp.cpp
+		capnp-impl.cpp
+		capnp-bind.cpp
+		
 		kj.cpp
 		fscpy.cpp
 		async.cpp
@@ -18,6 +20,7 @@ if(FSC_WITH_PYTHON)
 		
 		helpers.cpp
 	)
+	# capnp.cpp
 
 	target_link_libraries(
 		fsc-python-bindings

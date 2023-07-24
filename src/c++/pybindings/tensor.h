@@ -1,6 +1,7 @@
 #pragma once
 
 #include "fscpy.h"
+#include "capnp.h"
 
 #include <capnp/dynamic.h>
 
@@ -28,6 +29,8 @@ bool needsBackReference(capnp::DynamicValue::Type t);
 Tuple<size_t, kj::StringPtr> pyFormat(capnp::Type type);
 
 void setTensor(capnp::DynamicStruct::Builder dsb, py::buffer buffer);
-py::buffer_info getTensor(py::object self, bool readOnly);
+
+py::buffer_info getTensor(DynamicStructInterface<capnp::DynamicStruct::Reader> self);
+py::buffer_info getTensor(DynamicStructInterface<capnp::DynamicStruct::Builder> self);
 
 }

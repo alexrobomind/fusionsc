@@ -400,138 +400,6 @@ void defWhich(py::class_<T, Extra...>& c) {
 	});
 }
 
-// Pickling support
-
-kj::Array<const byte> fromPythonBuffer(py::buffer buf) {
-	auto bufInfo = buf.request();
-	
-	kj::ArrayPtr<const byte> ptr((const byte*) bufInfo.ptr, bufInfo.itemsize * bufInfo.size);
-	
-	// Add a deleter for the buffer info that deletes inside the GIL
-	Maybe<py::buffer_info> deletable = mv(bufInfo);
-	return ptr.attach(kj::defer([deletable = mv(deletable)]() mutable {
-		py::gil_scoped_acquire withGil;
-		deletable = nullptr;
-	}));
-}
-
-py::list flattenDataRef(uint32_t pickleVersion, capnp::DynamicCapability::Client dynamicRef) {
-	auto payloadType = getRefPayload(dynamicRef.getSchema());
-	
-	auto data = PythonWaitScope::wait(getActiveThread().dataService().downloadFlat(dynamicRef.castAs<DataRef<>>()));
-	
-	py::list result(data.size());
-	
-	if(pickleVersion <= 4) {
-		// Version with copying
-		for(auto i : kj::indices(data)) {
-			result[i] = py::bytes((const char*) data[i].begin(), (uint64_t) data[i].size());
-		}
-	} else {
-		// Zero-copy version
-		auto pbCls = py::module_::import("pickle").attr("PickleBuffer");
-		for(auto i : kj::indices(data)) {
-			py::object asPy = py::cast(capnp::Data::Reader(data[i].asPtr()));
-			asPy.attr("_backingArray") = unknownObject(mv(data[i]));
-			
-			result[i] = pbCls(mv(asPy));
-		}
-	}
-	
-	return result;
-}
-
-LocalDataRef<> unflattenDataRef(py::list input) {
-	auto arrayBuilder = kj::heapArrayBuilder<kj::Array<const byte>>(input.size());
-	
-	for(auto i : kj::indices(input)) {
-		arrayBuilder.add(fromPythonBuffer(py::reinterpret_borrow<py::buffer>(input[i])));
-	}
-	
-	return getActiveThread().dataService().publishFlat<capnp::AnyPointer>(arrayBuilder.finish());
-}
-
-void bindPickleRef(py::module_& m, py::class_<capnp::DynamicCapability::Client> cls) {
-	// Note: pybind11 generates incorrect qualnames for functions
-	// Therefore, we need to define unpicklers and then call them via a
-	// wrapper defined by python itself.
-	
-	m.def("_unpickleRef", [](uint32_t version, py::list data) -> capnp::DynamicCapability::Client {
-		KJ_REQUIRE(version == 1, "Only version 1 representation supported");
-		return unflattenDataRef(data);
-	});
-	
-	cls.def("__reduce_ex__", [cls](capnp::DynamicCapability::Client src, uint32_t pickleVersion) {
-		auto unpickler = py::module_::import("fusionsc").attr("pickle_support").attr("unpickleRef");
-		return py::make_tuple(
-			unpickler,
-			py::make_tuple(
-				1,
-				flattenDataRef(pickleVersion, src)
-			)
-		);
-	});
-}
-
-void bindPickleReader(py::module_& m, py::class_<capnp::DynamicStruct::Reader> cls) {
-	// Note: pybind11 generates incorrect qualnames for functions
-	// Therefore, we need to define unpicklers and then call them via a
-	// wrapper defined by python itself.
-	
-	m.def("_unpickleReader", [](uint32_t version, py::list data) {
-		KJ_REQUIRE(version == 1, "Only version 1 representation supported");
-		auto ref = unflattenDataRef(data);
-		return openRef(capnp::schema::Type::AnyPointer::Unconstrained::STRUCT, mv(ref));
-	});
-	
-	cls.def("__reduce_ex__", [cls](capnp::DynamicStruct::Reader src, uint32_t pickleVersion) mutable {
-		auto unpickler = py::module_::import("fusionsc").attr("pickle_support").attr("unpickleReader");
-		return py::make_tuple(
-			unpickler,
-			py::make_tuple(
-				1,
-				flattenDataRef(pickleVersion, publishReader(src))
-			)
-		);
-	});
-}
-
-void bindPickleBuilder(py::module_& m, py::class_<capnp::DynamicStruct::Builder> cls) {
-	// Note: pybind11 generates incorrect qualnames for functions
-	// Therefore, we need to define unpicklers and then call them via a
-	// wrapper defined by python itself.
-	
-	m.def("_unpickleBuilder", [](uint32_t version, py::list data) {
-		KJ_REQUIRE(version == 1, "Only version 1 representation supported");
-		auto ref = unflattenDataRef(data);
-		
-		KJ_IF_MAYBE(pPayloadType, getPayloadType(ref)) {
-			auto msgBuilder = kj::heap<capnp::MallocMessageBuilder>();
-			msgBuilder -> setRoot(ref.get());
-			
-			capnp::DynamicStruct::Builder dynamic = msgBuilder -> getRoot<capnp::DynamicStruct>(pPayloadType -> asStruct());
-			py::object result = py::cast(dynamic);
-			
-			result.attr("_msg") = unknownObject(mv(msgBuilder));
-			
-			return result;
-		} else {
-			KJ_FAIL_REQUIRE("Payload type missing, can't unpickle");
-		}
-	});
-	
-	cls.def("__reduce_ex__", [cls](capnp::DynamicStruct::Builder src, uint32_t pickleVersion) mutable {
-		auto unpickler = py::module_::import("fusionsc").attr("pickle_support").attr("unpickleBuilder");
-		return py::make_tuple(
-			unpickler,
-			py::make_tuple(
-				1,
-				flattenDataRef(pickleVersion, publishBuilder(src))
-			)
-		);
-	});
-}
-
 void bindStructClasses(py::module_& m) {
 	using DSB = DynamicStruct::Builder;
 	using DSR = DynamicStruct::Reader;
@@ -638,7 +506,7 @@ void bindStructClasses(py::module_& m) {
 		return py::eval("iter")(result);
 	});
 	
-	cDSR.def("items", [](py::object pyReader) {
+	cDSR.def("items_", [](py::object pyReader) {
 		DSR& reader = py::cast<DSR&>(pyReader);
 		py::list result;
 		
@@ -830,87 +698,6 @@ void bindHelpers(py::module_& m) {
 namespace fscpy {
 	
 	
-Maybe<DynamicValue::Reader> dynamicValueFromScalar(py::handle handle) {
-	// 0D arrays
-	if(PyArray_IsZeroDim(handle.ptr())) {
-		PyArrayObject* scalarPtr = reinterpret_cast<PyArrayObject*>(handle.ptr());
-		
-		switch(PyArray_TYPE(scalarPtr)) {
-			#define HANDLE_NPY_TYPE(npytype, ctype) \
-				case npytype: { \
-					ctype* data = static_cast<ctype*>(PyArray_DATA(scalarPtr)); \
-					return DynamicValue::Reader(*data); \
-				}
-						
-			HANDLE_NPY_TYPE(NPY_INT8,  int8_t);
-			HANDLE_NPY_TYPE(NPY_INT16, int16_t);
-			HANDLE_NPY_TYPE(NPY_INT32, int32_t);
-			HANDLE_NPY_TYPE(NPY_INT64, int64_t);
-			
-			HANDLE_NPY_TYPE(NPY_UINT8,  uint8_t);
-			HANDLE_NPY_TYPE(NPY_UINT16, uint16_t);
-			HANDLE_NPY_TYPE(NPY_UINT32, uint32_t);
-			HANDLE_NPY_TYPE(NPY_UINT64, uint64_t);
-			
-			HANDLE_NPY_TYPE(NPY_FLOAT32, float);
-			HANDLE_NPY_TYPE(NPY_FLOAT64, double);
-			
-			#undef HANDLE_NPY_TYPE
-			
-			case NPY_BOOL: {
-				unsigned char* data = static_cast<unsigned char*>(PyArray_DATA(scalarPtr)); 
-				return DynamicValue::Reader((*data) != 0);
-			}
-				
-			default:
-				break;
-		}
-	}
-	
-	// NumPy scalars
-	if(PyArray_IsScalar(handle.ptr(), Bool)) { \
-		return DynamicValue::Reader(PyArrayScalar_VAL(handle.ptr(), Bool) != 0); \
-	}
-	
-	#define HANDLE_TYPE(cls) \
-		if(PyArray_IsScalar(handle.ptr(), cls)) { \
-			return DynamicValue::Reader(PyArrayScalar_VAL(handle.ptr(), cls)); \
-		}
-	
-	HANDLE_TYPE(Byte);
-	HANDLE_TYPE(Short);
-	HANDLE_TYPE(Int);
-	HANDLE_TYPE(Long);
-	HANDLE_TYPE(LongLong);
-	
-	HANDLE_TYPE(UByte);
-	HANDLE_TYPE(UShort);
-	HANDLE_TYPE(UInt);
-	HANDLE_TYPE(ULong);
-	HANDLE_TYPE(ULongLong);
-	
-	HANDLE_TYPE(Float);
-	HANDLE_TYPE(Double);
-	
-	#undef HANDLE_TYPE		
-	
-	// Python builtins
-	#define HANDLE_TYPE(ctype, pytype) \
-		if(py::isinstance<pytype>(handle)) { \
-			pytype typed = py::reinterpret_borrow<pytype>(handle); \
-			ctype cTyped = static_cast<ctype>(typed); \
-			return DynamicValue::Reader(cTyped); \
-		}
-		
-	// Bool is a subtype of int, so this has to go first
-	HANDLE_TYPE(bool, py::bool_);
-	HANDLE_TYPE(signed long long, py::int_);
-	HANDLE_TYPE(double, py::float_);
-	
-	#undef HANDLE_TYPE
-	
-	return nullptr;
-}
 	
 // init method
 
@@ -951,17 +738,6 @@ void initCapnp(py::module_& m) {
 }
 	
 // class DynamicValuePipeline
-
-DynamicStructPipeline DynamicValuePipeline::asStruct() {
-	return DynamicStructPipeline(
-		typeless.noop(), schema.asStruct()
-	);
-}
-
-capnp::DynamicCapability::Client DynamicValuePipeline::asCapability() {
-	capnp::Capability::Client anyCap = typeless;
-	return anyCap.castAs<DynamicCapability>(schema.asInterface());
-}
 
 // class DynamicStructPipeline
 

@@ -114,6 +114,10 @@ namespace {
 }
 
 namespace fsc {
+
+capnp::DynamicValue::Reader loadPrimitive(capnp::Type type, YAML::Node src) {
+	return parsePrimitive(mv(type), mv(src));
+}
 	
 void load(DynamicList::Builder dst, YAML::Node src) {
 	auto listSchema = dst.getSchema();
@@ -212,6 +216,20 @@ void load(DynamicStruct::Builder dst, YAML::Node src) {
 	}
 }
 
+YAML::Emitter& operator<<(YAML::Emitter& dst, DynamicValue::Reader src) {
+	auto type = src.getType();
+	
+	if(type == DynamicValue::STRUCT) {
+		dst << src.as<DynamicStruct>();
+	} else if(type == DynamicValue::LIST) {
+		dst << src.as<DynamicList>();
+	} else {
+		emitPrimitive(dst, src);
+	}
+	
+	return dst;
+}
+
 YAML::Emitter& operator<<(YAML::Emitter& dst, DynamicList::Reader src) {
 	auto listSchema = src.getSchema();
 	auto elType = listSchema.getElementType();
@@ -222,13 +240,7 @@ YAML::Emitter& operator<<(YAML::Emitter& dst, DynamicList::Reader src) {
 	dst << YAML::BeginSeq;
 	
 	for(auto el : src) {
-		if(elType.isStruct()) {
-			dst << el.as<DynamicStruct>();
-		} else if(elType.isList()) {
-			dst << el.as<DynamicList>();
-		} else {
-			emitPrimitive(dst, el);
-		}
+		dst << el;
 	}
 	
 	dst << YAML::EndSeq;
@@ -246,7 +258,7 @@ YAML::Emitter& operator<<(YAML::Emitter& dst, DynamicStruct::Reader src) {
 		KJ_IF_MAYBE(pActive, maybeActive) {
 			auto& active = *pActive;
 			if(!src.has(active, capnp::HasMode::NON_DEFAULT)) {
-				dst << active.getProto().getName();
+				dst << active.getProto().getName().cStr();
 				return dst;
 			}
 		}
@@ -265,7 +277,7 @@ YAML::Emitter& operator<<(YAML::Emitter& dst, DynamicStruct::Reader src) {
 		
 		auto val = src.get(field);
 		
-		dst << YAML::Key << field.getProto().getName();
+		dst << YAML::Key << field.getProto().getName().cStr();
 		dst << YAML::Value;
 		
 		if(type.isStruct()) {
