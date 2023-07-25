@@ -73,6 +73,8 @@ namespace pybind11 { namespace detail {
 	template<>
 	struct type_caster<fscpy::DynamicStructPipeline> : public PolymorphicDispatchCaster<fscpy::DynamicStructPipeline, "Pipeline"> {	
 	};
+	
+	// Dynamic <-> Static casters for static classes w/ messages
 			
 	template<typename Builder>
 	struct type_caster<fscpy::WithMessage<Builder>, kj::EnableIf<CAPNP_KIND(capnp::FromBuilder<Builder>) == capnp::Kind::STRUCT>> {
@@ -114,8 +116,6 @@ namespace pybind11 { namespace detail {
 			return type_caster<DSB>::cast(dynamic, policy, parent);
 		}		
 	};
-	
-	// Dynamic <-> Static casters for static classes
 	
 	template<typename Reader>
 	struct type_caster<fscpy::WithMessage<Reader>, kj::EnableIf<CAPNP_KIND(capnp::FromReader<Reader>) == capnp::Kind::STRUCT>> {
@@ -178,6 +178,52 @@ namespace pybind11 { namespace detail {
 		}		
 	};
 	
+	// Static one-way bindings for builders & readers without messages
+	
+	template<typename Builder>
+	struct type_caster<Builder, kj::EnableIf<CAPNP_KIND(capnp::FromBuilder<Builder>) == capnp::Kind::STRUCT>> {
+		using Builds = typename Builder::Builds;
+		
+		PYBIND11_TYPE_CASTER(Builds, const_name<Builds>() + const_name(".Builder"));
+		FSCPY_MOVE_ONLY_CASTER;
+		
+		type_caster<WithMessage<Builder>> baseCaster;
+		
+		bool load(handle src, bool convert) {
+			if(!baseCaster.load(src, convert))
+				return false;
+			
+			value = baseCaster.wrapped();
+		}
+		
+		template<typename T>
+		static handle cast(T, return_value_policy, handle) {
+			static_assert(sizeof(T) == 0, "Do not attempt to cast Builders directly, use WithMessage<...>");
+		}
+	};
+	
+	template<typename Reader>
+	struct type_caster<Reader, kj::EnableIf<CAPNP_KIND(capnp::FromReader<Reader>) == capnp::Kind::STRUCT>> {
+		using Reads = typename Reader::Reads;
+		
+		PYBIND11_TYPE_CASTER(Reads, const_name<Reads>() + const_name(".Builder"));
+		FSCPY_MOVE_ONLY_CASTER;
+		
+		type_caster<WithMessage<Reader>> baseCaster;
+		
+		bool load(handle src, bool convert) {
+			if(!baseCaster.load(src, convert))
+				return false;
+			
+			value = baseCaster.wrapped();
+		}
+		
+		template<typename T>
+		static handle cast(T, return_value_policy, handle) {
+			static_assert(sizeof(T) == 0, "Do not attempt to cast Readers directly, use WithMessage<...>");
+		}
+	};
+	
 	namespace pybind_fsc {
 		template<typename T>
 		struct CastThisCap_ { static constexpr bool val = capnp::kind<T>() == capnp::Kind::INTERFACE; };
@@ -186,7 +232,7 @@ namespace pybind11 { namespace detail {
 		struct CastThisCap_<capnp::DynamicCapability> { static constexpr bool val = false; };
 		
 		template<typename T>
-		constexpr bool castThisCap() { return CastThisCap_<T>::val; }		
+		constexpr bool castThisCap() { return CastThisCap_<T>::val; }
 	}
 	
 	template<typename Client>
