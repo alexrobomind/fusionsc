@@ -46,7 +46,7 @@ Maybe<capnp::Type> getPayloadType(LocalDataRef<> dataRef) {
 	}
 }
 	
-py::object openRef(capnp::Type payloadType, LocalDataRef<> dataRef) {	
+DynamicValueReader openRef(capnp::Type payloadType, LocalDataRef<> dataRef) {	
 	// Create a keepAlive object
 	py::object keepAlive = unknownObject(dataRef);
 	
@@ -65,33 +65,24 @@ py::object openRef(capnp::Type payloadType, LocalDataRef<> dataRef) {
 	
 	// "Data" type payloads do not have a root pointer. They are NO capnp messages.
 	if(payloadType.isData()) {		
-		py::object result = py::cast(dataRef.getRaw());
-		result.attr("_ref") = keepAlive;
-		return result;
+		return DataReader::from(dataRef.forkRaw());
 	} else {
 		capnp::AnyPointer::Reader root = dataRef.get();
 		
 		if(payloadType.isInterface()) {
 			auto schema = payloadType.asInterface();
-			
-			capnp::DynamicValue::Reader asDynamic = root.getAs<capnp::DynamicCapability>(schema);
-			return py::cast(asDynamic);
+			return root.getAs<capnp::DynamicCapability>(schema);
 		}
 		if(payloadType.isStruct()) {
 			auto schema = payloadType.asStruct();
-			
-			capnp::DynamicValue::Reader asDynamic = root.getAs<capnp::DynamicStruct>(schema);
-			
-			py::object result = py::cast(asDynamic);
-			result.attr("_ref") = keepAlive;
-			return result;
+			return DynamicStructReader(kj::heap(dataRef), root.getAs<capnp::DynamicStruct>(schema));
 		}
 		
 		KJ_FAIL_REQUIRE("DataRefs can only carry interface, struct or data types (or AnyPointer if unknown)");
 	}
 }
 	
-Promise<py::object> download(capnp::DynamicCapability::Client capability) {
+Promise<DynamicValueReader> download(capnp::DynamicCapability::Client capability) {
 	using capnp::AnyPointer;
 	using capnp::DynamicCapability;
 	using capnp::DynamicStruct;
@@ -183,17 +174,26 @@ Promise<void> writeArchive3(capnp::DynamicStruct::Builder root, kj::StringPtr pa
 namespace fscpy {	
 	
 void initData(py::module_& m) {
+	KJ_DBG("initData()");
 	py::module_ dataModule = m.def_submodule("data", "Distributed data processing");
+	KJ_DBG("module ok");
 	
 	dataModule.def("downloadAsync", &download, "Starts a download for the given DataRef and returns a promise for its contents");
+	KJ_DBG("download ok");
 	dataModule.def("publish", &publishBuilder, "Creates a DataRef containing the given data");
+	KJ_DBG("publishBuilder ok");
 	dataModule.def("publish", &publishReader, "Creates a DataRef containing the given data");
+	KJ_DBG("publishReader ok");
 	
 	dataModule.def("openArchive", &openArchive, "Opens an archive file and returns a DataRef to its root");
+	KJ_DBG("openArchive ok");
 	
 	dataModule.def("writeArchiveAsync", &writeArchive1, "Downloads (recursively) the given DataRef and asynchronously waits an Archive containing its contents. Must wait on the returned promise.");
+	KJ_DBG("writeArchive1 ok");
 	dataModule.def("writeArchiveAsync", &writeArchive2);
+	KJ_DBG("writeArchive2 ok");
 	dataModule.def("writeArchiveAsync", &writeArchive3);
+	KJ_DBG("writeArchive3 ok");
 }
 
 }

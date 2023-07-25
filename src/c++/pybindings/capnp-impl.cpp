@@ -23,8 +23,8 @@ namespace {
 		if(type.isAnyPointer() && type.whichAnyPointerKind() == capnp::schema::Type::AnyPointer::Unconstrained::CAPABILITY) {
 			auto schema = defaultLoader.importBuiltin<capnp::Capability>();
 			
-			auto asAny = target.as<capnp::AnyPointer>();
-			target = asAny.getAs<capnp::DynamicCapability>(schema.asInterface());
+			auto asAny = target.template as<capnp::AnyPointer>();
+			target = asAny.template getAs<capnp::DynamicCapability>(schema.asInterface());
 		}
 		
 		return target;
@@ -39,46 +39,130 @@ namespace {
 
 // DynamicValueReader
 
+DynamicValueReader::DynamicValueReader(DynamicValueBuilder& other) :
+	WithMessage(kj::Own<const void>(), capnp::Void())
+{
+	using DV = capnp::DynamicValue;
+	
+	#define HANDLE_CASE(branch, Type) \
+		case DV::branch: \
+			*this = other.as<Type>();
+	
+	switch(other.getType()) {
+		HANDLE_CASE(VOID, capnp::Void)
+		HANDLE_CASE(BOOL, bool)
+		HANDLE_CASE(INT, int64_t)
+		HANDLE_CASE(UINT, uint64_t)
+		HANDLE_CASE(FLOAT, double)
+		HANDLE_CASE(CAPABILITY, capnp::DynamicCapability)
+		HANDLE_CASE(ENUM, capnp::DynamicEnum)
+		
+		case DV::TEXT:
+			*this = TextReader(other.asText());
+		case DV::DATA:
+			*this = DataReader(other.asData());
+		case DV::LIST:
+			*this = DynamicListReader(other.asList());
+		case DV::STRUCT:
+			*this = DynamicStructReader(other.asStruct());
+		case DV::ANY_POINTER:
+			*this = AnyReader(other.asAny());
+	}
+	
+	KJ_UNREACHABLE;
+	
+	#undef HANDLE_CASE
+}
+
 DynamicStructReader DynamicValueReader::asStruct() {
-	return DynamicStructReader(*this, as<DynamicStruct>());
+	return DynamicStructReader(shareMessage(*this), as<DynamicStruct>());
 }
 
 DynamicListReader DynamicValueReader::asList() {
-	return DynamicListReader(*this, as<DynamicList>());
+	return DynamicListReader(shareMessage(*this), as<DynamicList>());
 }
 
 DataReader DynamicValueReader::asData() {
-	return DataReader(*this, as<capnp::Data>());
+	return DataReader(shareMessage(*this), as<capnp::Data>());
 }
 
 TextReader DynamicValueReader::asText() {
-	return TextReader(*this, as<capnp::Text>());
+	return TextReader(shareMessage(*this), as<capnp::Text>());
 }
 
 AnyReader DynamicValueReader::asAny() {
-	return AnyReader(*this, as<AnyPointer>());
+	return AnyReader(shareMessage(*this), as<AnyPointer>());
+}
+
+EnumInterface DynamicValueReader::asEnum() {
+	return as<capnp::DynamicEnum>();
+}
+
+DynamicValueBuilder DynamicValueReader::clone() {
+	return DynamicValueBuilder::cloneFrom(*this);
 }
 
 // DynamicValueBuilder
 
 DynamicStructBuilder DynamicValueBuilder::asStruct() {
-	return DynamicStructBuilder(*this, as<DynamicStruct>());
+	return DynamicStructBuilder(shareMessage(*this), as<DynamicStruct>());
 }
 
 DynamicListBuilder DynamicValueBuilder::asList() {
-	return DynamicListBuilder(*this, as<DynamicList>());
+	return DynamicListBuilder(shareMessage(*this), as<DynamicList>());
 }
 
 DataBuilder DynamicValueBuilder::asData() {
-	return DataBuilder(*this, as<capnp::Data>());
+	return DataBuilder(shareMessage(*this), as<capnp::Data>());
 }
 
 TextBuilder DynamicValueBuilder::asText() {
-	return TextBuilder(*this, as<capnp::Text>());
+	return TextBuilder(shareMessage(*this), as<capnp::Text>());
 }
 
 AnyBuilder DynamicValueBuilder::asAny() {
-	return AnyBuilder(*this, as<AnyPointer>());
+	return AnyBuilder(shareMessage(*this), as<AnyPointer>());
+}
+
+EnumInterface DynamicValueBuilder::asEnum() {
+	return as<capnp::DynamicEnum>();
+}
+
+DynamicValueBuilder DynamicValueBuilder::clone() {
+	return DynamicValueBuilder::cloneFrom(toReader(wrapped()));
+}
+
+DynamicValueBuilder DynamicValueBuilder::cloneFrom(capnp::DynamicValue::Reader reader) {
+	using DV = capnp::DynamicValue;
+	
+	#define HANDLE_CASE(branch, Type) \
+		case DV::branch: \
+			return DynamicValueBuilder(kj::attachRef(ANONYMOUS), reader.as<Type>());
+	
+	switch(reader.getType()) {
+		HANDLE_CASE(VOID, capnp::Void)
+		HANDLE_CASE(BOOL, bool)
+		HANDLE_CASE(INT, int64_t)
+		HANDLE_CASE(UINT, uint64_t)
+		HANDLE_CASE(FLOAT, double)
+		HANDLE_CASE(CAPABILITY, capnp::DynamicCapability)
+		HANDLE_CASE(ENUM, capnp::DynamicEnum)
+		
+		case DV::TEXT:
+			return TextBuilder::cloneFrom(reader.as<capnp::Text>());
+		case DV::DATA:
+			return DataBuilder::cloneFrom(reader.as<capnp::Data>());
+		case DV::LIST:
+			return DynamicListBuilder::cloneFrom(reader.as<capnp::DynamicList>());
+		case DV::STRUCT:
+			return DynamicStructBuilder::cloneFrom(reader.as<capnp::DynamicStruct>());
+		case DV::ANY_POINTER:
+			return AnyBuilder::cloneFrom(reader.as<capnp::AnyPointer>());
+	}
+	
+	KJ_UNREACHABLE;
+	
+	#undef HANDLE_CASE
 }
 
 // DynamicValuePipeline
@@ -100,22 +184,22 @@ capnp::DynamicCapability::Client DynamicValuePipeline::asCapability() {
 
 template<typename StructType>
 DynamicValueType<StructType> DynamicStructInterface<StructType>::get(kj::StringPtr field) {
-	return getCapnp(getSchema().getFieldByName(field));
+	return getCapnp(this -> getSchema().getFieldByName(field));
 }
 
 template<typename StructType>
 DynamicValueType<StructType> DynamicStructInterface<StructType>::getCapnp(capnp::StructSchema::Field field) {
-	return DynamicValueType<StructType>(*this, adjust(field.getType(), wrapped().get(field)));
+	return DynamicValueType<StructType>(shareMessage(*this), adjust(field.getType(), this -> wrapped().get(field)));
 }
 
 template<typename StructType>
 bool DynamicStructInterface<StructType>::has(kj::StringPtr field) {
-	return wrapped().has(field);
+	return this -> wrapped().has(field);
 }
 
 template<typename StructType>
 kj::StringPtr DynamicStructInterface<StructType>::whichStr() {
-	KJ_IF_MAYBE(pWhich, which()) {
+	KJ_IF_MAYBE(pWhich, this -> which()) {
 		return pWhich -> getProto().getName();
 	}
 	
@@ -136,7 +220,7 @@ kj::String DynamicStructInterface<StructType>::toYaml(bool flow) {
 		emitter -> SetSeqFormat(YAML::Flow);
 	}
 	
-	(*emitter) << toReader(wrapped());
+	(*emitter) << toReader(this -> wrapped());
 	
 	kj::ArrayPtr<char> stringData(const_cast<char*>(emitter -> c_str()), emitter -> size() + 1);
 	
@@ -145,7 +229,7 @@ kj::String DynamicStructInterface<StructType>::toYaml(bool flow) {
 
 template<typename StructType>
 uint32_t DynamicStructInterface<StructType>::size() {
-	auto schema = getSchema();
+	auto schema = this -> getSchema();
 	size_t result = schema.getNonUnionFields().size();
 	if(schema.getUnionFields().size() > 0)
 		result += 1;
@@ -154,16 +238,21 @@ uint32_t DynamicStructInterface<StructType>::size() {
 }
 
 template<typename StructType>
+uint64_t DynamicStructInterface<StructType>::totalBytes() {
+	return this -> wrapped().totalSize().wordCount * 8;
+}
+
+template<typename StructType>
 py::dict DynamicStructInterface<StructType>::asDict() {
 	py::dict result;
 	
-	auto schema = getSchema();
+	auto schema = this -> getSchema();
 	
 	for(auto field : schema.getNonUnionFields()) {
 		result[field.getProto().getName().cStr()] = getCapnp(field);
 	}
 	
-	KJ_IF_MAYBE(pField, which()) {
+	KJ_IF_MAYBE(pField, this -> which()) {
 		result[pField -> getProto().getName().cStr()] = getCapnp(*pField);
 	}
 	
@@ -177,16 +266,17 @@ py::buffer_info DynamicStructInterface<StructType>::buffer() {
 
 template<typename StructType>
 DynamicStructBuilder DynamicStructInterface<StructType>::clone() {
-	auto msg = kj::heap<capnp::MallocMessageBuilder>();
-	msg -> setRoot(toReader(wrapped()));
-	
-	return DynamicStructBuilder(mv(msg), msg -> getRoot<DynamicStruct>(getSchema()));
+	return DynamicStructBuilder::cloneFrom(toReader(this -> wrapped()));
 }
 
 template class DynamicStructInterface<capnp::DynamicStruct::Reader>;
 template class DynamicStructInterface<capnp::DynamicStruct::Builder>;
 
 // DynamicStructReader (nothing required)
+
+DynamicStructReader::DynamicStructReader(DynamicStructBuilder other) :
+	DynamicStructReader(shareMessage(other), other.asReader())
+{}
 
 // DynamicStructBuilder
 
@@ -200,7 +290,15 @@ void DynamicStructBuilder::initList(kj::StringPtr field, uint32_t size) {
 }
 
 DynamicOrphan DynamicStructBuilder::disown(kj::StringPtr field) {
-	return DynamicOrphan(*this, wrapped().disown(field));
+	return DynamicOrphan(shareMessage(*this), wrapped().disown(field));
+}
+
+DynamicStructBuilder DynamicStructBuilder::cloneFrom(capnp::DynamicStruct::Reader reader) {
+	auto msg = kj::heap<capnp::MallocMessageBuilder>();
+	msg -> setRoot(reader);
+	
+	auto root = msg -> getRoot<DynamicStruct>(reader.getSchema());
+	return DynamicStructBuilder(mv(msg), root);
 }
 
 // DynamicStructPipeline
@@ -255,41 +353,42 @@ DynamicValuePipeline DynamicStructPipeline::getCapnp(capnp::StructSchema::Field 
 
 template<typename ListType>
 DynamicValueType<ListType> DynamicListInterface<ListType>::get(uint32_t idx) {	
-	return DynamicValueType<ListType>(*this, adjust(getSchema().getElementType(), wrapped()[idx]));
+	return DynamicValueType<ListType>(shareMessage(*this), adjust(this -> getSchema().getElementType(), this -> wrapped()[idx]));
 }
 
 template<typename ListType>
 py::buffer_info DynamicListInterface<ListType>::buffer() {
 	// Extract raw data
-	kj::ArrayPtr<const byte> rawBytes = capnp::AnyList::Reader(toReader(wrapped())).getRawBytes();
+	kj::ArrayPtr<const byte> rawBytes = capnp::AnyList::Reader(toReader(this -> wrapped())).getRawBytes();
 	byte* bytesPtr = const_cast<byte*>(rawBytes.begin());
 	
 	// Read format
-	capnp::ListSchema schema = getSchema();
+	capnp::ListSchema schema = this -> getSchema();
 	auto format = pyFormat(schema.getElementType());
 	size_t elementSize = kj::get<0>(format);
 	kj::StringPtr formatString = kj::get<1>(format);
 	
 	// Sanity checks
-	KJ_REQUIRE(elementSize * size() == rawBytes.size());
+	KJ_REQUIRE(elementSize * this -> size() == rawBytes.size());
 			
 	return py::buffer_info(
-		(void*) bytesPtr, elementSize, std::string(formatString.cStr()), size(), !isBuilder<ListType>()
+		(void*) bytesPtr, elementSize, std::string(formatString.cStr()), this -> size(), !isBuilder<ListType>()
 	);
 }
 
 template<typename ListType>
 DynamicListBuilder DynamicListInterface<ListType>::clone() {
-	auto msg = kj::heap<capnp::MallocMessageBuilder>();
-	msg -> setRoot(toReader(wrapped()));
-	
-	return DynamicListBuilder(mv(msg), msg -> getRoot<DynamicList>(getSchema()));
+	return DynamicListBuilder::cloneFrom(toReader(this -> wrapped()));
 }
 
 template class DynamicListInterface<capnp::DynamicList::Reader>;
 template class DynamicListInterface<capnp::DynamicList::Builder>;
 
 // DynamicListReader
+
+DynamicListReader::DynamicListReader(DynamicListBuilder other) :
+	DynamicListReader(shareMessage(other), other.asReader())
+{}
 
 // DynamicListBuilder
 
@@ -301,9 +400,21 @@ void DynamicListBuilder::initList(uint32_t idx, uint32_t size) {
 	init(idx, size);
 }
 
+DynamicListBuilder DynamicListBuilder::cloneFrom(capnp::DynamicList::Reader reader) {
+	auto msg = kj::heap<capnp::MallocMessageBuilder>();
+	msg -> setRoot(reader);
+	
+	auto root = msg -> getRoot<DynamicList>(reader.getSchema());
+	return DynamicListBuilder(mv(msg), root);
+}
+
 // ----------------------------------------------- Data -----------------------------------------------
 
 // DataReader
+
+DataReader::DataReader(DataBuilder other) :
+	DataReader(shareMessage(other), other.asReader())
+{}
 
 py::buffer_info DataReader::buffer() {
 	return py::buffer_info(begin(), size(), true);
@@ -311,6 +422,15 @@ py::buffer_info DataReader::buffer() {
 
 kj::String DataReader::repr() {
 	return kj::encodeBase64(wrapped());
+}
+
+DataReader DataReader::from(kj::Array<const byte> arr) {
+	auto ptr = arr.asPtr();
+	return DataReader(kj::heap(mv(arr)), ptr);
+}
+
+DataBuilder DataReader::clone() {
+	return DataBuilder::cloneFrom(*this);
 }
 
 // DataBuilder
@@ -323,18 +443,71 @@ kj::String DataBuilder::repr() {
 	return kj::encodeBase64(asReader());
 }
 
+DataBuilder DataBuilder::clone() {
+	return DataBuilder::cloneFrom(*this);
+}
+
+DataBuilder DataBuilder::from(kj::Array<byte> arr) {
+	auto ptr = arr.asPtr();
+	return DataBuilder(kj::heap(mv(arr)), ptr);
+}
+
+DataBuilder DataBuilder::cloneFrom(kj::ArrayPtr<const byte> ref) {
+	return DataBuilder::from(kj::heapArray(ref));
+}
+
 // ----------------------------------------------- Text -----------------------------------------------
+
+// TextReader
+
+TextReader::TextReader(TextBuilder other) :
+	TextReader(shareMessage(other), other.asReader())
+{}
 
 kj::StringPtr TextReader::repr() {
 	return *this;
+}
+
+TextReader TextReader::from(kj::String s) {
+	auto ptr = s.asPtr();
+	return TextReader(kj::heap(mv(s)), ptr);
+}
+
+TextBuilder TextReader::clone() {
+	return TextBuilder::cloneFrom(*this);
+}
+
+// TextBuilder
+
+kj::StringPtr TextBuilder::repr() {
+	return *this;
+}
+
+TextBuilder TextBuilder::cloneFrom(kj::StringPtr ptr) {
+	auto asArray = kj::heapString(ptr).releaseArray();
+	auto asPtr = asArray.asPtr();
+	
+	return TextBuilder(kj::heap(mv(asArray)), asPtr.begin(), asPtr.size());
+}
+
+TextBuilder TextBuilder::clone() {
+	return TextBuilder::cloneFrom(*this);
 }
 
 // ----------------------------------------------- AnyPointer -----------------------------------------
 
 // AnyReader
 
+AnyReader::AnyReader(AnyBuilder other) :
+	AnyReader(shareMessage(other), other.asReader())
+{}
+
 kj::String AnyReader::repr() {
 	return kj::str("<opaque pointer>");
+}
+
+AnyBuilder AnyReader::clone() {
+	return AnyBuilder::cloneFrom(*this);
 }
 
 // AnyBuilder
@@ -356,14 +529,27 @@ void AnyBuilder::adopt(DynamicOrphan& orphan) {
 }
 
 DynamicOrphan AnyBuilder::disown() {
-	return DynamicOrphan(*this, wrapped().disown());
+	return DynamicOrphan(shareMessage(*this), wrapped().disown());
+}
+
+AnyBuilder AnyBuilder::cloneFrom(capnp::AnyPointer::Reader ptr) {
+	auto msg = kj::heap<capnp::MallocMessageBuilder>();
+	msg -> setRoot(ptr);
+	
+	auto root = msg -> getRoot<capnp::AnyPointer>();
+	
+	return AnyBuilder(mv(msg), root);
+}
+
+AnyBuilder AnyBuilder::clone() {
+	return AnyBuilder::cloneFrom(*this);
 }
 
 // DynamicOrphan
 
 DynamicValueBuilder DynamicOrphan::get() {
 	KJ_REQUIRE(!consumed, "Can not access contents of adopted orphan");
-	return DynamicValueBuilder(*this, wrapped().get());
+	return DynamicValueBuilder(shareMessage(*this), wrapped().get());
 }
 
 capnp::Orphan<capnp::DynamicValue>&& DynamicOrphan::release() {
@@ -399,15 +585,19 @@ bool EnumInterface::eq3(kj::StringPtr other) {
 
 // FieldDescriptor
 
-DynamicValueBuilder FieldDescriptor::get1(DynamicStructBuilder builder) {
+DynamicValueBuilder FieldDescriptor::get1(DynamicStructBuilder& builder, py::object) {
 	return builder.get(getProto().getName());
 }
 
-DynamicValueReader FieldDescriptor::get2(DynamicStructReader reader) {
+DynamicValueReader FieldDescriptor::get2(DynamicStructReader& reader, py::object) {
 	return reader.get(getProto().getName());
 }
 
-kj::String FieldDescriptor::get3(py::none, py::type type) {
+DynamicValuePipeline FieldDescriptor::get3(DynamicStructPipeline& reader, py::object) {
+	return reader.get(getProto().getName());
+}
+
+kj::String FieldDescriptor::get4(py::none, py::type type) {
 	return kj::str("Field ", getProto().getName(), " of class ", py::cast<kj::StringPtr>(py::str(type)));
 }
 

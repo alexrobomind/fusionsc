@@ -74,6 +74,11 @@ extern kj::Own<py::type> baseMetaType;
 
 #include "kj.h"
 
+#define FSCPY_MOVE_ONLY_CASTER \
+	type_caster() = default; \
+	type_caster(const type_caster& other) = delete; \
+	type_caster(type_caster&& other) = default; \
+
 // Custom type casters
 #include "typecast_kj.h"
 #include "typecast_capnp.h"

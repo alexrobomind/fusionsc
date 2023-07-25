@@ -53,11 +53,11 @@ py::buffer_info getBoolTensor(DynamicStruct::Reader tensor) {
 template<typename T>
 py::buffer_info getObjectTensor(T tensor) {
 	// Extract shape and dat
-	auto shape = tensor.get("shape").asList().as<capnp::List<uint64_t>>();
+	auto shape = tensor.get("shape").asList().template as<capnp::List<uint64_t>>();
 	auto data  = tensor.get("data").asList();
 	
 	auto resultHolder = ContiguousCArray::alloc<PyObject*>(shape, "O");
-	auto outData = resultHolder.as<PyObject*>();
+	auto outData = resultHolder.template as<PyObject*>();
 	
 	for(auto i : kj::indices(data)) {
 		py::object outObject = py::cast(data[i]);		
@@ -74,7 +74,7 @@ py::buffer_info getDataTensor(T tensor) {
 	
 	try {
 		// Extract shape and dat
-		auto shape = tensor.get("shape").asList().as<capnp::List<uint64_t>>();
+		auto shape = tensor.get("shape").asList().template as<capnp::List<uint64_t>>();
 		auto data  = tensor.get("data").asList();
 				
 		// Extract raw data

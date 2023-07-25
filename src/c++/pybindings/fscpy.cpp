@@ -138,18 +138,29 @@ PYBIND11_MODULE(native, m) {
 	
 	// Initialize bindings for all components
 	initKj(m);
+	KJ_DBG("kj ok");
 	initAsync(m);
+	KJ_DBG("async ok");
 	initCapnp(m);
+	KJ_DBG("capnp ok");
 	initData(m);
+	KJ_DBG("data ok");
 	initLoader(m);	
+	KJ_DBG("loader ok");
 	initDevices(m);
+	KJ_DBG("devices ok");
 	initService(m);
+	KJ_DBG("service ok");
 	initHelpers(m);
+	KJ_DBG("helpers ok");
 	
 	// Load built-in schema
 	loadDefaultSchema(m);
+	KJ_DBG("default schema ok");
 	loadDeviceSchema(m);
+	KJ_DBG("device schema ok");
 	
 	auto atexitModule = py::module_::import("atexit");
 	atexitModule.attr("register")(py::cpp_function(&atExitFunction));
+	KJ_DBG("atexit ok");
 }

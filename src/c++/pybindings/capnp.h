@@ -8,8 +8,44 @@
 
 namespace fscpy {
 
-// Converts a scalar (python or numpy) into an instance of DynamicValue	
-Maybe<capnp::DynamicValue::Reader> dynamicValueFromScalar(py::handle handle);
+struct DynamicValueReader;
+struct DynamicValueBuilder;
+struct DynamicValuePipeline;
+
+struct DynamicStructReader;
+struct DynamicStructBuilder;
+struct DynamicStructPipeline;
+
+struct DynamicListReader;
+struct DynamicListBuilder;
+
+struct DataReader;
+struct DataBuilder;
+struct TextReader;
+struct TextBuilder; // Who the f'ck modifies a text in-place anyway?
+
+struct AnyReader;
+struct AnyBuilder;
+
+using DynamicCapabilityClient = capnp::DynamicCapability::Client;
+using DynamicCapabilityServer = capnp::DynamicCapability::Server;
+
+struct EnumInterface;
+
+struct DynamicOrphan;
+
+struct FieldDescriptor;
+
+/** 
+ * Catch-all converter for various things that look like scalar numbers from the python side.
+ * 
+ * Python has a massive amount of different things that could possibly
+ * be counted as "scalar numeric values", including:
+ *  - Baseline numeric types (boxed numbers of variable width ints and floats - int, float, bool)
+ *  - Numpy array scalars (boxed numbers of fixed-width types)
+ *  - 0D numpy arrays (which are NOT the same as scalars, ugh)
+ */
+Maybe<DynamicValueReader> dynamicValueFromScalar(py::handle handle);
 	
 namespace internal {
 
@@ -56,99 +92,156 @@ namespace internal {
 	};
 }
 
-//! Conversion helper to obtain DynamicValue from Python and NumPy scalar types
-Maybe<capnp::DynamicValue::Reader> dynamicValueFromScalar(py::handle handle);
-
 struct MessageHook : public kj::Refcounted {	
-	inline MessageHook(Own<void> data) : data(mv(data)) {}
+	inline MessageHook(Own<const void> data) : data(mv(data)) {}
 	Own<MessageHook> addRef() { return kj::addRef(*this); }
 	
 private:
-	Own<void> data;
+	Own<const void> data;
 };
 
 struct WithMessageBase {
 	WithMessageBase() = default;
-	WithMessageBase(Own<void> target) : hook(kj::refcounted<MessageHook>(mv(target))) {}
+	WithMessageBase(Own<const void> target) : hook(kj::refcounted<MessageHook>(mv(target))) {}
 	
 	inline WithMessageBase(WithMessageBase& other) : hook(other.hook -> addRef()) {}
 	WithMessageBase(WithMessageBase&& other) = default;
+	
+	inline WithMessageBase& operator=(WithMessageBase& other) { hook = other.hook -> addRef(); return *this; }
+	inline WithMessageBase& operator=(WithMessageBase&& other) = default;
 	
 private:
 	Own<MessageHook> hook;
 };
 
 template<typename T>
+struct CopyMsgT {
+	kj::Decay<T>& ref;
+};
+
+template<typename T, typename... Params>
+struct ShareMsgT {
+	kj::Decay<T>& ref;
+};
+
+template<typename T>
+CopyMsgT<T> copyMessage(T&& t) {
+	CopyMsgT<T> result { t };
+	return result;
+}
+
+template<typename T>
+ShareMsgT<T> shareMessage(T&& t) {
+	ShareMsgT<T> result { t };
+	return result;
+}
+
+template<typename T>
 struct WithMessage : public T, public WithMessageBase {
+	static const int ANONYMOUS = 0;
+	
+	template<typename T2, typename... Params>
+	WithMessage(ShareMsgT<T2> input, Params&&... params) :
+		T(fwd<Params>(params)...),
+		WithMessageBase(fwd<T2>(input.ref))
+	{}
+	
+	template<typename T2>
+	WithMessage(CopyMsgT<T2> input) :
+		T(fwd<T2>(input.ref)),
+		WithMessageBase(fwd<T2>(input.ref))
+	{}
+	
 	template<typename... Params>
-	WithMessage(WithMessageBase msg, Params&&... params) :
+	WithMessage(decltype(nullptr), Params&&... params) :
+		T(fwd<Params>(params)...),
+		WithMessageBase(kj::attachRef(ANONYMOUS))
+	{}
+	
+	template<typename... Params>
+	WithMessage(Own<const void> msg, Params&&... params) :
 		T(fwd<Params>(params)...),
 		WithMessageBase(mv(msg))
 	{}
 	
-	template<typename... Params>
-	WithMessage(Own<void> msg, Params&&... params) :
-		T(fwd<Params>(params)...),
-		WithMessageBase(mv(msg))
-	{}
-	
-	// Type-dispatching forwarding constructor
-	template<typename T2, typename SFINAE = kj::EnableIf<std::is_base_of<WithMessageBase, T2>::value>>
-	WithMessage(T2&& t2) :
-		T(fwd<T2>(t2)), WithMessageBase(fwd<T2>(t2))
-	{}
+	WithMessage(WithMessage& other) = default;
+	WithMessage(WithMessage&& other) = default;
+	WithMessage& operator=(WithMessage& other) = default;
+	WithMessage& operator=(WithMessage&& other) = default;
 	
 	T& wrapped() { return *this; }
 };
 
-struct DynamicValueReader;
-struct DynamicValueBuilder;
-struct DynamicValuePipeline;
+#define COPY_WITH_MSG(Cls, Input) \
+	inline Cls (Input& i) : Cls(copyMessage(i)) {}; \
+	inline Cls (Input&& i) : Cls(copyMessage(mv(i))) {};
 
-struct DynamicStructReader;
-struct DynamicStructBuilder;
-struct DynamicStructPipeline;
-
-struct DynamicListReader;
-struct DynamicListBuilder;
-
-struct DataReader;
-struct DataBuilder;
-struct TextReader;
-using TextBuilder = TextReader; // Who the f'ck modifies a text in-place anyway?
-
-struct AnyReader;
-struct AnyBuilder;
-
-using DynamicCapabilityClient = capnp::DynamicCapability::Client;
-using DynamicCapabilityServer = capnp::DynamicCapability::Server;
-
-struct EnumInterface;
-
-struct DynamicOrphan;
-
-struct FieldDescriptor;
+#define COPY_WITHOUT_MSG(Cls, Input) \
+	inline Cls (Input& i) : Cls(nullptr, i) {}; \
+	inline Cls (Input&& i) : Cls(nullptr, mv(i)) {};
 
 // class Definitions
 
 struct DynamicValueReader : public WithMessage<capnp::DynamicValue::Reader> {
 	using WithMessage::WithMessage;
 	
+	inline DynamicValueReader() : WithMessage(nullptr, capnp::Void()) {};
+	
+	DynamicValueReader(DynamicValueBuilder&);
+	
+	COPY_WITH_MSG(DynamicValueReader, DynamicStructReader);
+	COPY_WITH_MSG(DynamicValueReader, DynamicListReader);
+	COPY_WITH_MSG(DynamicValueReader, DataReader);
+	COPY_WITH_MSG(DynamicValueReader, TextReader);
+	COPY_WITH_MSG(DynamicValueReader, AnyReader);
+	
+	COPY_WITHOUT_MSG(DynamicValueReader, capnp::Void);
+	COPY_WITHOUT_MSG(DynamicValueReader, capnp::DynamicEnum);
+	COPY_WITHOUT_MSG(DynamicValueReader, capnp::DynamicCapability::Client);
+	COPY_WITHOUT_MSG(DynamicValueReader, double);
+	COPY_WITHOUT_MSG(DynamicValueReader, int64_t);
+	COPY_WITHOUT_MSG(DynamicValueReader, uint64_t);
+	COPY_WITHOUT_MSG(DynamicValueReader, bool);
+	
 	DynamicStructReader asStruct();
 	DynamicListReader asList();
 	DataReader asData();
 	TextReader asText();
 	AnyReader asAny();
+	EnumInterface asEnum();
+	
+	DynamicValueBuilder clone();
 };
 
 struct DynamicValueBuilder : public WithMessage<capnp::DynamicValue::Builder> {
 	using WithMessage::WithMessage;
+	
+	inline DynamicValueBuilder() : WithMessage(nullptr, capnp::Void()) {};
+	
+	COPY_WITH_MSG(DynamicValueBuilder, DynamicStructBuilder);
+	COPY_WITH_MSG(DynamicValueBuilder, DynamicListBuilder);
+	COPY_WITH_MSG(DynamicValueBuilder, DataBuilder);
+	COPY_WITH_MSG(DynamicValueBuilder, TextBuilder);
+	COPY_WITH_MSG(DynamicValueBuilder, AnyBuilder);
+	
+	COPY_WITHOUT_MSG(DynamicValueBuilder, capnp::Void);
+	COPY_WITHOUT_MSG(DynamicValueBuilder, capnp::DynamicEnum);
+	COPY_WITHOUT_MSG(DynamicValueBuilder, capnp::DynamicCapability::Client);
+	COPY_WITHOUT_MSG(DynamicValueBuilder, double);
+	COPY_WITHOUT_MSG(DynamicValueBuilder, int64_t);
+	COPY_WITHOUT_MSG(DynamicValueBuilder, uint64_t);
+	COPY_WITHOUT_MSG(DynamicValueBuilder, bool);
 	
 	DynamicStructBuilder asStruct();
 	DynamicListBuilder asList();
 	DataBuilder asData();
 	TextBuilder asText();
 	AnyBuilder asAny();
+	EnumInterface asEnum();
+	
+	DynamicValueBuilder clone();
+	
+	static DynamicValueBuilder cloneFrom(capnp::DynamicValue::Reader reader);
 };
 
 namespace internal {
@@ -209,6 +302,7 @@ struct DynamicStructInterface : public WithMessage<StructType> {
 	kj::String toYaml(bool flow);
 	
 	uint32_t size();
+	uint64_t totalBytes();
 	
 	py::dict asDict();
 	
@@ -219,6 +313,8 @@ struct DynamicStructInterface : public WithMessage<StructType> {
 
 struct DynamicStructReader : public DynamicStructInterface<capnp::DynamicStruct::Reader> {
 	using DynamicStructInterface::DynamicStructInterface;
+	
+	DynamicStructReader(DynamicStructBuilder other);
 };
 
 struct DynamicStructBuilder : public DynamicStructInterface<capnp::DynamicStruct::Builder> {
@@ -227,6 +323,8 @@ struct DynamicStructBuilder : public DynamicStructInterface<capnp::DynamicStruct
 	void set(kj::StringPtr field, py::object value);
 	void initList(kj::StringPtr field, uint32_t size);
 	DynamicOrphan disown(kj::StringPtr field);
+	
+	static DynamicStructBuilder cloneFrom(capnp::DynamicStruct::Reader reader);
 };
 
 struct DynamicStructPipeline {
@@ -261,7 +359,7 @@ struct DynamicListInterface : public WithMessage<ListType> {
 	using WithMessage<ListType>::WithMessage;
 	
 	struct Iterator {
-		inline DynamicValueType<ListType> operator*() { return DynamicValueType<ListType>(parent, parent.get(pos)); }
+		inline DynamicValueType<ListType> operator*() { return DynamicValueType<ListType>(shareMessage(parent), parent.get(pos)); }
 		
 		inline bool operator!=(const Iterator& other) const { return pos != other.pos; }
 		inline bool operator==(const Iterator& other) const { return pos == other.pos; }
@@ -285,20 +383,31 @@ struct DynamicListInterface : public WithMessage<ListType> {
 
 struct DynamicListReader : public DynamicListInterface<capnp::DynamicList::Reader> {
 	using DynamicListInterface::DynamicListInterface;
+	
+	DynamicListReader(DynamicListBuilder other);
 };
 
 struct DynamicListBuilder : public DynamicListInterface<capnp::DynamicList::Builder> {	
 	using DynamicListInterface::DynamicListInterface;
+	
 	// Builder interface
 	void set(uint32_t, py::object value);
 	void initList(uint32_t idx, uint32_t size);
+	
+	static DynamicListBuilder cloneFrom(capnp::DynamicList::Reader reader);
 };
 
 struct DataReader : public WithMessage<capnp::Data::Reader> {
 	using WithMessage::WithMessage;
 	
+	DataReader(DataBuilder);
+	
 	py::buffer_info buffer();
 	kj::String repr();
+	
+	DataBuilder clone();
+
+	static DataReader from(kj::Array<const byte>);
 };
 
 struct DataBuilder : public WithMessage<capnp::Data::Builder> {
@@ -306,18 +415,43 @@ struct DataBuilder : public WithMessage<capnp::Data::Builder> {
 	
 	py::buffer_info buffer();
 	kj::String repr();
+	
+	DataBuilder clone();
+	
+	static DataBuilder from(kj::Array<byte>);
+	static DataBuilder cloneFrom(kj::ArrayPtr<const byte>);
 };
 
 struct TextReader : public WithMessage<capnp::Text::Reader> {
 	using WithMessage::WithMessage;
 	
+	TextReader(TextBuilder);
+	
 	kj::StringPtr repr();
+	
+	TextBuilder clone();
+	
+	static TextReader from(kj::String);
+};
+
+struct TextBuilder : public WithMessage<capnp::Text::Builder> {
+	using WithMessage::WithMessage;
+	
+	kj::StringPtr repr();
+	
+	TextBuilder clone();
+	
+	static TextBuilder cloneFrom(kj::StringPtr);
 };
 
 struct AnyReader : public WithMessage<capnp::AnyPointer::Reader> {
 	using WithMessage::WithMessage;
 	
+	AnyReader(AnyBuilder);
+	
 	kj::String repr();
+	
+	AnyBuilder clone();
 };
 
 struct AnyBuilder : public WithMessage<capnp::AnyPointer::Builder> {
@@ -330,9 +464,13 @@ struct AnyBuilder : public WithMessage<capnp::AnyPointer::Builder> {
 	void adopt(DynamicOrphan&);
 	
 	DynamicOrphan disown();
+	
+	AnyBuilder clone();
+	
+	static AnyBuilder cloneFrom(capnp::AnyPointer::Reader);
 };
 
-struct DynamicOrphan : private WithMessage<capnp::Orphan<capnp::DynamicValue>> {
+struct DynamicOrphan : public WithMessage<capnp::Orphan<capnp::DynamicValue>> {
 	using WithMessage::WithMessage;
 	
 	bool consumed = false;
@@ -344,6 +482,8 @@ struct DynamicOrphan : private WithMessage<capnp::Orphan<capnp::DynamicValue>> {
 struct EnumInterface : public capnp::DynamicEnum {
 	using DynamicEnum::DynamicEnum;
 	
+	inline EnumInterface(const capnp::DynamicEnum& other) : DynamicEnum(other) {}
+	
 	kj::String repr();
 	bool eq1(DynamicEnum& other);
 	bool eq2(uint16_t other);
@@ -354,9 +494,12 @@ struct EnumInterface : public capnp::DynamicEnum {
 struct FieldDescriptor : public capnp::StructSchema::Field {
 	using Field::Field;
 	
-	DynamicValueBuilder get1(DynamicStructBuilder);
-	DynamicValueReader get2(DynamicStructReader);
-	kj::String get3(py::none, py::type);
+	inline FieldDescriptor(const Field& field) : Field(field) {}
+	
+	DynamicValueBuilder get1(DynamicStructBuilder&, py::object);
+	DynamicValueReader get2(DynamicStructReader&, py::object);
+	DynamicValuePipeline get3(DynamicStructPipeline&, py::object);
+	kj::String get4(py::none, py::type);
 	
 	void set(DynamicStructBuilder obj, py::object value);
 	void del(DynamicStructBuilder obj);

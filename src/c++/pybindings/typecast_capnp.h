@@ -30,25 +30,42 @@
 //
 //   fscpy::DynamicStructPipeline
 
-#define FSCPY_MOVE_ONLY_CASTER \
-	type_caster() = default; \
-	type_caster(const type_caster& other) = delete; \
-	type_caster(type_caster&& other) = default; \
+namespace fscpy {
+	template<typename T>
+	struct PolymorphicDispatchTraits {
+		static_assert(sizeof(T) == 0, "No polymorphic dispatch specified for this class");
+	};
+	
+	#define FSCPY_DEF_DISPATCH(T, attr) \
+		template<> \
+		struct PolymorphicDispatchTraits<T> { \
+			static const inline kj::StringPtr attributeName = attr; \
+		};\
+	
+	FSCPY_DEF_DISPATCH(DynamicCapabilityClient, "Client");
+	FSCPY_DEF_DISPATCH(DynamicStructBuilder, "Builder");
+	FSCPY_DEF_DISPATCH(DynamicStructReader, "Reader");
+	FSCPY_DEF_DISPATCH(DynamicStructPipeline, "Pipeline");		
+};
 
 namespace pybind11 { namespace detail {
 	
 	// Polymorphic casters for dynamic classes
-	
-	template<typename T, const char* classAttribute>
+		
+	template<typename T>
 	struct PolymorphicDispatchCaster : public type_caster_base<T> {	
+		PolymorphicDispatchCaster() = default;
+		PolymorphicDispatchCaster(const PolymorphicDispatchCaster&) = delete;
+		PolymorphicDispatchCaster(PolymorphicDispatchCaster&&) = default;
+		
 		static handle cast(T src, return_value_policy policy, handle parent) {
 			auto typeId = src.getSchema().getProto().getId();
 			
-			object baseInstance = reinterpret_steal<object>(type_caster_base::cast(kj::mv(T), policy, parent));
+			object baseInstance = reinterpret_steal<object>(type_caster_base<T>::cast(kj::mv(src), policy, parent));
 			
 			// Look for a derived class
 			if(globalClasses->contains(typeId)) {
-				auto derivedClass = (*globalClasses)[py::cast(typeId)].attr(classAttribute);
+				auto derivedClass = (*globalClasses)[py::cast(typeId)].attr(py::cast(fscpy::PolymorphicDispatchTraits<T>::attributeName));
 				
 				object derivedInstance = derivedClass(baseInstance);
 				return derivedInstance.inc_ref();
@@ -59,19 +76,19 @@ namespace pybind11 { namespace detail {
 	};
 	
 	template<>
-	struct type_caster<fscpy::DynamicCapabilityClient> : public PolymorphicDispatchCaster<fscpy::DynamicCapabilityClient, "Client">
+	struct type_caster<fscpy::DynamicCapabilityClient> : public PolymorphicDispatchCaster<fscpy::DynamicCapabilityClient>
 	{};
 	
 	template<>
-	struct type_caster<fscpy::DynamicStructBuilder> : public PolymorphicDispatchCaster<fscpy::DynamicStructBuilder, "Builder">
+	struct type_caster<fscpy::DynamicStructBuilder> : public PolymorphicDispatchCaster<fscpy::DynamicStructBuilder>
 	{};
 	
 	template<>
-	struct type_caster<fscpy::DynamicStructReader> : public PolymorphicDispatchCaster<fscpy::DynamicStructReader, "Reader">
+	struct type_caster<fscpy::DynamicStructReader> : public PolymorphicDispatchCaster<fscpy::DynamicStructReader>
 	{};
 	
 	template<>
-	struct type_caster<fscpy::DynamicStructPipeline> : public PolymorphicDispatchCaster<fscpy::DynamicStructPipeline, "Pipeline"> {	
+	struct type_caster<fscpy::DynamicStructPipeline> : public PolymorphicDispatchCaster<fscpy::DynamicStructPipeline> {	
 	};
 	
 	// Dynamic <-> Static casters for static classes w/ messages
@@ -111,7 +128,7 @@ namespace pybind11 { namespace detail {
 			capnp::StructSchema schema = fscpy::defaultLoader.importBuiltin<Builds>().asStruct();
 			
 			ASB any = capnp::toAny(src.wrapped());
-			DSB dynamic(src, any.as<capnp::DynamicStruct>(schema));
+			DSB dynamic(fscpy::shareMessage(src), any.as<capnp::DynamicStruct>(schema));
 			
 			return type_caster<DSB>::cast(dynamic, policy, parent);
 		}		
@@ -140,7 +157,7 @@ namespace pybind11 { namespace detail {
 				KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
 				ASR any = dynamic.wrapped();
 			
-				value = fscpy::WithMessage<Reader>(dynamic, any.as<Reads>());
+				value = fscpy::WithMessage<Reader>(fscpy::shareMessage(dynamic), any.as<Reads>());
 			} catch(kj::Exception e) {
 				KJ_LOG(WARNING, "Error during conversion", e);
 				return false;
@@ -171,57 +188,11 @@ namespace pybind11 { namespace detail {
 		static handle cast(fsc::Temporary<T> src, return_value_policy policy, handle parent) {
 			using T2 = fscpy::WithMessage<typename T::Builder>;
 			
-			return type_caster<T2>.cast(
+			return type_caster<T2>::cast(
 				T2(mv(src.holder), src.asBuilder()), 
 				policy, parent
 			);
 		}		
-	};
-	
-	// Static one-way bindings for builders & readers without messages
-	
-	template<typename Builder>
-	struct type_caster<Builder, kj::EnableIf<CAPNP_KIND(capnp::FromBuilder<Builder>) == capnp::Kind::STRUCT>> {
-		using Builds = typename Builder::Builds;
-		
-		PYBIND11_TYPE_CASTER(Builds, const_name<Builds>() + const_name(".Builder"));
-		FSCPY_MOVE_ONLY_CASTER;
-		
-		type_caster<WithMessage<Builder>> baseCaster;
-		
-		bool load(handle src, bool convert) {
-			if(!baseCaster.load(src, convert))
-				return false;
-			
-			value = baseCaster.wrapped();
-		}
-		
-		template<typename T>
-		static handle cast(T, return_value_policy, handle) {
-			static_assert(sizeof(T) == 0, "Do not attempt to cast Builders directly, use WithMessage<...>");
-		}
-	};
-	
-	template<typename Reader>
-	struct type_caster<Reader, kj::EnableIf<CAPNP_KIND(capnp::FromReader<Reader>) == capnp::Kind::STRUCT>> {
-		using Reads = typename Reader::Reads;
-		
-		PYBIND11_TYPE_CASTER(Reads, const_name<Reads>() + const_name(".Builder"));
-		FSCPY_MOVE_ONLY_CASTER;
-		
-		type_caster<WithMessage<Reader>> baseCaster;
-		
-		bool load(handle src, bool convert) {
-			if(!baseCaster.load(src, convert))
-				return false;
-			
-			value = baseCaster.wrapped();
-		}
-		
-		template<typename T>
-		static handle cast(T, return_value_policy, handle) {
-			static_assert(sizeof(T) == 0, "Do not attempt to cast Readers directly, use WithMessage<...>");
-		}
 	};
 	
 	namespace pybind_fsc {
@@ -240,7 +211,10 @@ namespace pybind11 { namespace detail {
 		using ClientFor = capnp::FromClient<Client>;
 		
 		PYBIND11_TYPE_CASTER(Client, const_name<ClientFor>() + const_name(".Client"));
-		FSCPY_MOVE_ONLY_CASTER;
+		
+		type_caster() : value(nullptr) {}
+		type_caster(const type_caster&) = delete;
+		type_caster(type_caster&&) = default;
 		
 		bool load(handle src, bool convert) {
 			// Try to load as dynamic struct
@@ -290,7 +264,7 @@ namespace pybind11 { namespace detail {
 						value = (Type&) caster; \
 						return true; \
 					} \
-				}
+				}		
 			
 			FSCPY_TRY_CAST(fscpy::DynamicStructBuilder)
 			FSCPY_TRY_CAST(fscpy::DynamicListBuilder)
@@ -299,43 +273,35 @@ namespace pybind11 { namespace detail {
 			FSCPY_TRY_CAST(fscpy::DynamicCapabilityClient)
 			
 			#undef FSCPY_TRY_CAST
-			
-			type_caster_base<DynamicValue::Builder> base;
-			auto baseLoadResult = base.load(src, convert);
-			
-			if(baseLoadResult) {
-				value = (DynamicValue::Builder&) base;
-				return true;
-			}
-			
 			return false;
 		}
 		
-		static handle cast(DynamicValueBuilder src, return_value_policy policy, handle parent) {
+		static handle cast(fscpy::DynamicValueBuilder src, return_value_policy policy, handle parent) {
+			using DV = capnp::DynamicValue;
+			
 			switch(src.getType()) {
-				case DynamicValue::VOID: return none().inc_ref();
-				case DynamicValue::BOOL: return py::cast(src.as<bool>()).inc_ref();
-				case DynamicValue::INT: return py::cast(src.as<int64_t>()).inc_ref();
-				case DynamicValue::UINT: return py::cast(src.as<uint64_t>()).inc_ref();
-				case DynamicValue::FLOAT: return py::cast(src.as<double>()).inc_ref();
-				case DynamicValue::TEXT: return py::cast(src.asText()).inc_ref();
-				case DynamicValue::DATA: return py::cast(src.asData()).inc_ref();
-				case DynamicValue::LIST: return py::cast(src.asList()).inc_ref();
-				case DynamicValue::STRUCT: return py::cast(src.asStruct()).inc_ref();
-				case DynamicValue::ENUM: return py::cast(src.as<capnp::DynamicEnum>()).inc_ref();
-				case DynamicValue::CAPABILITY: return py::cast(src.as<capnp::DynamicCapability>()).inc_ref();
-				case DynamicValue::ANY_POINTER: return py::cast(src.asAny()).inc_ref();
+				case DV::VOID: return none().inc_ref();
+				case DV::BOOL: return py::cast(src.as<bool>()).inc_ref();
+				case DV::INT: return py::cast(src.as<int64_t>()).inc_ref();
+				case DV::UINT: return py::cast(src.as<uint64_t>()).inc_ref();
+				case DV::FLOAT: return py::cast(src.as<double>()).inc_ref();
+				case DV::TEXT: return py::cast(src.asText()).inc_ref();
+				case DV::DATA: return py::cast(src.asData()).inc_ref();
+				case DV::LIST: return py::cast(src.asList()).inc_ref();
+				case DV::STRUCT: return py::cast(src.asStruct()).inc_ref();
+				case DV::ENUM: return py::cast(src.asEnum()).inc_ref();
+				case DV::CAPABILITY: return py::cast(src.as<capnp::DynamicCapability>()).inc_ref();
+				case DV::ANY_POINTER: return py::cast(src.asAny()).inc_ref();
 			}
+			
+			KJ_UNREACHABLE;
 		}
 	};
 	
 	template<>
 	struct type_caster<fscpy::DynamicValueReader> {		
 		PYBIND11_TYPE_CASTER(fscpy::DynamicValueReader, const_name("DynamicValueReader"));
-		FSCPY_MOVE_ONLY_CASTER;
-		
-		// If we get a string, we need to store it temporarily
-		type_caster<char> strCaster;		
+		FSCPY_MOVE_ONLY_CASTER;	
 		
 		bool load(handle src, bool convert) {						
 			if(src.is_none()) {
@@ -349,14 +315,11 @@ namespace pybind11 { namespace detail {
 			}
 			
 			if(py::isinstance<py::str>(src)) {
-				strCaster.load(src, false);
-				value = capnp::Text::Reader((char*) strCaster);
+				value = fscpy::TextReader::from(py::cast<kj::String>(src));
 				return true;
 			}
 			
 			if(py::isinstance<py::bytes>(src)) {
-				// strCaster.load(src, false);
-				// value = capnp::Text::Reader((char*) strCaster);
 				char *buffer = nullptr;
 				ssize_t length = 0;
 				auto asBytes = py::reinterpret_borrow<py::bytes>(src);
@@ -364,7 +327,7 @@ namespace pybind11 { namespace detail {
 				if(PyBytes_AsStringAndSize(asBytes.ptr(), &buffer, &length) != 0)
 					throw py::error_already_set();
 				
-				value = capnp::Data::Reader((const unsigned char*) buffer, (size_t) length);
+				value = fscpy::DataReader(kj::heap(src), kj::ArrayPtr<const kj::byte>((const kj::byte*) buffer, (size_t) length));
 				return true;
 			}
 						
@@ -377,6 +340,7 @@ namespace pybind11 { namespace detail {
 					} \
 				}
 			
+			FSCPY_TRY_CAST(fscpy::DynamicValueBuilder)
 			FSCPY_TRY_CAST(fscpy::DynamicStructReader)
 			FSCPY_TRY_CAST(fscpy::DynamicListReader)
 			FSCPY_TRY_CAST(fscpy::AnyReader)
@@ -390,20 +354,24 @@ namespace pybind11 { namespace detail {
 		
 		
 		static handle cast(fscpy::DynamicValueReader src, return_value_policy policy, handle parent) {
+			using DV = capnp::DynamicValue;
+			
 			switch(src.getType()) {
-				case DynamicValue::VOID: return none();
-				case DynamicValue::BOOL: return py::cast(src.as<bool>()).inc_ref();
-				case DynamicValue::INT: return py::cast(src.as<int64_t>()).inc_ref();
-				case DynamicValue::UINT: return py::cast(src.as<uint64_t>()).inc_ref();
-				case DynamicValue::FLOAT: return py::cast(src.as<double>()).inc_ref();
-				case DynamicValue::TEXT: return py::cast(src.asText()).inc_ref();
-				case DynamicValue::DATA: return py::cast(src.asData()).inc_ref();
-				case DynamicValue::LIST: return py::cast(src.asList()).inc_ref();
-				case DynamicValue::ENUM: return py::cast(src.as<capnp::DynamicEnum>()).inc_ref();
-				case DynamicValue::STRUCT: return py::cast(src.asStruct());
-				case DynamicValue::ANY_POINTER: return py::cast(src.asAny()).inc_ref();
-				case DynamicValue::CAPABILITY: return py::cast(src.as<capnp::DynamicCapability>()).inc_ref();
+				case DV::VOID: return none().inc_ref();
+				case DV::BOOL: return py::cast(src.as<bool>()).inc_ref();
+				case DV::INT: return py::cast(src.as<int64_t>()).inc_ref();
+				case DV::UINT: return py::cast(src.as<uint64_t>()).inc_ref();
+				case DV::FLOAT: return py::cast(src.as<double>()).inc_ref();
+				case DV::TEXT: return py::cast(src.asText()).inc_ref();
+				case DV::DATA: return py::cast(src.asData()).inc_ref();
+				case DV::LIST: return py::cast(src.asList()).inc_ref();
+				case DV::ENUM: return py::cast(src.asEnum()).inc_ref();
+				case DV::STRUCT: return py::cast(src.asStruct()).inc_ref();
+				case DV::ANY_POINTER: return py::cast(src.asAny()).inc_ref();
+				case DV::CAPABILITY: return py::cast(src.as<capnp::DynamicCapability>()).inc_ref();
 			}
+			
+			KJ_UNREACHABLE;
 		}
 	};
 	
@@ -413,7 +381,13 @@ namespace pybind11 { namespace detail {
 		FSCPY_MOVE_ONLY_CASTER;
 		
 		bool load(handle src, bool convert) {
-			#define FSCPY_TRY_CAST(Type) \
+			/* Currently, the machinery to create DynamicValuePipeline instances
+			   from instances of specific pipeline classes does not exist (might
+			   require a PipelineBuilder object. */
+			
+			return false;
+			   
+			/*#define FSCPY_TRY_CAST(Type) \
 				{ \
 					type_caster<Type> caster; \
 					if(caster.load(src, convert)) { \
@@ -426,13 +400,12 @@ namespace pybind11 { namespace detail {
 			FSCPY_TRY_CAST(fscpy::DynamicCapabilityClient)
 			
 			#undef FSCPY_TRY_CAST
-			
-			return false;
+			*/
 		}
 		
 		
 		static handle cast(fscpy::DynamicValuePipeline src, return_value_policy policy, handle parent) {
-			auto schema = src.getSchema();
+			auto schema = src.schema;
 			
 			switch(schema.getProto().which()) {
 				case capnp::schema::Node::STRUCT: return py::cast(src.asStruct()).inc_ref();

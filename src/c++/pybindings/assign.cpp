@@ -111,10 +111,10 @@ void assign(const BuilderSlot& dst, py::object object) {
 	auto assignmentFailureLog = kj::strTree();
 	
 	// Attempt 1: Check if target is orphan that can be adopted
-	pybind11::detail::make_caster<capnp::Orphan<DynamicValue>> orphanCaster;
+	pybind11::detail::make_caster<DynamicOrphan> orphanCaster;
 	if(orphanCaster.load(object, false)) {
-		capnp::Orphan<DynamicValue>& orphanRef = (capnp::Orphan<DynamicValue>&) orphanCaster;
-		dst.adopt(mv(orphanRef));
+		DynamicOrphan& orphan = (DynamicOrphan&) orphanCaster;
+		dst.adopt(orphan.release());
 		return;
 	}
 	
@@ -142,10 +142,10 @@ void assign(const BuilderSlot& dst, py::object object) {
 	}
 	
 	// Attempt 3: Check if target can be converted into a reader directly
-	pybind11::detail::make_caster<DynamicValue::Reader> dynValCaster;
+	pybind11::detail::make_caster<DynamicValueReader> dynValCaster;
 	if(dynValCaster.load(object, false)) {
 		try {
-			dst.set((DynamicValue::Reader&) dynValCaster);
+			dst.set((DynamicValueReader&) dynValCaster);
 			return;
 		} catch(kj::Exception e) {
 			assignmentFailureLog = strTree(mv(assignmentFailureLog), "Error while trying to assign from primitive: ", e, "\n");
@@ -159,7 +159,7 @@ void assign(const BuilderSlot& dst, py::object object) {
 		
 		for(auto item : asDict) {
 			pybind11::detail::make_caster<kj::StringPtr> keyCaster;
-			if(!keyCaster.load(item.first, false)) {
+			if(!keyCaster.load(item.first, true)) {
 				assignmentFailureLog = strTree(mv(assignmentFailureLog), "Skipped assigning from dict because a key could not be converted to string\n");
 				goto dict_assignment_failed;
 			}

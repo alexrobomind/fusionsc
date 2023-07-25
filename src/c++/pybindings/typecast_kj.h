@@ -75,6 +75,7 @@ template<>
 struct type_caster<kj::StringPtr> {
 	
 	PYBIND11_TYPE_CASTER(kj::StringPtr, const_name("str"));
+	FSCPY_MOVE_ONLY_CASTER;
 	
 	type_caster<char> strCaster;	
 	
@@ -111,10 +112,7 @@ template<>
 struct type_caster<kj::String> {
 	
 	PYBIND11_TYPE_CASTER(kj::String, const_name("str"));
-	
-	type_caster() = default;
-	type_caster(const type_caster<kj::String>& other) = delete;
-	type_caster(type_caster<kj::String>&& other) = default;
+	FSCPY_MOVE_ONLY_CASTER;
 	
 	bool load(handle src, bool convert) {			
 		object isInstance = eval("isinstance");
@@ -190,6 +188,7 @@ struct type_caster<kj::ArrayPtr<T>> {
 template<typename T>
 struct type_caster<kj::ArrayPtr<T>> {
 	PYBIND11_TYPE_CASTER(kj::ArrayPtr<T>, NameForArray<T>::name);
+	FSCPY_MOVE_ONLY_CASTER;
 	
 	bool load(handle src, bool convert) {
 		// Check if it is an array we returned
@@ -215,6 +214,7 @@ struct type_caster<kj::ArrayPtr<T>> {
 template<typename T>
 struct type_caster<kj::Array<T>> {
 	PYBIND11_TYPE_CASTER(kj::Array<T>, NameForArray<T>::name);
+	FSCPY_MOVE_ONLY_CASTER;
 	
 	// Arrays are owning objects. They can not be passed in via the
 	// standard pybind11 mechanisms.
@@ -230,6 +230,7 @@ struct type_caster<kj::Array<T>> {
 template<typename T>
 struct type_caster<kj::ArrayPtr<const T>> {
 	PYBIND11_TYPE_CASTER(kj::ArrayPtr<T>, NameForArray<T>::name);
+	FSCPY_MOVE_ONLY_CASTER;
 	
 	bool load(handle src, bool convert) {
 		// Check if it is an array we returned
@@ -266,6 +267,7 @@ struct type_caster<kj::ArrayPtr<const T>> {
 template<typename T>
 struct type_caster<kj::Array<const T>> {
 	PYBIND11_TYPE_CASTER(kj::Array<T>, NameForArray<T>::name);
+	FSCPY_MOVE_ONLY_CASTER;
 	
 	// Arrays are owning objects. They can not be passed in via the
 	// standard pybind11 mechanisms.

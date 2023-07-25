@@ -8,6 +8,7 @@ if(FSC_WITH_PYTHON)
 		
 		capnp-impl.cpp
 		capnp-bind.cpp
+		pickle.cpp
 		
 		kj.cpp
 		fscpy.cpp

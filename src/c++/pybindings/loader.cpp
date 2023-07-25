@@ -305,9 +305,9 @@ struct InterfaceMethod {
 		
 		if(py::len(pyKwargs) == 0 && py::len(pyArgs) == 1) {
 			// Check whether the first argument has the correct type
-			auto argVal = pyArgs[0].cast<DynamicValue::Reader>();
+			auto argVal = pyArgs[0].cast<DynamicValueReader>();
 			
-			if(argVal.getType() == DynamicValue::STRUCT && argVal.as<capnp::DynamicStruct>().getSchema().getProto().getId() == paramType.getProto().getId()) {
+			if(argVal.getType() == DynamicValue::STRUCT && argVal.asStruct().getSchema().getProto().getId() == paramType.getProto().getId()) {
 				DynamicStruct::Reader asStruct = argVal.as<DynamicStruct>();
 				
 				if(!typeInference.infer(asStruct.getSchema(), paramType, false)) {
@@ -329,17 +329,17 @@ struct InterfaceMethod {
 			auto nameList = py::list(pyKwargs);
 			
 			if(inferTypes) {
-				auto inferType = [&typeInference](capnp::Type dst, DynamicValue::Reader reader) {
+				auto inferType = [&typeInference](capnp::Type dst, DynamicValueReader reader) {
 					Maybe<capnp::Type> asType;
 					if(dst.isStruct()) {
 						KJ_REQUIRE(reader.getType() == capnp::DynamicValue::STRUCT);	
-						asType = reader.as<capnp::DynamicStruct>().getSchema();
+						asType = reader.asStruct().getSchema();
 					} else if(dst.isInterface()) {
 						KJ_REQUIRE(reader.getType() == capnp::DynamicValue::CAPABILITY);
 						asType = reader.as<capnp::DynamicCapability>().getSchema();
 					} else if(dst.isList()) {
 						KJ_REQUIRE(reader.getType() == capnp::DynamicValue::LIST);
-						asType = reader.as<capnp::DynamicList>().getSchema();
+						asType = reader.asList().getSchema();
 					}
 					
 					KJ_IF_MAYBE(pType, asType) {
@@ -351,13 +351,13 @@ struct InterfaceMethod {
 				for(size_t i = 0; i < pyArgs.size(); ++i) {
 					auto field = argFields[i];
 										
-					py::detail::type_caster<DynamicValue::Reader> readerCaster;
+					py::detail::type_caster<DynamicValueReader> readerCaster;
 					KJ_REQUIRE(readerCaster.load(pyArgs[i], false), "Failed to convert positional argument", i);
 					
-					inferType(field.getType(), readerCaster.operator DynamicValue::Reader&());
+					inferType(field.getType(), readerCaster.operator DynamicValueReader&());
 				}
 				
-				auto inferEntry = [this, &inferType](kj::StringPtr name, DynamicValue::Reader value) mutable {
+				auto inferEntry = [this, &inferType](kj::StringPtr name, DynamicValueReader value) mutable {
 					KJ_IF_MAYBE(pField, paramType.findFieldByName(name)) {
 						inferType(pField -> getType(), value);
 					} else {
@@ -573,7 +573,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 				}
 			}
 			
-			attributes[name.cStr()] = field;
+			attributes[name.cStr()] = FieldDescriptor(field);
 		}
 		
 		for(StructSchema::Field field : schema.getUnionFields()) {
@@ -604,12 +604,12 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		
 		switch(classType) {
 			case FSCPyClassType::BUILDER: 
-				baseClass = py::type::of<DynamicStruct::Builder>();
+				baseClass = py::type::of<DynamicStructBuilder>();
 				suffix = "Builder";
 				break;
 				
 			case FSCPyClassType::READER :
-				baseClass = py::type::of<DynamicStruct::Reader>();
+				baseClass = py::type::of<DynamicStructReader>();
 				suffix = "Reader";
 				break;
 				
@@ -684,7 +684,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		py::arg("initialSize") = 1024
 	);
 	
-	output.attr("castAs") = py::cpp_function(
+	/*output.attr("castAs") = py::cpp_function(
 		[schema](py::object input) -> py::object {
 			py::detail::make_caster<capnp::DynamicStruct::Reader> readerCaster;
 			py::detail::make_caster<capnp::DynamicStruct::Builder> builderCaster;
@@ -706,7 +706,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		}
 	);
 		
-	/*output.attr("_initRootAs") = py::cpp_function(
+	output.attr("_initRootAs") = py::cpp_function(
 		[schema](py::object src) mutable {
 			auto& msg = py::cast<capnp::MessageBuilder&>(src);
 			
