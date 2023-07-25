@@ -49,9 +49,6 @@ kj::String memberName(kj::StringPtr name) {
 		"False", "None", "True", "and", "as", "assert", "break", "class", "continue", "def", "del", "elif", "else", "except",
 		"finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise",
 		"return", "try", "while", "witdh", "yield", "async",
-		
-		// Special member names
-		"get", "set", "adopt", "disown", "clone", "pretty", "totalSize", "visualize", "items"
 	});
 	
 	if(newName.endsWith("_") || newName.startsWith("init") || reserved.count(newName) > 0)
@@ -565,11 +562,15 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 				nameUpper[0] = toupper(name[0]);
 				
 				if(type.isList() || type.isData() || type.isText()) {
-					attributes[str("init", nameUpper, "_").cStr()] =  methodDescriptor(py::cpp_function(
-						[field](DynamicStructBuilder& builder, size_t n) {
-							return builder.initList(field.getProto().getName(), n);
-						}
-					));
+					auto initializerName = str("init", nameUpper);
+					KJ_IF_MAYBE(pFound, schema.findFieldByName(initializerName)) {
+					} else {
+						attributes[initializerName.cStr()] =  methodDescriptor(py::cpp_function(
+							[field](DynamicStructBuilder& builder, size_t n) {
+								return builder.initList(field.getProto().getName(), n);
+							}
+						));
+					}
 				}
 			}
 			
@@ -589,11 +590,15 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 				nameUpper[0] = toupper(name[0]);
 				
 				if(type.isStruct()) {
-					attributes[str("init", nameUpper, "_").cStr()] =  methodDescriptor(py::cpp_function(
-						[field](DynamicStructBuilder& builder, size_t n) {
-							return builder.initList(field.getProto().getName(), n);
-						}
-					));
+					auto initializerName = str("init", nameUpper);
+					KJ_IF_MAYBE(pFound, schema.findFieldByName(initializerName)) {
+					} else {
+						attributes[initializerName.cStr()] =  methodDescriptor(py::cpp_function(
+							[field](DynamicStructBuilder& builder) {
+								return builder.init(field.getProto().getName());
+							}
+						));
+					}
 				}
 			}
 		}

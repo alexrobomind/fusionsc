@@ -5,19 +5,18 @@
 
 #include "fscpy.h"
 
-namespace {
-
-fsc::ToroidalGrid::Reader w7xDefaultGrid() {
-	return fsc::devices::w7x::DEFAULT_GRID;
-}
-
-fsc::CartesianGrid::Reader w7xDefaultGeometryGrid() {
-	return fsc::devices::w7x::DEFAULT_GEO_GRID;
-}
-
-}
 
 namespace fscpy {
+	namespace {
+		WithMessage<fsc::ToroidalGrid::Reader> w7xDefaultGrid() {
+			return noMessage(fsc::devices::w7x::DEFAULT_GRID.get());
+		}
+
+		WithMessage<fsc::CartesianGrid::Reader> w7xDefaultGeometryGrid() {
+			return noMessage(fsc::devices::w7x::DEFAULT_GEO_GRID.get());
+		}
+	}
+	
 	void initDevices(py::module_& root) {
 		py::module_ devices = root.def_submodule("devices", "Device-specific native functions");
 		

@@ -174,26 +174,17 @@ Promise<void> writeArchive3(capnp::DynamicStruct::Builder root, kj::StringPtr pa
 namespace fscpy {	
 	
 void initData(py::module_& m) {
-	KJ_DBG("initData()");
 	py::module_ dataModule = m.def_submodule("data", "Distributed data processing");
-	KJ_DBG("module ok");
 	
 	dataModule.def("downloadAsync", &download, "Starts a download for the given DataRef and returns a promise for its contents");
-	KJ_DBG("download ok");
 	dataModule.def("publish", &publishBuilder, "Creates a DataRef containing the given data");
-	KJ_DBG("publishBuilder ok");
 	dataModule.def("publish", &publishReader, "Creates a DataRef containing the given data");
-	KJ_DBG("publishReader ok");
 	
 	dataModule.def("openArchive", &openArchive, "Opens an archive file and returns a DataRef to its root");
-	KJ_DBG("openArchive ok");
 	
 	dataModule.def("writeArchiveAsync", &writeArchive1, "Downloads (recursively) the given DataRef and asynchronously waits an Archive containing its contents. Must wait on the returned promise.");
-	KJ_DBG("writeArchive1 ok");
 	dataModule.def("writeArchiveAsync", &writeArchive2);
-	KJ_DBG("writeArchive2 ok");
 	dataModule.def("writeArchiveAsync", &writeArchive3);
-	KJ_DBG("writeArchive3 ok");
 }
 
 }

@@ -119,8 +119,13 @@ struct CopyMsgT {
 	kj::Decay<T>& ref;
 };
 
-template<typename T, typename... Params>
+template<typename T>
 struct ShareMsgT {
+	kj::Decay<T>& ref;
+};
+
+template<typename T>
+struct NoMsgT {
 	kj::Decay<T>& ref;
 };
 
@@ -135,6 +140,14 @@ ShareMsgT<T> shareMessage(T&& t) {
 	ShareMsgT<T> result { t };
 	return result;
 }
+
+template<typename T>
+NoMsgT<T> noMessage(T&& t) {
+	NoMsgT<T> result { t };
+	return result;
+}
+
+struct noMessage {};
 
 template<typename T>
 struct WithMessage : public T, public WithMessageBase {
@@ -156,6 +169,11 @@ struct WithMessage : public T, public WithMessageBase {
 	WithMessage(decltype(nullptr), Params&&... params) :
 		T(fwd<Params>(params)...),
 		WithMessageBase(kj::attachRef(ANONYMOUS))
+	{}
+	
+	template<typename T2>
+	WithMessage(NoMsgT<T2> input) :
+		WithMessage(nullptr, fwd<T2>(input.ref))
 	{}
 	
 	template<typename... Params>
@@ -321,7 +339,8 @@ struct DynamicStructBuilder : public DynamicStructInterface<capnp::DynamicStruct
 	using DynamicStructInterface::DynamicStructInterface;
 	
 	void set(kj::StringPtr field, py::object value);
-	void initList(kj::StringPtr field, uint32_t size);
+	DynamicValueBuilder init(kj::StringPtr field);
+	DynamicListBuilder initList(kj::StringPtr field, uint32_t size);
 	DynamicOrphan disown(kj::StringPtr field);
 	
 	static DynamicStructBuilder cloneFrom(capnp::DynamicStruct::Reader reader);
@@ -365,7 +384,8 @@ struct DynamicListInterface : public WithMessage<ListType> {
 		inline bool operator==(const Iterator& other) const { return pos == other.pos; }
 		inline Iterator& operator++() { ++pos; return *this; }
 		
-		inline Iterator(DynamicListInterface& parent, size_t idx) : parent(parent), pos(pos) {}
+		inline Iterator(DynamicListInterface& parent, size_t pos) : parent(parent), pos(pos) {}
+		
 	private:
 		DynamicListInterface& parent;
 		uint32_t pos;
@@ -392,7 +412,7 @@ struct DynamicListBuilder : public DynamicListInterface<capnp::DynamicList::Buil
 	
 	// Builder interface
 	void set(uint32_t, py::object value);
-	void initList(uint32_t idx, uint32_t size);
+	DynamicListBuilder initList(uint32_t idx, uint32_t size);
 	
 	static DynamicListBuilder cloneFrom(capnp::DynamicList::Reader reader);
 };

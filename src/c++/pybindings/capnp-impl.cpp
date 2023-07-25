@@ -46,7 +46,8 @@ DynamicValueReader::DynamicValueReader(DynamicValueBuilder& other) :
 	
 	#define HANDLE_CASE(branch, Type) \
 		case DV::branch: \
-			*this = other.as<Type>();
+			*this = other.as<Type>(); \
+			return;
 	
 	switch(other.getType()) {
 		HANDLE_CASE(VOID, capnp::Void)
@@ -59,14 +60,19 @@ DynamicValueReader::DynamicValueReader(DynamicValueBuilder& other) :
 		
 		case DV::TEXT:
 			*this = TextReader(other.asText());
+			return;
 		case DV::DATA:
 			*this = DataReader(other.asData());
+			return;
 		case DV::LIST:
 			*this = DynamicListReader(other.asList());
+			return;
 		case DV::STRUCT:
 			*this = DynamicStructReader(other.asStruct());
+			return;
 		case DV::ANY_POINTER:
 			*this = AnyReader(other.asAny());
+			return;
 	}
 	
 	KJ_UNREACHABLE;
@@ -285,9 +291,14 @@ void DynamicStructBuilder::set(kj::StringPtr field, py::object value) {
 	assign(*this, field, mv(value));
 }
 
-void DynamicStructBuilder::initList(kj::StringPtr field, uint32_t size) {
-	init(field, size);
+DynamicValueBuilder DynamicStructBuilder::init(kj::StringPtr field) {
+	return DynamicValueBuilder(shareMessage(*this), wrapped().init(field));
 }
+
+DynamicListBuilder DynamicStructBuilder::initList(kj::StringPtr field, uint32_t size) {
+	return DynamicListBuilder(shareMessage(*this), wrapped().init(field, size).as<capnp::DynamicList>());
+}
+
 
 DynamicOrphan DynamicStructBuilder::disown(kj::StringPtr field) {
 	return DynamicOrphan(shareMessage(*this), wrapped().disown(field));
@@ -396,8 +407,8 @@ void DynamicListBuilder::set(uint32_t idx, py::object value) {
 	assign(*this, idx, mv(value));
 }
 
-void DynamicListBuilder::initList(uint32_t idx, uint32_t size) {
-	init(idx, size);
+DynamicListBuilder DynamicListBuilder::initList(uint32_t idx, uint32_t size) {
+	return DynamicListBuilder(shareMessage(*this), wrapped().init(idx, size).as<capnp::DynamicList>());
 }
 
 DynamicListBuilder DynamicListBuilder::cloneFrom(capnp::DynamicList::Reader reader) {

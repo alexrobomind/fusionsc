@@ -170,7 +170,7 @@ namespace pybind11 { namespace detail {
 			capnp::StructSchema schema = fscpy::defaultLoader.importBuiltin<Reads>().asStruct();
 			
 			ASR any = capnp::toAny(src.wrapped());
-			DSR dynamic(src, any.as<capnp::DynamicStruct>(schema));
+			DSR dynamic(fscpy::shareMessage(src), any.as<capnp::DynamicStruct>(schema));
 			
 			return type_caster<DSR>::cast(dynamic, policy, parent);
 		}		
@@ -340,6 +340,7 @@ namespace pybind11 { namespace detail {
 					} \
 				}
 			
+	
 			FSCPY_TRY_CAST(fscpy::DynamicValueBuilder)
 			FSCPY_TRY_CAST(fscpy::DynamicStructReader)
 			FSCPY_TRY_CAST(fscpy::DynamicListReader)

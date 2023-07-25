@@ -147,6 +147,7 @@ template<typename T, typename... Params>
 void bindListInterface(py::class_<T, Params...>& cls) {
 	cls.def("__getitem__", &T::get);
 	cls.def("clone", &T::clone);
+	cls.def("__len__", &T::size);
 	cls.def_buffer(&T::buffer);
 	
 	cls.def(
@@ -206,6 +207,7 @@ void bindStructClasses(py::module_& m) {
 	py::class_<SB> builder(m, "StructBuilder", py::multiple_inheritance(), py::buffer_protocol());
 	builder
 		.def("__setitem__", &SB::set)
+		.def("init_", &SB::init)
 		.def("init_", &SB::initList)
 		.def("disown_", &SB::disown)
 		.def("__reduce_ex__", &pickleReduceBuilder)
@@ -285,30 +287,13 @@ void initCapnp(py::module_& m) {
 	#define CHECK() if(PyErr_Occurred()) throw py::error_already_set();
 	
 	bindListClasses(mcapnp);
-	CHECK();
-	KJ_DBG("lists ok");
 	bindBlobClasses(mcapnp);
-	CHECK();
-	KJ_DBG("blobs ok");
 	bindStructClasses(mcapnp);
-	CHECK();
-	KJ_DBG("structs ok");
 	bindFieldDescriptors(mcapnp);
-	CHECK();
-	KJ_DBG("fields ok");
 	bindCapClasses(mcapnp);
-	CHECK();
-	KJ_DBG("caps ok");
 	bindEnumClasses(mcapnp);
-	CHECK();
-	KJ_DBG("enums ok");
 	bindAnyClasses(mcapnp);
-	CHECK();
-	KJ_DBG("any ok");
 	bindUnpicklers(mcapnp);
-	CHECK();
-	KJ_DBG("pickle ok");
-	CHECK();
 	
 	if(PyErr_Occurred())
 		throw py::error_already_set();
