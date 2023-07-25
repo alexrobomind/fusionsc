@@ -396,14 +396,9 @@ struct InterfaceMethod {
 		auto specializedResultType = typeInference.specialize(resultType).asStruct();
 		
 		// Extract promise
-		auto resultPromise = result.then([specializedResultType](capnp::Response<AnyPointer> response) -> py::object {			
-			DynamicValue::Reader structReader = response.getAs<DynamicStruct>(specializedResultType);
-			py::object pyReader = py::cast(structReader);
-			
-			py::object pyResponse = py::cast(mv(response));
-			pyReader.attr("_response") = pyResponse;
-			
-			return pyReader;
+		auto resultPromise = result.then([specializedResultType](capnp::Response<AnyPointer> response) {
+			DynamicStruct::Reader asStruct = response.getAs<DynamicStruct>(specializedResultType);
+			return DynamicStructReader(kj::heap(mv(response)), asStruct);
 		});
 		
 		// Extract pipeline

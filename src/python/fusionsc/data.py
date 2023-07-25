@@ -29,7 +29,7 @@ def openArchive(filename: str) -> service.DataRef:
 	return native.data.openArchive(filename, backends.localResources())
 	
 
-def publish(data: Union[capnp.DynamicStructReader, capnp.DataReader]) -> service.DataRef:
+def publish(data: Union[capnp.StructReader, capnp.DataReader]) -> service.DataRef:
 	"""
 	Copies the provided data and provides a DataRef to the in-memory copy.
 	
@@ -44,7 +44,7 @@ def publish(data: Union[capnp.DynamicStructReader, capnp.DataReader]) -> service
 	return cloneResult
 
 @asyncFunction
-def download(ref: service.DataRef) -> asnc.Future[Union[capnp.DynamicCapabilityClient, capnp.DynamicStructReader, capnp.DataReader]]:
+def download(ref: service.DataRef) -> asnc.Future[Union[capnp.CapabilityClient, capnp.StructReader, capnp.DataReader]]:
 	"""
 	Retrieves a local copy of the information stored in 'ref'. If possible, transfer of data will be avoided. The retrieved data
 	are immutable and the backing storage is shared across all users in this process. If 'ref' was obtained from an archive file,
@@ -55,18 +55,18 @@ def download(ref: service.DataRef) -> asnc.Future[Union[capnp.DynamicCapabilityC
 	
 	Returns:
 		The contents of the respective DataRef, interpreted as the appropriate type (either a DataReader if the ref holds raw binary
-		data, or a subtype of DynamicCapabilityClient or DynamicStructReader typed to the appropriate Cap'n'proto schema).
+		data, or a subtype of CapabilityClient or StructReader typed to the appropriate Cap'n'proto schema).
 	"""
 	return native.data.downloadAsync(ref)
 
 @asyncFunction
-def writeArchive(data: Union[capnp.DynamicStructReader, capnp.DynamicCapabilityClient], filename: str):
+def writeArchive(data: Union[capnp.StructReader, capnp.CapabilityClient], filename: str):
 	"""
 	Writes a copy of 'data' into a local archive file. All transitively contained DataRefs will be downloaded and a copy of them
 	will be stored in this file. This ensures that an archive always contains a complete copy of all information needed to reconstruct
 	its contents.
 	"""
-	if isinstance(data, capnp.DynamicCapabilityClient):
+	if isinstance(data, capnp.CapabilityClient):
 		ref = data
 	else:
 		ref = publish(data)
@@ -74,7 +74,7 @@ def writeArchive(data: Union[capnp.DynamicStructReader, capnp.DynamicCapabilityC
 	return backends.localResources().writeArchive(filename, ref)
 
 @asyncFunction
-def readArchive(filename: str) -> asnc.Future[Union[capnp.DynamicCapabilityClient, capnp.DynamicStructReader]]:
+def readArchive(filename: str) -> asnc.Future[Union[capnp.CapabilityClient, capnp.StructReader]]:
 	"""
 	Opens the given archive file, maps the root node into memory and returns a typed view to the memory-mapped data.
 	
@@ -83,7 +83,7 @@ def readArchive(filename: str) -> asnc.Future[Union[capnp.DynamicCapabilityClien
 	
 	Returns:
 		The contents of the archive, interpreted as the appropriate type (either a DataReader if the ref holds raw binary
-		data, or a subtype of DynamicCapabilityClient or DynamicStructReader typed to the appropriate Cap'n'proto schema).
+		data, or a subtype of CapabilityClient or StructReader typed to the appropriate Cap'n'proto schema).
 	"""
 	archiveRef = openArchive(filename)
 	return download.asnc(archiveRef)

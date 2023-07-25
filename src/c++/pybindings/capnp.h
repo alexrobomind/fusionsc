@@ -151,7 +151,7 @@ struct noMessage {};
 
 template<typename T>
 struct WithMessage : public T, public WithMessageBase {
-	static const int ANONYMOUS = 0;
+	static inline const int ANONYMOUS = 0;
 	
 	template<typename T2, typename... Params>
 	WithMessage(ShareMsgT<T2> input, Params&&... params) :

@@ -321,7 +321,7 @@ DynamicValuePipeline DynamicStructPipeline::get(kj::StringPtr fieldName) {
 DynamicValuePipeline DynamicStructPipeline::getCapnp(capnp::StructSchema::Field field) {
 	capnp::AnyPointer::Pipeline typelessValue(nullptr);
 	
-	KJ_REQUIRE(field.getProto().getDiscriminantValue() == capnp::schema::Field::NO_DISCRIMINANT, "Can not access union fields in pipelines");
+	KJ_REQUIRE(field.getProto().getDiscriminantValue() == static_cast<uint16_t>(-1), "Can not access union fields in pipelines");
 	
 	// Groups must point to the same field
 	if(field.getProto().isGroup()) {
