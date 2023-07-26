@@ -403,7 +403,7 @@ struct AsyncioFutureAdapter {
 		void call(py::object future) {
 			if(!valid)
 				return;
-			
+						
 			auto success = parent.fulfiller.rejectIfThrows([this, future]() mutable {
 				auto result = future.attr("result")();
 				parent.fulfiller.fulfill(mv(result));
@@ -428,15 +428,8 @@ struct AsyncioFutureAdapter {
 	}
 	
 	~AsyncioFutureAdapter() {
-		py::gil_scoped_acquire withGil;
-		
-		KJ_DBG("Removing callback");
-		py::print(py::type::of(future));
 		future.attr("remove_done_callback")(pythonCallback);
-		KJ_DBG("Done");
-		
 		cppCallback -> valid = false;
-		future = py::object();
 	}
 	
 private:
@@ -469,17 +462,9 @@ struct AsyncioFutureLike {
 	
 	kj::Canceler canceler;
 	
-	py::object context;
-	
 	AsyncioFutureLike(py::object loop, Promise<py::object> promise) :
 		contents(py::object()), loop(mv(loop)), doneCallbacks()
 	{
-		auto ptr = PyContext_CopyCurrent();
-		if(ptr == 0)
-			throw py::error_already_set();
-		
-		context = py::reinterpret_steal<py::object>(ptr);
-		
 		auto forked = promise.fork();
 		resolveTask = forked.addBranch().then(
 			[this](py::object result) mutable {
@@ -541,6 +526,10 @@ struct AsyncioFutureLike {
 	}
 	
 	void addDoneCallback(py::object cb, py::object context) {
+		if(context.is_none()) {
+			context = py::reinterpret_steal<py::object>(PyContext_CopyCurrent());
+		}
+
 		doneCallbacks.append(py::make_tuple(mv(cb), mv(context), this));
 		
 		if(done())
@@ -670,7 +659,7 @@ struct AsyncioFutureLike {
 			
 			// Test if first object is type or value
 			if(PyType_Check(excType.ptr())) {
-				if(py::type::of(value) != excType.ptr()) {
+				if(py::type::of(value).ptr() != excType.ptr()) {
 					value = excType(value);
 				}
 			} else {

@@ -60,11 +60,12 @@ py::buffer_info getObjectTensor(T tensor) {
 	auto outData = resultHolder.template as<PyObject*>();
 	
 	for(auto i : kj::indices(data)) {
-		py::object outObject = py::cast(data[i]);		
+		py::object outObject = py::cast(data.get(i));		
 		outData[i] = outObject.inc_ref().ptr();
 	}
 	
 	py::buffer asPyBuffer = py::cast(mv(resultHolder));
+	
 	return asPyBuffer.request(true);
 }
 
@@ -402,7 +403,7 @@ py::buffer getAsBufferViaNumpy(py::object input, capnp::Type type, int minDims, 
 }
 
 template<typename T>
-py::buffer_info getTensorImpl(T tensor) {	
+py::buffer_info getTensorImpl(T tensor) {
 	auto schema = tensor.getSchema();
 	auto scalarType = schema.getFieldByName("data").getType().asList().getElementType();
 	

@@ -308,15 +308,16 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 		for tagName, tagData in zip(response.tagNames, np.asarray(response.endTags))
 	}
 	
-	return {
+	result = {
 		"endPoints" : np.asarray(response.endPoints),
 		"poincareHits" : np.asarray(response.poincareHits),
 		"stopReasons" : np.asarray(response.stopReasons),
 		"fieldLines" : np.asarray(response.fieldLines),
 		"fieldStrengths" : np.asarray(response.fieldStrengths),
 		"endTags" : endTags,
-		"responseSize" : capnp.totalSize(response)
+		"responseSize" : response.totalBytes_()
 	}
+	return result
 
 @asyncFunction
 async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = "ccw", mapping = None):

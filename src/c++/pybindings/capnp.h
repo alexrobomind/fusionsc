@@ -390,6 +390,7 @@ struct DynamicStructPipeline {
 	{
 		typeless = other.typeless.noop();
 		schema = other.schema;
+		return *this;
 	}
 	
 	inline DynamicStructPipeline(DynamicStructPipeline&& other) = default;

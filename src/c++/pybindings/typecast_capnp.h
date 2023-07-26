@@ -152,7 +152,7 @@ namespace pybind11 { namespace detail {
 		
 		bool load(handle src, bool convert) {	
 			// Builder caster
-			using BuilderType = typename fscpy::WithMessage<capnp::FromReader<Reader>::Builder>;
+			using BuilderType = fscpy::WithMessage<typename capnp::FromReader<Reader>::Builder>;
 			type_caster<BuilderType> builderCaster;
 			if(builderCaster.load(src, convert)) {
 				auto& builder = (BuilderType&) builderCaster;

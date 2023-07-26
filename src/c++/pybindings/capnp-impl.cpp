@@ -267,7 +267,12 @@ py::dict DynamicStructInterface<StructType>::asDict() {
 
 template<typename StructType>
 py::buffer_info DynamicStructInterface<StructType>::buffer() {
-	return getTensor(*this);
+	auto result = getTensor(*this);
+	
+	if(PyErr_Occurred())
+		throw py::error_already_set();
+	
+	return result;
 }
 
 template<typename StructType>

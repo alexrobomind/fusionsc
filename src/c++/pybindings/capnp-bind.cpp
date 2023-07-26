@@ -143,7 +143,7 @@ struct ClassBinding : public py::class_<T, Params...> {
 		this -> def("__len__", &T2::size);
 		this -> def("__iter__", [](T2& t) {
 			return py::make_iterator(t.begin(), t.end());
-		});
+		}, py::keep_alive<0, 1>());
 		return *this;
 	}
 	
@@ -341,6 +341,8 @@ void initCapnp(py::module_& m) {
 	bindEnumClasses();
 	bindAnyClasses();
 	bindUnpicklers();
+	
+	capnpModule = py::module();
 	
 	if(PyErr_Occurred())
 		throw py::error_already_set();
