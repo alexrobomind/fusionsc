@@ -84,7 +84,7 @@ struct FieldCalculation {
 		KJ_REQUIRE(stepSize != 0, "Please specify a step size in the Biot-Savart settings");
 		
 		calculation = calculation.then([this, filament = mv(filament), coilWidth, stepSize, current]() mutable {
-			KJ_DBG("Processing coil", current, coilWidth, stepSize, filament.dimension(1));
+			KJ_LOG(INFO, "Processing coil", current, coilWidth, stepSize, filament.dimension(1));
 			
 			// Launch calculation
 			return FSC_LAUNCH_KERNEL(
@@ -119,7 +119,6 @@ struct FieldCalculation {
 			return _device -> barrier();
 		})
 		.then([this, out]() {
-			KJ_DBG("Calculation finished");
 			writeTensor(field->getHost(), out);
 		});
 		
@@ -143,7 +142,7 @@ struct CalculationSession : public FieldCalculator::Server {
 	//! Handles compute request
 	Promise<void> compute(ComputeContext context) {
 		// context.allowCancellation(); // NOTE: In capnproto 0.11, this has gone away
-		KJ_DBG("Initiating field computation");
+		KJ_LOG(INFO, "Initiating magnetic field computation");
 		
 		// Copy input field (so that call context can be released)
 		auto field = heapHeld<Temporary<MagneticField>>(context.getParams().getField());
@@ -222,7 +221,7 @@ struct CalculationSession : public FieldCalculator::Server {
 			auto result = heapHeld<Temporary<Float64Tensor>>();	
 			
 			auto publish = newCalculator->finish(*result).then([result, this]() mutable {
-				KJ_DBG("Field computation complete");
+				KJ_LOG(INFO, "Field calculation finished");
 				return getActiveThread().dataService().publish(result->asReader());
 			})
 			.eagerlyEvaluate(nullptr)

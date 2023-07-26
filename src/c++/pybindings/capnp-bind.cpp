@@ -100,41 +100,97 @@ Maybe<DynamicValueReader> dynamicValueFromScalar(py::handle handle) {
 	return nullptr;
 }
 
+static py::module_ capnpModule;
+
+template<typename T, typename... Params>
+struct ClassBinding : public py::class_<T, Params...> {
+	template<typename... Args>
+	ClassBinding(Args&&... args) :
+		py::class_<T, Params...>(capnpModule, fwd<Args>(args)...)
+	{}
+	
+	// Gets called by constructor, so return type can be void
+	ClassBinding& withCommon(kj::StringPtr cloneName = "clone") {
+		this -> def(cloneName.cStr(), &T::clone);
+		this -> def("__copy__", &T::clone);
+		this -> def("__deepcopy__", [](T& t, py::object memo) { return t.clone(); });
+		
+		this -> def("__repr__", &T::repr);
+		return *this;
+	}
+	
+	template<typename T2 = T>
+	ClassBinding& withBuffer() {
+		this -> def_buffer(&T2::buffer);
+		return *this;
+	}
+	
+	template<typename T2 = T>
+	ClassBinding& withGetitem() {
+		this -> def("__getitem__", &T2::get);
+		return *this;
+	}
+	
+	template<typename T2 = T>
+	ClassBinding& withSetitem() {
+		this -> def("__setitem__", &T2::get);
+		this -> def("__delitem__", &T2::init);
+		return *this;
+	}
+	
+	template<typename T2 = T>
+	ClassBinding& withSequence() {		
+		this -> def("__len__", &T2::size);
+		this -> def("__iter__", [](T2& t) {
+			return py::make_iterator(t.begin(), t.end());
+		});
+		return *this;
+	}
+	
+	template<typename T2 = T>
+	ClassBinding& withListInterface() {
+		this -> withCommon();
+		this -> withBuffer<T2>();
+		this -> withGetitem<T2>();
+		this -> withSequence<T2>();
+		
+		return *this;
+	}
+};
+
 // Pickling support
 
-void bindBlobClasses(py::module_& m) {
-	using DR = DataReader;
-	using DB = DataBuilder;
-	using TR = TextReader;
-	// TB is alias for TR
-	
-	py::class_<DR>(m, "DataReader", py::buffer_protocol())
-		.def("__repr__", &DR::repr)
-		.def_buffer(&DR::buffer)
+void bindBlobClasses() {	
+	ClassBinding<DataReader>("DataReader", py::buffer_protocol())
+		.withCommon()
+		.withBuffer()
+	;
+	ClassBinding<DataBuilder>("DataBuilder", py::buffer_protocol())
+		.withCommon()
+		.withBuffer()
 	;
 	
-	py::class_<DB>(m, "DataBuilder", py::buffer_protocol())
-		.def("__repr__", &DB::repr)
-		.def_buffer(&DB::buffer)
+	ClassBinding<TextReader>("TextReader")
+		.withCommon()
+	;
+	ClassBinding<TextBuilder>("TextBuilder")
+		.withCommon()
 	;
 	
-	py::class_<TR>(m, "TextReader")
-		.def("__repr__", &TR::repr)
-	;
-	
-	py::implicitly_convertible<DB, DR>();
+	py::implicitly_convertible<DataBuilder, DataReader>();
+	py::implicitly_convertible<TextBuilder, TextReader>();
 }
 
-void bindAnyClasses(py::module& m) {
+void bindAnyClasses() {
 	using AR = AnyReader;
 	using AB = AnyBuilder;
 	
-	py::class_<AR>(m, "AnyReader")
-		.def("__repr__", &AR::repr)
+	ClassBinding<AR>("AnyReader")
+		.withCommon()
 	;
 	
-	py::class_<AB>(m, "AnyBuilder")
-		.def("__repr__", &AB::repr)
+	ClassBinding<AB>("AnyBuilder")
+		.withCommon()
 		.def("set", &AB::setList)
 		.def("set", &AB::setStruct)
 		.def("set", &AB::adopt)
@@ -143,76 +199,66 @@ void bindAnyClasses(py::module& m) {
 	py::implicitly_convertible<AB, AR>();
 }
 
-template<typename T, typename... Params>
-void bindListInterface(py::class_<T, Params...>& cls) {
-	cls.def("__getitem__", &T::get);
-	cls.def("clone", &T::clone);
-	cls.def("__len__", &T::size);
-	cls.def_buffer(&T::buffer);
-	
-	cls.def(
-		"__iter__",
-		[](T& t) { return py::make_iterator(t.begin(), t.end()); },
-		py::keep_alive<0, 1>()
-	);
-}
-
-void bindListClasses(py::module_& m) {
+void bindListClasses() {
 	using LB = DynamicListBuilder;
 	using LR = DynamicListReader;
 	
-	py::class_<LB> builder(m, "ListBuilder", py::buffer_protocol());
-	builder
-		.def("__setitem__", &LB::set)
+	ClassBinding<LB>("ListBuilder", py::buffer_protocol())
+		.withListInterface()
 		.def("init", &LB::initList)
 	;
 	
-	py::class_<LR> reader(m, "ListReader", py::buffer_protocol());
-	
-	bindListInterface(builder);
-	bindListInterface(reader);
+	ClassBinding<LR>("ListReader", py::buffer_protocol())
+		.withListInterface()
+	;
 	
 	py::implicitly_convertible<LB, LR>();
 }
 
 template<typename T, typename... Params>
-void bindPipelineCompatibleInterface(py::class_<T, Params...>& cls) {
-	cls.def("__getitem__", &T::get);
-	cls.def("which_", &T::whichStr);
-	cls.def("__repr__", &T::repr);
+void bindPipelineCompatibleInterface(ClassBinding<T, Params...>& cls) {
+	cls.withGetitem();
+	cls.withSequence();
+	cls.withCommon("clone_");
 	cls.def(py::init<T&>());
+	
+	cls.def("which_", &T::whichStr);
 }
 
 template<typename T, typename... Params>
-void bindStructInterface(py::class_<T, Params...>& cls) {
+void bindStructInterface(ClassBinding<T, Params...>& cls) {
 	bindPipelineCompatibleInterface(cls);
+	
+	cls.withBuffer();
+	
 	cls.def("has_", &T::has);
 	cls.def("toYaml_", &T::toYaml, py::arg("flow"));
-	cls.def("__len__", &T::size);
 	cls.def("toDict_", &T::asDict);
-	cls.def("clone_", &T::clone);
-	cls.def("totalBytes", &T::totalBytes);
+	cls.def("totalBytes_", &T::totalBytes);
+	
 	cls.def_buffer(&T::buffer);
 }
 
-void bindStructClasses(py::module_& m) {
+void bindStructClasses() {
 	using SB = DynamicStructBuilder;
 	using SR = DynamicStructReader;
 	using SP = DynamicStructPipeline;
 	
-	py::class_<SR> reader(m, "StructReader", py::multiple_inheritance(), py::buffer_protocol());
+	ClassBinding<SR> reader("StructReader", py::multiple_inheritance(), py::buffer_protocol());
 	reader
 		.def("__reduce_ex__", &pickleReduceReader)
 	;
-	py::class_<SB> builder(m, "StructBuilder", py::multiple_inheritance(), py::buffer_protocol());
+	ClassBinding<SB> builder("StructBuilder", py::multiple_inheritance(), py::buffer_protocol());
 	builder
-		.def("__setitem__", &SB::set)
+		.withSetitem()
+		
 		.def("init_", &SB::init)
 		.def("init_", &SB::initList)
 		.def("disown_", &SB::disown)
+		
 		.def("__reduce_ex__", &pickleReduceBuilder)
 	;
-	py::class_<SP> pipeline(m, "StructPipeline", py::multiple_inheritance());
+	ClassBinding<SP> pipeline("StructPipeline", py::multiple_inheritance());
 	
 	bindStructInterface(reader);
 	bindStructInterface(builder);
@@ -221,12 +267,12 @@ void bindStructClasses(py::module_& m) {
 	py::implicitly_convertible<SB, SR>();
 }
 
-void bindCapClasses(py::module_& m) {
+void bindCapClasses() {
 	using C = DynamicCapabilityClient;
 	using S = DynamicCapabilityServer;
 	
-	py::class_<C> client(m, "CapabilityClient", py::multiple_inheritance(), py::metaclass(*baseMetaType));
-	py::class_<S> server(m, "CapabilityServer", py::multiple_inheritance(), py::metaclass(*baseMetaType));
+	ClassBinding<C> client("CapabilityClient", py::multiple_inheritance(), py::metaclass(*baseMetaType));
+	ClassBinding<S> server("CapabilityServer", py::multiple_inheritance(), py::metaclass(*baseMetaType));
 	
 	client
 		.def(py::init([](C src) { return src; }))
@@ -234,10 +280,10 @@ void bindCapClasses(py::module_& m) {
 	;
 }
 
-void bindFieldDescriptors(py::module& m) {
+void bindFieldDescriptors() {
 	using FD = FieldDescriptor;
 	
-	py::class_<FD>(m, "FieldDescriptor")
+	ClassBinding<FD>("FieldDescriptor")
 		.def("__get__", &FD::get1, py::arg("obj"), py::arg("type") = py::none())
 		.def("__get__", &FD::get2, py::arg("obj"), py::arg("type") = py::none())
 		.def("__get__", &FD::get3, py::arg("obj"), py::arg("type") = py::none())
@@ -249,10 +295,10 @@ void bindFieldDescriptors(py::module& m) {
 }
 
 
-void bindEnumClasses(py::module_& m) {
+void bindEnumClasses() {
 	using EI = EnumInterface;
 	
-	py::class_<EI>(m, "Enum")
+	ClassBinding<EI>("Enum")
 		.def("__repr__", &EI::repr)
 		.def("__eq__", &EI::eq1, py::is_operator())
 		.def("__eq__", &EI::eq2, py::is_operator())
@@ -260,10 +306,10 @@ void bindEnumClasses(py::module_& m) {
 	;
 }
 
-void bindUnpicklers(py::module_& m) {
-	m.def("_unpickleReader", &unpickleReader);
-	m.def("_unpickleBuilder", &unpickleBuilder);
-	m.def("_unpickleRef", &unpickleRef);
+void bindUnpicklers() {
+	capnpModule.def("_unpickleReader", &unpickleReader);
+	capnpModule.def("_unpickleBuilder", &unpickleBuilder);
+	capnpModule.def("_unpickleRef", &unpickleRef);
 }
 
 void initCapnp(py::module_& m) {
@@ -282,18 +328,19 @@ void initCapnp(py::module_& m) {
 	
 	defaultLoader.addBuiltin<capnp::Capability>();
 	
-	py::module_ mcapnp = m.def_submodule("capnp", "Python bindings for Cap'n'proto classes (excluding KJ library)");
+	// Static global defined above
+	capnpModule = m.def_submodule("capnp", "Python bindings for Cap'n'proto classes (excluding KJ library)");
 	
 	#define CHECK() if(PyErr_Occurred()) throw py::error_already_set();
 	
-	bindListClasses(mcapnp);
-	bindBlobClasses(mcapnp);
-	bindStructClasses(mcapnp);
-	bindFieldDescriptors(mcapnp);
-	bindCapClasses(mcapnp);
-	bindEnumClasses(mcapnp);
-	bindAnyClasses(mcapnp);
-	bindUnpicklers(mcapnp);
+	bindListClasses();
+	bindBlobClasses();
+	bindStructClasses();
+	bindFieldDescriptors();
+	bindCapClasses();
+	bindEnumClasses();
+	bindAnyClasses();
+	bindUnpicklers();
 	
 	if(PyErr_Occurred())
 		throw py::error_already_set();

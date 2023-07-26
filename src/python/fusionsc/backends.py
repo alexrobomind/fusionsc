@@ -1,6 +1,7 @@
 """Manages the active backend to use for calculation"""
 from . import asnc
 from . import native
+from . import service
 
 import contextlib
 
@@ -17,12 +18,10 @@ def connectLocal():
 	"""Connects a thread to the in-process worker. Automatically called for main thread."""
 	asnc.startEventLoop()
 	_threadLocal.localResources = inProcessWorker.connect()
-	_threadLocal.root = _threadLocal.localResources.root().root
 	
 def disconnectLocal():
 	"""Disconnects a thread from the in-process worker"""
 	del _threadLocal.localResources
-	del _threadLocal.root
 
 def localResources():
 	"""
@@ -31,6 +30,12 @@ def localResources():
 	This interface can be used to access several privileged functions (like network setup and file
 	system access) that are not available for remote clients.
 	"""
+	assert isLocalConnected(), """
+		This thread is not connected to the local backend. Please call fusionsc.backends.connectLocal()
+		(which is automatically done for the main thread), wrap your code in 'with fusionsc.backends.useBackend(...):',
+		or call 'fusionsc.backends.alwaysUseBackend(...):'
+	"""
+	
 	return _threadLocal.localResources
 
 def localBackend():
@@ -38,19 +43,23 @@ def localBackend():
 	Returns the backend corresponding to the in-process worker. Requires the active thread
 	to be connected to it.
 	"""
-	assert isLocalConnected(), """
-		This thread is not connected to the local backend. Please call fusionsc.backends.connectLocal()
-		(which is automatically done for the main thread), wrap your code in 'with fusionsc.backends.useBackend(...):',
-		or call 'fusionsc.backends.alwaysUseBackend(...):'
+	return localResources().root().pipeline.root
+
+@asnc.asyncFunction
+async def reconfigureLocalBackend(config):
 	"""
-	
-	return _threadLocal.root
+	Reconfigues the local backend to the given configuration.
+	"""
+	await localResources().configureRoot(config)
+
+def newLocalConfig():
+	return service.LocalConfig.newMessage()
 
 def isLocalConnected():
 	"""
 	Checks whether the thread is connected to the in-process worker
 	"""
-	return hasattr(_threadLocal, "root")
+	return hasattr(_threadLocal, "localResources")
 
 def activeBackend():
 	"""

@@ -100,7 +100,10 @@ namespace pybind11 { namespace detail {
 		using Builds = typename Builder::Builds;
 		
 		PYBIND11_TYPE_CASTER(fscpy::WithMessage<Builder>, const_name<Builds>() + const_name(".Builder"));
-		FSCPY_MOVE_ONLY_CASTER;
+		
+		type_caster() : value(nullptr, nullptr) {}
+		type_caster(const type_caster&) = delete;
+		type_caster(type_caster&&) = default;
 		
 		bool load(handle src, bool convert) {
 			// Try to load as dynamic struct
@@ -115,7 +118,7 @@ namespace pybind11 { namespace detail {
 				KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
 				ASB any = dynamic.wrapped();
 			
-				value = fscpy::WithMessage<Builder>(dynamic, any.as<Builds>());
+				value = fscpy::WithMessage<Builder>(fscpy::shareMessage(dynamic), any.as<Builds>());
 			} catch(kj::Exception e) {
 				KJ_LOG(WARNING, "Error during conversion", e);
 				return false;
@@ -142,9 +145,22 @@ namespace pybind11 { namespace detail {
 		using Reads = typename Reader::Reads;
 		
 		PYBIND11_TYPE_CASTER(fscpy::WithMessage<Reader>, const_name<Reads>() + const_name(".Reader"));
-		FSCPY_MOVE_ONLY_CASTER;
+
+		type_caster() : value(nullptr) {}
+		type_caster(const type_caster&) = delete;
+		type_caster(type_caster&&) = default;
 		
-		bool load(handle src, bool convert) {			
+		bool load(handle src, bool convert) {	
+			// Builder caster
+			using BuilderType = typename fscpy::WithMessage<capnp::FromReader<Reader>::Builder>;
+			type_caster<BuilderType> builderCaster;
+			if(builderCaster.load(src, convert)) {
+				auto& builder = (BuilderType&) builderCaster;
+				
+				value = fscpy::WithMessage<Reader>(fscpy::shareMessage(builder), builder.asReader());
+				return true;
+			}
+			
 			// Try to load as dynamic struct
 			type_caster<DSR> subCaster;
 			if(!subCaster.load(src, convert))

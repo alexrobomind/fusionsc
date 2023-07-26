@@ -22,11 +22,11 @@ using namespace fsc;
 
 namespace {
 	
-Own<DeviceBase> selectDevice(ComputationDeviceType preferredType) {
+Own<DeviceBase> selectDevice(LocalConfig::Reader config) {
 	#ifdef FSC_WITH_CUDA
 	
 	try {
-		if(preferredType == ComputationDeviceType::GPU) {
+		if(config.getPreferredDeviceType() == ComputationDeviceType::GPU) {
 			return kj::refcounted<GPUDevice>();
 		}
 	} catch(kj::Exception& e) {
@@ -34,15 +34,21 @@ Own<DeviceBase> selectDevice(ComputationDeviceType preferredType) {
 	
 	#endif
 	
-	unsigned int cpuThreads = CPUDevice::estimateNumThreads();
-	// KJ_DBG("Creating CPU device", cpuThreads);
-	return kj::refcounted<CPUDevice>(cpuThreads);
+	auto numThreadsRequested = config.getCpuBackend().getNumThreads();
+	
+	uint32_t numThreads = (uint32_t) CPUDevice::estimateNumThreads();
+	if(numThreadsRequested.isFixed()) {
+		numThreads = numThreadsRequested.getFixed();
+	}
+	
+	KJ_LOG(INFO, "Creating CPU backend", numThreads);
+	return kj::refcounted<CPUDevice>(numThreads);
 }
 
 struct RootServer : public RootService::Server {
 	RootServer(LocalConfig::Reader config) :
 		config(config),
-		device(selectDevice(config.getPreferredDeviceType()))
+		device(selectDevice(config))
 	{}
 	
 	Temporary<LocalConfig> config;
@@ -118,15 +124,22 @@ struct RootServer : public RootService::Server {
 
 
 struct LocalResourcesImpl : public LocalResources::Server, public LocalNetworkInterface {
-	Temporary<LocalConfig> config;
+	RootService::Client rootService;
+	// Temporary<LocalConfig> config;
+	
 	LocalResourcesImpl(LocalConfig::Reader config) :
-		config(config)
-	{}
+		rootService(createRoot(config))
+	{}	
 	
 	// Root service
 	
 	Promise<void> root(RootContext ctx) override {
-		ctx.getResults().setRoot(createRoot(config));
+		ctx.getResults().setRoot(rootService);
+		return READY_NOW;
+	}
+	
+	Promise<void> configureRoot(ConfigureRootContext ctx) override {
+		rootService = createRoot(ctx.getParams());
 		return READY_NOW;
 	}
 	

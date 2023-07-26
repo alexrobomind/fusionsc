@@ -33,7 +33,7 @@ async def sshPublicKey(host, user, port = 21, pubKeyFile = None, privKeyFile = N
 	"""Creates an SSH session using public key authentication."""
 	networkInterface = backends.localResources()
 	
-	connection = networkInterface.sshConnect(host, port).connection
+	connection = networkInterface.sshConnect(host, port).pipeline.connection
 	await connection.authenticateKeyFile(user, pubKeyFile, privKeyFile, passPhrase)
 	return connection
 

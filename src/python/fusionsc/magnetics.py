@@ -14,6 +14,9 @@ import numpy as np
 
 from typing import Optional
 
+def _calculator():
+	return backends.activeBackend().newFieldCalculator().pipeline.service
+
 class CoilFilament(wrappers.structWrapper(service.Filament)):
 	"""
 	Set of coils that can be associated with a current to compute magnetic fields.
@@ -109,12 +112,9 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		
 		resolved = await self.resolve.asnc()
 		
-		backend = backends.activeBackend()
-		calculator = backend.newFieldCalculator().service
-		
 		comp = result.data.initComputedField()
 		comp.grid = grid
-		comp.data = calculator.compute(resolved.data, grid).computedField.data
+		comp.data = _calculator().compute(resolved.data, grid).pipeline.computedField.data
 		
 		return result
 	
@@ -133,10 +133,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		"""
 		compField = (await self.compute.asnc(grid)).data.computedField
 		
-		backend = backends.activeBackend()
-		calculator = backend.newFieldCalculator().service
-		
-		response = await calculator.evaluateXyz(compField, points)
+		response = await _calculator().evaluateXyz(compField, points)
 		return np.asarray(response.values)
 		
 	

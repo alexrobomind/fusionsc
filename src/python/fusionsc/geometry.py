@@ -23,7 +23,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 			return Geometry(self.data)
 		
 		resolved = await self.resolve.asnc()
-		mergedRef = geometryLib().merge(resolved.data).ref
+		mergedRef = geometryLib().merge(resolved.data).pipeline.ref
 		
 		result = Geometry()
 		result.data.merged = mergedRef
@@ -34,7 +34,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		"""Creates a new geometry with small meshes combined into a small number of large meshes"""
 		resolved = await self.resolve.asnc()
 		
-		reducedRef = geometryLib().reduce(resolved.data, maxVerts, maxIndices).ref
+		reducedRef = geometryLib().reduce(resolved.data, maxVerts, maxIndices).pipeline.ref
 		
 		result = Geometry()
 		result.data.merged = reducedRef
@@ -53,7 +53,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		indexed = result.data.initIndexed()
 		indexed.grid = geometryGrid
 		
-		indexPipeline = geometryLib().index(resolved.data, geometryGrid).indexed
+		indexPipeline = geometryLib().index(resolved.data, geometryGrid).pipeline.indexed
 		indexed.base = indexPipeline.base
 		indexed.data = indexPipeline.data
 		
@@ -385,4 +385,4 @@ def cuboid(x1, x2, tags = {}):
 
 def geometryLib():
 	"""Creates an in-thread GeometryLib instance"""
-	return backends.activeBackend().newGeometryLib().service
+	return backends.activeBackend().newGeometryLib().pipeline.service

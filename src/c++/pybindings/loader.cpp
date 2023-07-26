@@ -287,7 +287,7 @@ struct InterfaceMethod {
 		}
 	}
 	
-	PromiseHandle operator()(capnp::DynamicCapability::Client self, py::args pyArgs, py::kwargs pyKwargs) const {	
+	py::object operator()(capnp::DynamicCapability::Client self, py::args pyArgs, py::kwargs pyKwargs) const {	
 		// auto request = self.newRequest(method);
 		capnp::Request<AnyPointer, AnyPointer> request = self.typelessRequest(
 			method.getContainingInterface().getProto().getId(), method.getOrdinal(), nullptr, capnp::Capability::Client::CallHints()
@@ -396,35 +396,16 @@ struct InterfaceMethod {
 		auto specializedResultType = typeInference.specialize(resultType).asStruct();
 		
 		// Extract promise
-		auto resultPromise = result.then([specializedResultType](capnp::Response<AnyPointer> response) {
+		Promise<py::object> resultPromise = result.then([specializedResultType](capnp::Response<AnyPointer> response) {
 			DynamicStruct::Reader asStruct = response.getAs<DynamicStruct>(specializedResultType);
-			return DynamicStructReader(kj::heap(mv(response)), asStruct);
+			return py::cast(DynamicStructReader(kj::heap(mv(response)), asStruct));
 		});
 		
 		// Extract pipeline
 		AnyPointer::Pipeline resultPipelineTypeless = mv(result);
-		py::object pyPipeline = py::cast(DynamicStructPipeline(mv(resultPipelineTypeless), specializedResultType));
+		DynamicStructPipeline resultPipeline(mv(resultPipelineTypeless), specializedResultType);
 		
-		// Check for PromiseForResult class for type
-		auto id = resultType.getProto().getId();
-		
-		// If not found, we can only return the promise for a generic result (perhaps once in the future
-		// we can add the option for a full pass-through into RemotePromise<DynamicStruct>)
-		py::object resultObject = py::cast(mv(resultPromise));
-		
-		if(globalClasses->contains(id)) {
-			// Construct merged promise / pipeline object from PyPromise and pipeline
-			py::type resultClass = (*globalClasses)[py::cast(id)].attr("Promise");
-			
-			resultObject = resultClass(resultObject, pyPipeline);
-		} else {
-			py::print("Could not find ID", id, "in global classes");
-		}
-		
-		PromiseHandle handle;
-		handle.pyPromise = resultObject;
-		
-		return handle;
+		return convertCallPromise(mv(resultPromise), mv(resultPipeline));
 	}
 	
 	kj::StringTree description() {
@@ -639,6 +620,10 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 	}
 	
 	// Create Promise class
+	
+
+	// Note: The mixing of Promise and Pipeline had to be removed because of conflicts between the generated and the asyncio.Future interface.
+	/*
 	{
 		py::dict attributes;
 		
@@ -659,9 +644,10 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		//py::type metaClass = py::type::of(promiseBase);
 		py::type metaClass = py::reinterpret_borrow<py::type>(reinterpret_cast<PyObject*>(&PyType_Type));
 		
-		py::object newCls = (*baseMetaType)(kj::str(structName, ".", suffix).cStr(), py::make_tuple(promiseBase, pipelineBase), attributes);
+		// py::object newCls = (*baseMetaType)(kj::str(structName, ".", suffix).cStr(), py::make_tuple(promiseBase, pipelineBase), attributes);
 		output.attr(suffix.cStr()) = newCls;
 	}
+	*/
 		
 	output.attr("newMessage") = py::cpp_function(
 		[schema](py::object copyFrom, size_t initialSize) mutable {

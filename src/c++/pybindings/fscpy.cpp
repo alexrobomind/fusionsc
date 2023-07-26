@@ -8,6 +8,8 @@
 #include <kj/exception.h>
 #include <capnp/dynamic.h>
 
+#include <cstdlib>
+
 using namespace fscpy;
 
 kj::Own<py::dict> globalClasses;
@@ -112,6 +114,12 @@ PYBIND11_MODULE(native, m) {
 	(void) capnp::newBrokenCap("Don't look at me. I'm shy.");
 	
 	kj::printStackTraceOnCrash();
+	
+	// There exists no public interface for the following code yet :(
+	const char* envVal = std::getenv("FUSIONSC_VERBOSE");
+	if(envVal != nullptr && std::strcmp(envVal, "0") != 0) {
+		kj::_::Debug::setLogLevel(kj::LogSeverity::INFO);
+	}
 	
 	// Perform run-time initialization of python-related globals
 	globalClasses = kj::heap<py::dict>();

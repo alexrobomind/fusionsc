@@ -40,10 +40,10 @@ async def make(
 	depthTolerance = 0.5
 ):
 	"""Creates a new HF camera based on the given projection"""
-	provider = backends.activeBackend().newHFCamProvider().service
+	provider = backends.activeBackend().newHFCamProvider().pipeline.service
 	
 	resolved = await geometry.resolve.asnc()
-	cam = provider.makeCamera(projection.data, resolved.data, edgeTolerance, depthTolerance).cam
+	cam = provider.makeCamera(projection.data, resolved.data, edgeTolerance, depthTolerance).pipeline.cam
 	return HFCam(cam)
 
 class HFCam:

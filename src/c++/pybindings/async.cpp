@@ -178,9 +178,6 @@ AsyncioEventPort::AsyncioEventPort() {
 	
 	wakeHelper = kj::heap<WakeHelper>(*this);
 	
-	auto asyncio = py::module_::import("asyncio");
-	eventLoop = asyncio.attr("get_event_loop")();
-	
 	loopRunner = py::cpp_function([](py::object future) {
 		// Either we have no active event loop, or this is a reentrant
 		// call to the C++ event loop from a C++ wait. Case 1 there
@@ -200,7 +197,10 @@ AsyncioEventPort::AsyncioEventPort() {
 		AsyncioEventPort::instance -> prepareRunner();
 	});
 	
-	prepareRunner();
+	auto asyncio = py::module_::import("asyncio");
+	auto newLoop = asyncio.attr("get_event_loop")();
+	
+	adjustEventLoop(newLoop);;
 }
 
 AsyncioEventPort::~AsyncioEventPort() {
@@ -295,10 +295,12 @@ void AsyncioEventPort::armRunner() {
 void AsyncioEventPort::adjustEventLoop(py::object newLoop) {
 	KJ_REQUIRE(instance != nullptr, "No asyncio event port active");
 	
-	if(instance -> eventLoop.is(newLoop))
+	if(instance -> eventLoop.ptr() == newLoop.ptr())
 		return;
 	
 	KJ_REQUIRE(!instance -> waitingForEvents, "Can not switch to a new event loop while already waiting for another");
+	
+	py::module_::import("nest_asyncio").attr("apply")(newLoop);
 	
 	instance -> eventLoop = newLoop;
 	instance -> prepareRunner();
@@ -580,7 +582,8 @@ struct AsyncioFutureLike {
 		}
 		
 		py::error_already_set eas;
-		return py::reinterpret_borrow<py::object>(eas.value());
+		auto exceptionObject = py::reinterpret_borrow<py::object>(eas.value());
+		return exceptionObject;
 	}
 	
 	py::object getLoop() {
@@ -630,7 +633,7 @@ struct AsyncioFutureLike {
 				parent.asyncioFutureBlocking = true;
 				return parent;
 			}
-						
+			
 			KJ_REQUIRE(!parent.asyncioFutureBlocking, "Future was not consumed by asyncio");
 			KJ_REQUIRE(parent.done(), "Future was not completed");
 			
@@ -649,6 +652,22 @@ struct AsyncioFutureLike {
 		
 		void throw_(py::object excType, py::object value, py::object stackTrace) {
 			KJ_REQUIRE(consumed, "Protocol error: Exception passed into unconsumed iterator on step 1");
+			
+			// Test if first object is type or value
+			if(PyType_Check(excType.ptr())) {
+				if(py::type::of(value) != excType.ptr()) {
+					value = excType(value);
+				}
+			} else {
+				value = excType;
+				excType = py::type::of(value);
+			}
+			
+			if(stackTrace.is_none()) {
+				stackTrace = value.attr("__traceback__");
+			} else {
+				PyException_SetTraceback(value.ptr(), stackTrace.ptr());
+			}
 			
 			PyErr_Restore(excType.inc_ref().ptr(), value.inc_ref().ptr(), stackTrace.inc_ref().ptr());
 			throw py::error_already_set();
@@ -677,6 +696,19 @@ private:
 		}
 		
 		doneCallbacks = py::list();
+	}
+};
+
+struct RemotePromise : public AsyncioFutureLike {
+	DynamicStructPipeline pipeline;
+	
+	RemotePromise(py::object loop, Promise<py::object> promise, DynamicStructPipeline pipeline) :
+		AsyncioFutureLike(mv(loop), mv(promise)),
+		pipeline(mv(pipeline))
+	{}
+	
+	DynamicStructPipeline& getPipeline() {
+		return pipeline;
 	}
 };
 
@@ -712,7 +744,22 @@ py::object convertToAsyncioFuture(Promise<py::object> promise) {
 	// correct loop at hand.
 	AsyncioEventPort::adjustEventLoop(loop);
 	
-	// Check if we need to adjust the event loop of the EventPort 
+	return result;
+}
+
+py::object convertCallPromise(Promise<py::object> promise, DynamicStructPipeline pipeline) {
+	promise = getActiveThread().lifetimeScope().wrap(mv(promise));
+	auto loop = py::module_::import("asyncio").attr("get_event_loop")();
+	auto result = py::cast(new RemotePromise(loop, mv(promise), mv(pipeline)));
+	
+	// It might be that the asyncio port is currently using a different 
+	// event loop. If the asyncio loop is in charge, and the KJ loop
+	// transitions to 'ready', the readyness signal will be sent to the
+	// wrong event loop, and the KJ loop will never be started by
+	// asyncio. To avoid this, we need to adjust now, when we have the
+	// correct loop at hand.
+	AsyncioEventPort::adjustEventLoop(loop);
+	
 	return result;
 }
 
@@ -771,7 +818,7 @@ void initAsync(py::module_& m) {
 		.def("cancelled", &AsyncioFutureLike::cancelled)
 		.def("add_done_callback", &AsyncioFutureLike::addDoneCallback, py::arg("callback"), py::kw_only(), py::arg("context") = py::none())
 		.def("remove_done_callback", &AsyncioFutureLike::removeDoneCallback)
-		.def("cancel", &AsyncioFutureLike::cancel)
+		.def("cancel", &AsyncioFutureLike::cancel, py::arg("msg") = py::none())
 		.def("exception", &AsyncioFutureLike::exception)
 		.def("get_loop", &AsyncioFutureLike::getLoop)
 		
@@ -781,9 +828,14 @@ void initAsync(py::module_& m) {
 	;
 	
 	py::class_<AsyncioFutureLike::FutureIterator>(futureCls, "_Iterator")
-		.def("__next__", &AsyncioFutureLike::FutureIterator::next)
-		.def("send", &AsyncioFutureLike::FutureIterator::send)
+		.def("__next__", &AsyncioFutureLike::FutureIterator::next, py::return_value_policy::take_ownership)
+		.def("send", &AsyncioFutureLike::FutureIterator::send, py::return_value_policy::take_ownership)
 		.def("throw", &AsyncioFutureLike::FutureIterator::throw_, py::arg("type"), py::arg("value") = py::none(), py::arg("traceback") = py::none())
+	;
+	
+	py::class_<RemotePromise, AsyncioFutureLike>(asyncModule, "PromiseForResult")
+		.def_property_readonly("pipeline", &RemotePromise::getPipeline)
+		.def_property_readonly("p", &RemotePromise::getPipeline)
 	;
 	
 	asyncModule.def("startEventLoop", &PythonContext::start, "If the active thread has no active event loop, starts a new one");

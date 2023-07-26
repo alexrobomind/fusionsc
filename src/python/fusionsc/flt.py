@@ -54,10 +54,10 @@ def symmetrize(points, nSym = 1, stellaratorSymmetric = False):
 	return np.stack([x, y, z], axis = 0)
 
 def _tracer():
-	return backends.activeBackend().newTracer().service
+	return backends.activeBackend().newTracer().pipeline.service
 
 def _mapper():
-	return backends.activeBackend().newMapper().service
+	return backends.activeBackend().newMapper().pipeline.service
 
 @asyncFunction
 async def fieldValues(config, grid):
@@ -493,7 +493,7 @@ async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit 
 	computedField = field.data.computedField
 	
 	backend = backends.activeBackend()
-	mapper = backend.newMapper().service
+	mapper = backend.newMapper().pipeline.service
 	
 	request = service.RFLMRequest.newMessage()
 	request.gridR = r
@@ -508,4 +508,4 @@ async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit 
 	request.u0 = [u0] if isinstance(u0, numbers.Number) else u0
 	request.v0 = [v0] if isinstance(v0, numbers.Number) else v0
 	
-	return mapper.computeRFLM(request).mapping
+	return mapper.computeRFLM(request).pipeline.mapping

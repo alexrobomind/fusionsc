@@ -44,41 +44,31 @@ def connectIPPSite():
 
 class CoilPack(wrappers.structWrapper(service.W7XCoilSet)):
 	"""Set of coils that can be used to obtain W7-X specific configurations"""
-	pass
-
-@asyncFunction
-async def computeCoilFields(calculator, coils: CoilPack, grid = None) -> CoilPack:
-	"""Pre-computes the a W7-X coil set on the given grid to be used for different configurations"""
-	if grid is None:
-		grid = defaultGrid
 	
-	result = service.W7XCoilSet.newMessage()
-	w7xnative.buildCoilFields(coils.data, result.initFields())
-	
-	async def resolveAndCompute(x):
-		x = await resolve.resolveField.asnc(x)
+	@asyncFunction
+	async def computeFields(self, grid) -> "CoilPack":
+		async def resolveAndCompute(x):
+			config = MagneticConfig(x)
+			config = await config.resolve.asnc()
+			config = config.compute(grid)
+			
+			return config.data.computedField
+			
+		result = CoilPack()
+		w7xnative.buildCoilFields(self.data, result.data.initFields())
 		
-		# Computed field is two part: Grid and data ref
-		# To hide latency, we extract the reference directly
+		fields = result.data.fields
 		
-		compField = service.ComputedField.newMessage()
-		compField.grid = grid
-		compField.data = calculator.compute(x, grid).computedField.data
+		for i in range(7):
+			fields.mainFields[i].computedField = await resolveAndCompute(fields.mainFields[i])
 		
-		return compField
-	
-	fields = result.fields
-	
-	for i in range(7):
-		fields.mainFields[i].computedField = await resolveAndCompute(fields.mainFields[i])
-	
-	for i in range(5):
-		fields.trimFields[i].computedField = await resolveAndCompute(fields.trimFields[i])
-	
-	for i in range(10):
-		fields.controlFields[i].computedField = await resolveAndCompute(fields.controlFields[i])
-	
-	return CoilPack(result)
+		for i in range(5):
+			fields.trimFields[i].computedField = await resolveAndCompute(fields.trimFields[i])
+		
+		for i in range(10):
+			fields.controlFields[i].computedField = await resolveAndCompute(fields.controlFields[i])
+		
+		return result
 
 def cadCoils(convention = '1-AA-R0004.5') -> CoilPack:
 	"""
@@ -253,8 +243,11 @@ def op21Geometry():
 # The W7XCoilSet type defaults to the W7-X coils 160 ... 230
 defaultCoils = cadCoils('archive')
 
-defaultGrid = w7xnative.defaultGrid()
-defaultGeometryGrid = w7xnative.defaultGeometryGrid()
+def defaultGrid():
+	return w7xnative.defaultGrid().clone_()
+
+def defaultGeometryGrid():
+	return w7xnative.defaultGeometryGrid().clone_()
 
 @asyncFunction
 def axisCurrent(field, current, grid = None, startPoint = [6.0, 0, 0], stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = "cw", mapping = None):

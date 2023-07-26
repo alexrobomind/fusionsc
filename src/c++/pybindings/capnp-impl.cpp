@@ -392,6 +392,27 @@ DynamicListBuilder DynamicListInterface<ListType>::clone() {
 	return DynamicListBuilder::cloneFrom(toReader(this -> wrapped()));
 }
 
+template<typename ListType>
+kj::String DynamicListInterface<ListType>::repr() {
+	return toYaml(false);
+}
+
+template<typename ListType>
+kj::String DynamicListInterface<ListType>::toYaml(bool flow) {
+	auto emitter = kj::heap<YAML::Emitter>();
+	
+	if(flow) {
+		emitter -> SetMapFormat(YAML::Flow);
+		emitter -> SetSeqFormat(YAML::Flow);
+	}
+	
+	(*emitter) << toReader(this -> wrapped());
+	
+	kj::ArrayPtr<char> stringData(const_cast<char*>(emitter -> c_str()), emitter -> size() + 1);
+	
+	return kj::String(stringData.attach(mv(emitter)));
+}
+
 template class DynamicListInterface<capnp::DynamicList::Reader>;
 template class DynamicListInterface<capnp::DynamicList::Builder>;
 

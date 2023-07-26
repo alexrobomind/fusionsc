@@ -40,7 +40,7 @@ def publish(data: Union[capnp.StructReader, capnp.DataReader]) -> service.DataRe
 		A DataRef pointing to an in-memory copy of 'data'.
 	"""
 	inThreadRef = native.data.publish(data)
-	cloneResult = backends.localResources().download(inThreadRef).ref
+	cloneResult = backends.localResources().download(inThreadRef).pipeline.ref
 	return cloneResult
 
 @asyncFunction

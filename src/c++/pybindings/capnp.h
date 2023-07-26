@@ -327,6 +327,30 @@ struct DynamicStructInterface : public WithMessage<StructType> {
 	py::buffer_info buffer();
 	
 	DynamicStructBuilder clone();
+	
+	struct Iterator {
+		inline kj::StringPtr operator*() {
+			auto nonUnion = parent.getSchema().getNonUnionFields();
+			
+			if(pos < nonUnion.size())
+				return nonUnion[pos].getProto().getName();
+			
+			return parent.whichStr();
+		}
+		
+		inline bool operator!=(const Iterator& other) const { return pos != other.pos; }
+		inline bool operator==(const Iterator& other) const { return pos == other.pos; }
+		inline Iterator& operator++() { ++pos; return *this; }
+		
+		inline Iterator(DynamicStructInterface& parent, size_t pos) : parent(parent), pos(pos) {}
+		
+	private:
+		DynamicStructInterface& parent;
+		uint32_t pos;
+	};
+	
+	inline Iterator begin() { return Iterator(*this, 0); }
+	inline Iterator end() { return Iterator(*this, this -> size()); }
 };
 
 struct DynamicStructReader : public DynamicStructInterface<capnp::DynamicStruct::Reader> {
@@ -362,6 +386,12 @@ struct DynamicStructPipeline {
 		schema(other.schema)
 	{}
 	
+	inline DynamicStructPipeline& operator=(DynamicStructPipeline& other)
+	{
+		typeless = other.typeless.noop();
+		schema = other.schema;
+	}
+	
 	inline DynamicStructPipeline(DynamicStructPipeline&& other) = default;
 	
 	inline capnp::StructSchema getSchema() { return schema; }
@@ -369,13 +399,41 @@ struct DynamicStructPipeline {
 	DynamicValuePipeline get(kj::StringPtr fieldName);
 	DynamicValuePipeline getCapnp(capnp::StructSchema::Field field);
 	
+	inline DynamicStructPipeline clone() { return *this; }
+	
 	inline kj::StringPtr whichStr() { return ""; }
 	inline kj::String repr() { return kj::str("<Pipeline for ", schema, ">"); }
+	
+	inline uint32_t size() { return schema.getNonUnionFields().size(); }
+	
+	struct Iterator {
+		inline kj::StringPtr operator*() { return parent.schema.getNonUnionFields()[pos].getProto().getName(); }
+		
+		inline bool operator!=(const Iterator& other) const { return pos != other.pos; }
+		inline bool operator==(const Iterator& other) const { return pos == other.pos; }
+		inline Iterator& operator++() { ++pos; return *this; }
+		
+		inline Iterator(DynamicStructPipeline& parent, size_t pos) : parent(parent), pos(pos) {}
+		
+	private:
+		DynamicStructPipeline& parent;
+		uint32_t pos;
+	};
+	
+	inline Iterator begin() { return Iterator(*this, 0); }
+	inline Iterator end() { return Iterator(*this, this -> size()); }
 };
 
 template<typename ListType>
 struct DynamicListInterface : public WithMessage<ListType> {
 	using WithMessage<ListType>::WithMessage;
+	
+	DynamicValueType<ListType> get(uint32_t idx);
+	py::buffer_info buffer();
+	DynamicListBuilder clone();
+	
+	kj::String repr();
+	kj::String toYaml(bool flow);
 	
 	struct Iterator {
 		inline DynamicValueType<ListType> operator*() { return DynamicValueType<ListType>(shareMessage(parent), parent.get(pos)); }
@@ -393,12 +451,6 @@ struct DynamicListInterface : public WithMessage<ListType> {
 	
 	inline Iterator begin() { return Iterator(*this, 0); }
 	inline Iterator end() { return Iterator(*this, ListType::size()); }
-	
-	DynamicValueType<ListType> get(uint32_t idx);
-		
-	py::buffer_info buffer();
-	
-	DynamicListBuilder clone();
 };
 
 struct DynamicListReader : public DynamicListInterface<capnp::DynamicList::Reader> {

@@ -33,6 +33,13 @@ struct LocalConfig {
 	
 	# Configuration settings for the field line tracer
 	flt @5 : FLT.FLTConfig;
+	
+	cpuBackend : group {	
+		numThreads : union {
+			autoDetect @6 : Void;
+			fixed @7 : UInt32 = 1;
+		}
+	}
 }
 
 struct NodeInfo {
@@ -84,4 +91,6 @@ interface LocalResources extends(Networking.NetworkInterface) {
 	openArchive  @1 (filename : Text) -> (ref : Data.DataRef(AnyPointer));
 	writeArchive @2 [T] (filename : Text, ref : Data.DataRef(T)) -> ();
 	download     @3 [T] (ref : Data.DataRef(T)) -> (ref : Data.DataRef(T));
+	
+	configureRoot @4 LocalConfig -> ();
 }

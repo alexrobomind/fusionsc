@@ -165,7 +165,7 @@ namespace fsc {
 						
 			using givemeatype = int[];
 			
-			return prerequisite.then([&device, mappers]() mutable {
+			Promise<void> result = prerequisite.then([&device, mappers]() mutable {
 				// Update device memory
 				// Note: This is an extremely convoluted looking way of calling updateDevice on all tuple members
 				// C++ 17 has a neater way to do this, but we don't wanna require it just yet
@@ -185,6 +185,8 @@ namespace fsc {
 				return device.barrier();
 			})
 			.attach(mappers.x(), device.addRef());
+			
+			return getActiveThread().uncancelable(mv(result));
 		}
 		
 		template<typename Kernel, Kernel f, typename Device, typename... Params, size_t... i>

@@ -10,4 +10,16 @@ namespace fsc {
 	YAML::Emitter& operator<<(YAML::Emitter&, capnp::DynamicStruct::Reader);
 	YAML::Emitter& operator<<(YAML::Emitter&, capnp::DynamicList::Reader);
 	YAML::Emitter& operator<<(YAML::Emitter&, capnp::DynamicValue::Reader);
+	
+	template<typename Reader, typename = capnp::FromReader<Reader>>
+	YAML::Emitter& operator<<(YAML::Emitter&, Reader);
+}
+
+// Implementation
+
+namespace fsc {
+	template<typename Reader, typename>
+	YAML::Emitter& operator<<(YAML::Emitter& emitter, Reader r) {
+		return emitter << capnp::DynamicValue::Reader(r);
+	}
 }

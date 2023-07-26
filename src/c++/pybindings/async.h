@@ -75,6 +75,7 @@ private:
 
 Promise<py::object> adaptAsyncioFuture(py::object future);
 py::object convertToAsyncioFuture(Promise<py::object> promise);
+py::object convertCallPromise(Promise<py::object> promise, DynamicStructPipeline pipeline);
 py::type futureType();
 
 struct PythonContext {

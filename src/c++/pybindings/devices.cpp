@@ -37,7 +37,11 @@ namespace fscpy {
 		w7x.def("geometryResolver", &fsc::devices::w7x::newW7xGeometryResolver);
 		w7x.def("fieldResolver", &fsc::devices::w7x::newW7xFieldResolver);
 		
-		w7x.def("buildCoilFields", &fsc::devices::w7x::buildCoilFields);
+		w7x.def("buildCoilFields",
+			[](WithMessage<fsc::W7XCoilSet::Reader> coilSet, WithMessage<fsc::W7XCoilSet::Fields::Builder> out) {
+				return fsc::devices::w7x::buildCoilFields(coilSet, out);
+			}
+		);
 		
 		// ================ J-TEXT ==================
 		
