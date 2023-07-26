@@ -64,7 +64,7 @@ py::buffer_info getObjectTensor(T tensor) {
 		outData[i] = outObject.inc_ref().ptr();
 	}
 	
-	py::buffer asPyBuffer = py::cast(resultHolder);
+	py::buffer asPyBuffer = py::cast(mv(resultHolder));
 	return asPyBuffer.request(true);
 }
 

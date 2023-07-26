@@ -427,9 +427,16 @@ struct AsyncioFutureAdapter {
 		future.attr("add_done_callback")(pythonCallback);
 	}
 	
-	~AsyncioFutureAdapter(){
+	~AsyncioFutureAdapter() {
+		py::gil_scoped_acquire withGil;
+		
+		KJ_DBG("Removing callback");
+		py::print(py::type::of(future));
 		future.attr("remove_done_callback")(pythonCallback);
+		KJ_DBG("Done");
+		
 		cppCallback -> valid = false;
+		future = py::object();
 	}
 	
 private:
@@ -462,9 +469,17 @@ struct AsyncioFutureLike {
 	
 	kj::Canceler canceler;
 	
+	py::object context;
+	
 	AsyncioFutureLike(py::object loop, Promise<py::object> promise) :
 		contents(py::object()), loop(mv(loop)), doneCallbacks()
 	{
+		auto ptr = PyContext_CopyCurrent();
+		if(ptr == 0)
+			throw py::error_already_set();
+		
+		context = py::reinterpret_steal<py::object>(ptr);
+		
 		auto forked = promise.fork();
 		resolveTask = forked.addBranch().then(
 			[this](py::object result) mutable {
