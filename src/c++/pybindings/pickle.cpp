@@ -54,7 +54,7 @@ LocalDataRef<> unflattenDataRef(py::list input) {
 
 }
 
-py::object pickleReduceReader(capnp::DynamicStruct::Reader reader, uint32_t pickleVersion) {
+py::object pickleReduceReader(DynamicStructReader reader, uint32_t pickleVersion) {
 	auto unpickler = py::module_::import("fusionsc").attr("pickle_support").attr("unpickleReader");
 	return py::make_tuple(
 		unpickler,
@@ -64,7 +64,7 @@ py::object pickleReduceReader(capnp::DynamicStruct::Reader reader, uint32_t pick
 		)
 	);
 }
-py::object pickleReduceBuilder(capnp::DynamicStruct::Builder builder, uint32_t pickleVersion) {
+py::object pickleReduceBuilder(DynamicStructBuilder builder, uint32_t pickleVersion) {
 	auto unpickler = py::module_::import("fusionsc").attr("pickle_support").attr("unpickleBuilder");
 	return py::make_tuple(
 		unpickler,

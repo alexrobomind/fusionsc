@@ -8,6 +8,7 @@ from . import resolve
 from . import backends
 from . import efit
 from . import magnetics
+from . import wrappers
 
 from .asnc import asyncFunction
 from .wrappers import unstableAPI
@@ -18,6 +19,12 @@ import functools
 from types import SimpleNamespace
 
 from typing import Optional, List
+
+class FieldlineMapping(wrappers.RefWrapper):
+	"""
+	A storage container for a mapping offering load / save methods
+	"""
+	pass
 
 def symmetrize(points, nSym = 1, stellaratorSymmetric = False):
 	"""
@@ -299,7 +306,7 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 		request.geometry = indexedGeometry
 	
 	if mapping is not None:
-		request.mapping = mapping
+		request.mapping = mapping.ref
 	
 	response = await _tracer().trace(request)
 	
@@ -350,7 +357,7 @@ async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTur
 	request.nPhi = nPhi
 	
 	if mapping is not None:
-		request.mapping = mapping
+		request.mapping = mapping.ref
 	
 	response = await _tracer().findAxis(request)
 	
@@ -398,7 +405,7 @@ async def findLCFS(field, geometry, p1, p2, grid = None, geometryGrid = None, st
 	request.distanceLimit = distanceLimit
 	
 	if mapping is not None:
-		request.mapping = mapping
+		request.mapping = mapping.ref
 	
 	response = await _tracer().findLcfs(request)
 	
@@ -421,7 +428,7 @@ async def axisCurrent(field, current, grid = None, startPoint = None, stepSize =
 		The magnetic configuration corresponding to the on-axis current's field.
 	"""
 	
-	assert field.data.which_() == "computed" or grid is not None, "The magnetic field must either be precomputed or a grid must be specified."
+	assert field.data.which_() == "computedField" or grid is not None, "The magnetic field must either be precomputed or a grid must be specified."
 	
 	if direction is None:
 		direction = "ccw"
@@ -509,4 +516,4 @@ async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit 
 	request.u0 = [u0] if isinstance(u0, numbers.Number) else u0
 	request.v0 = [v0] if isinstance(v0, numbers.Number) else v0
 	
-	return mapper.computeRFLM(request).pipeline.mapping
+	return FieldlineMapping(mapper.computeRFLM(request).pipeline.mapping)

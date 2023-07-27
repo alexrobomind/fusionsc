@@ -11,6 +11,8 @@
 #include "networking.h"
 #include "jobs.h"
 
+#include "devices/w7x.h"
+
 #include <capnp/rpc-twoparty.h>
 #include <capnp/membrane.h>
 
@@ -67,31 +69,43 @@ struct RootServer : public RootService::Server {
 	}
 	
 	Promise<void> newFieldCalculator(NewFieldCalculatorContext context) override {
+		KJ_REQUIRE(config.getEnableCompute(), "Computation is disabled on this node");
+		
 		context.initResults().setService(::fsc::newFieldCalculator(device -> addRef()));		
 		return READY_NOW;
 	}
 	
-	Promise<void> newTracer(NewTracerContext context) override {				
+	Promise<void> newTracer(NewTracerContext context) override {		
+		KJ_REQUIRE(config.getEnableCompute(), "Computation is disabled on this node");	
+		
 		context.initResults().setService(newFLT(device -> addRef(), config.getFlt()));		
 		return READY_NOW;
 	}
 	
 	Promise<void> newGeometryLib(NewGeometryLibContext context) override {
+		KJ_REQUIRE(config.getEnableCompute(), "Computation is disabled on this node");
+		
 		context.initResults().setService(fsc::newGeometryLib());
 		return READY_NOW;
 	}
 	
 	Promise<void> newHFCamProvider(NewHFCamProviderContext context) override {
+		KJ_REQUIRE(config.getEnableCompute(), "Computation is disabled on this node");
+		
 		context.initResults().setService(fsc::newHFCamProvider());
 		return READY_NOW;
 	}
 	
 	Promise<void> newKDTreeService(NewKDTreeServiceContext context) override {
+		KJ_REQUIRE(config.getEnableCompute(), "Computation is disabled on this node");
+		
 		context.initResults().setService(fsc::newKDTreeService());
 		return READY_NOW;
 	}
 	
 	Promise<void> newMapper(NewMapperContext ctx) override {
+		KJ_REQUIRE(config.getEnableCompute(), "Computation is disabled on this node");
+		
 		auto flt = thisCap().newTracerRequest().sendForPipeline().getService();
 		auto idx = thisCap().newKDTreeServiceRequest().sendForPipeline().getService();
 		
@@ -175,6 +189,12 @@ struct LocalResourcesImpl : public LocalResources::Server, public LocalNetworkIn
 		.then([ctx](LocalDataRef<capnp::AnyPointer> ref) mutable {
 			ctx.getResults().setRef(mv(ref));
 		});
+	}
+	
+	// Device providers
+	Promise<void> w7xProvider(W7xProviderContext ctx) override {
+		ctx.initResults().setService(devices::w7x::newProvider());
+		return READY_NOW;
 	}
 };
 

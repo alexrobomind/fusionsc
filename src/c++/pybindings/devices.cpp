@@ -27,8 +27,9 @@ namespace fscpy {
 		w7x.def("defaultGrid", &w7xDefaultGrid);
 		w7x.def("defaultGeometryGrid", &w7xDefaultGeometryGrid);		
 		
-		w7x.def("webserviceCoilsDB", &fsc::devices::w7x::newCoilsDBFromWebservice);
-		w7x.def("webserviceComponentsDB", &fsc::devices::w7x::newComponentsDBFromWebservice);
+		// The webservice connections use I/O and have to go through the localResources interface.
+		/* w7x.def("webserviceCoilsDB", &fsc::devices::w7x::newCoilsDBFromWebservice);
+		w7x.def("webserviceComponentsDB", &fsc::devices::w7x::newComponentsDBFromWebservice); */
 		
 		w7x.def("componentsDBResolver", &fsc::devices::w7x::newComponentsDBResolver);
 		w7x.def("coilsDBResolver", &fsc::devices::w7x::newCoilsDBResolver);
@@ -51,8 +52,13 @@ namespace fscpy {
 		jtext.def("fieldResolver", &fsc::devices::jtext::newFieldResolver);
 		jtext.def("exampleGeqdsk", &fsc::devices::jtext::exampleGeqdsk);
 		
-		jtext.def("defaultGrid", &fsc::devices::jtext::defaultGrid);
-		jtext.def("defaultGeometryGrid", &fsc::devices::jtext::defaultGeometryGrid);
+		jtext.def("defaultGrid", []() {
+			return bundleWithMessage(fsc::devices::jtext::defaultGrid(), nullptr);
+		});
+		
+		jtext.def("defaultGeometryGrid", []() {
+			return bundleWithMessage(fsc::devices::jtext::defaultGeometryGrid(), nullptr);
+		});
 	}
 	
 	void loadDeviceSchema(py::module_& m) {

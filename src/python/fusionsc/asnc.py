@@ -80,7 +80,7 @@ class AsyncMethodDescriptor:
 		orig = typing.get_origin(retAnn)
 		args = typing.get_args(retAnn)
 				
-		if (orig is Promise or orig is Awaitable) and len(args) == 1:
+		if (orig is Future or orig is Awaitable) and len(args) == 1:
 			return sig.replace(return_annotation = args[0])
 		else:
 			return sig.replace(return_annotation = Any)

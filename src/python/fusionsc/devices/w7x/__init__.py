@@ -9,17 +9,22 @@ from ...native.devices import w7x as w7xnative
 
 from ...data import asyncFunction
 
+from ...backends import localResources
+
 from typing import Union
 import numpy as np
 
 # Databases
+
+def _provider():
+	return localResources().w7xProvider().pipeline.service
 
 def connectCoilsDB(address: str):
 	"""
 	Connect to the coilsDB webservice at given address and use it to resolve
 	W7-X coil specifications
 	"""
-	coilsDB = w7xnative.webserviceCoilsDB(address)
+	coilsDB = _provider().connectCoilsDb(address).pipeline.service
 	
 	resolve.fieldResolvers.append(w7xnative.configDBResolver(coilsDB))
 	resolve.fieldResolvers.append(w7xnative.coilsDBResolver(coilsDB))
@@ -30,8 +35,8 @@ def connectComponentsDB(address: str):
 	"""
 	Connect to the componentsDB webservice at given address and use it to resolve
 	W7-X geometry specifications
-	"""	
-	componentsDB = w7xnative.webserviceComponentsDB(address)
+	"""
+	componentsDB = _provider().connectComponentsDb(address).pipeline.service
 	
 	resolve.geometryResolvers.append(w7xnative.componentsDBResolver(componentsDB))
 	
@@ -254,8 +259,8 @@ def axisCurrent(field, current, grid = None, startPoint = [6.0, 0, 0], stepSize 
 	"""
 	Variant of fsc.flt.axisCurrent with more reasonable W7-X-tailored default values.
 	"""
-	if field.data.which() != 'computedField' and grid is None:
-		grid = defaultGrid
+	if field.data.which_() != 'computedField' and grid is None:
+		grid = defaultGrid()
 		
 	return flt.axisCurrent.asnc(field, current, grid, startPoint, stepSize, nTurns, nIterations, nPhi, direction, mapping)
 
@@ -273,8 +278,8 @@ def computeMapping(
 	"""
 	Variant of fsc.flt.computeMapping with more reasonable W7-X-tailored default values.
 	"""
-	if field.data.which() != 'computedField' and grid is None:
-		grid = defaultGrid
+	if field.data.which_() != 'computedField' and grid is None:
+		grid = defaultGrid()
 		
 	return flt.computeMapping.asnc(
 		field,

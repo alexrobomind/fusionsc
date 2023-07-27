@@ -190,6 +190,11 @@ struct WithMessage : public T, public WithMessageBase {
 	T& wrapped() { return *this; }
 };
 
+template<typename T, typename MsgSrc>
+WithMessage<T> bundleWithMessage(T&& input, MsgSrc&& src) {
+	return WithMessage<T>(fwd<MsgSrc>(src), fwd<T>(input));
+}
+
 #define COPY_WITH_MSG(Cls, Input) \
 	inline Cls (Input& i) : Cls(copyMessage(i)) {}; \
 	inline Cls (Input&& i) : Cls(copyMessage(mv(i))) {};

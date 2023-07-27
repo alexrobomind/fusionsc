@@ -571,12 +571,28 @@ struct ComponentsDBWebservice : public ComponentsDB::Server {
 	}
 };
 
+struct ProviderImpl : public Provider::Server {
+	Promise<void> connectCoilsDb(ConnectCoilsDbContext ctx) override {
+		ctx.getResults().setService(kj::heap<CoilsDBWebservice>(ctx.getParams().getAddress()));
+		return READY_NOW;
+	}
+	
+	Promise<void> connectComponentsDb(ConnectComponentsDbContext ctx) override {
+		ctx.getResults().setService(kj::heap<ComponentsDBWebservice>(ctx.getParams().getAddress()));
+		return READY_NOW;
+	}
+};
+
 CoilsDB::Client newCoilsDBFromWebservice(kj::StringPtr address) {
 	return kj::heap<CoilsDBWebservice>(address);
 }
 
 ComponentsDB::Client newComponentsDBFromWebservice(kj::StringPtr address) {
 	return kj::heap<ComponentsDBWebservice>(address);
+}
+
+Provider::Client newProvider() {
+	return kj::heap<ProviderImpl>();
 }
 
 FieldResolver::Client newW7xFieldResolver() {

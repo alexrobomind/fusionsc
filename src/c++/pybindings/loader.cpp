@@ -606,13 +606,17 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 			}
 		));
 		
+		// Disable dynamic attributes
+		// attributes["__slots__"] = py::tuple();
+		
 		// Determine metaclass and build a new type with the given suffix
-		py::type metaClass = py::reinterpret_borrow<py::type>(reinterpret_cast<PyObject*>(&PyType_Type));//py::type::of(baseClass);
+		// py::type metaClass = py::reinterpret_borrow<py::type>(reinterpret_cast<PyObject*>(&PyType_Type));//py::type::of(baseClass);
+		py::type metaClass = py::type::of(baseClass);
 		
 		attributes["__qualname__"] = qualName(output, suffix);
 		attributes["__module__"] = moduleName;
 		
-		// attributes["__slots__"] = py::make_tuple("_msg");
+		attributes["__slots__"] = py::make_tuple();
 			
 		py::object newCls = (*baseMetaType)(kj::str(structName, ".", suffix).cStr(), py::make_tuple(baseClass /*, mappingAbstractBaseClass*/), attributes);
 				

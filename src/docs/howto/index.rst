@@ -1,5 +1,5 @@
-How to
-======
+Usage examples (How To ...)
+===========================
 
 This section contains various demonstration examples.
 

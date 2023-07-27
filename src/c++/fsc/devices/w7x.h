@@ -30,6 +30,8 @@ FieldResolver::Client newConfigDBResolver(CoilsDB::Client coilsDB);
 GeometryResolver::Client newW7xGeometryResolver();
 GeometryResolver::Client newComponentsDBResolver(ComponentsDB::Client componentsDB);
 
+Provider::Client newProvider();
+
 void buildCoilFields(W7XCoilSet::Reader in, W7XCoilSet::Fields::Builder out);
 
 

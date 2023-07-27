@@ -93,7 +93,6 @@ namespace {
 				auto plane = planes[iPlane];
 				plane.getOrientation().setPhi(phiStart + (iPlane + 1) * dPhi);
 			}
-			KJ_DBG(ccw, req);
 			buildStartPoints(req.getStartPoints());
 			
 			return req.send().dropPipeline();

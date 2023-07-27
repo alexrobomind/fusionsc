@@ -21,12 +21,11 @@ For what is intended to be included in the near future, check out the roadmap.
    
    installation
    setup
-   license
-   architecture
-   roadmap
-   
    howto/index
-   
+   architecture
+   dataspec
+   license
+  
    reference
 
 

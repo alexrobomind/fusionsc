@@ -563,7 +563,7 @@ struct CamProvider : public HFCamProvider::Server {;
 			auto entries = mergedGeometry.getEntries();
 			for(auto iMesh : kj::indices(entries)) {
 				Promise<void> processMesh = kj::evalLater([iMesh, dBuf, detBuf, projection, entries, context]() mutable {
-					KJ_DBG("Processing mesh", iMesh);
+					KJ_LOG(INFO, "Processing mesh", iMesh);
 					rasterizeGeometry(
 						projection,
 						*dBuf, *detBuf,

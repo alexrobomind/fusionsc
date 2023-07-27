@@ -16,6 +16,8 @@ using Data = import "data.capnp";
 using Networking = import "networking.capnp";
 using Vmec = import "vmec.capnp";
 
+using W7X = import "devices/w7x.capnp";
+
 enum ComputationDeviceType {
 	cpu @0;
 	gpu @1;
@@ -34,6 +36,7 @@ struct LocalConfig {
 	# Configuration settings for the field line tracer
 	flt @5 : FLT.FLTConfig;
 	
+	# Configuration for the CPU backend
 	cpuBackend : group {	
 		numThreads : union {
 			autoDetect @6 : Void;
@@ -93,4 +96,6 @@ interface LocalResources extends(Networking.NetworkInterface) {
 	download     @3 [T] (ref : Data.DataRef(T)) -> (ref : Data.DataRef(T));
 	
 	configureRoot @4 LocalConfig -> ();
+	
+	w7xProvider @5 () -> (service : W7X.Provider);
 }

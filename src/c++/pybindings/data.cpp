@@ -98,16 +98,16 @@ Promise<DynamicValueReader> download(capnp::DynamicCapability::Client capability
 	return promise;
 }
 
-capnp::DynamicCapability::Client publishReader(capnp::DynamicStruct::Reader value) {	
+capnp::DynamicCapability::Client publishReader(DynamicStructReader value) {	
 	auto dataRefSchema = createRefSchema(value.getSchema());
 	
 	// Publish DataRef and convert to correct type
-	capnp::Capability::Client asAny = getActiveThread().dataService().publish(value);
+	capnp::Capability::Client asAny = getActiveThread().dataService().publish(value.wrapped());
 	return asAny.castAs<capnp::DynamicCapability>(dataRefSchema);
 }
 
-capnp::DynamicCapability::Client publishBuilder(capnp::DynamicStruct::Builder dsb) {
-	return publishReader(dsb.asReader());
+capnp::DynamicCapability::Client publishBuilder(DynamicStructBuilder dsb) {
+	return publishReader(dsb);
 }
 
 }
@@ -161,11 +161,11 @@ Promise<void> writeArchive1(capnp::DynamicCapability::Client ref, kj::StringPtr 
 	return getActiveThread().dataService().writeArchive(asRef, *file).attach(mv(file));
 }
 
-Promise<void> writeArchive2(capnp::DynamicStruct::Reader root, kj::StringPtr path) {
+Promise<void> writeArchive2(DynamicStructReader root, kj::StringPtr path) {
 	return writeArchive1(publishReader(root), path);
 }
 
-Promise<void> writeArchive3(capnp::DynamicStruct::Builder root, kj::StringPtr path) {
+Promise<void> writeArchive3(DynamicStructBuilder root, kj::StringPtr path) {
 	return writeArchive1(publishBuilder(root), path);
 }
 

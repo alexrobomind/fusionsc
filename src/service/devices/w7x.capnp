@@ -58,6 +58,11 @@ interface ComponentsDB {
 	getAssembly @1 (id : UInt64) -> (components : List(UInt64));
 }
 
+interface Provider {
+	connectCoilsDb @0 (address : Text) -> (service : CoilsDB);
+	connectComponentsDb @1 (address : Text) -> (service : ComponentsDB);
+}
+
 # === client-side JSON interface for ComponentsDB ===
 
 struct ComponentsDBMesh {

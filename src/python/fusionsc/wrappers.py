@@ -57,11 +57,11 @@ class StructWrapperBase:
 		"""
 		return capnp.visualize(self.field, **kwargs)
 	
-	def toYaml(self):
+	def toYaml(self, flow = False):
 		"""
 		Prints the contents as block-structured YAML
 		"""
-		return capnp.toYaml(self.data)
+		return self.data.toYaml_(flow)
 			
 	def __repr__(self):
 		"""
@@ -74,6 +74,44 @@ def structWrapper(serviceType):
 		type = serviceType
 	
 	return Wrapper
+
+class RefWrapper:
+	def __init__(self, dataOrRef):
+		if not isinstance(dataOrRef, capnp.CapabilityClient):
+			dataOrRef = data.publish(dataOrRef)
+			
+		self._ref = dataOrRef
+	
+	@property
+	def ref(self):
+		"""
+		The underlying service.DataRef object.
+		"""
+		return self._ref
+	
+	@asyncFunction
+	async def download(self):
+		"""
+		Downloads (once it is available) the referenced data. Returns a reader for the result.
+		
+		*Note*: Data pointed to by DataRefs are immutable. If you want to modify the stored data,
+		        clone the results with its `clone_()` method (including the trailing underscore).
+		"""
+		return await data.download.asnc(self.ref)
+	
+	@asyncFunction
+	async def save(self, filename):
+		"""
+		Saves the referenced data into an archive file (including all referenced data)
+		"""
+		await data.writeArchive.asnc(self.ref, filename)
+	
+	@classmethod
+	def load(cls, filename):
+		"""
+		Loads an instance of this class from a previously written archive file.
+		"""
+		return cls(data.openArchive(filename))		
 
 def untested(f):
 	@functools.wraps(f)

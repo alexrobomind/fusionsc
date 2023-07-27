@@ -30,11 +30,8 @@ def localResources():
 	This interface can be used to access several privileged functions (like network setup and file
 	system access) that are not available for remote clients.
 	"""
-	assert isLocalConnected(), """
-		This thread is not connected to the local backend. Please call fusionsc.backends.connectLocal()
-		(which is automatically done for the main thread), wrap your code in 'with fusionsc.backends.useBackend(...):',
-		or call 'fusionsc.backends.alwaysUseBackend(...):'
-	"""
+	if not isLocalConnected():
+		connectLocal()
 	
 	return _threadLocal.localResources
 
@@ -51,9 +48,6 @@ async def reconfigureLocalBackend(config):
 	Reconfigues the local backend to the given configuration.
 	"""
 	await localResources().configureRoot(config)
-
-def newLocalConfig():
-	return service.LocalConfig.newMessage()
 
 def isLocalConnected():
 	"""

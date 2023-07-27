@@ -8,6 +8,10 @@ from typing import Optional
 class Projection(wrappers.structWrapper(service.HFCamProjection)):
 	pass
 
+def _provider():
+	return backends.activeBackend().newHFCamProvider().pipeline.service
+	
+
 @asyncFunction
 async def toroidalProjection(
 	w: int,
@@ -22,9 +26,8 @@ async def toroidalProjection(
 	fieldOfView: float
 ):
 	"""Computes a new camera projection setup that looks at the given target point"""
-	provider = backends.activeBackend().newHFCamProvider().service
 	
-	response = await provider.makeToroidalProjection(
+	response = await _provider().makeToroidalProjection(
 		w, h, phi,
 		rTarget, zTarget,
 		verticalInclination, horizontalInclination, distance,
@@ -39,11 +42,9 @@ async def make(
 	edgeTolerance = 0.5,
 	depthTolerance = 0.5
 ):
-	"""Creates a new HF camera based on the given projection"""
-	provider = backends.activeBackend().newHFCamProvider().pipeline.service
-	
+	"""Creates a new HF camera based on the given projection"""	
 	resolved = await geometry.resolve.asnc()
-	cam = provider.makeCamera(projection.data, resolved.data, edgeTolerance, depthTolerance).pipeline.cam
+	cam = _provider().makeCamera(projection.data, resolved.data, edgeTolerance, depthTolerance).pipeline.cam
 	return HFCam(cam)
 
 class HFCam:
@@ -86,5 +87,5 @@ class HFCam:
 		"""
 		Obtains the contents of the heat flux accumulator buffer.
 		"""
-		return self.cam.get_()
+		return self.cam.get()
 	
