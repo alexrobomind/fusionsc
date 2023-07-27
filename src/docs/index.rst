@@ -13,7 +13,12 @@ Started as an effort to automate my personal workflow, FusionSC is a library int
 operations required when analyzing the structure of magnetic confinement fusion devices, including the structure of
 the magnetic field as well as the machine geometry. 
 
-For what is intended to be included in the near future, check out the roadmap.
+**Currently fusionsc is in alpha release for version 2. This version includes minor interface overhauls which will
+be kept.** Most importantly, `defaultGrid` and `defaultGeometryGrid` are now **functions for all devices**. Beyond
+that, version 2 has full asyncio integration, which was a large item on the user-facing side.
+
+We do not expect any interface changes beyond version 2 any time soon. However, please keep in mind that the release
+version 2 will possibly implement additional feedback.
 
 .. toctree::
    :maxdepth: 2
