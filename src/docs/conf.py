@@ -15,7 +15,7 @@ if 'DOC_FSCPATH' not in os.environ:
 project = 'FusionSC'
 copyright = '2022 - 2023, Forschungszentrum Jülich GmbH, Jülich, Germany'
 author = 'Alexander Knieps'
-release = '1.3'
+release = '2.0.0a0'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
