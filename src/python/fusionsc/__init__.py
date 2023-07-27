@@ -29,7 +29,6 @@ from . import remote
 
 # Load auxiliary modules
 from . import data
-from . import ipython_integration
 from . import resolve
 from . import wrappers
 
