@@ -1,8 +1,10 @@
 :: Builds the documentation and pushes it to the main repository
 :: Builds from 'docs' to 'docs' (because of github pages limitations)
 
-:: Checkout
-git checkout pages
+:: Switch to 'pages' without checkout
+git symbolic-ref HEAD refs/heads/pages
+
+:: Overwrite branch with contents of main
 git reset --hard main
 
 :: Build documentations into "docs" dir in src tree
