@@ -144,6 +144,12 @@ add_vendored_dependency(
 )
 unset(WITH_ZLIB)
 
+# Enable ZLIB support for vendored Capnproto
+if(CapnProto_VENDORED)
+	target_compile_definitions(kj-http PRIVATE KJ_HAS_ZLIB)
+	target_link_libraries(kj-http PUBLIC ZLIB::ZLIB)
+endif()
+
 add_vendored_dependency(
 	PREFIX vendor/yaml-cpp
 	NAME yaml-cpp
