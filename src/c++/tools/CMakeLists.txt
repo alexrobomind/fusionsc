@@ -6,6 +6,13 @@ add_executable(
 target_link_libraries(fsc-server fsc)
 
 add_executable(
+	fsc-load-balancer
+	load-balancer.cpp
+)
+target_link_libraries(fsc-load-balancer fsc)
+
+
+add_executable(
 	brandedEnums
 	brandedEnums.cpp
 )

@@ -105,6 +105,9 @@ add_library(
 	
 	fieldline-mapping.h
 	fieldline-mapping.cpp
+	
+	load-balancer.h
+	load-balancer.cpp
 )
 
 target_link_libraries(fsc PUBLIC deps cupnp fsc-service-genapi)

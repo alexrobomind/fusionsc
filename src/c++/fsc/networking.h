@@ -1,5 +1,9 @@
 #pragma once
 
+#include "common.h"
+
+#include <kj/async-io.h>
+
 #include <fsc/networking.capnp.h>
 
 namespace kj {

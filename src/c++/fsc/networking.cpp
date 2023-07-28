@@ -150,7 +150,6 @@ struct StreamNetworkConnection : public MembranePolicy, capnp::BootstrapFactory<
 		
 		auto onDC = vatNetwork -> onDisconnect();
 		onDC = onDC.then([stream = mv(stream)]() mutable -> Promise<void> {
-			KJ_DBG("Disconnecting ...");
 			if(stream.is<Own<MessageStream>>()) {
 				auto result = stream.get<Own<MessageStream>>() -> end();
 				return result.attach(mv(stream));

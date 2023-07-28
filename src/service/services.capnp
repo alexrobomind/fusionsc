@@ -45,6 +45,17 @@ struct LocalConfig {
 	}
 }
 
+struct LoadBalancerConfig {
+	struct Backend {
+		url @0 : Text;
+	}
+	
+	backends @0 : List(Backend);
+	
+	heartbeatIntervalSeconds @1 : UInt64 = 300;
+	reconnectIntervalSeconds @2 : UInt64 = 30;
+}
+
 struct NodeInfo {
 	deviceType @0 : ComputationDeviceType;
 }
