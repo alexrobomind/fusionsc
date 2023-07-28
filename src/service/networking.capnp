@@ -7,6 +7,20 @@ using Java = import "java.capnp";
 $Java.package("org.fsc");
 $Java.outerClassname("Network");
 
+interface SimpleHttpServer {
+	struct Request {
+		method @0 : Text;
+		url @1 : Text;
+	}
+
+	struct Response {
+		status @0 : UInt16;
+		body @1 : Text;
+	}
+	
+	serve @0 Request -> Response;
+}
+
 interface NetworkInterface {
 	interface Connection {
 		getRemote @0 () -> (remote : Capability);
@@ -27,8 +41,8 @@ interface NetworkInterface {
 	}
 	
 	connect    @0 (url : Text) -> (connection : Connection);
-	listen     @1 (host : Text = "0.0.0.0", portHint : UInt16, listener : Listener) -> (openPort : OpenPort);
-	serve      @2 (host : Text = "0.0.0.0", portHint : UInt16, server : Capability) -> (openPort : OpenPort);
+	listen     @1 (host : Text = "0.0.0.0", portHint : UInt16, listener : Listener, fallback : SimpleHttpServer) -> (openPort : OpenPort);
+	serve      @2 (host : Text = "0.0.0.0", portHint : UInt16, server : Capability, fallback : SimpleHttpServer) -> (openPort : OpenPort);
 	
 	sshConnect @3 (host : Text, port : UInt16) -> (connection : SSHConnection);
 }

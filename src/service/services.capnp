@@ -52,8 +52,8 @@ struct LoadBalancerConfig {
 	
 	backends @0 : List(Backend);
 	
-	heartbeatIntervalSeconds @1 : UInt64 = 300;
-	reconnectIntervalSeconds @2 : UInt64 = 30;
+	heartbeatIntervalSeconds @1 : UInt64 = 60;
+	reconnectIntervalSeconds @2 : UInt64 = 60;
 }
 
 struct NodeInfo {

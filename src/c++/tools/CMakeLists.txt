@@ -14,14 +14,10 @@ target_link_libraries(fsc-load-balancer fsc)
 
 add_executable(
 	brandedEnums
+	EXCLUDE_FROM_ALL
 	brandedEnums.cpp
 )
 
 target_link_libraries(brandedEnums CapnProto::capnp-rpc)
 
-#add_executable(
-#	npytest
-#	npytest.cpp
-#)
-#
-#target_link_libraries(npytest fsc pybind11::embed)
+install(TARGETS fsc-server fsc-load-balancer EXPORT FSCTargets)

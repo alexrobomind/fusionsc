@@ -7,5 +7,24 @@
 #include <fsc/services.capnp.h>
 
 namespace fsc {
-	capnp::Capability::Client newLoadBalancer(NetworkInterface::Client, LoadBalancerConfig::Reader);
+	struct LoadBalancer {
+		struct StatusInfo {
+			struct Backend {
+				enum Status { OK, DISCONNECTED };
+				
+				kj::String url;
+				Status status;
+			};
+				
+			kj::Array<Backend> backends;
+		};
+		
+		virtual Own<LoadBalancer> addRef() = 0;
+		virtual StatusInfo status() = 0;
+		virtual capnp::Capability::Client loadBalanced() = 0;
+		
+		inline virtual ~LoadBalancer() noexcept(false) {}
+	};
+	
+	Own<LoadBalancer> newLoadBalancer(NetworkInterface::Client, LoadBalancerConfig::Reader);
 }

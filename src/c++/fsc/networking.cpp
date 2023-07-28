@@ -24,6 +24,7 @@ using kj::HttpHeaders;
 using kj::HttpHeaderId;
 using kj::HttpServer;
 using kj::HttpClientSettings;
+using kj::HttpServerSettings;
 using kj::HttpService;
 using kj::HttpClient;
 
@@ -278,17 +279,33 @@ struct OpenPortImpl : public NetworkInterface::OpenPort::Server {
 
 static kj::HttpHeaderTable DEFAULT_HEADERS = kj::HttpHeaderTable();
 
+struct SimpleMessageFallback : public SimpleHttpServer::Server {
+	Promise<void> serve(ServeContext ctx) {
+		unsigned int UPGRADE_REQUIRED = 426;
+		
+		auto results = ctx.initResults();
+		results.setStatus(UPGRADE_REQUIRED);
+		results.setBody(
+			"This is a FusionSC connection endpoint, which expects WebSocket requests."
+			" Please connect to it using the FusionSC client."
+			" See: https://jugit.fz-juelich.de/a.knieps/fsc for more information"
+		);
+		return READY_NOW;
+	}
+};
+
 struct HttpListener : public kj::HttpService {
 	using Side = capnp::rpc::twoparty::Side;
 	
 	OneOf<NetworkInterface::Listener::Client, capnp::Capability::Client> listener;
+	SimpleHttpServer::Client fallback;
 	
-	HttpListener(NetworkInterface::Listener::Client listener) :
-		listener(mv(listener))
+	HttpListener(NetworkInterface::Listener::Client listener, SimpleHttpServer::Client fallback) :
+		listener(mv(listener)), fallback(mv(fallback))
 	{}
 	
-	HttpListener(capnp::Capability::Client client) :
-		listener(mv(client))
+	HttpListener(capnp::Capability::Client client, SimpleHttpServer::Client fallback) :
+		listener(mv(client)), fallback(mv(fallback))
 	{}
 	
 	kj::Promise<void> request(
@@ -303,19 +320,16 @@ struct HttpListener : public kj::HttpService {
 		
 		// Check if the request is a websocket request
 		if(!headers.isWebSocket()) {
-			unsigned int UPGRADE_REQUIRED = 426;
+			auto request = fallback.serveRequest();
+			request.setMethod(kj::str(method));
+			request.setUrl(url);
 			
-			return response.sendError(
-				UPGRADE_REQUIRED,
-				"This is an FSC connection endpoint, which expects WebSocket requests."
-				" Please connect to it using the fsc client."
-				" See: https://jugit.fz-juelich.de/a.knieps/fsc for more information",
-				responseHeaders
-			);
+			return request.send().then([&response, responseHeaders = mv(responseHeaders)](auto simpleResponse) mutable {
+				return response.sendError(simpleResponse.getStatus(), simpleResponse.getBody(), responseHeaders);
+			});
 		}
 		
 		// Transition to a WebSocket response
-		responseHeaders.set(HttpHeaderId::CONNECTION, "Upgrade");
 		auto wsStream = response.acceptWebSocket(responseHeaders);
 		auto msgStream = kj::heap<capnp::WebSocketMessageStream>(*wsStream);
 		msgStream = msgStream.attach(mv(wsStream));
@@ -355,6 +369,7 @@ DefaultEntropySource DefaultEntropySource::INSTANCE;
 NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, kj::StringPtr url) {
 	HttpClientSettings settings;
 	settings.entropySource = DefaultEntropySource::INSTANCE;
+	settings.webSocketCompressionMode = HttpClientSettings::AUTOMATIC_COMPRESSION;
 	
 	auto client = ownHeld(kj::newHttpClient(DEFAULT_HEADERS, *stream, settings));
 	client.attach(mv(stream));
@@ -376,20 +391,27 @@ NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, k
 	});
 }
 
-NetworkInterface::OpenPort::Client listenViaHttp(Own<kj::ConnectionReceiver> receiver, NetworkInterface::Listener::Client target) {
+NetworkInterface::OpenPort::Client listenViaHttp(Own<kj::ConnectionReceiver> receiver, NetworkInterface::Listener::Client target, SimpleHttpServer::Client fallback) {
 	// Wrap listener client into HTTP server
-	auto service = kj::heap<HttpListener>(mv(target));
-	auto server = kj::heap<kj::HttpServer>(getActiveThread().timer(), DEFAULT_HEADERS, *service);
+	HttpServerSettings settings;
+	settings.webSocketCompressionMode = HttpServerSettings::AUTOMATIC_COMPRESSION;
+	
+	auto service = kj::heap<HttpListener>(mv(target), mv(fallback));
+	auto server = kj::heap<kj::HttpServer>(getActiveThread().timer(), DEFAULT_HEADERS, *service, settings);
 	server = server.attach(mv(service));
 	
 	// Create open port interface
 	return kj::heap<OpenPortImpl>(mv(server), mv(receiver));
 }
 
-NetworkInterface::OpenPort::Client listenViaHttp(Own<kj::ConnectionReceiver> receiver, capnp::Capability::Client target) {
+NetworkInterface::OpenPort::Client listenViaHttp(Own<kj::ConnectionReceiver> receiver, capnp::Capability::Client target, SimpleHttpServer::Client fallback) {
 	// Wrap listener client into HTTP server
-	auto service = kj::heap<HttpListener>(mv(target));
-	auto server = kj::heap<kj::HttpServer>(getActiveThread().timer(), DEFAULT_HEADERS, *service);
+	HttpServerSettings settings;
+	settings.webSocketCompressionMode = HttpServerSettings::AUTOMATIC_COMPRESSION;
+	
+	// Wrap listener client into HTTP server
+	auto service = kj::heap<HttpListener>(mv(target), mv(fallback));
+	auto server = kj::heap<kj::HttpServer>(getActiveThread().timer(), DEFAULT_HEADERS, *service, settings);
 	server = server.attach(mv(service));
 	
 	// Create open port interface
@@ -412,24 +434,38 @@ Promise<void> NetworkInterfaceBase::sshConnect(SshConnectContext ctx) {
 }
 
 Promise<void> NetworkInterfaceBase::listen(ListenContext ctx) {
+	auto params = ctx.getParams();
+	
 	Maybe<unsigned int> portHint;
-	if(ctx.getParams().getPortHint() != 0)
-		portHint = ctx.getParams().getPortHint();
+	if(params.getPortHint() != 0)
+		portHint = params.getPortHint();
+	
+	SimpleHttpServer::Client fallback = params.hasFallback() ?
+		params.getFallback() :
+		kj::heap<SimpleMessageFallback>()
+	;
 	
 	return listen(ctx.getParams().getHost(), portHint)
-	.then([ctx](Own<ConnectionReceiver> recv) mutable {
-		ctx.getResults().setOpenPort(listenViaHttp(mv(recv), ctx.getParams().getListener()));
+	.then([ctx, params, fallback](Own<ConnectionReceiver> recv) mutable {
+		ctx.getResults().setOpenPort(listenViaHttp(mv(recv), params.getListener(), fallback));
 	});
 }
 
 Promise<void> NetworkInterfaceBase::serve(ServeContext ctx) {
+	auto params = ctx.getParams();
+	
 	Maybe<unsigned int> portHint;
-	if(ctx.getParams().getPortHint() != 0)
-		portHint = ctx.getParams().getPortHint();
+	if(params.getPortHint() != 0)
+		portHint = params.getPortHint();
+	
+	SimpleHttpServer::Client fallback = params.hasFallback() ?
+		params.getFallback() :
+		kj::heap<SimpleMessageFallback>()
+	;
 	
 	return listen(ctx.getParams().getHost(), portHint)
-	.then([ctx](Own<ConnectionReceiver> recv) mutable {
-		ctx.getResults().setOpenPort(listenViaHttp(mv(recv), ctx.getParams().getServer()));
+	.then([ctx, params, fallback](Own<ConnectionReceiver> recv) mutable {
+		ctx.getResults().setOpenPort(listenViaHttp(mv(recv), params.getServer(), fallback));
 	});
 }
 
@@ -442,7 +478,7 @@ Promise<void> NetworkInterfaceBase::connect(ConnectContext ctx) {
 		KJ_FAIL_REQUIRE("User authentication via HTTP is hilariously unsafe and not supported");
 	}
 	
-	KJ_REQUIRE(url.scheme == "http", "Only basic HTTP connections are supported (https will come)");
+	KJ_REQUIRE(url.scheme == "http" || url.scheme == "ws", "Only url schemes 'http' and 'ws' are supported. HTTPS support is currently not available");
 	
 	auto hostAndPort = url.host.asPtr();
 	

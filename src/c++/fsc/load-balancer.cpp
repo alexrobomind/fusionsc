@@ -7,7 +7,7 @@ namespace fsc {
 
 namespace {
 
-struct LoadBalancerImpl : public capnp::Capability::Server {	
+struct LoadBalancerImpl : public capnp::Capability::Server, public kj::Refcounted, public LoadBalancer {	
 	struct Backend {
 		LoadBalancerImpl& parent;
 		kj::String url;
@@ -133,6 +133,29 @@ struct LoadBalancerImpl : public capnp::Capability::Server {
 		
 		backends = backendsBuilder.finish();
 	}
+		
+	Own<LoadBalancer> addRef() override { return kj::addRef(*this); }
+	
+	StatusInfo status() override {
+		auto infoBuilder = kj::heapArrayBuilder<StatusInfo::Backend>(backends.size());
+		for(Backend& b : backends) {
+			StatusInfo::Backend info;
+			info.url = kj::heapString(b.url);
+			if(b.target != nullptr)
+				info.status = StatusInfo::Backend::OK;
+			else
+				info.status = StatusInfo::Backend::DISCONNECTED;
+			infoBuilder.add(mv(info));
+		}
+		
+		StatusInfo result;
+		result.backends = infoBuilder.finish();
+		return result;
+	}
+	
+	capnp::Capability::Client loadBalanced() override {
+		return Own<capnp::Capability::Server>(kj::addRef(*this));
+	}
 	
 	capnp::Capability::Client selectCallTarget() {
 		if(activeBackends.size() == 0) {
@@ -178,13 +201,12 @@ struct LoadBalancerImpl : public capnp::Capability::Server {
 			true   // allowCancellation
 		};
 	}
-	
 };
 
 }
 
-capnp::Capability::Client newLoadBalancer(NetworkInterface::Client clt, LoadBalancerConfig::Reader config) {
-	return kj::heap<LoadBalancerImpl>(mv(clt), config);
+Own<LoadBalancer> newLoadBalancer(NetworkInterface::Client clt, LoadBalancerConfig::Reader config) {
+	return kj::refcounted<LoadBalancerImpl>(mv(clt), config);
 }
 
 }
