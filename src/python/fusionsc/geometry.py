@@ -105,7 +105,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 	def scale(self, by = 1.0):
 		import numbers
 		
-		if isinstance(by, number.Number):
+		if isinstance(by, numbers.Number):
 			by = [by, by, by]
 		
 		result = Geometry()
