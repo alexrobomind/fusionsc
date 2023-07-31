@@ -30,26 +30,26 @@ def download(args = None):
 			await addParts.asnc(resolved)
 			return
 			
-		if reader.which() == 'combined':
+		if reader.which_() == 'combined':
 			for el in reader.combined:
 				await addParts.asnc(el)
 			return
 		
-		if reader.which() == 'nested':
+		if reader.which_() == 'nested':
 			await addParts.asnc(reader.nested)
 			return
 		
-		if reader.which() == 'ref':
+		if reader.which_() == 'ref':
 			await addParts.asnc(fsc.data.download(reader.ref))
 			return
 				
-		if reader.which() == 'w7x':
+		if reader.which_() == 'w7x':
 			w7x = reader.w7x
 		
-			if w7x.which() == 'componentsDbMesh':
+			if w7x.which_() == 'componentsDbMesh':
 				meshes.append(w7x.componentsDbMesh)
 			
-			if w7x.which() == 'componentsDbAssembly':
+			if w7x.which_() == 'componentsDbAssembly':
 				assemblies.append(w7x.componentsDbAssembly)
 			
 			return

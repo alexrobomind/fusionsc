@@ -118,6 +118,10 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		
 		return result
 	
+	def __await__(self):
+		assert self.data.which_() == 'computedField', 'Can only await computed fields'
+		return self.data.computedField.data.__await__()
+	
 	@asyncFunction
 	async def interpolateXyz(self, points, grid = None):
 		"""

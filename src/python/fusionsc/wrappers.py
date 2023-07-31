@@ -89,6 +89,9 @@ class RefWrapper:
 		"""
 		return self._ref
 	
+	def __await__(self):
+		return self.ref.__await__()
+	
 	@asyncFunction
 	async def download(self):
 		"""

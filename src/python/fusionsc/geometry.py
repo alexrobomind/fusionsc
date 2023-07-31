@@ -59,6 +59,18 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		
 		return result
 	
+	def __await__(self):
+		assert self.data.which_() == 'indexed' or self.data.which_() == 'merged', (
+			'Can only await merged or indexed geometries, but geometry was "' + self.which_() + "'." +
+			' Schedule a merge(...) or index(...) computation first.'
+		)
+		
+		if self.data.which_() == 'indexed':
+			return self.data.indexed.data.__await__()
+		
+		if self.data.which_() == 'merged':
+			return self.data.merged.__await__()
+	
 	def __add__(self, other):
 		if isinstance(other, int) and other == 0:
 			return self

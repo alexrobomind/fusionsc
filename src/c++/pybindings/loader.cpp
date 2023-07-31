@@ -750,6 +750,28 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 	
 	py::dict outerAttrs;
 	py::dict clientAttrs;
+	
+	for(auto i : kj::indices(methods)) {
+		auto method = methods[i];
+		
+		InterfaceMethod backend(method, loader);
+		kj::StringTree desc = backend.description();
+		kj::String name = kj::heapString(backend.name);
+				
+		auto pyFunction = py::cpp_function(
+			mv(backend),
+			py::return_value_policy::move,
+			py::doc(desc.flatten().cStr()),
+			py::arg("self")
+		);
+				
+		// TODO: Override the signature object
+		
+		py::object descriptor = methodDescriptor(pyFunction);
+		descriptor.attr("__name__") = name.cStr();
+		descriptor.attr("__module__") = moduleName;
+		clientAttrs[name.cStr()] = descriptor;
+	}
 		
 	py::object methodHolder = simpleObject();
 	methodHolder.attr("__name__") = "methods";
@@ -808,27 +830,10 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 	// Remember the class before interpreting children to make sure we don't recurse
 	(*globalClasses)[py::cast(schema.getProto().getId())] = outerCls;
 	
-	for(size_t i = 0; i < methods.size(); ++i) {
-		// auto name = method.getProto().getName();
+	for(auto i : kj::indices(methods)) {
 		auto method = methods[i];
-		
 		InterfaceMethod backend(method, loader);
-		kj::StringTree desc = backend.description();
 		kj::String name = kj::heapString(backend.name);
-				
-		auto pyFunction = py::cpp_function(
-			mv(backend),
-			py::return_value_policy::move,
-			py::doc(desc.flatten().cStr()),
-			py::arg("self")
-		);
-				
-		// TODO: Override the signature object
-		
-		py::object descriptor = methodDescriptor(pyFunction);
-		descriptor.attr("__name__") = name.cStr();
-		descriptor.attr("__module__") = moduleName;
-		clientAttrs[name.cStr()] = descriptor;
 		
 		py::object holder = simpleObject();
 		holder.attr("__qualname__") = qualName(scope, str(schema.getUnqualifiedName(), ".methods.", name));

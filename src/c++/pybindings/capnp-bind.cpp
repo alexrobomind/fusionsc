@@ -277,6 +277,12 @@ void bindCapClasses() {
 	client
 		.def(py::init([](C src) { return src; }))
 		.def("__reduce_ex__", &pickleReduceRef)
+		.def("__await__", [](C& clt) {
+			Promise<py::object> whenReady = clt.whenResolved()
+			.then([]() mutable -> py::object { return py::none(); });
+			
+			return convertToAsyncioFuture(mv(whenReady)).attr("__await__")();
+		})
 	;
 }
 

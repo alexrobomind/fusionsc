@@ -19,4 +19,14 @@ namespace fsc { namespace internal {
 		kernels::FieldRef,
 		double
 	);
+	
+	INSTANTIATE_KERNEL(
+		kernels::addFieldInterpKernel,
+		const unsigned int,
+		kernels::FieldRef,
+		ToroidalGridStruct,
+		kernels::FieldRef,
+		ToroidalGridStruct,
+		double
+	);
 }}

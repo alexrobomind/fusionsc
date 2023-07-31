@@ -74,6 +74,23 @@ class CoilPack(wrappers.structWrapper(service.W7XCoilSet)):
 			fields.controlFields[i].computedField = await resolveAndCompute(fields.controlFields[i])
 		
 		return result
+	
+	def __await__(self):
+		assert self.data.which_() == 'fields', 'Can only await a coil pack on which computeFields() was called'
+		
+		fields = self.data.fields
+		
+		async def coro():
+			for i in range(7):
+				await MagneticConfig(fields.mainFields[i])
+			
+			for i in range(5):
+				await MagneticConfig(fields.trimFields[i])
+			
+			for i in range(10):
+				await MagneticConfig(fields.controlFields[i])
+		
+		return coro().__await__()
 
 def cadCoils(convention = '1-AA-R0004.5') -> CoilPack:
 	"""

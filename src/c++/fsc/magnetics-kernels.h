@@ -136,6 +136,37 @@ inline void biotSavart(Device& device, Callback<> done, ToroidalGridStruct grid,
 EIGEN_DEVICE_FUNC inline void addFieldKernel(const unsigned int idx, FieldRef out, FieldRef in, double scale) {
 	out.data()[idx] += in.data()[idx] * scale;
 }
+
+EIGEN_DEVICE_FUNC inline void addFieldInterpKernel(const unsigned int idx, FieldRef out, ToroidalGridStruct gridOut, FieldRef in, ToroidalGridStruct gridIn, double scale) {
+	// Copied from biotSavartKernel
+	int midx[3];
+	
+	{
+		// Decode index using column major layout
+		// in which the first index has stride 1
+		unsigned int tmp = idx;
+		for(int i = 0; i < 3; ++i) {
+			midx[i] = tmp % out.dimension(i+1);
+			tmp /= out.dimension(i+1);
+		}
+	}
+	
+	int i_r = midx[0];
+	int i_z   = midx[1];
+	int i_phi   = midx[2];
+
+	Vec3d x_grid = gridIn.xyz(i_phi, i_z, i_r);
+	
+	// Custom addition here
+	using InterpolationStrategy = C1CubicInterpolation<double>;
+	SlabFieldInterpolator<InterpolationStrategy> interpolator(InterpolationStrategy(), gridIn);
+	Vec3d field = interpolator.inSlabOrientation(in, x_grid);
+	
+	double* outData = out.data();	
+	outData[3 * idx + 0] += scale * field[0];
+	outData[3 * idx + 1] += scale * field[1];
+	outData[3 * idx + 2] += scale * field[2];
+}
 	
 /**
  \ingroup kernels
@@ -295,5 +326,6 @@ EIGEN_DEVICE_FUNC inline void eqFieldKernel(const unsigned int idx, ToroidalGrid
 }}
 
 REFERENCE_KERNEL(fsc::kernels::addFieldKernel, fsc::kernels::FieldRef, fsc::kernels::FieldRef, double);
+REFERENCE_KERNEL(fsc::kernels::addFieldInterpKernel, const unsigned int, FieldRef, ToroidalGridStruct, FieldRef, ToroidalGridStruct, double);
 REFERENCE_KERNEL(fsc::kernels::biotSavartKernel, fsc::ToroidalGridStruct, fsc::kernels::FilamentRef, double, double, double, fsc::kernels::FieldRef);
 REFERENCE_KERNEL(fsc::kernels::eqFieldKernel, ToroidalGridStruct, CuPtr<const fsc::cu::AxisymmetricEquilibrium>, double, FieldRef);

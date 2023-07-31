@@ -60,6 +60,33 @@ struct FieldCalculation {
 		});
 	}
 	
+	void addDifferent(double scale, Float64Tensor::Reader otherFieldIn, ToroidalGridStruct otherGrid) {
+		auto shape = otherFieldIn.getShape();
+		
+		KJ_REQUIRE(shape.size() == 4);
+		KJ_REQUIRE(shape[3] == 3);
+		
+		auto data = otherFieldIn.getData();
+		
+		// Write field into native format
+		Field otherField(3, otherGrid.nR, otherGrid.nZ, otherGrid.nPhi);
+		for(int i = 0; i < otherField.size(); ++i) {
+			otherField.data()[i] = data[i];
+		}
+				
+		calculation = calculation.then([this, otherField = mv(otherField), otherGrid, scale]() mutable {
+			return FSC_LAUNCH_KERNEL(
+				kernels::addFieldInterpKernel,
+				*_device, 
+				field -> getHost().size(),
+				FSC_KARG(field, NOCOPY), grid,
+				FSC_KARG(otherField, ALIAS_IN), otherGrid,
+				scale
+			);
+		});
+		
+	}
+	
 	void biotSavart(double current, Float64Tensor::Reader input, BiotSavartSettings::Reader settings) {
 		auto shape = input.getShape();
 		
@@ -295,10 +322,10 @@ struct CalculationSession : public FieldCalculator::Server {
 			}
 			case MagneticField::COMPUTED_FIELD: {
 				// First check grid compatibility
-				auto cField = node.getComputedField();
-				auto grid = cField.getGrid();
+				auto cField = node.getComputedField();				
+				Temporary<ToroidalGrid> grid = cField.getGrid();
 				
-				KJ_REQUIRE(
+				/*KJ_REQUIRE(
 					ID::fromReader(grid) == ID::fromReader(calculator.gridReader),
 					"The field you are using as input and the field you are trying to calculate "
 					"have differing grids. Currently, interpolation between different magnetic "
@@ -306,12 +333,17 @@ struct CalculationSession : public FieldCalculator::Server {
 					"authors and request implementation of cross-grid interpolation. Following "
 					"are the two grids as interpreted by this code.",
 					grid, calculator.gridReader
-				);
+				);*/
 				
 				// Then download data				
 				return getActiveThread().dataService().download(cField.getData())
-				.then([&calculator, scale](LocalDataRef<Float64Tensor> field) {
-					return calculator.add(scale, field.get());
+				.then([&calculator, scale, grid = mv(grid)](LocalDataRef<Float64Tensor> field) {
+					if(ID::fromReader(grid.asReader()) == ID::fromReader(calculator.gridReader)) {
+						return calculator.add(scale, field.get());
+					} else {
+						constexpr unsigned int GRID_VERSION = 7;
+						return calculator.addDifferent(scale, field.get(), readGrid(grid, GRID_VERSION));
+					}
 				});
 			}
 			case MagneticField::FILAMENT_FIELD: {

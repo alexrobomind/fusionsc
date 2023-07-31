@@ -110,6 +110,13 @@ Promise<void> GeometryResolverBase::processTransform(Transformed<Geometry>::Read
 			turnedOut.setCenter(turnedIn.getCenter());
 			return processTransform(turnedIn.getNode(), turnedOut.initNode(), context);
 		}
+		case Transformed<Geometry>::SCALED: {
+			auto scaledIn  = input.getScaled();
+			auto scaledOut = output.initScaled();
+			
+			scaledOut.setScale(scaledIn.getScale());
+			return processTransform(scaledIn.getNode(), scaledOut.initNode(), context);
+		}
 		default:
 			KJ_FAIL_REQUIRE("Unknown transform node encountered", input.which());
 	}

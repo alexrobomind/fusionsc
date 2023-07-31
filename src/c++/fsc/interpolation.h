@@ -4,6 +4,7 @@
 #include <fsc/magnetics.capnp.h>
 
 #include "tensor.h"
+#include "grids.h"
 
 namespace fsc {
 
@@ -229,6 +230,15 @@ struct SlabFieldInterpolator {
 	{
 	}
 	
+	EIGEN_DEVICE_FUNC SlabFieldInterpolator(const Strategy& strategy, const ToroidalGridStruct& grid) :
+		interpolator(strategy, {
+			Axis(0, 2 * fsc::pi / grid.nSym, grid.nPhi),
+			Axis(grid.zMin, grid.zMax, grid.nZ - 1),
+			Axis(grid.rMin, grid.rMax, grid.nZ - 1),
+		})
+	{
+	}
+	
 	// Host-only interpolator
 	SlabFieldInterpolator(const Strategy& strategy, ToroidalGrid::Reader grid) :
 		interpolator(strategy, {
@@ -279,8 +289,43 @@ struct SlabFieldInterpolator {
 		};
 	}
 	
+	EIGEN_DEVICE_FUNC Vec<Scalar, 3> inSlabOrientation(const TensorMap<const Tensor<Scalar, 4>>& fieldData, const Vec<Scalar, 3>& xyz) {
+		Scalar x = xyz[0];
+		Scalar y = xyz[1];
+		Scalar z = xyz[2];
+		
+		Scalar r = std::sqrt(x*x + y*y);
+		Scalar phi = atan2(y, x);
+		
+		// Lambda functions that return individual phi components
+		// and clamp the field for evaluation
+		auto selectComponent = [&fieldData](int iDim) {
+			return [&fieldData, iDim](int iPhi, int iZ, int iR) {
+				if(iR < 0) iR = 0;
+				if(iZ < 0) iZ = 0;
+				if(iR >= fieldData.dimension(1)) iR = fieldData.dimension(1) - 1;
+				if(iZ >= fieldData.dimension(2)) iZ = fieldData.dimension(2) - 1;
+				
+				int nPhi = fieldData.dimension(3);
+				iPhi = (iPhi % nPhi + nPhi) % nPhi;
+				
+				return fieldData(iDim, iR, iZ, iPhi);
+			};
+		};
+		
+		Scalar bPhi = interpolator(selectComponent(0), {phi, z, r});
+		Scalar bZ   = interpolator(selectComponent(1), {phi, z, r});
+		Scalar bR   = interpolator(selectComponent(2), {phi, z, r});
+		
+		return { bPhi, bZ, bR };
+	}
+	
 	EIGEN_DEVICE_FUNC Vec<Scalar, 3> operator()(const TensorMap<Tensor<Scalar, 4>>& fieldData, const Vec<Scalar, 3>& xyz) {
 		return operator()(TensorMap<const Tensor<Scalar, 4>>(fieldData.data(), fieldData.dimensions()), xyz);
+	}
+	
+	EIGEN_DEVICE_FUNC Vec<Scalar, 3> inSlabOrientation(const TensorMap<Tensor<Scalar, 4>>& fieldData, const Vec<Scalar, 3>& xyz) {
+		return inSlabOrientation(TensorMap<const Tensor<Scalar, 4>>(fieldData.data(), fieldData.dimensions()), xyz);
 	}
 };
 
