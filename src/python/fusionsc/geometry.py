@@ -102,6 +102,20 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		
 		return result
 	
+	def scale(self, by = 1.0):
+		import numbers
+		
+		if isinstance(by, number.Number):
+			by = [by, by, by]
+		
+		result = Geometry()
+		transformed = result.data.initTransformed()
+		scaled = transformed.initScaled()
+		scaled.scale = by
+		scaled.node.leaf = self.data
+		
+		return result
+	
 	def rotate(self, angle, axis, center = [0, 0, 0]):
 		"""Returns a new geometry rotated around the prescribed axis and center point"""
 		result = Geometry()
@@ -111,7 +125,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		turned.axis = axis
 		turned.angle = angle
 		turned.center = center
-		turned.node.leaf = self.geometry
+		turned.node.leaf = self.data
 		
 		return result
 	
@@ -139,7 +153,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 	@asyncFunction
 	async def download(self):
 		"""For a geometry of 'ref' type, downloads the contents of the referenced geometry and wraps them in a new Geometry instance"""
-		if self.geometry.which_() != 'ref':
+		if self.data.which_() != 'ref':
 			return Geometry(self.data)
 		
 		ref = self.data.ref
@@ -156,13 +170,13 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		assert len(vertices.shape) == 2
 		assert vertices.shape[1] == 3
 		
-		meshIndices = np.concatenate(polygons)
+		meshIndices = np.concatenate(polyIndices)
 		
 		polyBoundaries = [0]
 		offset = 0
 		isTrimesh = True
 		
-		for poly in polygons:
+		for poly in polyIndices:
 			offset += len(poly)
 			polyBoundaries.append(offset)
 			
@@ -170,7 +184,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 				isTrimesh = False
 		
 		
-		mesh = service.Mesh.initMessage()
+		mesh = service.Mesh.newMessage()
 		mesh.vertices = vertices
 		mesh.indices = meshIndices
 		

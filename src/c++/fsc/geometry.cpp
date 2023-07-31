@@ -250,6 +250,8 @@ Promise<void> GeometryLibImpl::collectTagNames(Transformed<Geometry>::Reader inp
 			return collectTagNames(input.getShifted().getNode(), output);
 		case Transformed<Geometry>::TURNED:
 			return collectTagNames(input.getTurned().getNode(), output);
+		case Transformed<Geometry>::SCALED:
+			return collectTagNames(input.getScaled().getNode(), output);
 		default:
 			KJ_FAIL_REQUIRE("Unknown transform type", input.which());
 	}
@@ -499,27 +501,25 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 }
 
 Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, GeometryAccumulator& output) {
+	Mat4d transformBase;
+	Transformed<Geometry>::Reader node;
+	
 	switch(input.which()) {
 		case Transformed<Geometry>::LEAF:
 			return mergeGeometries(input.getLeaf(), tagTable, tagScope, transform, output);
+			
 		case Transformed<Geometry>::SHIFTED: {
+			node = input.getShifted().getNode();
 			auto shift = input.getShifted().getShift();
 			KJ_REQUIRE(shift.size() == 3);
 			
-			KJ_IF_MAYBE(pTransform, transform) {
-				for(int i = 0; i < 3; ++i) {
-					(*pTransform)(i, 3) += shift[i];
-				}
-			} else {
-				transform = Mat4d {
-					{1, 0, 0, shift[0]},
-					{0, 1, 0, shift[1]},
-					{0, 0, 1, shift[2]},
-					{0, 0, 0, 1}
-				};
-			}
-			
-			return mergeGeometries(input.getShifted().getNode(), tagTable, tagScope, transform, output);
+			transformBase = Mat4d {
+				{1, 0, 0, shift[0]},
+				{0, 1, 0, shift[1]},
+				{0, 0, 1, shift[2]},
+				{0, 0, 0, 1}
+			};
+			break;
 		}
 		case Transformed<Geometry>::TURNED: {
 			auto turned = input.getTurned();
@@ -533,18 +533,35 @@ Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader inp
 			Vec3d axis   { inAxis[0], inAxis[1], inAxis[2] };
 			Vec3d center { inCenter[0], inCenter[1], inCenter[2] };
 			
-			auto rotation = rotationAxisAngle(center, axis, ang);
-			
-			KJ_IF_MAYBE(pTransform, transform) {
-				return mergeGeometries(turned.getNode(), tagTable, tagScope, (Mat4d)((*pTransform) * rotation), output);
-			} else {
-				return mergeGeometries(turned.getNode(), tagTable, tagScope, rotation, output);
-			}
+			transformBase = rotationAxisAngle(center, axis, ang);
+			node = turned.getNode();
+			break;
 		}
+		case Transformed<Geometry>::SCALED: {
+			auto scaled = input.getScaled();
+			auto scaleBy = scaled.getScale();
+			
+			KJ_REQUIRE(scaleBy.size() == 3);
+			
+			transformBase = Mat4d {
+				{scaleBy[0], 0, 0, 0},
+				{0, scaleBy[1], 0, 0},
+				{0, 0, scaleBy[2], 0},
+				{0, 0, 0, 1}
+			};
+			node = scaled.getNode();
+			break;
+		}
+			
 		default:
 			KJ_FAIL_REQUIRE("Unknown transform type", input.which());
 	}
-	
+			
+	KJ_IF_MAYBE(pTransform, transform) {
+		return mergeGeometries(node, tagTable, tagScope, (Mat4d)((*pTransform) * transformBase), output);
+	} else {
+		return mergeGeometries(node, tagTable, tagScope, transformBase, output);
+	}
 }
 
 Promise<void> GeometryLibImpl::index(IndexContext context) {

@@ -102,6 +102,10 @@ struct Transformed(T) {
 			axis  @5 : List(Float64);
 			node  @6 : Transformed(T);
 		}
+		scaled : group {
+			node @7 : Transformed(T);
+			scale @8 : List(Float64) = [1, 1, 1];
+		}
 	}
 }
 

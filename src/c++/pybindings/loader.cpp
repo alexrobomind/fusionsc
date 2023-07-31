@@ -757,6 +757,57 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 	methodHolder.attr("__module__") = moduleName;
 	outerAttrs["methods"] = methodHolder;
 	
+	outerAttrs["newDeferred"] = py::cpp_function(
+		[schema](Promise<capnp::DynamicCapability::Client> promise) {			
+			capnp::Capability::Client untyped = mv(promise);
+			return untyped.castAs<capnp::DynamicCapability>(schema);
+		}
+	);
+	
+	outerAttrs["newDisconnected"] = py::cpp_function(
+		[schema](kj::StringPtr disconnectReason) {
+			capnp::Capability::Client untyped(capnp::newBrokenCap(disconnectReason));
+			return untyped.castAs<capnp::DynamicCapability>(schema);
+		},
+		py::arg("disconnectReason") = "disconnected"
+	);
+	
+	outerAttrs["castAs"] = py::cpp_function(
+		[schema](capnp::DynamicCapability::Client input) {
+			capnp::Capability::Client asGeneric(mv(input));
+			return asGeneric.castAs<capnp::DynamicCapability>(schema);
+		}
+	);
+	
+	auto outerName = qualName(scope, schema.getUnqualifiedName());
+	outerAttrs["__qualname__"] = outerName;
+	outerAttrs["__module__"] = moduleName;
+	
+	py::object outerCls = metaClass(schema.getUnqualifiedName(), py::make_tuple(), outerAttrs);
+	
+	auto innerName = qualName(outerCls, "Client");
+	clientAttrs["__qualname__"] = innerName;
+	clientAttrs["__module__"] = moduleName;
+	
+	py::list bases;
+	for(auto baseType : schema.getSuperclasses()) {
+		auto id = baseType.getProto().getId();
+		
+		if(globalClasses -> contains(id))
+			bases.append((*globalClasses)[py::cast(id)].attr("Client"));
+		else
+			py::print("Missing base class when creating class", innerName, ", id =", id);
+	}
+	
+	if(bases.size() == 0)
+		bases.append(baseClass);
+	
+	py::object clientCls = (*baseMetaType)("Client", py::eval("tuple")(bases), clientAttrs);
+	outerCls.attr("Client") = clientCls;
+	
+	// Remember the class before interpreting children to make sure we don't recurse
+	(*globalClasses)[py::cast(schema.getProto().getId())] = outerCls;
+	
 	for(size_t i = 0; i < methods.size(); ++i) {
 		// auto name = method.getProto().getName();
 		auto method = methods[i];
@@ -796,58 +847,6 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 		
 		methodHolder.attr(name.cStr()) = holder;
 	}
-	
-	outerAttrs["newDeferred"] = py::cpp_function(
-		[schema](Promise<capnp::DynamicCapability::Client> promise) {			
-			capnp::Capability::Client untyped = mv(promise);
-			return untyped.castAs<capnp::DynamicCapability>(schema);
-		}
-	);
-	
-	outerAttrs["newDisconnected"] = py::cpp_function(
-		[schema](kj::StringPtr disconnectReason) {
-			capnp::Capability::Client untyped(capnp::newBrokenCap(disconnectReason));
-			return untyped.castAs<capnp::DynamicCapability>(schema);
-		},
-		py::arg("disconnectReason") = "disconnected"
-	);
-	
-	outerAttrs["castAs"] = py::cpp_function(
-		[schema](capnp::DynamicCapability::Client input) {
-			capnp::Capability::Client asGeneric(mv(input));
-			return asGeneric.castAs<capnp::DynamicCapability>(schema);
-		}
-	);
-	
-	/*py::print("Extracting surrounding module");
-	py::module_ module_ = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope;*/
-	
-	auto outerName = qualName(scope, schema.getUnqualifiedName());
-	outerAttrs["__qualname__"] = outerName;
-	outerAttrs["__module__"] = moduleName;
-	
-	py::object outerCls = metaClass(schema.getUnqualifiedName(), py::make_tuple(), outerAttrs);
-	
-	auto innerName = qualName(outerCls, "Client");
-	clientAttrs["__qualname__"] = innerName;
-	clientAttrs["__module__"] = moduleName;
-	
-	py::list bases;
-	for(auto baseType : schema.getSuperclasses()) {
-		auto id = baseType.getProto().getId();
-		
-		if(globalClasses -> contains(id))
-			bases.append((*globalClasses)[py::cast(id)].attr("Client"));
-		else
-			py::print("Missing base class when creating class", innerName, ", id =", id);
-	}
-	
-	if(bases.size() == 0)
-		bases.append(baseClass);
-	
-	py::object clientCls = (*baseMetaType)("Client", py::eval("tuple")(bases), clientAttrs);
-	outerCls.attr("Client") = clientCls;
-	
 	
 	return outerCls;
 }
