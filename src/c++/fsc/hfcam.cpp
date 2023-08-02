@@ -49,7 +49,7 @@ Temporary<HFCamProjection> createProjection(
 	
 	objectToHomScreen(all, 3) = intendedHomScreenOrigin - homScreenOrigin;
 	
-	std::cout << objectToHomScreen << std::endl;
+	// std::cout << objectToHomScreen << std::endl;
 	
 	result.setWidth(w);
 	result.setHeight(h);
