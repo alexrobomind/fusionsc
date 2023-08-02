@@ -113,7 +113,12 @@ PYBIND11_MODULE(native, m) {
 	// link between the capnp library and the capnp-rpc library
 	(void) capnp::newBrokenCap("Don't look at me. I'm shy.");
 	
-	kj::printStackTraceOnCrash();
+	/* Note: The following call makes sense in standalone
+	   programs, but pybind11 and python have their own
+	   crash handling infrastructure, and setting this up
+	   conflicts with python's Ctrl+C handler.
+	   */
+	// kj::printStackTraceOnCrash();
 	
 	// There exists no public interface for the following code yet :(
 	const char* envVal = std::getenv("FUSIONSC_VERBOSE");
@@ -141,6 +146,7 @@ PYBIND11_MODULE(native, m) {
 	helperFunctions(m);
 	
 	// baseMetaType = kj::heap<py::type>(standardMeta, py::type::of(py::type::of<Simple>()));
+	
 	// Retrieve the pybind11 metaclass
 	baseMetaType  = kj::heap<py::type>(py::type::of(py::type::of<Simple>()));
 	

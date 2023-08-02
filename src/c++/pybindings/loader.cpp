@@ -733,6 +733,45 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 	return output;
 }
 
+py::object interpretEnumSchema(capnp::EnumSchema schema, py::object scope) {	
+	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
+	
+	auto enumName = schema.getUnqualifiedName();
+	
+	py::dict attrs;
+	attrs["__qualname__"] = qualName(scope, enumName);
+	attrs["__module__"] = moduleName;
+	
+	attrs["__init__"] = py::cpp_function([]() {
+		KJ_UNIMPLEMENTED("Do not create instances of this class. Use EnumType.get() instead");
+	});
+	
+	py::object output = (*baseMetaType)(enumName, py::make_tuple(), attrs);
+	
+	output.attr("get") = py::cpp_function(
+		[schema](DynamicValueReader from) -> EnumInterface {
+			if(from.getType() == capnp::DynamicValue::ENUM) {
+				auto enumInput = from.as<capnp::DynamicEnum>();
+				KJ_REQUIRE(enumInput.getSchema().getProto().getId() == schema.getProto().getId(), "Incorrect enum type");
+				return capnp::DynamicEnum(schema, enumInput.getRaw());
+			}
+			
+			if(from.getType() == capnp::DynamicValue::TEXT) {
+				return capnp::DynamicEnum(schema.getEnumerantByName(from.as<capnp::Text>()));
+			}
+			
+			if(from.getType() == capnp::DynamicValue::UINT || from.getType() == capnp::DynamicValue::INT) {
+				return capnp::DynamicEnum(schema, from.as<uint16_t>());
+			}
+			
+			KJ_DBG(from, from.getType());
+			throw std::invalid_argument("Input must be an enum value, a string, or an integer");
+		}
+	);
+	
+	return output;
+}
+
 py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::InterfaceSchema schema, py::object rootScope, py::object scope) {		
 	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
 	auto methods = schema.getMethods();
@@ -902,6 +941,9 @@ py::object interpretSchema(capnp::SchemaLoader& loader, uint64_t id, py::object 
 			break;
 		case capnp::schema::Node::FILE:
 			output = rootScope;
+			break;
+		case capnp::schema::Node::ENUM:
+			output = interpretEnumSchema(schema.asEnum(), parent);
 			break;
 		
 		default:

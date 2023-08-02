@@ -12,3 +12,6 @@ def unpickleBuilder(version, data):
 
 def unpickleRef(version, data):
 	return native.capnp._unpickleRef(version, data)
+
+def unpickleEnum(version, typeInfo, enumerant):
+	return native.capnp._unpickleEnum(version, typeInfo, enumerant)

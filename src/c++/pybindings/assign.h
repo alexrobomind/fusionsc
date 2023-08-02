@@ -26,5 +26,6 @@ void assign(const BuilderSlot& dst, py::object object);
 void assign(capnp::DynamicStruct::Builder dsb, kj::StringPtr fieldName, py::object value);
 void assign(capnp::DynamicList::Builder dlb, uint32_t idx, py::object value);
 void assign(capnp::MessageBuilder& msg, capnp::StructSchema schema, py::object value);
+void assign(capnp::DynamicValue::Builder&, capnp::Type, py::object);
 
 }

@@ -65,17 +65,17 @@ Maybe<DynamicValueReader> dynamicValueFromScalar(py::handle handle) {
 			return DynamicValueReader(kj::attachRef(ANONYMOUS), PyArrayScalar_VAL(handle.ptr(), cls)); \
 		}
 	
-	HANDLE_TYPE(Byte);
-	HANDLE_TYPE(Short);
-	HANDLE_TYPE(Int);
-	HANDLE_TYPE(Long);
-	HANDLE_TYPE(LongLong);
-	
 	HANDLE_TYPE(UByte);
 	HANDLE_TYPE(UShort);
 	HANDLE_TYPE(UInt);
 	HANDLE_TYPE(ULong);
 	HANDLE_TYPE(ULongLong);
+	
+	HANDLE_TYPE(Byte);
+	HANDLE_TYPE(Short);
+	HANDLE_TYPE(Int);
+	HANDLE_TYPE(Long);
+	HANDLE_TYPE(LongLong);
 	
 	HANDLE_TYPE(Float);
 	HANDLE_TYPE(Double);
@@ -309,6 +309,7 @@ void bindEnumClasses() {
 		.def("__eq__", &EI::eq1, py::is_operator())
 		.def("__eq__", &EI::eq2, py::is_operator())
 		.def("__eq__", &EI::eq3, py::is_operator())
+		.def("__reduce_ex__", &pickleReduceEnum)
 	;
 }
 
@@ -316,6 +317,7 @@ void bindUnpicklers() {
 	capnpModule.def("_unpickleReader", &unpickleReader);
 	capnpModule.def("_unpickleBuilder", &unpickleBuilder);
 	capnpModule.def("_unpickleRef", &unpickleRef);
+	capnpModule.def("_unpickleEnum", &unpickleEnum);
 }
 
 void initCapnp(py::module_& m) {
