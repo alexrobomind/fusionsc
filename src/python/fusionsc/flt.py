@@ -169,7 +169,10 @@ async def trace(
 	direction = "forward",
 	
 	# Direction recording
-	recordEvery = 0
+	recordEvery = 0,
+	
+	# Return format
+	resultFormat = 'dict'
 ):
 	"""
 	Performs a tracing request.
@@ -206,27 +209,35 @@ async def trace(
 		- recordEvery: When set to > 0, instructs the tracer to record the fieldline every "recordEvery"-th step.
 	
 	Returns:
-		A dictionary holding the following entries (more can be added in future versions)
+		The format of the result depends on the `resultFormat` parameter.
 		
-		- *endPoints*: A numpy array of shape `[4] + startPoints.shape[1:]`. The first 3 components are the x, y, and z positions of
-		  the field lines' end points. The 4th component is the total length of the field line.
-		- *poincareHits*: A numpy array of shape `[5, len(phiPlanes)] + startPoints.shape[1:] + [maxTurns]` with maxTurns being a number <=
-		  turnLimit indicating the maximum turn count of any field line. The first 3 components of the first dimension are the x, y, and z
-		  coordinates of the phi plane intersections (commonly used for Poincaré maps). The next two components indicate the forward and backward
-		  connection lengths respectively to the next geometry collision along the field line. If the field line ends in that direction without
-		  a collision (e.g. closed field line, or no geometry specified), a negative number is returned whose absolute value corresponds to the
-		  remaining length in that direction. Non-existing points (due to field lines not all having same turn counts) have their values set to
-		  NaN.
-		- *stopReasons*: A numpy array of shape `startPoints.shape[1:]` that indicates for each point the final reason why the trace was stopped.
-		  The dtype of the array is fusionsc.service.FLTStopReason.
-		- *fieldLines*: A numpy array of shape `startPoints.shape + [max. field line length]` containing steps recorded at specified intervals
-		  (see parameter `recordEvery. Padded with NaN.
-		- *fieldStrengths*: A numpy array of shape `startPoints.shape[1:] + [max. field line length]` holding the absolute magnetic field
-		  strength at the recorded field line points. Padded with 0.
-		- *endTags*: A dict containing a numpy array of type fusionsc.service.TagValue for each tag name present in the geometry. Each array is
-		  of shape `startPoints.shape[1:]`, and its values indicate the tags associated with the final geometry hit. This gives information
-		  about the meshes impacted by the field lines.
-		- *responseSize*: The total size of the response size in bytes (mainly for profiling purposes).
+		-	If `resultFormat == 'dict'`:
+		
+			A dictionary holding the following entries (more can be added in future versions)
+			
+			- *endPoints*: A numpy array of shape `[4] + startPoints.shape[1:]`. The first 3 components are the x, y, and z positions of
+			  the field lines' end points. The 4th component is the total length of the field line.
+			- *poincareHits*: A numpy array of shape `[5, len(phiPlanes)] + startPoints.shape[1:] + [maxTurns]` with maxTurns being a number <=
+			  turnLimit indicating the maximum turn count of any field line. The first 3 components of the first dimension are the x, y, and z
+			  coordinates of the phi plane intersections (commonly used for Poincaré maps). The next two components indicate the forward and backward
+			  connection lengths respectively to the next geometry collision along the field line. If the field line ends in that direction without
+			  a collision (e.g. closed field line, or no geometry specified), a negative number is returned whose absolute value corresponds to the
+			  remaining length in that direction. Non-existing points (due to field lines not all having same turn counts) have their values set to
+			  NaN.
+			- *stopReasons*: A numpy array of shape `startPoints.shape[1:]` that indicates for each point the final reason why the trace was stopped.
+			  The dtype of the array is fusionsc.service.FLTStopReason.
+			- *fieldLines*: A numpy array of shape `startPoints.shape + [max. field line length]` containing steps recorded at specified intervals
+			  (see parameter `recordEvery. Padded with NaN.
+			- *fieldStrengths*: A numpy array of shape `startPoints.shape[1:] + [max. field line length]` holding the absolute magnetic field
+			  strength at the recorded field line points. Padded with 0.
+			- *endTags*: A dict containing a numpy array of type fusionsc.service.TagValue for each tag name present in the geometry. Each array is
+			  of shape `startPoints.shape[1:]`, and its values indicate the tags associated with the final geometry hit. This gives information
+			  about the meshes impacted by the field lines.
+			- *responseSize*: The total size of the response size in bytes (mainly for profiling purposes).
+		
+		-	If `resultFormat == 'raw'`:
+			
+			An instance of fusionsc.service.FLTResponse.Reader (for more efficient storage and later decoding).
 	"""
 	
 	if stepSize < 0.05 and mapping is not None:
@@ -240,6 +251,8 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	assert parallelConvectionVelocity is None or parallelDiffusionCoefficient is None
 	if isotropicDiffusionCoefficient is not None: 
 		assert parallelConvectionVelocity is not None or parallelDiffusionCoefficient is not None
+	
+	assert resultFormat in ['dict', 'raw'], "resultFormat parameter must be 'dict' or 'raw'"
 	
 	config = await config.compute.asnc(grid)
 	computedField = config.data.computedField
@@ -308,7 +321,18 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	if mapping is not None:
 		request.mapping = mapping.ref
 	
+	# Perform the tracing
 	response = await _tracer().trace(request)
+	
+	# Decode the response
+	return decodeTraceResponse(response, resultFormat)
+
+def decodeTraceResponse(response, resultFormat = 'dict'):
+	"""
+	Decodes an FLT response according to the requested format.
+	"""
+	if resultFormat == 'raw':
+		return response
 	
 	endTags = {
 		str(tagName) : tagData
