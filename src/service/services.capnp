@@ -44,6 +44,15 @@ struct LocalConfig {
 			fixed @7 : UInt32 = 1;
 		}
 	}
+	
+	# Configuration for the worker launcher
+	workerLauncher : union {
+		off @8 : Void;
+		auto @9 : Void; # Only available when launching via fsc-server
+		manual : group {
+			coordinatorUrl @10 : Text;
+		}
+	}
 }
 
 struct LoadBalancerConfig {

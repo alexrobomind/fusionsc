@@ -129,12 +129,13 @@ struct MainCls {
 		
 		NetworkInterface::Client networkInterface = kj::heap<LocalNetworkInterface>();
 		
-		auto listenRequest = networkInterface.listenRequest();
+		auto listenRequest = networkInterface.serveRequest();
 		KJ_IF_MAYBE(pPort, port) {
 			listenRequest.setPortHint(*pPort);
 		}
 		listenRequest.setHost(address);
-		listenRequest.setListener(kj::heap<RootServiceProvider>(loadedConfig));
+		// listenRequest.setListener(kj::heap<RootServiceProvider>(loadedConfig));
+		listenRequest.setServer(createRoot(loadedConfig.asReader()));
 		
 		auto openPort = listenRequest.sendForPipeline().getOpenPort();
 		auto info = openPort.getInfoRequest().send().wait(ws);
