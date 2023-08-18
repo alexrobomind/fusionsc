@@ -15,6 +15,7 @@ using Index = import "index.capnp";
 using Data = import "data.capnp";
 using Networking = import "networking.capnp";
 using Vmec = import "vmec.capnp";
+using Matcher = import "matcher.capnp";
 
 using W7X = import "devices/w7x.capnp";
 
@@ -71,6 +72,8 @@ interface RootService {
 	newMapper          @5 () -> (service : FLT.Mapper);
 	
 	dataService @6 () -> (service : Data.DataService);
+	
+	matcher @8 () -> (service : Matcher.Matcher);
 	
 	getInfo @7 () -> NodeInfo;
 }

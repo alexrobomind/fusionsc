@@ -42,7 +42,9 @@ TEST_CASE("rflm") {
 	
 	Temporary<LocalConfig> config;
 	config.setPreferredDeviceType(ComputationDeviceType::CPU);
-	auto req = createRoot(config).newMapperRequest();
+	
+	RootService::Client root = createRoot(config);
+	auto req = root.newMapperRequest();
 	auto mapper = req.send().getService();
 	
 	auto rflmRequest = mapper.computeRFLMRequest();
@@ -56,7 +58,7 @@ TEST_CASE("rflm") {
 	auto data = lt->dataService().download(mapping).wait(ws);
 	// KJ_DBG(data.get());
 	
-	auto fltReq = createRoot(config).newTracerRequest();
+	auto fltReq = root.newTracerRequest();
 	auto flt = fltReq.send().getService();
 	
 	auto traceReq = flt.traceRequest();

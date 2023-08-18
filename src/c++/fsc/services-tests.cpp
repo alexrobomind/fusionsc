@@ -36,7 +36,7 @@ TEST_CASE("http-connect") {
 	// Create a DataRef as service we want to serve
 	
 	Temporary<LocalConfig> config;
-	auto lr = createLocalResources(config);
+	LocalResources::Client lr = createLocalResources(config);
 	
 	auto data = kj::heapArray<capnp::byte>(20);
 	thread -> rng().randomize(data);
@@ -71,7 +71,7 @@ TEST_CASE("ssh-auth", "[.][ssh]") {
 	auto thread = library -> newThread();
 	
 	Temporary<LocalConfig> config;
-	auto localResources = createLocalResources(config.asReader());
+	LocalResources::Client localResources = createLocalResources(config.asReader());
 	
 	auto req = localResources.sshConnectRequest();
 	req.setHost("localhost");

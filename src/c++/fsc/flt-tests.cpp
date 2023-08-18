@@ -48,7 +48,9 @@ TEST_CASE("flt") {
 	
 	Temporary<LocalConfig> config;
 	config.setPreferredDeviceType(ComputationDeviceType::CPU);
-	auto req = createRoot(config).newTracerRequest();
+	
+	RootService::Client root = createRoot(config);
+	auto req = root.newTracerRequest();
 	auto flt = req.send().getService();
 	
 	/*SECTION("basic-trace") {
@@ -90,7 +92,8 @@ TEST_CASE("axis") {
 	Temporary<LocalConfig> config;
 	config.setPreferredDeviceType(ComputationDeviceType::CPU);
 	
-	auto req = createRoot(config).newTracerRequest();
+	RootService::Client root = createRoot(config);
+	auto req = root.newTracerRequest();
 	auto flt = req.send().getService();
 	
 	auto axReq = flt.findAxisRequest();

@@ -115,7 +115,44 @@ struct SSHConnectionImpl : public SSHConnection::Server, public NetworkInterface
 	}*/
 };
 
-struct StreamNetworkConnection : public MembranePolicy, capnp::BootstrapFactory<capnp::rpc::twoparty::VatId>, Refcounted, public NetworkInterface::Connection::Server {
+struct ConnectionMembrane : public MembranePolicy, Refcounted {
+	Own<void> target;
+	ForkedPromise<void> rev;
+	
+	ConnectionMembrane(Own<void> target, Promise<void> revIn) : target(mv(target)), rev(revIn.fork()) {}
+	
+	~ConnectionMembrane() {
+		// If a connection is held open by the remote end, then the last remaining
+		// references to this membrane will be dropped inside of the messageLoop() of
+		// the RPC system. Immediately deleting the connection objects will cause
+		// undefined behavior.
+		// Instead, schedule a safe deletion inside a detached promise.
+		getActiveThread().detach(kj::evalLater([target = mv(target)]() mutable {
+			target = Own<void>();
+		}));
+	}
+	
+	// MembranePolicy interface
+	
+	Own<MembranePolicy> addRef() override { return kj::addRef(*this); }
+	
+	Maybe<Capability::Client> outboundCall(uint64_t interfaceId, uint16_t methodId, Capability::Client target) override {
+		for(auto blockedId : protectedInterfaces()) {
+			KJ_REQUIRE(interfaceId != blockedId, "Direct remote calls to protected interfaces are prohibited");
+		}
+		
+		return nullptr;
+	}
+	
+	Maybe<Capability::Client> inboundCall(uint64_t interfaceId, uint16_t methodId, Capability::Client target) override {		
+		return nullptr;
+	}
+	
+	Maybe<Promise<void>> onRevoked() override {	return rev.addBranch(); }
+	
+};
+
+struct StreamNetworkConnection : public capnp::BootstrapFactory<capnp::rpc::twoparty::VatId>, Refcounted, public NetworkInterface::Connection::Server {
 	using VatId = capnp::rpc::twoparty::VatId;
 	using Side = capnp::rpc::twoparty::Side;
 	
@@ -137,6 +174,10 @@ struct StreamNetworkConnection : public MembranePolicy, capnp::BootstrapFactory<
 		peerSide(remote)
 	{
 		constructCommon();
+	}
+	
+	Own<MembranePolicy> membranePolicy() {
+		return kj::refcounted<ConnectionMembrane>(kj::addRef(*this), canceler.wrap(Promise<void>(NEVER_DONE)));
 	}
 	
 	void constructCommon() {
@@ -175,29 +216,11 @@ struct StreamNetworkConnection : public MembranePolicy, capnp::BootstrapFactory<
 		KJ_IF_MAYBE(pRpcSystem, rpcSystem) {
 			return capnp::membrane(
 				pRpcSystem -> bootstrap(id.asReader()),
-				addRef()
+				membranePolicy()
 			);
 		}
 		return KJ_EXCEPTION(DISCONNECTED, "Connection already closed");
 	}
-	
-	// MembranePolicy interface
-	
-	Own<MembranePolicy> addRef() override { return kj::addRef(*this); }
-	
-	Maybe<Capability::Client> outboundCall(uint64_t interfaceId, uint16_t methodId, Capability::Client target) override {
-		for(auto blockedId : protectedInterfaces()) {
-			KJ_REQUIRE(interfaceId != blockedId, "Direct remote calls to protected interfaces are prohibited");
-		}
-		
-		return nullptr;
-	}
-	
-	Maybe<Capability::Client> inboundCall(uint64_t interfaceId, uint16_t methodId, Capability::Client target) override {		
-		return nullptr;
-	}
-	
-	Maybe<Promise<void>> onRevoked() override {	return canceler.wrap<void>(NEVER_DONE); }
 	
 	// NetworkInterface::Connection interface
 	
@@ -218,7 +241,7 @@ struct StreamNetworkConnection : public MembranePolicy, capnp::BootstrapFactory<
 	// BootstrapFactory interface
 	
 	Capability::Client createFor(typename VatId::Reader clientId) override {
-		return capnp::reverseMembrane(factory(), addRef());
+		return capnp::reverseMembrane(factory(), membranePolicy());
 	}
 	
 	OneOf<Own<AsyncIoStream>, Own<MessageStream>, std::nullptr_t> stream;

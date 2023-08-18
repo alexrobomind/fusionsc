@@ -17,8 +17,8 @@ kj::Function<typename T::Client()> newInProcessServer(kj::Function<typename T::C
 	};
 }
 
-RootService::Client createRoot(LocalConfig::Reader config);
-LocalResources::Client createLocalResources(LocalConfig::Reader config);
+Own<RootService::Server> createRoot(LocalConfig::Reader config);
+Own<LocalResources::Server> createLocalResources(LocalConfig::Reader config);
 
 RootService::Client connectRemote(kj::StringPtr address, unsigned int portHint = 0);
 

@@ -193,6 +193,9 @@ struct ID {
 	inline ID(const ID& other) : data(kj::heapArray<const byte>(other.data)) {}
 	inline ID(ID&& other) : data(mv(other.data)) {}
 	
+	inline ID& operator=(const ID& other) { data = kj::heapArray<const byte>(other.data); return *this; }
+	inline ID& operator=(ID&& other) { data = mv(other.data); return *this; }
+	
 	inline ID(const ArrayPtr<const byte>& data) : data(kj::heapArray<const byte>(data)) {}
 		
 	inline operator ArrayPtr<const byte>() const { return data.asPtr(); }

@@ -13,6 +13,9 @@ add_library(
 	store.h
 	store.cpp
 	
+	matcher.h
+	matcher.cpp
+	
 	ssh.h
 	ssh.cpp
 	
@@ -124,6 +127,7 @@ if(BUILD_TESTING)
 		PUBLIC
 		poly-tests.cpp
 		local-tests.cpp
+		matcher-tests.cpp
 		jobs-tests.cpp
 		random-tests.cpp
 		data-tests.cpp

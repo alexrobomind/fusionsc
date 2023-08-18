@@ -10,6 +10,7 @@
 #include "ssh.h"
 #include "networking.h"
 #include "jobs.h"
+#include "matcher.h"
 
 #include "devices/w7x.h"
 
@@ -55,6 +56,8 @@ struct RootServer : public RootService::Server {
 	
 	Temporary<LocalConfig> config;
 	Own<DeviceBase> device;
+	
+	Matcher::Client myMatcher = newMatcher();
 	
 	JobScheduler::Client selectScheduler() {
 		// Select correct scheduler
@@ -129,6 +132,11 @@ struct RootServer : public RootService::Server {
 			KJ_FAIL_REQUIRE("Unknown device type");
 		}
 		
+		return READY_NOW;
+	}
+	
+	Promise<void> matcher(MatcherContext ctx) {
+		ctx.initResults().setService(myMatcher);
 		return READY_NOW;
 	}
 };
@@ -399,11 +407,11 @@ kj::Function<capnp::Capability::Client()> fsc::newInProcessServer(kj::Function<c
 	};
 }
 
-LocalResources::Client fsc::createLocalResources(LocalConfig::Reader config) {
+Own<LocalResources::Server> fsc::createLocalResources(LocalConfig::Reader config) {
 	return kj::heap<LocalResourcesImpl>(config);
 }
 
-RootService::Client fsc::createRoot(LocalConfig::Reader config) {
+Own<RootService::Server> fsc::createRoot(LocalConfig::Reader config) {
 	return kj::heap<RootServer>(config);
 }
 
@@ -439,7 +447,7 @@ RootService::Client fsc::connectRemote(kj::StringPtr address, unsigned int portH
 
 Promise<Own<fsc::Server>> fsc::startServer(unsigned int portHint, kj::StringPtr address) {	
 	Temporary<LocalConfig> rootConfig;
-	auto rootInterface = createRoot(rootConfig);
+	RootService::Client rootInterface = createRoot(rootConfig);
 	
 	// Get root network
 	auto& network = getActiveThread().network();

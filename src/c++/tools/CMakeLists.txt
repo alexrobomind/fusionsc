@@ -11,6 +11,12 @@ add_executable(
 )
 target_link_libraries(fsc-load-balancer fsc)
 
+add_executable(
+	fsc-worker
+	worker.cpp
+)
+target_link_libraries(fsc-worker fsc)
+
 
 add_executable(
 	brandedEnums

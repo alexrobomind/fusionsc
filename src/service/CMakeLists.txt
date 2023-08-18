@@ -14,6 +14,7 @@ set(
 	index.capnp
 	odb.capnp
 	jobs.capnp
+	matcher.capnp
 	
 	magnetics.capnp
 	geometry.capnp
