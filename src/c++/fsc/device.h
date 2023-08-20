@@ -12,9 +12,7 @@ namespace Eigen {
 
 namespace fsc {
 
-struct DeviceBase {	
-	static int PTR_SLOT;
-	
+struct DeviceBase {		
 	DeviceBase(void* brand);
 	virtual ~DeviceBase();
 	
@@ -104,12 +102,8 @@ struct DeviceMapping<kj::Array<const T>>;
 
 // ---------------------- Devices ----------------------------------------------------
 
-
-struct CPUDevice : public DeviceBase, public kj::Refcounted {
-	static int BRAND;
-	
-	CPUDevice(unsigned int numThreads);
-	~CPUDevice();
+struct CPUDeviceBase : public DeviceBase {
+	using DeviceBase::DeviceBase;
 	
 	void updateDevice(kj::byte* devicePtr, const kj::byte* hostPtr, size_t size) override;
 	void updateHost(kj::byte* hostPtr, const kj::byte* devicePtr, size_t size) override;
@@ -119,6 +113,13 @@ struct CPUDevice : public DeviceBase, public kj::Refcounted {
 	kj::byte* translateToDevice(kj::byte* hostPtr) override;
 	
 	Promise<void> emplaceBarrier() override;
+};
+
+struct CPUDevice : public CPUDeviceBase, public kj::Refcounted {
+	static int BRAND;
+	
+	CPUDevice(unsigned int numThreads);
+	~CPUDevice();
 	
 	Own<DeviceBase> addRef() override;
 	
@@ -128,6 +129,14 @@ struct CPUDevice : public DeviceBase, public kj::Refcounted {
 
 private:
 	static Own<Eigen::ThreadPoolDevice> createEigenDevice(unsigned int numThreads);
+};
+
+struct LoopDevice : public CPUDeviceBase {
+	static int BRAND;
+	
+	LoopDevice();
+	
+	Own<DeviceBase> addRef() override;
 };
 
 /*

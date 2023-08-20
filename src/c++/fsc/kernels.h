@@ -76,6 +76,9 @@ namespace fsc {
 	template<>
 	struct KernelLauncher<CPUDevice>;
 	
+	template<>
+	struct KernelLauncher<LoopDevice>;
+	
 	#ifdef FSC_WITH_GPU
 	template<>
 	struct KernelLauncher<GPUDevice>;
@@ -434,6 +437,18 @@ struct KernelLauncher<CPUDevice> {
 	}
 };
 
+template<>
+struct KernelLauncher<LoopDevice> {
+	template<typename Kernel, Kernel f, typename... Params>
+	static Promise<void> launch(LoopDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+		for(size_t i : kj::range(0, n)) {
+			f(i, params...);
+		}
+		
+		return READY_NOW;
+	}
+};
+
 #ifdef FSC_WITH_CUDA
 
 template<>
@@ -470,6 +485,7 @@ struct KernelLauncher<DeviceBase> {
 				return KernelLauncher<DevType>::launch<Kernel, func, Params...>(static_cast<DevType&>(device), n, cost, fwd<Params>(params)...);
 				
 		FSC_HANDLE_TYPE(CPUDevice);
+		FSC_HANDLE_TYPE(LoopDevice);
 		
 		#ifdef FSC_WITH_CUDA
 		FSC_HANDLE_TYPE(GpuDevice);
