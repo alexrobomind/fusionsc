@@ -17,6 +17,13 @@ add_executable(
 )
 target_link_libraries(fsc-worker fsc)
 
+add_executable(
+	fsc-fuzz
+	EXCLUDE_FROM_ALL
+	fuzz-test.cpp
+)
+target_link_libraries(fsc-fuzz fsc)
+
 
 add_executable(
 	brandedEnums
