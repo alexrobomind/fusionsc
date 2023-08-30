@@ -37,6 +37,11 @@ Own<DeviceBase> selectDevice(LocalConfig::Reader config) {
 	
 	#endif
 	
+	if(config.getPreferredDeviceType() == ComputationDeviceType::LOOP) {
+		static LoopDevice loopDevice;
+		return kj::attachRef(loopDevice);
+	}
+	
 	auto numThreadsRequested = config.getCpuBackend().getNumThreads();
 	
 	uint32_t numThreads = (uint32_t) CPUDevice::estimateNumThreads();

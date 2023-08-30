@@ -8,7 +8,9 @@ namespace fsc {
 	
 // class DeviceBase
 
-int DeviceBase::PTR_SLOT = 0;
+namespace {
+	int PTR_SLOT = 0;
+}
 
 DeviceBase::DeviceBase(void* brand) :
 	brand(brand)
@@ -50,13 +52,50 @@ Own<DeviceMappingBase> DeviceMappingBase::addRef() {
 	return kj::addRef(*this);
 }
 
+// === CPUDeviceBase ===
+
+void CPUDeviceBase::updateDevice(kj::byte* devicePtr, const kj::byte* hostPtr, size_t size) {
+	if(devicePtr == nullptr)
+		return;
+	
+	memcpy(devicePtr, hostPtr, size);
+}
+	
+void CPUDeviceBase::updateHost(kj::byte* hostPtr, const kj::byte* devicePtr, size_t size) {
+	if(devicePtr == nullptr)
+		return;
+	
+	memcpy(hostPtr, devicePtr, size);
+}
+
+kj::byte* CPUDeviceBase::map(const kj::byte* hostPtr, size_t size, bool allowAlias) {
+	if(allowAlias)
+		return nullptr;
+	
+	return new byte[size];
+}
+
+void CPUDeviceBase::unmap(const kj::byte* hostPtr, kj::byte* devicePtr) {
+	if(devicePtr == nullptr)
+		return;
+	
+	delete[] devicePtr;
+}
+
+kj::byte* CPUDeviceBase::translateToDevice(kj::byte* hostPtr) {
+	return hostPtr;
+}
+
+Promise<void> CPUDeviceBase::emplaceBarrier() {
+	return READY_NOW;
+}
 
 // === CPUDevice ===
 
 int CPUDevice::BRAND = 0;
 
 CPUDevice::CPUDevice(unsigned int numThreads) :
-	DeviceBase(&BRAND),
+	CPUDeviceBase(&BRAND),
 	eigenDevice(createEigenDevice(numThreads))
 {}
 
@@ -69,48 +108,27 @@ Own<Eigen::ThreadPoolDevice> CPUDevice::createEigenDevice(unsigned int numThread
 	return poolDevice.attach(mv(threadPool));
 }
 
-void CPUDevice::updateDevice(kj::byte* devicePtr, const kj::byte* hostPtr, size_t size) {
-	if(devicePtr == nullptr)
-		return;
-	
-	memcpy(devicePtr, hostPtr, size);
-}
-	
-void CPUDevice::updateHost(kj::byte* hostPtr, const kj::byte* devicePtr, size_t size) {
-	if(devicePtr == nullptr)
-		return;
-	
-	memcpy(hostPtr, devicePtr, size);
-}
-
-kj::byte* CPUDevice::map(const kj::byte* hostPtr, size_t size, bool allowAlias) {
-	if(allowAlias)
-		return nullptr;
-	
-	return new byte[size];
-}
-
-void CPUDevice::unmap(const kj::byte* hostPtr, kj::byte* devicePtr) {
-	if(devicePtr == nullptr)
-		return;
-	
-	delete[] devicePtr;
-}
-
-kj::byte* CPUDevice::translateToDevice(kj::byte* hostPtr) {
-	return hostPtr;
-}
-
 Own<DeviceBase> CPUDevice::addRef() {
 	return kj::addRef(*this);
-}
-
-Promise<void> CPUDevice::emplaceBarrier() {
-	return READY_NOW;
 }
 
 unsigned int CPUDevice::estimateNumThreads() {
 	return std::thread::hardware_concurrency();
 }
+
+// === LoopDevice ===
+
+int LoopDevice::BRAND = 0;
+
+LoopDevice::LoopDevice() :
+	CPUDeviceBase(&BRAND)
+{}
+
+Own<DeviceBase> LoopDevice::addRef() {
+	static LoopDevice instance;
+	return kj::attachRef(instance);
+}
+
+
 
 }

@@ -22,6 +22,7 @@ using W7X = import "devices/w7x.capnp";
 enum ComputationDeviceType {
 	cpu @0;
 	gpu @1;
+	loop @2;
 }
 
 struct LocalConfig {
