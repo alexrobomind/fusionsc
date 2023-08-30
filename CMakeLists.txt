@@ -272,11 +272,14 @@ endif()
 set(BUILD_TESTING ${BUILD_TESTING_TMP} CACHE BOOL "" FORCE)
 set(BUILD_EXAMPLES ${BUILD_EXAMPLES_TMP} CACHE BOOL "" FORCE)
 
+add_subdirectory(vendor/capfuzz)
+
 add_library(deps INTERFACE)
 target_link_libraries(
 	deps
 	INTERFACE
 	Botan::botan
+	CapFuzz::capfuzz
 	CapnProto::capnp-rpc
 	CapnProto::capnp-json
 	CapnProto::capnp-websocket
