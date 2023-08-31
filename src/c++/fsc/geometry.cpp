@@ -13,6 +13,9 @@ namespace {
 		}
 		KJ_FAIL_REQUIRE("Unknown angle type");
 	}
+	
+	// Limit to 128 million grid cells
+	constexpr size_t MAX_GRID_SIZE = 1024 * 1024 * 128;
 }
 
 bool isBuiltin(Geometry::Reader in) {
@@ -618,6 +621,7 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 		Vec3u gridSize { grid.getNX(), grid.getNY(), grid.getNZ() };
 		
 		size_t totalSize = gridSize[0] * gridSize[1] * gridSize[2];
+		KJ_REQUIRE(totalSize <= MAX_GRID_SIZE, "Maximum indexing grid size exceeded");
 		
 		struct ElRefStruct {
 			uint64_t meshIdx;

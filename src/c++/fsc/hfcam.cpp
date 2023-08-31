@@ -12,6 +12,9 @@
 
 
 namespace fsc { namespace {
+
+// Restrict buffer size to 128MB
+static constexpr uint64_t MAX_BUFFER_SIZE = 1024 * 1024 * 128;
 	
 Temporary<HFCamProjection> createProjection(
 	uint32_t w, uint32_t h, // Screen space
@@ -544,6 +547,15 @@ struct CamProvider : public HFCamProvider::Server {;
 		mergeRequest.setNested(context.getParams().getGeometry());
 		
 		auto projection = context.getParams().getProjection();
+		
+		// Limit projection frame size
+		{
+			uint64_t h = projection.getHeight();
+			uint64_t w = projection.getWidth();
+			
+			// Restrict the maximum buffer we allocate
+			KJ_REQUIRE(w * h < MAX_BUFFER_SIZE, "Maximum allowed image size exceeded");
+		}
 		
 		// Create buffers
 		auto detBuf = heapHeld<Mat>(projection.getHeight(), projection.getWidth());
