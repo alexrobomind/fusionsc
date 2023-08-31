@@ -2,6 +2,7 @@ add_library(
 	capfuzz
 	
 	capfuzz.h
+	capfuzz-miniafl.h
 	capfuzz.cpp
 )
 

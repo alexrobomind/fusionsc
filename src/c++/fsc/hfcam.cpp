@@ -100,7 +100,7 @@ struct HFProjectionStruct {
 	
 	void load(HFCamProjection::Reader input) {
 		auto tData = input.getTransform();
-		for(auto i : kj::indices(tData))
+		for(auto i : kj::range(0, 16))
 			transform.data()[i] = tData[i];
 		
 		width = input.getWidth();

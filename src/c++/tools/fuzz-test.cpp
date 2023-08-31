@@ -1,7 +1,3 @@
-#ifndef __AFL_FUZZ_INIT
-#error "This file must be compiled with the AFL or AFL++ compiler"
-#endif
-
 #include <fsc/local.h>
 #include <fsc/services.h>
 #include <fsc/data.h>
@@ -12,6 +8,9 @@
 
 #include <capfuzz.h>
 #include <unistd.h>
+
+// Fallback that provides AFL macros if we are not compiling with AFL compiler
+#include <capfuzz-miniafl.h>
 
 using namespace fsc;
 
@@ -44,6 +43,7 @@ struct MainCls {
 			Temporary<LocalConfig> config;
 			config.getCpuBackend().getNumThreads().setFixed(1);
 			config.getWorkerLauncher().setOff();
+			config.setPreferredDeviceType(ComputationDeviceType::LOOP);
 			
 			RootService::Client rootService = createRoot(config.asReader());
 			
@@ -53,10 +53,10 @@ struct MainCls {
 			auto fuzzJob = capfuzz::runFuzzer(fuzzerData, targets.finish()).fork();
 			
 			// Wait until fuzzer job or timeout completes
-			fuzzJob.addBranch()
-				.catch_([](kj::Exception&& e){})
-				.exclusiveJoin(getActiveThread().timer().afterDelay(200 * kj::MILLISECONDS))
-				.wait(ws);
+			//fuzzJob.addBranch()
+			//	.catch_([](kj::Exception&& e){})
+			//	.exclusiveJoin(getActiveThread().timer().afterDelay(200 * kj::MILLISECONDS))
+			//	.wait(ws);
 			
 			// Check whether fuzzer job completed
 			if(fuzzJob.addBranch().poll(ws)) {
