@@ -151,9 +151,9 @@ EIGEN_DEVICE_FUNC inline void addFieldInterpKernel(const unsigned int idx, Field
 		}
 	}
 	
-	int i_r = midx[0];
+	int i_r   = midx[0];
 	int i_z   = midx[1];
-	int i_phi   = midx[2];
+	int i_phi = midx[2];
 
 	Vec3d x_grid = gridIn.xyz(i_phi, i_z, i_r);
 	

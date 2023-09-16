@@ -2,11 +2,13 @@
 
 #include "common.h"
 #include "data.h"
+#include "capi-lvn.h"
 
 #include <capnp/rpc.h>
 #include <fsc/local-vat-network.capnp.h>
 
 #include <atomic>
+#include <type_traits>
 
 namespace fsc { 
 
@@ -63,59 +65,8 @@ struct LocalVatNetwork : public LocalVatNetworkBase {
 	~LocalVatNetwork();
 	
 private:
-	struct Message {
-		capnp::MallocMessageBuilder builder;
-		kj::ListLink<Message> link;
-		kj::Array<kj::AutoCloseFd> fds;
-		
-		Message(unsigned int firstSegmentSize);
-		
-		std::atomic<uint8_t> refCount = 1;
-	};
-
-	struct Connection : public LocalVatNetworkBase::Connection, public kj::AtomicRefcounted {
-		Connection();
-		~Connection();
-			
-		lvn::VatId::Reader getPeerVatId() override;
-		Own<capnp::OutgoingRpcMessage> newOutgoingMessage(unsigned int firstSegmentSize) override;
-		Promise<Maybe<Own<capnp::IncomingRpcMessage>>> receiveIncomingMessage() override;
-		Promise<void> shutdown() override;
-		
-		Own<const Connection> addRef() const;
-		
-		struct SharedData {
-			bool isClosed = false;
-			
-			kj::List<Message, &Message::link> queue;
-			Maybe<Own<kj::CrossThreadPromiseFulfiller<void>>> readyFulfiller;
-		};
-		
-		kj::MutexGuarded<SharedData> data;
-		Maybe<Own<const Connection>> peer;
-		Temporary<lvn::VatId> peerId;
-		
-		void post(Message* msg) const;
-		
-		struct IncomingMessage;
-		struct OutgoingMessage;
-	};
-	
-	struct AcceptEntry {
-		Own<Connection> conn;
-		kj::ListLink<AcceptEntry> link;
-	};
-	
-	struct SharedData {
-		kj::List<AcceptEntry, &AcceptEntry::link> acceptQueue;
-		Maybe<Own<kj::CrossThreadPromiseFulfiller<void>>> readyFulfiller;
-	};
-	
-	void acceptPeer(Own<Connection> conn) const;
-	
-	Own<const LocalVatHub> hub;
-	Temporary<lvn::VatId> vatId;
-	kj::MutexGuarded<SharedData> data;
+	struct Impl;
+	Own<Impl> pImpl;
 };
 
 }

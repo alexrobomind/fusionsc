@@ -17,6 +17,17 @@ const testGrid : ToroidalGrid = (
 	nPhi = 16
 );
 
+const testGrid2 : ToroidalGrid = (
+	rMin = 0.1,
+	rMax = 1.1,
+	zMin = -1.1,
+	zMax = 1,
+	nSym = 3,
+	nR = 18,
+	nZ = 11,
+	nPhi = 20
+);
+
 const wireField : MagneticField = (
 	filamentField = (
 		current = 1.0,

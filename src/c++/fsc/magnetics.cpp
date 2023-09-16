@@ -70,6 +70,8 @@ struct FieldCalculation {
 		
 		// Write field into native format
 		Field otherField(3, otherGrid.nR, otherGrid.nZ, otherGrid.nPhi);
+		KJ_REQUIRE(otherField.size() == data.size());
+		
 		for(int i = 0; i < otherField.size(); ++i) {
 			otherField.data()[i] = data[i];
 		}
@@ -78,7 +80,7 @@ struct FieldCalculation {
 			return FSC_LAUNCH_KERNEL(
 				kernels::addFieldInterpKernel,
 				*_device, 
-				field -> getHost().size(),
+				field -> getHost().size() / 3,
 				FSC_KARG(field, NOCOPY), grid,
 				FSC_KARG(otherField, ALIAS_IN), otherGrid,
 				scale

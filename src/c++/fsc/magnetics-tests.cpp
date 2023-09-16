@@ -96,6 +96,50 @@ TEST_CASE("build-field") {
 	}			
 }
 
+TEST_CASE("build-field-interp") {
+	auto field = WIRE_FIELD.get();
+	
+	Library l = newLibrary();
+	LibraryThread lt = l -> newThread();
+	auto& ws = lt->waitScope();
+	
+	auto grid1 = TEST_GRID.get();
+	auto grid2 = TEST_GRID2.get();
+	auto session = newFieldCalculator(kj::refcounted<CPUDevice>(CPUDevice::estimateNumThreads()));
+	
+	// Compute field on standard grid
+	auto cr1 = session.computeRequest();
+	cr1.setField(WIRE_FIELD.get());
+	cr1.setGrid(grid1);
+	
+	auto result1 = cr1.send().wait(ws);
+	
+	auto cr2 = session.computeRequest();
+	cr2.setField(WIRE_FIELD.get());
+	cr2.setGrid(grid2);
+	
+	auto result2 = cr2.send().wait(ws);
+	
+	auto cr3 = session.computeRequest();
+	auto sum = cr3.getField().initSum(2);
+	sum[0].setComputedField(result1.getComputedField());
+	sum[1].setComputedField(result2.getComputedField());
+	cr3.setGrid(grid1);
+	
+	auto result3 = cr3.send().wait(ws);
+	
+	LocalDataRef<Float64Tensor> ref1 = lt->dataService().download(result1.getComputedField().getData()).wait(ws);
+	LocalDataRef<Float64Tensor> ref2 = lt->dataService().download(result3.getComputedField().getData()).wait(ws);
+	
+	auto data1 = ref1.get().getData();
+	auto data2 = ref2.get().getData();
+	
+	KJ_REQUIRE(data1.size() == data2.size());
+	for(auto i : kj::indices(data1)) {
+		KJ_REQUIRE(std::abs(2 * data1[i] - data2[i]) < 0.05);
+	}
+}
+
 #ifdef FSC_WITH_CUDA
 
 TEST_CASE("build-field-gpu") {
