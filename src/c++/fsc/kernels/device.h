@@ -63,7 +63,9 @@ struct DeviceMapping : public DeviceMappingBase {
 	DeviceMapping(T newTarget, DeviceBase& device, bool allowAlias) :
 		DeviceMappingBase(device),
 		target(newTarget)
-	{}
+	{
+		static_assert(is_trivially_copyable<T>::value, "Default mappings only work for trivially copyable types");
+	}
 
 	void doUpdateDevice() override {}
 	void doUpdateHost() override {}
@@ -92,14 +94,6 @@ using DeviceMappingType = decltype(mapToDevice(std::declval<T>(), std::declval<D
 template<typename T>
 using DeviceType = decltype(std::declval<DeviceMappingType<T>>() -> get());
 
-// ---------------------- Mapping type for simple arrays -----------------------------
-
-template<typename T>
-struct DeviceMapping<kj::Array<T>>;
-
-template<typename T>
-struct DeviceMapping<kj::Array<const T>>;
-
 // ---------------------- Devices ----------------------------------------------------
 
 struct CPUDeviceBase : public DeviceBase {
@@ -123,12 +117,9 @@ struct CPUDevice : public CPUDeviceBase, public kj::Refcounted {
 	
 	Own<DeviceBase> addRef() override;
 	
-	Own<Eigen::ThreadPoolDevice> eigenDevice;
-	
 	static unsigned int estimateNumThreads();
-
-private:
-	static Own<Eigen::ThreadPoolDevice> createEigenDevice(unsigned int numThreads);
+	
+	Own<Eigen::ThreadPoolDevice> eigenDevice;
 };
 
 struct LoopDevice : public CPUDeviceBase {
@@ -145,5 +136,3 @@ struct GPUDevice : public DeviceBase, public kj::Refcounted {
 */
 
 }
-
-#include "device-inl.h"

@@ -8,6 +8,7 @@
 #include "eigen.h"
 #include "kernels.h"
 #include "device.h"
+#include "memory.h"
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 	#define FSC_WIRE_MATCHES_NATIVE

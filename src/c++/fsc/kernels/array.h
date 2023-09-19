@@ -1,3 +1,8 @@
+#pragma once
+
+#include "../common.h"
+#include "device.h"
+
 namespace fsc {
 
 template<typename T>

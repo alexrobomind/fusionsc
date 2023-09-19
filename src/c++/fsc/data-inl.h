@@ -5,6 +5,7 @@
 #include <unordered_map>
 
 #include "typing.h"
+#include "memory.h"
 
 namespace fsc {
 

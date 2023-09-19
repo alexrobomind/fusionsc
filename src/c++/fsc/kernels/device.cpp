@@ -92,6 +92,15 @@ Promise<void> CPUDeviceBase::emplaceBarrier() {
 
 // === CPUDevice ===
 
+namespace { 
+	Own<Eigen::ThreadPoolDevice> createEigenDevice(unsigned int numThreads) {
+		Own<Eigen::ThreadPoolInterface> threadPool = kj::heap<Eigen::ThreadPool>(numThreads);
+		Own<Eigen::ThreadPoolDevice> poolDevice = kj::heap<Eigen::ThreadPoolDevice>(threadPool.get(), numThreads);
+		
+		return poolDevice.attach(mv(threadPool));
+	}
+}
+
 int CPUDevice::BRAND = 0;
 
 CPUDevice::CPUDevice(unsigned int numThreads) :
@@ -100,13 +109,6 @@ CPUDevice::CPUDevice(unsigned int numThreads) :
 {}
 
 CPUDevice::~CPUDevice() {}
-
-Own<Eigen::ThreadPoolDevice> CPUDevice::createEigenDevice(unsigned int numThreads) {
-	Own<Eigen::ThreadPoolInterface> threadPool = kj::heap<Eigen::ThreadPool>(numThreads);
-	Own<Eigen::ThreadPoolDevice> poolDevice = kj::heap<Eigen::ThreadPoolDevice>(threadPool.get(), numThreads);
-	
-	return poolDevice.attach(mv(threadPool));
-}
 
 Own<DeviceBase> CPUDevice::addRef() {
 	return kj::addRef(*this);

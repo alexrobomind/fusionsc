@@ -2,7 +2,7 @@
 
 #include <cupnp/cupnp.h>
 #include "kernels.h"
-#include "data.h"
+#include "../data.h"
 
 #include <capnp/serialize.h>
 
