@@ -30,6 +30,14 @@ using kj::Maybe;
 
 using kj::mv;
 
+enum class NameUsage {
+	RAW, USE_MEMBER
+};
+
+enum class ClassType {
+	ROOT, BUILDER, READER
+};
+
 CodeGeneratorRequest::Reader request;
 StringTree methodDefinitions;
 
@@ -186,8 +194,9 @@ kj::StringTree cppTypeName(Type::Reader type, uint64_t scopeId, Brand::Reader sc
 		case Type::UINT64: return strTree("uint64_t");
 		case Type::FLOAT32: return strTree("float");
 		case Type::FLOAT64: return strTree("double");
-		case Type::TEXT: return strTree(capnpType ? "capnp::Text" : "cupnp::Text");
-		case Type::DATA: return strTree(capnpType ? "capnp::Data" : "cupnp::Data");
+		
+		case Type::TEXT: result = strTree("cupnp::Text"); break;
+		case Type::DATA: result = strTree("cupnp::Data"); break;
 		
 		case Type::ENUM: {
 			auto enumType = type.getEnum();
@@ -243,7 +252,6 @@ kj::StringTree cppTypeName(Type::Reader type, uint64_t scopeId, Brand::Reader sc
 		case ClassType::BUILDER: return strTree(mv(result), "::Builder");
 		case ClassType::READER: return strTree(mv(result), "::Reader");
 		case ClassType::ROOT: return result;
-		case ClassType::CAPNP_ROOT: return result;
 	}
 }
 
@@ -285,14 +293,6 @@ kj::StringTree nodeName(uint64_t nodeId, CodeGeneratorRequest::Reader request) {
 	
 	return nodeName;
 }
-
-enum class NameUsage {
-	RAW, USE_MEMBER
-};
-
-enum class ClassType {
-	ROOT, BUILDER, READER, CAPNP_ROOT
-};
 
 // Returns the C++ expression we have to use to refer to this node's generated type.
 kj::StringTree cppNodeTypeName(uint64_t nodeId, Brand::Reader nodeBrand, uint64_t scopeId, Brand::Reader scopeBrand, ClassType classType, NameUsage usage) {
