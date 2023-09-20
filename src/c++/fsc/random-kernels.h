@@ -10,7 +10,7 @@ struct MT19937 {
 	uint32_t state[N];
 	uint16_t index = 0;
 	
-	CUPNP_FUNCTION MT19937(const cu::MT19937State input) :
+	CUPNP_FUNCTION MT19937(cu::MT19937State::Reader input) :
 		index(input.getIndex())
 	{
 		for(int i = 0; i < N; ++i) {
@@ -18,7 +18,7 @@ struct MT19937 {
 		}
 	}
 	
-	CUPNP_FUNCTION void save(cu::MT19937State output) {
+	CUPNP_FUNCTION void save(cu::MT19937State::Builder output) {
 		output.setIndex(index);
 		for(int i = 0; i < N; ++i)
 			output.mutateVector().set(i, state[i]);

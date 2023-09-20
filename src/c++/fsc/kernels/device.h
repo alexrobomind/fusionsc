@@ -1,7 +1,7 @@
 #pragma once
 
-#include "common.h"
-#include "eigen.h"
+#include "../common.h"
+#include "../eigen.h"
 
 #include <type_traits>
 
@@ -64,7 +64,7 @@ struct DeviceMapping : public DeviceMappingBase {
 		DeviceMappingBase(device),
 		target(newTarget)
 	{
-		static_assert(is_trivially_copyable<T>::value, "Default mappings only work for trivially copyable types");
+		static_assert(std::is_trivially_copyable<T>::value, "Default mappings only work for trivially copyable types");
 	}
 
 	void doUpdateDevice() override {}

@@ -221,7 +221,7 @@ struct SlabFieldInterpolator {
 	NDInterpolator<3, Strategy> interpolator;
 	using Axis = typename NDInterpolator<3, Strategy>::Axis;
 	
-	EIGEN_DEVICE_FUNC SlabFieldInterpolator(const Strategy& strategy, const cu::ToroidalGrid grid) :
+	EIGEN_DEVICE_FUNC SlabFieldInterpolator(const Strategy& strategy, cu::ToroidalGrid::Reader grid) :
 		interpolator(strategy, {
 			Axis(0, 2 * fsc::pi / grid.getNSym(), grid.getNPhi()),
 			Axis(grid.getZMin(), grid.getZMax(), grid.getNZ() - 1),

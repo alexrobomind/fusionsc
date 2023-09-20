@@ -31,9 +31,6 @@ add_library(
 	networking.h
 	networking.cpp
 	
-	cudata.h
-	cudata.cpp
-	
 	compression.h
 	compression.cpp
 	
@@ -67,19 +64,16 @@ add_library(
 	magnetics.h
 	magnetics-kernels.h
 	magnetics.cpp
-	
-	device.h
-	device.cpp
+	magnetics-kernels.cpp
 	
 	offline.h
 	offline.cpp
 	
 	flt.h
 	flt-kernels.h
+	flt-kernels-impl.h
+	flt-kernels.cpp
 	flt.cpp
-	
-	kernels.h
-	kernels.cpp
 	
 	hfcam.h
 	hfcam.cpp
@@ -111,6 +105,19 @@ add_library(
 	
 	load-balancer.h
 	load-balancer.cpp
+	
+	kernels/array.h
+	kernels/device.h
+	kernels/karg.h
+	kernels/kernels.h
+	kernels/launch.h
+	kernels/launch-inl.h
+	kernels/message.h
+	kernels/tensor.h
+	
+	kernels/device.cpp
+	kernels/device-dummy.cpp
+	kernels/message.cpp
 )
 
 target_link_libraries(fsc PUBLIC deps cupnp fsc-service-genapi)

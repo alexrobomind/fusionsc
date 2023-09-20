@@ -37,6 +37,10 @@ struct DeviceMapping<kj::Array<T>> : public DeviceMappingBase {
 	kj::ArrayPtr<T> get() {
 		return deviceArray;
 	}
+	
+	kj::ArrayPtr<T> getHost() {
+		return hostArray;
+	}
 };
 
 template<typename T>
@@ -70,6 +74,10 @@ struct DeviceMapping<kj::Array<const T>> : public DeviceMappingBase {
 	
 	kj::ArrayPtr<T> get() {
 		return deviceArray;
+	}
+	
+	kj::ArrayPtr<const T> getHost() {
+		return hostArray;
 	}
 };
 

@@ -1,7 +1,13 @@
 #include "flt-kernels.h"
-#include "cudata.h"
-#include "kernels.h"
+
+#include "kernels/launch.h"
+#include "kernels/message.h"
+#include "kernels/tensor.h"
+#include "kernels/karg.h"
+
 #include "flt.h"
+#include "tensor.h"
+#include "random-kernels.h"
 
 #include <algorithm>
 
@@ -34,16 +40,10 @@ struct TraceCalculation {
 	constexpr static size_t EVENTBUF_SIZE_NOGEO = 100;
 		
 	struct Round {
-		DeviceMappingType<CuTypedMessageBuilder<
-			FLTKernelData, cu::FLTKernelData
-		>> kernelData;
-		
-		DeviceMappingType<CuTypedMessageBuilder<
-			FLTKernelRequest, cu::FLTKernelRequest
-		>> kernelRequest;
+		FSC_BUILDER_MAPPING(::fsc, FLTKernelData) kernelData;
+		FSC_BUILDER_MAPPING(::fsc, FLTKernelRequest) kernelRequest;
 		
 		kj::Vector<size_t> participants;
-		
 		size_t upperBound;
 	};
 	
@@ -56,22 +56,12 @@ struct TraceCalculation {
 	kj::Vector<Round> rounds;
 	
 	uint32_t ROUND_STEP_LIMIT = 1000000;
-		
-	DeviceMappingType<CuTypedMessageBuilder<
-		IndexedGeometry, cu::IndexedGeometry
-	>> indexedGeometry;
 	
-	DeviceMappingType<CuTypedMessageReader<
-		IndexedGeometry::IndexData, cu::IndexedGeometry::IndexData
-	>> indexData;
+	FSC_BUILDER_MAPPING(::fsc, IndexedGeometry) indexedGeometry;
 	
-	DeviceMappingType<CuTypedMessageReader<
-		MergedGeometry, cu::MergedGeometry
-	>> geometryData;
-	
-	DeviceMappingType<CuTypedMessageReader<
-		ReversibleFieldlineMapping, cu::ReversibleFieldlineMapping
-	>> mappingData;
+	FSC_READER_MAPPING(::fsc, IndexedGeometry::IndexData) indexData;
+	FSC_READER_MAPPING(::fsc, MergedGeometry) geometryData;
+	FSC_READER_MAPPING(::fsc, ReversibleFieldlineMapping) mappingData;
 	
 	uint32_t eventBufferSize = 0;
 		
@@ -88,24 +78,11 @@ struct TraceCalculation {
 		
 		request(mv(newRequest)),
 		
-		indexedGeometry(mapToDevice(
-			cuBuilder<IndexedGeometry, cu::IndexedGeometry>(
-				Temporary<IndexedGeometry>(geometryIndex)
-			),
-			device, true
-		)),
-		indexData(mapToDevice(
-			cuReader<IndexedGeometry::IndexData, cu::IndexedGeometry::IndexData>(indexData),
-			device, true
-		)),
-		geometryData(mapToDevice(
-			cuReader<MergedGeometry, cu::MergedGeometry>(geometryData),
-			device, true
-		)),
-		mappingData(mapToDevice(
-			cuReader<ReversibleFieldlineMapping, cu::ReversibleFieldlineMapping>(mappingData),
-			device, true
-		))
+		indexedGeometry(FSC_MAP_BUILDER(::fsc, IndexedGeometry, Temporary<IndexedGeometry>(geometryIndex), device, true)),
+		
+		indexData(FSC_MAP_READER(::fsc, IndexedGeometry::IndexData, indexData, device, true)),
+		geometryData(FSC_MAP_READER(::fsc, MergedGeometry, geometryData, device, true)),
+		mappingData(FSC_MAP_READER(::fsc, ReversibleFieldlineMapping, mappingData, device, true))
 	{		
 		if(request.getServiceRequest().getRngSeed() == 0) {
 			uint64_t seed;

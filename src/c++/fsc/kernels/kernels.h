@@ -36,10 +36,13 @@ namespace internal {
 
 	// Macro to disable implicit instantiation of kernel (which is required to prevent
 	#define FSC_DECLARE_KERNEL(func, ...) \
+		void func(unsigned int, __VA_ARGS__); \
 		extern template void ::fsc::internal::gpuLaunch<decltype(&func), &func, __VA_ARGS__>(Eigen::GpuDevice&, size_t, __VA_ARGS__);
 
 #else
-	#define FSC_DECLARE_KERNEL(func, ...)
+	#define FSC_DECLARE_KERNEL(func, ...) \
+		void func(unsigned int, __VA_ARGS__);
+		
 #endif // FSC_WITH_CUDA
 
 }

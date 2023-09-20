@@ -1,10 +1,9 @@
 #include "services.h"
 #include "magnetics.h"
-#include "kernels.h"
+
 #include "geometry.h"
 #include "flt.h"
 #include "hfcam.h"
-#include "index.h"
 #include "fieldline-mapping.h"
 #include "local-vat-network.h"
 #include "ssh.h"
@@ -13,6 +12,8 @@
 #include "matcher.h"
 
 #include "devices/w7x.h"
+
+#include "kernels/device.h"
 
 #include <capnp/rpc-twoparty.h>
 #include <capnp/membrane.h>

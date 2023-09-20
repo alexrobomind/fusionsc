@@ -17,7 +17,9 @@ enum class Kind {
 	BLOB,
 	LIST,
 	STRUCT,
-	ANY_POINTER
+	ANY_POINTER,
+	INTERFACE,
+	ENUM
 };
 
 namespace internal {
@@ -44,7 +46,7 @@ namespace internal {
 }
 
 template<typename T>
-constexpr Kind kindFor = internal::KindFor_<T>::kind;
+constexpr Kind KindFor = internal::KindFor_<T>::kind;
 	
 template<typename T>
 struct CuFor_ { using Type = T; };
@@ -735,15 +737,15 @@ namespace internal {
 	 * Helper class that performs type deduction and constructor delegation
 	 * for the creation of list entries.
 	 */
-	template<typename T, capnp::Kind Kind = CAPNP_KIND(T)>
+	template<typename T, Kind kind = KindFor<T>>
 	struct AccessHelper { static_assert(sizeof(T) == 0, "Unimplemented"); };
 }
 
-template<typename T, Kind CPKind = kindFor<T>>
+template<typename T, Kind CPKind = KindFor<T>>
 struct List {
 	static constexpr Kind kind = Kind::LIST;
 	
-private:
+public:
 	struct Common {
 		uint32_t listSize;
 		uint32_t elementSize;
@@ -863,18 +865,19 @@ private:
 		CUPNP_FUNCTION ElementType operator*() { return list[i]; }
 	};
 	
-	using Helper = cupnp::AccessHelper<T, CPKind>;
+	using Helper = ::cupnp::internal::AccessHelper<T, CPKind>;
 	
-public:
 	struct Reader : public Common {
+		using Common::Common;
+		
 		using Iterator = ListIterator<Reader, typename Helper::ReaderType>;
 	
 		CUPNP_FUNCTION Iterator begin() { return Iterator(*this, 0); }
-		CUPNP_FUNCTION Iterator end() { return iterator(*this, size()); }
+		CUPNP_FUNCTION Iterator end() { return iterator(*this, this -> size()); }
 		
 		CUPNP_FUNCTION typename Helper::ReaderType operator[] (unsigned int i) const {
-			CUPNP_REQUIRE(i < size());
-			return cupnp::ListHelper<T, CPKind>::get(this, i);
+			CUPNP_REQUIRE(i < this -> size());
+			return Helper::get(this, i);
 		}
 		
 		CUPNP_FUNCTION Reader slice(size_t begin, size_t end) const {
@@ -882,20 +885,27 @@ public:
 		}
 		
 		CUPNP_FUNCTION const unsigned char* data() const {
-			return listStart.ptr;
+			return this -> listStart.ptr;
 		}
 	};
 	
 	struct Builder : public Common {
+		using Common::Common;
+		
+		using Iterator = ListIterator<Builder, typename Helper::BuilderType>;
+	
+		CUPNP_FUNCTION Iterator begin() { return Iterator(*this, 0); }
+		CUPNP_FUNCTION Iterator end() { return iterator(*this, this -> size()); }
+		
 		CUPNP_FUNCTION typename Helper::BuilderType operator[] (unsigned int i) const {
-			CUPNP_REQUIRE(i < size());
-			return cupnp::ListHelper<T, CPKind>::getW(this, i);
+			CUPNP_REQUIRE(i < this -> size());
+			return Helper::get(this, i);
 		}
 		
 		template<typename T2>
 		CUPNP_FUNCTION void set(unsigned int i, T2 newVal) {
-			CUPNP_REQUIRE(i < size());
-			return cupnp::ListHelper<T, CPKind>::set(this, i, newVal);
+			CUPNP_REQUIRE(i < this -> size());
+			return Helper::set(this, i, newVal);
 		}
 		
 		CUPNP_FUNCTION List<T> slice(size_t begin, size_t end) {
@@ -903,7 +913,7 @@ public:
 		}
 		
 		CUPNP_FUNCTION unsigned char* data() {
-			return listStart.ptr;
+			return this -> listStart.ptr;
 		}
 	};
 };
@@ -913,7 +923,7 @@ namespace internal {
 	// at the beginning (for in-line composite lists) or derived from the element
 	// size in the list pointer.
 	template<typename T>
-	struct AccessHelper<T, capnp::Kind::STRUCT> {
+	struct AccessHelper<T, Kind::STRUCT> {
 		using ReaderType = typename T::Reader;
 		using BuilderType = typename T::Builder;
 		
@@ -939,7 +949,7 @@ namespace internal {
 	
 	// List types are stored as pointers.
 	template<typename T>
-	struct AccessHelper<T, capnp::Kind::LIST> {
+	struct AccessHelper<T, Kind::LIST> {
 		using ReaderType = typename T::Reader;
 		using BuilderType = typename T::Builder;
 		
@@ -952,7 +962,7 @@ namespace internal {
 		}
 		
 		template<typename T2>
-		static CUPNP_FUNCTION void set(const typename List<T>::Builder<T>* list, uint32_t element, T2 value) {
+		static CUPNP_FUNCTION void set(const typename List<T>::Builder* list, uint32_t element, T2 value) {
 			static_assert(sizeof(T) == 0, "cupnp::List<T>::set is only supported for primitive T");
 		}
 		
@@ -962,13 +972,13 @@ namespace internal {
 	
 	// Blobs are a special case of lists.
 	template<typename T>
-	struct AccessHelper<T, capnp::Kind::BLOB> : public AccessHelper<T, capnp::KIND::LIST> {
+	struct AccessHelper<T, Kind::BLOB> : public AccessHelper<T, Kind::LIST> {
 	};
 	
 	template<typename T>
-	struct AccessHelper<T, capnp::Kind::ANY_POINTER> {
-		using ReaderType = AnyPointer::Reader;
-		using BuilderType = AnyPointer::Builder;
+	struct AccessHelper<T, Kind::ANY_POINTER> {
+		using ReaderType = typename T::Reader;
+		using BuilderType = typename T::Builder;
 		
 		static CUPNP_FUNCTION ReaderType get(const typename List<T>::Reader* list, uint32_t element) {
 			return getPointer<ReaderType>(list->listStart + list->elementSize * element);
@@ -979,7 +989,29 @@ namespace internal {
 		}
 		
 		template<typename T2>
-		static CUPNP_FUNCTION void set(const typename List<T>::Builder<T>* list, uint32_t element, T2 value) {
+		static CUPNP_FUNCTION void set(const typename List<T>::Builder* list, uint32_t element, T2 value) {
+			static_assert(sizeof(T) == 0, "cupnp::List<T>::set is only supported for primitive T");
+		}
+		
+		static CUPNP_FUNCTION bool validList(const typename List<T>::Common* list) { return list->sizeEnum == 7 || list->sizeEnum == 6; }
+		static CUPNP_FUNCTION T getDefault() { return T(0, nullptr); }
+	};
+	
+	template<typename T>
+	struct AccessHelper<T, Kind::INTERFACE> {
+		using ReaderType = T;
+		using BuilderType = T;
+		
+		static CUPNP_FUNCTION ReaderType get(const typename List<T>::Reader* list, uint32_t element) {
+			return getPointer<ReaderType>(list->listStart + list->elementSize * element);
+		}
+		
+		static CUPNP_FUNCTION BuilderType get(const typename List<T>::Builder* list, uint32_t element) {
+			return getPointer<BuilderType>(list->listStart + list->elementSize * element);
+		}
+		
+		template<typename T2>
+		static CUPNP_FUNCTION void set(const typename List<T>::Builder* list, uint32_t element, T2 value) {
 			static_assert(sizeof(T) == 0, "cupnp::List<T>::set is only supported for primitive T");
 		}
 		
@@ -990,7 +1022,7 @@ namespace internal {
 	// Primitives, like structs, are stored in-line in the list, and must be accessed
 	// directly. Contrary to all other value types, we support setting these as well.
 	template<typename T>
-	struct AccessHelper<T, capnp::Kind::PRIMITIVE> {
+	struct AccessHelper<T, Kind::PRIMITIVE> {
 		using ReaderType = T;
 		using BuilderType = T;
 		
@@ -998,7 +1030,7 @@ namespace internal {
 			return (list->listStart + list->elementSize * element).template read<T>();
 		}
 		
-		static CUPNP_FUNCTION void set(const typename List<T>::Common* list, uint32_t element, T value) {
+		static CUPNP_FUNCTION void set(const typename List<T>::Builder* list, uint32_t element, T value) {
 			(list->listStart + list->elementSize * element).template write<T>(value);
 		}
 		
@@ -1023,9 +1055,48 @@ namespace internal {
 		static CUPNP_FUNCTION T getDefault() { return (T) 0; }
 	};
 	
+	// Primitives, like structs, are stored in-line in the list, and must be accessed
+	// directly. Contrary to all other value types, we support setting these as well.
+	template<typename T>
+	struct AccessHelper<T, Kind::ENUM> {
+		using ReaderType = T;
+		using BuilderType = T;
+		
+		static CUPNP_FUNCTION T get(const typename List<T>::Common* list, uint32_t element) {
+			return static_cast<T>((list->listStart + list->elementSize * element).template read<uint16_t>());
+		}
+		
+		static CUPNP_FUNCTION void set(const typename List<T>::Builder* list, uint32_t element, T value) {
+			(list->listStart + list->elementSize * element).template write<uint16_t>(static_cast<uint16_t>(value));
+		}
+		
+		// Primitive lists can be inline composite lists (tag 7) or any non-pointer list (tag 6)
+		// For inline composite lists, the element size 
+		static CUPNP_FUNCTION bool validList(const typename List<T>::Common* list ) {
+			// Boolean and non-boolean interpretations are incompatible
+			if(list->sizeEnum == 1)
+				return false;
+			
+			// Pointer lists are not allowed as primitivers
+			if(list->sizeEnum == 6)
+				return false;
+			
+			// Inline composite lists must at least hold the contents
+			if(list->sizeEnum == 7)
+				return list->elementSize >= sizeof(uint16_t);
+			
+			// Non-composite list must match exactly
+			return list->elementSize == sizeof(uint16_t);
+		}
+		static CUPNP_FUNCTION T getDefault() { return (T) 0; }
+	};
+	
 	// Bool values need some special handling, as they are not aligned on byte boundaries.
 	template<>
-	struct AccessHelper<bool, capnp::Kind::PRIMITIVE> {
+	struct AccessHelper<bool, Kind::PRIMITIVE> {
+		using ReaderType = bool;
+		using BuilderType = bool;
+		
 		static CUPNP_FUNCTION bool get(const List<bool>::Common* list, uint32_t element) {
 			auto loc = list->listStart + element / 8;
 			uint8_t byteVal = loc.read<uint8_t>();
@@ -1122,7 +1193,7 @@ struct Text {
 };
 
 struct AnyPointer {
-	static constexpr ANY_POINTER kind = Kind::ANY_POINTER;
+	static constexpr Kind kind = Kind::ANY_POINTER;
 	
 	struct Reader {
 		uint64_t structure;

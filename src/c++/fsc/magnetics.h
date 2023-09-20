@@ -10,6 +10,8 @@
 
 #include "grids.h"
 
+#include "kernels/device.h"
+
 namespace fsc {
 	
 /**

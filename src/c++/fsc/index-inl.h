@@ -1,7 +1,7 @@
 // DO NOT INCLUDE THIS FILE DIRECTLY
 // include index.h instead
 
-#include "cudata.h"
+#include "kernels/message.h"
 #include "intervals.h"
 
 #pragma once
@@ -28,7 +28,7 @@ inline CUPNP_FUNCTION typename KDTreeIndex<dims>::FindResult KDTreeIndex<dims>::
 }
 
 template<int dims>
-inline CUPNP_FUNCTION void KDTreeIndex<dims>::findNearest(const Vec<double, dims>& x, FindResult& currentClosest, cu::KDTree::Node node) {
+inline CUPNP_FUNCTION void KDTreeIndex<dims>::findNearest(const Vec<double, dims>& x, FindResult& currentClosest, cu::KDTree::Node::Reader node) {
 	CUPNP_REQUIRE(!node.hasLeaf());
 	
 	// Cut down the scan range to the lowest maximum possible distance over all children.
@@ -74,7 +74,7 @@ inline CUPNP_FUNCTION void KDTreeIndex<dims>::findNearest(const Vec<double, dims
 }
 
 template<int dims>
-Vec<double, dims> KDTreeIndex<dims>::closestPoint(Vec<double, dims> x, cupnp::List<double> bounds) {
+Vec<double, dims> KDTreeIndex<dims>::closestPoint(Vec<double, dims> x, cupnp::List<double>::Reader bounds) {
 	for(int i = 0; i < dims; ++i) {
 		double min = bounds[2 * i];
 		double max = bounds[2 * i + 1];
@@ -90,7 +90,7 @@ Vec<double, dims> KDTreeIndex<dims>::closestPoint(Vec<double, dims> x, cupnp::Li
 }
 
 template<int dims>
-Vec<double, dims> KDTreeIndex<dims>::furthestPoint(Vec<double, dims> x, cupnp::List<double> bounds) {
+Vec<double, dims> KDTreeIndex<dims>::furthestPoint(Vec<double, dims> x, cupnp::List<double>::Reader bounds) {
 	for(int i = 0; i < dims; ++i) {
 		double min = bounds[2 * i];
 		double max = bounds[2 * i + 1];

@@ -25,10 +25,10 @@ struct RFLM {
 	inline EIGEN_DEVICE_FUNC double getFieldlinePosition(double phi);
 	inline EIGEN_DEVICE_FUNC void setFieldlinePosition(double newValue);
 	
-	inline EIGEN_DEVICE_FUNC RFLM(cu::ReversibleFieldlineMapping mapping);
+	inline EIGEN_DEVICE_FUNC RFLM(cu::ReversibleFieldlineMapping::Reader mapping);
 	inline EIGEN_DEVICE_FUNC RFLM(const RFLM& other) = default;
 	
-	cu::ReversibleFieldlineMapping mapping;
+	cu::ReversibleFieldlineMapping::Reader mapping;
 	Vec2d uv;
 	uint64_t currentSection;
 	double phi;
@@ -44,10 +44,10 @@ struct RFLM {
 	double phi2;
 	
 	struct TensorField {
-		cu::Float64Tensor reader;
+		cu::Float64Tensor::Reader reader;
 		RFLM& parent;
 		
-		TensorField(cu::Float64Tensor reader, RFLM& parent) :
+		TensorField(cu::Float64Tensor::Reader reader, RFLM& parent) :
 			reader(reader), parent(parent)
 		{}
 		
@@ -73,7 +73,7 @@ struct RFLM {
 
 private:
 	inline void activateSection(uint64_t iSection);
-	inline cu::ReversibleFieldlineMapping::Section activeSection();
+	inline cu::ReversibleFieldlineMapping::Section::Reader activeSection();
 	
 	inline EIGEN_DEVICE_FUNC void interpolate(double phi, Vec2d& rz, Mat2d& jacobian);
 	
@@ -84,7 +84,7 @@ private:
 
 // === class RFLM ===
 
-EIGEN_DEVICE_FUNC RFLM::RFLM(cu::ReversibleFieldlineMapping mapping) :
+EIGEN_DEVICE_FUNC RFLM::RFLM(cu::ReversibleFieldlineMapping::Reader mapping) :
 	mapping(mapping),
 	uv(0.5, 0.5),
 	currentSection(0),
@@ -124,7 +124,7 @@ EIGEN_DEVICE_FUNC void RFLM::activateSection(uint64_t iSection) {
 	// KJ_DBG("Activated section", iSection, phi1, phi2, nPhi, nZ, nR);
 }
 
-EIGEN_DEVICE_FUNC cu::ReversibleFieldlineMapping::Section RFLM::activeSection() {
+EIGEN_DEVICE_FUNC cu::ReversibleFieldlineMapping::Section::Reader RFLM::activeSection() {
 	return mapping.getSections()[currentSection];
 }
 

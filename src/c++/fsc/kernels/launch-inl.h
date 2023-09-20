@@ -54,33 +54,6 @@ inline void potentiallySynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& d) {
 
 #endif*/
 
-// ========================= Generic launcher ============================
-
-template<>
-struct KernelLauncher<DeviceBase> {
-	template<typename Kernel, Kernel func, typename... Params>
-	static Promise<void> launch(DeviceBase& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
-		#define FSC_HANDLE_TYPE(DevType) \
-			if(device.brand == &DevType::BRAND) \
-				return KernelLauncher<DevType>::launch<Kernel, func, Params...>(static_cast<DevType&>(device), n, cost, fwd<Params>(params)...);
-				
-		FSC_HANDLE_TYPE(CPUDevice);
-		FSC_HANDLE_TYPE(LoopDevice);
-		
-		#ifdef FSC_WITH_CUDA
-		FSC_HANDLE_TYPE(GpuDevice);
-		#endif
-		
-		#undef FSC_HANDLE_TYPE
-		
-		KJ_FAIL_REQUIRE(
-			"Unknown device brand. To launch kernels from a DeviceBase reference,"
-			" the device must be of one of the following types: fsc::CpuDevice"
-			" or fsc::GpuDevice"
-		);
-	}
-};
-
 // =========================== CPU launcher ==============================
 
 template<>
@@ -142,6 +115,8 @@ struct KernelLauncher<LoopDevice> {
 	
 #ifdef FSC_WITH_CUDA
 
+// =========================== GPU launcher ==============================
+
 
 template<>
 struct KernelLauncher<Eigen::GpuDevice> {
@@ -167,4 +142,31 @@ struct KernelLauncher<Eigen::GpuDevice> {
 
 #endif // FSC_WITH_CUDA
 
-}}
+// ========================= Generic launcher ============================
+
+template<>
+struct KernelLauncher<DeviceBase> {
+	template<typename Kernel, Kernel func, typename... Params>
+	static Promise<void> launch(DeviceBase& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+		#define FSC_HANDLE_TYPE(DevType) \
+			if(device.brand == &DevType::BRAND) \
+				return KernelLauncher<DevType>::launch<Kernel, func, Params...>(static_cast<DevType&>(device), n, cost, fwd<Params>(params)...);
+				
+		FSC_HANDLE_TYPE(CPUDevice);
+		FSC_HANDLE_TYPE(LoopDevice);
+		
+		#ifdef FSC_WITH_CUDA
+		FSC_HANDLE_TYPE(GpuDevice);
+		#endif
+		
+		#undef FSC_HANDLE_TYPE
+		
+		KJ_FAIL_REQUIRE(
+			"Unknown device brand. To launch kernels from a DeviceBase reference,"
+			" the device must be of one of the following types: fsc::CpuDevice"
+			" or fsc::GpuDevice"
+		);
+	}
+};
+
+}

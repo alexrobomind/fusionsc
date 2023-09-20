@@ -2,7 +2,13 @@
 
 #include "magnetics.h"
 #include "data.h"
-#include "kernels.h"
+#include "interpolation.h"
+
+#include "kernels/launch.h"
+#include "kernels/tensor.h"
+#include "kernels/message.h"
+#include "kernels/karg.h"
+
 #include "magnetics-kernels.h"
 
 namespace fsc {
@@ -127,10 +133,7 @@ struct FieldCalculation {
 	
 	void equilibrium(double scale, AxisymmetricEquilibrium::Reader equilibrium) {		
 		calculation = calculation.then([this, equilibrium = Temporary<AxisymmetricEquilibrium>(equilibrium), scale]() mutable {
-			auto mapped = mapToDevice(
-				cuBuilder<AxisymmetricEquilibrium, cu::AxisymmetricEquilibrium>(mv(equilibrium)),
-				*_device, true
-			);
+			auto mapped = FSC_MAP_BUILDER(fsc, AxisymmetricEquilibrium, mv(equilibrium), *_device, true);
 			
 			return FSC_LAUNCH_KERNEL(
 				kernels::eqFieldKernel,

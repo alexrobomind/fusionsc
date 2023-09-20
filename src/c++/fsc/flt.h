@@ -1,7 +1,7 @@
 #pragma once
 
 #include "local.h"
-#include "kernels.h"
+#include "kernels/device.h"
 
 #include <fsc/flt.capnp.h>
 

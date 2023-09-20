@@ -1,5 +1,7 @@
 #include "geometry.h"
 #include "poly.h"
+#include "data.h"
+#include "tensor.h"
 
 #include <kj/map.h>
 

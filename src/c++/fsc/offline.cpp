@@ -1,11 +1,10 @@
 #include "offline.h"
+#include "data.h"
 
 #include "geometry.h"
 #include "magnetics.h"
 
 #include <kj/map.h>
-
-#include "data.h"
 
 namespace fsc {
 
