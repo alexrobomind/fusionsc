@@ -339,6 +339,11 @@ inline capnp::Type typeFor<capnp::AnyList>(capnp::AnyList::Reader r) {
 	return capnp::schema::Type::AnyPointer::Unconstrained::LIST;
 }
 
+template<>
+inline capnp::Type typeFor<capnp::AnyPointer>(capnp::AnyPointer::Reader r) {
+	return capnp::schema::Type::AnyPointer::Unconstrained::ANY_KIND;
+}
+
 template<typename T>
 struct References_ { using Type = typename References_<capnp::FromClient<T>>::Type; };
 

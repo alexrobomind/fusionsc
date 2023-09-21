@@ -141,7 +141,7 @@ struct RootServer : public RootService::Server {
 		return READY_NOW;
 	}
 	
-	Promise<void> matcher(MatcherContext ctx) {
+	Promise<void> matcher(MatcherContext ctx) override {
 		ctx.initResults().setService(myMatcher);
 		return READY_NOW;
 	}

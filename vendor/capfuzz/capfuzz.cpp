@@ -90,12 +90,15 @@ struct FuzzInput {
 			case capnp::schema::Type::VOID:
 				return capnp::Void();
 			
-			case capnp::schema::Type::ENUM:
+			case capnp::schema::Type::ENUM: {
 				auto schema = type.asEnum();
 				auto enumerants = schema.getEnumerants();
 				
 				uint16_t idx = read<uint16_t>(enumerants.size());
 				return capnp::DynamicEnum(enumerants[idx]);
+			}
+			
+			default: break;
 		}
 		
 		KJ_FAIL_REQUIRE("Pointer / unknown type requested for schema read", type.which());
@@ -263,7 +266,7 @@ enum ProtocolOp {
 
 constexpr uint8_t UNTYPED_CAPS = 5;
 
-struct ProtocolState {
+struct ProtocolState : public InputBuilder::Context {
 	std::list<Import> imports;
 	std::list<Export> exports;
 	std::list<InboundCall> inboundCalls;
@@ -277,6 +280,8 @@ struct ProtocolState {
 	ProtocolState(kj::ArrayPtr<const byte> inputData, ProtocolConfig config) :
 		input(inputData), config(config)
 	{}
+	
+	~ProtocolState() noexcept {}
 	
 	void addImport(DynamicCapability::Client clt) {
 		auto hook = ClientHook::from(cp(clt));
@@ -305,6 +310,8 @@ struct ProtocolState {
 			
 			case OP_FULFILL: return doFulfill();
 			case OP_REJECT: return doReject();
+			
+			case N_OPS: break;
 		}
 		
 		KJ_FAIL_REQUIRE("Dead code encountered");
@@ -318,6 +325,16 @@ struct ProtocolState {
 	}
 
 private:
+	kj::Array<InputBuilder*> getBuilders(capnp::Type type) {
+		kj::Vector<InputBuilder*> result;
+		
+		for(auto builder : config.builders) {
+			for(auto i : kj::range(0, builder -> getWeight(type)))
+				result.add(builder);
+		}
+		
+		return result.releaseAsArray();
+	}
 	capnp::Capability::Client makeUntyped(uint8_t type) {
 		#define FROM_EXCEPTION(ExcType) capnp::Capability::Client(KJ_EXCEPTION(ExcType, "Error-client"))
 		switch(type) {
@@ -333,7 +350,7 @@ private:
 	}
 	
 	// Create a capability
-	DynamicCapability::Client getCap(InterfaceSchema is) {
+	DynamicCapability::Client getCapability(InterfaceSchema is) override {
 		auto generic = is.getGeneric();
 		
 		kj::Vector<DynamicCapability::Client> candidates;
@@ -353,19 +370,31 @@ private:
 			checkCap(exp.get());
 		}
 		
-		size_t nCapTypes = candidates.size() + UNTYPED_CAPS + 1;
+		auto builders = getBuilders(is);
+		
+		size_t nCapTypes = UNTYPED_CAPS + 1 + builders.size() + candidates.size();
 		size_t capType = input.read(nCapTypes);
 		
 		if(capType < UNTYPED_CAPS) {
 			return makeUntyped((uint8_t) capType).castAs<DynamicCapability>(is);
-		} else if(capType == UNTYPED_CAPS) {
+		}
+		capType -= UNTYPED_CAPS;
+		
+		if(capType < builders.size()) {
+			auto result = builders[capType] -> getCapability(is, *this).castAs<capnp::DynamicCapability>(is);
+			addImport(result);
+			return result;
+		}
+		capType -= builders.size();
+		
+		if(capType == 0) {
 			// Create new export
 			Export x(is);
 			exports.emplace_back(x);
 			return x.get();
 		}
+		capType -= 1;
 		
-		capType -= UNTYPED_CAPS + 1;
 		return candidates[capType];
 	}
 	
@@ -387,7 +416,15 @@ private:
 		}
 	}
 	
-	void fillStruct(DynamicStruct::Builder data) {
+	void fillStruct(DynamicStruct::Builder data) override {
+		auto builders = getBuilders(data.getSchema());
+		
+		size_t source = input.read(builders.size() + 1);
+		if(source < builders.size()) {
+			builders[source] -> fillStruct(data, *this);
+		}
+		source -= 1;
+		
 		auto setField = [&data, this](capnp::StructSchema::Field field) {
 			if(field.getProto().isGroup()) {
 				fillStruct(data.init(field).as<DynamicStruct>());
@@ -406,7 +443,7 @@ private:
 			} else if(type.isStruct()) {
 				fillStruct(data.init(field).as<DynamicStruct>());
 			} else if(type.isInterface()) {
-				data.set(field, getCap(type.asInterface()));
+				data.set(field, getCapability(type.asInterface()));
 			} else if(type.isText()) {
 				uint32_t blobSize = input.read(config.maxBlobSize);
 				input.fill(data.init(field, blobSize).as<capnp::Text>().asBytes());
@@ -447,7 +484,7 @@ private:
 			}
 		} else if(elType.isInterface()) {
 			for(auto i : kj::indices(data)) {
-				data.set(i, getCap(elType.asInterface()));
+				data.set(i, getCapability(elType.asInterface()));
 			}
 		} else if(elType.isText()) {
 			for(auto i : kj::indices(data)) {

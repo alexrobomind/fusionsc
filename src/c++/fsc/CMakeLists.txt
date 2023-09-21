@@ -64,15 +64,12 @@ add_library(
 	magnetics.h
 	magnetics-kernels.h
 	magnetics.cpp
-	magnetics-kernels.cpp
 	
 	offline.h
 	offline.cpp
 	
 	flt.h
 	flt-kernels.h
-	flt-kernels-impl.h
-	flt-kernels.cpp
 	flt.cpp
 	
 	hfcam.h

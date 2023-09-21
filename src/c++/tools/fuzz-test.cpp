@@ -7,12 +7,50 @@
 #include <kj/thread.h>
 
 #include <capfuzz.h>
-#include <unistd.h>
 
 // Fallback that provides AFL macros if we are not compiling with AFL compiler
 #include <capfuzz-miniafl.h>
 
+#ifdef __AFL_COMPILER
+#include <unistd.h>
+#endif
+
 using namespace fsc;
+
+struct DataPublisher : public capfuzz::InputBuilder {
+	constexpr static uint64_t DR_ID = capnp::typeId<fsc::DataRef<>>();
+	
+	static Maybe<capnp::StructSchema> payloadType(capnp::Type t) {
+		if(!t.isInterface())
+			return nullptr;
+		
+		auto schema = t.asInterface();
+		if(schema.getProto().getId() != DR_ID)
+			return nullptr;
+		
+		capnp::Type payload = schema.getBrandArgumentsAtScope(DR_ID)[0];
+		if(!payload.isStruct())
+			return nullptr;
+		
+		return payload.asStruct();
+	}
+	
+	size_t getWeight(capnp::Type t) override {
+		return payloadType(mv(t)) != nullptr ? 1 : 0;
+	}
+	
+	inline capnp::Capability::Client getCapability(capnp::InterfaceSchema schema, Context& ctx) override {
+		KJ_IF_MAYBE(pPayloadSchema, payloadType(schema)) {
+			capnp::MallocMessageBuilder msg;
+			auto root = msg.initRoot<capnp::DynamicStruct>(*pPayloadSchema);
+			
+			ctx.fillStruct(root);
+			return getActiveThread().dataService().publish(root.asReader());
+		}
+		
+		KJ_UNIMPLEMENTED();
+	};
+};
 
 __AFL_FUZZ_INIT();
 
@@ -47,10 +85,19 @@ struct MainCls {
 			
 			RootService::Client rootService = createRoot(config.asReader());
 			
-			// Run fuzzer
+			// Customize protocol
+			DataPublisher dp;
+			auto builders = kj::heapArray<capfuzz::InputBuilder*>({&dp});
+			
+			capfuzz::ProtocolConfig protoConfig;
+			protoConfig.builders = builders.asPtr();
+			
+			// Set up targets
 			auto targets = kj::heapArrayBuilder<capnp::DynamicCapability::Client>(1);
 			targets.add(rootService);
-			auto fuzzJob = capfuzz::runFuzzer(fuzzerData, targets.finish()).fork();
+			
+			// Run fuzzer
+			auto fuzzJob = capfuzz::runFuzzer(fuzzerData, targets.finish(), protoConfig).fork();
 			
 			// Wait until fuzzer job or timeout completes
 			//fuzzJob.addBranch()

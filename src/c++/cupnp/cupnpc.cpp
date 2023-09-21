@@ -954,7 +954,7 @@ StringTree generateStructSection(uint64_t nodeId, ClassType classType) {
 									builderName.flatten(), strTree("mutate", subName.asPtr(), "()"),
 									strTree(
 										"CUPNP_REQUIRE(nonDefault", subName.asPtr(), "());\n",
-										"return cupnp::mutatePointerField<", builderName.flatten(), ", ", slot.getOffset(), ">(dataSectionSize, pointerSectionSize, data);\n"
+										"return cupnp::mutatePointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(dataSectionSize, pointerSectionSize, data);\n"
 									)
 								)
 							);
@@ -968,12 +968,12 @@ StringTree generateStructSection(uint64_t nodeId, ClassType classType) {
 							
 								generateMethod(
 									nodeId, classType,
-									strTree("const ", readerName.flatten()), strTree("get", subName.asPtr(), "() const"),
+									strTree(readerName.flatten()), strTree("get", subName.asPtr(), "() const"),
 									strTree(
 										"if(cupnp::getDiscriminant<", asStruct.getDiscriminantOffset(), ">(dataSectionSize, data) != ", field.getDiscriminantValue(), ") {\n",
 										"	return cupnp::getPointer<", readerName.flatten(), ">(reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n",
 										"} \n",
-										"return cupnp::getPointerField<", readerName.flatten(), ", ", slot.getOffset(), ">(dataSectionSize, pointerSectionSize, data, reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n"
+										"return cupnp::getPointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(dataSectionSize, pointerSectionSize, data, reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n"
 									)
 								),
 								generateMethod(
@@ -997,9 +997,9 @@ StringTree generateStructSection(uint64_t nodeId, ClassType classType) {
 								
 								generateMethod(
 									nodeId, classType,
-									strTree("const ", readerName.flatten()), strTree("get", subName.asPtr(), "() const"),
+									strTree(readerName.flatten()), strTree("get", subName.asPtr(), "() const"),
 									strTree(
-										"return cupnp::getPointerField<", readerName.flatten(), ", ", slot.getOffset(), ">(dataSectionSize, pointerSectionSize, data, reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n"
+										"return cupnp::getPointerField<", typeName.flatten(), ", ", slot.getOffset(), ">(dataSectionSize, pointerSectionSize, data, reinterpret_cast<const capnp::word*>(", enumName.asPtr(), "_DEFAULT_VALUE));\n"
 									)
 								),
 								generateMethod(
