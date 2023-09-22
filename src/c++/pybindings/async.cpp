@@ -7,6 +7,12 @@
 
 #include <thread>
 
+#if _WIN32
+	#include <winsock2.h>
+#else
+	#include <sys/socket.h>
+#endif
+
 using namespace fscpy;
 
 namespace {
@@ -176,7 +182,12 @@ AsyncioEventPort::AsyncioEventPort() {
 	KJ_REQUIRE(instance == nullptr, "Can not have two asyncio event ports active in the same thread");
 	instance = this;
 	
-	wakeHelper = kj::heap<WakeHelper>(*this);
+	py::tuple socketPair = py::module_::import("socket").attr("socketpair")();
+	readSocket = socketPair[0];
+	readSocket.attr("setblocking")(false);
+	writeSocket = py::cast<kj::LowLevelAsyncIoProvider::Fd>(socketPair[1].attr("detach")());
+	
+	// wakeHelper = kj::heap<WakeHelper>(*this);
 	
 	loopRunner = py::cpp_function([](py::object future) {
 		// Either we have no active event loop, or this is a reentrant
@@ -197,21 +208,50 @@ AsyncioEventPort::AsyncioEventPort() {
 		AsyncioEventPort::instance -> prepareRunner();
 	});
 	
+	remoteRunner = py::cpp_function([](py::object future) {
+		if(AsyncioEventPort::instance == nullptr)
+			return;
+		
+		if(py::bool_(future.attr("cancelled")()))
+			return;
+		
+		AsyncioEventPort::instance -> armRunner();
+	});
+	
 	auto asyncio = py::module_::import("asyncio");
 	auto newLoop = asyncio.attr("get_event_loop")();
 	
-	adjustEventLoop(newLoop);;
+	adjustEventLoop(newLoop);
 }
 
 AsyncioEventPort::~AsyncioEventPort() {
 	py::gil_scoped_acquire withGil;
 		
 	instance = nullptr;
+	
+	#if _WIN32
+		closesocket(writeSocket);
+	#else
+		close(writeSocket);
+	#endif
 }
 
-void AsyncioEventPort::prepareRunner() {	
+void AsyncioEventPort::prepareRunner() {
 	readyFuture = eventLoop.attr("create_future")();
 	activeRunner = readyFuture.attr("add_done_callback")(loopRunner);
+	
+	if(listenTask.ptr() != nullptr) {
+		listenTask.attr("cancel")();
+	}
+	listenTask = eventLoop.attr("create_task")(eventLoop.attr("sock_recv")(readSocket, 64));
+	activeRemoteRunner = listenTask.attr("add_done_callback")(remoteRunner);
+	
+	// It can happen that the old "ready" future was fired by unprocessed cross-thread events.
+	// If that is the case, we need to manually kick the event loop to make sure this gets handled
+	// correctly.
+	if(woken || runnable) {
+		armRunner();
+	}
 }
 
 bool AsyncioEventPort::poll() {
@@ -276,9 +316,12 @@ void AsyncioEventPort::setRunnable(bool newVal) {
 }
 
 void AsyncioEventPort::wake() const {
-	if(!woken) {
-		woken = true; 
-		wakeHelper -> notify();
+	if(!woken.exchange(true)) {
+		// wakeHelper -> notify();
+		
+		// Note: This call uses POSIX or winsock2 API depending on platform
+		char bytes[1] = {0};
+		send(writeSocket, bytes, 1, 0);
 	}
 }
 
@@ -348,7 +391,7 @@ PythonContext::Instance& PythonContext::getInstance() {
 			
 			py::module_::import("atexit").attr("register")(
 				py::cpp_function([]() {
-					shutdownMode = true;
+					// shutdownMode = true;
 					
 					try {
 						PythonContext::stop();
@@ -747,6 +790,8 @@ py::object convertToAsyncioFuture(Promise<py::object> promise) {
 	// asyncio. To avoid this, we need to adjust now, when we have the
 	// correct loop at hand.
 	AsyncioEventPort::adjustEventLoop(loop);
+	
+	py::print(result);
 	
 	return result;
 }

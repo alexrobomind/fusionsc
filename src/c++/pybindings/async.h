@@ -60,12 +60,19 @@ private:
 	py::object loopRunner;
 	py::object readyFuture;
 	
+	py::object listenTask;
+	py::object remoteRunner;
+	
 	py::object activeRunner; // Protected by GIL
+	py::object activeRemoteRunner; // Protected by GIL
 	
 	mutable std::atomic<bool> woken = false;
 	
 	struct WakeHelper;
-	Own<WakeHelper> wakeHelper;
+	// Own<WakeHelper> wakeHelper;
+	
+	py::object readSocket;
+	kj::LowLevelAsyncIoProvider::Fd writeSocket;
 	
 	inline static thread_local AsyncioEventPort* instance = nullptr;
 	

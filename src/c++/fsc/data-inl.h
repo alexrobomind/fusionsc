@@ -177,12 +177,26 @@ private:
 	//! Pre-check for already-local refs and ongoing downloads
 	Promise<Maybe<Result>> checkLocalAndRegister();
 	
-	struct TransmissionReceiver;
+	struct TransmissionReceiver : public DataRef<capnp::AnyPointer>::Receiver::Server {
+		kj::ListLink<TransmissionReceiver> listLink;
+		Maybe<DownloadTask&> parent;
+		
+		TransmissionReceiver(DownloadTask<Result>& parent) ;
+		~TransmissionReceiver();
+		
+		Promise<void> begin(BeginContext ctx) override;
+		Promise<void> receive(ReceiveContext ctx) override;
+		Promise<void> done(DoneContext ctx) override;
+		
+		void clear();
+	};
 	
 	std::unique_ptr<Botan::HashFunction> hashFunction;
 	kj::Array<unsigned char> hashValue;
 	
 	capnp::ClientHook* registrationKey = nullptr;
+	
+	kj::List<TransmissionReceiver, &TransmissionReceiver::listLink> receivers;
 };
 
 /**
@@ -653,33 +667,6 @@ typename T::Reader internal::getDataRefAs(internal::LocalDataRefImpl& impl, cons
 namespace internal {
 
 template<typename Result>
-struct DownloadTask<Result>::TransmissionReceiver : public DataRef<capnp::AnyPointer>::Receiver::Server {
-	Own<DownloadTask<Result>> parent;
-	TransmissionReceiver(DownloadTask<Result>& parent) :
-		parent(parent.addRef())
-	{}
-	
-	Promise<void> begin(BeginContext ctx) override {
-		return parent -> beginDownload();
-	}
-	
-	Promise<void> receive(ReceiveContext ctx) override {
-		auto data = ctx.getParams().getData();
-		parent -> hashFunction -> update(data.begin(), data.size());
-		return parent -> receiveData(data);
-	}
-	
-	Promise<void> done(DoneContext ctx) override {
-		parent -> hashValue = kj::heapArray<unsigned char>(parent -> hashFunction -> output_length());
-		parent -> hashFunction -> final(parent -> hashValue.begin());
-		
-		parent -> metadata.setDataHash(parent -> hashValue.asBytes());
-		
-		return parent -> finishDownload();
-	}
-};
-
-template<typename Result>
 DownloadTask<Result>::DownloadTask(DataRef<capnp::AnyPointer>::Client src, Context ctx) :
 	src(src), hashFunction(getActiveThread().library() -> defaultHash()), result(nullptr), ctx(ctx)
 {
@@ -691,6 +678,10 @@ DownloadTask<Result>::~DownloadTask() {
 	if(registrationKey != nullptr) {
 		auto& active = ctx.registry -> activeDownloads;
 		active.erase(registrationKey);
+	}
+	
+	for(auto& recv : receivers) {
+		recv.clear();
 	}
 }
 
@@ -800,6 +791,62 @@ Promise<void> DownloadTask<Result>::downloadData() {
 	downloadRequest.setReceiver(kj::heap<TransmissionReceiver>(*this));
 	
 	return downloadRequest.send().ignoreResult();
+}
+
+// ===== class DownloadTask::TransmissionReceiver =====
+
+template<typename Result>
+DownloadTask<Result>::TransmissionReceiver::TransmissionReceiver(DownloadTask<Result>& parent) :
+	parent(parent)
+{
+	parent.receivers.add(*this);
+}
+
+template<typename Result>
+DownloadTask<Result>::TransmissionReceiver::~TransmissionReceiver() {
+	clear();
+}
+
+template<typename Result>
+Promise<void> DownloadTask<Result>::TransmissionReceiver::begin(BeginContext ctx) {
+	KJ_IF_MAYBE(pParent, parent) {
+		auto ka = pParent -> addRef();
+		return pParent -> beginDownload().attach(mv(ka));
+	}
+	KJ_FAIL_REQUIRE("Download task cancelled");
+}
+
+template<typename Result>
+Promise<void> DownloadTask<Result>::TransmissionReceiver::receive(ReceiveContext ctx) {
+	KJ_IF_MAYBE(pParent, parent) {
+		auto ka = pParent -> addRef();
+		auto data = ctx.getParams().getData();
+		pParent -> hashFunction -> update(data.begin(), data.size());
+		return pParent -> receiveData(data).attach(mv(ka));
+	}
+	KJ_FAIL_REQUIRE("Download task cancelled");
+}
+
+template<typename Result>
+Promise<void> DownloadTask<Result>::TransmissionReceiver::done(DoneContext ctx) {
+	KJ_IF_MAYBE(pParent, parent) {
+		auto ka = pParent -> addRef();
+		pParent -> hashValue = kj::heapArray<unsigned char>(pParent -> hashFunction -> output_length());
+		pParent -> hashFunction -> final(pParent -> hashValue.begin());
+		
+		pParent -> metadata.setDataHash(pParent -> hashValue.asBytes());
+		
+		return pParent -> finishDownload().attach(mv(ka));
+	}
+	KJ_FAIL_REQUIRE("Download task cancelled");
+}
+
+template<typename Result>
+void DownloadTask<Result>::TransmissionReceiver::clear() {
+	KJ_IF_MAYBE(pParent, parent) {
+		pParent -> receivers.remove(*this);
+	}
+	parent = nullptr;
 }
 
 }
