@@ -32,20 +32,25 @@ struct NullErrorHandler : public kj::TaskSet::ErrorHandler {
 	void taskFailed(kj::Exception&& e) override ;
 };
 
+struct StartupParameters {
+	bool elevated = false;
+	Maybe<DataStore> dataStore;
+};
+
 /**
  *  "Global" libary handle. This class serves as the dependency injection context
  *  for objects that should be shared across all threads. Currently, this is only
  *  the local data store table and a shared daemon runner.
  */
 struct LibraryHandle : public kj::AtomicRefcounted {
-	LibraryHandle(bool elevated);
+	LibraryHandle(StartupParameters params = StartupParameters());
 	~LibraryHandle();
 	
 	// Creates an additional owning reference to this handle.
 	inline kj::Own<const LibraryHandle> addRef() const { return kj::atomicAddRef(*this); }
 	
 	// Mutex protected local data store
-	inline const kj::MutexGuarded<LocalDataStore>& store() const { return sharedData -> store; }
+	DataStore& store() const { return sharedStore; }
 	
 	const kj::Executor& steward() const ;
 	
@@ -69,14 +74,14 @@ struct LibraryHandle : public kj::AtomicRefcounted {
 	
 private:
 	struct SharedData : public kj::AtomicRefcounted {
-		kj::MutexGuarded<LocalDataStore> store;
+		DataStore& store;
 	};
 	
 	//! Executes the steward thread
 	void runSteward(bool elevated);
 	
 	kj::MutexGuarded<bool> shutdownMode;
-	Own<SharedData> sharedData;
+	mutable DataStore sharedStore = nullptr;
 	
 	Own<kj::CrossThreadPromiseFulfiller<bool>> stewardFulfiller;
 	kj::MutexGuarded<Maybe<Own<const kj::Executor>>> stewardExecutor;
@@ -94,8 +99,8 @@ private:
 };
 
 
-inline Library newLibrary(bool elevated = false) {
-	return kj::atomicRefcounted<LibraryHandle>(elevated);
+inline Library newLibrary(StartupParameters params = StartupParameters()) {
+	return kj::atomicRefcounted<LibraryHandle>(mv(params));
 }
 
 struct ThreadContext {
@@ -137,7 +142,7 @@ struct ThreadContext {
 	inline kj::Filesystem& filesystem() {
 		return *_filesystem;
 	}
-	inline const kj::MutexGuarded<LocalDataStore>& store() const {
+	inline DataStore& store() const {
 		return library() -> store();
 	}
 	

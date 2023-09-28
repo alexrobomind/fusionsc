@@ -12,13 +12,11 @@ namespace fsc {
 	
 // === class LibraryHandle ===
 	
-LibraryHandle::LibraryHandle(bool elevated) :
+LibraryHandle::LibraryHandle(StartupParameters params) :
 	shutdownMode(false),
-	// loopbackReferenceForStewardStartup(addRef()),
-	sharedData(kj::atomicRefcounted<SharedData>()),
-	stewardThread([this, elevated]() { runSteward(elevated); })
+	stewardThread([this, elevated = params.elevated]() { runSteward(elevated); })
 {
-	if(elevated) {
+	if(params.elevated) {
 		KJ_REQUIRE(elevatedInstance == nullptr, "Can only have one active elevated instance");
 		elevatedInstance = this;
 		
@@ -27,13 +25,16 @@ LibraryHandle::LibraryHandle(bool elevated) :
 		#endif
 	}
 	
+	KJ_IF_MAYBE(pStore, params.dataStore) {
+		sharedStore = mv(*pStore);
+	} else {
+		sharedStore = createStore();
+	}
+	
 	stewardThread.detach();
-	auto& st = steward();
-	st.executeSync([shared = kj::atomicAddRef(*sharedData)]() mutable {
-		Promise<void> promise = LocalDataStore::gcLoop(shared -> store)
-		.attach(mv(shared));
-		getActiveThread().detach(mv(promise));
-	});
+	
+	// Wait for steward thread to finish starting.
+	steward();
 };
 
 LibraryHandle::~LibraryHandle() {
@@ -74,21 +75,35 @@ void LibraryHandle::runSteward(bool elevated) {
 	// have back-access to the library.
 	StewardContext ctx;
 	
+	// Register fulfiller for shutdown	
+	auto paf = kj::newPromiseAndCrossThreadFulfiller<bool>();
+	stewardFulfiller = mv(paf.fulfiller);
 	
 	// Pass back the executor
 	{
 		auto locked = stewardExecutor.lockExclusive();
 		*locked = ctx.executor().addRef();
 	}
-	
-	// Register fulfiller for shutdown	
-	auto paf = kj::newPromiseAndCrossThreadFulfiller<bool>();
-	stewardFulfiller = mv(paf.fulfiller);
 
 	auto runPromise = mv(paf.promise);
+	
+	// Execute GC loop
+	kj::Function<Promise<void>()> gcLoop = [this, &ctx, &gcLoop]() {
+		store().gc();
+		
+		return ctx.timer().afterDelay(1 * kj::MINUTES)
+		.then(gcLoop);
+	};
+	
+	Promise<void> runningLoop = gcLoop().eagerlyEvaluate([](kj::Exception&& e) {
+		KJ_LOG(WARNING, "Store GC failure", e);
+	});
 
 	// loopbackReferenceForStewardStartup = nullptr;
 	bool fastShutdown = runPromise.wait(ctx.waitScope());
+	
+	runningLoop = READY_NOW;
+	
 	if(fastShutdown)
 		ctx.shutdownFast();
 	

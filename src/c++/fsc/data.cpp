@@ -98,7 +98,7 @@ Promise<bool> isDataRef(capnp::Capability::Client clt) {
 template<>
 capnp::Data::Reader internal::getDataRefAs<capnp::Data>(internal::LocalDataRefImpl& impl, const capnp::ReaderOptions& options) {
 	(void) options;
-	return impl.entryRef -> value.asPtr();
+	return impl.entry.asPtr();
 }
 	
 // === class LocalDataService ===
@@ -289,8 +289,7 @@ capnp::FlatArrayMessageReader& internal::LocalDataRefImpl::ensureReader(const ca
 }
 
 kj::Array<const byte> internal::LocalDataRefImpl::addRefRaw() {
-	const LocalDataStore::Entry& entry = *entryRef;
-	return entry.value.asPtr().attach(entry.addRef());
+	return entry.asArray();
 }
 
 // === class internal::LocalDataServiceImpl ===
@@ -336,7 +335,7 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 	Own<LocalDataServiceImpl> service;
 	bool recursive;
 	
-	Own<const LocalDataStore::Entry> dataEntry;
+	StoreEntry dataEntry = nullptr;
 	
 	kj::Array<kj::byte> downloadBuffer;
 	size_t downloadOffset = 0;
@@ -361,11 +360,9 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 	
 	virtual Promise<Maybe<ResultType>> useCached() override {
 		auto dataHash = metadata.getDataHash();
-		if(dataHash.size() > 0) {
-			auto lStore = getActiveThread().library() -> store().lockShared();
-			
-			KJ_IF_MAYBE(rowPtr, lStore -> table.find(dataHash)) {
-				dataEntry = (*rowPtr) -> addRef();
+		if(dataHash.size() > 0) {			
+			KJ_IF_MAYBE(rowPtr, getActiveThread().library() -> store().query(dataHash)) {
+				dataEntry = mv(*rowPtr);
 				return buildResult()
 				.then([](ResultType result) {
 					return Maybe<ResultType>(mv(result));
@@ -394,20 +391,8 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 		KJ_REQUIRE(downloadOffset == downloadBuffer.size());
 		KJ_REQUIRE(downloadBuffer != nullptr);
 		
-		dataEntry = kj::atomicRefcounted<const LocalDataStore::Entry>(
-			metadata.getDataHash(),	mv(downloadBuffer)
-		);
-		
-		auto lStore = getActiveThread().library() -> store().lockExclusive();
-			
-		KJ_IF_MAYBE(rowPtr, lStore -> table.find(metadata.getDataHash())) {
-			// If found now, discard current download
-			// Note: This should happen only rarely
-			dataEntry = (*rowPtr) -> addRef();
-		} else {
-			// If not found, store row
-			lStore -> table.insert(dataEntry -> addRef());
-		}
+		// Note: The hash is computed in the parent class.
+		dataEntry = getActiveThread().library() -> store().publish(metadata.getDataHash(), mv(downloadBuffer));
 		
 		return READY_NOW;
 	}
@@ -431,7 +416,7 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 		
 		backend->_metadata.setRoot(metadata.asReader());
 		
-		backend->entryRef = mv(dataEntry);
+		backend->entry = mv(dataEntry);
 		
 		return ResultType(mv(backend), service -> serverSet);
 	}
@@ -448,10 +433,7 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::downloa
 	});
 }
 
-LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRefMetadata::Reader metaData, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable) {
-	// Check if we have the id already, if not, 
-	Own<const LocalDataStore::Entry> entry;
-	
+LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRefMetadata::Reader metaData, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable) {	
 	KJ_REQUIRE(data.size() >= metaData.getDataSize(), "Data do not fit inside provided array");
 	KJ_REQUIRE(metaData.getCapTableSize() == capTable.size(), "Specified capability count must match provided table");
 	
@@ -471,18 +453,6 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRefM
 		myMetaData.setDataHash(hashOutput);
 	}
 	
-	// Prepare construction of the data
-	{
-		kj::Locked<LocalDataStore> lStore = library -> store().lockExclusive();
-		auto dataHash = myMetaData.getDataHash();
-		KJ_IF_MAYBE(ppRow, lStore -> table.find(dataHash)) {
-			entry = (*ppRow) -> addRef();
-		} else {
-			entry = kj::atomicRefcounted<LocalDataStore::Entry>(dataHash, mv(data));
-			lStore -> table.insert(entry -> addRef());
-		}
-	}
-	
 	// Prepare some clients
 	auto clients   = kj::heapArrayBuilder<capnp::Capability::Client>    (capTable.size());
 	auto tableCopy = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(capTable.size());
@@ -500,7 +470,7 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRefM
 	// Prepare backend
 	backend->readerTable = kj::heap<capnp::ReaderCapabilityTable>(tableCopy.finish());
 	backend->capTableClients = clients.finish();
-	backend->entryRef = mv(entry);
+	backend->entry = library -> store().publish(myMetaData.getDataHash(), mv(data));
 		
 	// Now construct a local data ref from the backend
 	return LocalDataRef<capnp::AnyPointer>(backend->addRef(), this -> serverSet);
@@ -807,6 +777,7 @@ struct ArchiveWriter {
 			
 			return prereq.then([this, key = mv(key)]() mutable -> Promise<Maybe<uint64_t>> {
 				KJ_IF_MAYBE(pResult, parent.dataRecordsByHash.find(key)) {
+					// The data are already in the file. Just reference the same block again.
 					return finalize(*pResult)
 					.then([](uint64_t x) -> Maybe<uint64_t> {
 						return x;
@@ -816,21 +787,15 @@ struct ArchiveWriter {
 				auto dataHash = metadata.getDataHash().asConst();
 				
 				// Get a ref to the store entry if it is found
-				Maybe<Own<const LocalDataStore::Entry>> maybeStoreEntry = nullptr;
+				Maybe<StoreEntry> maybeStoreEntry = nullptr;
 				if(dataHash.size() > 0) {
-					auto lStore = getActiveThread().library() -> store().lockShared();
-					
-					KJ_IF_MAYBE(rowPtr, lStore -> table.find(dataHash)) {
-						maybeStoreEntry = (*rowPtr) -> addRef();
-					}
+					maybeStoreEntry = getActiveThread().library() -> store().query(dataHash);
 				}
 				
 				KJ_IF_MAYBE(pStoreEntry, maybeStoreEntry) {
 					// We have the block locally. Just allocate space for it and memcpy
-					// it over
-					const LocalDataStore::Entry& storeEntry = **pStoreEntry;
-					
-					auto data = storeEntry.value.asPtr();
+					// it over					
+					auto data = pStoreEntry -> asPtr();
 					metadata.setDataSize(data.size());
 					
 					auto& dataRecord = parent.allocData(data.size());

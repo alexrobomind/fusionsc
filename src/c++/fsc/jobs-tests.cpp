@@ -40,7 +40,10 @@ TEST_CASE("slurm-parser") {
 }
 
 TEST_CASE("job-echo") {
-	auto l = newLibrary(true);
+	StartupParameters config;
+	config.elevated = true;
+	
+	auto l = newLibrary(config);
 	auto lt = l -> newThread();
 	
 	auto& ws = lt -> waitScope();

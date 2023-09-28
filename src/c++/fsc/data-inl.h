@@ -4,6 +4,8 @@
 
 #include <unordered_map>
 
+#include <capnp/serialize.h>
+
 #include "typing.h"
 #include "memory.h"
 
@@ -282,7 +284,7 @@ public:
 	Promise<void> transmit(TransmitContext) override ;
 	
 	// Reference to the local data store entry holding our data
-	Own<const LocalDataStore::Entry> entryRef;
+	StoreEntry entry = nullptr;
 	
 	// Array-of-clients view onto the capability table
 	Array<capnp::Capability::Client> capTableClients;
