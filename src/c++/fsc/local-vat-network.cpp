@@ -2,8 +2,11 @@
 
 #include "local-vat-network.h"
 #include "xthread-queue.h"
+#include "data.h"
 
 #include <capnp/rpc.capnp.h>
+
+#include <kj/io.h>
 
 #ifdef WIN32
 #include <io.h>
@@ -12,203 +15,342 @@
 #endif
 
 namespace fsc { namespace {
-	int dupFD(int fd) {
-		#if _WIN32
-		return _dup(fd);
-		#else
-		return dup(fd);
-		#endif
-	}
 	
-	struct Message : kj::AtomicRefcounted {
+	struct Message : public fusionsc_LvnMessage {
+		std::atomic<uint8_t> refcount = 1;
+		
 		capnp::MallocMessageBuilder builder;
-		kj::ListLink<Message> link;
-		kj::Array<int> fds;
-		bool fdsTaken = false;
+		
+		kj::Array<int> fdStorage;
+		kj::Array<fusionsc_SegmentInfo> infoStorage;
+		
+		bool sent = false;
 		
 		Message(unsigned int firstSegmentSize) :
 			builder(firstSegmentSize)
-		{}
+		{
+			free = [](fusionsc_LvnMessage* msg) noexcept {
+				auto typed = static_cast<Message*>(msg);
+				if(--typed->refcount == 0) {
+					delete typed;
+				}
+			};
+		}
 		
 		~Message() {
-			if(!fdsTaken) {
-				for(auto fd : fds) {
-					kj::AutoCloseFd afd(fd);
+			if(!sent) {
+				for(auto fd : fdStorage) {
+					kj::AutoCloseFd(fd);
 				}
 			}
 		}
 		
-		Own<Message> addRef() {
-			return kj::atomicAddRef(*this);
+		Message* prepareForSend() {
+			KJ_REQUIRE(!sent);
+			sent = true;
+			
+			auto segments = builder.getSegmentsForOutput();
+			
+			auto infoBuilder = kj::heapArrayBuilder<fusionsc_SegmentInfo>(segments.size());
+			for(auto& segment : segments) {
+				fusionsc_SegmentInfo info;
+				info.data = segment.begin();
+				info.sizeInWords = segment.size();
+				infoBuilder.add(info);
+			}
+			infoStorage = infoBuilder.finish();
+			
+			// Fill out message fields
+			fds = fdStorage.begin();
+			fdCount = fdStorage.size();
+			
+			segmentInfo = infoStorage.begin();
+			segmentCount = infoStorage.size();
+			
+			++refcount;
+			return this;
 		}
 	};
 	
-	struct ExchangePoint : public kj::AtomicRefcounted {
-		XThreadQueue<Own<capnp::IncomingRpcMessage>> queue;
-	};
-
-	struct Connection : public LocalVatNetworkBase::Connection {
-		Connection(Own<ExchangePoint> incoming, Own<ExchangePoint> outgoing):
-			incoming(mv(incoming)),
-			outgoing(mv(outgoing))
-		{};
+	struct LocalVatConnection;
+	
+	struct OutgoingMessage : public capnp::OutgoingRpcMessage {
+		Message* backend;
+		Own<LocalVatConnection> conn;
 		
-		~Connection() { shutdown(); };
+		OutgoingMessage(Own<LocalVatConnection>&& nConn, unsigned int firstSegmentSize) :
+			backend(new Message(firstSegmentSize)),
+			conn(mv(nConn))
+		{}
+		
+		~OutgoingMessage() {
+			backend -> free(backend);
+		}
+		
+		capnp::AnyPointer::Builder getBody() override {
+			return backend -> builder.getRoot<capnp::AnyPointer>();
+		}
+		
+		void setFds(Array<int> fds) override {
+			KJ_REQUIRE(!backend -> sent);
 			
-		lvn::VatId::Reader getPeerVatId() override {
-			return peerId;
+			for(auto fd : backend -> fdStorage) {
+				kj::AutoCloseFd(fd);
+			}
+			backend -> fdStorage = mv(fds);
+		}
+		
+		size_t sizeInWords() override {
+			return backend -> builder.sizeInWords();
+		}
+		
+		void send() override;
+	};
+	
+	struct IncomingMessage : public capnp::IncomingRpcMessage {
+		static constexpr capnp::ReaderOptions READ_UNLIMITED { std::numeric_limits<uint64_t>::max(), std::numeric_limits<int>::max() };
+		
+		struct MessageReader : public capnp::MessageReader {
+			fusionsc_LvnMessage* backend;
+			
+			MessageReader(fusionsc_LvnMessage* nBackend) :
+				capnp::MessageReader(READ_UNLIMITED),
+				backend(nBackend)
+			{}
+			
+			ArrayPtr<const capnp::word> getSegment(unsigned int id) override {
+				if(id >= backend -> segmentCount)
+					return nullptr;
+				
+				auto& info = backend -> segmentInfo[id];
+				return ArrayPtr<const capnp::word>((const capnp::word*) info.data, info.sizeInWords);
+			}
+		};
+		
+		fusionsc_LvnMessage* backend;
+		MessageReader reader;
+		
+		kj::Array<kj::AutoCloseFd> ownFds;
+		
+		IncomingMessage(fusionsc_LvnMessage* nBackend) :
+			backend(nBackend),
+			reader(nBackend)
+		{
+			auto fdBuilder = kj::heapArrayBuilder<kj::AutoCloseFd>(backend -> fdCount);
+			for(auto i : kj::range(0, backend -> fdCount)) {
+				fdBuilder.add(backend -> fds[i]);
+			}
+			ownFds = fdBuilder.finish();
+		}
+		
+		~IncomingMessage() {
+			backend -> free(backend);
+		}
+		
+		capnp::AnyPointer::Reader getBody() override {
+			return reader.getRoot<capnp::AnyPointer>();
+		}
+		
+		kj::ArrayPtr<kj::AutoCloseFd> getAttachedFds() override {
+			return ownFds;
+		}
+		
+		size_t sizeInWords() override {
+			return reader.sizeInWords();
+		}
+	};
+	
+	struct LocalEndPoint : public fusionsc_LvnEndPoint {
+		std::atomic<uint64_t> refcount = 2; // This class is always created with 2 refs initially
+		XThreadQueue<Own<capnp::IncomingRpcMessage>> queue;
+		
+		LocalEndPoint() {
+			incRef = [](fusionsc_LvnEndPoint* t) noexcept {
+				auto typed = static_cast<LocalEndPoint*>(t);
+				++(typed -> refcount);
+			};
+			
+			decRef = [](fusionsc_LvnEndPoint* t) noexcept {
+				auto typed = static_cast<LocalEndPoint*>(t);
+				if(--(typed -> refcount) == 0) {
+					delete typed;
+				}
+			};
+			
+			receive = [](fusionsc_LvnEndPoint* t, fusionsc_LvnMessage* msg) noexcept {
+				auto typed = static_cast<LocalEndPoint*>(t);
+				typed -> queue.push(kj::heap<IncomingMessage>(msg));
+			};
+			
+			close = [](fusionsc_LvnEndPoint* t) noexcept {
+				auto typed = static_cast<LocalEndPoint*>(t);
+				typed -> queue.close(KJ_EXCEPTION(DISCONNECTED, "Remote end closed"));
+			};
+		}
+	};
+	
+	struct LocalVatConnection : public LocalVatNetworkBase::Connection, public kj::Refcounted {
+		LocalEndPoint* localEndPoint;
+		fusionsc_LvnEndPoint* remoteEndPoint;
+		
+		Temporary<lvn::VatId> peerId;
+		
+		LocalVatConnection() :
+			localEndPoint(nullptr),
+			remoteEndPoint(nullptr)
+		{}
+		
+		~LocalVatConnection() {
+			if(localEndPoint != nullptr) {
+				localEndPoint -> queue.close();
+				localEndPoint -> queue.clear();
+				localEndPoint -> decRef(localEndPoint);
+			}
+			
+			if(remoteEndPoint != nullptr)
+				remoteEndPoint -> decRef(remoteEndPoint);
 		}
 		
 		Own<capnp::OutgoingRpcMessage> newOutgoingMessage(unsigned int firstSegmentSize) override {
-			return kj::heap<OutgoingMessage>(*this, firstSegmentSize);
+			return kj::heap<OutgoingMessage>(kj::addRef(*this), firstSegmentSize);
 		}
 		
-		Promise<Maybe<Own<capnp::IncomingRpcMessage>>> receiveIncomingMessage() override;
+		Promise<Maybe<Own<capnp::IncomingRpcMessage>>> receiveIncomingMessage() override {
+			using MaybeMsg = Maybe<Own<capnp::IncomingRpcMessage>>;
+			
+			return localEndPoint -> queue.pop().then(
+				[](auto msg) -> MaybeMsg { return mv(msg); },
+				[](auto&& exc) -> MaybeMsg { return nullptr; }
+			);
+		}
+		
+		lvn::VatId::Reader getPeerVatId() override {
+			return peerId.asReader();
+		}
+		
 		Promise<void> shutdown() override {
-			incoming -> queue.close();
-			incoming -> queue.clear();
-			outgoing -> queue.close(KJ_EXCEPTION(DISCONNECTED, "Remote end closed"));
+			localEndPoint -> queue.close();
+			localEndPoint -> queue.clear();
+			
+			remoteEndPoint -> close(remoteEndPoint);
 			
 			return READY_NOW;
 		}
-		
-		Own<ExchangePoint> incoming;
-		Own<ExchangePoint> outgoing;
-		
-		Temporary<lvn::VatId> peerId;
-
-		struct IncomingMessage : public capnp::IncomingRpcMessage {
-			Own<Message> msg;
-			kj::Array<kj::AutoCloseFd> fds;
-			
-			IncomingMessage(Own<Message>&& msgParam) :
-				msg(mv(msgParam))
-			{
-				auto fdsBuilder = kj::heapArrayBuilder<kj::AutoCloseFd>(msg -> fds.size());
-				for(auto fd : msg -> fds)
-					fdsBuilder.add(fd);
-				fds = fdsBuilder.finish();
-				
-				msg -> fdsTaken = true;
-			}
-			
-			capnp::AnyPointer::Reader getBody() override { return msg -> builder.getRoot<capnp::AnyPointer>(); }
-			size_t sizeInWords() override { return msg -> builder.sizeInWords(); }
-		};
-
-		struct OutgoingMessage : public capnp::OutgoingRpcMessage {
-			Connection* conn;
-			Own<Message> msg;
-			
-			OutgoingMessage(Connection& conn, unsigned int firstSegmentWordSize) :
-				conn(&conn),
-				msg(kj::atomicRefcounted<Message>(firstSegmentWordSize))
-			{}
-			
-			capnp::AnyPointer::Builder getBody() override { return msg -> builder.getRoot<capnp::AnyPointer>(); }
-			void send() override {
-				conn -> outgoing -> queue.push(kj::heap<IncomingMessage>(msg -> addRef()));
-			}
-			
-			size_t sizeInWords() override { return msg -> builder.sizeInWords(); }
-			void setFds(Array<int> fds) override {
-				if(!msg -> fdsTaken) {
-					for(auto fd : msg -> fds) {
-						kj::AutoCloseFd afd(fd);
-					}
-				}
-				
-				msg -> fds = mv(fds);
-				msg -> fdsTaken = false;
-			}
-		};
 	};
-}
-
-struct LocalVatNetwork::Impl {		
-	Own<const LocalVatHub> hub;
-	Temporary<lvn::VatId> vatId;
-	XThreadQueue<Own<Connection>> acceptQueue;
 	
-	Impl(const LocalVatHub& paramHub, LocalVatNetwork& parent) :
-		hub(paramHub.addRef())
-	{
-		auto locked = hub -> data.lockExclusive();
+	struct AcceptRequest {
+		uint64_t peerId;
+		fusionsc_LvnEndPoint* remoteEndPoint;
+		LocalEndPoint* localEndPoint;
 		
-		KJ_REQUIRE(locked -> freeId < std::numeric_limits<uint64_t>::max());
-		uint64_t myID = locked -> freeId++;
+		~AcceptRequest() {
+			if(remoteEndPoint != nullptr)
+				remoteEndPoint -> decRef(remoteEndPoint);
+			
+			if(localEndPoint != nullptr) {
+				localEndPoint -> queue.close();
+				localEndPoint -> queue.clear();
+				localEndPoint -> decRef(localEndPoint);
+			}
+		}
+	};
+	
+	struct LvnAcceptListener : public fusionsc_LvnListener {
+		std::atomic<uint64_t> refcount = 1;
 		
-		locked -> vats.insert(myID, &parent);
-		vatId.setKey(myID);
+		XThreadQueue<Own<AcceptRequest>> queue;
+		
+		LvnAcceptListener() {
+			free = [](fusionsc_LvnListener* t) {
+				auto typed = static_cast<LvnAcceptListener*>(t);
+				
+				if(--(typed -> refcount) == 0)
+					delete typed;
+			};
+			
+			accept = [](fusionsc_LvnListener* t, uint64_t peerId, fusionsc_LvnEndPoint* peer) -> fusionsc_LvnEndPoint* {
+				auto typed = static_cast<LvnAcceptListener*>(t);
+				
+				auto ar = kj::heap<AcceptRequest>();
+				ar -> peerId = peerId;
+				ar -> remoteEndPoint = peer;
+				
+				auto lep = new LocalEndPoint();
+				ar -> localEndPoint = lep;
+				
+				typed -> queue.push(mv(ar));
+				return lep;
+			};
+		}
+	};
+		
+	void OutgoingMessage::send() {
+		conn -> remoteEndPoint -> receive(conn -> remoteEndPoint, backend -> prepareForSend());
+	}
+} // Anonymous namespace
+	
+struct LocalVatNetwork::Impl {
+	LvnAcceptListener* listener;
+	fusionsc_Lvn* backend;
+	Temporary<lvn::VatId> vatId;
+	
+	Impl(LvnHub& hub) : listener(new LvnAcceptListener()) {
+		fusionsc_LvnHub* cHub = hub.get();
+		
+		++(listener -> refcount);
+		backend = cHub -> join(cHub, listener);
+		vatId.setKey(backend -> address);
 	}
 	
 	~Impl() {
-		// De-register vat from the network hub
-		{
-			auto hubLocked = hub -> data.lockExclusive();
-			hubLocked -> vats.erase(vatId.getKey());
-		}
+		backend -> decRef(backend);
 		
-		// From now on, we will not be receiving accept requests
-		// (since they are guarded by the hub lock)		
-		acceptQueue.close(KJ_EXCEPTION(DISCONNECTED, "Vat network deleted"));
+		listener -> queue.close();
+		listener -> queue.clear();
+		listener -> free(listener);
 	}
 };
 
-lvn::VatId::Reader LocalVatHub::INITIAL_VAT_ID = lvn::INITIAL_VAT_ID.get();
-
-Own<LocalVatHub> newLocalVatHub() {
-	return kj::atomicRefcounted<LocalVatHub>();
-}
-
-Own<const LocalVatHub> LocalVatHub::addRef() const {
-	return kj::atomicAddRef(*this);
-}
-
-Promise<Maybe<Own<capnp::IncomingRpcMessage>>> Connection::receiveIncomingMessage() {
-	using MaybeMsg = Maybe<Own<capnp::IncomingRpcMessage>>;
+Maybe<Own<LocalVatNetworkBase::Connection>> LocalVatNetwork::connect(lvn::VatId::Reader hostId) {
+	auto connection = kj::refcounted<LocalVatConnection>();
 	
-	return incoming -> queue.pop().then(
-		[](auto msg) -> MaybeMsg { return mv(msg); },
-		[](auto&& exc) -> MaybeMsg { return nullptr; }
-	);
+	auto lep = new LocalEndPoint();
+	connection -> localEndPoint = lep;
+	fusionsc_LvnEndPoint* remoteEnd = pImpl -> backend -> connect(pImpl -> backend, hostId.getKey(), lep);
+	
+	if(remoteEnd == nullptr)
+		return nullptr;
+	
+	connection -> remoteEndPoint = remoteEnd;
+	connection -> peerId.setKey(hostId.getKey());
+	
+	return connection;
+}
+
+Promise<Own<LocalVatNetworkBase::Connection>> LocalVatNetwork::accept() {
+	return pImpl -> listener -> queue.pop()
+	.then([](Own<AcceptRequest> request) -> Own<LocalVatNetworkBase::Connection> {
+		auto connection = kj::refcounted<LocalVatConnection>();
+		connection -> localEndPoint = request -> localEndPoint;
+		connection -> remoteEndPoint = request -> remoteEndPoint;
+		connection -> peerId.setKey(request -> peerId);
+		
+		request -> localEndPoint = nullptr;
+		request -> remoteEndPoint = nullptr;
+		
+		return connection;
+	});
 }
 
 lvn::VatId::Reader LocalVatNetwork::getVatId() const {
 	return pImpl -> vatId;
 }
 
-LocalVatNetwork::LocalVatNetwork(const LocalVatHub& hub) :
-	pImpl(kj::heap<Impl>(hub, *this))
+LocalVatNetwork::LocalVatNetwork(LvnHub& hub) :
+	pImpl(kj::heap<Impl>(hub))
 {}
 
 LocalVatNetwork::~LocalVatNetwork() {}
 
-Maybe<Own<LocalVatNetworkBase::Connection>> LocalVatNetwork::connect(lvn::VatId::Reader hostId) {
-	auto hubData = pImpl -> hub -> data.lockExclusive();
-	
-	KJ_IF_MAYBE(pVat, hubData -> vats.find(hostId.getKey())) {
-		// Create two connection endpoints
-		auto ex1 = kj::atomicRefcounted<ExchangePoint>();
-		auto ex2 = kj::atomicRefcounted<ExchangePoint>();
-		
-		auto myConn = kj::heap<::fsc::Connection>(kj::atomicAddRef(*ex1), kj::atomicAddRef(*ex2));
-		auto peerConn = kj::heap<::fsc::Connection>(mv(ex2), mv(ex1));
-		
-		// Store peer IDs
-		myConn -> peerId.setKey(hostId.getKey());
-		peerConn -> peerId.setKey(this -> getVatId().getKey());
-		
-		// Pass remote end to accept loop
-		(*pVat) -> pImpl -> acceptQueue.push(mv(peerConn));
-		return myConn;
-	}
-
-	return nullptr;
-}
-
-Promise<Own<LocalVatNetworkBase::Connection>> LocalVatNetwork::accept() {
-	return pImpl -> acceptQueue.pop();
-}
 
 }

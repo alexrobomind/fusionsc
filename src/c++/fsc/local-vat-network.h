@@ -1,16 +1,12 @@
 #pragma once
 
-#include "common.h"
-#include "data.h"
 #include "capi-lvn.h"
+#include "common.h"
 
 #include <capnp/rpc.h>
 #include <fsc/local-vat-network.capnp.h>
 
-#include <atomic>
-#include <type_traits>
-
-namespace fsc { 
+namespace fsc {
 
 using LocalVatNetworkBase = capnp::VatNetwork<
 	lvn::VatId,
@@ -20,26 +16,25 @@ using LocalVatNetworkBase = capnp::VatNetwork<
 	lvn::JoinResult
 >;
 
+struct LvnHub;
 struct LocalVatNetwork;
 
-//! Central exchange point to set up connections between LocalVatNetwork instances
-struct LocalVatHub : public kj::AtomicRefcounted {
-	//! Returns the Vat ID guaranteed to be assigned to the first vat joining the hub
-	static lvn::VatId::Reader INITIAL_VAT_ID;
+struct LvnHub {
+	LvnHub(fusionsc_LvnHub*);
 	
-	Own<const LocalVatHub> addRef() const;
+	LvnHub(const LvnHub&);
+	LvnHub(LvnHub&&);
+	
+	LvnHub& operator=(const LvnHub&);
+	LvnHub& operator=(LvnHub&&);
+	
+	fusionsc_LvnHub* incRef() const;
+	fusionsc_LvnHub* release() const;
+	fusionsc_LvnHub* get() const;
 	
 private:
-	struct SharedData {
-		kj::HashMap<uint64_t, const LocalVatNetwork*> vats;
-		uint64_t freeId = 0;
-	};
-	kj::MutexGuarded<SharedData> data;
-	
-	friend class LocalVatNetwork;
+	fusionsc_LvnHub* backend;
 };
-
-Own<LocalVatHub> newLocalVatHub();
 
 /** Local Vat network implementation
  *
@@ -61,7 +56,7 @@ struct LocalVatNetwork : public LocalVatNetworkBase {
 	Maybe<Own<LocalVatNetworkBase::Connection>> connect(lvn::VatId::Reader hostId) override;
 	Promise<kj::Own<LocalVatNetworkBase::Connection>> accept() override;
 		
-	LocalVatNetwork(const LocalVatHub& hub);
+	LocalVatNetwork(LvnHub& hub);
 	~LocalVatNetwork();
 	
 private:

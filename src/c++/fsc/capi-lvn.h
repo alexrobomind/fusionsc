@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -49,7 +51,8 @@ struct fusionsc_LvnEndPoint {
 	void (*incRef)(fusionsc_LvnEndPoint*); // Increases the reference count of this object
 	void (*decRef)(fusionsc_LvnEndPoint*); // Decreases the reference count of this object
 	
-	uint8_t (*receive)(fusionsc_LvnMessage*); // Return 0 if OK, 1 if connection is closed / failed
+	void (*close)(fusionsc_LvnEndPoint*); // Notifies the endpoint that no more messages will be sent
+	void (*receive)(fusionsc_LvnEndPoint*, fusionsc_LvnMessage*); // Return 0 if message was accepted, 1 if it was discarded
 };
 
 struct fusionsc_SegmentInfo {
@@ -58,7 +61,7 @@ struct fusionsc_SegmentInfo {
 };
 
 struct fusionsc_LvnMessage {
-	SegmentInfo* segmentInfo;
+	fusionsc_SegmentInfo* segmentInfo;
 	size_t segmentCount;
 	
 	int* fds;
