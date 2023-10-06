@@ -16,26 +16,6 @@ using LocalVatNetworkBase = capnp::VatNetwork<
 	lvn::JoinResult
 >;
 
-struct LvnHub;
-struct LocalVatNetwork;
-
-struct LvnHub {
-	LvnHub(fusionsc_LvnHub*);
-	
-	LvnHub(const LvnHub&);
-	LvnHub(LvnHub&&);
-	
-	LvnHub& operator=(const LvnHub&);
-	LvnHub& operator=(LvnHub&&);
-	
-	fusionsc_LvnHub* incRef() const;
-	fusionsc_LvnHub* release() const;
-	fusionsc_LvnHub* get() const;
-	
-private:
-	fusionsc_LvnHub* backend;
-};
-
 /** Local Vat network implementation
  *
  * Local multi-point implementation of Cap'n'proto's vat network protocol.
@@ -49,19 +29,44 @@ private:
  *       in one thread but use it in another, as long as no method except
  *       getVatId() is called beforehand.
  */
-struct LocalVatNetwork : public LocalVatNetworkBase {	
-	//! Vat ID that other LocalVatNetwork instances on the same hub can use to connect to this instance
-	lvn::VatId::Reader getVatId() const;
+struct LocalVatNetwork : public LocalVatNetworkBase {
+	static lvn::VatId::Reader INITIAL_VAT_ID;
+	virtual lvn::VatId::Reader getVatId() const = 0;
 	
-	Maybe<Own<LocalVatNetworkBase::Connection>> connect(lvn::VatId::Reader hostId) override;
-	Promise<kj::Own<LocalVatNetworkBase::Connection>> accept() override;
-		
-	LocalVatNetwork(LvnHub& hub);
-	~LocalVatNetwork();
+	virtual Maybe<Own<LocalVatNetworkBase::Connection>> connect(lvn::VatId::Reader hostId) override = 0;
+	virtual Promise<kj::Own<LocalVatNetworkBase::Connection>> accept() override = 0;
+};
+
+/** Exchange hub for local vat networks.
+ * 
+ * Whereas the LocalVatNetwork class represents the endpoints in the local network,
+ * the hub represents the network itself. Its join() method can be used to obtain new
+ * endpoints in the network with unique addresses. joins will be performed sequentially,
+ * and the first join() call is always guaranteed to have an ID of 0. Subsequent join()
+ * calls give no promises about the used IDs. After a network is deallocated, its ID
+ * will be reclaimed and might be used again. This inclused the initial 0 ID.
+ *
+ * This class actually wraps a C interface struct which can be passed to other fusionsc
+ * instances without ABI incompatibility considerations. 
+ */
+struct LocalVatHub {
+	LocalVatHub(fusionsc_LvnHub* = nullptr);
+	
+	LocalVatHub(const LocalVatHub&);
+	LocalVatHub(LocalVatHub&&);
+	
+	~LocalVatHub();
+	
+	LocalVatHub& operator=(const LocalVatHub&);
+	LocalVatHub& operator=(LocalVatHub&&);
+	
+	Own<LocalVatNetwork> join() const;
+	
+	fusionsc_LvnHub* incRef();
+	fusionsc_LvnHub* release();
 	
 private:
-	struct Impl;
-	Own<Impl> pImpl;
+	fusionsc_LvnHub* backend;
 };
 
 }

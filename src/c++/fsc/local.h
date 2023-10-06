@@ -73,9 +73,9 @@ struct LibraryHandle : public kj::AtomicRefcounted {
 	bool isElevated () const { return elevatedInstance == this; }
 	
 private:
-	struct SharedData : public kj::AtomicRefcounted {
+	/*struct SharedData : public kj::AtomicRefcounted {
 		DataStore& store;
-	};
+	};*/
 	
 	//! Executes the steward thread
 	void runSteward(bool elevated);

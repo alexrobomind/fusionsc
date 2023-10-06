@@ -1,3 +1,5 @@
+#pragma once
+
 #include "capi-store.h"
 
 namespace fsc {

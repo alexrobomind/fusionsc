@@ -242,8 +242,8 @@ struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::Bootstra
 		library(getActiveThread().library()->addRef()),
 		factory(mv(factory)),
 		
-		vatHub(newLocalVatHub()),
-		vatNetwork(kj::heap<LocalVatNetwork>(*vatHub)),
+		vatHub(kj::heap<LocalVatHub>()),
+		vatNetwork(vatHub -> join()),
 		
 		ready(false),
 		thread(KJ_BIND_METHOD(*this, run))
@@ -318,9 +318,9 @@ struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::Bootstra
 	Service::Client connect() const {
 		using capnp::RpcSystem;
 		
-		auto vatNetwork = heapHeld<LocalVatNetwork>(*vatHub);
+		auto vatNetwork = ownHeld(vatHub -> join());
 		auto rpcClient  = heapHeld<capnp::RpcSystem<VatId>>(*vatNetwork, nullptr);
-		auto client     = rpcClient -> bootstrap(LocalVatHub::INITIAL_VAT_ID);
+		auto client     = rpcClient -> bootstrap(LocalVatNetwork::INITIAL_VAT_ID);
 		
 		Own<void> attachments = kj::attachRef(client, vatNetwork.x(), rpcClient.x());
 		Promise<void> lifetimeScope = getActiveThread().lifetimeScope().wrap(Promise<void>(NEVER_DONE)).attach(mv(attachments));

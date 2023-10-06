@@ -414,7 +414,9 @@ PythonContext::Instance& PythonContext::getInstance() {
 }
 	
 Library PythonContext::library() {
-	static kj::MutexGuarded<Library> lib = kj::MutexGuarded<Library>(newLibrary(true));
+	StartupParameters ctx;
+	ctx.elevated = true;
+	static kj::MutexGuarded<Library> lib = kj::MutexGuarded<Library>(newLibrary(ctx));
 	return (**lib.lockExclusive()).addRef();
 }
 

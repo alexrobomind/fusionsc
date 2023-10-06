@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,7 +38,7 @@ struct fusionsc_LvnListener {
 struct fusionsc_Lvn {	
 	uint16_t version = 1;
 	
-	const uint64_t address;
+	uint64_t address;
 	
 	void (*incRef)(fusionsc_Lvn*); // Increases the reference count of this object
 	void (*decRef)(fusionsc_Lvn*); // Decreases the reference count of this object
