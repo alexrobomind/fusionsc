@@ -56,9 +56,6 @@ struct LibraryHandle : public kj::AtomicRefcounted {
 	inline LibraryThread newThread(Maybe<kj::EventPort&> eventPort = nullptr) const ;
 	void stopSteward() const;
 	
-	inline bool inShutdownMode() const { return *(shutdownMode.lockShared()); }
-	inline void setShutdownMode() const { KJ_FAIL_REQUIRE("DEPRECATED"); *(shutdownMode.lockExclusive()) = true; }
-	
 	std::unique_ptr<Botan::HashFunction> defaultHash() const;
 	
 private:
@@ -66,10 +63,9 @@ private:
 	//! Executes the steward thread
 	void runSteward();
 	
-	kj::MutexGuarded<bool> shutdownMode;
 	mutable DataStore sharedStore = nullptr;
 	
-	Own<kj::CrossThreadPromiseFulfiller<bool>> stewardFulfiller;
+	Own<kj::CrossThreadPromiseFulfiller<void>> stewardFulfiller;
 	kj::MutexGuarded<Maybe<Own<const kj::Executor>>> stewardExecutor;
 	kj::Thread stewardThread;
 	
@@ -146,9 +142,6 @@ struct ThreadContext {
 	Promise<void> drain();
 	
 	kj::Canceler& lifetimeScope();
-
-protected:
-	bool fastShutdown = false;
 	
 private:
 	struct CustomEventPort {
@@ -225,8 +218,6 @@ private:
 struct StewardContext : public ThreadContext {
 	inline const Library& library() const override { KJ_FAIL_REQUIRE("Library instance not available from steward context"); }
 	inline LocalDataService& dataService() override { KJ_FAIL_REQUIRE("Data service not available from steward context"); }
-	
-	void shutdownFast();
 	
 	StewardContext();
 	~StewardContext();

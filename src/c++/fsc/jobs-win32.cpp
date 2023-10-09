@@ -316,7 +316,6 @@ struct Win32ProcessJobScheduler : public JobScheduler::Server {
 // API
 
 JobScheduler::Client newProcessScheduler() {
-	KJ_REQUIRE(getActiveThread().library() -> isElevated(), "Process jobs can only be run through elevated FSC instances.");
 	return kj::heap<Win32ProcessJobScheduler>();
 }
 

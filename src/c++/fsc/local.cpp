@@ -13,7 +13,6 @@ namespace fsc {
 // === class LibraryHandle ===
 	
 LibraryHandle::LibraryHandle(StartupParameters params) :
-	shutdownMode(false),
 	stewardThread([this]() { runSteward(); })
 {	
 	KJ_IF_MAYBE(pStore, params.dataStore) {
@@ -33,7 +32,7 @@ LibraryHandle::~LibraryHandle() {
 }
 
 void LibraryHandle::stopSteward() const {
-	stewardFulfiller -> fulfill(inShutdownMode());
+	stewardFulfiller -> fulfill();
 }
 
 std::unique_ptr<Botan::HashFunction> LibraryHandle::defaultHash() const {
@@ -59,7 +58,7 @@ void LibraryHandle::runSteward() {
 	StewardContext ctx;
 	
 	// Register fulfiller for shutdown	
-	auto paf = kj::newPromiseAndCrossThreadFulfiller<bool>();
+	auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
 	stewardFulfiller = mv(paf.fulfiller);
 	
 	// Pass back the executor
@@ -83,14 +82,7 @@ void LibraryHandle::runSteward() {
 	});
 
 	// loopbackReferenceForStewardStartup = nullptr;
-	bool fastShutdown = runPromise.wait(ctx.waitScope());
-	
-	runningLoop = READY_NOW;
-	
-	if(fastShutdown)
-		ctx.shutdownFast();
-	
-	// DO NOT USE this PAST THIS POINT
+	runPromise.wait(ctx.waitScope());
 }
 
 // === class NullErrorHandler ===
@@ -196,49 +188,27 @@ ThreadHandle::ThreadHandle(Library l, Maybe<kj::EventPort&> eventPort) :
 {}
 
 ThreadHandle::~ThreadHandle() {	
-	// If the library is in shutdown mode, we have to (conservatively) assume 
-	// that all other threads  have unexpectedly died and this is the last
-	// remaining active thread. We can not BANK on it, but we can not wait
-	// for any other promises on the event loop to resolve.
-	if(!_library->inShutdownMode()) {
-		drain().wait(waitScope());
+	drain().wait(waitScope());
+	
+	while(true) {
+		Promise<void> noMoreRefs = READY_NOW;
 		
-		while(true) {
-			Promise<void> noMoreRefs = READY_NOW;
-			
-			{
-				auto locked = refData -> lockExclusive();
-				
-				if(locked -> refs.size() == 0)
-					break;
-				
-				auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-				noMoreRefs = mv(paf.promise);
-				
-				locked -> whenNoRefs = mv(paf.fulfiller);
-			}
-			
-			noMoreRefs.wait(waitScope());
-		}
-		
-		delete refData;
-	} else {
-		detachedTasks.clear();
-		
-		bool canDeleteRefdata = false;
 		{
 			auto locked = refData -> lockExclusive();
-		
+			
 			if(locked -> refs.size() == 0)
-				canDeleteRefdata = true;
+				break;
+			
+			auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+			noMoreRefs = mv(paf.promise);
+			
+			locked -> whenNoRefs = mv(paf.fulfiller);
 		}
 		
-		if(canDeleteRefdata)
-			delete refData;
-		
-		// Tell the thread context that we are doing a fast shutdown
-		ThreadContext::fastShutdown = true;
+		noMoreRefs.wait(waitScope());
 	}
+	
+	delete refData;
 }
 
 Own<ThreadHandle> ThreadHandle::addRef() {
@@ -256,8 +226,5 @@ StewardContext::~StewardContext() {
 	detachedTasks.clear();
 };
 
-void StewardContext::shutdownFast() {
-	ThreadContext::fastShutdown = true;
-}
 
 }

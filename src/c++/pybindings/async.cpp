@@ -40,8 +40,6 @@ namespace {
 		
 		return fiberPool.startFiber(mv(func));
 	}
-	
-	static thread_local bool shutdownMode = false;
 }
 
 namespace fscpy {
@@ -85,98 +83,6 @@ bool PythonWaitScope::canWait() {
 }
 
 // class AsyncioEventPort
-	
-struct AsyncioEventPort::WakeHelper {
-	using State = uint8_t;
-	
-	constexpr static State STARTING = 0;
-	
-	constexpr static State READY = 1;
-	constexpr static State NOTIFIED = 2;
-	constexpr static State STOPPED = 4;
-		
-	struct Data : public kj::AtomicRefcounted {
-		kj::MutexGuarded<State> state;
-		AsyncioEventPort& parent;
-		std::atomic<bool> stopped = false;
-		
-		Data(AsyncioEventPort& parent) : state(STARTING), parent(parent) {}
-	};
-	
-	Own<Data> data;
-	std::thread spinner;
-	
-	WakeHelper(AsyncioEventPort& parent) :
-		data(kj::atomicRefcounted<Data>(parent)),
-		spinner(KJ_BIND_METHOD(*this, runSpinner))
-	{	
-		auto locked = data -> state.lockExclusive();
-		locked.wait([](auto state){ return state & READY; });
-	}
-	
-	~WakeHelper() {
-		py::gil_scoped_release withoutGil;
-		
-		auto locked = data -> state.lockExclusive();
-		*locked |= STOPPED;
-		
-		if(shutdownMode) {
-			spinner.detach();
-		} else {
-			spinner.join();
-		}
-	}
-	
-	void runSpinner() {	
-		auto data = kj::atomicAddRef(*this -> data);
-		
-		{	
-			auto locked = data -> state.lockExclusive();
-			*locked = READY;
-		}
-		
-		while(true) {
-			{
-				auto locked = data -> state.lockExclusive();
-				locked.wait([](auto state) { return state & (NOTIFIED | STOPPED); });
-				
-				if(*locked & STOPPED) {
-					return;
-				}
-				
-				*locked &= ~NOTIFIED;
-			}
-			
-			// Pybind11's gil_scoped_acquire has a lot of error checking that gets
-			// tripped when the interpreter finalizes. Just use the basic python api.
-			PyGILState_STATE gilState;
-			gilState = PyGILState_Ensure();
-			KJ_DEFER({
-				if(!_Py_IsFinalizing()) {
-					PyGILState_Release(gilState); 
-				}
-			});
-			
-			if(py::bool_(data -> parent.eventLoop.attr("is_closed")()))
-				continue;
-						
-			data -> parent.eventLoop.attr("call_soon_threadsafe")(py::cpp_function(
-				[]() {
-					// Event port was destroyed in the meantime
-					if(AsyncioEventPort::instance == nullptr)
-						return;
-					
-					AsyncioEventPort::instance -> armRunner();
-				}
-			));
-		}
-	}
-	
-	void notify() const {		
-		auto locked = data -> state.lockExclusive();
-		*locked |= NOTIFIED;
-	}
-};
 
 AsyncioEventPort::AsyncioEventPort() {	
 	KJ_REQUIRE(instance == nullptr, "Can not have two asyncio event ports active in the same thread");
@@ -379,9 +285,7 @@ PythonContext::Instance& PythonContext::getInstance() {
 	   python has been finalized. This can cause the main thread shutdown to hang or crash.
 	   
 	   To mitigate this issue, we deregister the thread-local data while Python is still
-	   active. Note that the Daemon threads can hang up or die once they try to touch
-	   the interpreter, which requires us to not join on them (which is what the shutdownMode
-	   flag is for).
+	   active.
 	*/
 	{
 		auto locked = pythonInitialized.lockExclusive();
@@ -390,16 +294,13 @@ PythonContext::Instance& PythonContext::getInstance() {
 			*locked = true;
 			
 			py::module_::import("atexit").attr("register")(
-				py::cpp_function([]() {
-					// shutdownMode = true;
-					
+				py::cpp_function([]() {					
 					try {
 						PythonContext::stop();
 					} catch(py::error_already_set& e) {
 						KJ_LOG(WARNING, "Exception during cleanup", convertPyError(e));
 					}
 					
-					shutdownMode = false;
 					*pythonInitialized.lockExclusive() = false;
 				})
 			);
