@@ -14,17 +14,8 @@ namespace fsc {
 	
 LibraryHandle::LibraryHandle(StartupParameters params) :
 	shutdownMode(false),
-	stewardThread([this, elevated = params.elevated]() { runSteward(elevated); })
-{
-	if(params.elevated) {
-		KJ_REQUIRE(elevatedInstance == nullptr, "Can only have one active elevated instance");
-		elevatedInstance = this;
-		
-		#ifndef _WIN32
-		kj::UnixEventPort::captureChildExit();
-		#endif
-	}
-	
+	stewardThread([this]() { runSteward(); })
+{	
 	KJ_IF_MAYBE(pStore, params.dataStore) {
 		sharedStore = mv(*pStore);
 	} else {
@@ -39,9 +30,6 @@ LibraryHandle::LibraryHandle(StartupParameters params) :
 
 LibraryHandle::~LibraryHandle() {
 	stopSteward();
-	
-	if(elevatedInstance == this)
-		elevatedInstance = nullptr;
 }
 
 void LibraryHandle::stopSteward() const {
@@ -65,12 +53,7 @@ const kj::Executor& LibraryHandle::steward() const {
 	return **pExecutor;
 }
 
-void LibraryHandle::runSteward(bool elevated) {
-	#ifndef _WIN32
-	if(elevated)
-		kj::UnixEventPort::captureChildExit();
-	#endif
-
+void LibraryHandle::runSteward() {
 	// We use a special thread context for the steward that doesn't
 	// have back-access to the library.
 	StewardContext ctx;

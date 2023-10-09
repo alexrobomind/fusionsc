@@ -33,7 +33,6 @@ struct NullErrorHandler : public kj::TaskSet::ErrorHandler {
 };
 
 struct StartupParameters {
-	bool elevated = false;
 	Maybe<DataStore> dataStore;
 };
 
@@ -58,27 +57,14 @@ struct LibraryHandle : public kj::AtomicRefcounted {
 	void stopSteward() const;
 	
 	inline bool inShutdownMode() const { return *(shutdownMode.lockShared()); }
-	inline void setShutdownMode() const { *(shutdownMode.lockExclusive()) = true; }
+	inline void setShutdownMode() const { KJ_FAIL_REQUIRE("DEPRECATED"); *(shutdownMode.lockExclusive()) = true; }
 	
 	std::unique_ptr<Botan::HashFunction> defaultHash() const;
 	
-	/**
-	 * Sets this FSC library instance to elevated mode. This causes the following changed:
-	 *  - On UNIX, installs a signal handler to handle SIGCHLD events. The handler is restricted
-	 *    to the event loop of the steward thread. Since SIGCHLD handlers tend to heavily interfere
-	 *    with each other, this action is restricted to on-demand.
-	 *
-	 * \warning You can only have one elevated instance per process.
-	 */
-	bool isElevated () const { return elevatedInstance == this; }
-	
 private:
-	/*struct SharedData : public kj::AtomicRefcounted {
-		DataStore& store;
-	};*/
 	
 	//! Executes the steward thread
-	void runSteward(bool elevated);
+	void runSteward();
 	
 	kj::MutexGuarded<bool> shutdownMode;
 	mutable DataStore sharedStore = nullptr;
@@ -94,7 +80,6 @@ private:
 	
 	friend Own<LibraryHandle> kj::atomicRefcounted<LibraryHandle>();
 	
-	static inline const LibraryHandle* elevatedInstance = nullptr;
 	friend class StewardContext;
 };
 

@@ -39,11 +39,8 @@ TEST_CASE("slurm-parser") {
 	auto result = internal::testSControlParser(SCONTROL_EXAMPLE_OUT);
 }
 
-TEST_CASE("job-echo") {
-	StartupParameters config;
-	config.elevated = true;
-	
-	auto l = newLibrary(config);
+TEST_CASE("job-echo") {	
+	auto l = newLibrary();
 	auto lt = l -> newThread();
 	
 	auto& ws = lt -> waitScope();
