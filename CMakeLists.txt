@@ -124,6 +124,7 @@ else()
 	add_library(ZLIB::zlib ALIAS ZLIB::ZLIB)
 	add_library(ZLIB::zlibstatic ALIAS ZLIB::ZLIB)
 endif()
+set(ZLIB_FOUND 1)
 
 set(ZLIB_STATIC_LIBRARY ZLIB::zlibstatic)
 set(ZLIB_LIBRARY ZLIB::zlib)
@@ -193,11 +194,24 @@ add_vendored_dependency(
 	VERSION 3.4
 )
 
-find_package(HDF5)
-if(HDF5_FOUND)
-	set(FSC_WITH_HDF5 On)
-else()
-	set(FSC_WITH_HDF5 Off)
+set(FSC_WITH_HDF5 On)
+set(HDF5_EXTERNALLY_CONFIGURED 1)
+set(H5_ZLIB_HEADER "zlib.h")
+#set(HDF5_LIB_DEPENDENCIES ZLIB::ZLIB)
+set(HDF5_EXPORTED_TARGETS "FSCTargets")
+set(LINK_COMP_LIBS ZLIB::ZLIB)
+
+set(HDF5_BUILD_CPP_LIB ON CACHE BOOL "description" FORCE)
+
+add_vendored_dependency(
+	PREFIX vendor/hdf5
+	NAME HDF5
+	VERSION 1.14.2
+)
+
+if(HDF5_VENDORED)
+	add_library(hdf5::hdf5 ALIAS hdf5-static)
+	add_library(hdf5::hdf5_cpp ALIAS hdf5_cpp-static)
 endif()
 
 # NetCDF requires a pre-built HDF5 to work, so we can't package it in here :/
@@ -286,6 +300,7 @@ target_link_libraries(
 	CapnProto::kj-http
 	CapnProto::kj
 	Eigen3::Eigen
+	hdf5::hdf5_cpp
 	Libssh2::libssh2
 	SQLite::SQLite3
 	ZLIB::ZLIB
@@ -316,19 +331,6 @@ if(FSC_WITH_PYTHON)
 		INTERFACE
 		pybind11::pybind11
 		Python::NumPy
-	)
-endif()
-
-if(FSC_WITH_HDF5)
-	target_compile_definitions(
-		deps
-		INTERFACE
-		FSC_WITH_HDF5
-	)
-	target_link_libraries(
-		deps
-		INTERFACE
-		hdf5::hdf5
 	)
 endif()
 
