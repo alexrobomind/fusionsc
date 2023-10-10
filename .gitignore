@@ -1,9 +1,10 @@
 /build*/
+/test*/
 /_skbuild/
 /gendocs/
 /dist/
 /wheelhouse/
-/testnbs/
+/*.fsc
 *.pyc
 *.so
 *.pyd
