@@ -22,10 +22,10 @@ build-backend = "scikit_build_core.build"
 
 [tool.scikit-build]
 sdist.exclude = [
-	"examples/",
-	"util/",
-	"src/service/devices/w7x-resources/components.json",
-	"src/service/devices/w7x-resources/compile-index.py"
+	"/examples/",
+	"/util/",
+	"/src/service/devices/w7x-resources/components.json",
+	"/src/service/devices/w7x-resources/compile-index.py"
 ]
 
 cmake.targets = ["fsc-skbuild-target"]
