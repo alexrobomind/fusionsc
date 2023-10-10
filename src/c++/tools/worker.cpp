@@ -105,7 +105,7 @@ kj::Array<const byte> token = kj::heapArray<const byte>({0});
 	}
 		
 	bool run() {
-		auto l = newLibrary(true);
+		auto l = newLibrary();
 		auto lt = l -> newThread();
 		auto& ws = lt->waitScope();
 		
@@ -163,7 +163,7 @@ kj::Array<const byte> token = kj::heapArray<const byte>({0});
 	
 	auto getMain() {
 		auto infoString = kj::str(
-			"FusionSC worker\n",
+			"FusionSC worker node\n",
 			"Protocol version ", FSC_PROTOCOL_VERSION, "\n"
 		);
 		

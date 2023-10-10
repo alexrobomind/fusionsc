@@ -332,6 +332,11 @@ if(FSC_WITH_HDF5)
 	)
 endif()
 
+# Set up the scikit build
+if(SKBUILD)
+	add_custom_target(fsc-skbuild-target)
+endif()
+
 # Set up testing subsystem
 include(Catch)
 

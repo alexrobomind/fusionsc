@@ -1,6 +1,6 @@
 # Setup tests
 if(BUILD_TESTING)
-	add_executable(tests tests_main.cpp)
+	add_executable(tests EXCLUDE_FROM_ALL tests_main.cpp)
 	target_link_libraries(tests PUBLIC Catch2::Catch2 deps)
 
 	set(SFC_TEST_DIR "${CMAKE_BINARY_DIR}/tests")

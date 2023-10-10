@@ -33,4 +33,9 @@ add_executable(
 
 target_link_libraries(brandedEnums CapnProto::capnp-rpc)
 
-install(TARGETS fsc-server fsc-load-balancer EXPORT FSCTargets)
+if(SKBUILD)
+	add_dependencies(fsc-skbuild-target fsc-server fsc-load-balancer fsc-worker)
+	install(TARGETS fsc-server fsc-load-balancer fsc-worker RUNTIME DESTINATION ${SKBUILD_SCRIPTS_DIR} COMPONENT SKBUILD)
+endif()
+
+install(TARGETS fsc-server fsc-load-balancer fsc-worker EXPORT FSCTargets)
