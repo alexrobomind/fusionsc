@@ -1,9 +1,9 @@
-build*/
-_skbuild/
-gendocs/
-dist/
-wheelhouse/
-testnbs/
+/build*/
+/_skbuild/
+/gendocs/
+/dist/
+/wheelhouse/
+/testnbs/
 *.pyc
 *.so
 *.pyd
