@@ -9,5 +9,5 @@
 *.so
 *.pyd
 *.egg-info/
-w7x.fsc
+w7x*.fsc
 .ipynb_checkpoints
