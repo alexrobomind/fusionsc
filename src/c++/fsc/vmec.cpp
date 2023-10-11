@@ -1,6 +1,8 @@
 #include "vmec.h"
 #include "common.h"
 
+#include <H5cpp.h>
+
 namespace fsc {
 
 namespace {
@@ -133,10 +135,6 @@ kj::StringTree generateVmecInput(VmecRequest::Reader request) {
 	
 	KJ_REQUIRE(request.getPhiEdge() != 0, "phiEdge must be provided");
 	
-	if(request.isFreeBoundary()) {
-		KJ_UNIMPLEMENTED("Free boundary runs not supported");
-	}
-	
 	kj::StringTree result = kj::strTree(
 		"LFREEB = ", fBool(request.isFreeBoundary()), "\n"
 		"LOLDOUT = F\n"
@@ -177,6 +175,14 @@ kj::StringTree generateVmecInput(VmecRequest::Reader request) {
 		);
 	}
 	
+	if(request.isFreeBoundary()) {
+		result = kj::strTree(
+			mv(result),
+			
+		);
+		KJ_UNIMPLEMENTED("Free boundary runs not supported");
+	}
+	
 	result = kj::strTree(
 		"&INDATA\n", mv(result), "/\n"
 	);
@@ -184,14 +190,73 @@ kj::StringTree generateVmecInput(VmecRequest::Reader request) {
 	return result;
 }
 
+void writeMGridFileInternal(kj::Path path, ComputedField::Reader cField, LocalDataRef<Float64Tensor> fieldData) {
+}
+
+Promise<void> writeMGridFile(kj::Path path, ComputedField::Reader cField) {
+	return getActiveThread().dataService().download(cField.getData())
+	.then([path, grid = cField.getGrid()](LocalDataRef<Float64Tensor> data) {
+		// Data types
+		H5::DataType intType(H5::PredType::NATIVE_INT);
+		H5::DataType doubleType(H5::PredType::NATIVE_DOUBLE);
+		H5::DataType charType(H5::PredType::NATIVE_CHAR);
+		
+		// Data shapes
+		hsize_t shapeContainer[4];
+		
+		H5::DataSpace scalarShape();
+		
+		shapeContainer[0] = grid.getNPhi();
+		shapeContainer[1] = grid.getNZ();
+		shapeContainer[2] = grid.getNR();
+		H5::DataSpace fieldShape(3, shapeContainer);
+		
+		shapeContainer[0] = 1;
+		shapeContainer[1] = 30;
+		H5::DataSpace coilGroupShape(2, shapeContainer);
+		
+		shapeContainer[0] = 1;
+		H5::DataSpace mgridModeShape(1, shapeContainer);
+		
+		// File
+		H5::H5File file(path.toWin32String(true).cStr(), H5F_ACC_TRUNC);
+		
+		// Variables
+		auto writeScalar = [&](auto value
+	};
 }
 
 struct VmecDriverImpl : public VmecDriver::Server {
 	JobScheduler::Client scheduler;
 	
-	VmecDriverImpl(JobScheduler::Client scheduler) :
-		scheduler(mv(scheduler))
+	kj::Path rootPath;
+	Own<kj::Directory> rootDirectory;
+	
+	uint64_t jobDirCounter = 0;
+	
+	VmecDriverImpl(JobScheduler::Client scheduler, kj::Filesystem& fs, kj::Path rootPath) :
+		scheduler(mv(scheduler)), rootPath(rootPath),
+		rootDirectory(fs.getCurrent() -> openSubdir(rootPath, WriteMode::CREATE | WriteMode::MODIFY))
 	{}
+	
+	kj::Path createJobDirectory() {
+		auto names = rootDirectory -> listNames();
+		while(true) {
+			auto nameCandidate = kj::str("vmecJob", jobDirCounter++);
+			
+			for(auto& name : names) {
+				if(name == nameCandidate) {
+					goto nextCandidate;
+				}
+			}
+			
+			rootDirectory -> openSubdir(nameCandidate, WriteMode::CREATE);
+			return rootPath.append(nameCandidate);
+			
+			nextCandidate:
+				continue;
+		}
+	}
 };
 
 VmecDriver::Client createVmecDriver(JobScheduler::Client scheduler) {

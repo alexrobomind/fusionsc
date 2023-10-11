@@ -28,6 +28,9 @@ add_library(
 	yaml.h
 	yaml.cpp
 	
+	hdf5.h
+	hdf5.cpp
+	
 	networking.h
 	networking.cpp
 	

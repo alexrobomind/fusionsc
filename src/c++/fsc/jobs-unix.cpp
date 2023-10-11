@@ -157,6 +157,7 @@ struct UnixProcessJobScheduler : public JobScheduler::Server {
 		
 		char** args = heapArgs.begin();
 		const char* path = params.getCommand().cStr();
+		const char* workDir = params.getWorkDir().cStr();
 		
 		auto stdin = stdinPipe[0];
 		auto stdout = stdoutPipe[1];
@@ -184,6 +185,8 @@ struct UnixProcessJobScheduler : public JobScheduler::Server {
 			close(stderrPipe[1]);
 			close(dummyPipe[0]);
 			close(dummyPipe[1]);
+			
+			KJ_SYSCALL(chdir(workDir));
 			
 			execvp(path, args);
 			exit(-1);
