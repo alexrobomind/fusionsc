@@ -212,6 +212,8 @@ add_vendored_dependency(
 if(HDF5_VENDORED)
 	add_library(hdf5::hdf5 ALIAS hdf5-static)
 	add_library(hdf5::hdf5_cpp ALIAS hdf5_cpp-static)
+	add_library(hdf5::hdf5_hl ALIAS hdf5_hl-static)
+	add_library(hdf5::hdf5_hl_cpp ALIAS hdf5_hl_cpp-static)
 endif()
 
 # NetCDF requires a pre-built HDF5 to work, so we can't package it in here :/
@@ -301,6 +303,7 @@ target_link_libraries(
 	CapnProto::kj
 	Eigen3::Eigen
 	hdf5::hdf5_cpp
+	hdf5::hdf5_hl_cpp
 	Libssh2::libssh2
 	SQLite::SQLite3
 	ZLIB::ZLIB
