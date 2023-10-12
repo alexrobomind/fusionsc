@@ -27,7 +27,7 @@ struct VmecSurfaces {
 	# Tensor of shape [nSurfaces, nPoloidalCoeffs, nToroidalCoeffs]
 	zSin @1 : FTensor;
 	
-	period @2 : UInt32;
+	period @2 : UInt32 = 1;
 	nTor @3 : UInt32;
 	mPol @4 : UInt32;
 	
@@ -97,6 +97,8 @@ struct VmecRequest {
 		vacuumCalcSteps @15 : UInt32 = 6;
 		timeStep @16 : Float32 =  0.9;
 		forceToleranceLevels @17 : List(Float32) = [1.0E-5, 1.0E-7, 1.E-10, 1.E-15];
+		mPolMax @19 : UInt32 = 6;
+		nTorMax @20 : UInt32 = 9;
 	}
 	
 	phiEdge @18 : Float64 = 0;

@@ -201,8 +201,8 @@ struct ThreadHandle : public ThreadContext {
 	 * semantics, holding this reference causes the ThreadHandle's destructor to cycle its event
 	 * loop until all references are destroyed.
 	 */
-	Own<ThreadHandle> addRef();
-	Own<const ThreadHandle> addRef() const;
+	/*Own<ThreadHandle> addRef();
+	Own<const ThreadHandle> addRef() const;*/
 		
 private:
 	// Back-reference to the library handle.
@@ -212,7 +212,7 @@ private:
 	struct Ref;
 	struct RefData;
 	
-	kj::MutexGuarded<RefData>* refData;
+	// kj::MutexGuarded<RefData>* refData;
 };
 
 struct StewardContext : public ThreadContext {

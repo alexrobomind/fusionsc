@@ -146,6 +146,7 @@ if(BUILD_TESTING)
 		flt-tests.cpp
 		interpolation-tests.cpp
 		fieldline-mapping-tests.cpp
+		vmec-tests.cpp
 		
 		efit-tests.cpp
 		

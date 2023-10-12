@@ -143,7 +143,7 @@ void validateSurfaces(VmecSurfaces::Reader in) {
 }
 
 kj::StringTree makeAxisData(VmecSurfaces::Reader in) {
-	validateSurfaces();
+	validateSurfaces(in);
 	
 	auto nTor = in.getNTor();
 	auto mPol = in.getMPol();
@@ -160,12 +160,14 @@ kj::StringTree makeAxisData(VmecSurfaces::Reader in) {
 	
 	for(auto iTor : kj::range(0, nTor)) {
 		rAxisCC.add(rCos(iTor, mPol, 0));
-		zAxisCs.add(zSin(iTor, mPol, 0));
+		zAxisCS.add(zSin(iTor, mPol, 0));
 	}
 	
-	auto result = kj::strTree(
+	result = kj::strTree(
+		"\n",
+		"! --- Magnetic axis ---\n",
 		"RAXIS_CC = ", fArray(rAxisCC.finish()), "\n"
-		"ZAXIS_CS = ", fArray(zAxisCs.finish()), "\n"
+		"ZAXIS_CS = ", fArray(zAxisCS.finish()), "\n"
 	);
 	
 	if(in.isNonSymmetric()) {
@@ -192,7 +194,7 @@ kj::StringTree makeAxisData(VmecSurfaces::Reader in) {
 }
 
 kj::StringTree makeBoundaryData(VmecSurfaces::Reader in) {
-	validateSurfaces();
+	validateSurfaces(in);
 	
 	auto nTor = in.getNTor();
 	auto mPol = in.getMPol();
@@ -207,14 +209,23 @@ kj::StringTree makeBoundaryData(VmecSurfaces::Reader in) {
 	
 	kj::StringTree result;
 	
+	result = kj::strTree(
+		mv(result), "\n",
+		"! --- Symmetric flux surface coefficients --- \n"
+	);
+	
 	for(auto iTor : kj::range(0, nTor)) {
+		result = kj::strTree(
+			mv(result),
+			"! n = ", iTor, "\n"
+		);
 		for(auto jPol : kj::range(0, 2 * mPol + 1)) {
 			int64_t jReal = static_cast<int64_t>(jPol) - mPol;
 			
 			result = kj::strTree(
 				mv(result),
-				"RBC(", jReal, ", ", iTor, ") = ", rCos(iTor, mPol, iMax), "  "
-				"ZBS(", jReal, ", ", iTor, ") = ", zSin(iTor, mPol, iMax), "\n"
+				"RBC(", jReal, ", ", iTor, ") = ", rCos(iTor, jPol, iMax), "  "
+				"ZBS(", jReal, ", ", iTor, ") = ", zSin(iTor, jPol, iMax), "\n"
 			);
 		}
 	}
@@ -225,14 +236,23 @@ kj::StringTree makeBoundaryData(VmecSurfaces::Reader in) {
 		readTensor(in.getNonSymmetric().getRSin(), rSin);
 		readTensor(in.getNonSymmetric().getZCos(), zCos);
 	
+		result = kj::strTree(
+			mv(result),
+			"! --- Antisymmetric flux surface coefficients --- \n"
+		);
+	
 		for(auto iTor : kj::range(0, nTor)) {
+			result = kj::strTree(
+				mv(result),
+				"! n = ", iTor, "\n"
+			);
 			for(auto jPol : kj::range(0, 2 * mPol + 1)) {
 				int64_t jReal = static_cast<int64_t>(jPol) - mPol;
 				
 				result = kj::strTree(
 					mv(result),
-					"RBZ(", jReal, ", ", iTor, ") = ", rSin(iTor, mPol, iMax), "  "
-					"ZBC(", jReal, ", ", iTor, ") = ", zCos(iTor, mPol, iMax), "\n"
+					"RBZ(", jReal, ", ", iTor, ") = ", rSin(iTor, jPol, iMax), "  "
+					"ZBC(", jReal, ", ", iTor, ") = ", zCos(iTor, jPol, iMax), "\n"
 				);
 			}
 		}
@@ -241,55 +261,52 @@ kj::StringTree makeBoundaryData(VmecSurfaces::Reader in) {
 	return result;
 }
 
-Promise<void> writeMGridFile(kj::Path path, ComputedField::Reader cField) {
-	return getActiveThread().dataService().download(cField.getData())
-	.then([path, grid = cField.getGrid()](LocalDataRef<Float64Tensor> data) {
-		// Data types
-		H5::DataType intType(H5::PredType::NATIVE_INT);
-		H5::DataType doubleType(H5::PredType::NATIVE_DOUBLE);
-		H5::DataType charType(H5::PredType::NATIVE_CHAR);
-		
-		// Data shapes
-		hsize_t shapeContainer[4];
-		
-		H5::DataSpace scalarShape();
-		
-		shapeContainer[0] = grid.getNPhi();
-		shapeContainer[1] = grid.getNZ();
-		shapeContainer[2] = grid.getNR();
-		H5::DataSpace fieldShape(3, shapeContainer);
-		
-		shapeContainer[0] = 1;
-		shapeContainer[1] = 30;
-		H5::DataSpace coilGroupShape(2, shapeContainer);
-		
-		shapeContainer[0] = 1;
-		H5::DataSpace mgridModeShape(1, shapeContainer);
-		
-		// File
-		H5::H5File file(path.toNativeString(true).cStr(), H5F_ACC_TRUNC);
-		
-		// Variables
-		auto writeScalar = [&](auto value
-	};
+struct VmecDriverImpl : public VmecDriver::Server {
+	JobScheduler::Client scheduler;
+	
+	kj::Path rootPath;
+	Own<const kj::Directory> rootDirectory;
+	
+	uint64_t jobDirCounter = 0;
+	
+	VmecDriverImpl(JobScheduler::Client scheduler, kj::Filesystem& fs, kj::PathPtr parPath) :
+		scheduler(mv(scheduler)), rootPath(parPath.clone()),
+		rootDirectory(fs.getCurrent().openSubdir(rootPath, kj::WriteMode::CREATE | kj::WriteMode::MODIFY))
+	{}
+	
+	kj::Path createJobDirectory() {
+		auto names = rootDirectory -> listNames();
+		while(true) {
+			auto nameCandidate = kj::str("vmecJob", jobDirCounter++);
+			
+			for(auto& name : names) {
+				if(name == nameCandidate) {
+					goto nextCandidate;
+				}
+			}
+			
+			rootDirectory -> openSubdir(kj::Path(nameCandidate), kj::WriteMode::CREATE);
+			return rootPath.append(nameCandidate);
+			
+			nextCandidate:
+				continue;
+		}
+	}
+};
+
 }
 
 //! Generates the input file for a VMEC request
-kj::StringTree generateVmecInput(VmecRequest::Reader request, kj::Path mgridFile) {
+kj::String generateVmecInput(VmecRequest::Reader request, kj::PathPtr mgridFile) {
 	auto sp = request.getStartingPoint();
-	auto surfShape = sp.getRCos().getShape();
-	auto nSurf = surfShape[0];
-	auto n = surfShape[1];
-	auto m = surfShape[2];
-	auto period = sp.getPeriod();
-	
 	auto iota = request.getIota();
-	auto rp = request.getRunParams();
+	auto runParams = request.getRunParams();
 	
 	KJ_REQUIRE(request.getPhiEdge() != 0, "phiEdge must be provided");
+	KJ_REQUIRE(runParams.getNGridPoloidal() >= 2 * runParams.getMPolMax() + 6, "Poloidal grid resolution too low");
 	
 	kj::StringTree result = kj::strTree(
-		"LFREEB = ", fBool(request.isFreeBoundary()), "\n"
+		"! --- Fixed settings ---\n"
 		"LOLDOUT = F\n"
 		"LWOUTTXT = T\n"
 		"LDIAGNO = F\n"
@@ -297,23 +314,27 @@ kj::StringTree generateVmecInput(VmecRequest::Reader request, kj::Path mgridFile
 		"LGIVEUP = F\n"
 		"FGIVEUP = 30.\n"
 		"MAX_MAIN_ITERATIONS = 2\n"
-		"DELT = ", rp.getTimeStep(), "\n"
 		"TCON0 = 2.\n"
-		"NTOR = ", rp.getStartingPoint().getNTor(), "\n"
-		"MPOL = ", rp.getStartingPoint().getMPol(), "\n"
-		"NFP = ", period, "\n"
-		"NCURR = ", iota.isIotaProfile() ? 0 : 1, "\n"
-		"MPOL = ", m, " NTOR = ", n, "\n"
-		"NZETA = ", rp.getNGridToroidal(), " NTHETA = ", rp.getNGridPoloidal(), "\n"
-		"NS_ARRAY = ", fArray(rp.getNGridRadial()), "\n"
-		"NITER = ", rp.getMaxIterationsPerSequence(), "\n"
-		"NSTEP = ", rp.getConvergenceSteps(), "\n"
-		"NVACSKIP = ", rp.getVacuumCalcSteps(), "\n"
-		"GAMMA = ", request.getGamma(), "\n"
-		"FTOL_ARRAY = ", fArray(rp.getForceToleranceLevels()), "\n"
-		"PHIEDGE = ", request.getPhiEdge(), "\n"
-		"BLOAT = 1.\n",
+		"BLOAT = 1.\n"
+		"\n"
 		
+		"! --- General settings ---\n"
+		"LFREEB = ", fBool(request.isFreeBoundary()), " ! Whether to use a free boundary run\n"
+		"DELT = ", runParams.getTimeStep(), " ! Blend factor between runs\n"
+		"NTOR = ", runParams.getNTorMax(), "\n"
+		"MPOL = ", runParams.getMPolMax(), "\n"
+		"NFP = ", sp.getPeriod(), "\n"
+		"NTHETA = ", runParams.getNGridPoloidal(), "\n"
+		"NS_ARRAY = ", fArray(runParams.getNGridRadial()), "\n"
+		"NITER = ", runParams.getMaxIterationsPerSequence(), "\n"
+		"NSTEP = ", runParams.getConvergenceSteps(), "\n"
+		"NVACSKIP = ", runParams.getVacuumCalcSteps(), "\n"
+		"FTOL_ARRAY = ", fArray(runParams.getForceToleranceLevels()), "\n"
+		"PHIEDGE = ", request.getPhiEdge(), "\n"
+		"\n"
+		
+		"! --- Mass / pressure profile ---\n",
+		"GAMMA = ", request.getGamma(), "\n",
 		makeMassProfile(request.getMassProfile()),
 		
 		makeAxisData(request.getStartingPoint()),
@@ -322,32 +343,37 @@ kj::StringTree generateVmecInput(VmecRequest::Reader request, kj::Path mgridFile
 	
 	if(iota.isIotaProfile()) {
 		result = kj::strTree(
-			mv(result),
+			mv(result), "\n",
+			"! --- Iota profile ---\n",
+			"NCURR = 0\n",
 			makeIotaProfile(iota.getIotaProfile())
 		);
 	} else if(iota.isFromCurrent()) {
 		auto fromC = iota.getFromCurrent();
 		result = kj::strTree(
-			mv(result),
+			mv(result), "\n",
+			"! --- Current profile ---\n",
+			"NCURR = 1\n"
 			"CURTOR = ", fromC.getTotalCurrent(), "\n",
 			makeCurrentOrDensityProfile(fromC)
 		);
 	}
 	
 	if(request.isFreeBoundary()) {
-		/*result = kj::strTree(
-			mv(result),
+		result = kj::strTree(
+			mv(result), "\n",
+			"! --- Free boundary inputs ---\n",
 			"MGRID_FILE = '", mgridFile.toNativeString(true), "'\n",
+			"NZETA = ", request.getFreeBoundary().getVacuumField().getGrid().getNPhi(), "\n",
 			"EXTCUR = 1\n"
-		);*/
-		KJ_UNIMPLEMENTED("Free boundary runs not supported");
+		);
 	}
 	
 	result = kj::strTree(
 		"&INDATA\n", mv(result), "/\n"
 	);
 	
-	return result;
+	return result.flatten();
 }
 
 
@@ -403,41 +429,6 @@ Promise<void> writeMGridFile(kj::Path path, ComputedField::Reader cField) {
 			writeArray<double>(createDataSet<double>(file, "br_001", {nPhi, nZ, nR}), br);
 		}
 	});
-}
-
-struct VmecDriverImpl : public VmecDriver::Server {
-	JobScheduler::Client scheduler;
-	
-	kj::Path rootPath;
-	Own<const kj::Directory> rootDirectory;
-	
-	uint64_t jobDirCounter = 0;
-	
-	VmecDriverImpl(JobScheduler::Client scheduler, kj::Filesystem& fs, kj::PathPtr parPath) :
-		scheduler(mv(scheduler)), rootPath(parPath.clone()),
-		rootDirectory(fs.getCurrent().openSubdir(rootPath, kj::WriteMode::CREATE | kj::WriteMode::MODIFY))
-	{}
-	
-	kj::Path createJobDirectory() {
-		auto names = rootDirectory -> listNames();
-		while(true) {
-			auto nameCandidate = kj::str("vmecJob", jobDirCounter++);
-			
-			for(auto& name : names) {
-				if(name == nameCandidate) {
-					goto nextCandidate;
-				}
-			}
-			
-			rootDirectory -> openSubdir(kj::Path(nameCandidate), kj::WriteMode::CREATE);
-			return rootPath.append(nameCandidate);
-			
-			nextCandidate:
-				continue;
-		}
-	}
-};
-
 }
 
 VmecDriver::Client createVmecDriver(JobScheduler::Client scheduler, kj::PathPtr workDir) {

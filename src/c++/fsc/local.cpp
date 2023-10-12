@@ -109,10 +109,13 @@ ThreadContext::~ThreadContext() {
 	KJ_REQUIRE(current == this, "Destroying LibraryThread in wrong thread");
 	
 	scopeProvider.cancel("Thread context destroyed");
+	waitScope().cancelAllDetached();
 
 	// We need to turn the event loop so that we can make sure the cancellations
 	// have propagated.
 	waitScope().poll();
+	
+	drain().wait(waitScope());
 	
 	current = nullptr;
 }
@@ -183,13 +186,12 @@ ThreadHandle::Ref::~Ref() {
 ThreadHandle::ThreadHandle(Library l, Maybe<kj::EventPort&> eventPort) :
 	ThreadContext(eventPort),
 	_library(l -> addRef()),
-	_dataService(kj::heap<LocalDataService>(l)),
-	refData(new kj::MutexGuarded<RefData>())
+	_dataService(kj::heap<LocalDataService>(l))
+	// refData(new kj::MutexGuarded<RefData>())
 {}
 
-ThreadHandle::~ThreadHandle() {	
-	drain().wait(waitScope());
-	
+ThreadHandle::~ThreadHandle() {		
+	/*KJ_DBG("Waiting for refs to release");
 	while(true) {
 		Promise<void> noMoreRefs = READY_NOW;
 		
@@ -207,23 +209,24 @@ ThreadHandle::~ThreadHandle() {
 		
 		noMoreRefs.wait(waitScope());
 	}
+	KJ_DBG("Refs released");*/
 	
-	delete refData;
+	// delete refData;
 }
 
-Own<ThreadHandle> ThreadHandle::addRef() {
+/*Own<ThreadHandle> ThreadHandle::addRef() {
 	return Own<ThreadHandle>(this, kj::NullDisposer::instance).attach(kj::heap<ThreadHandle::Ref>(this->refData));
 }
 
 Own<const ThreadHandle> ThreadHandle::addRef() const {
 	return Own<const ThreadHandle>(this, kj::NullDisposer::instance).attach(kj::heap<ThreadHandle::Ref>(this->refData));
-}
+}*/
 
 // === class StewardContext ===
 
 StewardContext::StewardContext() {};
 StewardContext::~StewardContext() {
-	detachedTasks.clear();
+	// detachedTasks.clear();
 };
 
 

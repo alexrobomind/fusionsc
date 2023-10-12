@@ -15,7 +15,7 @@ namespace fsc {
 		space.getSimpleExtentDims(&length, &maxLength); // Since we have 1 dimension each, we can copy max lengths directly
 	}
 		
-	H5::DataSet createDataSet(H5::H5Location& parent, kj::StringPtr name, H5::DataType dType, kj::ArrayPtr<const H5Dim> dimensions) {
+	H5::DataSet createDataSet(H5::H5Location& parent, kj::StringPtr name, const H5::DataType& dType, kj::ArrayPtr<const H5Dim> dimensions) {
 		size_t rank = dimensions.size();
 		
 		KJ_STACK_ARRAY(hsize_t, lengths, rank, 8, 32);
