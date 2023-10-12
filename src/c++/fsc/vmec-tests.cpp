@@ -24,11 +24,12 @@ freeBoundary:
       nR: 4
       nZ: 5
       
-      mTor: 7
+      nSym: 7
       
 startingPoint:
   nTor: 2
   mPol: 1
+  period: 7
   
   rCos:
     shape: [2, 3, 2]
@@ -64,7 +65,7 @@ iota:
       powerSeries: [1]
 )"_kj;
 
-static VmecRequest::Reader vmecRequest(VmecRequest::Builder req) {
+static void vmecRequest(VmecRequest::Builder req) {
     auto node = YAML::Load(vmecRequestYaml.cStr());
     load(req, node);
     
@@ -77,7 +78,6 @@ static VmecRequest::Reader vmecRequest(VmecRequest::Builder req) {
     computeRequest.setGrid(req.getFreeBoundary().getVacuumField().getGrid());
     
     req.getFreeBoundary().getVacuumField().setData(computeRequest.send().getComputedField().getData());
-    return req.asReader();
 }   
 
 TEST_CASE("vmec-input") {
@@ -89,4 +89,18 @@ TEST_CASE("vmec-input") {
 	vmecRequest(req);
     
     KJ_DBG(generateVmecInput(req, kj::Path({"c:", "mgrid"})));
+}
+
+TEST_CASE("vmec-mgrid") {
+    auto l = newLibrary();
+    auto lt = l -> newThread();
+    auto& ws = lt -> waitScope();
+	
+	Temporary<VmecRequest> req;
+	vmecRequest(req);
+	
+	auto fs = kj::newDiskFilesystem();
+	auto mgridPath = fs -> getCurrentPath().append("mgrid.nc");
+	
+	writeMGridFile(mgridPath, req.getFreeBoundary().getVacuumField()).wait(ws);
 }

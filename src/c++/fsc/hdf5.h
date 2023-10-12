@@ -4,6 +4,13 @@
 #include <H5Cpp.h>
 
 namespace fsc {
+	struct HDF5Lib {
+		HDF5Lib();
+		~HDF5Lib();
+		
+		static HDF5Lib INSTANCE;
+	};
+	
 	template<typename T>
 	const H5::PredType& h5Type();
 	
@@ -29,7 +36,7 @@ namespace fsc {
 	};
 	
 	H5::DataSet createDataSet(H5::H5Location&, kj::StringPtr, const H5::DataType&, kj::ArrayPtr<const H5Dim> = nullptr);
-	H5::DataSet createDimension(H5::H5Location&, kj::StringPtr, const H5::DataType&, const H5Dim&);
+	H5::DataSet createDimension(H5::H5Location&, kj::StringPtr, const H5::DataType&, const H5Dim&, bool hideFromNetcdf = false);
 	
 	kj::Array<H5Dim> getDimensions(const H5::DataSet&);
 	size_t totalSize(const H5::DataSpace&);
@@ -41,7 +48,7 @@ namespace fsc {
 	H5::DataSet createDataSet(H5::H5Location&, kj::StringPtr, kj::ArrayPtr<const H5Dim> = nullptr);
 	
 	template<typename T>
-	H5::DataSet createDimension(H5::H5Location&, kj::StringPtr, const H5Dim&);
+	H5::DataSet createDimension(H5::H5Location&, kj::StringPtr, const H5Dim&, bool hideFromNetcdf = false);
 	
 	template<typename T>
 	T readScalar(const H5::DataSet&);
@@ -71,14 +78,21 @@ namespace fsc {
 			static_assert(sizeof(T) == 0, "No native type assigned");
 		};
 		
+		// Note: The PredType constants are actually bound to objects
+		// allocated during the initialization of H5::PredType's translation
+		// unit. At global initialization, these are therefore not yet available.
+		// We therefore have to access the references later at runtime with a
+		// function.
 		#define FSC_HDF5_NATIVE_TYPE(cType, hdfType) \
 		template<> \
 		struct H5TypeFor<cType> { \
-			static const inline H5::PredType& value = H5::PredType::hdfType; \
+			static const inline H5::PredType& value() { \
+				return H5::PredType::hdfType; \
+			} \
 		};
 		
 		// The types char, unsigned char (uint8_t), and signed char (int8_t) are MUTUALLY DISTINCT
-		FSC_HDF5_NATIVE_TYPE(char, NATIVE_CHAR);
+		FSC_HDF5_NATIVE_TYPE(char, C_S1);
 		FSC_HDF5_NATIVE_TYPE(int8_t, NATIVE_INT8);
 		FSC_HDF5_NATIVE_TYPE(uint8_t, NATIVE_UINT8);
 		
@@ -98,7 +112,8 @@ namespace fsc {
 	
 	template<typename T>
 	const H5::PredType& h5Type() {
-		return internal::H5TypeFor<T>::value;
+		auto& result = internal::H5TypeFor<T>::value();
+		return result;
 	}
 	
 	template<typename Reader>
@@ -117,8 +132,8 @@ namespace fsc {
 	}
 	
 	template<typename T>
-	H5::DataSet createDimension(H5::H5Location& loc, kj::StringPtr name, const H5Dim& dim) {
-		return createDimension(loc, name, h5Type<T>(), dim);
+	H5::DataSet createDimension(H5::H5Location& loc, kj::StringPtr name, const H5Dim& dim, bool hideFromNetcdf) {
+		return createDimension(loc, name, h5Type<T>(), dim, hideFromNetcdf);
 	}
 	
 	template<typename T>

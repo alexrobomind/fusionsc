@@ -39,11 +39,15 @@ namespace fsc {
 		return ds;
 	}
 	
-	H5::DataSet createDimension(H5::H5Location& parent, kj::StringPtr name, const H5::DataType& dType, const H5Dim& dim) {
+	H5::DataSet createDimension(H5::H5Location& parent, kj::StringPtr name, const H5::DataType& dType, const H5Dim& dim, bool hideFromNetcdf) {
 		H5::DataSpace space(1, &(dim.length), &(dim.maxLength));
 		H5::DataSet ds = parent.createDataSet(name.cStr(), dType, space);
 		
-		H5DSset_scale(ds.getId(), name.cStr());
+		if(hideFromNetcdf) {
+			H5DSset_scale(ds.getId(), "This is a netCDF dimension but not a netCDF variable.");
+		} else  {
+			H5DSset_scale(ds.getId(), name.cStr());
+		}
 		return ds;
 	}
 	

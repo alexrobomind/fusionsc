@@ -360,6 +360,8 @@ kj::String generateVmecInput(VmecRequest::Reader request, kj::PathPtr mgridFile)
 	}
 	
 	if(request.isFreeBoundary()) {
+		KJ_REQUIRE(request.getFreeBoundary().getVacuumField().getGrid().getNSym() == sp.getPeriod(), "Vacuum field symmetry must match field period of start surfaces");
+		
 		result = kj::strTree(
 			mv(result), "\n",
 			"! --- Free boundary inputs ---\n",
@@ -377,11 +379,12 @@ kj::String generateVmecInput(VmecRequest::Reader request, kj::PathPtr mgridFile)
 }
 
 
-Promise<void> writeMGridFile(kj::Path path, ComputedField::Reader cField) {
+Promise<void> writeMGridFile(kj::PathPtr path, ComputedField::Reader cField) {
 	return getActiveThread().dataService().download(cField.getData())
 	.then([path = mv(path), grid = cField.getGrid()](LocalDataRef<Float64Tensor> data) {
 		// File
 		H5::H5File file(path.toWin32String(true).cStr(), H5F_ACC_TRUNC);
+		
 		
 		// Scalars
 		auto nR = grid.getNR();
@@ -398,6 +401,11 @@ Promise<void> writeMGridFile(kj::Path path, ComputedField::Reader cField) {
 		writeScalar(createDataSet<double>(file, "zmin"), grid.getZMin());
 		writeScalar(createDataSet<double>(file, "zmax"), grid.getZMax());
 		writeScalar(createDataSet<uint32_t>(file, "nextcur"), 1);
+		
+		// Named dimensions
+		auto dimR = createDimension<double>(file, "r", nR, true);
+		auto dimZ = createDimension<double>(file, "z", nZ, true);
+		auto dimP = createDimension<double>(file, "phi", nPhi, true);
 		
 		// Mgrid mode
 		writeScalar<char>(createDataSet<char>(file, "mgrid_mode", {1}), 'H');
@@ -424,9 +432,9 @@ Promise<void> writeMGridFile(kj::Path path, ComputedField::Reader cField) {
 				br[i] = dataIn[3 * i + 2];
 			}
 			
-			writeArray<double>(createDataSet<double>(file, "bp_001", {nPhi, nZ, nR}), bp);
-			writeArray<double>(createDataSet<double>(file, "bz_001", {nPhi, nZ, nR}), bz);
-			writeArray<double>(createDataSet<double>(file, "br_001", {nPhi, nZ, nR}), br);
+			writeArray<double>(createDataSet<double>(file, "bp_001", {dimP, dimZ, dimR}), bp);
+			writeArray<double>(createDataSet<double>(file, "bz_001", {dimP, dimZ, dimR}), bz);
+			writeArray<double>(createDataSet<double>(file, "br_001", {dimP, dimZ, dimR}), br);
 		}
 	});
 }
