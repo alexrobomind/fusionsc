@@ -1,9 +1,9 @@
 #include "hdf5.h"
 
-#include "hdf5_hl.h" // Required for dimension scale API
+#include <hdf5_hl.h> // Required for dimension scale API
 
 namespace fsc {
-	H5Dim::H5Dim(const H5DataSet& ds) :
+	H5Dim::H5Dim(const H5::DataSet& ds) :
 		dataset(ds)
 	{
 		auto space = ds.getSpace();
@@ -15,7 +15,7 @@ namespace fsc {
 		space.getSimpleExtentDims(&length, &maxLength); // Since we have 1 dimension each, we can copy max lengths directly
 	}
 		
-	H5::DataSet createDataSet(H5::Location& parent, kj::StringPtr name, H5::DataType dType, kj::ArrayPtr<H5Dim> dimensions) {
+	H5::DataSet createDataSet(H5::H5Location& parent, kj::StringPtr name, H5::DataType dType, kj::ArrayPtr<const H5Dim> dimensions) {
 		size_t rank = dimensions.size();
 		
 		KJ_STACK_ARRAY(hsize_t, lengths, rank, 8, 32);
@@ -39,7 +39,7 @@ namespace fsc {
 		return ds;
 	}
 	
-	H5::DataSet createDimension(H5::Location& parent, kj::StringPtr name, const H5::DataType& dType, const H5Dim& dim) {
+	H5::DataSet createDimension(H5::H5Location& parent, kj::StringPtr name, const H5::DataType& dType, const H5Dim& dim) {
 		H5::DataSpace space(1, &(dim.length), &(dim.maxLength));
 		H5::DataSet ds = parent.createDataSet(name.cStr(), dType, space);
 		
@@ -59,7 +59,7 @@ namespace fsc {
 		space.getSimpleExtentDims(lengths.begin(), maxLengths.begin());
 		
 		auto visitor = [](hid_t did, unsigned dim, hid_t dsid, void *visitor_data) noexcept -> herr_t {
-			Maybe<hid_t>* begin = visitor_data;
+			Maybe<hid_t>* begin = (Maybe<hid_t>*) visitor_data;
 			Maybe<hid_t>& target = *(begin + dim);
 			
 			if(target == nullptr) {
@@ -86,7 +86,6 @@ namespace fsc {
 	}
 	
 	size_t totalSize(const H5::DataSpace& space) {
-		auto space = ds.getSpace();
 		KJ_REQUIRE(space.isSimple());
 		
 		size_t rank = space.getSimpleExtentNdims();

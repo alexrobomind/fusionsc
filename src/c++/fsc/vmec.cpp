@@ -1,8 +1,12 @@
 #include "vmec.h"
+
 #include "common.h"
 #include "tensor.h"
+#include "data.h"
 
-#include <H5cpp.h>
+#include "hdf5.h"
+
+#include <kj/filesystem.h>
 
 namespace fsc {
 
@@ -331,11 +335,11 @@ kj::StringTree generateVmecInput(VmecRequest::Reader request, kj::Path mgridFile
 	}
 	
 	if(request.isFreeBoundary()) {
-		result = kj::strTree(
+		/*result = kj::strTree(
 			mv(result),
 			"MGRID_FILE = '", mgridFile.toNativeString(true), "'\n",
 			"EXTCUR = 1\n"
-		);
+		);*/
 		KJ_UNIMPLEMENTED("Free boundary runs not supported");
 	}
 	
@@ -346,17 +350,72 @@ kj::StringTree generateVmecInput(VmecRequest::Reader request, kj::Path mgridFile
 	return result;
 }
 
+
+Promise<void> writeMGridFile(kj::Path path, ComputedField::Reader cField) {
+	return getActiveThread().dataService().download(cField.getData())
+	.then([path = mv(path), grid = cField.getGrid()](LocalDataRef<Float64Tensor> data) {
+		// File
+		H5::H5File file(path.toWin32String(true).cStr(), H5F_ACC_TRUNC);
+		
+		// Scalars
+		auto nR = grid.getNR();
+		auto nZ = grid.getNZ();
+		auto nPhi = grid.getNPhi();
+		
+		writeScalar(createDataSet<uint32_t>(file, "ir"), nR);
+		writeScalar(createDataSet<uint32_t>(file, "jz"), nZ);
+		writeScalar(createDataSet<uint32_t>(file, "kp"), nPhi);
+		
+		writeScalar(createDataSet<uint32_t>(file, "nfp"), grid.getNSym());
+		writeScalar(createDataSet<double>(file, "rmin"), grid.getRMin());
+		writeScalar(createDataSet<double>(file, "rmax"), grid.getRMax());
+		writeScalar(createDataSet<double>(file, "zmin"), grid.getZMin());
+		writeScalar(createDataSet<double>(file, "zmax"), grid.getZMax());
+		writeScalar(createDataSet<uint32_t>(file, "nextcur"), 1);
+		
+		// Mgrid mode
+		writeScalar<char>(createDataSet<char>(file, "mgrid_mode", {1}), 'H');
+		
+		// Coil groups
+		writeArray<char>(createDataSet<char>(file, "coil_group", {1, 5}), {'C', 'O', 'I', 'L', '\0'});
+		
+		// Field data
+		
+		// Fortunately, we use exactly the same tensor shapes (phi, z, r) for the data
+		// The only difference is that the fusionsc storage tensor uses {phi z r} as the last dimension
+		// while makegrid stores the orientations separately. We therefore only need to demultiplex the
+		// arrays point by point.
+		{
+			auto dataIn = data.get().getData();
+			size_t nPoints = dataIn.size() / 3;
+			
+			auto bp = kj::heapArray<double>(nPoints);
+			auto br = kj::heapArray<double>(nPoints);
+			auto bz = kj::heapArray<double>(nPoints);
+			for(auto i : kj::range(0, nPoints)) {
+				bp[i] = dataIn[3 * i + 0];
+				bz[i] = dataIn[3 * i + 1];
+				br[i] = dataIn[3 * i + 2];
+			}
+			
+			writeArray<double>(createDataSet<double>(file, "bp_001", {nPhi, nZ, nR}), bp);
+			writeArray<double>(createDataSet<double>(file, "bz_001", {nPhi, nZ, nR}), bz);
+			writeArray<double>(createDataSet<double>(file, "br_001", {nPhi, nZ, nR}), br);
+		}
+	});
+}
+
 struct VmecDriverImpl : public VmecDriver::Server {
 	JobScheduler::Client scheduler;
 	
 	kj::Path rootPath;
-	Own<kj::Directory> rootDirectory;
+	Own<const kj::Directory> rootDirectory;
 	
 	uint64_t jobDirCounter = 0;
 	
-	VmecDriverImpl(JobScheduler::Client scheduler, kj::Filesystem& fs, kj::Path rootPath) :
-		scheduler(mv(scheduler)), rootPath(rootPath),
-		rootDirectory(fs.getCurrent() -> openSubdir(rootPath, WriteMode::CREATE | WriteMode::MODIFY))
+	VmecDriverImpl(JobScheduler::Client scheduler, kj::Filesystem& fs, kj::PathPtr parPath) :
+		scheduler(mv(scheduler)), rootPath(parPath.clone()),
+		rootDirectory(fs.getCurrent().openSubdir(rootPath, kj::WriteMode::CREATE | kj::WriteMode::MODIFY))
 	{}
 	
 	kj::Path createJobDirectory() {
@@ -370,7 +429,7 @@ struct VmecDriverImpl : public VmecDriver::Server {
 				}
 			}
 			
-			rootDirectory -> openSubdir(nameCandidate, WriteMode::CREATE);
+			rootDirectory -> openSubdir(kj::Path(nameCandidate), kj::WriteMode::CREATE);
 			return rootPath.append(nameCandidate);
 			
 			nextCandidate:
@@ -381,8 +440,8 @@ struct VmecDriverImpl : public VmecDriver::Server {
 
 }
 
-VmecDriver::Client createVmecDriver(JobScheduler::Client scheduler) {
-	return kj::heap<VmecDriverImpl>(mv(scheduler));
+VmecDriver::Client createVmecDriver(JobScheduler::Client scheduler, kj::PathPtr workDir) {
+	return kj::heap<VmecDriverImpl>(mv(scheduler), *(kj::newDiskFilesystem()), workDir);
 }
 
 }
