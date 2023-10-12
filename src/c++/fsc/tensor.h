@@ -84,15 +84,19 @@ Own<TensorMap<const T>> mapTensor(Reader reader) {
 		
 	// Fast path for little-endian CPUs
 	#ifdef FSC_WIRE_MATCHES_NATIVE
-		return kj::heap<MapType>((const Num*) capnp::toAny(data).getRawBytes().begin(), dims);
-	#else
-		auto tensor = heapHeld<RemoveConst<T>>(dims);
-		auto dataOut = tensor->data();
-		for(size_t i = 0; i < data.size(); ++i)
-			dataOut[i] = data[i];
-		
-		return kj::heap<MapType>(*tensor).attach(tensor.x());
+		auto rawBytes = capnp::toAny(data).getRawBytes();
+		// Check if data is densely packed
+		if(rawBytes.size() == size * sizeof(T)) {
+			return kj::heap<MapType>((const Num*) rawBytes.begin(), dims);
+		}
 	#endif
+	
+	auto tensor = heapHeld<RemoveConst<T>>(dims);
+	auto dataOut = tensor->data();
+	for(size_t i = 0; i < data.size(); ++i)
+		dataOut[i] = data[i];
+	
+	return kj::heap<MapType>(*tensor).attach(tensor.x());
 }
 	
 // template<typename T, int rank, int options, typename Index, typename T2>
@@ -122,6 +126,29 @@ void writeTensor(const TensorType& in, T2 builder) {
 	
 	for(size_t i = 0; i < in.size(); ++i)
 		dataOut.set(i, data[i]);
+}
+
+template<typename T>
+void validateTensor(T t, kj::ArrayPtr<const Maybe<uint32_t>> shapeConstraints = nullptr) {
+	auto shape = t.getShape();
+	
+	uint32_t shapeProd = 1;
+	for(auto el : shape)
+		shapeProd *= el;
+	
+	KJ_REQUIRE(t.getData().size() == shapeProd, "Data size does not match expectation from shape");
+	
+	auto desiredRank = shapeConstraints.size();
+	if(desiredRank != 0) {
+		KJ_REQUIRE(shape.size() == desiredRank, "Rank mismatch");
+	}
+	
+	for(auto dimension : kj::range(0, desiredRank)) {
+		KJ_IF_MAYBE(pExp, shapeConstraints[dimension]) {
+			uint32_t expectedSize = *pExp;
+			KJ_REQUIRE(shape[dimension] == expectedSize, "Shape mismatch along dimension", dimension);
+		}
+	}
 }
 
 }

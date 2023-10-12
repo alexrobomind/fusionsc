@@ -16,6 +16,10 @@ using DataRef = DataPkg.DataRef;
 struct VmecSurfaces {
 	# Surface Fourier coefficients coefficients for input and output
 	# All tensors must have identical shapes
+	# - nPoloidalCoeffs must be 2 * mPol + 1
+	# - nToroidalCoeffs must be nTor
+	#
+	# The poloidal indices are laid out in increasing order from -mPol to mPol.
 	
 	# Tensor of shape [nSurfaces, nPoloidalCoeffs, nToroidalCoeffs]
 	rCos @0 : FTensor;
@@ -24,15 +28,17 @@ struct VmecSurfaces {
 	zSin @1 : FTensor;
 	
 	period @2 : UInt32;
+	nTor @3 : UInt32;
+	mPol @4 : UInt32;
 	
 	union {
-		symmetric @3 : Void;
+		symmetric @5 : Void;
 		nonSymmetric : group {
 			# Tensor of shape [nSurfaces, nPoloidalCoeffs, nToroidalCoeffs]
-			rSin @4 : FTensor;
+			rSin @6 : FTensor;
 			
 			# Tensor of shape [nSurfaces, nPoloidalCoeffs, nToroidalCoeffs]
-			zCos @5 : FTensor;
+			zCos @7 : FTensor;
 		}
 	}
 }
@@ -62,7 +68,7 @@ struct VmecRequest {
 			vacuumField @1 : Magnetics.ComputedField;
 			
 			# High-level description of magnetic field
-			vacuumFieldHL @2 : Magnetics.MagneticField;
+			vacuumFieldHl @2 : Magnetics.MagneticField;
 		}
 	}
 	
