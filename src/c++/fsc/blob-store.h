@@ -2,6 +2,8 @@
 
 #include "db.h"
 
+#include <kj/io.h>
+
 namespace fsc {
 	
 struct Blob {
@@ -28,7 +30,7 @@ struct BlobStore {
 	virtual Own<BlobStore> addRef() = 0;
 	
 	virtual Maybe<Own<Blob>> find(kj::ArrayPtr<const byte> hash) = 0;
-	virtual Own<Blob> get(int64_t id);
+	virtual Own<Blob> get(int64_t id) = 0;
 	
 	virtual Own<BlobBuilder> create(size_t chunkSize) = 0;
 };

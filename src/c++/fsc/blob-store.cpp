@@ -1,4 +1,8 @@
 #include "blob-store.h"
+#include "compression.h"
+
+#include <memory>
+#include <botan/hash.h>
 
 namespace fsc {
 
@@ -10,7 +14,7 @@ struct BlobStoreImpl : public BlobStore, kj::Refcounted {
 	Own<BlobStore> addRef() override;
 	
 	Maybe<Own<Blob>> find(kj::ArrayPtr<const byte> hash) override;
-	Own<Blob> get(uint64_t id) override;
+	Own<Blob> get(int64_t id) override;
 	
 	Own<BlobBuilder> create(size_t chunkSize) override;
 	
@@ -35,7 +39,7 @@ struct BlobStoreImpl : public BlobStore, kj::Refcounted {
 };
 
 struct BlobImpl : public Blob, kj::Refcounted {
-	BlobImpl(BlobStore& parent, uint64_t id);
+	BlobImpl(BlobStoreImpl& parent, int64_t id);
 	
 	Own<Blob> addRef() override;
 	
@@ -50,19 +54,19 @@ struct BlobImpl : public Blob, kj::Refcounted {
 	
 	// Impl
 	Own<BlobStoreImpl> parent;
-	uint64_t id;
+	int64_t id;
 };
 
 struct BlobBuilderImpl : public BlobBuilder {
-	BlobBuilderImpl(BlobStore& parent, size_t chunkSize);
+	BlobBuilderImpl(BlobStoreImpl& parent, size_t chunkSize);
 	
 	int64_t getId() override;
 	void write(const void* buffer, size_t size) override;
 	Own<Blob> finish() override;
 	
-	void writeBuffer();
+	void flushBuffer();
 		
-	Own<BlobStore> parent;
+	Own<BlobStoreImpl> parent;
 	int64_t id;
 	int64_t currentChunkNo = 0;
 	kj::Array<byte> buffer;
@@ -72,7 +76,7 @@ struct BlobBuilderImpl : public BlobBuilder {
 };
 
 struct BlobReaderImpl : public kj::InputStream {
-	BlobReaderImpl(BlobStore& parent, int64_t id);
+	BlobReaderImpl(BlobStoreImpl& parent, int64_t id);
 	
 	size_t tryRead(void* buf, size_t min, size_t max) override;
 	
@@ -169,7 +173,7 @@ void BlobImpl::decRef() {
 	parent -> decRefcount(id);
 }
 
-void BlobImpl::getRefcount() {
+int64_t BlobImpl::getRefcount() {
 	auto q = parent -> readRefcount.query(id);
 	KJ_REQUIRE(q.step(), "Blob not found");
 	
@@ -198,7 +202,7 @@ Own<kj::InputStream> BlobImpl::open() {
 
 BlobBuilderImpl::BlobBuilderImpl(BlobStoreImpl& parent, size_t chunkSize) :
 	id(parent.createBlob.insert()),
-	parent(parent.addRef()),
+	parent(kj::addRef(parent)),
 	buffer(kj::heapArray<byte>(chunkSize)),
 	
 	compressor(9),
@@ -209,7 +213,7 @@ BlobBuilderImpl::BlobBuilderImpl(BlobStoreImpl& parent, size_t chunkSize) :
 	compressor.setOutput(buffer);
 }
 
-void BlobBuilderImpl::write(void* buf, size_t count) {
+void BlobBuilderImpl::write(const void* buf, size_t count) {
 	kj::ArrayPtr<const byte> data((const byte*) buf, count);
 	auto t = parent -> conn -> ensureTransaction(true);
 	
@@ -268,14 +272,12 @@ void BlobBuilderImpl::flushBuffer() {
 // class BlobReaderImpl
 
 BlobReaderImpl::BlobReaderImpl(BlobStoreImpl& parent, int64_t id) :
-	parent(kj::addRef(parent)),
-	id(id),
 	readStatement(parent.conn -> prepare(str("SELECT data FROM ", parent.tablePrefix, "_chunks WHERE id = ? ORDER BY chunkNo"))),
 	readQuery(readStatement.query(id))
 {}
 
 size_t BlobReaderImpl::tryRead(void* output, size_t minSize, size_t maxSize) {
-	decompressor.setOutput(kj::ArrayPtr<byte>((byte)* output, maxSize));
+	decompressor.setOutput(kj::ArrayPtr<byte>((byte*) output, maxSize));
 	
 	while(true) {
 		if(decompressor.remainingIn() == 0) {

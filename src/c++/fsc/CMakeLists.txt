@@ -46,6 +46,9 @@ add_library(
 	db.h
 	db.cpp
 	
+	blob-store.h
+	blob-store.cpp
+	
 	odb.h
 	odb.cpp
 	
