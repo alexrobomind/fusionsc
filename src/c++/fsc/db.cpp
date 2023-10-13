@@ -86,6 +86,12 @@ SQLite3RootTransaction SQLite3Connection::beginRootTransaction (bool immediate) 
 	return SQLite3RootTransaction(*this, immediate);
 }
 
+Maybe<SQLite3RootTransaction> SQLite3Connection::ensureTransaction(bool immediate) {
+	if(inTransaction())
+		return nullptr;
+	return beginRootTransaction(immediate);
+}
+
 SQLite3PreparedStatement SQLite3Connection::prepare(kj::StringPtr statement) {
 	// KJ_DBG("Preparing statement statement", statement);
 	return SQLite3PreparedStatement(*this, statement);

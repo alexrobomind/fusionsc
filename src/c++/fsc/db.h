@@ -61,6 +61,7 @@ struct SQLite3Connection : private kj::Refcounted {
 	
 	SQLite3Transaction beginTransaction(kj::StringPtr name = nullptr);
 	SQLite3RootTransaction beginRootTransaction(bool immediate);
+	Maybe<SQLite3RootTransaction> ensureTransaction(bool immediate);
 	
 private:
 	uint64_t transactionUID = 0; //< Unique ID counter for transactions
