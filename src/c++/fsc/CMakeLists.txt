@@ -49,6 +49,9 @@ add_library(
 	blob-store.h
 	blob-store.cpp
 	
+	db-cache.h
+	db-cache.cpp
+	
 	odb.h
 	odb.cpp
 	
@@ -150,6 +153,7 @@ if(BUILD_TESTING)
 		interpolation-tests.cpp
 		fieldline-mapping-tests.cpp
 		vmec-tests.cpp
+		blob-store-tests.cpp
 		
 		efit-tests.cpp
 		

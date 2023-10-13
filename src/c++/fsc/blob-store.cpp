@@ -60,9 +60,9 @@ struct BlobImpl : public Blob, kj::Refcounted {
 struct BlobBuilderImpl : public BlobBuilder {
 	BlobBuilderImpl(BlobStoreImpl& parent, size_t chunkSize);
 	
-	int64_t getId() override;
 	void write(const void* buffer, size_t size) override;
 	Own<Blob> finish() override;
+	Own<Blob> getBlobUnderConstruction() override;
 	
 	void flushBuffer();
 		
@@ -164,13 +164,18 @@ Own<Blob> BlobImpl::addRef() {
 }
 
 void BlobImpl::incRef() {
+	auto t = parent -> conn -> ensureTransaction(true);
 	KJ_REQUIRE(!parent -> readOnly);
+	KJ_REQUIRE(isFinished(), "Can not increase the reference count of deleted or under-construction blobs");
 	parent -> incRefcount(id);
 }
 
 void BlobImpl::decRef() {
 	KJ_REQUIRE(!parent -> readOnly);
+	auto t = parent -> conn -> ensureTransaction(true);
+	
 	parent -> decRefcount(id);
+	parent -> deleteIfOrphan(id);
 }
 
 int64_t BlobImpl::getRefcount() {
@@ -231,6 +236,11 @@ void BlobBuilderImpl::write(const void* buf, size_t count) {
 	}
 }
 
+Own<Blob> BlobBuilderImpl::getBlobUnderConstruction() {
+	KJ_REQUIRE(buffer != nullptr, "Can only access partially constructed blob before finish()");
+	return kj::refcounted<BlobImpl>(*parent, id);
+}
+
 Own<Blob> BlobBuilderImpl::finish() {
 	KJ_REQUIRE(buffer != nullptr, "Can only call BlobBuilder::finish() once");
 	auto t = parent -> conn -> ensureTransaction(true);
@@ -251,6 +261,8 @@ Own<Blob> BlobBuilderImpl::finish() {
 	
 	// Check hash for uniqueness
 	KJ_IF_MAYBE(pBlob, parent -> find(hashOutput)) {
+		(**pBlob).incRef();
+		BlobImpl(*parent, id).decRef();
 		return mv(*pBlob);
 	}
 	
@@ -274,17 +286,13 @@ void BlobBuilderImpl::flushBuffer() {
 BlobReaderImpl::BlobReaderImpl(BlobStoreImpl& parent, int64_t id) :
 	readStatement(parent.conn -> prepare(str("SELECT data FROM ", parent.tablePrefix, "_chunks WHERE id = ? ORDER BY chunkNo"))),
 	readQuery(readStatement.query(id))
-{}
+{
+}
 
 size_t BlobReaderImpl::tryRead(void* output, size_t minSize, size_t maxSize) {
 	decompressor.setOutput(kj::ArrayPtr<byte>((byte*) output, maxSize));
 	
 	while(true) {
-		if(decompressor.remainingIn() == 0) {
-			KJ_REQUIRE(readQuery.step(), "Missing chunks despite expecting more");
-			decompressor.setInput(readQuery[0]);
-		}
-			
 		ZLib::State state = decompressor.step();
 		
 		if(state == ZLib::FINISHED)
@@ -294,6 +302,8 @@ size_t BlobReaderImpl::tryRead(void* output, size_t minSize, size_t maxSize) {
 			break;
 		
 		KJ_ASSERT(decompressor.remainingIn() == 0);
+		KJ_REQUIRE(readQuery.step(), "Missing chunks despite expecting more");
+		decompressor.setInput(readQuery[0]);		
 	}
 	
 	return maxSize - decompressor.remainingOut();
