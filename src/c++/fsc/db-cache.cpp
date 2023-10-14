@@ -68,51 +68,54 @@ struct TransmissionProcess {
 	
 	Array<byte> buffer;
 	
-	TransmissionProcess(Own<kj::InputStream>&& reader, DataRef<capnp::AnyPointer>::Receiver::Client receiver, size_t start, size_t end) :
-		reader(mv(reader)),
-		receiver(mv(receiver)),
-		buffer(kj::heapArray<byte>(CHUNK_SIZE)),
-		start(start), end(end)
-	{
-		KJ_REQUIRE(end >= start);
-	}
+	TransmissionProcess(Own<kj::InputStream>&& reader, DataRef<capnp::AnyPointer>::Receiver::Client receiver, size_t start, size_t end);
 	
-	Promise<void> run() {
-		reader -> skip(start);
-		
-		auto request = receiver.beginRequest();
-		request.setNumBytes(end - start);
-		return request.send().ignoreResult().then([this]() { return transmit(start); });
-	}
-	
-	Promise<void> transmit(size_t chunkStart) {			
-		// Check if we are done transmitting
-		if(chunkStart >= end)
-			return receiver.doneRequest().send().ignoreResult();
-		
-		auto slice = chunkStart + CHUNK_SIZE <= end ? buffer.asPtr() : buffer.slice(0, end - chunkStart);
-		reader -> read(slice.begin(), slice.size());
-		
-		// Do a transmission
-		auto request = receiver.receiveRequest();
-		
-		if(slice.size() % 8 == 0) {
-			// Note: This is safe because we keep this object alive until the transmission
-			// succeeds or fails
-			auto orphanage = capnp::Orphanage::getForMessageContaining((DataRef<capnp::AnyPointer>::Receiver::ReceiveParams::Builder) request);
-			auto externalData = orphanage.referenceExternalData(slice);
-			request.adoptData(mv(externalData));
-		} else {
-			request.setData(slice);
-		}
-		
-		return request.send().then([this, chunkEnd = chunkStart + slice.size()]() { return transmit(chunkEnd); });
-	}
+	Promise<void> run();
+	Promise<void> transmit(size_t chunkStart);
 };
 
 // class TransmissionProcess
+	
+TransmissionProcess::TransmissionProcess(Own<kj::InputStream>&& reader, DataRef<capnp::AnyPointer>::Receiver::Client receiver, size_t start, size_t end) :
+	reader(mv(reader)),
+	receiver(mv(receiver)),
+	buffer(kj::heapArray<byte>(CHUNK_SIZE)),
+	start(start), end(end)
+{
+	KJ_REQUIRE(end >= start);
+}
 
+Promise<void> TransmissionProcess::run() {
+	reader -> skip(start);
+	
+	auto request = receiver.beginRequest();
+	request.setNumBytes(end - start);
+	return request.send().ignoreResult().then([this]() { return transmit(start); });
+}
 
+Promise<void> TransmissionProcess::transmit(size_t chunkStart) {			
+	// Check if we are done transmitting
+	if(chunkStart >= end)
+		return receiver.doneRequest().send().ignoreResult();
+	
+	auto slice = chunkStart + CHUNK_SIZE <= end ? buffer.asPtr() : buffer.slice(0, end - chunkStart);
+	reader -> read(slice.begin(), slice.size());
+	
+	// Do a transmission
+	auto request = receiver.receiveRequest();
+	
+	if(slice.size() % 8 == 0) {
+		// Note: This is safe because we keep this object alive until the transmission
+		// succeeds or fails
+		auto orphanage = capnp::Orphanage::getForMessageContaining((DataRef<capnp::AnyPointer>::Receiver::ReceiveParams::Builder) request);
+		auto externalData = orphanage.referenceExternalData(slice);
+		request.adoptData(mv(externalData));
+	} else {
+		request.setData(slice);
+	}
+	
+	return request.send().then([this, chunkEnd = chunkStart + slice.size()]() { return transmit(chunkEnd); });
+}
 
 // class DBCacheImpl
 
