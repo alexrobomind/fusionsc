@@ -12,7 +12,7 @@ auto withCacheBackoff(T func) {
 
 struct DBCacheImpl : public DBCache, kj::Refcounted {
 	Own<DBCache> addRef() override;
-	Promise<DataRef<capnp::AnyPointer>::Client> cache(DataRef<capnp::AnyPointer>::Client target) override;
+	DataRef<capnp::AnyPointer>::Client cache(DataRef<capnp::AnyPointer>::Client target) override;
 	
 	capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> serverSet;
 	Own<BlobStore> store;
@@ -122,6 +122,14 @@ Promise<void> TransmissionProcess::transmit(size_t chunkStart) {
 DBCacheImpl::DBCacheImpl(BlobStore& store) :
 	store(store.addRef())
 {}
+
+Own<DBCache> DBCacheImpl::addRef() {
+	return kj::addRef(*this);
+}
+
+DataRef<capnp::AnyPointer>::Client DBCacheImpl::cache(DataRef<capnp::AnyPointer>::Client target) {
+	return kj::refcounted<DownloadProcess>(*this, mv(target)) -> output();
+}
 
 // class CachedRef
 	
@@ -275,7 +283,7 @@ Promise<DownloadProcess::ResultType> DownloadProcess::buildResult() {
 
 }
 
-Own<DBCache> createCache(BlobStore& store) {
+Own<DBCache> createDBCache(BlobStore& store) {
 	return kj::refcounted<DBCacheImpl>(store);
 }
 
