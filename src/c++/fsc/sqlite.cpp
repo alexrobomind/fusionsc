@@ -1,4 +1,4 @@
-#include "db.h"
+#include "sqlite.h"
 #include "sqlite3.h"
 
 #incldue <kj/refcount.h>

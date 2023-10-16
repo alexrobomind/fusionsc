@@ -150,10 +150,6 @@ struct Transaction {
 
 }}
 
-namespace fsc {
-	Own<db::Connection> connectSqlite(kj::StringPtr url, bool readOnly = false);
-}
-
 // Implementation
 
 

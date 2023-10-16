@@ -46,6 +46,9 @@ add_library(
 	db.h
 	db.cpp
 	
+	sqlite.h
+	sqlite.cpp
+	
 	blob-store.h
 	blob-store.cpp
 	
