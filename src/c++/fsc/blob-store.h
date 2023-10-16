@@ -63,6 +63,6 @@ struct BlobStore {
 	virtual Own<BlobBuilder> create(size_t chunkSize) = 0;
 };
 
-Own<BlobStore> createBlobStore(sqlite::Connection& conn, kj::StringPtr tablePrefix = "blobs", bool readOnly = false);
+Own<BlobStore> createBlobStore(db::Connection& conn, kj::StringPtr tablePrefix = "blobs", bool readOnly = false);
 
 }

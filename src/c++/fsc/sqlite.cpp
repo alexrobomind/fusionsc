@@ -67,6 +67,7 @@ Own<Connection> SQLiteConnection::addRef() {
 }
 
 Own<Connection> SQLiteConnection::fork(bool readOnly) {
+	KJ_REQUIRE(!filename.startsWith(":memory:"), "Anonymous connections can not be forked");
 	return kj::refcounted<SQLiteConnection>(filename, readOnly);
 }
 

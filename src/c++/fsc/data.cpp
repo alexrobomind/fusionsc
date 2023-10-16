@@ -13,7 +13,8 @@
 #include <capnp/rpc.capnp.h>
 
 #include "data.h"
-#include "odb.h"
+#include "db-cache.h"
+#include "sqlite.h"
 
 using capnp::WORDS;
 using capnp::word;
@@ -294,10 +295,18 @@ kj::Array<const byte> internal::LocalDataRefImpl::addRefRaw() {
 
 // === class internal::LocalDataServiceImpl ===
 
+namespace {
+	Own<DBCache> createSqliteTempCache() {
+		auto conn = connectSqlite("");
+		auto blobStore = createBlobStore(*conn);
+		return createDBCache(*blobStore);
+	}
+}
+
 internal::LocalDataServiceImpl::LocalDataServiceImpl(Library& lib) :
 	library(lib -> addRef()),
 	fileBackedMemory(kj::newDiskFilesystem()->getCurrent().clone()),
-	dbCache(kj::refcounted<odb::DBCache>())
+	dbCache(createSqliteTempCache())
 {}
 
 Own<internal::LocalDataServiceImpl> internal::LocalDataServiceImpl::addRef() {

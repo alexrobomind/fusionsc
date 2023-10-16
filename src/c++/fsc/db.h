@@ -31,7 +31,7 @@ struct PreparedStatement {
 	~PreparedStatement();
 	
 	template<typename P>
-	setParameter(size_t, P);
+	void setParameter(size_t, P);
 	
 	//! Assigns all parameters from arguments
 	template<typename... Params>
@@ -62,15 +62,6 @@ struct PreparedStatement {
 		hook -> reset();
 		
 		return hook -> lastInsertedRowid();
-	}
-	
-	inline bool step() {
-		if(hook -> step()) {
-			return true;
-		} else {
-			hook -> reset();
-			return false;
-		}
 	}
 	
 private:

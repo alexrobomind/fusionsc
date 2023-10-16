@@ -9,7 +9,7 @@ namespace fsc {
 namespace {
 
 struct BlobStoreImpl : public BlobStore, kj::Refcounted {	
-	BlobStoreImpl(sqlite::Connection& conn, kj::StringPtr tablePrefix, bool readOnly = false);
+	BlobStoreImpl(db::Connection& conn, kj::StringPtr tablePrefix, bool readOnly = false);
 	
 	Own<BlobStore> addRef() override;
 	
@@ -19,7 +19,7 @@ struct BlobStoreImpl : public BlobStore, kj::Refcounted {
 	Own<BlobBuilder> create(size_t chunkSize) override;
 	
 	// Impl
-	using Statement = sqlite::Statement;
+	using Statement = db::PreparedStatement;
 	
 	Statement createBlob;
 	Statement setBlobHash;
@@ -89,7 +89,7 @@ struct BlobReaderImpl : public kj::InputStream {
 
 // class BlobStoreImpl
 
-BlobStoreImpl::BlobStoreImpl(sqlite::Connection& conn, kj::StringPtr tablePrefix, bool readOnly) :
+BlobStoreImpl::BlobStoreImpl(db::Connection& conn, kj::StringPtr tablePrefix, bool readOnly) :
 	tablePrefix(kj::heapString(tablePrefix)),
 	conn(conn.addRef()),
 	readOnly(readOnly)

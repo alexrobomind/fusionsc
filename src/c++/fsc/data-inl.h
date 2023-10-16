@@ -11,10 +11,7 @@
 
 namespace fsc {
 
-namespace odb {
-	// Defined in odb.h
-	struct DBCache;
-}
+struct DBCache;
 
 namespace internal {
 
@@ -245,7 +242,7 @@ private:
 	capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> serverSet;
 	Library library;
 	
-	Own<odb::DBCache> dbCache;
+	Own<DBCache> dbCache;
 	
 	LocalDataService::Limits limits;
 	MMapTemporary fileBackedMemory;
