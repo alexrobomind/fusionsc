@@ -34,7 +34,7 @@ struct BlobStoreImpl : public BlobStore, kj::Refcounted {
 	Statement createChunk;
 	
 	kj::String tablePrefix;
-	Own<sqlite::Connection> conn;	
+	Own<db::Connection> conn;	
 	const bool readOnly;
 };
 
@@ -81,8 +81,7 @@ struct BlobReaderImpl : public kj::InputStream {
 	size_t tryRead(void* buf, size_t min, size_t max) override;
 	
 	Decompressor decompressor;
-	sqlite::Statement readStatement;
-	sqlite::Statement::Query readQuery;
+	db::PreparedStatement readStatement;
 };
 
 // Implementation
@@ -136,9 +135,9 @@ Own<BlobStore> BlobStoreImpl::addRef() {
 }
 
 Maybe<Own<Blob>> BlobStoreImpl::find(kj::ArrayPtr<const byte> hash) {	
-	auto q = findBlob.query(hash);
-	if(q.step()) {
-		return get(q[0]);
+	findBlob.bind(hash);
+	if(findBlob.step()) {
+		return get(findBlob[0]);
 	}
 	
 	return nullptr;
@@ -164,34 +163,38 @@ Own<Blob> BlobImpl::addRef() {
 }
 
 void BlobImpl::incRef() {
-	auto t = parent -> conn -> ensureTransaction(true);
+	db::Transaction t(*parent -> conn);
 	KJ_REQUIRE(!parent -> readOnly);
 	KJ_REQUIRE(isFinished(), "Can not increase the reference count of deleted or under-construction blobs");
 	parent -> incRefcount(id);
 }
 
 void BlobImpl::decRef() {
+	db::Transaction t(*parent -> conn);
 	KJ_REQUIRE(!parent -> readOnly);
-	auto t = parent -> conn -> ensureTransaction(true);
 	
 	parent -> decRefcount(id);
 	parent -> deleteIfOrphan(id);
 }
 
 int64_t BlobImpl::getRefcount() {
-	auto q = parent -> readRefcount.query(id);
-	KJ_REQUIRE(q.step(), "Blob not found");
+	auto& rc = parent -> readRefcount;
 	
-	return q[0].asInt64();
+	rc.bind(id);
+	KJ_REQUIRE(rc.step(), "Blob not found");
+	
+	return rc[0];
 }
 
 kj::Array<const byte> BlobImpl::getHash() {
-	auto q = parent -> getBlobHash.query(id);
+	auto& gbh = parent -> getBlobHash;
 	
-	if(!q.step())
+	gbh.bind(id);
+	
+	if(!gbh.step())
 		return nullptr;
 	
-	return kj::heapArray<byte>(q[0].asBlob());
+	return kj::heapArray<byte>(gbh[0].asBlob());
 }
 
 int64_t BlobImpl::getId() {
@@ -220,7 +223,7 @@ BlobBuilderImpl::BlobBuilderImpl(BlobStoreImpl& parent, size_t chunkSize) :
 
 void BlobBuilderImpl::write(const void* buf, size_t count) {
 	kj::ArrayPtr<const byte> data((const byte*) buf, count);
-	auto t = parent -> conn -> ensureTransaction(true);
+	db::Transaction t(*parent -> conn);
 	
 	hashFunction -> update(data.begin(), data.size());
 	compressor.setInput(data);
@@ -243,7 +246,7 @@ Own<Blob> BlobBuilderImpl::getBlobUnderConstruction() {
 
 Own<Blob> BlobBuilderImpl::finish() {
 	KJ_REQUIRE(buffer != nullptr, "Can only call BlobBuilder::finish() once");
-	auto t = parent -> conn -> ensureTransaction(true);
+	db::Transaction t(*parent -> conn);
 	
 	// Write out remaining data inside zlib stream
 	compressor.setInput(nullptr);
@@ -284,9 +287,9 @@ void BlobBuilderImpl::flushBuffer() {
 // class BlobReaderImpl
 
 BlobReaderImpl::BlobReaderImpl(BlobStoreImpl& parent, int64_t id) :
-	readStatement(parent.conn -> prepare(str("SELECT data FROM ", parent.tablePrefix, "_chunks WHERE id = ? ORDER BY chunkNo"))),
-	readQuery(readStatement.query(id))
+	readStatement(parent.conn -> prepare(str("SELECT data FROM ", parent.tablePrefix, "_chunks WHERE id = ? ORDER BY chunkNo")))
 {
+	readStatement.bind(id);
 }
 
 size_t BlobReaderImpl::tryRead(void* output, size_t minSize, size_t maxSize) {
@@ -302,8 +305,8 @@ size_t BlobReaderImpl::tryRead(void* output, size_t minSize, size_t maxSize) {
 			break;
 		
 		KJ_ASSERT(decompressor.remainingIn() == 0);
-		KJ_REQUIRE(readQuery.step(), "Missing chunks despite expecting more");
-		decompressor.setInput(readQuery[0]);		
+		KJ_REQUIRE(readStatement.step(), "Missing chunks despite expecting more");
+		decompressor.setInput(readStatement[0]);		
 	}
 	
 	return maxSize - decompressor.remainingOut();
@@ -311,7 +314,7 @@ size_t BlobReaderImpl::tryRead(void* output, size_t minSize, size_t maxSize) {
 
 }
 
-Own<BlobStore> createBlobStore(sqlite::Connection& conn, kj::StringPtr tablePrefix, bool readOnly) {
+Own<BlobStore> createBlobStore(db::Connection& conn, kj::StringPtr tablePrefix, bool readOnly) {
 	return kj::refcounted<BlobStoreImpl>(conn, tablePrefix, readOnly);
 }
 

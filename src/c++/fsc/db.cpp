@@ -53,16 +53,14 @@ void Savepoint::rollback() {
 // class Transaction
 
 Transaction::Transaction(Connection& parent) :
-		parent(parent.addRef())
-{
-	parent.beginTransaction();
-}
+	savepoint(parent)
+{}
 	
 Transaction::~Transaction() {
 	if(!savepoint.active())
 		return;
 	
-	if(ud.isUnwinding()) {
+	if(savepoint.ud.isUnwinding()) {
 		try {
 			rollback();
 		} catch(...) {

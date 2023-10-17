@@ -11,115 +11,15 @@
 
 namespace fsc { namespace odb {
 	
-struct BlobStore;
-struct Blob;
-struct BlobReader;
-struct BlobBuilder;
-
 struct ObjectDB;
 struct DBObject;
-
-struct BlobStore : public kj::Refcounted {
-	using Statement = sqlite::Statement;
-	
-	Statement createBlob;
-	Statement setBlobHash;
-	Statement findBlob;
-	Statement getBlobHash;
-	
-	Statement incRefcount;
-	Statement decRefcount;
-	Statement getRefcount;
-	
-	Statement deleteIfOrphan;
-	Statement createChunk;
-	
-	
-	kj::String tablePrefix;
-	Own<sqlite::Connection> conn;	
-	const bool readOnly;
-
-	inline Own<BlobStore> addRef() { return kj::addRef(*this); }
-	
-	Maybe<Blob> find(kj::ArrayPtr<const byte> hash);
-	BlobBuilder create(size_t chunkSize);
-		
-private:
-	BlobStore(sqlite::Connection& conn, kj::StringPtr tablePrefix, bool readOnly = false);
-	
-	friend kj::Refcounted;
-	
-	template<typename T, typename... Params>
-	friend Own<T> kj::refcounted(Params&&... params);
-	
-	template <typename T>
-	friend Own<T> kj::addRef(T& object);	
-};
-
-struct Blob {
-	mutable Own<BlobStore> parent;
-	const int64_t id;
-	
-	Blob(BlobStore& parent, int64_t id);
-	
-	inline Blob(const Blob& other) : Blob(*(other.parent), other.id) {}
-	inline Blob(Blob&& other) = default;
-	
-	void incRef();
-	void decRef();
-	
-	int64_t refcount();
-	
-	kj::Array<const byte> hash();
-	
-	inline Own<BlobReader> open();
-};
-
-struct BlobBuilder {
-	BlobBuilder(BlobStore& parent, size_t chunkSize = 8 * 1024 * 1024);
-	~BlobBuilder();
-	
-	void write(kj::ArrayPtr<const byte> bytes);
-	Blob finish();
-	
-	Own<BlobStore> parent;
-		
-private:
-	int64_t id;
-	int64_t currentChunkNo = 0;
-	kj::Array<byte> buffer;
-	
-	void flushBuffer();
-	
-	Compressor compressor;
-	std::unique_ptr<Botan::HashFunction> hashFunction;
-	
-	kj::UnwindDetector ud;
-};
-
-struct BlobReader {	
-	bool read(kj::ArrayPtr<byte> output);
-	inline size_t remainingOut() { return decompressor.remainingOut(); }
-	
-	BlobReader(Blob& blob);
-	
-	// The readQuery can not track the readStatement during move
-	BlobReader(BlobReader&&) = delete;
-	
-private:	
-	Blob blob;
-	
-	Decompressor decompressor;
-	sqlite::Statement readStatement;
-	sqlite::Statement::Query readQuery;
-};
 
 struct ObjectDB : public kj::Refcounted {
 	using Capability = capnp::Capability;
 	using AnyPointer = capnp::AnyPointer;
 	using ClientHook = capnp::ClientHook;
 	
-	using Statement = sqlite::Statement;
+	using Statement = db::PreparedStatement;
 	
 	const kj::String filename;
 	const kj::String tablePrefix;
@@ -221,26 +121,6 @@ private:
 	Own<capnp::MallocMessageBuilder> infoHolder;
 	
 	friend class ObjectDB;
-};
-
-//! Simple non-persistent non-recursive cache to temporarily store DataRefs
-struct DBCache : public kj::Refcounted {
-	struct TransmissionReceiver;
-	
-	Promise<DataRef<capnp::AnyPointer>::Client> cache(DataRef<capnp::AnyPointer>::Client target);
-	
-	Own<BlobStore> store;
-	Own<sqlite::Connection> conn;
-	
-	static capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> SERVER_SET;
-	
-	//! Clients that are currently in the process of being downloaded
-	// std::unordered_map<capnp::ClientHook*, DataRef<capnp::AnyPointer>::Client> activeDownloads;
-	
-	struct DownloadProcess;
-	struct CachedRef;
-	
-	inline Own<DBCache> addRef() { return kj::addRef(*this); }
 };
 
 // ==================================== Inline implementation ===================================

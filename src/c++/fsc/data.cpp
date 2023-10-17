@@ -1057,10 +1057,8 @@ Promise<void> internal::LocalDataServiceImpl::writeArchive(DataRef<capnp::AnyPoi
 
 
 Promise<void> internal::LocalDataServiceImpl::clone(CloneContext context) {
-	return dbCache -> cache(context.getParams().getSource())
-	.then([context](DataRef<capnp::AnyPointer>::Client result) mutable {
-		context.getResults().setRef(mv(result));
-	});
+	context.getResults().setRef(dbCache -> cache(context.getParams().getSource()));
+	return READY_NOW;
 }
 
 Promise<void> internal::LocalDataServiceImpl::store(StoreContext context) {

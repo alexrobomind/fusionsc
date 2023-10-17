@@ -9,338 +9,684 @@ using kj::str;
 
 using namespace capnp;
 
-namespace fsc { namespace odb {
+namespace fsc { namespace {
 
-/*
-Folder::Client openObjectDB(kj::StringPtr folder) {
-	auto objectDB = kj::refcounted<ObjectDB>(folder, "objectdb", false);
-	
-	auto clientHook = ClientHook::from(objectDB -> getRoot());
-	clientHook = clientHook.attach(kj::defer([db = mv(objectDB)]() mutable {
-		db -> cancelDownloads();
-	}));
-	
-	return Folder::Client(mv(clientHook));
-}*/
+// Database structure
 
-// ====================== class BlobStore =======================
+struct ObjectDBBase {
+	ObjectDBBase(db::Connection& conn, kj::StringPtr tablePrefix, bool readOnly);
 	
-BlobStore::BlobStore(sqlite::Connection& conn, kj::StringPtr tablePrefix, bool readOnly) :
-	tablePrefix(kj::heapString(tablePrefix)),
-	conn(conn.addRef()),
-	readOnly(readOnly)
-{	
+	Statement createObject;
+	Statement setInfo;
+	Statement incRefcount;
+	Statement decRefcount;
+	Statement deleteObject;
+	
+	Statement insertRef;
+	Statement clearOutgoingRefs;
+	
+	Statement getInfo;
+	Statement listOutgoingRefs;
+	Statement getRefcount;
+	
+	Statement getBlob;
+	Statement setBlob;
+	
+	Statement readNewestId;
+	
+	kj::String tablePrefix;
+	Own<db::Connection> conn;
+	bool readOnly;
+	Own<BlobStore> blobStore;
+	
+	Maybe<int64_t> getNewestId();
+};
+
+ObjectDBBase::ObjectDBBase(db::Connection& paramConn, kj::StringPtr paramTablePrefix, bool paramReadOnly) :
+	tablePrefix(kj::heapString(paramTablePrefix)),
+	conn(paramConn -> addRef),
+	readOnly(paramReadOnl),
+	blobStore(createBlobStore(*conn, tablePrefix, readOnly))
+{		
+	auto objectsTable = str(tablePrefix, "_objects");
+	auto refsTable = str(tablePrefix, "_object_refs");
+	auto blobsTable = str(tablePrefix, "_blobs");
+	
 	if(!readOnly) {
-		conn.exec(str(
-			"CREATE TABLE IF NOT EXISTS ", tablePrefix, "_blobs ("
-			"  id INTEGER PRIMARY KEY,"
-			"  hash BLOB UNIQUE," // SQLite UNIQUE allows multiple NULL values
-			"  refcount INTEGER DEFAULT 0"
+		conn -> exec(str(
+			"CREATE TABLE IF NOT EXISTS ", objectsTable, " ("
+			  "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+			  "info BLOB,"
+			  "refcount INTEGER DEFAULT 0,"
+			  "blobId INTEGER DEFAULT NULL REFERENCES ", blobsTable, "(id)"
 			")"
 		));
-		conn.exec(str(
-			"CREATE TABLE IF NOT EXISTS ", tablePrefix, "_chunks ("
-			"  id INTEGER,"
-			"  chunkNo INTEGER,"
-			"  data BLOB,"
-			""
-			"  PRIMARY KEY(id, chunkNo),"
-			"  FOREIGN KEY(id) REFERENCES ", tablePrefix, "_blobs(id) ON UPDATE CASCADE ON DELETE CASCADE"
+		conn -> exec(str(
+			"CREATE TABLE IF NOT EXISTS ", refsTable, " ("
+			  "parent INTEGER REFERENCES ", objectsTable, "(id) ON DELETE CASCADE ON UPDATE CASCADE,"
+			  "slot INTEGER,"
+			  "child INTEGER REFERENCES ", objectsTable, "(id)"
 			")"
 		));
-		conn.exec(str("CREATE INDEX IF NOT EXISTS ", tablePrefix, "_blobs_hash_idx ON ", tablePrefix, "_blobs (hash)"));
-		conn.exec(str("CREATE UNIQUE INDEX IF NOT EXISTS ", tablePrefix, "_blobs_chunks_idx ON ", tablePrefix, "_chunks (id, chunkNo)"));
+		conn -> exec(str(
+			"CREATE UNIQUE INDEX IF NOT EXISTS ", tablePrefix, "_index_refs_by_parent ON ", refsTable, "(parent, slot)"
+		));
 		
-		createBlob = conn.prepare(str("INSERT INTO ", tablePrefix, "_blobs DEFAULT VALUES"));
-		setBlobHash = conn.prepare(str("UPDATE ", tablePrefix, "_blobs SET hash = ?2 WHERE id = ?1"));
+		createObject = conn -> prepare(str("INSERT INTO ", objectsTable, " DEFAULT VALUES"));
+		setInfo = conn -> prepare(str("UPDATE ", objectsTable, " SET info = ?2 WHERE id = ?1"));
+		incRefcount = conn -> prepare(str("UPDATE ", objectsTable, " SET refcount = refcount + 1 WHERE id = ?"));
+		decRefcount = conn -> prepare(str("UPDATE ", objectsTable, " SET refcount = refcount - 1 WHERE id = ?"));
+		deleteObject = conn -> prepare(str("DELETE FROM ", objectsTable, " WHERE id = ?"));
 		
-		incRefcount = conn.prepare(str("UPDATE ", tablePrefix, "_blobs SET refcount = refcount + 1 WHERE id = ?"));
-		decRefcount = conn.prepare(str("UPDATE ", tablePrefix, "_blobs SET refcount = refcount - 1 WHERE id = ?"));
+		setBlob = conn -> prepare(str("UPDATE ", objectsTable, " SET blobId = ?2 WHERE id = ?1"));
 		
-		deleteIfOrphan = conn.prepare(str("DELETE FROM ", tablePrefix, "_blobs WHERE id = ? AND refcount <= 0"));
-		
-		createChunk = conn.prepare(str("INSERT INTO ", tablePrefix, "_chunks (id, chunkNo, data) VALUES (?, ?, ?)"));
+		insertRef = conn -> prepare(str("INSERT INTO ", refsTable, " (parent, slot, child) VALUES (?, ?, ?)"));
+		clearOutgoingRefs = conn -> prepare(str("DELETE FROM ", refsTable, " WHERE parent = ?"));
 	}
 	
-	findBlob = conn.prepare(str("SELECT id FROM ", tablePrefix, "_blobs WHERE hash = ?"));
-	getBlobHash = conn.prepare(str("SELECT hash FROM ", tablePrefix, "_blobs WHERE id = ?"));
-	getRefcount = conn.prepare(str("SELECT refcount FROM ", tablePrefix, "_blobs WHERE id = ?"));
-}
-
-Maybe<Blob> BlobStore::find(kj::ArrayPtr<const byte> hash) {	
-	auto q = findBlob.query(hash);
-	if(q.step()) {
-		return Blob(*this, q[0]);
-	}
+	getInfo = conn -> prepare(str("SELECT info FROM ", objectsTable, " WHERE id = ?"));
+	getRefcount = conn -> prepare(str("SELECT refcount FROM ", objectsTable, " WHERE id = ?"));
+	getBlob = conn -> prepare(str("SELECT blobId FROM ", objectsTable, " WHERE id = ?"));
 	
-	return nullptr;
-}
-
-BlobBuilder BlobStore::create(size_t chunkSize) {
-	return BlobBuilder(*this, chunkSize);
-}
-
-// =================================== class Blob ===================================
-
-Blob::Blob(BlobStore& parent, int64_t id) :
-	parent(parent.addRef()),
-	id(id)
-{}
-
-void Blob::incRef() { KJ_REQUIRE(!parent -> readOnly); parent -> incRefcount(id); }
-void Blob::decRef() { KJ_REQUIRE(!parent -> readOnly); parent -> decRefcount(id); parent -> deleteIfOrphan(id); }
-
-int64_t Blob::refcount() {
-	auto q = parent -> getRefcount.query(id);
-	KJ_REQUIRE(q.step());
+	listOutgoingRefs = conn -> prepare(str("SELECT child FROM ", refsTable, " WHERE parent = ? ORDER BY slot"));
 	
-	return q[0].asInt64();
+	readNewestId = conn -> prepare(str("SELECT seq FROM sqlite_sequence WHERE name = ?"));
 }
 
-
-kj::Array<const byte> Blob::hash() {
-	auto q = parent -> getBlobHash.query(id);
-	
+int64_t ObjectDBBase::getNewestId() {
+	auto& q = readNewestId.bind(kj::str(tablePrefix, "_objects"));
 	if(!q.step())
 		return nullptr;
 	
-	return kj::heapArray<byte>(q[0].asBlob());
+	return q[0].asInt64();
+}	
+
+struct ObjectDB;
+struct ObjectDBSnapshot;
+struct ObjectDBEntry;
+struct ObjectInterface;
+
+struct ObjectDBEntry : public kj::Refcounted {
+	ObjectDBEntry(ObjectDB& parent, int64_t id, Maybe<Own<ObjectDBSnapshot>> snapshot);
+	~ObjectDBEntry();
+	
+	// Tries to update the snapshot to the current one
+	// Returns true if loadPreserved has a valid snapshot
+	// to work from.
+	void trySync();
+	Promise<void> whenUpdated();
+	
+	// Tries to load a snapshot guaranteed to exist
+	void loadPreserved();
+	bool hasPreserved() { return snapshot != nullptr; }
+	
+	// Tries to load the object from the most current version (object might be deleted)
+	void load();
+	void save();
+	
+	ObjectDB::Builder get() { KJ_REQUIRE(storage.get() != nullptr, "Need to load first"); return storage -> getRoot<ObjectInfo>(); }
+	Own<ObjectDBEntry> addRef() { return kj::addRef(*this); }
+
+private:
+	void doLoad(Maybe<ObjectDBSnapshot&> snapshot);
+	
+	bool isLive() { return liveLink.isLinked(); }
+	
+	Own<ObjectDB> parent;
+	int64_t id;
+	Maybe<Own<ObjectDBSnapshot>> snapshot;
+	
+	Own<capnp::MallocMessageBuilder> storage;
+		
+	Maybe<Own<kj::Fulfiller<void>>> updateFulfiller;
+	ForkedPromise<void> updatePromise;
+	
+	kj::ListLink<ObjectDBEntry> liveLink;
+	friend class ObjectDB;
+};
+
+struct ObjectDB : public ObjectDBBase, kj::Refcounted {
+	ObjectDB(db::Connection& conn, kj::StringPtr tablePrefix, bool readOnly);
+	Own<ObjectDB> addRef() { return kj::addRef(*this); }
+	
+	ObjectDBSnapshot& getCurrentSnapshot();
+	void changed();
+	
+	void syncAll();
+	
+	Own<ObjectDBEntry> open(int64_t id, Maybe<ObjectDBSnapshot&> snapshot);
+	
+	// Interface to wrap & unwrap objects into / from DataRefs
+	OneOf<Own<ObjectDBEntry>, Capability::Client, nullptr> unwrap(Capability::Client);
+	DBObject::Client wrap(Own<ObjectDBEntry> e);
+	
+	// Cleanup for deleted objects
+	void deleteIfOrphan(int64_t id);
+	
+	// Creates a new object in the DB
+	// WARNING: Make sure you always use this in a transaction
+	// with the actual storage of the parent reference. Failure
+	// to comply might corrupt the database.
+	Own<ObjectDBEntry> create();
+
+private:
+	// Content manipulation API
+	// These methods are extremely unsafe when used outside proper transactions
+	// They are therefore only exposed in the object API class
+	
+	Maybe<Own<ObjectDBSnapshot>> currentSnapshot;
+	
+	kj::List<ObjectDBEntry, &ObjectDBEntry::liveLink> liveEntries;
+	friend class ObjectDBEntry;
+};
+
+struct ObjectDBSnapshot : public ObjectDBBase, kj::Refcounted {
+	ObjectDBSnapshot(ObjectDB& base);
+	
+	Own<ObjectDBSnapshot> addRef() { return kj::addRef(*this); }
+	
+	db::Savepoint savepoint;
+};
+
+/* Entries can point to unresolved objects. Because we need to be able to unwrap
+   objects that have not been resolved yet, we need our own custom client hook
+   that we can use to unwrap pointers into the database. */
+struct ObjectDBHook : public ClientHook, kj::Refcounted {	
+	// Interface methods
+	Request<AnyPointer, AnyPointer> newCall(
+		uint64_t interfaceId,
+		uint16_t methodId,
+		kj::Maybe<MessageSize> sizeHint,
+		CallHints hints
+	) override {
+		return inner -> newCall(interfaceId, methodId, mv(sizeHint), mv(hints));
+	}
+
+	VoidPromiseAndPipeline call(
+		uint64_t interfaceId,
+		uint16_t methodId,
+		kj::Own<CallContextHook>&& context,
+		CallHints hints
+	) override {
+		return inner -> call(interfaceId, methodId, mv(context), mv(hints));
+	}
+
+	kj::Maybe<ClientHook&> getResolved() override {	return *inner; }
+	kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
+		return inner -> whenMoreResolved();
+	}
+
+	virtual kj::Own<ClientHook> addRef() override { return kj::addRef(*this); }
+	const void* getBrand() override { return &BRAND; }
+	kj::Maybe<int> getFd() override { return nullptr; }
+	
+	// Implementation methods
+	Promise<void> whenReady()
+	ObjectHook(Own<ObjectDBEntry> objectIn);
+
+	// Member
+	inline static const uint BRAND = 0;
+	Own<ObjectDBEntry> entry;
+	Own<ClientHook> inner;
+};
+
+struct ObjectInterface : public ::fsc::odb::Object::Server {
+	// Object interface
+	Promise<void> getInfo(GetInfoContext ctx) override;
+	
+	// DataRef interface
+	Promise<void> metaAndCapTable(MetaAndCapTableContext ctx) override;
+	Promise<void> rawBytes(RawBytesContext ctx) override;
+	Promise<void> transmit(TransmitContext ctx) override;
+	
+	// Folder interface
+	Promise<void> ls(LsContext ctx) override;
+	Promise<void> getAll(GetAllContext ctx) override;
+	Promise<void> getEntry(GetEntryContext ctx) override;
+	Promise<void> putEntry(PutEntryContext ctx) override;
+	Promise<void> rm(RmContext ctx) override;
+	Promise<void> mkdir(MkdirContext ctx) override;
+
+	// Implementation
+	ObjectInterface(Own<DBObject>&& object, kj::Badge<ObjectDBHook>) :
+		object(mv(object))
+	{}
+	
+	Promise<void> dataReady();
+	
+	ObjectInfo::Folder::Builder checkFolder();
+	ObjectInfo::DataRef::Builder checkRef();
+	
+	// Members
+	Own<DBObject> object;
+};
+
+// Implementation helpers
+
+template<typename T>
+auto withODBBackoff(T func) {
+	return withBackoff(10 * kj::MILLISECONDS, 5 * kj::MINUTES, 2, mv(func));
 }
 
-// ============================== class BlobBuilder =================================
-
-BlobBuilder::BlobBuilder(BlobStore& parent, size_t chunkSize) :
-	id(parent.createBlob.insert()),
-	parent(parent.addRef()),
-	buffer(kj::heapArray<byte>(chunkSize)),
-	
-	compressor(9),
-	hashFunction(Botan::HashFunction::create("Blake2b"))
-{
-	KJ_REQUIRE(!parent.readOnly);
-	KJ_REQUIRE(chunkSize > 0);
-	compressor.setOutput(buffer);
+kj::Exception objectDeleted() {
+	return KJ_EXCEPTION(DISCONNECTED, "Object was deleted from database");
 }
 
-BlobBuilder::~BlobBuilder() {
-	ud.catchExceptionsIfUnwinding([this]() {
-		parent -> deleteIfOrphan(id);
-	});
-}
-
-void BlobBuilder::flushBuffer() {
-	auto chunkData = buffer.slice(0, buffer.size() - compressor.remainingOut());
-	
-	if(chunkData.size() > 0) {
-		parent -> createChunk(id, currentChunkNo, chunkData);
-		++currentChunkNo;
-	}
-	compressor.setOutput(buffer);
-}
-
-void BlobBuilder::write(kj::ArrayPtr<const byte> data) {
-	hashFunction -> update(data.begin(), data.size());
-	
-	compressor.setInput(data);
-	
-	while(true) {
-		compressor.step(false);
-		
-		if(compressor.remainingOut() == 0)
-			flushBuffer();
-		
-		if(compressor.remainingIn() == 0)
-			return;
-	}
-}
-
-Blob BlobBuilder::finish() {
-	KJ_REQUIRE(parent -> conn -> inTransaction(), "Must be inside transaction");
-	KJ_REQUIRE(buffer != nullptr, "Can only call BlobBuilder::finish() once");
-	
-	compressor.setInput(nullptr);
-	
-	while(compressor.step(true) != ZLib::FINISHED) {
-		flushBuffer();
-	}
-	
-	flushBuffer();
-	buffer = nullptr;
-		
-	KJ_STACK_ARRAY(uint8_t, hashOutput, hashFunction -> output_length(), 1, 64);
-	hashFunction -> final(hashOutput.begin());
-	
-	// We need to check for uniqueness of the target object. If the hash already exists, we return that object instead (this one will be deleted when the blob builder gets destroyed)
-	// auto transaction = parent -> conn -> beginTransaction();
-	
-	auto& findBlob = parent -> findBlob;
-	
-	KJ_IF_MAYBE(pBlob, parent -> find(hashOutput)) {
-		return mv(*pBlob);
-	}
-	
-	parent -> setBlobHash(id, hashOutput);
-	return Blob(*parent, id);
-}
-
-// ============================================ class BlobReader ==============================================
-
-BlobReader::BlobReader(Blob& blob) :
-	blob(blob),
-	readStatement(blob.parent -> conn -> prepare(str("SELECT data FROM ", blob.parent -> tablePrefix, "_chunks WHERE id = ? ORDER BY chunkNo"))),
-	readQuery(readStatement.query(blob.id))
-{
-}
-
-bool BlobReader::read(kj::ArrayPtr<byte> output) {
-	decompressor.setOutput(output);
-	
-	while(true) {
-		if(decompressor.remainingIn() == 0) {
-			KJ_REQUIRE(readQuery.step(), "Missing chunks despite expecting more");
-			decompressor.setInput(readQuery[0]);
-		}
-			
-		ZLib::State state = decompressor.step();
-		
-		if(state == ZLib::FINISHED)
-			return true;
-		
-		if(decompressor.remainingOut() == 0)
-			return false;
-		
-		KJ_ASSERT(decompressor.remainingIn() == 0);
-	}
-}
-
-// ========================= ObjectDB ==============================
-
-namespace {
-	template<typename T>
-	auto withODBBackoff(T func) {
-		return withBackoff(10 * kj::MILLISECONDS, 5 * kj::MINUTES, 2, mv(func));
-	}
-	
-	KJ_NORETURN (void objectDeleted());
-	void objectDeleted() {
-		kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "Object was deleted from database"));
-	}
-	
-	kj::Exception fromProto(rpc::Exception::Reader proto) { 
-		kj::Exception::Type type;
-		switch(proto.getType()) {
-			#define HANDLE_VAL(val) \
-				case rpc::Exception::Type::val: \
-					type = kj::Exception::Type::val; \
-					break;
-					
-			HANDLE_VAL(FAILED)
-			HANDLE_VAL(OVERLOADED)
-			HANDLE_VAL(DISCONNECTED)
-			HANDLE_VAL(UNIMPLEMENTED)
-			
-			#undef HANDLE_VAL
-		}
-		
-		kj::Exception result(type, "remote", -1, str(proto.getReason()));
-		
-		if(proto.hasTrace()) {
-			result.setRemoteTrace(str(proto.getTrace()));
-		}
-		
-		return result;
-	}
-	
-	Temporary<rpc::Exception> toProto(kj::Exception& e) {
-		Temporary<rpc::Exception> result;
-		
-		switch(e.getType()) {
-			#define HANDLE_VAL(val) \
-				case kj::Exception::Type::val: \
-					result.setType(rpc::Exception::Type::val); \
-					break;
-					
-			HANDLE_VAL(FAILED)
-			HANDLE_VAL(OVERLOADED)
-			HANDLE_VAL(DISCONNECTED)
-			HANDLE_VAL(UNIMPLEMENTED)
-			
-			#undef HANDLE_VAL
-		}
-		
-		result.setReason(e.getDescription());
-		
-		if(e.getRemoteTrace() != nullptr) {
-			result.setTrace(e.getRemoteTrace());
-		}
-		
-		return result;
-	}
-}
-
-struct TransmissionProcess {
-	constexpr static inline size_t CHUNK_SIZE = 1024 * 1024;
-	
-	Own<BlobReader> reader;
-	
-	DataRef<capnp::AnyPointer>::Receiver::Client receiver;
-	size_t start;
-	size_t end;
-	
-	Array<byte> buffer;
-	
-	TransmissionProcess(Own<BlobReader>&& reader, DataRef<capnp::AnyPointer>::Receiver::Client receiver, size_t start, size_t end) :
-		reader(mv(reader)),
-		receiver(mv(receiver)),
-		buffer(kj::heapArray<byte>(CHUNK_SIZE)),
-		start(start), end(end)
-	{
-		KJ_REQUIRE(end >= start);
-	}
-	
-	Promise<void> run() {
-		// Wind forward the stream until we hit the target point
-		uint64_t windRemaining = start;
-		while(true) {
-			if(windRemaining >= buffer.size()) {
-				reader -> read(buffer);
-				windRemaining -= buffer.size();
-			} else {
-				reader -> read(buffer.slice(0, windRemaining));
+kj::Exception fromProto(rpc::Exception::Reader proto) { 
+	kj::Exception::Type type;
+	switch(proto.getType()) {
+		#define HANDLE_VAL(val) \
+			case rpc::Exception::Type::val: \
+				type = kj::Exception::Type::val; \
 				break;
+				
+		HANDLE_VAL(FAILED)
+		HANDLE_VAL(OVERLOADED)
+		HANDLE_VAL(DISCONNECTED)
+		HANDLE_VAL(UNIMPLEMENTED)
+		
+		#undef HANDLE_VAL
+	}
+	
+	kj::Exception result(type, "remote", -1, str(proto.getReason()));
+	
+	if(proto.hasTrace()) {
+		result.setRemoteTrace(str(proto.getTrace()));
+	}
+	
+	return result;
+}
+
+Temporary<rpc::Exception> toProto(kj::Exception& e) {
+	Temporary<rpc::Exception> result;
+	
+	switch(e.getType()) {
+		#define HANDLE_VAL(val) \
+			case kj::Exception::Type::val: \
+				result.setType(rpc::Exception::Type::val); \
+				break;
+				
+		HANDLE_VAL(FAILED)
+		HANDLE_VAL(OVERLOADED)
+		HANDLE_VAL(DISCONNECTED)
+		HANDLE_VAL(UNIMPLEMENTED)
+		
+		#undef HANDLE_VAL
+	}
+	
+	result.setReason(e.getDescription());
+	
+	if(e.getRemoteTrace() != nullptr) {
+		result.setTrace(e.getRemoteTrace());
+	}
+	
+	return result;
+}
+
+// class ObjectDBBase
+
+// class ObjectDB
+	
+ObjectDBSnapshot& ObjectDB::getCurrentSnapshot() {
+	KJ_IF_MAYBE(p, currentSnapshot) {
+		return **p;
+	}
+	
+	// We need to open a fresh snapshot
+	auto newSnapshot = kj::refcounted<ObjectDBSnapshot>(*this);
+	currentSnapshot = newSnapshot -> addRef();
+	
+	return newSnapshot;
+}
+
+void ObjectDB::changed() {
+	currentSnapshot = nullptr;
+}
+
+void ObjectDB::syncAll() {
+	for(auto& e : liveEntries) {
+		e.trySync();
+	}
+}
+
+Own<ObjectDBEntry> ObjectDB::open(int64_t id, Maybe<ObjectDBSnapshot&> snapshot) {
+	KJ_IF_MAYBE(pSnapshot, snapshot) {
+		return kj::refcounted<ObjectDBEntry>(*this, id, pSnapshot -> addRef());
+	}
+	return kj::refcounted<ObjectDBEntry>(*this, id, nullptr);
+}
+
+DataRef::Client ObjectDB::wrap(Own<ObjectDBEntry> e) {
+	return kj::refcounted<ObjectDBHook>(mv(e));
+}
+
+OneOf<Own<ObjectDBEntry>, Capability::Client, nullptr> ObjectDB::unwrap(Capability::Client clt) {
+	// Resolve to innermost hook
+	// If any of the hooks encountered is an object hook, use that
+	Own<capnp::ClientHook> hook = capnp::ClientHook::from(kj::cp(object));
+	
+	ClientHook* inner = hook.get();
+	while(true) {
+		if(inner -> getBrand() == &ObjectHook::BRAND) {
+			auto asObjectHook = static_cast<ObjectHook*>(inner);
+			
+			if(asObjectHook -> entry -> parent.get() == this) {
+				return asObjectHook -> entry -> addRef();
 			}
 		}
 		
-		auto request = receiver.beginRequest();
-		request.setNumBytes(end - start);
-		return request.send().ignoreResult().then([this]() { return transmit(start); });
+		KJ_IF_MAYBE(pHook, inner -> getResolved()) {
+			inner = pHook;
+		} else {
+			break;
+		}
 	}
 	
-	Promise<void> transmit(size_t chunkStart) {			
-		// Check if we are done transmitting
-		if(chunkStart >= end)
-			return receiver.doneRequest().send().ignoreResult();
-		
-		auto slice = chunkStart + CHUNK_SIZE <= end ? buffer.asPtr() : buffer.slice(0, end - chunkStart);
-		reader -> read(slice);
-		KJ_REQUIRE(reader -> remainingOut() == 0, "Buffer should be filled completely");
-		
-		// Do a transmission
-		auto request = receiver.receiveRequest();
-		
-		if(slice.size() % 8 == 0) {
-			// Note: This is safe because we keep this object alive until the transmission
-			// succeeds or fails
-			auto orphanage = capnp::Orphanage::getForMessageContaining((DataRef<capnp::AnyPointer>::Receiver::ReceiveParams::Builder) request);
-			auto externalData = orphanage.referenceExternalData(slice);
-			request.adoptData(mv(externalData));
-		} else {
-			request.setData(slice);
+	// ... otherwise check whether it is a null cap ... 
+	if(inner -> isNull()) {
+		return nullptr;
+	}
+	
+	// ... turns out we can't unwrap this.
+	return mv(object);
+}
+
+// class ObjectDBEntry
+
+ObjectDBEntry::ObjectDBEntry(ObjectDB& parent, int64_t id, Maybe<ObjectDBSnapshot&> paramSnapshot) :
+	parent(parent.addRef()), id(id)
+{
+	KJ_IF_MAYBE(pSnap, paramSnapshot) {
+		snapshot = pSnap -> addRef();
+	}
+	
+	parent.liveObjects.add(*this);
+	trySync();
+}
+
+ObjectDBEntry::~ObjectDBEntry() {
+	if(isLive()) {
+		parent -> liveObjects.remove(*this);
+	}
+}
+
+void ObjectDBEntry::trySync() {
+	if(!isLive())
+		return;
+	
+	ObjectDBSnapshot& dbSnapshot = parent -> getCurrentSnapshot();
+	
+	KJ_IF_MAYBE(pMySnap, snapshot) {
+		// We are already on the current snapshot
+		if(pMySnap -> get() == &dbSnapshot)
+			return;
+	}
+	
+	// Check if the object exists
+	auto& getRefcount = dbSnapshot.getRefcount;
+	getRefcount.bind(id);
+	
+	if(!getRefcount.step()) {
+		// Either object is dead, or not yet in the database
+		KJ_IF_MAYBE(pId, dbSnapshot.getNewestId()) {
+			if(*pId >= id) {
+				// Object is dead
+				KJ_IF_MAYBE(ppFulfiller, updateFulfiller) {
+					(**ppFulfiller).reject(objectDeleted());
+				}
+				
+				parent -> liveObjects.remove(*this);
+			}
 		}
 		
-		return request.send().then([this, chunkEnd = chunkStart + slice.size()]() { return transmit(chunkEnd); });
+		return;
 	}
-};
+	
+	// Update to new snapshot
+	snapshot = dbSnapshot.addRef();
+	
+	// Notify waiting updates
+	KJ_IF_MAYBE(ppFulfiller, updateFulfiller) {
+		(**ppFulfiller).fulfill();
+		
+		auto paf = kj::newPromiseFulfillerPair<void>();
+		updateFulfiller = mv(paf.fulfiller);
+		updatePromise = paf.promise.fork();
+	}
+}
+
+Promise<void> ObjectDBEntry::whenUpdated() {
+	if(!isLive()) {
+		return objectDeleted();
+	}
+	
+	if(updateFulfiller == nullptr) {
+		auto paf = kj::newPromiseFulfillerPair<void>();
+		updateFulfiller = mv(paf.fulfiller);
+		updatePromise = paf.promise.fork();
+	}
+	
+	return updatePromise.addBranch();
+}
+
+void ObjectDBEntry::loadPreserved() {	
+	KJ_IF_MAYBE(pSnap, snapshot) {
+		doLoad(**pSnap);
+	} else {
+		KJ_FAIL_REQUIRE("loadPreserved() has no snapshot to load from. Ensure that hasPreserved() is true, e.g. by waiting for whenUpdated()", id);
+	}
+	
+	return true;
+}
+
+void ObjectDBEntry::load() {
+	doLoad(nullptr);
+}
+
+void ObjectDBEntry::save() {
+	KJ_REQUIRE(!parent -> readOnly);
+	
+	// Start transaction
+	db::Transaction(parent -> conn);
+	
+	// Now we need to figure out how to serialize references. This means we need to make a new message builder
+	MallocMessageBuilder outputBuilder(get().totalSize().wordCount + 1);
+	
+	// Decrease refcount of all previous outgoing references
+	std::set<int64_t> idsToCheck;
+	{
+		auto& outgoingRefs = parent -> listOutgoingRefs.bind(id);
+		while(outgoingRefs.step()) {
+			// Skip NULL
+			if(outgoingRefs[0].isNull()) {
+				continue;
+			}
+			
+			int64_t target = outgoingRefs[0];;
+			parent -> decRefcount(target);
+			idsToCheck.insert(target);
+		}
+	}
+	
+	// Clear existing references
+	parent -> clearOutgoingRefs(id);
+	
+	// Compact info into a correctly sized message and capture the used capabilities
+	BuilderCapabilityTable capTable;
+	AnyPointer::Builder outputRoot = capTable.imbue(outputBuilder.initRoot<AnyPointer>());
+	outputRoot.setAs<ObjectInfo>(info);
+	
+	// Serialize the message into the database
+	kj::Array<byte> flatInfo = wordsToBytes(messageToFlatArray(outputBuilder));
+	parent -> setInfo(id, flatInfo.asPtr());
+	
+	// Iterate through the captured capabilities and store the links in the appropriate DB table
+	kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> capTableData = capTable.getTable();
+	for(auto i : kj::indices(capTableData)) {
+		KJ_IF_MAYBE(pHook, capTableData[i]) {
+			Capability::Client client((*pHook) -> addRef());
+			auto unwrapped = parent -> unwrap(client);
+			
+			KJ_REQUIRE(!unwrapped.is<Capability::Client>(), "Only immediate DB references and null capabilities may be used inside DBObject.");
+			if(unwrapped.is<Own<DBObject>>()) {
+				auto& target = unwrapped.get<Own<DBObject>>();
+				
+				auto rowid = parent -> insertRef.insert(id, (int64_t) i, target -> id);
+				parent -> incRefcount(target -> id);
+				
+				continue;
+			}
+		}
+		
+		parent -> insertRef(id, (int64_t) i, nullptr);
+	}
+	
+	// Check if we have capabilities without incoming refs
+	for(int64_t id : idsToCheck) {
+		parent -> deleteIfOrphan(id);
+	}		
+}
+
+void ObjectDBEntry::doLoad(Maybe<ObjectDBSnapshot&> snapshotToUse) {
+	auto getTargetBase = [&]() -> ObjectDBBase& {
+		KJ_IF_MAYBE(pSnap, snapshotToUse) {
+			return *pSnap:
+		}
+		
+		return *parent;
+	}
+	ObjectDBBase& targetBase = getTargetBase();
+	
+	// Start transaction
+	db::Transaction(targetBase.conn);
+	
+	auto& q = parent.getInfo.bind(id);
+	KJ_REQUIRE(q.step(), "Object not present in database");
+	
+	auto flatInfo = kj::heapArray<const byte>(q[0].asBlob());
+	auto heapBuffer = bytesToWords(mv(flatInfo));
+	FlatArrayMessageReader reader(heapBuffer);
+	
+	kj::Vector<Maybe<Own<ClientHook>>> rawCapTable;
+	
+	auto& refs = targetBase.listOutgoingRefs.bind(id);
+	while(refs.step()) {		
+		if(refs[0].isNull()) {
+			rawCapTable.add(nullptr);
+			continue;
+		}
+		
+		auto dbObject = parent -> open(refs[0], snapshotToUse);
+		rawCapTable.add(ClientHook::from(parent -> wrap(mv(dbObject))));
+	}
+	
+	ReaderCapabilityTable capTable(rawCapTable.releaseAsArray());
+	auto root = capTable.imbue(reader.getRoot<ObjectInfo>());
+	
+	storage = kj::heap<MallocMessageBuilder>(root.totalSize().wordCount + 1);
+	storage -> setRoot(root);
+}
+
+void ObjectDB::deleteIfOrphan(int64_t id) {
+	db::Transaction(*conn);
+	
+	KJ_REQUIRE(!readOnly);
+	
+	// Make sure that the object is not in use
+	auto& rc = getRefcount.bind(id);
+	KJ_REQUIRE(rc.step(), "Internal error, refcount not found");
+	
+	if(rc[0].asInt64() > 0)
+		return;
+	
+	auto& blobId = getBlobId().bind(id);
+	blobId.step();
+	
+	if(!blobId[0].isNull()) {
+		blobStore -> get(blobId[0].asInt64()) -> decRef();
+	}
+		
+	// Scan outgoing refs
+	std::set<int64_t> idsToCheck;
+	{
+		auto& outgoingRefs = listOutgoingRefs.query(id);
+		while(outgoingRefs.step()) {
+			// Skip NULL
+			if(outgoingRefs[0].isNull()) {
+				continue;
+			}
+			
+			auto target = outgoingRefs[0].asInt64();
+			decRefcount(target);
+			idsToCheck.insert(target);
+		}
+	}
+	
+	deleteObject(id);
+	
+	// Check if we have capabilities without refs
+	for(int64_t id : idsToCheck) {
+		deleteIfOrphan(id);
+	}	
+}
+
+Own<ObjectDBEntry> ObjectDB::create() {
+	int64_t id = createObject.insert();
+	return open(id);
+}
+
+// class ObjectDBHook
+
+ObjectDBHook::ObjectDBHook(Own<ObjectDBEntry> paramEntry) :
+	entry(mv(paramEntry))
+{
+	Promise<Own<ClientHook>> clientPromise =
+		whenReady()
+		.then([this]() {
+			return ClientHook::from(kj::heap<ObjectInterface>(
+				entry -> addRef(), kj::Badge<ObjectDBHook>()
+			));
+		});
+	
+	inner = capnp::newLocalPromiseClient(mv(clientPromise));
+}
+
+Promise<void> ObjectDBHook::whenReady() {
+	// The promise in the database could potentially
+	// be of an exception the type OVERLOADED (wondering whether that
+	// really is smart to do ...), so we need to avoid returning
+	// it inside withODBBackoff.
+	
+	auto tryLater = [this]() {
+		return entry -> whenUpdated().then([this]() { return whenReady(); });
+	};
+	
+	return withODBBackoff([this]() -> Promise<void> {
+		// Wait until we have synced at least once successfully
+		if(!hasPreserved())
+			entry -> whenUpdated().then([this]() { return whenReady(); });
+		
+		// Load the currently present object
+		loadPreserved();
+		return READY_NOW;
+	}).then([this]() -> Promise<void> {
+		auto info = entry -> get();
+		switch(info.which()) {
+			case ObjectInfo::UNRESOLVED:
+				return entry -> whenUpdated().then([this]() { return whenReady(); });
+			case ObjectInfo::EXCEPTION: {
+				return fromProto(info.getException());
+			}	
+			case ObjectInfo::LINK:
+			case ObjectInfo::DATA_REF:
+			case ObjectInfo::FOLDER:
+				return READY_NOW;
+		}
+		
+		KJ_FAIL_REQUIRE("Unknown object entry in database");
+	});
+}
+	
 
 /**
  * Transmission receiver that forwards the data into a blob store and in the end attaches
@@ -389,203 +735,6 @@ struct ObjectDB::TransmissionReceiver : public DataRef<AnyPointer>::Receiver::Se
 		});
 	}
 };
-
-
-struct DBCache::CachedRef : public DataRef<AnyPointer>::Server {
-	Temporary<DataRefMetadata> _metadata;
-	kj::Array<capnp::Capability::Client> refs;
-	Blob blob;
-	kj::UnwindDetector ud;
-	Own<DBCache> parent;
-	
-	//! Create a cached reference by stealing metadata, refs AND blob (so no incRef inside, but a decRef on destruction)
-	CachedRef(Temporary<DataRefMetadata>&& metadata, kj::Array<capnp::Capability::Client> refs, Blob blob, DBCache& parent) :
-		_metadata(mv(metadata)),
-		refs(mv(refs)),
-		blob(blob),
-		parent(parent.addRef())
-	{
-		// No incRef, since the constructor steals the blob's refcount
-	}
-	
-	~CachedRef() {
-		ud.catchExceptionsIfUnwinding([this]() mutable {
-			auto t = blob.parent -> conn -> beginTransaction();
-			blob.decRef();
-		});
-	}
-	
-	Promise<void> metaAndCapTable(MetaAndCapTableContext ctx) override {
-		// The metadata table is only ready once the hash is verified
-		ctx.initResults().setMetadata(_metadata);
-		
-		auto tableOut = ctx.getResults().initTable(refs.size());
-		for(auto i : kj::indices(refs))
-			tableOut.set(i, refs[i]);
-		
-		return READY_NOW;
-	}
-	
-	Promise<void> rawBytes(RawBytesContext ctx) override {
-		return withODBBackoff([this, ctx]() mutable {
-			auto t = blob.parent -> conn -> beginTransaction();
-				
-			const uint64_t start = ctx.getParams().getStart();
-			const uint64_t end = ctx.getParams().getEnd();
-			KJ_REQUIRE(end >= start);
-			KJ_REQUIRE(end < _metadata.getDataSize());
-			
-			auto buffer = kj::heapArray<byte>(8 * 1024 * 1024);
-			auto reader = blob.open();
-				
-			// Wind forward the stream until we hit the target point
-			uint64_t windRemaining = start;
-			while(true) {
-				if(windRemaining >= buffer.size()) {
-					reader -> read(buffer);
-					windRemaining -= buffer.size();
-				} else {
-					reader -> read(buffer.slice(0, windRemaining));
-					break;
-				}
-			}
-				
-			auto data = ctx.getResults().initData(end - start);
-			reader -> read(data);
-		});
-	}
-	
-	Promise<void> transmit(TransmitContext ctx) override {
-		return withODBBackoff([this, ctx]() mutable {
-			auto params = ctx.getParams();
-			auto reader = blob.open();
-			auto transProc = heapHeld<TransmissionProcess>(mv(reader), params.getReceiver(), params.getStart(), params.getEnd());
-			
-			auto transmission = kj::evalNow([=]() mutable { return transProc -> run(); });
-			return transmission.attach(transProc.x());
-		})
-		.attach(thisCap());
-	}
-};
-
-struct DBCache::DownloadProcess : public internal::DownloadTask<DataRef<capnp::AnyPointer>::Client> {
-	Own<DBCache> parent;
-	
-	Own<BlobBuilder> builder;
-	Maybe<Blob> blob;
-	
-	kj::UnwindDetector ud;
-	
-	DownloadProcess(DBCache& parent, DataRef<AnyPointer>::Client src) :
-		DownloadTask(src, Context()),
-		parent(parent.addRef())
-	{}
-	
-	~DownloadProcess() {
-		ud.catchExceptionsIfUnwinding([this]() {
-			KJ_IF_MAYBE(pBlob, blob) {	
-				auto t = parent -> store -> conn -> beginRootTransaction(true);
-				pBlob -> decRef();
-			}
-		});
-	}
-	
-	//! Check whether "src" can be directly unwrapped
-	Promise<Maybe<ResultType>> unwrap() override {
-		return parent -> SERVER_SET.getLocalServer(src)
-		.then([this](Maybe<DataRef<AnyPointer>::Server> maybeResult) -> Maybe<ResultType> {
-			KJ_IF_MAYBE(pResult, maybeResult) {
-				auto backend = static_cast<CachedRef*>(pResult);
-				
-				// Ensure that the backend comes from the same store
-				// TODO: I should just have a non-static server set here ...
-				if(backend -> parent.get() != parent.get())
-					return nullptr;
-				
-				return src;
-			}
-			
-			return nullptr;
-		});
-	}
-	
-	//! Adjust refs e.g. by performing additional downloads. If the resulting client is broken with an exception of type "unimplemented", the original ref is used instead.
-	capnp::Capability::Client adjustRef(capnp::Capability::Client ref) override {
-		return mv(ref); //DBCache doesn't do recursive downloads
-		/*if(!recursive)
-			return mv(ref);
-		
-		return parent -> cache(ref.castAs<DataRef<AnyPointer>>(), true);*/
-	}
-	
-	Promise<Maybe<ResultType>> useCached() override {
-		return withODBBackoff([this]() mutable -> Maybe<ResultType> {		
-			auto t = parent -> store -> conn -> beginRootTransaction(true);		
-			
-			// Check if blob is already present in store
-			auto hash = metadata.getDataHash();
-			KJ_IF_MAYBE(pBlob, parent -> store -> find(hash)) {
-				pBlob -> incRef();
-				
-				auto server = kj::heap<CachedRef>(mv(metadata), mv(capTable), mv(*pBlob), *parent);
-				auto client = parent -> SERVER_SET.add(mv(server));
-				return client;
-			}
-			
-			builder = kj::heap<BlobBuilder>(*parent -> store);
-			return nullptr;
-		});
-	}
-	
-	Promise<void> beginDownload() override { return READY_NOW; }
-	Promise<void> receiveData(kj::ArrayPtr<const byte> data) override {
-		return withODBBackoff([this, data]() mutable {
-			KJ_ASSERT(builder.get() != nullptr);
-			
-			// Always grab the write lock before doing anything to fail fast
-			auto t = parent -> conn -> beginRootTransaction(true);
-			builder -> write(data);
-		});
-	};
-	Promise<void> finishDownload() override {
-		return withODBBackoff([this]() mutable {
-			KJ_ASSERT(builder.get() != nullptr);
-			
-			// Always grab the write lock before doing anything to fail fast
-			auto t = parent -> conn -> beginRootTransaction(true);
-			
-			auto finishedBlob = builder -> finish();
-			this -> blob = finishedBlob;
-			finishedBlob.incRef();
-			
-			builder = nullptr;
-		});
-	}
-	
-	Promise<ResultType> buildResult() override {
-		return withODBBackoff([this]() mutable {
-			auto t = parent -> store -> conn -> beginRootTransaction(true);
-			
-			KJ_IF_MAYBE(pBlob, this -> blob) {
-				auto server = kj::heap<CachedRef>(mv(metadata), mv(capTable), *pBlob, *parent);
-				// The CachedRef steals the blob, so we need to set blob to
-				// nullptr to avoid the destructor double-freeing
-				this -> blob = nullptr;
-				
-				return parent -> SERVER_SET.add(mv(server));
-			}
-			
-			KJ_FAIL_REQUIRE("Transmission process completed, but no blob stored");
-		});
-	}
-};
-
-Promise<DataRef<AnyPointer>::Client> DBCache::cache(DataRef<AnyPointer>::Client src) {
-	auto downloadTask = kj::refcounted<DownloadProcess>(*this, mv(src));
-	return downloadTask -> output();
-}
-
-capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> DBCache::SERVER_SET;
 
 /** Server class that gives clients access to DB object.
  *
@@ -1180,15 +1329,19 @@ ObjectDB::ObjectDB(kj::StringPtr filename, kj::StringPtr tablePrefix, bool readO
 	
 	conn = openSQLite3(filename);
 	
+	blobStore = kj::refcounted<BlobStore>(*conn, tablePrefix, readOnly);
+	
 	auto objectsTable = str(tablePrefix, "_objects");
 	auto refsTable = str(tablePrefix, "_object_refs");
+	auto blobsTable = str(tablePrefix, "_blobs");
 	
 	if(!readOnly) {
 		conn -> exec(str(
 			"CREATE TABLE IF NOT EXISTS ", objectsTable, " ("
-			  "id INTEGER PRIMARY KEY,"
+			  "id INTEGER PRIMARY KEY AUTOINCREMENT,"
 			  "info BLOB,"
-			  "refcount INTEGER DEFAULT 0"
+			  "refcount INTEGER DEFAULT 0,"
+			  "blobId INTEGER REFERENCES ", blobsTable, "(id)"
 			")"
 		));
 		conn -> exec(str(
@@ -1208,16 +1361,19 @@ ObjectDB::ObjectDB(kj::StringPtr filename, kj::StringPtr tablePrefix, bool readO
 		decRefcount = conn -> prepare(str("UPDATE ", objectsTable, " SET refcount = refcount - 1 WHERE id = ?"));
 		deleteObject = conn -> prepare(str("DELETE FROM ", objectsTable, " WHERE id = ?"));
 		
+		setBlob = conn -> prepare(str("UPDATE ", objectsTable, " SET blobId = ?2 WHERE id = ?1"));
+		
 		insertRef = conn -> prepare(str("INSERT INTO ", refsTable, " (parent, slot, child) VALUES (?, ?, ?)"));
 		clearOutgoingRefs = conn -> prepare(str("DELETE FROM ", refsTable, " WHERE parent = ?"));
 	}
 	
 	getInfo = conn -> prepare(str("SELECT info FROM ", objectsTable, " WHERE id = ?"));
 	getRefcount = conn -> prepare(str("SELECT refcount FROM ", objectsTable, " WHERE id = ?"));
+	getBlob = conn -> prepare(str("SELECT blobId FROM ", objectsTable, " WHERE id = ?"));
 	
 	listOutgoingRefs = conn -> prepare(str("SELECT child FROM ", refsTable, " WHERE parent = ? ORDER BY slot"));
 	
-	blobStore = kj::refcounted<BlobStore>(*conn, tablePrefix, readOnly);
+	readNewestId = conn -> prepare(str("SELECT seq FROM sqlite_sequence WHERE name = ?"));
 	
 	if(!readOnly)
 		createRoot();
@@ -1603,6 +1759,4 @@ void DBObject::load() {
 }
 
 }}
-
-// =========================== class DBCache =======================
 

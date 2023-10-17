@@ -1,7 +1,7 @@
 #include "sqlite.h"
-#include "sqlite3.h"
 
-#incldue <kj/refcount.h>
+#include <sqlite3.h>
+#include <kj/refcount.h>
 
 namespace fsc { namespace db {
 
@@ -44,6 +44,8 @@ struct SQLiteStatementHook : public PreparedStatementHook {
 	kj::ArrayPtr<const byte> getBlob(size_t) override;
 	kj::StringPtr getText(size_t) override;
 	
+	bool isNull(size_t) override;
+	
 	kj::String getColumnName(size_t) override;
 	
 	size_t size() override;
@@ -71,35 +73,36 @@ Own<Connection> SQLiteConnection::fork(bool readOnly) {
 	return kj::refcounted<SQLiteConnection>(filename, readOnly);
 }
 
-Own<PreparedStatementHook> prepareHook(kj::StringPtr sql) {
-	return SQLiteStatementHook(*this, sql);
+Own<PreparedStatementHook> SQLiteConnection::prepareHook(kj::StringPtr sql) {
+	return kj::heap<SQLiteStatementHook>(*this, sql);
 }
 
-SQLiteConnection(kj::StringPtr filename, bool readOnly) :
+SQLiteConnection::SQLiteConnection(kj::StringPtr filename, bool readOnly) :
 	filename(kj::heapString(filename)),
 	handle(nullptr)
 {
 	try {
-		check(sqlite3_open(
+		check(sqlite3_open_v2(
 			filename.cStr(),
 			&handle,
-			(readOnly ? SQLITE_OPEN_READONLY : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)) | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_EXRESCODE
+			(readOnly ? SQLITE_OPEN_READONLY : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)) | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_EXRESCODE,
+			nullptr
 		));
 		
 		// Set up connection parameters
 		exec("PRAGMA journal_mode=WAL");
 		exec("PRAGMA foreign_keys = ON");
 	} catch(...) {
-		sqlite_close_v2(handle);
+		sqlite3_close_v2(handle);
 		throw;
 	}
 }
 
-~SQLiteConnection() {
-	sqlite_close_v2(handle);
+SQLiteConnection::~SQLiteConnection() {
+	sqlite3_close_v2(handle);
 }
 
-int SQLiteConnection::Check(int result) {
+int SQLiteConnection::check(int result) {
 	if(result == SQLITE_OK)
 		return result;
 	
@@ -128,7 +131,7 @@ void SQLiteStatementHook::reset() {
 }
 
 bool SQLiteStatementHook::step() {
-	int result = check(sqlite3_step());
+	int result = check(sqlite3_step(handle));
 	
 	available = true;
 	if(result == SQLITE_ROW)
@@ -138,22 +141,22 @@ bool SQLiteStatementHook::step() {
 	if(result == SQLITE_DONE)
 		return false;
 	
-	KJ_UNREACHABLE();
+	KJ_UNREACHABLE;
 }
 
 int64_t SQLiteStatementHook::lastInsertedRowid() {
-	return sqlite3_last_insert_rowid(handle);
+	return sqlite3_last_insert_rowid(parent -> handle);
 }
 
 size_t SQLiteStatementHook::nRowsModified() {
-	return sqlite3_changes64(handle);
+	return sqlite3_changes64(parent -> handle);
 }
 
 void SQLiteStatementHook::setParameter(size_t idx, double d) {
 	check(sqlite3_bind_double(handle, idx, d));
 }
 
-void SQLiteStatementHook::setParameter(size_t t, int64_t i) {
+void SQLiteStatementHook::setParameter(size_t idx, int64_t i) {
 	check(sqlite3_bind_int64(handle, idx, i));
 }
 
@@ -199,6 +202,12 @@ kj::StringPtr SQLiteStatementHook::getText(size_t idx) {
 	);
 }
 
+bool SQLiteStatementHook::isNull(size_t idx) {
+	KJ_REQUIRE(available, "Statement has no active row");
+	
+	return sqlite3_column_type(handle, idx) != SQLITE_NULL;
+}
+
 kj::String SQLiteStatementHook::getColumnName(size_t idx) {
 	KJ_REQUIRE(available, "Statement has no active row");
 	
@@ -232,8 +241,8 @@ SQLiteStatementHook::~SQLiteStatementHook() {
 
 namespace fsc {
 	
-Own<db::Transaction> connectSqlite(kj::StringPtr url, bool readOnly) {
-	return kj::refcounted<SQLiteConnection>(url, readOnly);
+Own<db::Connection> connectSqlite(kj::StringPtr url, bool readOnly) {
+	return kj::refcounted<db::SQLiteConnection>(url, readOnly);
 }
 
 }

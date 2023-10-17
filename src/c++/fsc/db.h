@@ -2,6 +2,8 @@
 
 #include "common.h"
 
+#include <utility>
+
 namespace fsc { namespace db {
 
 struct PreparedStatementHook {
@@ -22,20 +24,26 @@ struct PreparedStatementHook {
 	virtual kj::ArrayPtr<const byte> getBlob(size_t) = 0;
 	virtual kj::StringPtr getText(size_t) = 0;
 	
+	virtual bool isNull(size_t) = 0;
+	
 	virtual kj::String getColumnName(size_t) = 0;
 	virtual size_t size() = 0;
 };
 
 struct PreparedStatement {
+	PreparedStatement() = default;
 	PreparedStatement(Own<PreparedStatementHook>&& hook);
 	~PreparedStatement();
+	
+	PreparedStatement(PreparedStatement&&) = default;
+	PreparedStatement& operator=(PreparedStatement&&) = default;
 	
 	template<typename P>
 	void setParameter(size_t, P);
 	
 	//! Assigns all parameters from arguments
 	template<typename... Params>
-	void bind(Params... params);
+	PreparedStatement& bind(Params... params);
 	
 	struct Column;
 	Column operator[](size_t idx);
@@ -84,6 +92,7 @@ struct PreparedStatement::Column {
 	inline double asDouble() { return parent.hook -> getDouble(idx); }
 	inline int64_t asInt64() { return parent.hook -> getInt64(idx); }
 	inline kj::StringPtr asText() { return parent.hook -> getText(idx); }
+	inline bool isNull() { return parent.hook -> isNull(idx); }
 	
 	inline operator kj::ArrayPtr<const byte>() { return asBlob(); }
 	inline operator kj::StringPtr() { return asText(); }
@@ -156,8 +165,10 @@ void PreparedStatement::setParameter(size_t idx, P p) {
 }
 
 template<typename... Params>
-void PreparedStatement::bind(Params... params) {
+PreparedStatement& PreparedStatement::bind(Params... params) {
+	hook -> reset();
 	bindInternal(std::index_sequence_for<Params...>(), params...);
+	return *this;
 }
 	
 template<typename... Params, size_t... indices>
