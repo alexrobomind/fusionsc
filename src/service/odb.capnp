@@ -14,15 +14,12 @@ using Data = import "data.capnp";
 
 struct FolderEntry {
 	name @0 : Text;
-	union {
-		ref @1 : Data.DataRef;
-		folder @2 : Folder;
-	}
+	value @1 : Capability;
 }
 
 interface Folder {
-	ls @0 () -> (entries : List(Text));
-	getAll @1 () -> (entries : List(FolderEntry));
+	ls @0 (name : Text) -> (entries : List(Text));
+	getAll @1 (name : Text) -> (entries : List(FolderEntry));
 	getEntry @2 (name : Text) -> FolderEntry;
 	putEntry @3 FolderEntry -> FolderEntry;
 	
@@ -32,18 +29,12 @@ interface Folder {
 	store @6 (name : Text, ref : Data.DataRef) -> ();
 }
 
-interface Object extends(Data.DataRef, Folder) {
-	enum Type { data @0; folder @1; }
-	
-	getInfo @0 () -> (type : Type);
-}
-
 # Internal, do not use
 struct ObjectInfo {
 	union {
 		unresolved @0 : Void;
 		exception @1 : Rpc.Exception;
-		link @2 : Object;
+		link @2 : Capability;
 		
 		dataRef : group {
 			downloadStatus : union {
@@ -51,7 +42,7 @@ struct ObjectInfo {
 				finished @4 : Void;
 			}
 			metadata @5 : Data.DataRefMetadata;
-			capTable @6 : List(Object);
+			capTable @6 : List(Capability);
 		}
 		folder : group {
 			entries @7 : List(FolderEntry);

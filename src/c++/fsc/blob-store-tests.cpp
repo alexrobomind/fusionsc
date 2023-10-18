@@ -2,6 +2,7 @@
 
 #include "blob-store.h"
 #include "local.h"
+#include "sqlite.h"
 
 using namespace fsc;
 	
@@ -9,8 +10,7 @@ TEST_CASE("blob-store") {
 	Library l = newLibrary();
 	LibraryThread th = l -> newThread();
 	
-	auto conn = openSQLite3(":memory:");
-	auto t = conn -> beginTransaction();
+	auto conn = connectSqlite(":memory:");
 	
 	auto store = createBlobStore(*conn, "blobs");
 	

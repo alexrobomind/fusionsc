@@ -5,96 +5,25 @@
 #include "odb.h"
 #include "local.h"
 #include "data.h"
+#include "sqlite.h"
 
 using namespace fsc;
 using namespace fsc::odb;
-	
-TEST_CASE("ODB blobstore") {
-	Library l = newLibrary();
-	LibraryThread th = l -> newThread();
-	
-	auto conn = openSQLite3(":memory:");
-	auto t = conn -> beginTransaction();
-	
-	auto store = kj::refcounted<BlobStore>(*conn, "blobs");
-	
-	auto data1 = kj::heapArray<byte>(1024);
-	th -> rng().randomize(data1);
-	
-	auto builder = store -> create(128);
-	builder.write(data1);
-	
-	Blob blob = builder.finish();
-	REQUIRE_THROWS(builder.finish());
-		
-	auto data2 = kj::heapArray<byte>(1024);
-	{
-		auto reader = blob.open();
-		REQUIRE(reader -> read(data2));
-		REQUIRE(reader -> remainingOut() == 0);
-		REQUIRE(data1 == data2);
-	}
-	
-	{
-		auto reader = blob.open();
-		REQUIRE_FALSE(reader -> read(data2.slice(0, 512)));
-		REQUIRE(reader -> read(data2.slice(512, 1024)));
-		REQUIRE(reader -> remainingOut() == 0);
-		REQUIRE(data1 == data2);
-	}
-		
-	
-	KJ_IF_MAYBE(pResult, store -> find(blob.hash())) {
-		REQUIRE(true);
-	} else {
-		REQUIRE(false);
-	}
-	
-	auto builder2 = store -> create(128);
-	builder2.write(data1.slice(0, 213));
-	builder2.write(data1.slice(213, 1024));
-	
-	// Check that hashes are cached
-	Blob blob2 = builder2.finish();
-	REQUIRE(blob2.id == blob.id);
-	
-	REQUIRE(blob.refcount() == 0);
-	blob.incRef();
-	REQUIRE(blob.refcount() == 1);
-	blob.incRef();
-	REQUIRE(blob.refcount() == 2);
-	blob.decRef();
-	REQUIRE(blob.refcount() == 1);
-	blob.decRef();
-	REQUIRE_THROWS([&]() {
-		blob.refcount();
-	}());
-	
-	REQUIRE_THROWS([&]() {
-		blob.open() -> read(data2);
-	}());
-	
-	KJ_IF_MAYBE(pResult, store -> find(blob.hash())) {
-		REQUIRE(false);
-	} else {
-		REQUIRE(true);
-	}
-}
 
 TEST_CASE("ODB open") {
 	Library l = newLibrary();
 	LibraryThread th = l -> newThread();
 	
 	SECTION("temporary") {
-		kj::refcounted<ObjectDB>("");
+		openObjectDb(*connectSqlite(""));
 	}
 	
 	SECTION("memory") {
-		kj::refcounted<ObjectDB>(":memory:");
+		openObjectDb(*connectSqlite(":memory:"));
 	}
 	
 	SECTION("testDB") {
-		kj::refcounted<ObjectDB>("testDB");
+		openObjectDb(*connectSqlite("testDB"));
 	}
 }
 
@@ -109,15 +38,14 @@ TEST_CASE("ODB rw") {
 	auto paf = kj::newPromiseAndFulfiller<HolderRef::Client>();
 	HolderRef::Client promiseRef(mv(paf.promise));
 	
-	auto odb = kj::refcounted<ObjectDB>(":memory:");
-	Folder::Client dbRoot = odb -> getRoot();
+	Folder::Client dbRoot = openObjectDb(*connectSqlite(":memory:"));
 	
 	auto putRequest = dbRoot.putEntryRequest();
 	putRequest.setName("obj");
-	putRequest.setRef(promiseRef.asGeneric());
+	putRequest.setValue(promiseRef.asGeneric());
 	
 	auto putResponse = putRequest.send().wait(ws);
-	auto storedObject = putResponse.getRef().asGeneric<test::DataRefHolder<capnp::Data>>();
+	auto storedObject = putResponse.getValue().castAs<HolderRef>();
 	
 	SECTION("fast termination") {
 		// Checks for memory leaks in case download process gets into limbo
@@ -137,10 +65,10 @@ TEST_CASE("ODB rw") {
 			
 			auto putRequest = dbRoot.putEntryRequest();
 			putRequest.setName("obj");
-			putRequest.setRef(promiseRef.asGeneric());
+			putRequest.setValue(promiseRef);
 			
 			auto putResponse = putRequest.send().wait(ws);
-			auto storedObject = putResponse.getRef();
+			auto storedObject = putResponse.getValue();
 			
 			auto msg = "Injected failure message"_kj;
 			exc.setDescription(str(msg));
@@ -178,8 +106,6 @@ TEST_CASE("ODB rw") {
 			REQUIRE(innerCopy.get() == data);
 		}
 	}
-	
-	odb -> cancelDownloads();
 }
 
 TEST_CASE("ODB rw main") {
@@ -193,15 +119,14 @@ TEST_CASE("ODB rw main") {
 	auto paf = kj::newPromiseAndFulfiller<HolderRef::Client>();
 	HolderRef::Client promiseRef(mv(paf.promise));
 	
-	auto odb = kj::refcounted<ObjectDB>(":memory:");
-	Folder::Client dbRoot = odb -> getRoot();
+	Folder::Client dbRoot = openObjectDb(*connectSqlite(":memory:"));
 	
 	auto putRequest = dbRoot.putEntryRequest();
 	putRequest.setName("obj");
-	putRequest.setRef(promiseRef.asGeneric());
+	putRequest.setValue(promiseRef);
 	
 	auto putResponse = putRequest.send().wait(ws);
-	auto storedObject = putResponse.getRef().asGeneric<test::DataRefHolder<capnp::Data>>();
+	auto storedObject = putResponse.getValue().castAs<HolderRef>();
 	
 	Temporary<test::DataRefHolder<capnp::Data>> refHolder;
 	
@@ -241,15 +166,14 @@ TEST_CASE("ODB rw persistent") {
 		
 		th -> rng().randomize(data);	
 	
-		auto odb = kj::refcounted<ObjectDB>("testdb.sqlite");
-		Folder::Client dbRoot = odb -> getRoot();
+		Folder::Client dbRoot = openObjectDb(*connectSqlite("testdb.sqlite"));
 		
 		auto putRequest = dbRoot.putEntryRequest();
 		putRequest.setName("obj");
-		putRequest.setRef(th -> dataService().publish(data).asGeneric());
+		putRequest.setValue(th -> dataService().publish(data).asGeneric());
 		auto putResponse = putRequest.send().wait(ws);
 		
-		auto storedObject = putResponse.getRef().asGeneric<test::DataRefHolder<capnp::Data>>();
+		auto storedObject = putResponse.getValue().castAs<HolderRef>();
 		
 		storedObject.whenResolved().wait(ws);
 	}
@@ -258,15 +182,14 @@ TEST_CASE("ODB rw persistent") {
 		Library l = newLibrary();
 		LibraryThread th = l -> newThread();
 		auto& ws = th -> waitScope();		
-		
-		auto odb = kj::refcounted<ObjectDB>("testdb.sqlite");
-		Folder::Client dbRoot = odb -> getRoot();
+	
+		Folder::Client dbRoot = openObjectDb(*connectSqlite("testdb.sqlite"));
 		
 		auto getRequest = dbRoot.getEntryRequest();
 		getRequest.setName("obj");
 		
 		auto getResponse = getRequest.send().wait(ws);
-		auto remoteData = getResponse.getRef().asGeneric<capnp::Data>();
+		auto remoteData = getResponse.getValue().castAs<HolderRef>();
 		auto localData = th -> dataService().download(remoteData).wait(ws);
 		
 		REQUIRE(localData.get() == data);

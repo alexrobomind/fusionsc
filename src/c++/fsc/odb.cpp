@@ -153,7 +153,7 @@ ObjectDBBase::ObjectDBBase(db::Connection& paramConn, kj::StringPtr paramTablePr
 }
 
 Maybe<int64_t> ObjectDBBase::getNewestId() {
-	auto& q = readNewestId.bind(kj::str(tablePrefix, "_objects"));
+	auto& q = readNewestId.bind(kj::str(tablePrefix, "_objects").asPtr());
 	if(!q.step())
 		return nullptr;
 	
@@ -222,6 +222,8 @@ struct ObjectDBEntry : public kj::Refcounted {
 	 * Note: The returned objects maintains an open transaction
 	 */
 	Own<Accessor> open();
+	
+	ObjectDB& getDb() { return *parent; }
 
 public:
 	const int64_t id;
@@ -412,7 +414,7 @@ struct ObjectDBHook : public ClientHook, kj::Refcounted {
 };
 
 //! Glue function that creates the access interface for entries.
-Maybe<Capability::Client> createInterface(ObjectDBEntry& e);
+Maybe<Capability::Client> createInterface(ObjectDBEntry& e, kj::Badge<ObjectDBHook> badge);
 
 // class ObjectDBBase
 
@@ -784,7 +786,7 @@ Promise<Own<ClientHook>> ObjectDBHook::resolveTask() {
 }
 
 Maybe<Capability::Client> ObjectDBHook::checkResolved() {
-	return createInterface(*entry);
+	return createInterface(*entry, kj::Badge<ObjectDBHook>());
 }
 
 // ======================= Import interfaces ===================
@@ -828,10 +830,7 @@ private:
 };
 
 struct DatarefDownloadProcess : public internal::DownloadTask<Own<ObjectDBEntry>> {
-	DatarefDownloadProcess(ObjectDB& db, int64_t id, DataRef<AnyPointer>::Client src) :
-		DownloadTask(src, Context()),
-		db(db), id(id)
-	{}
+	DatarefDownloadProcess(ObjectDB& db, int64_t id, DataRef<AnyPointer>::Client src);
 	
 	Promise<Maybe<Own<ObjectDBEntry>>> unwrap() override;
 	Promise<Maybe<Own<ObjectDBEntry>>> useCached() override;
@@ -851,7 +850,7 @@ ImportContext::ImportContext(ObjectDB& parent) :
 	parent(parent.addRef())
 {
 	KJ_REQUIRE(!parent.conn -> inTransaction(), "ImportContext must be created outside any transactions");
-	transaction = kj::heap<db::Transaction>(parent);
+	transaction = kj::heap<db::Transaction>(*parent.conn);
 }
 
 ImportContext::~ImportContext() {
@@ -888,7 +887,7 @@ Promise<void> ImportContext::importTask(int64_t id, Capability::Client src) {
 	ObjectDB& myParent = *parent;
 	
 	// Attempt to download DataRef
-	auto dlp = kj::refcounted<DatarefDownloadProcess>(myParent, id, src);
+	auto dlp = kj::refcounted<DatarefDownloadProcess>(myParent, id, src.castAs<DataRef<AnyPointer>>());
 	return dlp -> output().ignoreResult()
 	
 	// Check what type of exception it is
@@ -921,13 +920,13 @@ DatarefDownloadProcess::DatarefDownloadProcess(ObjectDB& db, int64_t id, DataRef
 {}
 
 Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::unwrap() {
-	return withODBBackoff([this]() mutable -> Maybe<Own<DBObject>> {
+	return withODBBackoff([this]() mutable -> Maybe<Own<ObjectDBEntry>> {
 		auto unwrapResult = db.unwrap(src);
 		
-		if(unwrapResult.is<Own<DBObject>>()) {
-			auto acc = db.open(id) -> open();
+		if(unwrapResult.is<Own<ObjectDBEntry>>()) {
+			auto dst = db.open(id);
+			auto acc = dst -> open();
 			acc -> setLink(src);
-			acc -> release(true);
 			
 			return mv(dst);
 		}
@@ -936,10 +935,11 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::unwrap() {
 	});
 }
 
-Promise<Maybe<Own<DBObject>>> DatarefDownloadProcess::useCached() {
-	return withODBBackoff([this]() mutable -> Maybe<Own<DBObject>> {
-		ImportContext ic(*parent);
-		auto acc = db.open(id) -> open();
+Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
+	return withODBBackoff([this]() mutable -> Maybe<Own<ObjectDBEntry>> {
+		ImportContext ic(db);
+		auto dst = db.open(id);
+		auto acc = dst -> open();
 		
 		// Initialize target to DataRef
 		auto ref = acc -> initDataRef();
@@ -948,21 +948,22 @@ Promise<Maybe<Own<DBObject>>> DatarefDownloadProcess::useCached() {
 		
 		auto capTableOut = ref.initCapTable(capTable.size());
 		for(auto i : kj::indices(capTable))
-			capTableOut.set(i, ic.import(capTable[i]));
+			capTableOut.set(i, db.wrap(ic.import(capTable[i])));
 		
 		// Check if we have hash in blob store
-		KJ_IF_MAYBE(pBlob, dst -> parent -> blobStore -> find(metadata.getDataHash())) {
+		KJ_IF_MAYBE(pBlob, db.blobStore -> find(metadata.getDataHash())) {
 			ref.getDownloadStatus().setFinished();
-			pBlob -> incRef();
+			(**pBlob).incRef();
 			return mv(dst);
 		}
 		
 		// Allocate blob builder
-		builder = dst -> parent -> blobStore -> create();
+		constexpr size_t CHUNK_SIZE = 128 * 1024;
+		builder = db.blobStore -> create(CHUNK_SIZE);
 		
 		// Set blob id under construction so that the blob gets deleted with
 		// the parent object.
-		dst -> parent -> setBlob(dst -> id, builder -> getId());
+		db.setBlob(id, builder -> getBlobUnderConstruction() -> getId());
 		
 		return nullptr;
 	});
@@ -973,7 +974,7 @@ Promise<void> DatarefDownloadProcess::receiveData(kj::ArrayPtr<const kj::byte> d
 		KJ_REQUIRE(builder.get() != nullptr);
 		
 		// BlobBuilder::write() does not go inside a transaction
-		builder -> write(data);
+		builder -> write(data.begin(), data.size());
 	});
 }
 
@@ -985,14 +986,14 @@ Promise<void> DatarefDownloadProcess::finishDownload() {
 		builder -> prepareFinish();
 		
 		// This goes inside the transaction
-		db::Transaction t(db.conn);
+		db::Transaction t(*db.conn);
 		auto finishedBlob = builder -> finish();
 		db.setBlob(id, finishedBlob -> getId());
 	});
 }
 
-Promise<Own<DBObject>> DatarefDownloadProcess::buildResult() {
-	return mv(dst);
+Promise<Own<ObjectDBEntry>> DatarefDownloadProcess::buildResult() {
+	return db.open(id);
 }	
 
 // ======================= Access interfaces ===================
@@ -1029,7 +1030,7 @@ struct FolderInterface : public ::fsc::odb::Folder::Server {
 	Own<ObjectDBEntry> object;
 };
 
-struct DataRefInterface : public DataRef::Server {
+struct DataRefInterface : public DataRef<AnyPointer>::Server {
 	// DataRef interface
 	Promise<void> metaAndCapTable(MetaAndCapTableContext ctx) override;
 	Promise<void> rawBytes(RawBytesContext ctx) override;
@@ -1071,7 +1072,7 @@ Promise<void> FolderInterface::ls(LsContext ctx) {
 	auto in = data -> getFolder().getEntries();
 	auto out = ctx.getResults().initEntries(in.size());
 	for(auto i : kj::indices(in)) {
-		out[i] = in[i].getName();
+		out.set(i, in[i].getName());
 	}
 	
 	return READY_NOW;
@@ -1083,7 +1084,7 @@ Promise<void> FolderInterface::getAll(GetAllContext ctx) {
 	KJ_REQUIRE(data -> isFolder(), "Trying to list contents of non-folder object");
 	
 	auto in = data -> getFolder().getEntries();
-	auto out = ctx.getResults().setEntries(in);
+	ctx.getResults().setEntries(in);
 	
 	return READY_NOW;
 }
@@ -1096,7 +1097,7 @@ Promise<void> FolderInterface::getEntry(GetEntryContext ctx) {
 	
 	auto& filename = path.basename()[0];
 	for(auto e : data -> getFolder().getEntries()) {
-		if(e.getName().asString() == name) {
+		if(e.getName() == filename) {
 			ctx.setResults(e);
 			return READY_NOW;
 		}
@@ -1108,15 +1109,15 @@ Promise<void> FolderInterface::getEntry(GetEntryContext ctx) {
 Promise<void> FolderInterface::putEntry(PutEntryContext ctx) {
 	return withODBBackoff([this, ctx]() mutable -> Promise<void> {
 		kj::Path path = kj::Path::parse(ctx.getParams().getName());
-		ImportContext ic;
+		ImportContext ic(object -> getDb());
 		
 		auto acc = getFolderForModification(path, true);
 		
 		auto& filename = path.basename()[0];
 		KJ_IF_MAYBE(pEntry, ic.import(ctx.getParams().getValue())) {
-			setEntry(*acc, filename, mv(*pEntry));
+			setEntry(acc -> getFolder(), filename, mv(*pEntry));
 		} else {
-			setEntry(*acc, filename, nullptr);
+			setEntry(acc -> getFolder(), filename, nullptr);
 		}
 		
 		acc -> release(true);
@@ -1130,7 +1131,7 @@ Promise<void> FolderInterface::rm(RmContext ctx) {
 		auto acc = getFolderForModification(path.parent(), false);
 		
 		auto& filename = path.basename()[0];
-		setEntry(*acc, filename, nullptr);
+		setEntry(acc -> getFolder(), filename, nullptr);
 		
 		acc -> release(true);
 	});
@@ -1144,17 +1145,13 @@ Promise<void> FolderInterface::mkdir(MkdirContext ctx) {
 		
 		auto& filename = path.basename()[0];
 		
-		auto newObject = object -> parent -> create();
+		auto newObject = object -> getDb().create();
 		newObject -> open() -> initFolder();
 		
-		setEntry(*acc, filename, newObject -> addRef());
+		setEntry(acc -> getFolder(), filename, newObject -> addRef());
 		acc -> release(true);
 	});
 }
-
-FolderInterface::FolderInterface(Own<ObjectDBEntry>&& object, kj::Badge<ObjectDBHook>) :
-	object(mv(object))
-{}
 
 void FolderInterface::setEntry(ObjectInfo::Folder::Builder folder, kj::StringPtr name, Maybe<Own<ObjectDBEntry>> entry) {
 	// Try to locate existing entry with correct name
@@ -1162,7 +1159,7 @@ void FolderInterface::setEntry(ObjectInfo::Folder::Builder folder, kj::StringPtr
 	
 	auto entries = folder.getEntries();
 	for(auto i : kj::indices(entries)) {
-		if(entries[i].getName() == name) {
+		if(entries[i].getName().asReader() == name) {
 			maybeIdx = i;
 			break;
 		}
@@ -1172,7 +1169,7 @@ void FolderInterface::setEntry(ObjectInfo::Folder::Builder folder, kj::StringPtr
 		size_t idx = *pIdx;
 		
 		KJ_IF_MAYBE(pVal, entry) {
-			entries[i].setVal(object -> parent -> wrap(mv(*pVal)));
+			entries[idx].setValue(object -> getDb().wrap(mv(*pVal)));
 		} else {
 			auto orphanage = Orphanage::getForMessageContaining(folder);
 			auto newList = orphanage.newOrphan<List<FolderEntry>>(entries.size() - 1);
@@ -1192,17 +1189,17 @@ void FolderInterface::setEntry(ObjectInfo::Folder::Builder folder, kj::StringPtr
 			auto disowned = folder.disownEntries();
 			disowned.truncate(disowned.get().size() + 1);
 			folder.adoptEntries(mv(disowned));
-			entries = folder.getrEntries();
+			entries = folder.getEntries();
 			
 			// Configure last entry
 			auto lastEntry = entries[entries.size() - 1];
 			lastEntry.setName(name);
-			lastEntry.setVal(object -> parent -> wrap(mv(*pVal)));
+			lastEntry.setValue(object -> getDb().wrap(mv(*pVal)));
 		}
 	}
 }
 
-Own<ObjectDBEntry::Accessor> FolderInterface::getFolderForModification(kj::PathPtr path, bool create = false) {
+Own<ObjectDBEntry::Accessor> FolderInterface::getFolderForModification(kj::PathPtr path, bool create) {
 	Own<ObjectDBEntry> current = object -> addRef();
 	
 	for(const auto& folderName : path) {
@@ -1213,8 +1210,8 @@ Own<ObjectDBEntry::Accessor> FolderInterface::getFolderForModification(kj::PathP
 		
 		// Check if entry exists
 		for(auto i : kj::indices(entries)) {
-			if(entries[i].getName() == path[0]) {
-				current = object -> parent -> unwrapValid(entries[i].getVal());
+			if(entries[i].getName().asReader() == path[0]) {
+				current = object -> getDb().unwrapValid(entries[i].getValue());
 				acc -> release(false);
 				goto entry_found;
 			}
@@ -1222,12 +1219,12 @@ Own<ObjectDBEntry::Accessor> FolderInterface::getFolderForModification(kj::PathP
 		
 		// Folder does not exist
 		if(create) {
-			auto newFolder = object -> parent -> create();
-			auto newFolderAcc = newFolder.open();
+			auto newFolder = object -> getDb().create();
+			auto newFolderAcc = newFolder -> open();
 			newFolderAcc -> initFolder();
 			newFolderAcc -> release(true);
 			
-			setEntry(acc -> getFolder(), folderName, object -> parent -> wrap(newFolder -> addRef()));
+			setEntry(acc -> getFolder(), folderName, newFolder -> addRef());
 			acc -> release(true);
 			
 			current = mv(newFolder);
@@ -1246,40 +1243,41 @@ Own<ObjectInfo::Reader> FolderInterface::readObject(kj::PathPtr path) {
 	
 	Own<ObjectDBEntry> current = object -> addRef();
 	for(const auto& folderName : path.parent()) {
-		auto reader = current -> getPreserved();
+		auto reader = current -> loadPreserved();
 		
-		KJ_REQUIRE(acc -> isFolder(), "Trying to access child object of non-folder", path, folderName);
-		auto entries = acc -> getFolder().getEntries();
+		KJ_REQUIRE(reader -> isFolder(), "Trying to access child object of non-folder", path, folderName);
+		auto entries = reader -> getFolder().getEntries();
 		
 		// Check if entry exists
 		for(auto i : kj::indices(entries)) {
 			if(entries[i].getName() == path[0]) {
-				current = object -> parent -> unwrapValid(entries[i].getVal());
+				current = object -> getDb().unwrapValid(entries[i].getValue());
 				goto entry_found;
 			}
 		}
 		
 		KJ_FAIL_REQUIRE("Folder not found", path, folderName);
+		
+		entry_found:;
 	}
 	
-	return current -> getPreserved();
+	return current -> loadPreserved();
 }
 
 // class DataRefInterface
 
-Promise<void> DataRefInterface::metaAndCapTable(MetaAndCapTableContext ctx) override {
+Promise<void> DataRefInterface::metaAndCapTable(MetaAndCapTableContext ctx) {
 	return withODBBackoff([this, ctx]() mutable {
-		auto data = object -> getPreserved();
+		auto data = object -> loadPreserved();
 		
 		auto results = ctx.initResults();
-		results.setMetadata(data -> getMetadata());
-		results.setTable(data -> getCapTable());
-		
-		return READY_NOW;
+		auto ref = data -> getDataRef();
+		results.setMetadata(ref.getMetadata());
+		results.setTable(ref.getCapTable());
 	});
 }
 
-Promise<void> DataRefInterface::rawBytes(RawBytesContext ctx) override {
+Promise<void> DataRefInterface::rawBytes(RawBytesContext ctx) {
 	return withODBBackoff([this, ctx]() mutable {
 		const uint64_t start = ctx.getParams().getStart();
 		const uint64_t end = ctx.getParams().getEnd();
@@ -1288,10 +1286,10 @@ Promise<void> DataRefInterface::rawBytes(RawBytesContext ctx) override {
 		
 		// Query blob id
 		auto& blobIdQuery = snapshot -> getBlob.bind(object -> id);
-		KJ_REQUIRE(blobIdQuery.step(), "Internal error: Object deleted", id);
+		KJ_REQUIRE(blobIdQuery.step(), "Internal error: Object deleted", object -> id);
 		
 		// Open blob
-		Own<Blob> blob = snapshot -> blobStore.get(blobIdQuery[0]);
+		Own<Blob> blob = snapshot -> blobStore -> get(blobIdQuery[0]);
 		Own<kj::InputStream> reader = blob -> open();
 		reader -> skip(start);
 		
@@ -1301,25 +1299,22 @@ Promise<void> DataRefInterface::rawBytes(RawBytesContext ctx) override {
 	});
 }
 
-Promise<void> DataRefInterface::transmit(TransmitContext ctx) override {
-	return dataReady()
-	.then([this, ctx]() mutable {
-		return withODBBackoff([this, ctx]() mutable {
-			auto params = ctx.getParams();
+Promise<void> DataRefInterface::transmit(TransmitContext ctx) {
+	return withODBBackoff([this, ctx]() mutable {
+		auto params = ctx.getParams();
+	
+		auto snapshot = object -> getSnapshot().addRef();
 		
-			auto snapshot = object -> getSnapshot().addRef();
-			
-			auto& blobIdQuery = snapshot -> getBlob.bind(object -> id);
-			KJ_REQUIRE(blobIdQuery.step(), "Internal error: Object deleted", id);
-			
-			// Open blob
-			Own<Blob> blob = snapshot -> blobStore.get(blobIdQuery[0]);
-			Own<kj::InputStream> reader = blob -> open();
-			
-			// Create transmission process
-			auto transProc = heapHeld<TransmissionProcess>(mv(reader), params.getReceiver(), params.getStart(), params.getEnd());
-			return transProc.run().attach(transProc.x());
-		});
+		auto& blobIdQuery = snapshot -> getBlob.bind(object -> id);
+		KJ_REQUIRE(blobIdQuery.step(), "Internal error: Object deleted", object -> id);
+		
+		// Open blob
+		Own<Blob> blob = snapshot -> blobStore -> get(blobIdQuery[0]);
+		Own<kj::InputStream> reader = blob -> open();
+		
+		// Create transmission process
+		auto transProc = heapHeld<TransmissionProcess>(mv(reader), params.getReceiver(), params.getStart(), params.getEnd());
+		return transProc -> run().attach(transProc.x());
 	});
 }
 
@@ -1366,7 +1361,7 @@ Promise<void> TransmissionProcess::transmit(size_t chunkStart) {
 	return request.send().then([this, chunkEnd = chunkStart + slice.size()]() { return transmit(chunkEnd); });
 }
 
-Maybe<Capability::Client> createInterface(ObjectDBEntry& entry) {
+Maybe<Capability::Client> createInterface(ObjectDBEntry& entry, kj::Badge<ObjectDBHook> badge) {
 	if(!entry.hasPreserved())
 		return nullptr;
 	
@@ -1375,7 +1370,7 @@ Maybe<Capability::Client> createInterface(ObjectDBEntry& entry) {
 		case ObjectInfo::UNRESOLVED:
 			return nullptr;
 		case ObjectInfo::EXCEPTION: {
-			return fromProto(info -> getException());
+			return fromProto(reader -> getException());
 		}	
 		case ObjectInfo::LINK: {
 			return reader -> getLink();
@@ -1386,10 +1381,10 @@ Maybe<Capability::Client> createInterface(ObjectDBEntry& entry) {
 			if(refInfo.getDownloadStatus().isDownloading())
 				return nullptr;
 			
-			return kj::heap<DataRefInterface>(*entry)
+			return kj::heap<DataRefInterface>(entry.addRef(), badge);
 		}
 		case ObjectInfo::FOLDER:
-			return kj::heap<FolderInterface>(*entry);
+			return kj::heap<FolderInterface>(entry.addRef(), badge);
 	}
 }
 

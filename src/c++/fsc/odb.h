@@ -11,6 +11,6 @@
 
 namespace fsc {
 	
-odb::Folder::Client openObjectDb(db::Connection& conn);
+odb::Folder::Client openObjectDb(db::Connection& conn, kj::StringPtr tablePrefix = "objectdb");
 
 }

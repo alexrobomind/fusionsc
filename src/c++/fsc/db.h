@@ -46,7 +46,7 @@ struct PreparedStatement {
 	PreparedStatement& bind(Params... params);
 	
 	struct Column;
-	Column operator[](size_t idx);
+	inline Column operator[](size_t idx);
 	
 	bool step();
 	
@@ -175,7 +175,7 @@ PreparedStatement& PreparedStatement::bind(Params... params) {
 }
 	
 template<typename... Params, size_t... indices>
-void bindInternal(std::integer_sequence<size_t, indices...> pIndices, Params... params) {
+void PreparedStatement::bindInternal(std::integer_sequence<size_t, indices...> pIndices, Params... params) {
 	int unused[] = {
 		0, (hook -> setParameter(indices, params), 1)...
 	};

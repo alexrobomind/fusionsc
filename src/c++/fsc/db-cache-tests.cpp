@@ -4,6 +4,7 @@
 #include "local.h"
 #include "common.h"
 #include "data.h"
+#include "sqlite.h"
 
 using namespace fsc;
 
@@ -16,7 +17,7 @@ TEST_CASE("db-cache") {
 	auto array = kj::heapArray<kj::byte>(12);
 	th -> rng().randomize(array);
 	
-	auto conn = openSQLite3(":memory:");
+	auto conn = connectSqlite(":memory:");
 	auto bs = createBlobStore(*conn);
 	auto cache = createDBCache(*bs);
 	
