@@ -699,7 +699,9 @@ void ObjectDBEntry::Accessor::save(ObjectInfo::Reader input) {
 	// Check if we have capabilities without incoming refs
 	for(int64_t id : idsToCheck) {
 		parent -> deleteIfOrphan(id);
-	}		
+	}
+	
+	parent -> changed();
 }
 
 // class ObjectDBHook
