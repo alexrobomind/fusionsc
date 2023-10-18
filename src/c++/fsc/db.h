@@ -115,6 +115,8 @@ struct Connection {
 	
 	virtual Own<PreparedStatementHook> prepareHook(kj::StringPtr sql) = 0;
 	
+	virtual bool inTransaction() = 0;
+	
 	inline PreparedStatement prepare(kj::StringPtr sql) { return prepareHook(sql); }
 	inline int64_t exec(kj::StringPtr sql) { return prepare(sql)(); }
 
@@ -130,7 +132,7 @@ struct Savepoint {
 	kj::UnwindDetector ud;
 	
 	Savepoint(Connection& parent);
-	~Savepoint();
+	~Savepoint() noexcept(false) ;
 	
 	bool active();
 	void release();
@@ -142,10 +144,11 @@ struct Transaction {
 	Savepoint savepoint;
 	
 	Transaction(Connection& parent);
-	~Transaction();
+	~Transaction() noexcept(false) ;
 	
 	inline void commit() {savepoint.release(); }
 	inline void rollback() { savepoint.rollback(); }
+	bool active() { return savepoint.active(); }
 };
 
 }}

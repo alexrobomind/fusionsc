@@ -61,6 +61,7 @@ struct BlobBuilderImpl : public BlobBuilder {
 	BlobBuilderImpl(BlobStoreImpl& parent, size_t chunkSize);
 	
 	void write(const void* buffer, size_t size) override;
+	void prepareFinish() override;
 	Own<Blob> finish() override;
 	Own<Blob> getBlobUnderConstruction() override;
 	
@@ -73,6 +74,9 @@ struct BlobBuilderImpl : public BlobBuilder {
 	
 	Compressor compressor;
 	std::unique_ptr<Botan::HashFunction> hashFunction;
+	
+	Maybe<size_t> partialCompressionOffset;
+	kj::Array<uint8_t> hash;
 };
 
 struct BlobReaderImpl : public kj::InputStream {
@@ -222,21 +226,31 @@ BlobBuilderImpl::BlobBuilderImpl(BlobStoreImpl& parent, size_t chunkSize) :
 }
 
 void BlobBuilderImpl::write(const void* buf, size_t count) {
-	kj::ArrayPtr<const byte> data((const byte*) buf, count);
-	db::Transaction t(*parent -> conn);
+	KJ_REQUIRE(!parent -> conn -> inTransaction(), "Can not call write() inside transaction");
 	
-	hashFunction -> update(data.begin(), data.size());
-	compressor.setInput(data);
+	kj::ArrayPtr<const byte> data((const byte*) buf, count);
+	
+	// If a previous run failed, pick up where we left off
+	KJ_IF_MAYBE(pOffset, partialCompressionOffset) {
+		compressor.setInput(data.slice(*pOffset));
+	} else {
+		compressor.setInput(data);
+	}
 	
 	while(true) {
 		compressor.step(false);
 		
-		if(compressor.remainingOut() == 0)
+		if(compressor.remainingOut() == 0) {
+			partialCompressionOffset = data.size() - compressor.remainingIn();
 			flushBuffer();
+			partialCompressionOffset = nullptr;
+		}
 		
 		if(compressor.remainingIn() == 0)
-			return;
+			break;
 	}
+	
+	hashFunction -> update(data.begin(), data.size());
 }
 
 Own<Blob> BlobBuilderImpl::getBlobUnderConstruction() {
@@ -244,9 +258,10 @@ Own<Blob> BlobBuilderImpl::getBlobUnderConstruction() {
 	return kj::refcounted<BlobImpl>(*parent, id);
 }
 
-Own<Blob> BlobBuilderImpl::finish() {
-	KJ_REQUIRE(buffer != nullptr, "Can only call BlobBuilder::finish() once");
-	db::Transaction t(*parent -> conn);
+void BlobBuilderImpl::prepareFinish() {
+	KJ_REQUIRE(!parent -> conn -> inTransaction(), "Can not call prepareFinish() inside transaction");
+	if(buffer == nullptr)
+		return;
 	
 	// Write out remaining data inside zlib stream
 	compressor.setInput(nullptr);
@@ -258,28 +273,35 @@ Own<Blob> BlobBuilderImpl::finish() {
 	flushBuffer();
 	buffer = nullptr;
 	
-	// Finalize hash
-	KJ_STACK_ARRAY(uint8_t, hashOutput, hashFunction -> output_length(), 1, 64);
+	hash = kj::heapArray<uint8_t>(hashFunction -> output_length());
 	hashFunction -> final(hashOutput.begin());
+}
+
+Own<Blob> BlobBuilderImpl::finish() {
+	KJ_REQUIRE(hash != nullptr, "Must call prepareFinish() before calling finish()");
+	KJ_REQUIRE(parent -> conn -> inTransaction(), "finish() must be called inside transaction");
 	
 	// Check hash for uniqueness
-	KJ_IF_MAYBE(pBlob, parent -> find(hashOutput)) {
+	KJ_IF_MAYBE(pBlob, parent -> find(hash)) {
 		(**pBlob).incRef();
 		BlobImpl(*parent, id).decRef();
 		return mv(*pBlob);
 	}
 	
 	// Finalize hash and return blob
-	parent -> setBlobHash(id, hashOutput);
+	parent -> setBlobHash(id, hash);
 	return kj::refcounted<BlobImpl>(*parent, id);
 }
 
 void BlobBuilderImpl::flushBuffer() {
-	auto chunkData = buffer.slice(0, buffer.size() - compressor.remainingOut());
-	
-	if(chunkData.size() > 0) {
-		parent -> createChunk(id, currentChunkNo, chunkData);
-		++currentChunkNo;
+	db::Transaction t(*parent -> conn);
+	{
+		auto chunkData = buffer.slice(0, buffer.size() - compressor.remainingOut());
+		
+		if(chunkData.size() > 0) {
+			parent -> createChunk(id, currentChunkNo, chunkData);
+			++currentChunkNo;
+		}
 	}
 	compressor.setOutput(buffer);
 }

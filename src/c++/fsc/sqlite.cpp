@@ -14,6 +14,8 @@ struct SQLiteConnection : public Connection, kj::Refcounted {
 	
 	Own<PreparedStatementHook> prepareHook(kj::StringPtr sql) override;
 	
+	bool inTransaction() override;
+	
 	// Implementation
 	SQLiteConnection(kj::StringPtr filename, bool readOnly);
 	~SQLiteConnection();
@@ -121,6 +123,10 @@ int SQLiteConnection::check(int result) {
 	kj::String errorMessage = kj::str(sqlite3_errmsg(handle));
 	
 	KJ_FAIL_REQUIRE("SQL error in sqlite", errorCode, extendedErrorCode, errorMessage);
+}
+
+bool SQLiteConnection::inTransaction() {
+	return sqlite3_get_autocommit(handle) == 0;
 }
 
 // class SQLiteStatementHook
