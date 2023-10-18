@@ -232,7 +232,7 @@ void BlobBuilderImpl::write(const void* buf, size_t count) {
 	
 	// If a previous run failed, pick up where we left off
 	KJ_IF_MAYBE(pOffset, partialCompressionOffset) {
-		compressor.setInput(data.slice(*pOffset));
+		compressor.setInput(data.slice(*pOffset, data.size()));
 	} else {
 		compressor.setInput(data);
 	}
@@ -274,7 +274,7 @@ void BlobBuilderImpl::prepareFinish() {
 	buffer = nullptr;
 	
 	hash = kj::heapArray<uint8_t>(hashFunction -> output_length());
-	hashFunction -> final(hashOutput.begin());
+	hashFunction -> final(hash.begin());
 }
 
 Own<Blob> BlobBuilderImpl::finish() {
@@ -289,7 +289,7 @@ Own<Blob> BlobBuilderImpl::finish() {
 	}
 	
 	// Finalize hash and return blob
-	parent -> setBlobHash(id, hash);
+	parent -> setBlobHash(id, hash.asPtr());
 	return kj::refcounted<BlobImpl>(*parent, id);
 }
 
