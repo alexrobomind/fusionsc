@@ -50,7 +50,7 @@ struct PreparedStatement {
 	
 	bool step();
 	
-	inline bool reset() { hook -> reset(); }
+	inline void reset() { hook -> reset(); }
 	
 	template<typename... Params>
 	size_t operator()(Params... params) {

@@ -178,6 +178,7 @@ TEST_CASE("ODB rw persistent") {
 		storedObject.whenResolved().wait(ws);
 	}
 	
+	
 	{
 		Library l = newLibrary();
 		LibraryThread th = l -> newThread();

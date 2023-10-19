@@ -4,6 +4,7 @@
 
 #include <capnp/rpc.capnp.h>
 
+#include <list>
 #include <set>
 
 using kj::str;
@@ -115,7 +116,7 @@ ObjectDBBase::ObjectDBBase(db::Connection& paramConn, kj::StringPtr paramTablePr
 		conn -> exec(str(
 			"CREATE TABLE IF NOT EXISTS ", objectsTable, " ("
 			  "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-			  "info BLOB DEFAULT x'00 00 00 00  00 00 00 01  00 00 00 00  00 00 00 00',"
+			  "info BLOB DEFAULT x'00000000010000000000000000000000'," // x'00 00 00 00  01 00 00 00  00 00 00 00  00 00 00 00'
 			  "refcount INTEGER DEFAULT 0,"
 			  "blobId INTEGER DEFAULT NULL REFERENCES ", blobsTable, "(id)"
 			")"
@@ -321,7 +322,7 @@ struct ObjectDB : public ObjectDBBase, kj::Refcounted {
 	Capability::Client wrap(Maybe<Own<ObjectDBEntry>> e);
 	
 	//! Unwraps an object KNOWN to be pointing to a database entry
-	Own<ObjectDBEntry> unwrapValid(Capability::Client c) { return mv(unwrap(c).get<Own<ObjectDBEntry>>()); }
+	Own<ObjectDBEntry> unwrapValid(Capability::Client c) { return unwrap(c).get<Own<ObjectDBEntry>>(); }
 	
 	//! Checks whether the object's reference count is 0 If yes, deletes it.
 	void deleteIfOrphan(int64_t id);
@@ -335,8 +336,15 @@ struct ObjectDB : public ObjectDBBase, kj::Refcounted {
 	 *          time, corrupting the database.
 	 */
 	Own<ObjectDBEntry> create();
+	
+	//! Creates the root entry if not present
+	odb::Folder::Client getRoot();
 
 private:
+	
+	//! Task that periodically recycles the database
+	kj::Promise<void> syncTask();
+	
 	Maybe<Own<ObjectDBSnapshot>> currentSnapshot;
 	
 	kj::List<ObjectDBEntry, &ObjectDBEntry::liveLink> liveEntries;
@@ -344,6 +352,8 @@ private:
 	
 	kj::TaskSet importTasks;
 	friend class ImportContext;
+	
+	kj::Promise<void> syncPromise;
 };
 
 //! Snapshot to a frozen representation of the database
@@ -413,12 +423,54 @@ struct ObjectDBHook : public ClientHook, kj::Refcounted {
 	Own<ClientHook> inner;
 };
 
+struct ImportErrorHandler : public kj::TaskSet::ErrorHandler {
+	void taskFailed(kj::Exception&& exception) override {
+	}
+	
+	static ImportErrorHandler INSTANCE;
+};
+
+ImportErrorHandler ImportErrorHandler::INSTANCE;
+
 //! Glue function that creates the access interface for entries.
 Maybe<Capability::Client> createInterface(ObjectDBEntry& e, kj::Badge<ObjectDBHook> badge);
 
 // class ObjectDBBase
 
 // class ObjectDB
+
+ObjectDB::ObjectDB(db::Connection& conn, kj::StringPtr tablePrefix, bool readOnly) :
+	ObjectDBBase(conn, tablePrefix, readOnly),
+	importTasks(ImportErrorHandler::INSTANCE),
+	syncPromise(kj::evalLater([this]() { return syncTask(); }).eagerlyEvaluate(nullptr))
+{}
+
+Promise<void> ObjectDB::syncTask() {
+	changed();
+	syncAll();
+	
+	return getActiveThread().timer().afterDelay(3 * kj::SECONDS)
+	.then([this]() { return syncTask(); });
+}
+
+odb::Folder::Client ObjectDB::getRoot() {
+	return withODBBackoff([this]() {
+		db::Transaction(*conn);
+		
+		// Check if root exists
+		getRefcount.bind((int64_t) 0);
+		if(getRefcount.step())
+			return wrap(open(0)).castAs<odb::Folder>();
+		
+		// Create root object
+		auto root = create();
+		auto acc = root -> open();
+		acc -> initFolder();
+		acc -> release(true);
+		
+		return wrap(mv(root)).castAs<odb::Folder>();
+	}).attach(addRef());
+}
 	
 ObjectDBSnapshot& ObjectDB::getCurrentSnapshot() {
 	KJ_IF_MAYBE(p, currentSnapshot) {
@@ -438,7 +490,10 @@ void ObjectDB::changed() {
 
 void ObjectDB::syncAll() {
 	for(auto& e : liveEntries) {
-		e.trySync();
+		try {
+			e.trySync();
+		} catch(kj::Exception e) {
+		}
 	}
 }
 
@@ -493,101 +548,6 @@ OneOf<Own<ObjectDBEntry>, Capability::Client, decltype(nullptr)> ObjectDB::unwra
 	// ... turns out we can't unwrap this.
 	return mv(clt);
 }
-
-// class ObjectDBEntry
-
-ObjectDBEntry::ObjectDBEntry(ObjectDB& parent, int64_t id, Maybe<Own<ObjectDBSnapshot>> paramSnapshot) :
-	parent(parent.addRef()), id(id), updatePromise(nullptr)
-{
-	KJ_IF_MAYBE(pSnap, paramSnapshot) {
-		snapshot = (**pSnap).addRef();
-	}
-	
-	parent.liveEntries.add(*this);
-	trySync();
-}
-
-ObjectDBEntry::~ObjectDBEntry() {
-	if(isLive()) {
-		parent -> liveEntries.remove(*this);
-	}
-}
-
-void ObjectDBEntry::trySync() {
-	if(!isLive())
-		return;
-	
-	ObjectDBSnapshot& dbSnapshot = parent -> getCurrentSnapshot();
-	
-	KJ_IF_MAYBE(pMySnap, snapshot) {
-		// We are already on the current snapshot
-		if(pMySnap -> get() == &dbSnapshot)
-			return;
-	}
-	
-	// Check if the object exists
-	auto& getRefcount = dbSnapshot.getRefcount;
-	getRefcount.bind(id);
-	
-	if(!getRefcount.step()) {
-		// Either object is dead, or not yet in the database
-		KJ_IF_MAYBE(pId, dbSnapshot.getNewestId()) {
-			if(*pId >= id) {
-				// Object is dead
-				KJ_IF_MAYBE(ppFulfiller, updateFulfiller) {
-					(**ppFulfiller).reject(KJ_EXCEPTION(DISCONNECTED, "Object was deleted from database"));
-				}
-				
-				parent -> liveEntries.remove(*this);
-			}
-		}
-		
-		return;
-	}
-	
-	// Update to new snapshot
-	snapshot = dbSnapshot.addRef();
-	
-	// Notify waiting updates
-	KJ_IF_MAYBE(ppFulfiller, updateFulfiller) {
-		(**ppFulfiller).fulfill();
-		
-		auto paf = kj::newPromiseAndFulfiller<void>();
-		updateFulfiller = mv(paf.fulfiller);
-		updatePromise = paf.promise.fork();
-	}
-}
-
-ObjectDBSnapshot& ObjectDBEntry::getSnapshot() {
-	KJ_IF_MAYBE(pMySnap, snapshot) {
-		return **pMySnap;
-	}
-	
-	KJ_FAIL_REQUIRE("Snapshot requested on object without snapshot");
-}
-
-Promise<void> ObjectDBEntry::whenUpdated() {
-	if(!isLive()) {
-		return KJ_EXCEPTION(DISCONNECTED, "Object was deleted from database");
-	}
-	
-	if(updateFulfiller == nullptr) {
-		auto paf = kj::newPromiseAndFulfiller<void>();
-		updateFulfiller = mv(paf.fulfiller);
-		updatePromise = paf.promise.fork();
-	}
-	
-	return updatePromise.addBranch();
-}
-
-Own<ObjectInfo::Reader> ObjectDBEntry::loadPreserved() {	
-	KJ_IF_MAYBE(pSnap, snapshot) {
-		return doLoad(**pSnap);
-	}
-	KJ_FAIL_REQUIRE("loadPreserved() has no snapshot to load from. Ensure that hasPreserved() is true, e.g. by waiting for whenUpdated()", id);
-}
-
-// class ObjectDB
 
 void ObjectDB::deleteIfOrphan(int64_t id) {
 	db::Transaction(*conn);
@@ -683,6 +643,111 @@ Own<ObjectInfo::Reader> ObjectDBEntry::doLoad(Maybe<ObjectDBSnapshot&> snapshotT
 Own<ObjectDBEntry::Accessor> ObjectDBEntry::open() {
 	return kj::heap<Accessor>(*this);
 }
+
+// class ObjectDBSnapshot
+
+ObjectDBSnapshot::ObjectDBSnapshot(ObjectDB& base) :
+	ObjectDBBase(*base.conn -> fork(true), base.tablePrefix, true),
+	savepoint(*conn)
+{
+}
+
+// class ObjectDBEntry
+
+ObjectDBEntry::ObjectDBEntry(ObjectDB& parent, int64_t id, Maybe<Own<ObjectDBSnapshot>> paramSnapshot) :
+	parent(parent.addRef()), id(id), updatePromise(nullptr)
+{
+	KJ_IF_MAYBE(pSnap, paramSnapshot) {
+		snapshot = (**pSnap).addRef();
+	}
+	
+	parent.liveEntries.add(*this);
+	trySync();
+}
+
+ObjectDBEntry::~ObjectDBEntry() {
+	if(isLive()) {
+		parent -> liveEntries.remove(*this);
+	}
+}
+
+void ObjectDBEntry::trySync() {
+	if(!isLive())
+		return;
+	
+	ObjectDBSnapshot& dbSnapshot = parent -> getCurrentSnapshot();
+	
+	KJ_IF_MAYBE(pMySnap, snapshot) {
+		// We are already on the current snapshot
+		if(pMySnap -> get() == &dbSnapshot)
+			return;
+	}
+	
+	// Check if the object exists
+	auto& getRefcount = dbSnapshot.getRefcount;
+	getRefcount.bind(id);
+	
+	if(!getRefcount.step()) {
+		// Either object is dead, or not yet in the database
+		KJ_IF_MAYBE(pId, dbSnapshot.getNewestId()) {
+			if(*pId >= id) {
+				// Object is dead
+				KJ_IF_MAYBE(ppFulfiller, updateFulfiller) {
+					(**ppFulfiller).reject(KJ_EXCEPTION(DISCONNECTED, "Object was deleted from database"));
+				}
+				
+				parent -> liveEntries.remove(*this);
+			}
+		}
+		
+		return;
+	}
+	
+	// Update to new snapshot
+	snapshot = dbSnapshot.addRef();
+	
+	// Notify waiting updates
+	KJ_IF_MAYBE(ppFulfiller, updateFulfiller) {
+		(**ppFulfiller).fulfill();
+		
+		auto paf = kj::newPromiseAndFulfiller<void>();
+		updateFulfiller = mv(paf.fulfiller);
+		updatePromise = paf.promise.fork();
+	}
+}
+
+ObjectDBSnapshot& ObjectDBEntry::getSnapshot() {
+	KJ_IF_MAYBE(pMySnap, snapshot) {
+		return **pMySnap;
+	}
+	
+	KJ_FAIL_REQUIRE("Snapshot requested on object without snapshot");
+}
+
+Promise<void> ObjectDBEntry::whenUpdated() {
+	if(!isLive()) {
+		return KJ_EXCEPTION(DISCONNECTED, "Object was deleted from database");
+	}
+	
+	if(updateFulfiller == nullptr) {
+		auto paf = kj::newPromiseAndFulfiller<void>();
+		updateFulfiller = mv(paf.fulfiller);
+		updatePromise = paf.promise.fork();
+	}
+	
+	return updatePromise.addBranch();
+}
+
+Own<ObjectInfo::Reader> ObjectDBEntry::loadPreserved() {
+	trySync();
+	
+	KJ_IF_MAYBE(pSnap, snapshot) {
+		return doLoad(**pSnap);
+	}
+	KJ_FAIL_REQUIRE("loadPreserved() has no snapshot to load from. Ensure that hasPreserved() is true, e.g. by waiting for whenUpdated()", id);
+}
+
+// class ObjectDB
 
 // class ObjectDBEntry::Accessor
 
@@ -861,7 +926,7 @@ ImportContext::~ImportContext() {
 }
 
 Maybe<Own<ObjectDBEntry>> ImportContext::import(Capability::Client target) {
-	auto unwrapped = parent -> unwrap(mv(target));
+	auto unwrapped = parent -> unwrap(target);
 	
 	if(unwrapped.is<decltype(nullptr)>())
 		return nullptr;
@@ -1103,15 +1168,18 @@ Promise<void> FolderInterface::getEntry(GetEntryContext ctx) {
 		}
 	}
 	
+	auto acc = getFolderForModification(path.parent());
+	KJ_DBG(ObjectInfo::Reader(*data), acc -> asReader());
+	
 	return KJ_EXCEPTION(FAILED, "Entry not found in folder", filename);
 }
 
 Promise<void> FolderInterface::putEntry(PutEntryContext ctx) {
-	return withODBBackoff([this, ctx]() mutable -> Promise<void> {
+	return withODBBackoff([this, ctx]() mutable {
 		kj::Path path = kj::Path::parse(ctx.getParams().getName());
 		ImportContext ic(object -> getDb());
 		
-		auto acc = getFolderForModification(path, true);
+		auto acc = getFolderForModification(path.parent(), true);
 		
 		auto& filename = path.basename()[0];
 		KJ_IF_MAYBE(pEntry, ic.import(ctx.getParams().getValue())) {
@@ -1120,12 +1188,17 @@ Promise<void> FolderInterface::putEntry(PutEntryContext ctx) {
 			setEntry(acc -> getFolder(), filename, nullptr);
 		}
 		
+		KJ_DBG(acc -> asReader());
 		acc -> release(true);
+		
+		auto acc2 = getFolderForModification(path.parent(), true);
+		KJ_DBG(acc2 -> asReader());
+		acc2 -> release(false);
 	});
 }
 
 Promise<void> FolderInterface::rm(RmContext ctx) {
-	return withODBBackoff([this, ctx]() mutable -> Promise<void> {
+	return withODBBackoff([this, ctx]() mutable {
 		kj::Path path = kj::Path::parse(ctx.getParams().getName());
 		
 		auto acc = getFolderForModification(path.parent(), false);
@@ -1138,7 +1211,7 @@ Promise<void> FolderInterface::rm(RmContext ctx) {
 }
 
 Promise<void> FolderInterface::mkdir(MkdirContext ctx) {
-	return withODBBackoff([this, ctx] () mutable -> Promise<void> {
+	return withODBBackoff([this, ctx] () mutable {
 		kj::Path path = kj::Path::parse(ctx.getParams().getName());
 		
 		auto acc = getFolderForModification(path.parent(), true);
@@ -1242,10 +1315,10 @@ Own<ObjectInfo::Reader> FolderInterface::readObject(kj::PathPtr path) {
 	KJ_REQUIRE(object -> hasPreserved(), "Internal error: Folder has no preserved state");
 	
 	Own<ObjectDBEntry> current = object -> addRef();
-	for(const auto& folderName : path.parent()) {
+	for(const auto& entryName : path) {
 		auto reader = current -> loadPreserved();
 		
-		KJ_REQUIRE(reader -> isFolder(), "Trying to access child object of non-folder", path, folderName);
+		KJ_REQUIRE(reader -> isFolder(), "Trying to access child object of non-folder", path, entryName);
 		auto entries = reader -> getFolder().getEntries();
 		
 		// Check if entry exists
@@ -1256,7 +1329,7 @@ Own<ObjectInfo::Reader> FolderInterface::readObject(kj::PathPtr path) {
 			}
 		}
 		
-		KJ_FAIL_REQUIRE("Folder not found", path, folderName);
+		KJ_FAIL_REQUIRE("Entry not found", path, entryName);
 		
 		entry_found:;
 	}
@@ -1370,7 +1443,7 @@ Maybe<Capability::Client> createInterface(ObjectDBEntry& entry, kj::Badge<Object
 		case ObjectInfo::UNRESOLVED:
 			return nullptr;
 		case ObjectInfo::EXCEPTION: {
-			return fromProto(reader -> getException());
+			return Capability::Client(fromProto(reader -> getException()));
 		}	
 		case ObjectInfo::LINK: {
 			return reader -> getLink();
@@ -1381,12 +1454,22 @@ Maybe<Capability::Client> createInterface(ObjectDBEntry& entry, kj::Badge<Object
 			if(refInfo.getDownloadStatus().isDownloading())
 				return nullptr;
 			
-			return kj::heap<DataRefInterface>(entry.addRef(), badge);
+			return Capability::Client(kj::heap<DataRefInterface>(entry.addRef(), badge));
 		}
 		case ObjectInfo::FOLDER:
-			return kj::heap<FolderInterface>(entry.addRef(), badge);
+			return Capability::Client(kj::heap<FolderInterface>(entry.addRef(), badge));
 	}
+	
+	KJ_FAIL_REQUIRE("Unknown object type");
 }
 
 }}}
 
+namespace fsc {
+	
+odb::Folder::Client openObjectDb(db::Connection& conn, kj::StringPtr tablePrefix) {
+	auto odb = kj::refcounted<odb::ObjectDB>(conn, tablePrefix, false);	
+	return odb -> getRoot();
+}
+
+}

@@ -90,10 +90,6 @@ SQLiteConnection::SQLiteConnection(kj::StringPtr filename, bool readOnly) :
 			(readOnly ? SQLITE_OPEN_READONLY : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)) | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_EXRESCODE,
 			nullptr
 		));
-		
-		// Set up connection parameters
-		exec("PRAGMA journal_mode=WAL");
-		exec("PRAGMA foreign_keys = ON");
 	} catch(...) {
 		sqlite3_close_v2(handle);
 		throw;
@@ -159,23 +155,23 @@ size_t SQLiteStatementHook::nRowsModified() {
 }
 
 void SQLiteStatementHook::setParameter(size_t idx, double d) {
-	check(sqlite3_bind_double(handle, idx, d));
+	check(sqlite3_bind_double(handle, idx + 1, d));
 }
 
 void SQLiteStatementHook::setParameter(size_t idx, int64_t i) {
-	check(sqlite3_bind_int64(handle, idx, i));
+	check(sqlite3_bind_int64(handle, idx + 1, i));
 }
 
 void SQLiteStatementHook::setParameter(size_t idx, decltype(nullptr)) {
-	check(sqlite3_bind_null(handle, idx));
+	check(sqlite3_bind_null(handle, idx + 1));
 }
 
 void SQLiteStatementHook::setParameter(size_t idx, ArrayPtr<const byte> blob) {
-	check(sqlite3_bind_blob(handle, idx, blob.begin(), blob.size(), SQLITE_TRANSIENT));
+	check(sqlite3_bind_blob(handle, idx + 1, blob.begin(), blob.size(), SQLITE_TRANSIENT));
 }
 
 void SQLiteStatementHook::setParameter(size_t idx, kj::StringPtr text) {
-	check(sqlite3_bind_text(handle, idx, text.begin(), text.size(), SQLITE_TRANSIENT));
+	check(sqlite3_bind_text(handle, idx + 1, text.begin(), text.size(), SQLITE_TRANSIENT));
 }
 
 double SQLiteStatementHook::getDouble(size_t idx) {
@@ -211,7 +207,7 @@ kj::StringPtr SQLiteStatementHook::getText(size_t idx) {
 bool SQLiteStatementHook::isNull(size_t idx) {
 	KJ_REQUIRE(available, "Statement has no active row");
 	
-	return sqlite3_column_type(handle, idx) != SQLITE_NULL;
+	return sqlite3_column_type(handle, idx) == SQLITE_NULL;
 }
 
 kj::String SQLiteStatementHook::getColumnName(size_t idx) {
@@ -248,7 +244,13 @@ SQLiteStatementHook::~SQLiteStatementHook() {
 namespace fsc {
 	
 Own<db::Connection> connectSqlite(kj::StringPtr url, bool readOnly) {
-	return kj::refcounted<db::SQLiteConnection>(url, readOnly);
+	auto result = kj::refcounted<db::SQLiteConnection>(url, readOnly);
+	
+	// Set up connection parameters
+	result -> exec("PRAGMA journal_mode=WAL");
+	result -> exec("PRAGMA foreign_keys = ON");
+	
+	return result;
 }
 
 }

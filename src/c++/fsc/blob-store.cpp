@@ -100,8 +100,8 @@ BlobStoreImpl::BlobStoreImpl(db::Connection& conn, kj::StringPtr tablePrefix, bo
 	if(!readOnly) {
 		conn.exec(str(
 			"CREATE TABLE IF NOT EXISTS ", tablePrefix, "_blobs ("
-			"  id INTEGER PRIMARY KEY,"
-			"  hash BLOB UNIQUE," // SQLite UNIQUE allows multiple NULL values
+			"  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+			"  hash BLOB UNIQUE DEFAULT NULL," // SQLite UNIQUE allows multiple NULL values
 			"  refcount INTEGER DEFAULT 1"
 			")"
 		));
@@ -279,7 +279,12 @@ void BlobBuilderImpl::prepareFinish() {
 
 Own<Blob> BlobBuilderImpl::finish() {
 	KJ_REQUIRE(hash != nullptr, "Must call prepareFinish() before calling finish()");
-	KJ_REQUIRE(parent -> conn -> inTransaction(), "finish() must be called inside transaction");
+	
+	db::Transaction(*parent -> conn);
+	
+	auto& gbh = parent -> getBlobHash.bind(id);
+	KJ_REQUIRE(gbh.step(), "finish() was already called and blob under construction was deleted");
+	KJ_REQUIRE(gbh[0].isNull(), "finish() was already called and blob has hash assigned");
 	
 	// Check hash for uniqueness
 	KJ_IF_MAYBE(pBlob, parent -> find(hash)) {
