@@ -194,10 +194,8 @@ kj::Array<const byte> BlobImpl::getHash() {
 	auto& gbh = parent -> getBlobHash;
 	
 	gbh.bind(id);
-	
-	if(!gbh.step())
-		return nullptr;
-	
+	KJ_REQUIRE(gbh.step(), "Blob not found");
+		
 	return kj::heapArray<byte>(gbh[0].asBlob());
 }
 

@@ -121,7 +121,7 @@ struct Connection {
 	inline int64_t exec(kj::StringPtr sql) { return prepare(sql)(); }
 
 private:
-	uint64_t savepointCounter;
+	uint64_t savepointCounter = 0;
 	friend class Savepoint;
 };
 

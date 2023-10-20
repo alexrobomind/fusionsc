@@ -33,19 +33,20 @@ interface Folder {
 struct ObjectInfo {
 	union {
 		unresolved @0 : Void;
-		exception @1 : Rpc.Exception;
-		link @2 : Capability;
+		nullValue @1 : Void;
+		exception @2 : Rpc.Exception;
+		link @3 : Capability;
 		
 		dataRef : group {
 			downloadStatus : union {
-				downloading @3 : Void;
-				finished @4 : Void;
+				downloading @4 : Void;
+				finished @5 : Void;
 			}
-			metadata @5 : Data.DataRefMetadata;
-			capTable @6 : List(Capability);
+			metadata @6 : Data.DataRefMetadata;
+			capTable @7 : List(Capability);
 		}
 		folder : group {
-			entries @7 : List(FolderEntry);
+			entries @8 : List(FolderEntry);
 		}
 	}
 }
