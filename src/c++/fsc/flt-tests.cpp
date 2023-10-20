@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <kj/array.h>
 
@@ -75,10 +76,7 @@ TEST_CASE("flt") {
 		// traceReq.setStepLimit(10000);
 		traceReq.setStepSize(0.001);
 		
-		KJ_DBG("Sending request");
 		auto response = traceReq.send().wait(ws);
-		
-		KJ_DBG("Done");
 		//KJ_DBG(response); // This currently can't be printed due to a Capnp bug
 	}
 }
@@ -102,10 +100,13 @@ TEST_CASE("axis") {
 	axReq.setStepSize(0.01);
 	auto response = axReq.send().wait(ws);
 	
-	Tensor<double, 2> data;
-	readTensor(response.getAxis(), data);
+	auto pos = response.getPos();
+	REQUIRE(pos.size() == 3);
 	
-	std::cout << "Mean " << data.mean(Eigen::array<int, 1>({0})) << std::endl;
+	using Catch::Matchers::WithinAbs;
+	REQUIRE_THAT(pos[0], WithinAbs(1.0, 0.01));
+	REQUIRE_THAT(pos[1], WithinAbs(0.0, 0.01));
+	REQUIRE_THAT(pos[2], WithinAbs(0.0, 0.01));
 }
 
 #ifdef FSC_WITH_CUDA
@@ -135,10 +136,7 @@ TEST_CASE("flt-gpu") {
 		// traceReq.setStepLimit(10000);
 		traceReq.setStepSize(0.001);
 		
-		KJ_DBG("Sending request");
 		auto response = traceReq.send().wait(ws);
-		
-		KJ_DBG("Done");
 		// KJ_DBG(response);
 	}
 }

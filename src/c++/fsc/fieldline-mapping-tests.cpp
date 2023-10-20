@@ -56,7 +56,6 @@ TEST_CASE("rflm") {
 	
 	auto mapping = rflmRequest.sendForPipeline().getMapping();
 	auto data = lt->dataService().download(mapping).wait(ws);
-	// KJ_DBG(data.get());
 	
 	auto fltReq = root.newTracerRequest();
 	auto flt = fltReq.send().getService();
@@ -76,7 +75,5 @@ TEST_CASE("rflm") {
 	traceReq.setDistanceLimit(0);
 	traceReq.setStepSize(0.1);
 	
-	KJ_DBG("Sending request");
 	auto response = traceReq.send().wait(ws);
-	// KJ_DBG(response.getPoincareHits());
 }

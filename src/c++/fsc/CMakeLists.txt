@@ -156,7 +156,7 @@ if(BUILD_TESTING)
 		interpolation-tests.cpp
 		fieldline-mapping-tests.cpp
 		vmec-tests.cpp
-		blob-store-tests.cpp#
+		blob-store-tests.cpp
 		db-cache-tests.cpp
 		
 		efit-tests.cpp

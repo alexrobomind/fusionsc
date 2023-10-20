@@ -1004,7 +1004,6 @@ namespace fsc {
 TEST_CASE("parse-geqdsk") {
 	Temporary<AxisymmetricEquilibrium> result;
 	parseGeqdsk(result, GEQDSK_EXAMPLE);
-	KJ_DBG(result.asReader());
 }
 
 

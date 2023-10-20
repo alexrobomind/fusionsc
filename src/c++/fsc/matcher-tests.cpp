@@ -29,7 +29,6 @@ TEST_CASE("matcher") {
 	Matcher::Client matcher = newMatcher();
 	
 	auto getResponse = matcher.getRequest().send().wait(ws);
-	KJ_DBG(getResponse);
 	
 	auto putRequest = matcher.putRequest();
 	putRequest.setToken(getResponse.getToken());

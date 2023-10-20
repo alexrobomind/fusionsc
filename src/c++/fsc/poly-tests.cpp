@@ -26,5 +26,5 @@ TEST_CASE("triangulate-poly") {
 	poly(4, 1) = 1;
 	
 	auto result = triangulate(poly);
-	std::cout << result << std::endl;
+	// std::cout << result << std::endl;
 }

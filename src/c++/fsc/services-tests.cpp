@@ -19,12 +19,9 @@ TEST_CASE("in-process-server") {
 	};
 	
 	auto server = newInProcessServer<LocalResources>(mv(localFactory));
-	KJ_DBG("Server created. Connecting ...");
 	
 	auto connected = server();
-	KJ_DBG("Connection formed, waiting for resolution ...");
 	connected.whenResolved().wait(thread -> waitScope());
-	KJ_DBG("Resolved");
 }
 
 TEST_CASE("http-connect") {
@@ -46,7 +43,6 @@ TEST_CASE("http-connect") {
 	serveRequest.setServer(published);
 	auto openPort = serveRequest.send().wait(ws).getOpenPort();
 	auto port = openPort.getInfoRequest().send().wait(ws).getPort();
-	KJ_DBG(port);
 	
 	auto connReq = lr.connectRequest();
 	connReq.setUrl(kj::str("http://localhost:", port));
@@ -61,8 +57,6 @@ TEST_CASE("http-connect") {
 	connection = nullptr;
 	
 	openPort.drainRequest().send().wait(ws);
-	
-	KJ_DBG("Finished test");
 }
 
 TEST_CASE("ssh-auth", "[.][ssh]") {

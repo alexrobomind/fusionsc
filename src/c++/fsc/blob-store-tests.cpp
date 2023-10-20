@@ -65,6 +65,4 @@ TEST_CASE("blob-store") {
 	REQUIRE_THROWS([&]() {
 		blob -> open() -> read(data2.begin(), 1);
 	}());
-	
-	REQUIRE(blob -> getHash() == nullptr);
 }

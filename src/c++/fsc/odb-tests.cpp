@@ -8,26 +8,31 @@
 #include "sqlite.h"
 
 using namespace fsc;
-using namespace fsc::odb;
+using namespace fsc;
 
-TEST_CASE("ODB open") {
+Warehouse::Folder::Client testWarehouse() {
+	auto wh = openWarehouse(*connectSqlite("warehouse"));
+	return wh.getRootRequest().send().getRoot();
+}
+
+TEST_CASE("warehouse-open", "[warehouse]") {
 	Library l = newLibrary();
 	LibraryThread th = l -> newThread();
 	
 	SECTION("temporary") {
-		REQUIRE_THROWS(openObjectDb(*connectSqlite("")));
+		REQUIRE_THROWS(openWarehouse(*connectSqlite("")));
 	}
 	
 	SECTION("memory") {
-		REQUIRE_THROWS(openObjectDb(*connectSqlite(":memory:")));
+		REQUIRE_THROWS(openWarehouse(*connectSqlite(":memory:")));
 	}
 	
 	SECTION("testDB") {
-		openObjectDb(*connectSqlite("testDB"));
+		openWarehouse(*connectSqlite("warehouse"));
 	}
 }
 
-TEST_CASE("ODB rw") {
+TEST_CASE("warehouse-rw-1", "[warehouse]") {
 	Library l = newLibrary();
 	LibraryThread th = l -> newThread();
 	
@@ -38,49 +43,47 @@ TEST_CASE("ODB rw") {
 	auto paf = kj::newPromiseAndFulfiller<HolderRef::Client>();
 	HolderRef::Client promiseRef(mv(paf.promise));
 	
-	Folder::Client dbRoot = openObjectDb(*connectSqlite("testdb.sqlite"));
+	auto dbRoot = testWarehouse();
 	
-	auto putRequest = dbRoot.putEntryRequest();
-	putRequest.setName("obj");
+	auto putRequest = dbRoot.putRequest();
+	putRequest.setPath("obj");
 	putRequest.setValue(promiseRef.asGeneric());
 	
 	auto putResponse = putRequest.send().wait(ws);
-	auto storedObject = putResponse.getValue().castAs<HolderRef>();
+	auto storedObject = putResponse.getAsRef().castAs<HolderRef>();
 	
 	SECTION("fast termination") {
 		// Checks for memory leaks in case download process gets into limbo
 	}
 	
 	SECTION("failure") {
-		kj::Exception errors[4] = {
-			KJ_EXCEPTION(FAILED),
-			KJ_EXCEPTION(DISCONNECTED),
-			KJ_EXCEPTION(OVERLOADED),
-			KJ_EXCEPTION(UNIMPLEMENTED)
-		};
+		Maybe<kj::Exception> exc;
 		
-		for(auto exc : errors) {
-			auto paf = kj::newPromiseAndFulfiller<HolderRef::Client>();
-			HolderRef::Client promiseRef(mv(paf.promise));
-			
-			auto putRequest = dbRoot.putEntryRequest();
-			putRequest.setName("obj");
-			putRequest.setValue(promiseRef);
-			
-			auto putResponse = putRequest.send().wait(ws);
-			auto storedObject = putResponse.getValue();
-			
-			auto msg = "Injected failure message"_kj;
-			exc.setDescription(str(msg));
-			paf.fulfiller -> reject(mv(exc));
-			
+		SECTION("failure") {	
+			exc = KJ_EXCEPTION(FAILED, "TEST FAILED");
+		}
+		SECTION("disconnected") {
+			exc = KJ_EXCEPTION(DISCONNECTED, "TEST DISCONNECTED");
+		}
+		SECTION("overloaded") {
+			exc = KJ_EXCEPTION(OVERLOADED, "TEST OVERLOADED");
+		}
+		SECTION("unimplemented") {
+			exc = KJ_EXCEPTION(UNIMPLEMENTED, "TEST UNIMPLEMENTED");
+		}
+		
+		KJ_IF_MAYBE(pExc, exc) {
+			paf.fulfiller -> reject(cp(*pExc));
+		
 			try {
 				storedObject.whenResolved().wait(ws);			
 				FAIL("We should never get here");
 			} catch(kj::Exception& e) {
-				REQUIRE(e.getDescription() == msg);
-				REQUIRE(e.getType() == exc.getType());
+				REQUIRE(e.getDescription() == pExc -> getDescription());
+				REQUIRE(e.getType() == pExc -> getType());
 			}
+		} else {
+			FAIL("Section without exception");
 		}
 	}
 	
@@ -90,31 +93,27 @@ TEST_CASE("ODB rw") {
 		auto data = kj::heapArray<byte>(12);
 		th -> rng().randomize(data);
 		
-		/*SECTION("nestedRefs") {
-			KJ_DBG("Setting nested ref...");
+		SECTION("nestedRefs") {
 			refHolder.setRef(th -> dataService().publish(data));
-		}*/
+		}
 		SECTION("null") {
-			KJ_DBG("Setting no nested ref...");
 		}
 		
 		paf.fulfiller -> fulfill(th -> dataService().publish(refHolder.asReader()));
 		
-		KJ_DBG("Waiting for resolution...");
 		storedObject.whenResolved().wait(ws);
-		KJ_DBG("Resolved");
 		
 		auto outerCopy = th -> dataService().download(storedObject).wait(ws);
 		REQUIRE(outerCopy.get().hasRef() == refHolder.hasRef());
 		
-		/*if(refHolder.hasRef()) {
+		if(refHolder.hasRef()) {
 			auto innerCopy = th -> dataService().download(refHolder.getRef()).wait(ws);
 			REQUIRE(innerCopy.get() == data);
-		}*/
+		}
 	}
 }
 
-TEST_CASE("ODB rw main") {
+TEST_CASE("warehouse-rw-2", "[warehouse]") {
 	Library l = newLibrary();
 	LibraryThread th = l -> newThread();
 	
@@ -125,14 +124,14 @@ TEST_CASE("ODB rw main") {
 	auto paf = kj::newPromiseAndFulfiller<HolderRef::Client>();
 	HolderRef::Client promiseRef(mv(paf.promise));
 	
-	Folder::Client dbRoot = openObjectDb(*connectSqlite("testdb.sqlite"));
+	auto dbRoot = testWarehouse();
 	
-	auto putRequest = dbRoot.putEntryRequest();
-	putRequest.setName("obj");
+	auto putRequest = dbRoot.putRequest();
+	putRequest.setPath("obj");
 	putRequest.setValue(promiseRef);
 	
 	auto putResponse = putRequest.send().wait(ws);
-	auto storedObject = putResponse.getValue().castAs<HolderRef>();
+	auto storedObject = putResponse.getAsRef().castAs<HolderRef>();
 	
 	Temporary<test::DataRefHolder<capnp::Data>> refHolder;
 	
@@ -156,11 +155,11 @@ TEST_CASE("ODB rw main") {
 	}
 	
 	auto rmreq = dbRoot.rmRequest();
-	rmreq.setName("obj");
+	rmreq.setPath("obj");
 	rmreq.send().wait(ws);
 }
 
-TEST_CASE("ODB rw persistent") {
+TEST_CASE("warehouse-rw-3", "[warehouse]") {
 	auto data = kj::heapArray<byte>(12);
 	
 	using HolderRef = DataRef<capnp::Data>;
@@ -172,19 +171,16 @@ TEST_CASE("ODB rw persistent") {
 		
 		th -> rng().randomize(data);	
 	
-		Folder::Client dbRoot = openObjectDb(*connectSqlite("testdb.sqlite"));
+		auto dbRoot = testWarehouse();
 		
-		auto putRequest = dbRoot.putEntryRequest();
-		putRequest.setName("obj");
+		auto putRequest = dbRoot.putRequest();
+		putRequest.setPath("obj");
 		putRequest.setValue(th -> dataService().publish(data).asGeneric());
 		auto putResponse = putRequest.send().wait(ws);
-		KJ_DBG("Put complete");
 		
-		auto storedObject = putResponse.getValue().castAs<HolderRef>();
+		auto storedObject = putResponse.getAsRef().asGeneric<capnp::Data>();
 		
-		KJ_DBG("Waiting for stored");
 		storedObject.whenResolved().wait(ws);
-		KJ_DBG("Done");
 	}
 	
 	
@@ -193,13 +189,12 @@ TEST_CASE("ODB rw persistent") {
 		LibraryThread th = l -> newThread();
 		auto& ws = th -> waitScope();		
 	
-		Folder::Client dbRoot = openObjectDb(*connectSqlite("testdb.sqlite"));
+		auto dbRoot = testWarehouse();
 		
-		auto getRequest = dbRoot.getEntryRequest();
-		getRequest.setName("obj");
+		auto getRequest = dbRoot.getRequest();
+		getRequest.setPath("obj");
 		
-		auto getResponse = getRequest.send().wait(ws);
-		auto remoteData = getResponse.getValue().castAs<HolderRef>();
+		auto remoteData = getRequest.send().getAsRef().castAs<HolderRef>();
 		auto localData = th -> dataService().download(remoteData).wait(ws);
 		
 		REQUIRE(localData.get() == data);

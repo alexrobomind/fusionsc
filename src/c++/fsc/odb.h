@@ -4,13 +4,13 @@
 #include <botan/hash.h>
 #include <capnp/capability.h>
 
-#include <fsc/odb.capnp.h>
+#include <fsc/warehouse.capnp.h>
 
 #include "db.h"
 #include "compression.h"
 
 namespace fsc {
 	
-odb::Folder::Client openObjectDb(db::Connection& conn, kj::StringPtr tablePrefix = "objectdb");
+Warehouse::Client openWarehouse(db::Connection& conn, kj::StringPtr tablePrefix = "warehouse");
 
 }

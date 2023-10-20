@@ -83,7 +83,6 @@ TEST_CASE("index-cube") {
 	auto indexResult = indexRequest.send().wait(ws);
 	auto indexDataRef = lt->dataService().download(indexResult.getIndexed().getData()).wait(ws);
 	auto indexData = indexDataRef.get();
-	KJ_DBG(indexResult, indexData);
 	
 	double sizeX = (grid.getXMax() - grid.getXMin()) / grid.getNX();
 	double sizeY = (grid.getYMax() - grid.getYMin()) / grid.getNY();
@@ -140,7 +139,6 @@ TEST_CASE("index-cube") {
 					isInCell = true;
 			}
 			
-			KJ_DBG(linearIndex, iPoly, shouldBeInCell, isInCell);
 			KJ_REQUIRE(shouldBeInCell == isInCell, iPoly);
 		}
 		

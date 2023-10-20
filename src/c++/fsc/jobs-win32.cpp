@@ -120,7 +120,6 @@ struct Win32ProcessJob : public JobServerBase {
 	void startTrackingTask() {
 		completionPromise = kj::evalLater([this]() { return waitForTermination(); })
 		.eagerlyEvaluate([this](kj::Exception e) {
-			KJ_DBG("Task failure", e);
 			if(state == Job::State::RUNNING)
 				state = Job::State::FAILED;
 			
@@ -133,8 +132,6 @@ struct Win32ProcessJob : public JobServerBase {
 	Promise<void> waitForTermination() {
 		DWORD exitCode = 0;
 		KJ_WIN32(GetExitCodeProcess(process, &exitCode));
-		
-		KJ_DBG(exitCode);
 		
 		if(exitCode == STILL_ACTIVE) {
 			// Currently Cap'n'proto does not support waiting on signals
@@ -277,8 +274,6 @@ struct Win32ProcessJobScheduler : public JobScheduler::Server {
 		stInfo.hStdInput = inStream[0];
 		stInfo.hStdOutput = outStream[1];
 		stInfo.hStdError  = errStream[1];
-		
-		KJ_DBG(cmdString);
 		
 		PROCESS_INFORMATION procInfo;
 		

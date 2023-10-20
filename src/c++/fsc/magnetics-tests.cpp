@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+
 #include <fsc/magnetics-test.capnp.h>
 #include <fsc/magnetics-test.capnp.cu.h>
 
@@ -23,8 +24,6 @@ TEST_CASE("build-field") {
 	auto computeRequest = session.computeRequest();
 	computeRequest.setField(WIRE_FIELD.get());
 	computeRequest.setGrid(grid);
-	
-	KJ_DBG(grid);
 		
 	Temporary<ComputedField> computed(
 		computeRequest.send().wait(ws).getComputedField()

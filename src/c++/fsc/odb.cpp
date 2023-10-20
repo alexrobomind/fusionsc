@@ -3,6 +3,7 @@
 #include "blob-store.h"
 
 #include <capnp/rpc.capnp.h>
+#include <fsc/warehouse-internal.capnp.h>
 
 #include <list>
 #include <set>
@@ -11,7 +12,9 @@ using kj::str;
 
 using namespace capnp;
 
-namespace fsc { namespace odb { namespace {
+using ::fsc::internal::ObjectInfo;
+
+namespace fsc { namespace {
 	
 template<typename T>
 auto withODBBackoff(T func) {
@@ -85,8 +88,13 @@ struct ObjectDBBase {
 	Statement insertRef;
 	Statement clearOutgoingRefs;
 	
+	Statement updateFolderEntry;
+	Statement deleteFolderEntry;
+	
 	Statement getInfo;
 	Statement listOutgoingRefs;
+	Statement listFolderEntries;
+	Statement getFolderEntry;
 	Statement getRefcount;
 	
 	Statement getBlob;
@@ -112,6 +120,7 @@ ObjectDBBase::ObjectDBBase(db::Connection& paramConn, kj::StringPtr paramTablePr
 {		
 	auto objectsTable = str(tablePrefix, "_objects");
 	auto refsTable = str(tablePrefix, "_object_refs");
+	auto folderEntriesTable = str(tablePrefix, "_folder_entries");
 	auto blobsTable = str(tablePrefix, "_blobs");
 	
 	if(!readOnly) {
@@ -123,6 +132,7 @@ ObjectDBBase::ObjectDBBase(db::Connection& paramConn, kj::StringPtr paramTablePr
 			  "blobId INTEGER DEFAULT NULL REFERENCES ", blobsTable, "(id) ON DELETE SET NULL ON UPDATE CASCADE"
 			")"
 		));
+		
 		conn -> exec(str(
 			"CREATE TABLE IF NOT EXISTS ", refsTable, " ("
 			  "parent INTEGER REFERENCES ", objectsTable, "(id) ON DELETE CASCADE ON UPDATE CASCADE,"
@@ -132,6 +142,17 @@ ObjectDBBase::ObjectDBBase(db::Connection& paramConn, kj::StringPtr paramTablePr
 		));
 		conn -> exec(str(
 			"CREATE UNIQUE INDEX IF NOT EXISTS ", tablePrefix, "_index_refs_by_parent ON ", refsTable, "(parent, slot)"
+		));
+		
+		conn -> exec(str(
+			"CREATE TABLE IF NOT EXISTS ", folderEntriesTable, " ("
+			  "parent INTEGER REFERENCES ", objectsTable, "(id) ON DELETE CASCADE ON UPDATE CASCADE,"
+			  "name TEXT,"
+			  "child INTEGER REFERENCES ", objectsTable, "(id) ON UPDATE CASCADE"
+			")"
+		));
+		conn -> exec(str(
+			"CREATE UNIQUE INDEX IF NOT EXISTS ", tablePrefix, "_index_folder_entries ON ", folderEntriesTable, "(parent, name)"
 		));
 		
 		createObject = conn -> prepare(str("INSERT INTO ", objectsTable, " DEFAULT VALUES"));
@@ -145,6 +166,9 @@ ObjectDBBase::ObjectDBBase(db::Connection& paramConn, kj::StringPtr paramTablePr
 		insertRef = conn -> prepare(str("INSERT INTO ", refsTable, " (parent, slot, child) VALUES (?, ?, ?)"));
 		clearOutgoingRefs = conn -> prepare(str("DELETE FROM ", refsTable, " WHERE parent = ?"));
 		
+		updateFolderEntry = conn -> prepare(str("INSERT OR REPLACE INTO ", folderEntriesTable, " (parent, name, child) VALUES (?, ?, ?)"));
+		deleteFolderEntry = conn -> prepare(str("DELETE FROM ", folderEntriesTable, " WHERE parent = ? AND name = ?"));
+		
 		createRootEntry = conn -> prepare(str("INSERT INTO ", objectsTable, " (id) VALUES (0)"));
 	}
 	
@@ -153,6 +177,8 @@ ObjectDBBase::ObjectDBBase(db::Connection& paramConn, kj::StringPtr paramTablePr
 	getBlob = conn -> prepare(str("SELECT blobId FROM ", objectsTable, " WHERE id = ?"));
 	
 	listOutgoingRefs = conn -> prepare(str("SELECT child FROM ", refsTable, " WHERE parent = ? ORDER BY slot"));
+	listFolderEntries = conn -> prepare(str("SELECT name, child FROM ", folderEntriesTable, " WHERE parent = ? ORDER BY name"));
+	getFolderEntry =  conn -> prepare(str("SELECT child FROM ", folderEntriesTable, " WHERE parent = ? AND name = ?"));
 	
 	readNewestId = conn -> prepare(str("SELECT seq FROM sqlite_sequence WHERE name = ?"));
 }
@@ -283,7 +309,7 @@ private:
  * This class maintains the main connection to the database, as well as a frozen
  * snapshot view of the database, that can be repeatedly updated.
  */
-struct ObjectDB : public ObjectDBBase, kj::Refcounted {
+struct ObjectDB : public ObjectDBBase, kj::Refcounted, Warehouse::Server {
 	ObjectDB(db::Connection& conn, kj::StringPtr tablePrefix, bool readOnly);
 	Own<ObjectDB> addRef() { return kj::addRef(*this); }
 	
@@ -328,6 +354,9 @@ struct ObjectDB : public ObjectDBBase, kj::Refcounted {
 	//! Unwraps an object KNOWN to be pointing to a database entry
 	Own<ObjectDBEntry> unwrapValid(Capability::Client c) { return unwrap(c).get<Own<ObjectDBEntry>>(); }
 	
+	//! Writes presently known information about the object into the target entry
+	void exportStoredObject(Capability::Client c, Warehouse::StoredObject::Builder);
+	
 	//! Checks whether the object's reference count is 0 If yes, deletes it.
 	void deleteIfOrphan(int64_t id);
 	
@@ -342,7 +371,7 @@ struct ObjectDB : public ObjectDBBase, kj::Refcounted {
 	Own<ObjectDBEntry> create();
 	
 	//! Creates the root entry if not present
-	odb::Folder::Client getRoot();
+	Promise<void> getRoot(GetRootContext ctx) override;
 
 private:
 	
@@ -458,24 +487,24 @@ Promise<void> ObjectDB::syncTask() {
 	.then([this]() { return syncTask(); });
 }
 
-odb::Folder::Client ObjectDB::getRoot() {
-	return withODBBackoff([this]() {
+Promise<void> ObjectDB::getRoot(GetRootContext ctx) {
+	return withODBBackoff([this, ctx]() mutable {
 		db::Transaction(*conn);
 		
 		// Check if root exists
 		getRefcount.bind((int64_t) 0);
-		if(getRefcount.step())
-			return wrap(open(0)).castAs<odb::Folder>();
+		if(!getRefcount.step()) {
+			createRootEntry();
+			
+			// Create root object
+			auto root = open(0);
+			auto acc = root -> open();
+			acc -> setFolder();
+			acc -> release(true);
+		}
 		
-		// Create root object
-		createRootEntry();
-		auto root = open(0);
-		auto acc = root -> open();
-		acc -> initFolder();
-		acc -> release(true);
-		
-		return wrap(mv(root)).castAs<odb::Folder>();
-	}).attach(addRef());
+		ctx.initResults().setRoot(wrap(open(0)).castAs<Warehouse::Folder>());
+	});
 }
 	
 ObjectDBSnapshot& ObjectDB::getCurrentSnapshot() {
@@ -555,6 +584,61 @@ OneOf<Own<ObjectDBEntry>, Capability::Client, decltype(nullptr)> ObjectDB::unwra
 	return mv(clt);
 }
 
+void ObjectDB::exportStoredObject(Capability::Client c, Warehouse::StoredObject::Builder out) {
+	auto entry = unwrapValid(c);
+	entry -> trySync();
+	
+	out.setAsRef(c.castAs<DataRef<AnyPointer>>());
+	out.setAsFolder(c.castAs<Warehouse::Folder>());
+	out.setAsFile(c.castAs<Warehouse::File<>>());
+	
+	if(!entry -> hasPreserved()) {
+		if(entry -> isLive()) {
+			out.setUnresolved();
+		} else {
+			out.setDead();
+		}
+		
+		return;
+	}
+	
+	auto data = entry -> loadPreserved();
+	switch(data -> which()) {
+		case ObjectInfo::UNRESOLVED:
+			out.setUnresolved();
+			return;
+			
+		case ObjectInfo::NULL_VALUE:
+			out.setNullValue();
+			return;
+			
+		case ObjectInfo::EXCEPTION:
+			out.setException(data -> getException());
+			return;
+			
+		case ObjectInfo::LINK:
+			exportStoredObject(data -> getLink(), out);
+			return;
+			
+		case ObjectInfo::DATA_REF: {
+			auto info = out.initDataRef();
+			if(data -> getDataRef().getDownloadStatus().isFinished())
+				info.getDownloadStatus().setFinished();
+			return;
+		}
+		
+		case ObjectInfo::FOLDER:
+			out.setFolder();
+			return;
+		
+		case ObjectInfo::FILE:
+			out.setFile();
+			return;
+	}
+	
+	KJ_FAIL_REQUIRE("Unknown object type in database");
+}
+
 void ObjectDB::deleteIfOrphan(int64_t id) {
 	db::Transaction(*conn);
 	
@@ -632,7 +716,6 @@ ObjectDBEntry::ObjectDBEntry(ObjectDB& parent, int64_t id, Maybe<Own<ObjectDBSna
 	}
 	
 	parent.liveEntries.add(*this);
-	trySync();
 }
 
 ObjectDBEntry::~ObjectDBEntry() {
@@ -873,6 +956,99 @@ Maybe<Capability::Client> ObjectDBHook::checkResolved() {
 	return createInterface(*entry, kj::Badge<ObjectDBHook>());
 }
 
+// ======================= Temporary files =====================
+
+static inline capnp::CapabilityServerSet<Warehouse::File<>> tempFileSet;
+
+/** Temporary file
+ *
+ * Represents a file that is held temporarily the server and can later be imported
+ * into the database proper.
+ */
+struct TempFile : public Warehouse::File<>::Server {
+	Promise<void> set(SetContext ctx);
+	Promise<void> get(GetContext ctx);
+	
+	Promise<void> setAny(SetAnyContext ctx);
+	Promise<void> getAny(GetAnyContext ctx);
+	
+	using Detached = Capability::Client;
+	using Attached = Warehouse::File<>::Client;
+	
+	OneOf<Detached, Attached> storage = Detached(nullptr);
+};
+
+Warehouse::File<>::Client createTempFile();
+Promise<Maybe<TempFile&>> checkTempFile(Warehouse::File<>::Client);
+
+// class TempFile
+
+Promise<void> TempFile::get(GetContext ctx) {
+	if(storage.is<Detached>()) {
+		ctx.initResults().setRef(storage.get<Detached>().castAs<DataRef<>>());
+		return READY_NOW;
+	}
+	
+	return ctx.tailCall(
+		storage.get<Attached>().getRequest()
+	);
+}
+
+Promise<void> TempFile::getAny(GetAnyContext ctx) {
+	if(storage.is<Detached>()) {
+		auto val = storage.get<Detached>();
+		
+		auto results = ctx.initResults();
+		results.setAsRef(val.castAs<DataRef<>>());
+		results.setAsFolder(val.castAs<Warehouse::Folder>());
+		results.setAsFile(val.castAs<Warehouse::File<>>());
+		results.setUnresolved();
+		
+		return READY_NOW;
+	}
+	
+	return ctx.tailCall(
+		storage.get<Attached>().getAnyRequest()
+	);
+}
+
+Promise<void> TempFile::set(SetContext ctx) {
+	if(storage.is<Detached>()) {
+		storage.get<Detached>() = ctx.getParams().getRef();
+		return READY_NOW;
+	}
+	
+	auto tail = storage.get<Attached>().setRequest();
+	tail.setRef(ctx.getParams().getRef());
+	return ctx.tailCall(mv(tail));
+}
+
+Promise<void> TempFile::setAny(SetAnyContext ctx) {
+	if(storage.is<Detached>()) {
+		storage.get<Detached>() = ctx.getParams().getValue();
+		return READY_NOW;
+	}
+	
+	auto tail = storage.get<Attached>().setAnyRequest();
+	tail.setValue(ctx.getParams().getValue());
+	return ctx.tailCall(mv(tail));
+}
+
+Warehouse::File<>::Client createTempFile() {
+	return tempFileSet.add(kj::heap<TempFile>());
+}
+
+Promise<Maybe<TempFile&>> checkTempFile(Warehouse::File<>::Client clt) {
+	return tempFileSet.getLocalServer(clt)
+	.then([](Maybe<Warehouse::File<>::Server&> server) mutable -> Maybe<TempFile&> {
+		KJ_IF_MAYBE(pServer, server) {
+			return static_cast<TempFile&>(*pServer);
+		}
+		return nullptr;
+	});
+}
+	
+
 // ======================= Import interfaces ===================
 
 struct ImportContext;
@@ -968,13 +1144,47 @@ void ImportContext::scheduleImports() {
 }
 
 Promise<void> ImportContext::importTask(int64_t id, Capability::Client src) {
+	// Note on lifetime: The task promises outlive ImportContext, but are
+	// lifetime-bound to the parent DB. Therefore, we need to capture
+	// parent by reference, id by value, and NOT capture "this".
 	ObjectDB& myParent = *parent;
 	
-	// Attempt to download DataRef
-	auto dlp = kj::refcounted<DatarefDownloadProcess>(myParent, id, src.castAs<DataRef<AnyPointer>>());
+	return checkTempFile(src.castAs<Warehouse::File<>>())
+	.then([src, id, &myParent](Maybe<TempFile&> maybeTempFile) mutable {
+		// Step 1: If we have a temporary file, import that temp file into the
+		// database.
+		KJ_IF_MAYBE(pTempFile, maybeTempFile) {
+			return withODBBackoff([src, &storage = pTempFile -> storage, &myParent, id]() mutable {
+				auto handle = myParent.open(id);
+				
+				using Attached = TempFile::Attached;
+				using Detached = TempFile::Detached;
+				
+				// If the temp file is attached, we link to it.
+				if(storage.is<Attached>()) {
+					auto acc = handle -> open();
+					acc -> setLink(storage.get<Attached>());
+					return;
+				} else {
+					// Actual transaction
+					{
+						ImportContext ic(myParent);
+						auto acc = handle -> open();
+						auto newTarget = ic.import(storage.get<Detached>());
+						
+						acc -> setFile(myParent.wrap(mv(newTarget)));
+					}
+					
+					// If that all worked, register myself as backend to temp file
+					storage.init<Attached>(myParent.wrap(myParent.open(id)).castAs<Warehouse::File<>>());
+				}
+				
+				myParent.changed();
+			});
+		}
 	
-	return src.whenResolved()
-	.then([dlp = mv(dlp), id]() mutable {
+		// Step 2: If it's not a temp file, attempt to download as DataRef
+		auto dlp = kj::refcounted<DatarefDownloadProcess>(myParent, id, src.castAs<DataRef<AnyPointer>>());
 		return dlp -> output().ignoreResult()
 		
 		// Check what type of exception it is
@@ -1100,25 +1310,19 @@ Promise<void> DatarefDownloadProcess::finishDownload() {
 	return withODBBackoff([this]() mutable {
 		KJ_REQUIRE(builder.get() != nullptr);
 		
-		KJ_DBG("Prepare finish");
-		
 		// This goes outside the transaction
 		builder -> prepareFinish();
-		
-		KJ_DBG("Finish transaction");
 		
 		// This goes inside the transaction
 		{
 			db::Transaction t(*db.conn);
 			auto finishedBlob = builder -> finish();
 			KJ_REQUIRE(finishedBlob -> isFinished(), "Blob unfinished after finish() call");
-			KJ_DBG(finishedBlob -> getHash());
 			db.setBlob(id, finishedBlob -> getId());
 			
 			// Mark ref as done
 			db.open(id) -> open() -> getDataRef().getDownloadStatus().setFinished();
 			t.commit();
-			KJ_DBG("Transaction complete", id, finishedBlob -> getId());
 		}
 		
 		// Discard the snapshot taken during the above commits
@@ -1130,35 +1334,57 @@ Promise<Own<ObjectDBEntry>> DatarefDownloadProcess::buildResult() {
 	return db.open(id);
 }	
 
+// ======================= Export interfaces ===================
+	
+
 // ======================= Access interfaces ===================
 
+struct FileInterface;
 struct FolderInterface;
 struct DataRefInterface;
 struct TransmissionProcess;
 
+//! Interface class for file objects
+struct FileInterface : public Warehouse::File<AnyPointer>::Server {
+	// Interface
+	Promise<void> set(SetContext ctx);
+	Promise<void> get(GetContext ctx);
+	
+	Promise<void> setAny(SetAnyContext ctx);
+	Promise<void> getAny(GetAnyContext ctx);
+	
+	// Implementation
+	FileInterface(Own<ObjectDBEntry>&& object, kj::Badge<ObjectDBHook>) :
+		object(mv(object))
+	{}
+	
+	Promise<void> setImpl(Capability::Client);
+	
+	// Members
+	Own<ObjectDBEntry> object;
+};
+
 //! Interface class for folder objects
-struct FolderInterface : public ::fsc::odb::Folder::Server {
+struct FolderInterface : public Warehouse::Folder::Server {
 	// Interface
 	Promise<void> ls(LsContext ctx) override;
 	Promise<void> getAll(GetAllContext ctx) override;
-	Promise<void> getEntry(GetEntryContext ctx) override;
-	Promise<void> putEntry(PutEntryContext ctx) override;
+	Promise<void> get(GetContext ctx) override;
+	Promise<void> put(PutContext ctx) override;
 	Promise<void> rm(RmContext ctx) override;
 	Promise<void> mkdir(MkdirContext ctx) override;
+	Promise<void> createFile(CreateFileContext ctx) override;
 
 	// Implementation
 	FolderInterface(Own<ObjectDBEntry>&& object, kj::Badge<ObjectDBHook>) :
 		object(mv(object))
 	{}
-	
-	//! Sets a folder entry. Passing nullptr as 3rd arg deletes it instead.
-	void setEntry(ObjectInfo::Folder::Builder folder, kj::StringPtr name, Maybe<Own<ObjectDBEntry>> entry);
-	
-	//! Opens a folder for modification. Optionally creates the folder (and all parents) if not present
-	Own<ObjectDBEntry::Accessor> getFolderForModification(kj::PathPtr path, bool create = false);
+		
+	//! Locates a directory for modification
+	Own<ObjectDBEntry> locateWriteDir(kj::PathPtr path, bool create);
 	
 	//! Reads an object relative to this one. Uses the preserved snapshot of this folder.
-	Own<ObjectInfo::Reader> readObject(kj::PathPtr path);
+	Own<ObjectDBEntry> locate(kj::PathPtr path);
 	
 	// Members
 	Own<ObjectDBEntry> object;
@@ -1196,210 +1422,287 @@ struct TransmissionProcess {
 	Promise<void> transmit(size_t chunkStart);
 };
 
+// class FileInterface
+
+Promise<void> FileInterface::setImpl(Capability::Client clt) {
+	return withODBBackoff([this, clt = mv(clt)]() mutable {
+		{
+			ImportContext ic(object -> getDb());
+			
+			auto acc = object -> open();
+			KJ_IF_MAYBE(pImported, ic.import(clt)) {
+				acc -> setFile(object -> getDb().wrap(mv(*pImported)));
+			} else {
+				acc -> setFile(nullptr);
+			}
+		}
+		
+		object -> getDb().changed();
+	});
+}
+
+Promise<void> FileInterface::getAny(GetAnyContext ctx) {
+	return withODBBackoff([this, ctx]() mutable {
+		auto data = object -> loadPreserved();
+		object -> getDb().exportStoredObject(data -> getFile(), ctx.initResults());
+	});
+}
+
+Promise<void> FileInterface::get(GetContext ctx) {
+	return withODBBackoff([this, ctx]() mutable {
+		auto data = object -> loadPreserved();
+		ctx.getResults().setRef(data -> getFile().castAs<DataRef<AnyPointer>>());
+	});
+}
+
+Promise<void> FileInterface::set(SetContext ctx) {
+	return setImpl(ctx.getParams().getRef());
+}
+
+Promise<void> FileInterface::setAny(SetAnyContext ctx) {
+	return setImpl(ctx.getParams().getValue());
+}
+
 // class FolderInterface
 
 Promise<void> FolderInterface::ls(LsContext ctx) {
-	auto data = readObject(kj::Path::parse(ctx.getParams().getName()));
-	
-	KJ_REQUIRE(data -> isFolder(), "Trying to list contents of non-folder object");
-	
-	auto in = data -> getFolder().getEntries();
-	auto out = ctx.getResults().initEntries(in.size());
-	for(auto i : kj::indices(in)) {
-		out.set(i, in[i].getName());
-	}
-	
-	return READY_NOW;
+	return withODBBackoff([this, ctx]() mutable {
+		auto data = locate(kj::Path::parse(ctx.getParams().getPath()));
+		data -> trySync();
+		
+		auto& snap = data -> getSnapshot();
+		
+		auto& q = snap.listFolderEntries.bind(data -> id);
+		
+		std::list<kj::String> tmp;
+		while(q.step()) {
+			tmp.push_back(kj::heapString(q[0].asText()));
+		}
+		
+		auto out = ctx.getResults().initEntries(tmp.size());
+		for(auto i : kj::indices(out)) {
+			out.set(i, *tmp.begin());
+			tmp.pop_front();
+		}
+	});
 }
 
 Promise<void> FolderInterface::getAll(GetAllContext ctx) {
-	auto data = readObject(kj::Path::parse(ctx.getParams().getName()));
-	
-	KJ_REQUIRE(data -> isFolder(), "Trying to list contents of non-folder object");
-	
-	auto in = data -> getFolder().getEntries();
-	ctx.getResults().setEntries(in);
-	
-	return READY_NOW;
-}
-
-Promise<void> FolderInterface::getEntry(GetEntryContext ctx) {
-	auto path = kj::Path::parse(ctx.getParams().getName());
-	
-	auto data = readObject(path.parent());
-	KJ_REQUIRE(data -> isFolder(), "Trying to access entry of non-folder object");
-		
-	auto& filename = path.basename()[0];
-	for(auto e : data -> getFolder().getEntries()) {
-		if(e.getName() == filename) {
-			ctx.setResults(e);
-			return READY_NOW;
-		}
-	}
-	
-	return KJ_EXCEPTION(FAILED, "Entry not found in folder", filename);
-}
-
-Promise<void> FolderInterface::putEntry(PutEntryContext ctx) {
 	return withODBBackoff([this, ctx]() mutable {
-		kj::Path path = kj::Path::parse(ctx.getParams().getName());
-		ImportContext ic(object -> getDb());
+		auto data = locate(kj::Path::parse(ctx.getParams().getPath()));
+		data -> trySync();
 		
-		auto acc = getFolderForModification(path.parent(), true);
+		auto& snap = data -> getSnapshot();
 		
-		auto& filename = path.basename()[0];
-		KJ_IF_MAYBE(pEntry, ic.import(ctx.getParams().getValue())) {
-			ctx.getResults().setValue(object -> getDb().wrap((**pEntry).addRef()));
-			
-			setEntry(acc -> getFolder(), filename, mv(*pEntry));
-		} else {
-			setEntry(acc -> getFolder(), filename, nullptr);
+		auto& q = snap.listFolderEntries.bind(data -> id);
+		
+		std::list<kj::String> tmp;
+		std::list<int64_t> tmp2;
+		while(q.step()) {
+			tmp.push_back(kj::heapString(q[0].asText()));
+			tmp2.push_back(q[1].asInt64());
 		}
 		
-		ctx.getResults().setName(filename);
+		auto out = ctx.getResults().initEntries(tmp.size());
+		for(auto i : kj::indices(out)) {
+			auto eOut = out[i];
+			eOut.setName(*tmp.begin());
+			
+			auto entry = object -> getDb().open(*tmp2.begin(), snap);
+			auto wrapped = object -> getDb().wrap(mv(entry));
+			
+			object -> getDb().exportStoredObject(wrapped, eOut.initValue());
+			
+			tmp.pop_front();
+			tmp2.pop_front();
+		}
+	});
+}
+
+Promise<void> FolderInterface::get(GetContext ctx) {
+	return withODBBackoff([this, ctx]() mutable {
+		auto target = locate(kj::Path::parse(ctx.getParams().getPath()));
+		auto wrapped = object -> getDb().wrap(mv(target));
 		
-		acc -> release(true);
+		object -> getDb().exportStoredObject(wrapped, ctx.initResults());
+	});
+}
+
+Promise<void> FolderInterface::put(PutContext ctx) {
+	return withODBBackoff([this, ctx]() mutable {
+		auto& db = object -> getDb();
+		
+		kj::Path path = kj::Path::parse(ctx.getParams().getPath());
+		
+		{
+			ImportContext ic(db);
+			
+			auto parentFolder = locateWriteDir(path.parent(), true);
+			auto& filename = path.basename()[0];
+			
+			// Decrease old refcount if present
+			Maybe<int64_t> oldId;
+			auto& oldIdQuery = db.getFolderEntry.bind(parentFolder -> id, filename.asPtr());
+			if(oldIdQuery.step()) {
+				oldId = oldIdQuery[0].asInt64();
+			}
+			
+			KJ_IF_MAYBE(pEntry, ic.import(ctx.getParams().getValue())) {
+				int64_t id = (**pEntry).id;
+				
+				db.incRefcount(id);
+				db.updateFolderEntry(parentFolder -> id, filename.asPtr(), id);
+				
+				auto wrapped = db.wrap(mv(*pEntry));
+				db.exportStoredObject(wrapped, ctx.initResults());
+			} else {
+				db.deleteFolderEntry(parentFolder -> id, filename.asPtr());
+				ctx.initResults().setNullValue();
+			}
+			
+			KJ_IF_MAYBE(pOldId, oldId) {
+				db.decRefcount(*pOldId);
+				db.deleteIfOrphan(*pOldId);
+			}
+		}
+		
+		db.changed();
 	});
 }
 
 Promise<void> FolderInterface::rm(RmContext ctx) {
 	return withODBBackoff([this, ctx]() mutable {
-		kj::Path path = kj::Path::parse(ctx.getParams().getName());
+		auto& db = object -> getDb();
 		
-		auto acc = getFolderForModification(path.parent(), false);
+		kj::Path path = kj::Path::parse(ctx.getParams().getPath());
 		
-		auto& filename = path.basename()[0];
-		setEntry(acc -> getFolder(), filename, nullptr);
+		{
+			fsc::db::Transaction t(*db.conn);
+			
+			auto parentFolder = locateWriteDir(path.parent(), false);
+			auto& filename = path.basename()[0];
+			
+			// Decrease old refcount if present
+			Maybe<int64_t> oldId;
+			auto& oldIdQuery = db.getFolderEntry.bind(parentFolder -> id, filename.asPtr());
+			if(oldIdQuery.step()) {
+				oldId = oldIdQuery[0].asInt64();
+			}
+			
+			db.deleteFolderEntry(parentFolder -> id, filename.asPtr());
+			
+			KJ_IF_MAYBE(pOldId, oldId) {
+				db.decRefcount(*pOldId);
+				db.deleteIfOrphan(*pOldId);
+			}
+		}
 		
-		acc -> release(true);
+		db.changed();
 	});
 }
 
 Promise<void> FolderInterface::mkdir(MkdirContext ctx) {
 	return withODBBackoff([this, ctx] () mutable {
-		kj::Path path = kj::Path::parse(ctx.getParams().getName());
+		kj::Path path = kj::Path::parse(ctx.getParams().getPath());
 		
-		auto acc = getFolderForModification(path.parent(), true);
+		auto result = locateWriteDir(path, true);
+		ctx.initResults().setFolder(object -> getDb().wrap(mv(result)).castAs<Warehouse::Folder>());
 		
-		auto& filename = path.basename()[0];
-		
-		auto newObject = object -> getDb().create();
-		newObject -> open() -> initFolder();
-		
-		setEntry(acc -> getFolder(), filename, newObject -> addRef());
-		acc -> release(true);
+		object -> getDb().changed();
 	});
 }
 
-void FolderInterface::setEntry(ObjectInfo::Folder::Builder folder, kj::StringPtr name, Maybe<Own<ObjectDBEntry>> entry) {
-	// Try to locate existing entry with correct name
-	Maybe<size_t> maybeIdx;
-	
-	auto entries = folder.getEntries();
-	for(auto i : kj::indices(entries)) {
-		if(entries[i].getName().asReader() == name) {
-			maybeIdx = i;
-			break;
-		}
+Promise<void> FolderInterface::createFile(CreateFileContext ctx) {
+	// Temporary file creation
+	if(ctx.getParams().getPath().size() == 0) {
+		ctx.initResults().setFile(createTempFile());
+		return READY_NOW;
 	}
 	
-	KJ_IF_MAYBE(pIdx, maybeIdx) {
-		size_t idx = *pIdx;
+	return withODBBackoff([this, ctx] () mutable {
+		auto& db = object -> getDb();
 		
-		KJ_IF_MAYBE(pVal, entry) {
-			entries[idx].setValue(object -> getDb().wrap(mv(*pVal)));
-		} else {
-			auto orphanage = Orphanage::getForMessageContaining(folder);
-			auto newList = orphanage.newOrphan<List<FolderEntry>>(entries.size() - 1);
-			for(auto i : kj::range(0, idx)) {
-				newList.get().setWithCaveats(i, entries[i]);
-			}
-			for(auto i : kj::range(idx + 1, entries.size())) {
-				newList.get().setWithCaveats(i - 1, entries[i]);
-			}
-			folder.adoptEntries(mv(newList));
-		}
-	} else {
-		KJ_IF_MAYBE(pVal, entry) {
-			auto orphanage = Orphanage::getForMessageContaining(folder);
+		fsc::db::Transaction t(*db.conn);
+		{
+			kj::Path path = kj::Path::parse(ctx.getParams().getPath());
 			
-			// Extend entries by 1
-			auto disowned = folder.disownEntries();
-			disowned.truncate(disowned.get().size() + 1);
-			folder.adoptEntries(mv(disowned));
-			entries = folder.getEntries();
+			auto parentFolder = locateWriteDir(path.parent(), true);
+			auto& filename = path.basename()[0];
 			
-			// Configure last entry
-			auto lastEntry = entries[entries.size() - 1];
-			lastEntry.setName(name);
-			lastEntry.setValue(object -> getDb().wrap(mv(*pVal)));
+			// Decrease old refcount if present
+			Maybe<int64_t> oldId;
+			auto& oldIdQuery = db.getFolderEntry.bind(parentFolder -> id, filename.asPtr());
+			if(oldIdQuery.step()) {
+				oldId = oldIdQuery[0].asInt64();
+			}
+			
+			auto newFile = db.create();
+			newFile -> open() -> setFile(nullptr);
+						
+			db.incRefcount(newFile -> id);
+			db.updateFolderEntry(parentFolder -> id, filename.asPtr(), newFile -> id);
+			
+			ctx.initResults().setFile(db.wrap(mv(newFile)).castAs<Warehouse::File<>>());
+			
+			KJ_IF_MAYBE(pOldId, oldId) {
+				db.decRefcount(*pOldId);
+				db.deleteIfOrphan(*pOldId);
+			}
 		}
-	}
+		
+		db.changed();
+	});
 }
 
-Own<ObjectDBEntry::Accessor> FolderInterface::getFolderForModification(kj::PathPtr path, bool create) {
+Own<ObjectDBEntry> FolderInterface::locateWriteDir(kj::PathPtr path, bool create) {
+	auto& db = object -> getDb();
+	fsc::db::Transaction t(*db.conn);
+	
 	Own<ObjectDBEntry> current = object -> addRef();
 	
 	for(const auto& folderName : path) {
 		auto acc = current -> open();
-		
 		KJ_REQUIRE(acc -> isFolder(), "Trying to access child object of non-folder", path, folderName);
-		auto entries = acc -> getFolder().getEntries();
-		
-		// Check if entry exists
-		for(auto i : kj::indices(entries)) {
-			if(entries[i].getName().asReader() == path[0]) {
-				current = object -> getDb().unwrapValid(entries[i].getValue());
-				acc -> release(false);
-				goto entry_found;
-			}
-		}
-		
-		// Folder does not exist
-		if(create) {
+				
+		auto& q = db.getFolderEntry.bind(current -> id, folderName.asPtr());
+		if(q.step()) {
+			current = db.open(q[0]);
+		} else {
 			auto newFolder = object -> getDb().create();
 			auto newFolderAcc = newFolder -> open();
-			newFolderAcc -> initFolder();
+			newFolderAcc -> setFolder();
 			newFolderAcc -> release(true);
 			
-			setEntry(acc -> getFolder(), folderName, newFolder -> addRef());
-			acc -> release(true);
-			
-			current = mv(newFolder);
-		} else {
-			KJ_FAIL_REQUIRE("Folder not found", path, folderName);
+			db.updateFolderEntry(current -> id, folderName.asPtr(), newFolder -> id);
+			db.incRefcount(newFolder -> id);
 		}
-		
-		entry_found:;
 	}
 	
-	return current -> open();
+	auto acc = current -> open();
+	KJ_REQUIRE(acc -> isFolder(), "Trying to modify non-folder as folder");
+	acc -> release(false);
+	
+	return current;
+	
 }
 
-Own<ObjectInfo::Reader> FolderInterface::readObject(kj::PathPtr path) {
+Own<ObjectDBEntry> FolderInterface::locate(kj::PathPtr path) {
 	KJ_REQUIRE(object -> hasPreserved(), "Internal error: Folder has no preserved state");
 	
 	Own<ObjectDBEntry> current = object -> addRef();
 	for(const auto& entryName : path) {
-		auto reader = current -> loadPreserved();
+		current -> trySync();
+		ObjectDBSnapshot& snap = current -> getSnapshot();
 		
-		KJ_REQUIRE(reader -> isFolder(), "Trying to access child object of non-folder", path, entryName);
-		auto entries = reader -> getFolder().getEntries();
+		auto& q = snap.getFolderEntry.bind(current -> id, entryName.asPtr());
+		KJ_REQUIRE(q.step(), "Entry not found", path, entryName);
 		
-		// Check if entry exists
-		for(auto i : kj::indices(entries)) {
-			if(entries[i].getName() == path[0]) {
-				current = object -> getDb().unwrapValid(entries[i].getValue());
-				goto entry_found;
-			}
-		}
-		
-		KJ_FAIL_REQUIRE("Entry not found", path, entryName);
-		
-		entry_found:;
+		current = object -> getDb().open(q[0], snap);
 	}
 	
-	return current -> loadPreserved();
+	current -> trySync();
+	
+	return current;
 }
 
 // class DataRefInterface
@@ -1447,11 +1750,7 @@ Promise<void> DataRefInterface::transmit(TransmitContext ctx) {
 		KJ_REQUIRE(blobIdQuery.step(), "Internal error: Object deleted", object -> id);
 		
 		// Open blob
-		KJ_DBG("Opening blob ", blobIdQuery[0].asInt64());
 		Own<Blob> blob = snapshot -> blobStore -> get(blobIdQuery[0]);
-		KJ_DBG("Blob hash", blob -> getHash());
-		KJ_DBG("Blob id", blob -> getId());
-		KJ_DBG("Blob refcount", blob -> getRefcount());
 		Own<kj::InputStream> reader = blob -> open();
 		
 		// Create transmission process
@@ -1504,11 +1803,12 @@ Promise<void> TransmissionProcess::transmit(size_t chunkStart) {
 }
 
 Maybe<Capability::Client> createInterface(ObjectDBEntry& entry, kj::Badge<ObjectDBHook> badge) {
+	entry.trySync();
+	
 	if(!entry.hasPreserved())
 		return nullptr;
 	
 	auto reader = entry.loadPreserved();
-	KJ_DBG(reader->which());
 	switch(reader -> which()) {
 		case ObjectInfo::UNRESOLVED:
 			return nullptr;
@@ -1523,8 +1823,6 @@ Maybe<Capability::Client> createInterface(ObjectDBEntry& entry, kj::Badge<Object
 		case ObjectInfo::DATA_REF: {
 			auto refInfo = reader -> getDataRef();
 			
-			KJ_DBG(refInfo.getDownloadStatus());
-			
 			if(refInfo.getDownloadStatus().isDownloading())
 				return nullptr;
 			
@@ -1534,27 +1832,26 @@ Maybe<Capability::Client> createInterface(ObjectDBEntry& entry, kj::Badge<Object
 			blobId.step();
 			auto blob = snapshot.blobStore -> get(blobId[0]);
 			
-			KJ_DBG(blob -> getHash());
-			
 			return Capability::Client(kj::heap<DataRefInterface>(entry.addRef(), badge));
 		}
 		case ObjectInfo::FOLDER:
 			return Capability::Client(kj::heap<FolderInterface>(entry.addRef(), badge));
+		case ObjectInfo::FILE:
+			return Capability::Client(kj::heap<FileInterface>(entry.addRef(), badge));
 	}
 	
 	KJ_FAIL_REQUIRE("Unknown object type");
 }
 
-}}}
+}}
 
 namespace fsc {
 	
-odb::Folder::Client openObjectDb(db::Connection& conn, kj::StringPtr tablePrefix) {
+Warehouse::Client openWarehouse(db::Connection& conn, kj::StringPtr tablePrefix) {
 	// Make sure we use a forkable connection
 	conn.fork(true);
 	
-	auto odb = kj::refcounted<odb::ObjectDB>(conn, tablePrefix, false);	
-	return odb -> getRoot();
+	return kj::refcounted<ObjectDB>(conn, tablePrefix, false);
 }
 
 }

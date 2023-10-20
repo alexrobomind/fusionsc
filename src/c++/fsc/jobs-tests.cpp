@@ -53,9 +53,6 @@ TEST_CASE("job-echo") {
 	JobScheduler::Client sched = newProcessScheduler();
 	Job::Client job = runJob(sched, cmd, args);
 	
-	KJ_DBG("Job running");
-	KJ_DBG("Attaching");
-	
 	// Obtain job's stdout
 	auto attach = job.attachRequest().sendForPipeline();
 	// auto remoteStdout = job.attachRequest().send().getStdout();
@@ -63,14 +60,10 @@ TEST_CASE("job-echo") {
 	auto remoteStdout = attach.getStdout();
 	auto remoteStderr = attach.getStderr();
 	
-	KJ_DBG("Received remote output stream");
 	remoteStdout.whenResolved().wait(ws);
-	KJ_DBG("Stream resolved");
 	
 	auto localStdout = lt -> streamConverter().fromRemote(remoteStdout).wait(ws);
 	auto localStderr = lt -> streamConverter().fromRemote(remoteStderr).wait(ws);
-	
-	KJ_DBG("Attached");
 	
 	// Read all data from stdout
 	auto stdoutData = localStdout -> readAllBytes().wait(ws);
@@ -78,7 +71,6 @@ TEST_CASE("job-echo") {
 	
 	auto stderrData = localStderr -> readAllBytes().wait(ws);
 	auto stderrString = kj::heapString(stderrData.asChars());
-	KJ_DBG(stderrString);
 	
 	// Wait for process to terminate
 	job.whenCompletedRequest().send().wait(ws);

@@ -45,7 +45,6 @@ TEST_CASE("c1interp") {
 		double interp = ipol(f, Vec<double, 1>{dx});
 		double fx = f(dx);
 		
-		KJ_DBG(fx, interp);
 		REQUIRE(fx == Approx(interp));
 	}
 }
