@@ -263,7 +263,7 @@ struct ObjectDBEntry::Accessor : public ObjectInfo::Builder {
 	 * Release the built-in transaction, optionally with (true) or without (false) writing the
 	 * object representation back to the database.
 	 */
-	void release(bool doSave) { if(doSave) { save(); } transaction.commit(); }
+	void release(bool doSave) { KJ_REQUIRE(transaction.active()); if(doSave) { save(); } else { transaction.commit(); } }
 	
 private:
 	void load();
@@ -721,7 +721,7 @@ Own<ObjectInfo::Reader> ObjectDBEntry::doLoad(Maybe<ObjectDBSnapshot&> snapshotT
 	// Start transaction
 	db::Transaction t(*targetBase.conn);
 	
-	auto& q = parent -> getInfo.bind(id);
+	auto& q = targetBase.getInfo.bind(id);
 	KJ_REQUIRE(q.step(), "Object not present in database");
 	
 	auto flatInfo = kj::heapArray<const byte>(q[0].asBlob());
@@ -835,6 +835,9 @@ void ObjectDBEntry::Accessor::save() {
 	for(int64_t id : idsToCheck) {
 		target -> parent -> deleteIfOrphan(id);
 	}
+	
+	// Commit transaction
+	transaction.commit();
 	
 	// Register change with database (and immediately resync same object)
 	target -> parent -> changed();
@@ -986,23 +989,27 @@ Promise<void> ImportContext::importTask(int64_t id, Capability::Client src) {
 	// If it fails, store failure in database
 	.catch_([&myParent, id](kj::Exception&& e) mutable {
 		return withODBBackoff([&myParent, id, e]() mutable -> Promise<void> {
-			db::Transaction transaction(*myParent.conn);
-			
-			myParent.open(id)
-			-> open()
-			-> setException(
-				toProto(e)
-			);
-			
-			// Delete partially written results
-			auto& q = myParent.getBlob.bind(id);
-			KJ_REQUIRE(q.step(), "Internal error");
-			if(!q[0].isNull()) {
-				int64_t blobId = q[0];
+			{
+				db::Transaction transaction(*myParent.conn);
 				
-				myParent.setBlob(id, nullptr);
-				myParent.blobStore -> get(blobId) -> decRef();
+				myParent.open(id)
+				-> open()
+				-> setException(
+					toProto(e)
+				);
+				
+				// Delete partially written results
+				auto& q = myParent.getBlob.bind(id);
+				KJ_REQUIRE(q.step(), "Internal error");
+				if(!q[0].isNull()) {
+					int64_t blobId = q[0];
+					
+					myParent.setBlob(id, nullptr);
+					myParent.blobStore -> get(blobId) -> decRef();
+				}
 			}
+			
+			myParent.changed();
 			
 			return READY_NOW;
 		});
@@ -1039,7 +1046,10 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::unwrap() {
 }
 
 Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
-	return withODBBackoff([this]() mutable -> Maybe<Own<ObjectDBEntry>> {		
+	return withODBBackoff([this]() mutable -> Maybe<Own<ObjectDBEntry>> {
+		kj::UnwindDetector ud;
+		KJ_DEFER({ if(!ud.isUnwinding()) db.changed(); });
+		
 		ImportContext ic(db);
 		auto dst = db.open(id);
 		auto acc = dst -> open();
@@ -1054,8 +1064,10 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
 		
 		// Check if we have hash in blob store
 		KJ_IF_MAYBE(pBlob, db.blobStore -> find(metadata.getDataHash())) {
-			ref.getDownloadStatus().setFinished();
+			db.setBlob(id, (**pBlob).getId());
 			(**pBlob).incRef();
+			
+			ref.getDownloadStatus().setFinished();
 			
 			return mv(dst);
 		}
@@ -1100,15 +1112,17 @@ Promise<void> DatarefDownloadProcess::finishDownload() {
 			db::Transaction t(*db.conn);
 			auto finishedBlob = builder -> finish();
 			KJ_REQUIRE(finishedBlob -> isFinished(), "Blob unfinished after finish() call");
+			KJ_DBG(finishedBlob -> getHash());
 			db.setBlob(id, finishedBlob -> getId());
 			
 			// Mark ref as done
 			db.open(id) -> open() -> getDataRef().getDownloadStatus().setFinished();
+			t.commit();
 			KJ_DBG("Transaction complete", id, finishedBlob -> getId());
 		}
 		
-		// It is important that we discard snapshots now.
-		// db.changed();
+		// Discard the snapshot taken during the above commits
+		db.changed();
 	});
 }
 
@@ -1513,6 +1527,14 @@ Maybe<Capability::Client> createInterface(ObjectDBEntry& entry, kj::Badge<Object
 			
 			if(refInfo.getDownloadStatus().isDownloading())
 				return nullptr;
+			
+			// Load snapshot
+			auto& snapshot = entry.getSnapshot();
+			auto& blobId = snapshot.getBlob.bind(entry.id);
+			blobId.step();
+			auto blob = snapshot.blobStore -> get(blobId[0]);
+			
+			KJ_DBG(blob -> getHash());
 			
 			return Capability::Client(kj::heap<DataRefInterface>(entry.addRef(), badge));
 		}
