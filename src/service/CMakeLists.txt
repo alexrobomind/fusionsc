@@ -11,8 +11,10 @@ set(
 	data-archive.capnp
 	streams.capnp
 	
+	warehouse.capnp
+	warehouse-internal.capnp
+	
 	index.capnp
-	odb.capnp
 	jobs.capnp
 	matcher.capnp
 	
