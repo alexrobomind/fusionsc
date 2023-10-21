@@ -308,6 +308,7 @@ struct SimpleMessageFallback : public SimpleHttpServer::Server {
 		
 		auto results = ctx.initResults();
 		results.setStatus(UPGRADE_REQUIRED);
+		results.setStatusText("Upgrade required");
 		results.setBody(
 			"This is a FusionSC connection endpoint, which expects WebSocket requests."
 			" Please connect to it using the FusionSC client."
@@ -348,7 +349,12 @@ struct HttpListener : public kj::HttpService {
 			request.setUrl(url);
 			
 			return request.send().then([&response, responseHeaders = mv(responseHeaders)](auto simpleResponse) mutable {
-				return response.sendError(simpleResponse.getStatus(), simpleResponse.getBody(), responseHeaders);
+				responseHeaders.set(HttpHeaderId::CONTENT_TYPE, "text/html; charset=utf-8");
+				KJ_DBG(simpleResponse);
+								
+				auto outputStream = response.send(simpleResponse.getStatus(), simpleResponse.getStatusText(), responseHeaders, simpleResponse.getBody().size());
+				auto sendPromise = outputStream -> write(simpleResponse.getBody().begin(), simpleResponse.getBody().size());
+				return sendPromise.attach(mv(outputStream), mv(simpleResponse));
 			});
 		}
 		

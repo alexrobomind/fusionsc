@@ -11,6 +11,9 @@
 #include "jobs.h"
 #include "matcher.h"
 
+#include "odb.h"
+#include "sqlite.h"
+
 #include "devices/w7x.h"
 
 #include "kernels/device.h"
@@ -19,6 +22,8 @@
 #include <capnp/membrane.h>
 
 #include <kj/list.h>
+#include <kj/compat/url.h>
+#include <kj/string-tree.h>
 
 #include <fsc/jobs.capnp.h>
 
@@ -206,9 +211,60 @@ struct LocalResourcesImpl : public LocalResources::Server, public LocalNetworkIn
 	}
 	
 	// Device providers
+	
 	Promise<void> w7xProvider(W7xProviderContext ctx) override {
 		ctx.initResults().setService(devices::w7x::newProvider());
 		return READY_NOW;
+	}
+	
+	// Warehouse access
+	
+	Promise<void> openWarehouse(OpenWarehouseContext ctx) override {
+		auto params = ctx.getParams();
+		auto url = kj::Url::parse(params.getUrl());
+		
+		KJ_REQUIRE(
+			url.scheme == "sqlite" || url.scheme == "http" || url.scheme == "ws",
+			
+			"Only the schemes 'sqlite' (local sqlite database file), 'ws' (http/websocket"
+			" connection to remote DB server) or 'http' (alias for 'ws') are supported",
+			url.scheme
+		);
+		
+		if(url.scheme == "sqlite") {			
+			bool readOnly = false;
+			kj::StringPtr tablePrefix = "warehouse";
+			
+			for(auto& param : url.query) {
+				if(param.name == "readOnly")
+					readOnly = true;
+				
+				if(param.name == "tablePrefix")
+					tablePrefix = param.value;
+			}
+			
+			auto conn = connectSqlite(kj::str(kj::delimited(url.path, "/")), readOnly);
+			auto db = ::fsc::openWarehouse(*conn, tablePrefix);
+			ctx.getResults().setRoot(db.getRootRequest().sendForPipeline().getRoot());
+		}
+		
+		// Treat URL as server connection
+		
+		// Select connection interface to use (allows SSH tunnel)
+		auto networkInterface =
+			params.hasNetworkInterface() ?
+			params.getNetworkInterface() :
+			thisCap();
+		
+		// Pass connect request to interface
+		auto connectRequest = networkInterface.connectRequest();
+		connectRequest.setUrl(params.getUrl());
+		
+		// Open connection and get remote object
+		auto remotePromise = connectRequest.send().getConnection().getRemoteRequest().send();
+		ctx.getResults().setRoot(remotePromise.getRemote().castAs<Warehouse::Folder>());
+		
+		return remotePromise.ignoreResult();
 	}
 };
 

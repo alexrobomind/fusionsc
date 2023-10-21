@@ -1162,8 +1162,14 @@ Promise<void> ImportContext::importTask(int64_t id, Capability::Client src) {
 				
 				// If the temp file is attached, we link to it.
 				if(storage.is<Attached>()) {
+					auto target = storage.get<Attached>();
+					
+					// Check that the target is from the same database
+					bool compatible = !myParent.unwrap(target).is<Capability::Client>();
+					KJ_REQUIRE(compatible, "Temp file was already attached to a different database");
+					
 					auto acc = handle -> open();
-					acc -> setLink(storage.get<Attached>());
+					acc -> setLink(target);
 					return;
 				} else {
 					// Actual transaction

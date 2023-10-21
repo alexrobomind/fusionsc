@@ -16,6 +16,7 @@ interface SimpleHttpServer {
 	struct Response {
 		status @0 : UInt16;
 		body @1 : Text;
+		statusText @2 : Text;
 	}
 	
 	serve @0 Request -> Response;

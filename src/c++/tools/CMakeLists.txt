@@ -18,6 +18,12 @@ add_executable(
 target_link_libraries(fsc-worker fsc)
 
 add_executable(
+	fsc-warehouse
+	fsc-warehouse.cpp
+)
+target_link_libraries(fsc-warehouse fsc)
+
+add_executable(
 	fsc-fuzz
 	EXCLUDE_FROM_ALL
 	fuzz-test.cpp
@@ -34,8 +40,8 @@ add_executable(
 target_link_libraries(brandedEnums CapnProto::capnp-rpc)
 
 if(SKBUILD)
-	add_dependencies(fsc-skbuild-target fsc-server fsc-load-balancer fsc-worker)
-	install(TARGETS fsc-server fsc-load-balancer fsc-worker RUNTIME DESTINATION ${SKBUILD_SCRIPTS_DIR} COMPONENT SKBUILD)
+	add_dependencies(fsc-skbuild-target fsc-server fsc-load-balancer fsc-worker fsc-warehouse)
+	install(TARGETS fsc-server fsc-load-balancer fsc-worker fsc-warehouse RUNTIME DESTINATION ${SKBUILD_SCRIPTS_DIR} COMPONENT SKBUILD)
 endif()
 
-install(TARGETS fsc-server fsc-load-balancer fsc-worker EXPORT FSCTargets)
+install(TARGETS fsc-server fsc-load-balancer fsc-worker fsc-warehouse EXPORT FSCTargets)

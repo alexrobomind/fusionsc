@@ -16,6 +16,7 @@ using Data = import "data.capnp";
 using Networking = import "networking.capnp";
 using Vmec = import "vmec.capnp";
 using Matcher = import "matcher.capnp";
+using Warehouse = import "warehouse.capnp";
 
 using W7X = import "devices/w7x.capnp";
 
@@ -122,4 +123,6 @@ interface LocalResources extends(Networking.NetworkInterface) {
 	configureRoot @4 LocalConfig -> ();
 	
 	w7xProvider @5 () -> (service : W7X.Provider);
+	
+	openWarehouse @6 (url : Text, networkInterface : Networking.NetworkInterface) -> (root : Warehouse.Warehouse.Folder);
 }
