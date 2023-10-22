@@ -42,10 +42,12 @@ struct MainCls {
 	kj::String dbFile;
 	kj::String tablePrefix;
 	
+	kj::String rootPath;
+	
 	bool writeAccess = false;
 	
 	MainCls(kj::ProcessContext& context):
-		context(context), tablePrefix(kj::heapString("warehouse"))
+		context(context), tablePrefix(kj::heapString("warehouse")), rootPath(kj::heapString(""))
 	{}
 	
 	bool setAddress(kj::StringPtr val) {
@@ -72,6 +74,11 @@ struct MainCls {
 		tablePrefix = kj::heapString(prefix);
 		return true;
 	}
+	
+	bool setPath(kj::StringPtr pathStr) {
+		rootPath = kj::heapString(pathStr);
+		return true;
+	}
 		
 	bool run() {
 		auto l = newLibrary();
@@ -82,9 +89,24 @@ struct MainCls {
 		
 		bool readOnly = !writeAccess;
 		auto conn = connectSqlite(dbFile, readOnly);
-		auto db = ::fsc::openWarehouse(*conn, tablePrefix);
+		auto db = ::fsc::openWarehouse(*conn, tablePrefix, readOnly);
 		auto root = db.getRootRequest().sendForPipeline().getRoot();
 		root.whenResolved().wait(ws);
+		
+		// Get root path
+		if(readOnly) {
+			auto getRequest = root.getRequest();
+			getRequest.setPath(rootPath);
+			
+			auto rootObject = getRequest.send().wait(ws);
+			KJ_REQUIRE(rootObject.isFolder(), "Requested root object is not a folder");
+			
+			root = rootObject.getFolder();
+		} else {
+			auto mkdirRequest = root.mkdirRequest();
+			mkdirRequest.setPath(rootPath);
+			root = mkdirRequest.send().wait(ws).getFolder();
+		}
 		
 		// Create network interface
 		NetworkInterface::Client networkInterface = kj::heap<LocalNetworkInterface>();
@@ -131,6 +153,7 @@ struct MainCls {
 			
 			.addOption({'w', "write-access"}, KJ_BIND_METHOD(*this, setWriteAccess), "Enables write access to the target database")
 			.addOptionWithArg({"table-prefix"}, KJ_BIND_METHOD(*this, setTablePrefix), "<prefix>", "Prefix to use for table names (default 'warehouse')")
+			.addOptionWithArg({"path"}, KJ_BIND_METHOD(*this, setPath), "<path>", "Path to share relative to database root")
 			.expectArg("<database file>", KJ_BIND_METHOD(*this, setDb))
 			
 			.callAfterParsing(KJ_BIND_METHOD(*this, run))

@@ -102,11 +102,12 @@ struct ObjectDBBase {
 	
 	Statement readNewestId;
 	
-	Statement createRootEntry;
+	Statement createRoot;
+	Statement findRoot;
 	
 	kj::String tablePrefix;
 	Own<db::Connection> conn;
-	bool readOnly;
+	const bool readOnly;
 	Own<BlobStore> blobStore;
 	
 	Maybe<int64_t> getNewestId();
@@ -122,6 +123,7 @@ ObjectDBBase::ObjectDBBase(db::Connection& paramConn, kj::StringPtr paramTablePr
 	auto refsTable = str(tablePrefix, "_object_refs");
 	auto folderEntriesTable = str(tablePrefix, "_folder_entries");
 	auto blobsTable = str(tablePrefix, "_blobs");
+	auto rootsTable = str(tablePrefix, "_roots");
 	
 	if(!readOnly) {
 		conn -> exec(str(
@@ -131,6 +133,9 @@ ObjectDBBase::ObjectDBBase(db::Connection& paramConn, kj::StringPtr paramTablePr
 			  "refcount INTEGER DEFAULT 0,"
 			  "blobId INTEGER DEFAULT NULL REFERENCES ", blobsTable, "(id) ON DELETE SET NULL ON UPDATE CASCADE"
 			")"
+		));
+		conn -> exec(str(
+			"CREATE INDEX IF NOT EXISTS ", tablePrefix, "_objects_by_blob ON ", objectsTable, "(blobId)"
 		));
 		
 		conn -> exec(str(
@@ -143,6 +148,9 @@ ObjectDBBase::ObjectDBBase(db::Connection& paramConn, kj::StringPtr paramTablePr
 		conn -> exec(str(
 			"CREATE UNIQUE INDEX IF NOT EXISTS ", tablePrefix, "_index_refs_by_parent ON ", refsTable, "(parent, slot)"
 		));
+		conn -> exec(str(
+			"CREATE INDEX IF NOT EXISTS ", tablePrefix, "_index_refs_by_child ON ", refsTable, "(child)"
+		));
 		
 		conn -> exec(str(
 			"CREATE TABLE IF NOT EXISTS ", folderEntriesTable, " ("
@@ -152,8 +160,25 @@ ObjectDBBase::ObjectDBBase(db::Connection& paramConn, kj::StringPtr paramTablePr
 			")"
 		));
 		conn -> exec(str(
-			"CREATE UNIQUE INDEX IF NOT EXISTS ", tablePrefix, "_index_folder_entries ON ", folderEntriesTable, "(parent, name)"
+			"CREATE UNIQUE INDEX IF NOT EXISTS ", tablePrefix, "_index_folder_entries_by_parent ON ", folderEntriesTable, "(parent, name)"
 		));
+		conn -> exec(str(
+			"CREATE INDEX IF NOT EXISTS ", tablePrefix, "_index_folder_entries_by_child ON ", folderEntriesTable, "(child)"
+		));
+		
+		conn -> exec(str(
+			"CREATE TABLE IF NOT EXISTS ", rootsTable, " ("
+			  "id INTEGER REFERENCES ", objectsTable, "(id),"
+			  "name TEXT"
+			")"
+		));
+		conn -> exec(str(
+			"CREATE UNIQUE INDEX IF NOT EXISTS ", tablePrefix, "_index_roots_by_name ON ", rootsTable, "(name)"
+		));
+		conn -> exec(str(
+			"CREATE INDEX IF NOT EXISTS ", tablePrefix, "_index_roots_by_id ON ", rootsTable, "(id)"
+		));
+		
 		
 		createObject = conn -> prepare(str("INSERT INTO ", objectsTable, " DEFAULT VALUES"));
 		setInfo = conn -> prepare(str("UPDATE ", objectsTable, " SET info = ?2 WHERE id = ?1"));
@@ -169,12 +194,13 @@ ObjectDBBase::ObjectDBBase(db::Connection& paramConn, kj::StringPtr paramTablePr
 		updateFolderEntry = conn -> prepare(str("INSERT OR REPLACE INTO ", folderEntriesTable, " (parent, name, child) VALUES (?, ?, ?)"));
 		deleteFolderEntry = conn -> prepare(str("DELETE FROM ", folderEntriesTable, " WHERE parent = ? AND name = ?"));
 		
-		createRootEntry = conn -> prepare(str("INSERT INTO ", objectsTable, " (id) VALUES (0)"));
+		createRoot = conn -> prepare(str("INSERT INTO ", rootsTable, " (id, name) VALUES (?, ?)"));
 	}
 	
 	getInfo = conn -> prepare(str("SELECT info FROM ", objectsTable, " WHERE id = ?"));
 	getRefcount = conn -> prepare(str("SELECT refcount FROM ", objectsTable, " WHERE id = ?"));
 	getBlob = conn -> prepare(str("SELECT blobId FROM ", objectsTable, " WHERE id = ?"));
+	findRoot = conn -> prepare(str("SELECT id FROM ", rootsTable, " WHERE name = ?"));
 	
 	listOutgoingRefs = conn -> prepare(str("SELECT child FROM ", refsTable, " WHERE parent = ? ORDER BY slot"));
 	listFolderEntries = conn -> prepare(str("SELECT name, child FROM ", folderEntriesTable, " WHERE parent = ? ORDER BY name"));
@@ -491,19 +517,24 @@ Promise<void> ObjectDB::getRoot(GetRootContext ctx) {
 	return withODBBackoff([this, ctx]() mutable {
 		db::Transaction(*conn);
 		
-		// Check if root exists
-		getRefcount.bind((int64_t) 0);
-		if(!getRefcount.step()) {
-			createRootEntry();
-			
-			// Create root object
-			auto root = open(0);
-			auto acc = root -> open();
-			acc -> setFolder();
-			acc -> release(true);
+		// Look for root
+		auto& q = findRoot.bind(ctx.getParams().getName());
+		if(q.step()) {
+			ctx.initResults().setRoot(wrap(open(q[0].asInt64())).castAs<Warehouse::Folder>());
+			return;
 		}
 		
-		ctx.initResults().setRoot(wrap(open(0)).castAs<Warehouse::Folder>());
+		KJ_REQUIRE(!readOnly, "The requested root does not exist and the database is read-only");
+		
+		auto newRoot = create();
+		auto acc = newRoot -> open();
+		acc -> setFolder();
+		acc -> release(true);
+		
+		createRoot.insert(newRoot -> id, ctx.getParams().getName());
+		incRefcount(newRoot -> id);
+		
+		ctx.initResults().setRoot(wrap(mv(newRoot)).castAs<Warehouse::Folder>());
 	});
 }
 	
@@ -588,9 +619,7 @@ void ObjectDB::exportStoredObject(Capability::Client c, Warehouse::StoredObject:
 	auto entry = unwrapValid(c);
 	entry -> trySync();
 	
-	out.setAsRef(c.castAs<DataRef<AnyPointer>>());
-	out.setAsFolder(c.castAs<Warehouse::Folder>());
-	out.setAsFile(c.castAs<Warehouse::File<>>());
+	out.setAsGeneric(c.castAs<Warehouse::GenericObject>());
 	
 	if(!entry -> hasPreserved()) {
 		if(entry -> isLive()) {
@@ -624,15 +653,17 @@ void ObjectDB::exportStoredObject(Capability::Client c, Warehouse::StoredObject:
 			auto info = out.initDataRef();
 			if(data -> getDataRef().getDownloadStatus().isFinished())
 				info.getDownloadStatus().setFinished();
+			info.setAsRef(c.castAs<DataRef<>>());
+			
 			return;
 		}
 		
 		case ObjectInfo::FOLDER:
-			out.setFolder();
+			out.setFolder(c.castAs<Warehouse::Folder>());
 			return;
 		
 		case ObjectInfo::FILE:
-			out.setFile();
+			out.setFile(c.castAs<Warehouse::File<>>());
 			return;
 	}
 	
@@ -858,7 +889,7 @@ ObjectDBEntry::Accessor::~Accessor() {
 }
 
 void ObjectDBEntry::Accessor::load() {
-	KJ_REQUIRE(!target -> parent -> readOnly);
+	KJ_REQUIRE(!target -> parent -> readOnly, "Can not perform write operations on target");
 	auto inputReader = target -> doLoad(nullptr);
 	
 	auto outputPtr = capTable.imbue(messageBuilder.initRoot<AnyPointer>());
@@ -999,9 +1030,7 @@ Promise<void> TempFile::getAny(GetAnyContext ctx) {
 		auto val = storage.get<Detached>();
 		
 		auto results = ctx.initResults();
-		results.setAsRef(val.castAs<DataRef<>>());
-		results.setAsFolder(val.castAs<Warehouse::Folder>());
-		results.setAsFile(val.castAs<Warehouse::File<>>());
+		results.setAsGeneric(val.castAs<Warehouse::GenericObject>());
 		results.setUnresolved();
 		
 		return READY_NOW;
@@ -1380,6 +1409,7 @@ struct FolderInterface : public Warehouse::Folder::Server {
 	Promise<void> rm(RmContext ctx) override;
 	Promise<void> mkdir(MkdirContext ctx) override;
 	Promise<void> createFile(CreateFileContext ctx) override;
+	Promise<void> freeze(FreezeContext ctx) override;
 
 	// Implementation
 	FolderInterface(Own<ObjectDBEntry>&& object, kj::Badge<ObjectDBHook>) :
@@ -1391,6 +1421,9 @@ struct FolderInterface : public Warehouse::Folder::Server {
 	
 	//! Reads an object relative to this one. Uses the preserved snapshot of this folder.
 	Own<ObjectDBEntry> locate(kj::PathPtr path);
+	
+	Promise<void> freezeImpl(Own<ObjectDBEntry> e, Warehouse::FrozenFolder::Builder out);
+	Promise<void> freezeImpl(Own<ObjectDBEntry> e, Warehouse::FrozenEntry::Builder out);
 	
 	// Members
 	Own<ObjectDBEntry> object;
@@ -1660,6 +1693,18 @@ Promise<void> FolderInterface::createFile(CreateFileContext ctx) {
 	});
 }
 
+Promise<void> FolderInterface::freeze(FreezeContext ctx) {
+	Temporary<Warehouse::FrozenFolder> target;
+	
+	Promise<void> doFreeze = freezeImpl(locate(kj::Path::parse(ctx.getParams().getPath())), target);
+	
+	return doFreeze
+	.then([target = mv(target), ctx]() mutable {
+		auto ref = getActiveThread().dataService().publish(target.asReader());
+		ctx.initResults().setRef(mv(ref));
+	});
+}
+
 Own<ObjectDBEntry> FolderInterface::locateWriteDir(kj::PathPtr path, bool create) {
 	auto& db = object -> getDb();
 	fsc::db::Transaction t(*db.conn);
@@ -1709,6 +1754,72 @@ Own<ObjectDBEntry> FolderInterface::locate(kj::PathPtr path) {
 	current -> trySync();
 	
 	return current;
+}
+
+Promise<void> FolderInterface::freezeImpl(Own<ObjectDBEntry> e, Warehouse::FrozenFolder::Builder out) {
+	return withODBBackoff([this, e = mv(e), out]() mutable {
+		ObjectDBSnapshot& snap = e -> getSnapshot();
+		
+		std::list<kj::String> tmp;
+		std::list<int64_t> tmp2;
+		
+		auto& q = snap.listFolderEntries.bind(e -> id);
+		while(q.step()) {
+			tmp.push_back(kj::heapString(q[0].asText()));
+			tmp2.push_back(q[1].asInt64());
+		}
+		
+		auto promiseBuilder = kj::heapArrayBuilder<Promise<void>>(tmp.size());
+		
+		auto entries = out.initEntries(tmp.size());
+		for(auto i : kj::indices(entries)) {
+			entries[i].setName(*tmp.begin());
+			promiseBuilder.add(freezeImpl(
+				e -> getDb().open(*tmp2.begin(), snap),
+				entries[i].initValue()
+			));
+			
+			tmp.pop_front();
+			tmp2.pop_front();
+		}
+		
+		return kj::joinPromises(promiseBuilder.finish());
+	});
+}
+
+Promise<void> FolderInterface::freezeImpl(Own<ObjectDBEntry> e, Warehouse::FrozenEntry::Builder out) {
+	return withODBBackoff([this, e = mv(e), out]() mutable -> Promise<void> {
+		auto data = e -> loadPreserved();
+		
+		switch(data -> which()) {
+			case ObjectInfo::UNRESOLVED:
+				out.setUnavailable();
+				return READY_NOW;
+			case ObjectInfo::NULL_VALUE:
+				out.setUnavailable();
+				return READY_NOW;
+			case ObjectInfo::EXCEPTION:
+				out.setUnavailable();
+				return READY_NOW;
+			case ObjectInfo::LINK:
+				return freezeImpl(e -> getDb().unwrapValid(data -> getLink()), out);
+			case ObjectInfo::DATA_REF:
+				out.setDataRef(e -> getDb().wrap(e -> addRef()).castAs<DataRef<>>());
+				return READY_NOW;
+			case ObjectInfo::FOLDER:
+				return freezeImpl(e -> addRef(), out.initFolder());
+			case ObjectInfo::FILE: {
+				if(!data -> hasFile()) {
+					out.initFile().setNullValue();
+					return READY_NOW;
+				} else {
+					return freezeImpl(e -> getDb().unwrapValid(data -> getFile()), out.initFile().initValue());
+				}
+			}
+			default:
+				KJ_FAIL_REQUIRE("Unknown object type");
+		}
+	});
 }
 
 // class DataRefInterface
@@ -1853,11 +1964,11 @@ Maybe<Capability::Client> createInterface(ObjectDBEntry& entry, kj::Badge<Object
 
 namespace fsc {
 	
-Warehouse::Client openWarehouse(db::Connection& conn, kj::StringPtr tablePrefix) {
+Warehouse::Client openWarehouse(db::Connection& conn, kj::StringPtr tablePrefix, bool readOnly) {
 	// Make sure we use a forkable connection
 	conn.fork(true);
 	
-	return kj::refcounted<ObjectDB>(conn, tablePrefix, false);
+	return kj::refcounted<ObjectDB>(conn, tablePrefix, readOnly);
 }
 
 }
