@@ -235,6 +235,7 @@ void bindStructInterface(ClassBinding<T, Params...>& cls) {
 	cls.def("toYaml_", &T::toYaml, py::arg("flow"));
 	cls.def("toDict_", &T::asDict);
 	cls.def("totalBytes_", &T::totalBytes);
+	cls.def_property_readonly("schema_", &T::encodeSchema);
 	
 	cls.def_buffer(&T::buffer);
 }

@@ -4,6 +4,7 @@
 #include "tensor.h"
 
 #include <kj/encoding.h>
+#include <fsc/typing.h>
 
 #include <fsc/yaml.h>
 
@@ -231,6 +232,14 @@ kj::String DynamicStructInterface<StructType>::toYaml(bool flow) {
 	kj::ArrayPtr<char> stringData(const_cast<char*>(emitter -> c_str()), emitter -> size() + 1);
 	
 	return kj::String(stringData.attach(mv(emitter)));
+}
+
+template<typename StructType>
+DynamicStructReader DynamicStructInterface<StructType>::encodeSchema() {
+	Temporary<capnp::schema::Type> type;
+	extractType(this -> getSchema(), type);
+	
+	return DynamicStructReader(Own<const void>(mv(type.holder)), type.asReader());
 }
 
 template<typename StructType>

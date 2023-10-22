@@ -324,6 +324,8 @@ struct DynamicStructInterface : public WithMessage<StructType> {
 	kj::String repr();
 	kj::String toYaml(bool flow);
 	
+	DynamicStructReader encodeSchema();
+	
 	uint32_t size();
 	uint64_t totalBytes();
 	
