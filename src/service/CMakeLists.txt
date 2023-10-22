@@ -40,6 +40,8 @@ set(
 	
 	devices/w7x.capnp	
 	devices/jtext.capnp
+	
+	dynamic.capnp
 )
 
 set(

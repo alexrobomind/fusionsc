@@ -11,26 +11,47 @@ $Java.outerClassname("Warehouse");
 
 using Data = import "data.capnp";
 
-interface Warehouse {
+interface Warehouse {	
 	struct StoredObject {
-		asFolder @0 : Folder;
-		asRef    @1 : Data.DataRef;
-		asFile   @2 : File;
+		
+		asGeneric @0 : GenericObject;
 		
 		union {
-			unresolved @3 : Void;
-			nullValue  @4 : Void;
-			exception  @5 : Rpc.Exception;
-			folder     @6 : Void;
-			file       @7 : Void;
-			dead       @8 : Void;
+			unresolved @1 : Void;
+			nullValue  @2 : Void;
+			exception  @3 : Rpc.Exception;
+			folder     @4 : Folder;
+			file       @5 : File;
+			dead       @6 : Void;
 			
 			dataRef  : group {
 				downloadStatus : union {
-					downloading @9 : Void;
-					finished @10 : Void;
+					downloading @7 : Void;
+					finished @8 : Void;
 				}
+				asRef @9 : Data.DataRef;
 			}
+		}
+	}
+	
+	struct FrozenFolder {
+		struct Entry {
+			name @0 : Text;
+			value @1 : FrozenEntry;
+		}
+		
+		entries @0 : List(Entry);
+	}
+	
+	struct FrozenEntry {
+		union {
+			unavailable @0 : Void;
+			folder @1 : FrozenFolder;
+			file : union {
+				nullValue @2 : Void;
+				value @3 : FrozenEntry;
+			}
+			dataRef @4 : Data.DataRef;
 		}
 	}
 	
@@ -50,6 +71,8 @@ interface Warehouse {
 		mkdir @5 (path : Text) -> (folder : Folder);
 		
 		createFile @6 (path : Text) -> (file : File);
+		
+		freeze @7 (path : Text) -> (ref : Data.DataRef(FrozenFolder));
 	}
 	
 	interface File(StaticType) {
@@ -60,5 +83,8 @@ interface Warehouse {
 		getAny @3 () -> StoredObject;
 	}
 	
-	getRoot @0 () -> (root : Folder);
+	interface GenericObject extends (Data.DataRef, Folder, File) {
+	}
+	
+	getRoot @0 (name : Text = "root") -> (root : Folder);
 }
