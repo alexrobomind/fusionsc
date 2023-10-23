@@ -609,7 +609,7 @@ struct DynamicCapabilityClient : public capnp::DynamicCapability::Client, CapnpO
 	capnp::Type getType() override;
 };
 
-struct DynamicCapabilityServer : public capnp::Capability::Server, CapnpObject {
+struct DynamicCapabilityServer : public capnp::DynamicCapability::Server, CapnpObject {
 	using Server::Server;
 	
 	inline capnp::Type getType() override { KJ_UNIMPLEMENTED(); }
