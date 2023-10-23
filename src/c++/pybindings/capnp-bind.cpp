@@ -15,7 +15,6 @@ using capnp::DynamicEnum;
 using capnp::DynamicList;
 
 using O = fscpy::CapnpObject;
-using P = fscpy::CapnpPointer;
 using R = fscpy::CapnpReader;
 using B = fscpy::CapnpBuilder;
 

@@ -243,7 +243,7 @@ struct DynamicValueReader : public WithMessage<capnp::DynamicValue::Reader>, Cap
 	COPY_WITHOUT_MSG(DynamicValueReader, capnp::Void);
 	COPY_WITHOUT_MSG(DynamicValueReader, capnp::DynamicEnum);
 	COPY_WITHOUT_MSG(DynamicValueReader, capnp::DynamicCapability::Client);
-	COPY_WITHOUT_MSG(DynamicValueReader, DynamicCapabilityClient);
+	// COPY_WITHOUT_MSG(DynamicValueReader, DynamicCapabilityClient);
 	COPY_WITHOUT_MSG(DynamicValueReader, double);
 	COPY_WITHOUT_MSG(DynamicValueReader, int64_t);
 	COPY_WITHOUT_MSG(DynamicValueReader, uint64_t);
@@ -273,7 +273,7 @@ struct DynamicValueBuilder : public WithMessage<capnp::DynamicValue::Builder>, C
 	COPY_WITHOUT_MSG(DynamicValueBuilder, capnp::Void);
 	COPY_WITHOUT_MSG(DynamicValueBuilder, capnp::DynamicEnum);
 	COPY_WITHOUT_MSG(DynamicValueBuilder, capnp::DynamicCapability::Client);
-	COPY_WITHOUT_MSG(DynamicValueBuilder, DynamicCapabilityClient);
+	// COPY_WITHOUT_MSG(DynamicValueBuilder, DynamicCapabilityClient);
 	COPY_WITHOUT_MSG(DynamicValueBuilder, double);
 	COPY_WITHOUT_MSG(DynamicValueBuilder, int64_t);
 	COPY_WITHOUT_MSG(DynamicValueBuilder, uint64_t);
@@ -600,7 +600,7 @@ struct AnyBuilder : public WithMessage<capnp::AnyPointer::Builder>, CapnpBuilder
 	static AnyBuilder cloneFrom(capnp::AnyPointer::Reader);
 };
 
-struct DynamicCapabilityClient : public capnp::Capability::Client, CapnpObject {
+struct DynamicCapabilityClient : public capnp::DynamicCapability::Client, CapnpObject {
 	using Client::Client;
 	
 	DynamicCapabilityClient(Client& c) : Client(c) {}
