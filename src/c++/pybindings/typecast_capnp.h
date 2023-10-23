@@ -261,7 +261,7 @@ namespace pybind11 { namespace detail {
 			capnp::Capability::Client anyCap = src;
 			capnp::DynamicCapability::Client dynamic = src.template castAs<capnp::DynamicCapability>(schema);
 			
-			return type_caster<capnp::DynamicCapability::Client>::cast(dynamic, policy, parent);
+			return type_caster<fscpy::DynamicCapabilityClient>::cast(dynamic, policy, parent);
 		}		
 	};
 	
@@ -308,6 +308,7 @@ namespace pybind11 { namespace detail {
 				case DV::ENUM: return py::cast(src.asEnum()).inc_ref();
 				case DV::CAPABILITY: return py::cast(src.as<capnp::DynamicCapability>()).inc_ref();
 				case DV::ANY_POINTER: return py::cast(src.asAny()).inc_ref();
+				case DV::UNKNOWN: KJ_FAIL_REQUIRE("Unknown builder type");
 			}
 			
 			KJ_UNREACHABLE;
@@ -386,6 +387,7 @@ namespace pybind11 { namespace detail {
 				case DV::STRUCT: return py::cast(src.asStruct()).inc_ref();
 				case DV::ANY_POINTER: return py::cast(src.asAny()).inc_ref();
 				case DV::CAPABILITY: return py::cast(src.as<capnp::DynamicCapability>()).inc_ref();
+				case DV::UNKNOWN: KJ_FAIL_REQUIRE("Unknown builder type");
 			}
 			
 			KJ_UNREACHABLE;

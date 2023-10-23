@@ -190,6 +190,11 @@ capnp::DynamicCapability::Client DynamicValuePipeline::asCapability() {
 // DynamicStructInterface
 
 template<typename StructType>
+capnp::Type DynamicStructInterface<StructType>::getType() {
+	return this -> getSchema();
+}
+
+template<typename StructType>
 DynamicValueType<StructType> DynamicStructInterface<StructType>::get(kj::StringPtr field) {
 	return getCapnp(this -> getSchema().getFieldByName(field));
 }
@@ -377,6 +382,11 @@ DynamicValuePipeline DynamicStructPipeline::getCapnp(capnp::StructSchema::Field 
 // DynamicListInterface
 
 template<typename ListType>
+capnp::Type DynamicListInterface<ListType>::getType() {
+	return this -> getSchema();
+}
+
+template<typename ListType>
 DynamicValueType<ListType> DynamicListInterface<ListType>::get(uint32_t idx) {	
 	return DynamicValueType<ListType>(shareMessage(*this), adjust(this -> getSchema().getElementType(), this -> wrapped()[idx]));
 }
@@ -456,6 +466,12 @@ DynamicListBuilder DynamicListBuilder::cloneFrom(capnp::DynamicList::Reader read
 
 // ----------------------------------------------- Data -----------------------------------------------
 
+// DataCommon
+
+capnp::Type DataCommon::getType() {
+	return capnp::Type::from<capnp::Data>();
+}
+
 // DataReader
 
 DataReader::DataReader(DataBuilder other) :
@@ -504,6 +520,12 @@ DataBuilder DataBuilder::cloneFrom(kj::ArrayPtr<const byte> ref) {
 
 // ----------------------------------------------- Text -----------------------------------------------
 
+// TextCommon
+
+capnp::Type TextCommon::getType() {
+	return capnp::Type::from<capnp::Text>();
+}
+
 // TextReader
 
 TextReader::TextReader(TextBuilder other) :
@@ -542,6 +564,12 @@ TextBuilder TextBuilder::clone() {
 
 // ----------------------------------------------- AnyPointer -----------------------------------------
 
+// AnyCommon
+
+capnp::Type AnyCommon::getType() {
+	return capnp::Type::from<capnp::AnyPointer>();
+}
+
 // AnyReader
 
 AnyReader::AnyReader(AnyBuilder other) :
@@ -570,6 +598,10 @@ void AnyBuilder::setStruct(DynamicStructReader r) {
 	setAs<DynamicStruct>(r.wrapped());
 }
 
+void AnyBuilder::setCap(DynamicCapabilityClient c) {
+	setAs<DynamicCapability::Client>(c.wrapped());
+}
+
 void AnyBuilder::adopt(DynamicOrphan& orphan) {
 	wrapped().adopt(orphan.release());
 }
@@ -590,6 +622,16 @@ AnyBuilder AnyBuilder::cloneFrom(capnp::AnyPointer::Reader ptr) {
 AnyBuilder AnyBuilder::clone() {
 	return AnyBuilder::cloneFrom(*this);
 }
+
+// -------------------------------------------- Capabilities --------------------------------------
+
+// DynamicCapabilityClient
+
+capnp::Type DynamicCapabilityClient::getType() {
+	return this -> getSchema();
+}
+
+// ----------------------------------------------- Orphans ----------------------------------------
 
 // DynamicOrphan
 

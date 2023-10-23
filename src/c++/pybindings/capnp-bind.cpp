@@ -14,6 +14,11 @@ using capnp::DynamicCapability;
 using capnp::DynamicEnum;
 using capnp::DynamicList;
 
+using O = fscpy::CapnpObject;
+using P = fscpy::CapnpPointer;
+using R = fscpy::CapnpReader;
+using B = fscpy::CapnpBuilder;
+
 static const int ANONYMOUS = 0;
 
 namespace fscpy {
@@ -158,22 +163,28 @@ struct ClassBinding : public py::class_<T, Params...> {
 	}
 };
 
-// Pickling support
+void bindRootClasses() {
+	ClassBinding<O>("Object");
+	ClassBinding<R>("Reader");
+	ClassBinding<B>("Builder"):
+}
 
-void bindBlobClasses() {	
-	ClassBinding<DataReader>("DataReader", py::buffer_protocol())
+void bindBlobClasses() {
+	ClassBinding<DataCommon, O>("Data");
+	ClassBinding<DataReader, DataCommon, R>("DataReader", py::buffer_protocol())
 		.withCommon()
 		.withBuffer()
 	;
-	ClassBinding<DataBuilder>("DataBuilder", py::buffer_protocol())
+	ClassBinding<DataBuilder, DataCommon, B>("DataBuilder", py::buffer_protocol())
 		.withCommon()
 		.withBuffer()
 	;
 	
-	ClassBinding<TextReader>("TextReader")
+	ClassBinding<TextCommon, O>();
+	ClassBinding<TextReader, TextCommon, R>("TextReader")
 		.withCommon()
 	;
-	ClassBinding<TextBuilder>("TextBuilder")
+	ClassBinding<TextBuilder, TextCommon, B>("TextBuilder")
 		.withCommon()
 	;
 	
@@ -185,14 +196,16 @@ void bindAnyClasses() {
 	using AR = AnyReader;
 	using AB = AnyBuilder;
 	
-	ClassBinding<AR>("AnyReader")
+	ClassBinding<AnyCommon>("AnyPointer");
+	ClassBinding<AR, AnyCommon, R>("AnyReader")
 		.withCommon()
 	;
 	
-	ClassBinding<AB>("AnyBuilder")
+	ClassBinding<AB, AnyCommon, B>("AnyBuilder")
 		.withCommon()
 		.def("set", &AB::setList)
 		.def("set", &AB::setStruct)
+		.def("set", &AB::setCap)
 		.def("set", &AB::adopt)
 	;
 	
@@ -200,15 +213,17 @@ void bindAnyClasses() {
 }
 
 void bindListClasses() {
+	using L = DynamicListCommon;
 	using LB = DynamicListBuilder;
 	using LR = DynamicListReader;
 	
-	ClassBinding<LB>("ListBuilder", py::buffer_protocol())
+	ClassBinding<L>("List");
+	ClassBinding<LB, L, B>("ListBuilder", py::buffer_protocol())
 		.withListInterface()
 		.def("init", &LB::initList)
 	;
 	
-	ClassBinding<LR>("ListReader", py::buffer_protocol())
+	ClassBinding<LR, L, R>("ListReader", py::buffer_protocol())
 		.withListInterface()
 	;
 	
@@ -241,15 +256,18 @@ void bindStructInterface(ClassBinding<T, Params...>& cls) {
 }
 
 void bindStructClasses() {
+	using S  = DynamicStructCommon;
 	using SB = DynamicStructBuilder;
 	using SR = DynamicStructReader;
 	using SP = DynamicStructPipeline;
 	
-	ClassBinding<SR> reader("StructReader", py::multiple_inheritance(), py::buffer_protocol());
+	ClassBinding<S>("Struct");
+	
+	ClassBinding<SR, S, R> reader("StructReader", py::multiple_inheritance(), py::buffer_protocol());
 	reader
 		.def("__reduce_ex__", &pickleReduceReader)
 	;
-	ClassBinding<SB> builder("StructBuilder", py::multiple_inheritance(), py::buffer_protocol());
+	ClassBinding<SB, S, B> builder("StructBuilder", py::multiple_inheritance(), py::buffer_protocol());
 	builder
 		.withSetitem()
 		
@@ -272,7 +290,7 @@ void bindCapClasses() {
 	using C = DynamicCapabilityClient;
 	using S = DynamicCapabilityServer;
 	
-	ClassBinding<C> client("CapabilityClient", py::multiple_inheritance(), py::metaclass(*baseMetaType));
+	ClassBinding<C, P> client("CapabilityClient", py::multiple_inheritance(), py::metaclass(*baseMetaType));
 	ClassBinding<S> server("CapabilityServer", py::multiple_inheritance(), py::metaclass(*baseMetaType));
 	
 	client

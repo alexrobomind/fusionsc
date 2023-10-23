@@ -11,8 +11,8 @@ using DataRef = import "data.capnp".DataRef;
 
 struct DynamicObject {
 	struct MappingEntry {
-		key : DynamicObject;
-		value : DynamicObject;
+		key   @0 : DynamicObject;
+		value @1 : DynamicObject;
 	}
 	
 	struct DType {
@@ -33,45 +33,45 @@ struct DynamicObject {
 	union {
 		text @0 : Text;
 		data @1 : Data;
-		bigData @15 : DataRef(Data);
+		bigData @2 : DataRef(Data);
 		
-		sequence @2 : List(DynamicObject);
-		mapping  @3 : List(MappingEntry);
+		sequence @3 : List(DynamicObject);
+		mapping  @4 : List(MappingEntry);
 		
 		ref : group {
-			target @4 : DataRef(AnyPointer);
-			wrapped @16 : Bool;
+			target @5 : DataRef(AnyPointer);
+			wrapped @6 : Bool;
 		}
 		
 		dynamicStruct : group {
-			schema @5 : AnyStruct;
-			data @6 : AnyStruct;
+			schema @7 : AnyStruct;
+			data @8 : AnyStruct;
 		}
 		
-		uint64 @4 : UInt64;
-		int64 @5 : Int64;
+		uint64 @9 : UInt64;
+		int64 @10 : Int64;
 		
-		double @6 : Double;
+		double @11 : Float64;
 		
 		array : group {
-			dType @7 : DType;
-			shape @8 : List(UInt64);
+			dType @12 : DType;
+			shape @13 : List(UInt64);
 			
 			union {
-				data @9 : Data;
-				bigData @17 : DataRef(Data);
+				data @14 : Data;
+				bigData @15 : DataRef(Data);
 			}
 		}
 		
 		dynamicObjectArray : group {
-			shape @11 : List(UInt64);
-			data @12 : List(DynamicObject);
+			shape @16 : List(UInt64);
+			data @17 : List(DynamicObject);
 		}
 		
-		pythonBigInt @13 : Data;
+		pythonBigInt @18 : Data;
 		pythonPickle : union {
-			data @14 : Data;
-			bigData @18 : DataRef(Data);
+			data @19 : Data;
+			bigData @20 : DataRef(Data);
 		}
 	}
-};
+}

@@ -8,27 +8,39 @@
 
 namespace fscpy {
 
+struct CapnpObject;
+struct CapnpReader;
+struct CapnpBuilder;
+
 struct DynamicValueReader;
 struct DynamicValueBuilder;
 struct DynamicValuePipeline;
 
+struct DynamicStructCommon;
 struct DynamicStructReader;
 struct DynamicStructBuilder;
 struct DynamicStructPipeline;
 
+struct DynamicListCommon;
 struct DynamicListReader;
 struct DynamicListBuilder;
 
+struct DataCommon;
 struct DataReader;
 struct DataBuilder;
+
+struct TextCommon;
 struct TextReader;
 struct TextBuilder; // Who the f'ck modifies a text in-place anyway?
 
 struct AnyReader;
 struct AnyBuilder;
 
-using DynamicCapabilityClient = capnp::DynamicCapability::Client;
-using DynamicCapabilityServer = capnp::DynamicCapability::Server;
+struct DynamicCapabilityClient;
+struct DynamicCapabilityServer;
+
+// using DynamicCapabilityClient = capnp::DynamicCapability::Client;
+// using DynamicCapabilityServer = capnp::DynamicCapability::Server;
 
 struct EnumInterface;
 
@@ -205,7 +217,17 @@ WithMessage<T> bundleWithMessage(T&& input, MsgSrc&& src) {
 
 // class Definitions
 
-struct DynamicValueReader : public WithMessage<capnp::DynamicValue::Reader> {
+struct CapnpObject {
+	DynamicStructReader encodeSchema();
+	
+	virtual capnp::Type getType() = 0;
+	inline virtual ~CapnpObject() noexcept(false) {};
+};
+
+struct CapnpReader {};
+struct CapnpBuilder {};
+
+struct DynamicValueReader : public WithMessage<capnp::DynamicValue::Reader>, CapnpReader {
 	using WithMessage::WithMessage;
 	
 	inline DynamicValueReader() : WithMessage(nullptr, capnp::Void()) {};
@@ -221,6 +243,7 @@ struct DynamicValueReader : public WithMessage<capnp::DynamicValue::Reader> {
 	COPY_WITHOUT_MSG(DynamicValueReader, capnp::Void);
 	COPY_WITHOUT_MSG(DynamicValueReader, capnp::DynamicEnum);
 	COPY_WITHOUT_MSG(DynamicValueReader, capnp::DynamicCapability::Client);
+	COPY_WITHOUT_MSG(DynamicValueReader, DynamicCapabilityClient);
 	COPY_WITHOUT_MSG(DynamicValueReader, double);
 	COPY_WITHOUT_MSG(DynamicValueReader, int64_t);
 	COPY_WITHOUT_MSG(DynamicValueReader, uint64_t);
@@ -236,7 +259,7 @@ struct DynamicValueReader : public WithMessage<capnp::DynamicValue::Reader> {
 	DynamicValueBuilder clone();
 };
 
-struct DynamicValueBuilder : public WithMessage<capnp::DynamicValue::Builder> {
+struct DynamicValueBuilder : public WithMessage<capnp::DynamicValue::Builder>, CapnpBuilder {
 	using WithMessage::WithMessage;
 	
 	inline DynamicValueBuilder() : WithMessage(nullptr, capnp::Void()) {};
@@ -250,6 +273,7 @@ struct DynamicValueBuilder : public WithMessage<capnp::DynamicValue::Builder> {
 	COPY_WITHOUT_MSG(DynamicValueBuilder, capnp::Void);
 	COPY_WITHOUT_MSG(DynamicValueBuilder, capnp::DynamicEnum);
 	COPY_WITHOUT_MSG(DynamicValueBuilder, capnp::DynamicCapability::Client);
+	COPY_WITHOUT_MSG(DynamicValueBuilder, DynamicCapabilityClient);
 	COPY_WITHOUT_MSG(DynamicValueBuilder, double);
 	COPY_WITHOUT_MSG(DynamicValueBuilder, int64_t);
 	COPY_WITHOUT_MSG(DynamicValueBuilder, uint64_t);
@@ -312,9 +336,15 @@ struct DynamicValuePipeline {
 	}
 };
 
+struct DynamicStructCommon : public CapnpObject {
+	~DynamicStructCommon() noexcept(false) = default;
+};
+
 template<typename StructType>
-struct DynamicStructInterface : public WithMessage<StructType> {
+struct DynamicStructInterface : public WithMessage<StructType>, public DynamicStructCommon {
 	using WithMessage<StructType>::WithMessage;
+	
+	capnp::Type getType() override;
 	
 	DynamicValueType<StructType> get(kj::StringPtr field);
 	DynamicValueType<StructType> getCapnp(capnp::StructSchema::Field field);
@@ -323,8 +353,6 @@ struct DynamicStructInterface : public WithMessage<StructType> {
 	
 	kj::String repr();
 	kj::String toYaml(bool flow);
-	
-	DynamicStructReader encodeSchema();
 	
 	uint32_t size();
 	uint64_t totalBytes();
@@ -360,13 +388,13 @@ struct DynamicStructInterface : public WithMessage<StructType> {
 	inline Iterator end() { return Iterator(*this, this -> size()); }
 };
 
-struct DynamicStructReader : public DynamicStructInterface<capnp::DynamicStruct::Reader> {
+struct DynamicStructReader : public DynamicStructInterface<capnp::DynamicStruct::Reader>, CapnpReader {
 	using DynamicStructInterface::DynamicStructInterface;
 	
 	DynamicStructReader(DynamicStructBuilder other);
 };
 
-struct DynamicStructBuilder : public DynamicStructInterface<capnp::DynamicStruct::Builder> {
+struct DynamicStructBuilder : public DynamicStructInterface<capnp::DynamicStruct::Builder>, CapnpBuilder {
 	using DynamicStructInterface::DynamicStructInterface;
 	
 	void set(kj::StringPtr field, py::object value);
@@ -432,9 +460,15 @@ struct DynamicStructPipeline {
 	inline Iterator end() { return Iterator(*this, this -> size()); }
 };
 
+struct DynamicListCommon : public CapnpObject {
+	~DynamicListCommon() noexcept(false) = default;
+};
+
 template<typename ListType>
-struct DynamicListInterface : public WithMessage<ListType> {
+struct DynamicListInterface : public WithMessage<ListType>, DynamicListCommon {
 	using WithMessage<ListType>::WithMessage;
+	
+	capnp::Type getType() override;
 	
 	DynamicValueType<ListType> get(uint32_t idx);
 	py::buffer_info buffer();
@@ -461,13 +495,13 @@ struct DynamicListInterface : public WithMessage<ListType> {
 	inline Iterator end() { return Iterator(*this, ListType::size()); }
 };
 
-struct DynamicListReader : public DynamicListInterface<capnp::DynamicList::Reader> {
+struct DynamicListReader : public DynamicListInterface<capnp::DynamicList::Reader>, CapnpReader {
 	using DynamicListInterface::DynamicListInterface;
 	
 	DynamicListReader(DynamicListBuilder other);
 };
 
-struct DynamicListBuilder : public DynamicListInterface<capnp::DynamicList::Builder> {	
+struct DynamicListBuilder : public DynamicListInterface<capnp::DynamicList::Builder>, CapnpBuilder {	
 	using DynamicListInterface::DynamicListInterface;
 	
 	// Builder interface
@@ -477,7 +511,12 @@ struct DynamicListBuilder : public DynamicListInterface<capnp::DynamicList::Buil
 	static DynamicListBuilder cloneFrom(capnp::DynamicList::Reader reader);
 };
 
-struct DataReader : public WithMessage<capnp::Data::Reader> {
+struct DataCommon : public CapnpObject {
+	capnp::Type getType() override;
+	~DataCommon() noexcept(false) = default;
+};
+
+struct DataReader : public WithMessage<capnp::Data::Reader>, DataCommon, CapnpReader {
 	using WithMessage::WithMessage;
 	
 	DataReader(DataBuilder);
@@ -490,7 +529,7 @@ struct DataReader : public WithMessage<capnp::Data::Reader> {
 	static DataReader from(kj::Array<const byte>);
 };
 
-struct DataBuilder : public WithMessage<capnp::Data::Builder> {
+struct DataBuilder : public WithMessage<capnp::Data::Builder>, DataCommon, CapnpBuilder {
 	using WithMessage::WithMessage;
 	
 	py::buffer_info buffer();
@@ -502,7 +541,12 @@ struct DataBuilder : public WithMessage<capnp::Data::Builder> {
 	static DataBuilder cloneFrom(kj::ArrayPtr<const byte>);
 };
 
-struct TextReader : public WithMessage<capnp::Text::Reader> {
+struct TextCommon : public CapnpObject {
+	capnp::Type getType() override;
+	~TextCommon() noexcept(false) = default;
+};
+
+struct TextReader : public WithMessage<capnp::Text::Reader>, CapnpReader {
 	using WithMessage::WithMessage;
 	
 	TextReader(TextBuilder);
@@ -514,7 +558,7 @@ struct TextReader : public WithMessage<capnp::Text::Reader> {
 	static TextReader from(kj::String);
 };
 
-struct TextBuilder : public WithMessage<capnp::Text::Builder> {
+struct TextBuilder : public WithMessage<capnp::Text::Builder>, CapnpBuilder {
 	using WithMessage::WithMessage;
 	
 	kj::StringPtr repr();
@@ -524,7 +568,12 @@ struct TextBuilder : public WithMessage<capnp::Text::Builder> {
 	static TextBuilder cloneFrom(kj::StringPtr);
 };
 
-struct AnyReader : public WithMessage<capnp::AnyPointer::Reader> {
+struct AnyCommon : public CapnpObject {
+	capnp::Type getType() override;
+	~AnyCommon() noexcept(false) = default;
+};
+
+struct AnyReader : public WithMessage<capnp::AnyPointer::Reader>, CapnpReader {
 	using WithMessage::WithMessage;
 	
 	AnyReader(AnyBuilder);
@@ -534,13 +583,14 @@ struct AnyReader : public WithMessage<capnp::AnyPointer::Reader> {
 	AnyBuilder clone();
 };
 
-struct AnyBuilder : public WithMessage<capnp::AnyPointer::Builder> {
+struct AnyBuilder : public WithMessage<capnp::AnyPointer::Builder>, CapnpBuilder {
 	using WithMessage::WithMessage;
 	
 	kj::String repr();
 	
 	void setList(DynamicListReader);
 	void setStruct(DynamicStructReader);
+	void setCap(DynamicCapabilityClient);
 	void adopt(DynamicOrphan&);
 	
 	DynamicOrphan disown();
@@ -548,6 +598,21 @@ struct AnyBuilder : public WithMessage<capnp::AnyPointer::Builder> {
 	AnyBuilder clone();
 	
 	static AnyBuilder cloneFrom(capnp::AnyPointer::Reader);
+};
+
+struct DynamicCapabilityClient : public capnp::Capability::Client, CapnpObject {
+	using Client::Client;
+	
+	DynamicCapabilityClient(Client& c) : Client(c) {}
+	DynamicCapabilityClient(Client&& c) : Client(mv(c)) {}
+	
+	capnp::Type getType() override;
+};
+
+struct DynamicCapabilityServer : public capnp::Capability::Server, CapnpObject {
+	using Server::Server;
+	
+	inline capnp::Type getType() override { KJ_UNIMPLEMENTED(); }
 };
 
 struct DynamicOrphan : public WithMessage<capnp::Orphan<capnp::DynamicValue>> {

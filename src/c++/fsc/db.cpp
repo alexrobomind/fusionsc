@@ -29,7 +29,7 @@ Savepoint::Savepoint(Connection& parent) :
 	parent.prepare(kj::str("SAVEPOINT sp_", id))();
 }
 
-Savepoint::~Savepoint() {
+Savepoint::~Savepoint() noexcept(false) {
 	if(active())
 		ud.catchExceptionsIfUnwinding([this]() { release(); });
 }
@@ -56,7 +56,7 @@ Transaction::Transaction(Connection& parent) :
 	savepoint(parent)
 {}
 	
-Transaction::~Transaction() {
+Transaction::~Transaction() noexcept(false) {
 	if(!savepoint.active())
 		return;
 	

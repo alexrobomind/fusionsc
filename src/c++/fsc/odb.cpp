@@ -515,7 +515,7 @@ Promise<void> ObjectDB::syncTask() {
 
 Promise<void> ObjectDB::getRoot(GetRootContext ctx) {
 	return withODBBackoff([this, ctx]() mutable {
-		db::Transaction(*conn);
+		db::Transaction t(*conn);
 		
 		// Look for root
 		auto& q = findRoot.bind(ctx.getParams().getName());
@@ -671,7 +671,7 @@ void ObjectDB::exportStoredObject(Capability::Client c, Warehouse::StoredObject:
 }
 
 void ObjectDB::deleteIfOrphan(int64_t id) {
-	db::Transaction(*conn);
+	db::Transaction t(*conn);
 	
 	KJ_REQUIRE(!readOnly);
 	
