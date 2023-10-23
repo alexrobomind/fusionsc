@@ -1,3 +1,4 @@
+from . import capnp
 from . import service
 from . import backends
 from . import wrappers
@@ -124,7 +125,7 @@ class Unknown(Folder, File, wrappers.RefWrapper):
 		super().__init__(backend)
 		wrappers.RefWrapper.__init__(self, backend)
 
-def _encode(obj: Storable) -> service.CapabilityClient):
+def _encode(obj: Storable) -> capnp.CapabilityClient):
 	if isinstance(obj, service.DataRef):
 		return obj
 	

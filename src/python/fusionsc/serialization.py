@@ -1,3 +1,4 @@
+"""This module extends the native storage capabilities to dynamically wrapped python objects"""
 from service import DynamicObject
 from . import data
 import collections.abc
@@ -5,6 +6,8 @@ import sys
 import wrappers
 
 import numpy as np
+
+from typing import Any, Optional
 
 _endianMap = {
 	'>': 'big',
@@ -17,7 +20,30 @@ _maxInt = 2**64
 _minInt = -2**63 + 1
 _maxLen = 2**29 # Maximum size for inline data
 
-def dump(obj, builder = None, pickle = False):
+def wrap(obj: Any):
+	if isinstance(obj, capnp.DynamicStructReader):
+		return obj
+	
+	if isinstance(obj, capnp.DynamicStructBuilder):
+		return obj
+	
+	if isinstance(obj, capnp.DynamicCapabilityClient):
+		return obj
+	
+	return dump(obj)
+
+@asyncFunction
+def unwrap(obj):
+	if isinstance(obj, service.DynamicObject.Reader):
+		return load.asnc(obj)
+	
+	if isinstance(obj, service.DynamicObject.Builder):
+		return load.asnc(obj)
+	
+	return obj
+		
+
+def dump(obj: Any, builder: Optional[service.DynamicObject.Builder] = None, pickle: bool = False):
 	if builder is None:
 		builder = DynamicObject.newMessage()
 		
@@ -54,12 +80,12 @@ def dump(obj, builder = None, pickle = False):
 		dtype = obj.dtype
 		
 		array = builder.initArray()
-		odt = array.initDType()
+		odt = array.dType
 		
 		if dtype.kind == "b":
 			odt.bool = True
 		elif dtype.kind in "iuf":
-			numeric = odt.initNUmeric()
+			numeric = odt.initNumeric()
 			
 			if dtype.kind == "i":
 				numeric.base.signedInteger = True
@@ -83,10 +109,10 @@ def dump(obj, builder = None, pickle = False):
 		array = builder.initObjectArray()
 		array.shape = obj.shape
 		
-		flat = array.flatten()
+		flat = obj.flatten()
 		out = array.initData(len(flat))
 		
-		for i, el in enumerate(array.flatten()):
+		for i, el in enumerate(flat):
 			serializeInto(el, out[i])
 		
 	elif isinstance(obj, collections.abc.Sequence):
@@ -115,7 +141,7 @@ def dump(obj, builder = None, pickle = False):
 	return builder
 
 @asyncFunction
-async def load(reader, pickle = False):
+async def load(reader: service.DynamicObject.Reader, pickle: bool = False):
 	which = reader.which_()
 	if which == "text":
 		return reader.text

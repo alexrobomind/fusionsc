@@ -47,8 +47,10 @@ Maybe<capnp::Type> getPayloadType(LocalDataRef<> dataRef) {
 }
 	
 DynamicValueReader openRef(capnp::Type payloadType, LocalDataRef<> dataRef) {	
-	// Create a keepAlive object
-	py::object keepAlive = unknownObject(dataRef);
+	// "Data" type payloads do not have a root pointer. They are NO capnp messages.
+	if(dataRef.getFormat().isRaw()) {
+		return DataReader::from(dataRef.forkRaw());
+	}
 	
 	auto inferredType = getPayloadType(dataRef);
 	if(payloadType.isAnyPointer()) {
@@ -63,23 +65,25 @@ DynamicValueReader openRef(capnp::Type payloadType, LocalDataRef<> dataRef) {
 		}
 	}
 	
-	// "Data" type payloads do not have a root pointer. They are NO capnp messages.
-	if(payloadType.isData()) {		
-		return DataReader::from(dataRef.forkRaw());
-	} else {
-		capnp::AnyPointer::Reader root = dataRef.get();
-		
-		if(payloadType.isInterface()) {
-			auto schema = payloadType.asInterface();
-			return root.getAs<capnp::DynamicCapability>(schema);
-		}
-		if(payloadType.isStruct()) {
-			auto schema = payloadType.asStruct();
-			return DynamicStructReader(kj::heap(dataRef), root.getAs<capnp::DynamicStruct>(schema));
-		}
-		
-		KJ_FAIL_REQUIRE("DataRefs can only carry interface, struct or data types (or AnyPointer if unknown)");
+	capnp::AnyPointer::Reader root = dataRef.get();
+	
+	if(payloadType.isInterface()) {
+		auto schema = payloadType.asInterface();
+		return root.getAs<capnp::DynamicCapability>(schema);
 	}
+	if(payloadType.isStruct()) {
+		auto schema = payloadType.asStruct();
+		return DynamicStructReader(kj::heap(dataRef), root.getAs<capnp::DynamicStruct>(schema));
+	}
+	if(payloadType.isData()) {
+		return DataReader(kj::heap(dataRef), root.getAs<capnp::Data>());
+	}
+	if(payloadType.isList()) {
+		auto schema = payloadType.asList();
+		return DynamicListReader(kj::heap(dataRef), root.getAs<capnp::DynamicList>(schema));
+	}
+	
+	KJ_FAIL_REQUIRE("DataRefs can only carry pointer types (interface, struct, data, text)");
 }
 	
 Promise<DynamicValueReader> download(capnp::DynamicCapability::Client capability) {
@@ -98,15 +102,29 @@ Promise<DynamicValueReader> download(capnp::DynamicCapability::Client capability
 	return promise;
 }
 
-capnp::DynamicCapability::Client publishReader(DynamicStructReader value) {	
+capnp::DynamicCapability::Client publishReader(DynamicValueReader value) {
 	auto dataRefSchema = createRefSchema(value.getSchema());
 	
+	auto& ds = getActiveThread().dataService();
+	
 	// Publish DataRef and convert to correct type
-	capnp::Capability::Client asAny = getActiveThread().dataService().publish(value.wrapped());
+	capnp::Capability::Client asAny = nullptr;
+	
+	switch(value.getType()) {
+		case capnp::DynamicValue::DATA:
+			asAny = ds.publish(value.asData().getWrapped());
+			break;
+		case capnp::DynamicValue::STRUCT:
+			asAny = ds.publish(value.asStruct().getWrapped());
+			break;
+		default:
+			KJ_FAIL_REQUIRE("Can only publish data blobs and struct readers");
+	}
+	
 	return asAny.castAs<capnp::DynamicCapability>(dataRefSchema);
 }
 
-capnp::DynamicCapability::Client publishBuilder(DynamicStructBuilder dsb) {
+capnp::DynamicCapability::Client publishBuilder(DynamicValueBuilder dsb) {
 	return publishReader(dsb);
 }
 
