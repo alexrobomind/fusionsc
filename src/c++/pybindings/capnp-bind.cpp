@@ -165,7 +165,7 @@ struct ClassBinding : public py::class_<T, Params...> {
 void bindRootClasses() {
 	ClassBinding<O>("Object");
 	ClassBinding<R>("Reader");
-	ClassBinding<B>("Builder"):
+	ClassBinding<B>("Builder");
 }
 
 void bindBlobClasses() {
@@ -289,7 +289,7 @@ void bindCapClasses() {
 	using C = DynamicCapabilityClient;
 	using S = DynamicCapabilityServer;
 	
-	ClassBinding<C, P> client("CapabilityClient", py::multiple_inheritance(), py::metaclass(*baseMetaType));
+	ClassBinding<C, O> client("CapabilityClient", py::multiple_inheritance(), py::metaclass(*baseMetaType));
 	ClassBinding<S> server("CapabilityServer", py::multiple_inheritance(), py::metaclass(*baseMetaType));
 	
 	client

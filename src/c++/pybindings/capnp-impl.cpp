@@ -31,6 +31,16 @@ namespace {
 		return target;
 	}
 }
+
+// ------------------------------------------------- Object ---------------------------------------------------
+
+
+DynamicStructReader CapnpObject::encodeSchema() {
+	Temporary<capnp::schema::Type> type;
+	extractType(getType(), type);
+	
+	return DynamicStructReader(Own<const void>(mv(type.holder)), type.asReader());
+}
 	
 // ------------------------------------------------- Message --------------------------------------------------
 
@@ -237,14 +247,6 @@ kj::String DynamicStructInterface<StructType>::toYaml(bool flow) {
 	kj::ArrayPtr<char> stringData(const_cast<char*>(emitter -> c_str()), emitter -> size() + 1);
 	
 	return kj::String(stringData.attach(mv(emitter)));
-}
-
-template<typename StructType>
-DynamicStructReader DynamicStructInterface<StructType>::encodeSchema() {
-	Temporary<capnp::schema::Type> type;
-	extractType(this -> getSchema(), type);
-	
-	return DynamicStructReader(Own<const void>(mv(type.holder)), type.asReader());
 }
 
 template<typename StructType>
@@ -567,7 +569,7 @@ TextBuilder TextBuilder::clone() {
 // AnyCommon
 
 capnp::Type AnyCommon::getType() {
-	return capnp::Type::from<capnp::AnyPointer>();
+	return capnp::schema::Type::AnyPointer::Unconstrained::ANY_KIND;
 }
 
 // AnyReader
@@ -599,7 +601,7 @@ void AnyBuilder::setStruct(DynamicStructReader r) {
 }
 
 void AnyBuilder::setCap(DynamicCapabilityClient c) {
-	setAs<DynamicCapability::Client>(c.wrapped());
+	setAs<DynamicCapability>((DynamicCapability::Client&&) c);
 }
 
 void AnyBuilder::adopt(DynamicOrphan& orphan) {

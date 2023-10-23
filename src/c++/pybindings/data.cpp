@@ -102,8 +102,8 @@ Promise<DynamicValueReader> download(capnp::DynamicCapability::Client capability
 	return promise;
 }
 
-capnp::DynamicCapability::Client publishReader(DynamicValueReader value) {
-	auto dataRefSchema = createRefSchema(value.getSchema());
+DynamicCapabilityClient publishReader(DynamicValueReader value) {
+	capnp::Type baseType;
 	
 	auto& ds = getActiveThread().dataService();
 	
@@ -112,19 +112,22 @@ capnp::DynamicCapability::Client publishReader(DynamicValueReader value) {
 	
 	switch(value.getType()) {
 		case capnp::DynamicValue::DATA:
-			asAny = ds.publish(value.asData().getWrapped());
+			asAny = ds.publish(value.asData().wrapped());
+			baseType = capnp::Type::from<capnp::Data>();
 			break;
 		case capnp::DynamicValue::STRUCT:
-			asAny = ds.publish(value.asStruct().getWrapped());
+			asAny = ds.publish(value.asStruct().wrapped());
+			baseType = value.asStruct().getSchema();
 			break;
 		default:
 			KJ_FAIL_REQUIRE("Can only publish data blobs and struct readers");
 	}
 	
+	auto dataRefSchema = createRefSchema(baseType);
 	return asAny.castAs<capnp::DynamicCapability>(dataRefSchema);
 }
 
-capnp::DynamicCapability::Client publishBuilder(DynamicValueBuilder dsb) {
+DynamicCapabilityClient publishBuilder(DynamicValueBuilder dsb) {
 	return publishReader(dsb);
 }
 

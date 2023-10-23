@@ -546,7 +546,7 @@ struct TextCommon : public CapnpObject {
 	~TextCommon() noexcept(false) = default;
 };
 
-struct TextReader : public WithMessage<capnp::Text::Reader>, CapnpReader {
+struct TextReader : public WithMessage<capnp::Text::Reader>, TextCommon, CapnpReader {
 	using WithMessage::WithMessage;
 	
 	TextReader(TextBuilder);
@@ -558,7 +558,7 @@ struct TextReader : public WithMessage<capnp::Text::Reader>, CapnpReader {
 	static TextReader from(kj::String);
 };
 
-struct TextBuilder : public WithMessage<capnp::Text::Builder>, CapnpBuilder {
+struct TextBuilder : public WithMessage<capnp::Text::Builder>, TextCommon, CapnpBuilder {
 	using WithMessage::WithMessage;
 	
 	kj::StringPtr repr();
@@ -573,7 +573,7 @@ struct AnyCommon : public CapnpObject {
 	~AnyCommon() noexcept(false) = default;
 };
 
-struct AnyReader : public WithMessage<capnp::AnyPointer::Reader>, CapnpReader {
+struct AnyReader : public WithMessage<capnp::AnyPointer::Reader>, AnyCommon, CapnpReader {
 	using WithMessage::WithMessage;
 	
 	AnyReader(AnyBuilder);
@@ -583,7 +583,7 @@ struct AnyReader : public WithMessage<capnp::AnyPointer::Reader>, CapnpReader {
 	AnyBuilder clone();
 };
 
-struct AnyBuilder : public WithMessage<capnp::AnyPointer::Builder>, CapnpBuilder {
+struct AnyBuilder : public WithMessage<capnp::AnyPointer::Builder>, AnyCommon, CapnpBuilder {
 	using WithMessage::WithMessage;
 	
 	kj::String repr();

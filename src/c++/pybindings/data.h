@@ -15,7 +15,7 @@ DynamicValueReader openRef(capnp::Type payloadType, LocalDataRef<> dataRef);
 	
 Promise<DynamicValueReader> download(capnp::DynamicCapability::Client capability);
 
-capnp::DynamicCapability::Client publishReader(DynamicStructReader value);
-capnp::DynamicCapability::Client publishBuilder(DynamicStructBuilder dsb);
+DynamicCapabilityClient publishReader(DynamicValueReader value);
+DynamicCapabilityClient publishBuilder(DynamicValueBuilder dsb);
 
 }
