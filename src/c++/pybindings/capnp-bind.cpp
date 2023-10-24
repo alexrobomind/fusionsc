@@ -216,7 +216,7 @@ void bindListClasses() {
 	using LB = DynamicListBuilder;
 	using LR = DynamicListReader;
 	
-	ClassBinding<L>("List");
+	ClassBinding<L, O>("List");
 	ClassBinding<LB, L, B>("ListBuilder", py::buffer_protocol())
 		.withListInterface()
 		.def("init", &LB::initList)
@@ -260,7 +260,7 @@ void bindStructClasses() {
 	using SR = DynamicStructReader;
 	using SP = DynamicStructPipeline;
 	
-	ClassBinding<S>("Struct");
+	ClassBinding<S, O>("Struct");
 	
 	ClassBinding<SR, S, R> reader("StructReader", py::multiple_inheritance(), py::buffer_protocol());
 	reader
