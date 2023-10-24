@@ -91,6 +91,17 @@ namespace pybind11 { namespace detail {
 	struct type_caster<fscpy::DynamicStructPipeline> : public PolymorphicDispatchCaster<fscpy::DynamicStructPipeline> {	
 	};
 	
+	template<>
+	struct type_caster<capnp::DynamicCapability::Client> : public type_caster<fscpy::DynamicCapabilityClient> {
+		inline operator capnp::DynamicCapability::Client&() {
+			return operator fscpy::DynamicCapabilityClient&();
+		}
+		
+		/*inline operator capnp::DynamicCapability::Client&&() {
+			return operator fscpy::DynamicCapabilityClient&&();
+		}*/
+	};
+	
 	// Dynamic <-> Static casters for static classes w/ messages
 			
 	template<typename Builder>
@@ -217,6 +228,9 @@ namespace pybind11 { namespace detail {
 		
 		template<>
 		struct CastThisCap_<capnp::DynamicCapability> { static constexpr bool val = false; };
+		
+		template<>
+		struct CastThisCap_<fscpy::DynamicCapabilityClient> { static constexpr bool val = false; };
 		
 		template<typename T>
 		constexpr bool castThisCap() { return CastThisCap_<T>::val; }
