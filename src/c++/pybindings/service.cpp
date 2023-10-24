@@ -16,6 +16,7 @@
 #include <fsc/magnetics.h>
 #include <fsc/offline.capnp.h>
 #include <fsc/hint.capnp.h>
+#include <fsc/dynamic.capnp.h>
 
 using capnp::DynamicValue;
 using capnp::DynamicList;
@@ -77,7 +78,7 @@ namespace fscpy {
 		
 		#define FSC_BUILTIN_SCHEMAS FieldResolver, GeometryResolver, NetworkInterface, LocalResources, OfflineData, \
 			MergedGeometry, FLTStopReason, HintEquilibrium, ReversibleFieldlineMapping, \
-			SimpleHttpServer
+			SimpleHttpServer, Warehouse, Warehouse::Folder, DynamicObject
 		
 		defaultLoader.addBuiltin<
 			capnp::schema::Node,

@@ -45,7 +45,7 @@ def publish(data: Union[capnp.StructReader, capnp.DataReader]) -> service.DataRe
 	return cloneResult
 
 @asyncFunction
-def download(ref: service.DataRef) -> asnc.Future[Union[capnp.CapabilityClient, capnp.StructReader, capnp.DataReader]]:
+async def download(ref: service.DataRef) -> asnc.Future[Union[capnp.CapabilityClient, capnp.StructReader, capnp.DataReader]]:
 	"""
 	Retrieves a local copy of the information stored in 'ref'. If possible, transfer of data will be avoided. The retrieved data
 	are immutable and the backing storage is shared across all users in this process. If 'ref' was obtained from an archive file,

@@ -179,7 +179,7 @@ void bindBlobClasses() {
 		.withBuffer()
 	;
 	
-	ClassBinding<TextCommon, O>();
+	ClassBinding<TextCommon, O>("Text");
 	ClassBinding<TextReader, TextCommon, R>("TextReader")
 		.withCommon()
 	;
@@ -359,14 +359,25 @@ void initCapnp(py::module_& m) {
 	
 	#define CHECK() if(PyErr_Occurred()) throw py::error_already_set();
 	
+	KJ_DBG("A");
+	bindRootClasses();
+	KJ_DBG("A");
 	bindListClasses();
+	KJ_DBG("A");
 	bindBlobClasses();
+	KJ_DBG("A");
 	bindStructClasses();
+	KJ_DBG("A");
 	bindFieldDescriptors();
+	KJ_DBG("A");
 	bindCapClasses();
+	KJ_DBG("A");
 	bindEnumClasses();
+	KJ_DBG("A");
 	bindAnyClasses();
+	KJ_DBG("A");
 	bindUnpicklers();
+	KJ_DBG("A");
 	
 	capnpModule = py::module();
 	
