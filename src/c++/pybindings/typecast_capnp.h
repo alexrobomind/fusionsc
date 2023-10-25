@@ -294,7 +294,8 @@ namespace pybind11 { namespace detail {
 						value = (Type&) caster; \
 						return true; \
 					} \
-				}		
+					if(PyErr_Occurred()) { throw py::error_already_set(); } \
+				} \
 			
 			FSCPY_TRY_CAST(fscpy::DynamicStructBuilder)
 			FSCPY_TRY_CAST(fscpy::DynamicListBuilder)

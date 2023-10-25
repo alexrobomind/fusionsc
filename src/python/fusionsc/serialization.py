@@ -2,6 +2,7 @@
 import collections.abc
 import sys
 import numpy as np
+import abc
 
 from typing import Any, Optional
 from .wrappers import asyncFunction
@@ -9,6 +10,7 @@ from .wrappers import asyncFunction
 from . import data
 from . import service
 from . import wrappers
+from . import capnp
 
 _endianMap = {
 	'>': 'big',
@@ -46,7 +48,7 @@ def unwrap(obj):
 
 def dump(obj: Any, builder: Optional[service.DynamicObject.Builder] = None, pickle: bool = False):
 	if builder is None:
-		builder = DynamicObject.newMessage()
+		builder = service.DynamicObject.newMessage()
 		
 	if isinstance(obj, str):
 		builder.text = obj
@@ -61,10 +63,10 @@ def dump(obj: Any, builder: Optional[service.DynamicObject.Builder] = None, pick
 		builder.initRef().target = obj.ref
 		builder.ref.wrapped = True
 	
-	elif isinstance(obj, capnp.DataRef):
+	elif isinstance(obj, service.DataRef):
 		builder.initRef().target = obj
 	
-	elif isinstance(obj, capnp.StructReader) or isinstance(obj, capnp.StructBuilder):
+	elif isinstance(obj, capnp.Struct):
 		ds = builder.initDynamicStruct()
 		ds.schema = obj.schema_
 		ds.data = obj
