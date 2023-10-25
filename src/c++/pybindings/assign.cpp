@@ -152,6 +152,10 @@ void assign(const BuilderSlot& dst, py::object object) {
 		}
 	}
 	
+	if(PyErr_Occurred()) {
+		throw py::error_already_set();
+	}
+	
 	// Attempt 4: Try to assign from a dict
 	if(py::dict::check_(object) && dst.type.isStruct()) {
 		auto asDict = py::reinterpret_borrow<py::dict>(object);

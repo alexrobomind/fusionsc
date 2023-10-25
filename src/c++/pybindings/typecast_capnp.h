@@ -294,8 +294,7 @@ namespace pybind11 { namespace detail {
 						value = (Type&) caster; \
 						return true; \
 					} \
-					if(PyErr_Occurred()) { throw py::error_already_set(); } \
-				} \
+				}		
 			
 			FSCPY_TRY_CAST(fscpy::DynamicStructBuilder)
 			FSCPY_TRY_CAST(fscpy::DynamicListBuilder)
@@ -359,7 +358,7 @@ namespace pybind11 { namespace detail {
 				if(PyBytes_AsStringAndSize(asBytes.ptr(), &buffer, &length) != 0)
 					throw py::error_already_set();
 				
-				value = fscpy::DataReader(kj::heap(src), kj::ArrayPtr<const kj::byte>((const kj::byte*) buffer, (size_t) length));
+				value = fscpy::DataReader(kj::heap(asBytes), kj::ArrayPtr<const kj::byte>((const kj::byte*) buffer, (size_t) length));
 				return true;
 			}
 						

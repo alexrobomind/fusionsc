@@ -74,10 +74,14 @@ def dump(obj: Any, builder: Optional[service.DynamicObject.Builder] = None, pick
 	elif isinstance(obj, int):
 		if obj >= 0 and obj < _maxInt:
 			builder.uint64 = obj
-		elif obj > _minInt:
+		elif obj < 0 and obj > _minInt:
 			builder.int64 = obj
 		else:
-			builder.pythonBigInt = obj.to_bytes(byteorder='little', signed = True)
+			# Number of bits needed is no. of bits neede for abs
+			# value + 1 due to 2-complement signed representation.
+			# Rounded up needs another 7 bits.
+			numBytes = (obj.bit_length() + 8) // 8
+			builder.pythonBigInt = obj.to_bytes(length = numBytes, byteorder='little', signed = True)
 		
 	elif isinstance(obj, np.array) and obj.dtype.kind in "biuf":
 		dtype = obj.dtype
@@ -150,7 +154,7 @@ async def load(reader: service.DynamicObject.Reader, pickle: bool = False):
 		return reader.text
 	
 	if which == "data":
-		return reader.data
+		return memoryview(reader.data)
 	
 	if which == "bigData":
 		return await data.download(reader.bigData)
@@ -218,7 +222,7 @@ async def load(reader: service.DynamicObject.Reader, pickle: bool = False):
 		return np.asarray([await load(e, pickle) for e in reader.objectArray.data]).reshape(reader.objectArray.shape)
 	
 	if which == "pythonBigInt":
-		return int.from_bytes(byteorder="little", signed = True)
+		return int.from_bytes(bytes = reader.pythonBigInt, byteorder="little", signed = True)
 	
 	if which == "pythonPickle":
 		assert pickle, "Loading from pickle requires explicit permission (due to the associated security risks)"

@@ -91,6 +91,9 @@ Maybe<DynamicValueReader> dynamicValueFromScalar(py::handle handle) {
 		if(py::isinstance<pytype>(handle)) { \
 			pytype typed = py::reinterpret_borrow<pytype>(handle); \
 			ctype cTyped = static_cast<ctype>(typed); \
+			if(PyErr_Occurred()) \
+				throw py::error_already_set(); \
+			\
 			return DynamicValueReader(kj::attachRef(ANONYMOUS), cTyped); \
 		}
 		
@@ -359,25 +362,15 @@ void initCapnp(py::module_& m) {
 	
 	#define CHECK() if(PyErr_Occurred()) throw py::error_already_set();
 	
-	KJ_DBG("A");
 	bindRootClasses();
-	KJ_DBG("A");
 	bindListClasses();
-	KJ_DBG("A");
 	bindBlobClasses();
-	KJ_DBG("A");
 	bindStructClasses();
-	KJ_DBG("A");
 	bindFieldDescriptors();
-	KJ_DBG("A");
 	bindCapClasses();
-	KJ_DBG("A");
 	bindEnumClasses();
-	KJ_DBG("A");
 	bindAnyClasses();
-	KJ_DBG("A");
 	bindUnpicklers();
-	KJ_DBG("A");
 	
 	capnpModule = py::module();
 	
