@@ -30,7 +30,7 @@ def openArchive(filename: str) -> service.DataRef:
 	return native.data.openArchive(filename, backends.localResources())
 	
 
-def publish(data: Union[capnp.StructReader, capnp.DataReader]) -> service.DataRef:
+def publish(data: Any) -> service.DataRef -> service.DataRef.Client:
 	"""
 	Copies the provided data and provides a DataRef to the in-memory copy.
 	
@@ -45,7 +45,7 @@ def publish(data: Union[capnp.StructReader, capnp.DataReader]) -> service.DataRe
 	return cloneResult
 
 @asyncFunction
-async def download(ref: service.DataRef) -> asnc.Future[Union[capnp.CapabilityClient, capnp.StructReader, capnp.DataReader]]:
+async def download(ref: service.DataRef) -> asnc.Future[Any]:
 	"""
 	Retrieves a local copy of the information stored in 'ref'. If possible, transfer of data will be avoided. The retrieved data
 	are immutable and the backing storage is shared across all users in this process. If 'ref' was obtained from an archive file,
@@ -62,7 +62,7 @@ async def download(ref: service.DataRef) -> asnc.Future[Union[capnp.CapabilityCl
 	return serialization.unwrap.asnc(data)
 
 @asyncFunction
-def writeArchive(data: Union[capnp.StructReader, capnp.CapabilityClient], filename: str):
+def writeArchive(data: Any, filename: str) -> asnc.Future:
 	"""
 	Writes a copy of 'data' into a local archive file. All transitively contained DataRefs will be downloaded and a copy of them
 	will be stored in this file. This ensures that an archive always contains a complete copy of all information needed to reconstruct
@@ -76,7 +76,7 @@ def writeArchive(data: Union[capnp.StructReader, capnp.CapabilityClient], filena
 	return backends.localResources().writeArchive(filename, ref)
 
 @asyncFunction
-def readArchive(filename: str) -> asnc.Future[Union[capnp.CapabilityClient, capnp.StructReader]]:
+def readArchive(filename: str) -> asnc.Future[Any]:
 	"""
 	Opens the given archive file, maps the root node into memory and returns a typed view to the memory-mapped data.
 	
