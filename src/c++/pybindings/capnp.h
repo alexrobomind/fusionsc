@@ -581,6 +581,7 @@ struct AnyReader : public WithMessage<capnp::AnyPointer::Reader>, AnyCommon, Cap
 	kj::String repr();
 	
 	AnyBuilder clone();
+	DynamicValueReader interpretAs(capnp::Type);
 };
 
 struct AnyBuilder : public WithMessage<capnp::AnyPointer::Builder>, AnyCommon, CapnpBuilder {
@@ -596,6 +597,8 @@ struct AnyBuilder : public WithMessage<capnp::AnyPointer::Builder>, AnyCommon, C
 	DynamicOrphan disown();
 	
 	AnyBuilder clone();
+	
+	DynamicValueBuilder interpretAs(capnp::Type);
 	
 	static AnyBuilder cloneFrom(capnp::AnyPointer::Reader);
 };
@@ -630,7 +633,7 @@ struct EnumInterface : public capnp::DynamicEnum {
 	inline EnumInterface(const capnp::DynamicEnum& other) : DynamicEnum(other) {}
 	
 	kj::String repr();
-	bool eq1(DynamicEnum& other);
+	bool eq1(EnumInterface& other);
 	bool eq2(uint16_t other);
 	bool eq3(kj::StringPtr other);
 };

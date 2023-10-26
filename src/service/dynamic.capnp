@@ -23,9 +23,18 @@ struct DynamicObject {
 					float @1 : Void;
 					unsignedInt @2 : Void;
 					signedInt @3 : Void;
+					complex @4 : Void;
 				}
-				littleEndian @4 : Bool;
-				numBytes @5 : UInt8;
+				littleEndian @5 : Bool;
+				numBytes @6 : UInt8;
+			}
+			special : group {
+				union {
+					byteArray @7 : Void;
+					unicodeString @8 : Void;
+				}
+				littleEndian @9 : Bool;
+				length @10 : UInt64;
 			}
 		}
 	}
@@ -53,6 +62,16 @@ struct DynamicObject {
 		
 		double @11 : Float64;
 		
+		complex : group {
+			real @21 : Float64;
+			imag @22 : Float64;
+		}
+		
+		dynamicEnum : group {
+			schema @23 : AnyStruct;
+			value  @24 : UInt16;
+		}
+		
 		array : group {
 			dType @12 : DType;
 			shape @13 : List(UInt64);
@@ -66,6 +85,12 @@ struct DynamicObject {
 		dynamicObjectArray : group {
 			shape @16 : List(UInt64);
 			data @17 : List(DynamicObject);
+		}
+		
+		enumArray : group {
+			schema @25 : AnyStruct;
+			shape @26 : List(UInt64);
+			data @27 : List(UInt16);
 		}
 		
 		pythonBigInt @18 : Data;

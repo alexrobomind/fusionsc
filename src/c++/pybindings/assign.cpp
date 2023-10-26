@@ -159,7 +159,7 @@ void assign(const BuilderSlot& dst, py::object object) {
 	// Attempt 4: Try to assign from a dict
 	if(py::dict::check_(object) && dst.type.isStruct()) {
 		auto asDict = py::reinterpret_borrow<py::dict>(object);
-		auto dstAsStruct = dst.get().as<DynamicStruct>();
+		auto dstAsStruct = dst.init().as<DynamicStruct>();
 		
 		for(auto item : asDict) {
 			pybind11::detail::make_caster<kj::StringPtr> keyCaster;
@@ -175,7 +175,7 @@ void assign(const BuilderSlot& dst, py::object object) {
 				try {
 					assign(FieldSlot(dstAsStruct, *pField), py::reinterpret_borrow<py::object>(item.second));
 				} catch(std::exception e) {
-					assignmentFailureLog = strTree(mv(assignmentFailureLog), "Skipped assigning from dict because assignment of field failed\n", fieldName, e.what());
+					assignmentFailureLog = strTree(mv(assignmentFailureLog), "Skipped assigning from dict because assignment of field failed\nField name: ", fieldName, "\nError: ", e.what(), "\n");
 					goto dict_assignment_failed;
 				}
 			} else {

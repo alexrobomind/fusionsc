@@ -348,11 +348,13 @@ struct AsyncioFutureAdapter {
 		void call(py::object future) {
 			if(!valid)
 				return;
-						
-			auto success = parent.fulfiller.rejectIfThrows([this, future]() mutable {
+			
+			try {
 				auto result = future.attr("result")();
 				parent.fulfiller.fulfill(mv(result));
-			});
+			} catch(py::error_already_set& e) {
+				parent.fulfiller.reject(convertPyError(e));
+			}
 		}
 		
 		FulfillerCallback(AsyncioFutureAdapter& parent) :

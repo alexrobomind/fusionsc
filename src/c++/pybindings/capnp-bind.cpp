@@ -7,6 +7,10 @@
 #include "loader.h"
 #include "pickle.h"
 
+#include <fsc/common.h>
+
+#include <pybind11/operators.h>
+
 using capnp::AnyPointer;
 using capnp::DynamicValue;
 using capnp::DynamicStruct;
@@ -18,94 +22,7 @@ using O = fscpy::CapnpObject;
 using R = fscpy::CapnpReader;
 using B = fscpy::CapnpBuilder;
 
-static const int ANONYMOUS = 0;
-
 namespace fscpy {
-
-Maybe<DynamicValueReader> dynamicValueFromScalar(py::handle handle) {
-	// 0D arrays
-	if(PyArray_IsZeroDim(handle.ptr())) {
-		PyArrayObject* scalarPtr = reinterpret_cast<PyArrayObject*>(handle.ptr());
-		
-		switch(PyArray_TYPE(scalarPtr)) {
-			#define HANDLE_NPY_TYPE(npytype, ctype) \
-				case npytype: { \
-					ctype* data = static_cast<ctype*>(PyArray_DATA(scalarPtr)); \
-					return DynamicValueReader(kj::attachRef(ANONYMOUS), *data); \
-				}
-						
-			HANDLE_NPY_TYPE(NPY_INT8,  int8_t);
-			HANDLE_NPY_TYPE(NPY_INT16, int16_t);
-			HANDLE_NPY_TYPE(NPY_INT32, int32_t);
-			HANDLE_NPY_TYPE(NPY_INT64, int64_t);
-			
-			HANDLE_NPY_TYPE(NPY_UINT8,  uint8_t);
-			HANDLE_NPY_TYPE(NPY_UINT16, uint16_t);
-			HANDLE_NPY_TYPE(NPY_UINT32, uint32_t);
-			HANDLE_NPY_TYPE(NPY_UINT64, uint64_t);
-			
-			HANDLE_NPY_TYPE(NPY_FLOAT32, float);
-			HANDLE_NPY_TYPE(NPY_FLOAT64, double);
-			
-			#undef HANDLE_NPY_TYPE
-			
-			case NPY_BOOL: {
-				unsigned char* data = static_cast<unsigned char*>(PyArray_DATA(scalarPtr)); 
-				return DynamicValueReader(kj::attachRef(ANONYMOUS), (*data) != 0);
-			}
-				
-			default:
-				break;
-		}
-	}
-	
-	// NumPy scalars
-	if(PyArray_IsScalar(handle.ptr(), Bool)) { \
-		return DynamicValueReader(kj::attachRef(ANONYMOUS), PyArrayScalar_VAL(handle.ptr(), Bool) != 0); \
-	}
-	
-	#define HANDLE_TYPE(cls) \
-		if(PyArray_IsScalar(handle.ptr(), cls)) { \
-			return DynamicValueReader(kj::attachRef(ANONYMOUS), PyArrayScalar_VAL(handle.ptr(), cls)); \
-		}
-	
-	HANDLE_TYPE(UByte);
-	HANDLE_TYPE(UShort);
-	HANDLE_TYPE(UInt);
-	HANDLE_TYPE(ULong);
-	HANDLE_TYPE(ULongLong);
-	
-	HANDLE_TYPE(Byte);
-	HANDLE_TYPE(Short);
-	HANDLE_TYPE(Int);
-	HANDLE_TYPE(Long);
-	HANDLE_TYPE(LongLong);
-	
-	HANDLE_TYPE(Float);
-	HANDLE_TYPE(Double);
-	
-	#undef HANDLE_TYPE		
-	
-	// Python builtins
-	#define HANDLE_TYPE(ctype, pytype) \
-		if(py::isinstance<pytype>(handle)) { \
-			pytype typed = py::reinterpret_borrow<pytype>(handle); \
-			ctype cTyped = static_cast<ctype>(typed); \
-			if(PyErr_Occurred()) \
-				throw py::error_already_set(); \
-			\
-			return DynamicValueReader(kj::attachRef(ANONYMOUS), cTyped); \
-		}
-		
-	// Bool is a subtype of int, so this has to go first
-	HANDLE_TYPE(bool, py::bool_);
-	HANDLE_TYPE(signed long long, py::int_);
-	HANDLE_TYPE(double, py::float_);
-	
-	#undef HANDLE_TYPE
-	
-	return nullptr;
-}
 
 static py::module_ capnpModule;
 
@@ -166,7 +83,10 @@ struct ClassBinding : public py::class_<T, Params...> {
 };
 
 void bindRootClasses() {
-	ClassBinding<O>("Object");
+	ClassBinding<O>("Object")
+		.def_property_readonly("type_", &O::getType)
+	;
+	
 	ClassBinding<R>("Reader");
 	ClassBinding<B>("Builder");
 }
@@ -201,6 +121,7 @@ void bindAnyClasses() {
 	ClassBinding<AnyCommon>("AnyPointer");
 	ClassBinding<AR, AnyCommon, R>("AnyReader")
 		.withCommon()
+		.def("interpretAs", &AR::interpretAs)
 	;
 	
 	ClassBinding<AB, AnyCommon, B>("AnyBuilder")
@@ -209,6 +130,7 @@ void bindAnyClasses() {
 		.def("set", &AB::setStruct)
 		.def("set", &AB::setCap)
 		.def("set", &AB::adopt)
+		.def("interpretAs", &AB::interpretAs)
 	;
 	
 	py::implicitly_convertible<AB, AR>();
@@ -252,7 +174,6 @@ void bindStructInterface(ClassBinding<T, Params...>& cls) {
 	cls.def("toYaml_", &T::toYaml, py::arg("flow"));
 	cls.def("toDict_", &T::asDict);
 	cls.def("totalBytes_", &T::totalBytes);
-	cls.def_property_readonly("schema_", &T::encodeSchema);
 	
 	cls.def_buffer(&T::buffer);
 }
@@ -331,6 +252,13 @@ void bindEnumClasses() {
 		.def("__eq__", &EI::eq2, py::is_operator())
 		.def("__eq__", &EI::eq3, py::is_operator())
 		.def("__reduce_ex__", &pickleReduceEnum)
+		.def_property_readonly("raw", &EI::getRaw)
+		.def_property_readonly("type", [](EnumInterface& ei) -> capnp::Type {
+			return ei.getSchema();
+		})
+		.def_static("fromRaw", [](capnp::Type t, uint16_t val) {
+			return EnumInterface(t.asEnum(), val);
+		})
 	;
 }
 
@@ -340,6 +268,27 @@ void bindUnpicklers() {
 	capnpModule.def("_unpickleRef", &unpickleRef);
 	capnpModule.def("_unpickleEnum", &unpickleEnum);
 }
+
+void bindType() {
+	ClassBinding<capnp::Type>("Type")
+		.def("toProto", [](capnp::Type& t) {
+			auto mb = fsc::heapHeld<capnp::MallocMessageBuilder>(1024);
+			
+			auto root = mb -> initRoot<capnp::schema::Type>();
+			fsc::extractType(t, root);
+			
+			return fscpy::AnyReader(mb.x(), mb -> getRoot<capnp::AnyPointer>());
+		})
+		.def_static("fromProto", [](fscpy::AnyReader r) {
+			return defaultLoader.capnpLoader.getType(r.getAs<capnp::schema::Type>());
+		})
+		.def_static("fromProto", [](fscpy::AnyBuilder r) {
+			return defaultLoader.capnpLoader.getType(r.getAs<capnp::schema::Type>());
+		})
+		.def(py::self == py::self)
+		.def(py::self != py::self)
+	;
+}	
 
 void initCapnp(py::module_& m) {
 	// Make sure numpy is initialized
@@ -370,6 +319,7 @@ void initCapnp(py::module_& m) {
 	bindCapClasses();
 	bindEnumClasses();
 	bindAnyClasses();
+	bindType();
 	bindUnpicklers();
 	
 	capnpModule = py::module();
