@@ -509,7 +509,7 @@ Promise<void> ObjectDB::syncTask() {
 	changed();
 	syncAll();
 	
-	return getActiveThread().timer().afterDelay(15 * kj::SECONDS)
+	return getActiveThread().timer().afterDelay(1 * kj::SECONDS)
 	.then([this]() { return syncTask(); });
 }
 
@@ -1964,7 +1964,7 @@ Maybe<Capability::Client> createInterface(ObjectDBEntry& entry, kj::Badge<Object
 
 namespace fsc {
 	
-Warehouse::Client openWarehouse(db::Connection& conn, kj::StringPtr tablePrefix, bool readOnly) {
+Warehouse::Client openWarehouse(db::Connection& conn, bool readOnly, kj::StringPtr tablePrefix) {
 	// Make sure we use a forkable connection
 	conn.fork(true);
 	

@@ -59,16 +59,78 @@ Own<DeviceBase> selectDevice(LocalConfig::Reader config) {
 	return kj::refcounted<CPUDevice>(numThreads);
 }
 
+Promise<Warehouse::Folder::Client> connectWarehouse(kj::StringPtr urlString, NetworkInterface::Client networkInterface) {
+	auto url = kj::Url::parse(urlString);
+	
+	KJ_REQUIRE(
+		url.scheme == "sqlite" || url.scheme == "http" || url.scheme == "ws",
+		
+		"Only the schemes 'sqlite' (local sqlite database file), 'ws' (http/websocket"
+		" connection to remote DB server) or 'http' (alias for 'ws') are supported",
+		url.scheme
+	);
+	
+	if(url.scheme == "sqlite") {			
+		bool readOnly = false;
+		kj::StringPtr tablePrefix = "warehouse";
+		kj::StringPtr rootName = "root";
+		
+		for(auto& param : url.query) {
+			if(param.name == "readOnly")
+				readOnly = true;
+			
+			if(param.name == "tablePrefix")
+				tablePrefix = param.value;
+		}
+		
+		auto conn = connectSqlite(kj::str(kj::delimited(url.path, "/")), readOnly);
+		auto db = ::fsc::openWarehouse(*conn, readOnly, tablePrefix);
+		
+		auto req = db.getRootRequest();
+		req.setName(rootName); // Not neccessary for main root
+		
+		return req.sendForPipeline.getRoot();
+	}
+	
+	// Treat URL as server connection
+	
+	// Pass connect request to interface
+	auto connectRequest = networkInterface.connectRequest();
+	connectRequest.setUrl(params.getUrl());
+	
+	// Open connection and get remote object
+	return connectRequest.send().
+	.then([](auto response) {
+		return response.getConnection().getRemoteRequest().send()
+	})
+	.then([](auto response) {
+		return response.getRemote().castAs<Warehouse::Folder>();
+	});
+}
+
 struct RootServer : public RootService::Server {
 	RootServer(LocalConfig::Reader config) :
 		config(config),
 		device(selectDevice(config))
-	{}
+	{
+		NetworkInterface::Client nif = kj::heap<LocalNetworkInterface>();
+		
+		for(auto entry : config.getWarehouses()) {
+			auto root = connectWarehouse(entry.getUrl(), nif);
+			auto getReq = root.getRequest();
+			getReq.setPath(entry.getPath());
+			
+			Warehouse::Folder::Client actualRoot = getReq.sendForPipeline().getAsGeneric();
+			warehouses.insert(entry.getName(), mv(actualRoot));
+		}
+	}
 	
 	Temporary<LocalConfig> config;
 	Own<DeviceBase> device;
 	
 	Matcher::Client myMatcher = newMatcher();
+	
+	std::unordered_map<kj::String, Warehouse::Folder::Client> warehouses;
 	
 	JobScheduler::Client selectScheduler() {
 		// Select correct scheduler
@@ -155,7 +217,6 @@ struct RootServer : public RootService::Server {
 // Networking implementation
 
 
-
 struct LocalResourcesImpl : public LocalResources::Server, public LocalNetworkInterface {
 	RootService::Client rootService;
 	// Temporary<LocalConfig> config;
@@ -221,34 +282,6 @@ struct LocalResourcesImpl : public LocalResources::Server, public LocalNetworkIn
 	
 	Promise<void> openWarehouse(OpenWarehouseContext ctx) override {
 		auto params = ctx.getParams();
-		auto url = kj::Url::parse(params.getUrl());
-		
-		KJ_REQUIRE(
-			url.scheme == "sqlite" || url.scheme == "http" || url.scheme == "ws",
-			
-			"Only the schemes 'sqlite' (local sqlite database file), 'ws' (http/websocket"
-			" connection to remote DB server) or 'http' (alias for 'ws') are supported",
-			url.scheme
-		);
-		
-		if(url.scheme == "sqlite") {			
-			bool readOnly = false;
-			kj::StringPtr tablePrefix = "warehouse";
-			
-			for(auto& param : url.query) {
-				if(param.name == "readOnly")
-					readOnly = true;
-				
-				if(param.name == "tablePrefix")
-					tablePrefix = param.value;
-			}
-			
-			auto conn = connectSqlite(kj::str(kj::delimited(url.path, "/")), readOnly);
-			auto db = ::fsc::openWarehouse(*conn, tablePrefix);
-			ctx.getResults().setRoot(db.getRootRequest().sendForPipeline().getRoot());
-		}
-		
-		// Treat URL as server connection
 		
 		// Select connection interface to use (allows SSH tunnel)
 		auto networkInterface =
@@ -256,15 +289,10 @@ struct LocalResourcesImpl : public LocalResources::Server, public LocalNetworkIn
 			params.getNetworkInterface() :
 			thisCap();
 		
-		// Pass connect request to interface
-		auto connectRequest = networkInterface.connectRequest();
-		connectRequest.setUrl(params.getUrl());
-		
-		// Open connection and get remote object
-		auto remotePromise = connectRequest.send().getConnection().getRemoteRequest().send();
-		ctx.getResults().setRoot(remotePromise.getRemote().castAs<Warehouse::Folder>());
-		
-		return remotePromise.ignoreResult();
+		return connectWarehouse(params.getUrl(), networkInterface)
+		.then([](Warehouse::Folder::Client root) {
+			ctx.getResults().setRoot(mv(root));
+		}):
 	}
 };
 

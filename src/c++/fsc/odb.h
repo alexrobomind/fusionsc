@@ -11,6 +11,6 @@
 
 namespace fsc {
 	
-Warehouse::Client openWarehouse(db::Connection& conn, kj::StringPtr tablePrefix = "warehouse", bool readOnly = false);
+Warehouse::Client openWarehouse(db::Connection& conn, bool readOnly = false, kj::StringPtr tablePrefix = "warehouse");
 
 }

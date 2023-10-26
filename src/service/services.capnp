@@ -26,6 +26,12 @@ enum ComputationDeviceType {
 	loop @2;
 }
 
+struct WarehouseConfig {
+	name @0 : Text;
+	url  @1 : Text;
+	path @2 : Text = "/";
+}
+
 struct LocalConfig {
 	preferredDeviceType @0 : ComputationDeviceType;
 	enableCompute @1 : Bool = true;
@@ -55,6 +61,8 @@ struct LocalConfig {
 			coordinatorUrl @10 : Text;
 		}
 	}
+	
+	warehouses @11 : List(WarehouseConfig);
 }
 
 struct LoadBalancerConfig {
@@ -85,6 +93,9 @@ interface RootService {
 	dataService @6 () -> (service : Data.DataService);
 	
 	matcher @8 () -> (service : Matcher.Matcher);
+	
+	listWarehouses @9 () -> (warehouses : List(Text));
+	getWarehouse @10 (name : Text) -> (warehouse : Warehouse.Warehouse.Folder.Client);
 	
 	getInfo @7 () -> NodeInfo;
 }
