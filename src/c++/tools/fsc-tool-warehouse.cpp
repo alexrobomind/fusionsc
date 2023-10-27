@@ -46,7 +46,10 @@ static struct WarehouseTool {
 	
 	kj::String rootPath;
 	
+	kj::String backupFile;
+	
 	bool writeAccess = false;
+	bool truncate = false;
 	
 	WarehouseTool(kj::ProcessContext& context):
 		context(context), tablePrefix(kj::heapString("warehouse")), rootPath(kj::heapString(""))
@@ -67,8 +70,18 @@ static struct WarehouseTool {
 		return true;
 	}
 	
+	bool setTruncate() {
+		truncate = true;
+		return true;
+	}
+	
 	bool setDb(kj::StringPtr file) {
 		dbFile = kj::heapString(file);
+		return true;
+	}
+	
+	bool setBackup(kj::StringPtr file) {
+		backupFile = kj::heapString(file);
 		return true;
 	}
 	
@@ -82,7 +95,7 @@ static struct WarehouseTool {
 		return true;
 	}
 		
-	bool run() {
+	bool serve() {
 		auto l = newLibrary();
 		auto lt = l -> newThread();
 		auto& ws = lt->waitScope();
@@ -91,7 +104,7 @@ static struct WarehouseTool {
 		
 		bool readOnly = !writeAccess;
 		auto conn = connectSqlite(dbFile, readOnly);
-		auto db = ::fsc::openWarehouse(*conn, tablePrefix, readOnly);
+		auto db = ::fsc::openWarehouse(*conn, readOnly, tablePrefix);
 		auto root = db.getRootRequest().sendForPipeline().getRoot();
 		root.whenResolved().wait(ws);
 		
@@ -143,13 +156,121 @@ static struct WarehouseTool {
 		return true;
 	}
 	
-	auto getMain() {
-		auto infoString = kj::str(
-			"FusionSC database server\n",
-			"Protocol version ", FSC_PROTOCOL_VERSION, "\n"
-		);
+	bool vacuum() {
+		std::cout << "Opening database file " << dbFile.cStr() << std::endl;
 		
-		return kj::MainBuilder(context, infoString, "Creates an FSC server")
+		auto conn = connectSqlite(dbFile);
+		conn -> exec("PRAGMA busy_timeout=5000");
+		
+		std::cout << "Beginning vacuum operation. Please note that this will lock any pending database writes." << std::endl;
+		
+		while(true) {
+			try {
+				conn -> exec("VACUUM");
+				break;
+			} catch(kj::Exception& e) {
+				if(e.getType() == kj::Exception::Type::OVERLOADED) {
+					KJ_LOG(WARNING, "Database is currently busy. Retrying.");
+				} else {
+					throw;
+				}
+			}
+		}
+		
+		std::cout << "Vacuum complete." << std::endl;
+		return true;
+	}
+	
+	bool checkpoint() {
+		std::cout << "Opening database file " << dbFile.cStr() << std::endl;
+		
+		auto conn = connectSqlite(dbFile);
+		conn -> exec("PRAGMA busy_timeout=5000");
+		
+		std::cout << "Beginning checkpoint operation. Please note that this will lock any pending database writes." << std::endl;
+		
+		while(true) {
+			try {
+				if(truncate) {
+					conn -> exec("PRAGMA main.wal_checkpoint(TRUNCATE)");
+				} else {
+					conn -> exec("PRAGMA main.wal_checkpoint(FULL)");
+				}
+				break;
+			} catch(kj::Exception& e) {
+				if(e.getType() == kj::Exception::Type::OVERLOADED) {
+					KJ_LOG(WARNING, "Database is currently busy. Retrying.");
+				} else {
+					throw;
+				}
+			}
+		}
+		
+		std::cout << "Checkpoint complete." << std::endl;
+		return true;
+	}
+	
+	bool backup() {
+		std::cout << "Opening database file " << dbFile.cStr() << std::endl;
+		
+		auto conn = connectSqlite(dbFile);
+		
+		std::cout
+			<< "Beginning backup operation. This operation will hold a read lock (which might grow the WAL size)." << std::endl
+			<< "Target: " << backupFile.cStr() << std::endl
+		;
+		
+		while(true) {
+			try {
+				auto stmt = conn -> prepare("VACUUM INTO ?");
+				stmt(backupFile.asPtr());
+				break;
+			} catch(kj::Exception& e) {
+				if(e.getType() == kj::Exception::Type::OVERLOADED) {
+					KJ_LOG(WARNING, "Database is currently busy. Retrying.");
+				} else {
+					throw;
+				}
+			}
+		}
+		
+		std::cout << "Backup complete." << std::endl;
+		return true;
+	}
+	
+	auto vacuumCmd() {
+		return kj::MainBuilder(context, "", "Runs an sqlite VACUUM command to rebuild the database in-place. This command should be periodically"
+			" executed in order to mitigate database fragmentation.")
+			.expectArg("<database file>", KJ_BIND_METHOD(*this, setDb))
+			.callAfterParsing(KJ_BIND_METHOD(*this, vacuum))
+			.build()
+		;	
+	}
+	
+	auto checkpointCmd() {
+		return kj::MainBuilder(context, "", "Writes all content in the write-ahead-log to disk. Usually, this operation is performed automatically during"
+			" database operation. However, executing a large number of writes while having open database handles (especially to deleted objects, which are"
+			" not synchronized to newer snapshots) can grow the WAL file to unreasonably large size. To combat this, run a checkpoint command with the"
+			" --truncate option to clear the write-ahead queue and reset the file. Note that this is only possible if no past checkpoints are being held"
+			" open. Otherwise, this command will block until that is the case.")
+			.expectArg("<database file>", KJ_BIND_METHOD(*this, setDb))
+			.addOption({"truncate"}, KJ_BIND_METHOD(*this, setTruncate), "Truncate the WAL file (blocks writing until no transaction reads from past history)")
+			.callAfterParsing(KJ_BIND_METHOD(*this, checkpoint))
+			.build()
+		;	
+	}
+	
+	auto backupCmd() {
+		return kj::MainBuilder(context, "", "")
+			.expectArg("<database file>", KJ_BIND_METHOD(*this, setDb))
+			.expectArg("<backup file>", KJ_BIND_METHOD(*this, setBackup))
+			.callAfterParsing(KJ_BIND_METHOD(*this, backup))
+			.build()
+		;
+	}
+	
+	auto serveCmd() {
+		return kj::MainBuilder(context, "", "")
 			.addOptionWithArg({'a', "address"}, KJ_BIND_METHOD(*this, setAddress), "<address>", "Address to listen on, defaults to 0.0.0.0")
 			.addOptionWithArg({'p', "port"}, KJ_BIND_METHOD(*this, setPort), "<port>", "Port to listen on, defaults to system-assigned")
 			
@@ -158,8 +279,25 @@ static struct WarehouseTool {
 			.addOptionWithArg({"path"}, KJ_BIND_METHOD(*this, setPath), "<path>", "Path to share relative to database root")
 			.expectArg("<database file>", KJ_BIND_METHOD(*this, setDb))
 			
-			.callAfterParsing(KJ_BIND_METHOD(*this, run))
-			.build();
+			.callAfterParsing(KJ_BIND_METHOD(*this, serve))
+			.build()
+		;
+	}
+	
+	auto getMain() {
+		auto infoString = kj::str(
+			"FusionSC warehouse manager\n",
+			"Protocol version ", FSC_PROTOCOL_VERSION, "\n"
+		);
+		
+		return kj::MainBuilder(context, infoString, "Manages a warehouse database")
+			.addSubCommand("serve", KJ_BIND_METHOD(*this, serveCmd), "Serves a warehouse from an sqlite database")
+			
+			.addSubCommand("backup", KJ_BIND_METHOD(*this, backupCmd), "Create a backup of the database at target location.")
+			.addSubCommand("vacuum", KJ_BIND_METHOD(*this, vacuumCmd), "Rebuilds the database in-place.")
+			.addSubCommand("checkpoint", KJ_BIND_METHOD(*this, checkpointCmd), "Checkpoints the WAL to the database (and optionally truncates the WAL file)")
+			.build()
+		;
 	}
 };
 

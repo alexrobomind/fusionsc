@@ -252,6 +252,7 @@ Own<db::Connection> connectSqlite(kj::StringPtr url, bool readOnly) {
 	// Set up connection parameters
 	result -> exec("PRAGMA journal_mode=WAL");
 	result -> exec("PRAGMA foreign_keys = ON");
+	result -> exec("PRAGMA busy_timeout = 50");
 	
 	return result;
 }
