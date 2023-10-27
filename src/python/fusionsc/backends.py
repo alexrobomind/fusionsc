@@ -4,6 +4,7 @@ from . import native
 from . import service
 
 import contextlib
+import contextvars
 
 # Initialize event loop for main thread
 asnc.startEventLoop()
@@ -13,6 +14,8 @@ inProcessWorker = native.LocalRootServer()
 
 import threading
 _threadLocal = threading.local()
+
+_currentBackend = contextvars.ContextVar("fusionsc.backends._currentBackend", default = None)
 
 def connectLocal():
 	"""Connects a thread to the in-process worker. Automatically called for main thread."""
@@ -61,10 +64,12 @@ def activeBackend():
 	active useBackend call, falling back to the in-process worker if no other backend
 	is in use
 	"""
-	if hasattr(_threadLocal, "active"):
-		return _threadLocal.active
+	cb = _currentBackend.get()
 	
-	return localBackend()
+	if cb is None:
+		cb = localBackend()
+	
+	return cb
 
 @contextlib.contextmanager
 def useBackend(newBackend):
@@ -78,20 +83,9 @@ def useBackend(newBackend):
 		with fsc.backends.useBackend(newBackend):
 			... Calculation code ...
 	"""
-	if hasattr(_threadLocal, "active"):
-		prevBackend = _threadLocal.active
-	else:
-		prevBackend = None
-	
-	_threadLocal.active = newBackend
-	
+	token = _currentBackend.set(newBackend)
 	yield newBackend
-	
-	if prevBackend is None:
-		del _threadLocal.active
-	else:
-		_threadLocal.active = prevBackend
-
+	_currentBackend.reset(token)
 
 def alwaysUseBackend(newBackend):
 	"""
@@ -100,4 +94,4 @@ def alwaysUseBackend(newBackend):
 	Note that exiting newBackend(...) scopes also removes the backend installed by this function if
 	it was installed inside.
 	"""
-	_threadLocal.active = newBackend
+	_currentBackend.set(newBackend)
