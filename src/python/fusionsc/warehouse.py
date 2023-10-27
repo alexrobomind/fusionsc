@@ -1,8 +1,14 @@
+"""
+This module can be used to access 'Warehouses', remotely accessible mutable object stores.
+"""
+
 from . import capnp
 from . import service
 from . import backends
 from . import wrappers
 from . import data
+
+from .wrappers import asyncFunction
 
 from typing import OneOf
 
@@ -19,12 +25,31 @@ Storable = OneOf[
 	Object # Warehouse objects can be stored inside each other IF they come from the same database
 ]
 
+@asyncFunction
+async def lsRemote():
+	response = await backends.activeBackend().listWarehouses()
+	return [str(name) for name in names]
+
+@asyncFunction
+async def openRemote(name: str):
+	response = await backends.activeBackend().getWarehouse(name)
+	return Folder(response.warehouse)
+
+@asyncFunction
+async def open(url: str):
+	response = await backends.localResources().openWarehouse(url)
+	return Folder(response.warehouse)
+
 class Folder(Object):
+	"""
+	A mutable folder inside a warehouse
+	"""
+	
 	def __init__(self, backend):
 		super().__init__(backend)
 	
 	@asyncFunction
-	def ls(self, path: str = ""):
+	async def ls(self, path: str = ""):
 		"""
 		Lists all entries currently present in this folder
 		"""
@@ -33,7 +58,7 @@ class Folder(Object):
 		return [str(x) for x in response.entries]
 	
 	@asyncFunction
-	def getAll(self, path: str = ""):
+	async def getAll(self, path: str = ""):
 		"""
 		Returns a key-value mapping of all present entries
 		"""
@@ -42,7 +67,7 @@ class Folder(Object):
 		return { str(entry.key) : _decode(entry.value) }
 	
 	@asyncFunction
-	def get(self, path: str):
+	async def get(self, path: str):
 		"""
 		Returns the object placed under the specified path
 		"""
@@ -51,7 +76,7 @@ class Folder(Object):
 		return _decode(response)
 	
 	@asyncFunction
-	def put(self, path: str, val: Storable):
+	async def put(self, path: str, val: Storable):
 		"""
 		Places an object under the specified path. Creates parent directories as needed
 		"""
@@ -60,7 +85,7 @@ class Folder(Object):
 		return _decode(response)
 	
 	@asyncFunction
-	def rm(self, path: str):
+	async def rm(self, path: str):
 		"""
 		Removes the specified path
 		"""
@@ -68,7 +93,7 @@ class Folder(Object):
 		await self.backend.rm(path)
 	
 	@asyncFunction
-	def createFile(self, path: str = ""):
+	async def createFile(self, path: str = ""):
 		"""
 		Creates a new database file at the given path.
 		
@@ -94,7 +119,7 @@ class File(Object):
 		super().__init__(backend)
 	
 	@asyncFunction
-	def get(self):
+	async def get(self):
 		"""
 		Accesses the contents of the target file (by reference)
 		"""
@@ -103,17 +128,16 @@ class File(Object):
 		return _decode(response)
 	
 	@asyncFunction
-	def read(file):
+	async def read(file):
 		"""
 		Downloads the contents of the target file (assuming it's
 		a DataRef)
 		"""
-		response = self.backend.get()
-		return await data.download(response.asGeneric)
+		return await data.download.asnc(self.backend.get().ref)
 	
 	@asyncFunction
-	def put(self, val: Storable):
-		response = await self.backend.put(_encode(val))
+	async def put(self, val: Storable):
+		response = await self.backend.put.asnc(_encode(val))
 		return _decode(response)
 
 class Unknown(Folder, File, wrappers.RefWrapper):
@@ -129,19 +153,13 @@ def _encode(obj: Storable) -> capnp.CapabilityClient):
 	if isinstance(obj, service.DataRef):
 		return obj
 	
-	if isinstance(obj, wrappers.RefWrapper):
-		return obj.ref
-		
-	if isinstance(obj, capnp.StructReader) or
-		isinstance(obj, capnp.DataReader) or
-		isinstance(obj, capnp.StructBuilder) or
-		isinstance(obj, capnp.DataBuilder):
-		return data.publish(obj)
-	
 	if isinstance(obj, Object):
 		return obj.backend
 	
-	raise ValueError("Object is not storable in warehouse")
+	if isinstance(obj, wrappers.RefWrapper):
+		return obj.ref
+		
+	return data.publish(obj)
 
 def _decode(obj: service.warehouse.StoredObject.Reader):
 	which = obj.which()
