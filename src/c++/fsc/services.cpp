@@ -27,6 +27,8 @@
 
 #include <fsc/jobs.capnp.h>
 
+#include <map>
+
 using namespace fsc;
 
 namespace {
@@ -89,19 +91,19 @@ Promise<Warehouse::Folder::Client> connectWarehouse(kj::StringPtr urlString, Net
 		auto req = db.getRootRequest();
 		req.setName(rootName); // Not neccessary for main root
 		
-		return req.sendForPipeline.getRoot();
+		return req.sendForPipeline().getRoot();
 	}
 	
 	// Treat URL as server connection
 	
 	// Pass connect request to interface
 	auto connectRequest = networkInterface.connectRequest();
-	connectRequest.setUrl(params.getUrl());
+	connectRequest.setUrl(urlString);
 	
 	// Open connection and get remote object
-	return connectRequest.send().
+	return connectRequest.send()
 	.then([](auto response) {
-		return response.getConnection().getRemoteRequest().send()
+		return response.getConnection().getRemoteRequest().send();
 	})
 	.then([](auto response) {
 		return response.getRemote().castAs<Warehouse::Folder>();
@@ -116,12 +118,12 @@ struct RootServer : public RootService::Server {
 		NetworkInterface::Client nif = kj::heap<LocalNetworkInterface>();
 		
 		for(auto entry : config.getWarehouses()) {
-			auto root = connectWarehouse(entry.getUrl(), nif);
+			Warehouse::Folder::Client root = connectWarehouse(entry.getUrl(), nif);
 			auto getReq = root.getRequest();
 			getReq.setPath(entry.getPath());
 			
 			Warehouse::Folder::Client actualRoot = getReq.sendForPipeline().getAsGeneric();
-			warehouses.insert(entry.getName(), mv(actualRoot));
+			warehouses.insert(std::make_pair(kj::heapString(entry.getName()), mv(actualRoot)));
 		}
 	}
 	
@@ -130,7 +132,7 @@ struct RootServer : public RootService::Server {
 	
 	Matcher::Client myMatcher = newMatcher();
 	
-	std::unordered_map<kj::String, Warehouse::Folder::Client> warehouses;
+	std::map<kj::String, Warehouse::Folder::Client> warehouses;
 	
 	JobScheduler::Client selectScheduler() {
 		// Select correct scheduler
@@ -212,6 +214,27 @@ struct RootServer : public RootService::Server {
 		ctx.initResults().setService(myMatcher);
 		return READY_NOW;
 	}
+	
+	Promise<void> listWarehouses(ListWarehousesContext ctx) override {
+		auto out = ctx.getResults().initNames(warehouses.size());
+		
+		size_t i = 0;
+		for(auto& e : warehouses) {
+			out.set(i++, e.first);
+		}
+		return READY_NOW;
+	}
+	
+	Promise<void> getWarehouse(GetWarehouseContext ctx) override {
+		auto name = kj::heapString(ctx.getParams().getName());
+		auto it = warehouses.find(name);
+		
+		KJ_REQUIRE(it != warehouses.end(), "Warehouse not found", name);
+		
+		ctx.getResults().setWarehouse(it -> second);
+		
+		return READY_NOW;
+	}
 };
 
 // Networking implementation
@@ -290,9 +313,9 @@ struct LocalResourcesImpl : public LocalResources::Server, public LocalNetworkIn
 			thisCap();
 		
 		return connectWarehouse(params.getUrl(), networkInterface)
-		.then([](Warehouse::Folder::Client root) {
+		.then([ctx](Warehouse::Folder::Client root) mutable {
 			ctx.getResults().setRoot(mv(root));
-		}):
+		});
 	}
 };
 

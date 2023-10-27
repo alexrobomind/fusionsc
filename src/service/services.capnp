@@ -94,8 +94,8 @@ interface RootService {
 	
 	matcher @8 () -> (service : Matcher.Matcher);
 	
-	listWarehouses @9 () -> (warehouses : List(Text));
-	getWarehouse @10 (name : Text) -> (warehouse : Warehouse.Warehouse.Folder.Client);
+	listWarehouses @9 () -> (names : List(Text));
+	getWarehouse @10 (name : Text) -> (warehouse : Warehouse.Warehouse.Folder);
 	
 	getInfo @7 () -> NodeInfo;
 }
