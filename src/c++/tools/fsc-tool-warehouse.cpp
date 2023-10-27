@@ -272,7 +272,8 @@ struct WarehouseTool {
 	}
 	
 	auto serveCmd() {
-		return kj::MainBuilder(context, "", "")
+		return kj::MainBuilder(context, "ABC", "Serves a warehouse from an sqlite database on the given address / port. By default read-only, use the -w / --write-access"
+			" option to enable write modifications.")
 			.addOptionWithArg({'a', "address"}, KJ_BIND_METHOD(*this, setAddress), "<address>", "Address to listen on, defaults to 0.0.0.0")
 			.addOptionWithArg({'p', "port"}, KJ_BIND_METHOD(*this, setPort), "<port>", "Port to listen on, defaults to system-assigned")
 			
