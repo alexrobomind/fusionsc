@@ -18,7 +18,7 @@
 
 using namespace fsc;
 
-struct LoadBalancerInfo : public SimpleHttpServer::Server {
+static struct LoadBalancerInfo : public SimpleHttpServer::Server {
 	Own<LoadBalancer> target;
 	
 	LoadBalancerInfo(Own<LoadBalancer>&& target) :
@@ -59,7 +59,7 @@ struct LoadBalancerInfo : public SimpleHttpServer::Server {
 	}
 };
 
-struct MainCls {
+static struct LoadBalancerTool {
 	kj::ProcessContext& context;
 	Maybe<uint64_t> port = nullptr;
 	kj::String address = kj::heapString("0.0.0.0");
@@ -67,7 +67,7 @@ struct MainCls {
 	struct ReadFromStdin {};
 	OneOf<decltype(nullptr), kj::Path, ReadFromStdin> config = nullptr;
 	
-	MainCls(kj::ProcessContext& context):
+	LoadBalancerTool(kj::ProcessContext& context):
 		context(context)
 	{}
 	
@@ -194,4 +194,6 @@ struct MainCls {
 	}
 };
 
-KJ_MAIN(MainCls)
+kj::MainFunc fsc_tool::loadBalancer(kj::ProcessContext& ctx) {
+	return KJ_BIND_METHOD(LoadBalancerTool(ctx), getMain);
+}

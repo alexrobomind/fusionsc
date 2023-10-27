@@ -17,9 +17,11 @@
 
 #include <capnp/ez-rpc.h>
 
+#include "fsc-tool.h"
+
 using namespace fsc;
 
-struct RootServiceProvider : public NetworkInterface::Listener::Server {
+static struct RootServiceProvider : public NetworkInterface::Listener::Server {
 	Temporary<LocalConfig> config;
 	
 	RootServiceProvider(LocalConfig::Reader configIn) :
@@ -32,16 +34,16 @@ struct RootServiceProvider : public NetworkInterface::Listener::Server {
 	}
 };
 
-struct MainCls {
+static struct WorkerTool {
 	kj::ProcessContext& context;
 	
 	kj::String url = kj::heapString("http://localhost");
-kj::Array<const byte> token = kj::heapArray<const byte>({0});
+	kj::Array<const byte> token = kj::heapArray<const byte>({0});
 	
 	struct ReadFromStdin {};
 	OneOf<decltype(nullptr), LocalConfig::Reader, kj::Path, ReadFromStdin> config = nullptr;
 	
-	MainCls(kj::ProcessContext& context):
+	WorkerTool(kj::ProcessContext& context):
 		context(context)
 	{}
 	
@@ -178,4 +180,6 @@ kj::Array<const byte> token = kj::heapArray<const byte>({0});
 	}
 };
 
-KJ_MAIN(MainCls)
+kj::MainFunc fsc_tool::worker(kj::ProcessContext& ctx) {
+	return KJ_BIND_METHOD(WorkerTool, getMain);
+}

@@ -16,9 +16,11 @@
 
 #include <capnp/ez-rpc.h>
 
+#include "fsc-tool.h"
+
 using namespace fsc;
 
-struct SimpleMessageFallback : public SimpleHttpServer::Server {
+static struct SimpleMessageFallback : public SimpleHttpServer::Server {
 	Promise<void> serve(ServeContext ctx) {
 		unsigned int UPGRADE_REQUIRED = 426;
 		
@@ -34,7 +36,7 @@ struct SimpleMessageFallback : public SimpleHttpServer::Server {
 	}
 };
 
-struct MainCls {
+static struct WarehouseTool {
 	kj::ProcessContext& context;
 	Maybe<uint64_t> port = nullptr;
 	kj::String address = kj::heapString("0.0.0.0");
@@ -46,7 +48,7 @@ struct MainCls {
 	
 	bool writeAccess = false;
 	
-	MainCls(kj::ProcessContext& context):
+	WarehouseTool(kj::ProcessContext& context):
 		context(context), tablePrefix(kj::heapString("warehouse")), rootPath(kj::heapString(""))
 	{}
 	
@@ -161,4 +163,6 @@ struct MainCls {
 	}
 };
 
-KJ_MAIN(MainCls)
+kj::MainFunc fsc_tool::warehouse(kj::ProcessContext& ctx) {
+	return KJ_BIND_METHOD(WarehouseTool(ctx), getMain);
+}

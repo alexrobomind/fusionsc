@@ -15,9 +15,11 @@
 
 #include <capnp/ez-rpc.h>
 
+#include "fsc-tool.h"
+
 using namespace fsc;
 
-struct RootServiceProvider : public NetworkInterface::Listener::Server {
+static struct RootServiceProvider : public NetworkInterface::Listener::Server {
 	Temporary<LocalConfig> config;
 	
 	RootServiceProvider(LocalConfig::Reader configIn) :
@@ -30,7 +32,7 @@ struct RootServiceProvider : public NetworkInterface::Listener::Server {
 	}
 };
 
-struct MainCls {
+static struct ServerTool {
 	kj::ProcessContext& context;
 	Maybe<uint64_t> port = nullptr;
 	kj::String address = kj::heapString("0.0.0.0");
@@ -38,7 +40,7 @@ struct MainCls {
 	struct ReadFromStdin {};
 	OneOf<decltype(nullptr), LocalConfig::Reader, kj::Path, ReadFromStdin> config = nullptr;
 	
-	MainCls(kj::ProcessContext& context):
+	ServerTool(kj::ProcessContext& context):
 		context(context)
 	{}
 	
@@ -176,4 +178,6 @@ struct MainCls {
 	}
 };
 
-KJ_MAIN(MainCls)
+kj::MainFunc fsc_tool::server(kj::ProcessContext& ctx) {
+	return KJ_BIND_METHOD(ServerTool(), getMain);
+}
