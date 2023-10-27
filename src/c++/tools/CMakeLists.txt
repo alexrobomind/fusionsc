@@ -1,27 +1,16 @@
 add_executable(
-	fsc-server
-	fsc-server.cpp
-)
-
-target_link_libraries(fsc-server fsc)
-
-add_executable(
-	fsc-load-balancer
-	load-balancer.cpp
-)
-target_link_libraries(fsc-load-balancer fsc)
-
-add_executable(
-	fsc-worker
-	worker.cpp
-)
-target_link_libraries(fsc-worker fsc)
-
-add_executable(
-	fsc-warehouse
-	fsc-warehouse.cpp
-)
-target_link_libraries(fsc-warehouse fsc)
+	fsc-tool
+	
+	fsc-tool.h
+	fsc-tool.cpp
+	
+	fsc-tool-warehouse.cpp
+	fsc-tool-worker.cpp
+	fsc-tool-load-balancer.cpp
+	fsc-tool-server.cpp
+)	
+target_link_libraries(fsc-tool fsc)
+set_target_properties(fsc-tool PROPERTIES OUTPUT_NAME "fusionsc")
 
 add_executable(
 	fsc-fuzz
@@ -40,8 +29,8 @@ add_executable(
 target_link_libraries(brandedEnums CapnProto::capnp-rpc)
 
 if(SKBUILD)
-	add_dependencies(fsc-skbuild-target fsc-server fsc-load-balancer fsc-worker fsc-warehouse)
-	install(TARGETS fsc-server fsc-load-balancer fsc-worker fsc-warehouse RUNTIME DESTINATION ${SKBUILD_SCRIPTS_DIR} COMPONENT SKBUILD)
+	add_dependencies(fsc-skbuild-target fsc-tool)
+	install(TARGETS fsc-tool RUNTIME DESTINATION ${SKBUILD_SCRIPTS_DIR} COMPONENT SKBUILD)
 endif()
 
-install(TARGETS fsc-server fsc-load-balancer fsc-worker fsc-warehouse EXPORT FSCTargets)
+install(TARGETS fsc-tool EXPORT FSCTargets)

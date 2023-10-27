@@ -20,7 +20,9 @@
 
 using namespace fsc;
 
-static struct SimpleMessageFallback : public SimpleHttpServer::Server {
+namespace {
+
+struct SimpleMessageFallback : public SimpleHttpServer::Server {
 	Promise<void> serve(ServeContext ctx) {
 		unsigned int UPGRADE_REQUIRED = 426;
 		
@@ -36,7 +38,7 @@ static struct SimpleMessageFallback : public SimpleHttpServer::Server {
 	}
 };
 
-static struct WarehouseTool {
+struct WarehouseTool {
 	kj::ProcessContext& context;
 	Maybe<uint64_t> port = nullptr;
 	kj::String address = kj::heapString("0.0.0.0");
@@ -301,6 +303,8 @@ static struct WarehouseTool {
 	}
 };
 
-kj::MainFunc fsc_tool::warehouse(kj::ProcessContext& ctx) {
+}
+
+fsc_tool::MainGen fsc_tool::warehouse(kj::ProcessContext& ctx) {
 	return KJ_BIND_METHOD(WarehouseTool(ctx), getMain);
 }

@@ -16,9 +16,13 @@
 
 #include <capnp/ez-rpc.h>
 
+#include "fsc-tool.h"
+
 using namespace fsc;
 
-static struct LoadBalancerInfo : public SimpleHttpServer::Server {
+namespace {
+
+struct LoadBalancerInfo : public SimpleHttpServer::Server {
 	Own<LoadBalancer> target;
 	
 	LoadBalancerInfo(Own<LoadBalancer>&& target) :
@@ -59,7 +63,7 @@ static struct LoadBalancerInfo : public SimpleHttpServer::Server {
 	}
 };
 
-static struct LoadBalancerTool {
+struct LoadBalancerTool {
 	kj::ProcessContext& context;
 	Maybe<uint64_t> port = nullptr;
 	kj::String address = kj::heapString("0.0.0.0");
@@ -194,6 +198,8 @@ static struct LoadBalancerTool {
 	}
 };
 
-kj::MainFunc fsc_tool::loadBalancer(kj::ProcessContext& ctx) {
+}
+
+fsc_tool::MainGen fsc_tool::loadBalancer(kj::ProcessContext& ctx) {
 	return KJ_BIND_METHOD(LoadBalancerTool(ctx), getMain);
 }

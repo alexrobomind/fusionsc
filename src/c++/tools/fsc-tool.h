@@ -2,9 +2,11 @@
 
 namespace fsc_tool {
 
-kj::MainFunc loadBalancer(kj::ProcessContext&);
-kj::MainFunc server(kj::ProcessContext&);
-kj::MainFunc worker(kj::ProcessContext&);
-kj::MainFunc warehouse(kj::ProcessContext&);
+using MainGen = kj::Function<kj::MainFunc()>;
+
+MainGen loadBalancer(kj::ProcessContext&);
+MainGen server(kj::ProcessContext&);
+MainGen worker(kj::ProcessContext&);
+MainGen warehouse(kj::ProcessContext&);
 
 }

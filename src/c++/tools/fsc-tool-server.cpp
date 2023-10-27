@@ -19,7 +19,9 @@
 
 using namespace fsc;
 
-static struct RootServiceProvider : public NetworkInterface::Listener::Server {
+namespace {
+
+struct RootServiceProvider : public NetworkInterface::Listener::Server {
 	Temporary<LocalConfig> config;
 	
 	RootServiceProvider(LocalConfig::Reader configIn) :
@@ -32,7 +34,7 @@ static struct RootServiceProvider : public NetworkInterface::Listener::Server {
 	}
 };
 
-static struct ServerTool {
+struct ServerTool {
 	kj::ProcessContext& context;
 	Maybe<uint64_t> port = nullptr;
 	kj::String address = kj::heapString("0.0.0.0");
@@ -178,6 +180,8 @@ static struct ServerTool {
 	}
 };
 
-kj::MainFunc fsc_tool::server(kj::ProcessContext& ctx) {
-	return KJ_BIND_METHOD(ServerTool(), getMain);
+}
+
+fsc_tool::MainGen fsc_tool::server(kj::ProcessContext& ctx) {
+	return KJ_BIND_METHOD(ServerTool(ctx), getMain);
 }
