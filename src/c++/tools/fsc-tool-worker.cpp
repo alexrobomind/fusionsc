@@ -144,7 +144,7 @@ struct WorkerTool {
 		}));
 		
 		// Connect to remote interface
-		std::cout << "Connecting ..." << std::endl;
+		std::cout << "Connecting to upstream node ..." << std::endl;
 		NetworkInterface::Client networkInterface = kj::heap<LocalNetworkInterface>();
 		auto connectRequest = networkInterface.connectRequest();
 		connectRequest.setUrl(url);
@@ -171,7 +171,13 @@ struct WorkerTool {
 			"Protocol version ", FSC_PROTOCOL_VERSION, "\n"
 		);
 		
-		return kj::MainBuilder(context, infoString, "Creates a fusionsc worker")
+		return kj::MainBuilder(context, infoString, "Creates a fusionsc worker\n\n "
+			"A worker is a computation node offering equivalent functionality to a classical server node. "
+			"However, a worker node does not listen for incoming connections, but instead connects to an upstream "
+			"node and publishes its interface (using the matching service of the target node).\n"
+			"This functionality is intended to allow a scheduler to start a computing node n request and then wait "
+			"for its connection to come in. Generally, this functionality is used by the worker launcher and users "
+			"don't need to manually launch this command.")
 			.expectArg("<Upstream URL>", KJ_BIND_METHOD(*this, setUrl))
 			.expectArg("<Token>", KJ_BIND_METHOD(*this, setToken))
 			.expectOptionalArg("<settings file>", KJ_BIND_METHOD(*this, setFile))
