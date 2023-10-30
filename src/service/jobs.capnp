@@ -9,15 +9,6 @@ $Java.outerClassname("Jobs");
 
 using Streams = import "streams.capnp";
 
-struct JobRequest {
-	workDir @0 : Text;
-	command @1 : Text;
-	arguments @2 : List(Text);
-	
-	numTasks @3 : UInt32 = 1;
-	numCpusPerTask @4 : UInt32 = 1;
-}
-
 interface Job {
 	enum State {
 		pending @0;
@@ -41,8 +32,4 @@ interface Job {
 	
 	attach @5 () -> AttachResponse;
 	eval @6 (stdIn : Data) -> (stdOut : Text, stdErr : Text);
-}
-
-interface JobScheduler {
-	run @0 JobRequest -> (job : Job);
 }

@@ -94,22 +94,22 @@ kj::StringTree escapeForBash(kj::StringPtr input) {
 	return result;
 }
 
-kj::String wrapCommand(kj::StringPtr command, capnp::List<capnp::Text>::Reader arguments) {
+kj::String wrapCommand(kj::StringPtr command, ArrayPtr<kj::String> arguments) {
 	auto result = kj::strTree(escapeForBash(command));
-	for(auto arg : arguments) {
+	for(kj::StringPtr arg : arguments) {
 		result = kj::strTree(mv(result), " ", escapeForBash(arg));
 	}
 	return result.flatten();
 }
 
 struct SlurmJob : public Job::Server {
-	JobScheduler::Client systemLauncher;
+	Own<JobLauncher> systemLauncher;
 	unsigned int jobId;
 	ForkedPromise<void> completionPromise;
 	
 	Job::State state = Job::State::PENDING;
 	
-	SlurmJob(JobScheduler::Client systemLauncher, unsigned int jobId) :
+	SlurmJob(Own<JobLauncher> systemLauncher, unsigned int jobId) :
 		systemLauncher(mv(systemLauncher)), jobId(jobId),
 		completionPromise(track().eagerlyEvaluate(nullptr).fork())
 	{}
@@ -136,11 +136,11 @@ struct SlurmJob : public Job::Server {
 	}
 	
 	Promise<Job::State> queryState() {
-		auto scontrolRequest = systemLauncher.runRequest();
-		scontrolRequest.setCommand("scontrol");
+		JobRequest scontrolRequest;
+		scontrolRequest.command = kj::str("scontrol");
 		scontrolRequest.setArguments({"show", "job", kj::str(jobId)});
 		
-		return scontrolRequest.sendForPipeline().getJob().evalRequest().send()
+		return systemLauncher -> launch(mv(scontrolRequest)).evalRequest().send()
 		.then([](Job::EvalResults::Reader results) {
 			p::IteratorInput<char, const char*> input(results.getStdOut().begin(), results.getStdOut().end());
 			
@@ -181,11 +181,11 @@ struct SlurmJob : public Job::Server {
 	Promise<void> attach(AttachContext ctx) override {
 		return whenRunning()
 		.then([this, ctx]() mutable {
-			auto sattachRequest = systemLauncher.runRequest();
-			sattachRequest.setCommand("sattach");
+			JobRequest sattachRequest;
+			sattachRequest.command = kj::str("sattach");
 			sattachRequest.setArguments({kj::str(jobId, ".0")});
 			
-			auto sattachJob = sattachRequest.sendForPipeline().getJob();
+			auto sattachJob = systemLauncher -> launch(mv(sattachRequest));
 			return ctx.tailCall(sattachJob.attachRequest());
 		});
 	}
@@ -199,37 +199,34 @@ struct SlurmJob : public Job::Server {
 	}
 	
 	Promise<void> cancel(CancelContext ctx) override {
-		auto cancelReq = systemLauncher.runRequest();
-		cancelReq.setCommand("scancel");
-		cancelReq.setArguments({kj::str(jobId)});
+		JobRequest scancelRequest;
+		scancelRequest.command = kj::str("scancel");
+		scancelRequest.setArguments({kj::str(jobId)});
 		
-		return cancelReq.sendForPipeline().getJob().whenCompletedRequest().send().ignoreResult();
+		return systemLauncher -> launch(mv(scancelRequest)).whenCompletedRequest().send().ignoreResult();
 	}
 };
 
-struct SlurmJobLauncher : public JobScheduler::Server {
-	JobScheduler::Client systemLauncher;
+struct SlurmJobLauncher : public JobLauncher, kj::Refcounted {
+	Own<JobLauncher> systemLauncher;
 	
-	SlurmJobLauncher(JobScheduler::Client sysLauncher) :
+	SlurmJobLauncher(Own<JobLauncher> sysLauncher) :
 		systemLauncher(mv(sysLauncher))
 	{}
 	
-	Promise<void> run(RunContext ctx) override {
-		auto params = ctx.getParams();
-		
-		auto runRequest = systemLauncher.runRequest();
-		runRequest.setCommand("sbatch");
-		
-		runRequest.setArguments({
+	Job::Client launch(JobRequest req) override {
+		JobRequest sbatchRequest;
+		sbatchRequest.command = kj::str("sbatch");
+		sbatchRequest.setArguments({
 			"--parsable",
-			"--ntasks", kj::str(params.getNumTasks()),
-			"--cpus-per-task", kj::str(params.getNumCpusPerTask()),
-			"--wrap", wrapCommand(params.getCommand(), params.getArguments())
+			"--ntasks", kj::str(req.numTasks),
+			"--cpus-per-task", kj::str(req.cpusPerTask),
+			"--wrap", wrapCommand(req.command, req.arguments),
 		});
+		sbatchRequest.workDir = mv(req.workDir);
 		
-		auto job = runRequest.sendForPipeline().getJob();
-		return runToCompletion(job)
-		.then([this, ctx, job](kj::String stdoutText) mutable {
+		return runToCompletion(systemLauncher -> launch(mv(sbatchRequest)))
+		.then([req = mv(req), sl = systemLauncher -> addRef()](kj::String stdoutText) mutable -> Job::Client {
 			// The slurm output can hold a ';' to separate cluster name and id
 			// Just retrieve the id part
 			kj::String jobNoStr;
@@ -240,15 +237,23 @@ struct SlurmJobLauncher : public JobScheduler::Server {
 			}
 			
 			unsigned int jobId = jobNoStr.parseAs<unsigned int>();
-			ctx.initResults().setJob(kj::heap<SlurmJob>(systemLauncher, jobId));
+			return kj::heap<SlurmJob>(mv(sl), jobId);
 		});
+	}
+	
+	Own<JobDir> createDir() override {
+		return systemLauncher -> createDir();
+	}
+	
+	Own<JobLauncher> addRef() override {
+		return kj::addRef(*this);
 	}
 };
 
 }
 
-JobScheduler::Client newSlurmScheduler() {
-	return kj::heap<SlurmJobLauncher>(newProcessScheduler());
+Own<JobLauncher> newSlurmScheduler(kj::StringPtr baseDir) {
+	return kj::refcounted<SlurmJobLauncher>(newProcessScheduler(baseDir));
 }
 	
 

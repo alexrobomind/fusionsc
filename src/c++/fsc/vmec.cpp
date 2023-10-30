@@ -261,37 +261,73 @@ kj::StringTree makeBoundaryData(VmecSurfaces::Reader in) {
 	return result;
 }
 
-struct VmecDriverImpl : public VmecDriver::Server {
-	JobScheduler::Client scheduler;
+struct VmecRun {
+	Own<JobDir> workDir;
+	VmecDriver::Server::RunContext ctx;
 	
-	kj::Path rootPath;
-	Own<const kj::Directory> rootDirectory;
-	
-	uint64_t jobDirCounter = 0;
-	
-	VmecDriverImpl(JobScheduler::Client scheduler, kj::Filesystem& fs, kj::PathPtr parPath) :
-		scheduler(mv(scheduler)), rootPath(parPath.clone()),
-		rootDirectory(fs.getCurrent().openSubdir(rootPath, kj::WriteMode::CREATE | kj::WriteMode::MODIFY))
+	VmecRun(VmecDriver::RunContext ctx, Own<JobDir> d) :
+		workDir(mv(d)),
+		ctx(mv(ctx))
 	{}
 	
-	kj::Path createJobDirectory() {
-		auto names = rootDirectory -> listNames();
-		while(true) {
-			auto nameCandidate = kj::str("vmecJob", jobDirCounter++);
-			
-			for(auto& name : names) {
-				if(name == nameCandidate) {
-					goto nextCandidate;
-				}
-			}
-			
-			rootDirectory -> openSubdir(kj::Path(nameCandidate), kj::WriteMode::CREATE);
-			return rootPath.append(nameCandidate);
-			
-			nextCandidate:
-				continue;
+	Promise<void> run(JobLauncher& launcher) {
+		auto mgridPath = workDir.absPath.append("vacField.nc4");
+		auto inputPath = workDir.absPath.append("vmecInput.input");
+		
+		auto params = ctx.getParams();
+		if(params.isFreeBoundary()) {	
+			// Write the mgrid file
+			writeMGridFile(mgridPath, params.getFreeBoundary().getVacuumField();
 		}
+		
+		// Prepare the VMEC input file
+		auto inputFile = workDir.dir -> open("vmecInput.input", kj::WriteMode::CREATE);
+		
+		auto inputString = generateVmecInput(params, mgridPath);
+		inputFile -> writeAll(inputString);
+		
+		// Launch the VMEC code
+		JobRequest req;
+		req.command = kj::str("xvmec2000");
+		req.setArguments({"vmecInput"});
+		req.workDir = workDir.absPath.clone();
+		
+		auto job = launcher.launch(mv(req));
+		
+		auto extractLog = [](auto stream) -> DataRef<capnp::Text>::Client {
+			return stream.readAllTextRequest().send()
+			.then([ctx](auto response) mutable {
+				auto ref = getActiveThread().dataService().publish(response.getText());
+				ctx.getResults().setStdout(ref);
+			})
+		};
+		
+		auto streams = job.attachRequest().sendForPipeline();
+		ctx.getResults().setStdout(extractLog(streams.getStdout()));
+		ctx.getResults().setStderr(extractLog(streams.getStderr()));
+		
+		auto readStdout = streams.getStdout().readAllTextRequest().send()
+		
+		// Wait for job to finish
+		return job.whenCompleted()
+		
+		.then(
+			[this]() {}, // Success
+			[this](kj::Exception&& e) {} // Failure
+		);
 	}
+	
+	
+};
+
+struct VmecDriverImpl : public VmecDriver::Server {
+	Own<JobLauncher> launcher;
+	
+	VmecDriverImpl(JobLauncher& l) :
+		launcher(l -> addRef())
+	{}
+	
+	
 };
 
 }
@@ -385,7 +421,6 @@ Promise<void> writeMGridFile(kj::PathPtr path, ComputedField::Reader cField) {
 		// File
 		H5::H5File file(path.toWin32String(true).cStr(), H5F_ACC_TRUNC);
 		
-		
 		// Scalars
 		auto nR = grid.getNR();
 		auto nZ = grid.getNZ();
@@ -440,7 +475,7 @@ Promise<void> writeMGridFile(kj::PathPtr path, ComputedField::Reader cField) {
 }
 
 VmecDriver::Client createVmecDriver(JobScheduler::Client scheduler, kj::PathPtr workDir) {
-	return kj::heap<VmecDriverImpl>(mv(scheduler), *(kj::newDiskFilesystem()), workDir);
+	return kj::heap<VmecDriverImpl>(mv(scheduler), workDir);
 }
 
 }

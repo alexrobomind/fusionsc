@@ -134,13 +134,13 @@ struct RootServer : public RootService::Server {
 	
 	std::map<kj::String, Warehouse::Folder::Client> warehouses;
 	
-	JobScheduler::Client selectScheduler() {
+	Own<JobLauncher> selectScheduler() {
 		// Select correct scheduler
 		switch(config.getJobScheduler().which()) {
 			case LocalConfig::JobScheduler::SYSTEM:
-				return newProcessScheduler();
+				return newProcessScheduler(config.getJobDir());
 			case LocalConfig::JobScheduler::SLURM:
-				return newSlurmScheduler();
+				return newSlurmScheduler(config.getJobDir());
 			default:
 				KJ_UNIMPLEMENTED("Unknown scheduler type requested.");
 		}
@@ -505,7 +505,6 @@ kj::ArrayPtr<uint64_t> fsc::protectedInterfaces() {
 	static kj::Array<uint64_t> result = kj::heapArray<uint64_t>({
 		capnp::typeId<LocalResources>(),
 		capnp::typeId<NetworkInterface>(),
-		capnp::typeId<JobScheduler>(),
 		capnp::typeId<SSHConnection>()
 	});
 	

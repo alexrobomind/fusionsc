@@ -8,6 +8,7 @@
 #include <kj/encoding.h>
 
 #include <kj/async-win32.h>
+#include <kj/refcount.h>
 
 namespace fsc {
 	
@@ -103,7 +104,9 @@ struct Win32ProcessJob : public JobServerBase {
 	bool isDetached = false;
 	Job::State state = Job::State::RUNNING;
 	
-	Temporary<Job::AttachResponse> streams;
+	Own<kj::AsyncInputStream> myStdout;
+	Own<kj::AsyncInputStream> myStderr;
+	Own<MultiplexedOutputStream> myStdin;
 	
 	Win32ProcessJob(HANDLE process) :
 		process(process),
@@ -175,7 +178,20 @@ struct Win32ProcessJob : public JobServerBase {
 	}
 	
 	Promise<void> attach(AttachContext ctx) {
-		ctx.setResults(streams);
+		auto fork = [this](Own<kj::AsyncInputStream>& is) {
+			kj::Tee tee = kj::newTee(mv(is));
+			is = mv(tee.branches[0]);
+			
+			return getActiveThread().streamConverter().toRemote(mv(tee.branches[1]));
+		};
+		
+		auto res = ctx.initResults();
+		
+		res.setStdout(fork(myStdout));
+		res.setStderr(fork(myStderr));
+		
+		res.setStdin(getActiveThread().streamConverter().toRemote(myStdin -> addRef()));
+		
 		return READY_NOW;
 	}
 };
@@ -234,13 +250,22 @@ struct WinCArgumentEscaper {
 	}
 };
 
-struct Win32ProcessJobScheduler : public JobScheduler::Server {
-	Promise<void> run(RunContext ctx) {
-		JobRequest::Reader params = ctx.getParams();
-		
+struct Win32ProcessJobScheduler : public JobLauncher, kj::Refcounted, BaseDirProvider {
+	using BaseDirProvider::BaseDirProvider;
+	
+	Own<JobDir> createDir() override {
+		return BaseDirProvider::createDir();
+	}
+	
+	Own<JobLauncher> addRef() override {
+		return kj::addRef(*this);
+	}
+	
+	Job::Client launch(JobRequest req) override {		
 		kj::Vector<kj::StringPtr> cmdLine;
-		cmdLine.add(params.getCommand());
-		for(auto arg : params.getArguments())
+		
+		cmdLine.add(req.command);
+		for(kj::StringPtr arg : req.arguments)
 			cmdLine.add(arg);
 		
 		kj::String cmdString = WinCArgumentEscaper::escapeCommandLine(cmdLine.releaseAsArray());
@@ -275,6 +300,11 @@ struct Win32ProcessJobScheduler : public JobScheduler::Server {
 		stInfo.hStdOutput = outStream[1];
 		stInfo.hStdError  = errStream[1];
 		
+		kj::Array<wchar_t> workDir;
+		KJ_IF_MAYBE(pWd, req.workDir) {
+			workDir = pWd -> forWin32Api(true);
+		};
+		
 		PROCESS_INFORMATION procInfo;
 		
 		KJ_WIN32(CreateProcessW(
@@ -285,7 +315,7 @@ struct Win32ProcessJobScheduler : public JobScheduler::Server {
 			true,   // bInheritHandles
 			0, // dwCreationFlags
 			nullptr, // lpEnvironment
-			params.getWorkDir().size() != 0 ? kj::encodeWideString(params.getWorkDir(), true).begin() : nullptr, // lpCurrentDirectory
+			workDir.begin(), // lpCurrentDirectory (for no WD, this is nullptr)
 			&stInfo, // lpStartupInfo
 			&procInfo
 		));
@@ -296,13 +326,11 @@ struct Win32ProcessJobScheduler : public JobScheduler::Server {
 		
 		auto job = kj::heap<Win32ProcessJob>(procInfo.hProcess);
 		
-		job -> streams.setStdin(getActiveThread().streamConverter().toRemote(mv(stdinStream)));
-		job -> streams.setStdout(getActiveThread().streamConverter().toRemote(mv(stdoutStream)));
-		job -> streams.setStderr(getActiveThread().streamConverter().toRemote(mv(stderrStream)));
+		job -> myStdin = multiplex(mv(stdinStream));
+		job -> myStdout = buffer(mv(stdoutStream));
+		job -> myStderr= buffer(mv(stderrStream));
 		
-		ctx.initResults().setJob(mv(job));
-		
-		return READY_NOW;
+		return job;
 	}
 };
 
@@ -310,8 +338,8 @@ struct Win32ProcessJobScheduler : public JobScheduler::Server {
 
 // API
 
-JobScheduler::Client newProcessScheduler() {
-	return kj::heap<Win32ProcessJobScheduler>();
+Own<JobLauncher> newProcessScheduler(kj::StringPtr baseDir) {
+	return kj::refcounted<Win32ProcessJobScheduler>(baseDir);
 }
 
 }

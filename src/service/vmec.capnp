@@ -105,14 +105,30 @@ struct VmecRequest {
 }
 
 struct VmecResult {
-	raw @0 : DataRef(Data);
+	woutNc @0 : DataRef(Data);
+	
 	surfaces @1 : DataRef(VmecSurfaces);
 	volume @2 : Float64;
 	energy @3 : Float64;
 }
 
 interface VmecDriver {
-	run @0 VmecRequest -> VmecResult;
+	struct RunInfo {	
+		# Original request
+		request @0 : VmecRequest;
+		
+		# Output from the code
+		stdout @1 : DataRef(Text);
+		stderr @2 : DataRef(Text);
+		
+		# Reference to the result
+		result : union {
+			failed @3 : Text;
+			ok @4 : DataRef(VmecResult);
+		}
+	}
+	
+	run @0 VmecRequest -> (info : DataRef(RunInfo));
 	computePhiEdge @1 (field : Magnetics.ComputedField, surface : VmecSurfaces) -> (phiEdge : Float64);
 }
 

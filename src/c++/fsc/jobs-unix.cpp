@@ -27,7 +27,9 @@ struct UnixProcessJob : public JobServerBase {
 	bool isDetached = false;
 	Job::State state = Job::State::RUNNING;
 	
-	Temporary<Job::AttachResponse> streams;
+	Own<kj::AsyncInputStream> myStdout;
+	Own<kj::AsyncInputStream> myStderr;
+	Own<MultiplexedOutputStream> myStdin;
 	
 	pid_t pid;
 	Own<kj::AsyncInputStream> dummyInput;
@@ -124,13 +126,30 @@ struct UnixProcessJob : public JobServerBase {
 	}
 	
 	Promise<void> attach(AttachContext ctx) override {
-		ctx.setResults(streams);
+		auto fork = [this](Own<kj::InputStream>& is) {
+			kj::Tee tee = kj::newTee(mv(is));
+			is = mv(tee[0]);
+			
+			return getActiveThread().streamConverter().toRemote(mv(tee[1]));
+		};
+		
+		auto res = ctx.initResults();
+		
+		res.setStdout(fork(myStdout));
+		res.setStderr(fork(myStderr));
+		
+		res.setStdin(getActiveThread().streamConverter().toRemote(myStdin -> addRef()));
+		
 		return READY_NOW;
 	}
 };
 
-struct UnixProcessJobScheduler : public JobScheduler::Server {
-	Promise<void> run(RunContext ctx) override {
+struct UnixProcessJobScheduler : public JobLauncher, kj::Refcounted, BaseDirProvider {
+	Own<JobLauncher> addRef() override {
+		return kj::addRef(*this);
+	}
+	
+	Job::Client launch(JobRequest req) override {
 		// All signal-related things should run on the steward thread
 		auto& executor = getActiveThread().library() -> steward();
 		
@@ -145,19 +164,21 @@ struct UnixProcessJobScheduler : public JobScheduler::Server {
 		pipe(stderrPipe);
 		pipe(dummyPipe);
 		
-		JobRequest::Reader params = ctx.getParams();
-		
 		// Note: execv takes the arguments as char* instead of const char* because
 		// of C limitations. They are guaranteed not to be modified.
-		auto heapArgs = kj::heapArrayBuilder<char*>(params.getArguments().size() + 2);
-		heapArgs.add(const_cast<char*>(params.getCommand().cStr()));
-		for(auto arg : params.getArguments())
+		auto heapArgs = kj::heapArrayBuilder<char*>(req.arguments.size() + 2);
+		heapArgs.add(const_cast<char*>(req.command.cStr()));
+		for(auto arg : req.arguments)
 			heapArgs.add(const_cast<char*>(arg.cStr()));
 		heapArgs.add(nullptr);
 		
 		char** args = heapArgs.begin();
-		const char* path = params.getCommand().cStr();
-		const char* workDir = params.getWorkDir().cStr();
+		const char* path = req.command.cStr();
+		
+		kj::String workDir;
+		KJ_IF_MAYBE(pWd, req.workDir) {
+			workDir = pWd -> toString(true);
+		};
 		
 		auto stdin = stdinPipe[0];
 		auto stdout = stdoutPipe[1];
@@ -186,7 +207,9 @@ struct UnixProcessJobScheduler : public JobScheduler::Server {
 			close(dummyPipe[0]);
 			close(dummyPipe[1]);
 			
-			KJ_SYSCALL(chdir(workDir));
+			if(workDir != nullptr) {
+				KJ_SYSCALL(chdir(workDir.cStr()));
+			}
 			
 			execvp(path, args);
 			exit(-1);
@@ -203,27 +226,11 @@ struct UnixProcessJobScheduler : public JobScheduler::Server {
 		
 		auto job = kj::heap<UnixProcessJob>(pid, mv(dummyInput));
 		
-		job -> streams.setStdin(
-			getActiveThread().streamConverter().toRemote(
-				getActiveThread().ioContext().lowLevelProvider -> wrapOutputFd(stdinPipe[1], kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP)
-			)
-		);
+		job -> myStdin = multiplex(getActiveThread().ioContext().lowLevelProvider -> wrapOutputFd(stdinPipe[1], kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP));
+		job -> myStdout = buffer(getActiveThread().ioContext().lowLevelProvider -> wrapInputFd(stdoutPipe[0], kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP));
+		job -> myStderr = buffer(getActiveThread().ioContext().lowLevelProvider -> wrapInputFd(stderrPipe[0], kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP));
 		
-		job -> streams.setStdout(
-			getActiveThread().streamConverter().toRemote(
-				getActiveThread().ioContext().lowLevelProvider -> wrapInputFd(stdoutPipe[0], kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP)
-			)
-		);
-		
-		job -> streams.setStderr(
-			getActiveThread().streamConverter().toRemote(
-				getActiveThread().ioContext().lowLevelProvider -> wrapInputFd(stderrPipe[0], kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP)
-			)
-		);
-		
-		ctx.initResults().setJob(mv(job));
-		
-		return READY_NOW;
+		return job;
 		
 		// Portable code
 	}
@@ -239,7 +246,7 @@ struct SlurmJob {
 // API
 
 JobScheduler::Client newProcessScheduler() {
-	return kj::heap<UnixProcessJobScheduler>();
+	return kj::refcounted<UnixProcessJobScheduler>();
 }
 
 }

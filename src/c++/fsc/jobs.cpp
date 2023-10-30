@@ -1,6 +1,57 @@
 #include "jobs.h"
+#include "local.h"
 
 namespace fsc {
+
+namespace {
+
+struct BaseJobDir : public JobDir, kj::Refcounted {
+	BaseJobDir(kj::Path p, Own<const kj::Directory> d, const kj::Directory& parent, kj::StringPtr name) :
+		parent(parent.clone()),
+		name(kj::heapString(name))
+	{
+		dir = mv(d);
+		absPath = mv(p);
+	}
+	
+	Own<JobDir> addRef() { return kj::addRef(*this); }
+	
+	~BaseJobDir() {
+		ud.catchExceptionsIfUnwinding([this]() {
+			parent -> remove(kj::Path(name));
+		});
+	}
+	
+	Own<const kj::Directory> parent;
+	kj::StringPtr name;
+	
+	kj::UnwindDetector ud;
+};
+
+std::atomic<size_t> dirCounter = 0;
+
+}
+
+// class BaseDirProvider
+
+BaseDirProvider::BaseDirProvider(kj::StringPtr dirName) {
+	auto& fs = getActiveThread().filesystem();
+	
+	basePath = fs.getCurrentPath().eval(dirName);
+	baseDir = fs.getRoot().openSubdir(basePath, kj::WriteMode::CREATE | kj::WriteMode::MODIFY | kj::WriteMode::CREATE_PARENT);
+}
+
+Own<JobDir> BaseDirProvider::createDir() {
+	while(true) {
+		auto nameCandidate = kj::str("job-", dirCounter++);
+		
+		if(baseDir -> exists(kj::Path(nameCandidate)))
+			continue;
+		
+		auto dir = baseDir -> openSubdir(kj::Path(nameCandidate), kj::WriteMode::CREATE);
+		return kj::refcounted<BaseJobDir>(basePath.append(nameCandidate), mv(dir), *baseDir, nameCandidate);
+	}
+}
 	
 // Class JobServerBase
 
@@ -39,15 +90,13 @@ Promise<void> JobServerBase::eval(EvalContext ctx) {
 	return kj::joinPromises(builder.finish());
 }
 
-Job::Client runJob(JobScheduler::Client sched, kj::StringPtr cmd, kj::ArrayPtr<kj::StringPtr> args, kj::StringPtr workDir) {
-	auto req = sched.runRequest();
-	req.setWorkDir(workDir);
-	req.setCommand(cmd);
-	auto argsOut = req.initArguments(args.size());
-	for(auto i : kj::indices(args))
-		argsOut.set(i, args[i]);
+Job::Client runJob(JobLauncher& sched, kj::StringPtr cmd, kj::ArrayPtr<kj::StringPtr> args, Maybe<kj::PathPtr> wd) {
+	JobRequest req;
+	req.command = kj::str(cmd);
+	req.setArguments(args);
+	req.workDir = wd.map([](kj::PathPtr x) { return x.clone(); });
 	
-	return req.send().getJob();
+	return sched.launch(mv(req));
 }
 
 Promise<kj::String> runToCompletion(Job::Client job) {

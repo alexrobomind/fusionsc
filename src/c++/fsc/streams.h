@@ -19,4 +19,25 @@ struct StreamConverter {
 
 Own<StreamConverter> newStreamConverter();
 
+/** Buffers the input stream
+ *
+ * Creates an eagerly consuming buffer (based on linked list of blocks) that consumes
+ * data from the given input stream. The internal buffer blocks are released once the
+ * data is no longer required. The input stream features an optimized tee implementation
+ * that shared the buffer and only forks the buffer's cursor position.
+ */
+Own<kj::AsyncInputStream> buffer(Own<kj::AsyncInputStream>&& in, uint64_t limit = kj::maxValue);
+
+//! A variant of kj::OutputStream where multiple write calls may be simultaneously active.
+struct MultiplexedOutputStream : public kj::AsyncOutputStream {
+	virtual Own<MultiplexedOutputStream> addRef() = 0;
+};
+
+/** Multiplexes the output stream
+ *
+ * This returns an object that can safely allow multiple simultaneous writes to the given
+ * output stream by multiplexing write calls in turn with a FIFO.
+ */
+Own<MultiplexedOutputStream> multiplex(Own<kj::AsyncOutputStream>&&);
+
 }

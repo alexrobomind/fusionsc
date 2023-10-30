@@ -42,6 +42,9 @@ struct LocalConfig {
 		slurm @4 : Void;
 	}
 	
+	# Root directory for temporary worker dirs
+	jobDir @12 : Text = ".";
+	
 	# Configuration settings for the field line tracer
 	flt @5 : FLT.FLTConfig;
 	
