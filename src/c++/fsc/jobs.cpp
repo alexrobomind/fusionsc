@@ -1,6 +1,8 @@
 #include "jobs.h"
 #include "local.h"
 
+#include <atomic>
+
 namespace fsc {
 
 namespace {
@@ -18,7 +20,8 @@ struct BaseJobDir : public JobDir, kj::Refcounted {
 	
 	~BaseJobDir() {
 		ud.catchExceptionsIfUnwinding([this]() {
-			parent -> remove(kj::Path(name));
+			KJ_DBG("Skipped releasing directory (debug behavior)", absPath);
+			// parent -> remove(kj::Path(name));
 		});
 	}
 	
@@ -90,11 +93,13 @@ Promise<void> JobServerBase::eval(EvalContext ctx) {
 	return kj::joinPromises(builder.finish());
 }
 
-Job::Client runJob(JobLauncher& sched, kj::StringPtr cmd, kj::ArrayPtr<kj::StringPtr> args, Maybe<kj::PathPtr> wd) {
+Job::Client runJob(JobLauncher& sched, kj::StringPtr cmd, kj::ArrayPtr<kj::StringPtr> args, kj::PathPtr wd) {
 	JobRequest req;
 	req.command = kj::str(cmd);
 	req.setArguments(args);
-	req.workDir = wd.map([](kj::PathPtr x) { return x.clone(); });
+	
+	if(wd != nullptr)
+		req.workDir = wd.clone();
 	
 	return sched.launch(mv(req));
 }

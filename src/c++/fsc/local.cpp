@@ -83,8 +83,6 @@ void LibraryHandle::runSteward() {
 
 	// loopbackReferenceForStewardStartup = nullptr;
 	runPromise.wait(ctx.waitScope());
-	
-	KJ_DBG("Steward stopping ...");
 }
 
 // === class NullErrorHandler ===

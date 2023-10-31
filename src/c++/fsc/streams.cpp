@@ -296,20 +296,7 @@ struct InputBuffer : public kj::Refcounted {
 				++c.pos;
 				c.bytes = 0;
 				
-				// Perhaps we can now free the first block of the buffer
-				bool canFree = true;
-				for(auto& c : readers) {
-					if(c.pos == data.begin())
-						canFree = false;
-				}
-				
-				if(canFree) {
-					data.pop_front();
-					
-					// The pump might have blocked due to running out of space
-					// Try to restart it
-					startPump();
-				}
+				gc();
 				
 				continue;
 			}
@@ -323,6 +310,32 @@ struct InputBuffer : public kj::Refcounted {
 		}
 		
 		return consumed;
+	}
+	
+	void gc() {
+		bool freed = false;
+		
+		while(true) {
+			// Perhaps we can now free the first block of the buffer
+			bool canFree = true;
+			for(auto& c : readers) {
+				if(c.pos == data.begin())
+					canFree = false;
+			}
+			
+			if(canFree) {
+				data.pop_front();
+				freed = true;
+			} else {
+				break;
+			}
+		}
+		
+		if(freed) {			
+			// The pump might have blocked due to running out of space
+			// Try to restart it
+			startPump();
+		}
 	}
 		
 	kj::ArrayPtr<kj::byte> inputBuffer() {
@@ -341,6 +354,11 @@ struct InputBuffer : public kj::Refcounted {
 			return queue.wait();
 		
 		return (size_t) 0;
+	}
+	
+	void reset(Cursor& c) {
+		c.pos = data.begin();
+		c.bytes = 0;
 	}
 	
 	const uint64_t sizeLimit;
@@ -375,6 +393,7 @@ struct BufferedInputStream : public kj::AsyncInputStream {
 	BufferedInputStream(InputBuffer& buf) :
 		buf(kj::addRef(buf))
 	{
+		buf.reset(cursor);
 		buf.readers.add(cursor);
 	}
 	
@@ -387,6 +406,9 @@ struct BufferedInputStream : public kj::AsyncInputStream {
 	
 	~BufferedInputStream() {
 		buf -> readers.remove(cursor);
+		
+		if(!buf -> readers.empty())
+			buf -> gc();
 	}
 	
 	Promise<size_t> tryRead(void* bufPtr, size_t minBytes, size_t maxBytes) {

@@ -50,13 +50,11 @@ TEST_CASE("job-echo") {
 	auto args = kj::heapArray<kj::StringPtr>({"-E", "echo_append", ECHO_STRING});
 	
 	// Start job
-	JobScheduler::Client sched = newProcessScheduler();
-	Job::Client job = runJob(sched, cmd, args);
+	auto sched = newProcessScheduler(".");
+	Job::Client job = runJob(*sched, cmd, args);
 	
 	// Obtain job's stdout
 	auto attach = job.attachRequest().sendForPipeline();
-	// auto remoteStdout = job.attachRequest().send().getStdout();
-	// auto remoteStderr = job.attachRequest().send().getStderr();
 	auto remoteStdout = attach.getStdout();
 	auto remoteStderr = attach.getStderr();
 	

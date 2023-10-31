@@ -50,7 +50,7 @@ TEST_CASE("warehouse-rw-1", "[warehouse]") {
 	putRequest.setValue(promiseRef.asGeneric());
 	
 	auto putResponse = putRequest.send().wait(ws);
-	auto storedObject = putResponse.getAsRef().castAs<HolderRef>();
+	auto storedObject = putResponse.getAsGeneric().castAs<HolderRef>();
 	
 	SECTION("fast termination") {
 		// Checks for memory leaks in case download process gets into limbo
@@ -131,7 +131,7 @@ TEST_CASE("warehouse-rw-2", "[warehouse]") {
 	putRequest.setValue(promiseRef);
 	
 	auto putResponse = putRequest.send().wait(ws);
-	auto storedObject = putResponse.getAsRef().castAs<HolderRef>();
+	auto storedObject = putResponse.getAsGeneric().castAs<HolderRef>();
 	
 	Temporary<test::DataRefHolder<capnp::Data>> refHolder;
 	
@@ -178,8 +178,7 @@ TEST_CASE("warehouse-rw-3", "[warehouse]") {
 		putRequest.setValue(th -> dataService().publish(data).asGeneric());
 		auto putResponse = putRequest.send().wait(ws);
 		
-		auto storedObject = putResponse.getAsRef().asGeneric<capnp::Data>();
-		
+		auto storedObject = putResponse.getAsGeneric();
 		storedObject.whenResolved().wait(ws);
 	}
 	
@@ -194,7 +193,7 @@ TEST_CASE("warehouse-rw-3", "[warehouse]") {
 		auto getRequest = dbRoot.getRequest();
 		getRequest.setPath("obj");
 		
-		auto remoteData = getRequest.send().getAsRef().castAs<HolderRef>();
+		auto remoteData = getRequest.send().getAsGeneric().castAs<HolderRef>();
 		auto localData = th -> dataService().download(remoteData).wait(ws);
 		
 		REQUIRE(localData.get() == data);

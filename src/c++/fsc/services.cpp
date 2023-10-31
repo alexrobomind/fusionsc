@@ -106,7 +106,7 @@ Promise<Warehouse::Folder::Client> connectWarehouse(kj::StringPtr urlString, Net
 		return response.getConnection().getRemoteRequest().send();
 	})
 	.then([](auto response) {
-		return response.getRemote().castAs<Warehouse::Folder>();
+		return response.getRemote().template castAs<Warehouse::Folder>();
 	});
 }
 

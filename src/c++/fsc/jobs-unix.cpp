@@ -126,11 +126,11 @@ struct UnixProcessJob : public JobServerBase {
 	}
 	
 	Promise<void> attach(AttachContext ctx) override {
-		auto fork = [this](Own<kj::InputStream>& is) {
+		auto fork = [this](Own<kj::AsyncInputStream>& is) {
 			kj::Tee tee = kj::newTee(mv(is));
-			is = mv(tee[0]);
+			is = mv(tee.branches[0]);
 			
-			return getActiveThread().streamConverter().toRemote(mv(tee[1]));
+			return getActiveThread().streamConverter().toRemote(mv(tee.branches[1]));
 		};
 		
 		auto res = ctx.initResults();
@@ -145,6 +145,12 @@ struct UnixProcessJob : public JobServerBase {
 };
 
 struct UnixProcessJobScheduler : public JobLauncher, kj::Refcounted, BaseDirProvider {
+	using BaseDirProvider::BaseDirProvider;
+	
+	Own<JobDir> createDir() override {
+		return BaseDirProvider::createDir();
+	}
+	
 	Own<JobLauncher> addRef() override {
 		return kj::addRef(*this);
 	}
@@ -168,7 +174,7 @@ struct UnixProcessJobScheduler : public JobLauncher, kj::Refcounted, BaseDirProv
 		// of C limitations. They are guaranteed not to be modified.
 		auto heapArgs = kj::heapArrayBuilder<char*>(req.arguments.size() + 2);
 		heapArgs.add(const_cast<char*>(req.command.cStr()));
-		for(auto arg : req.arguments)
+		for(kj::StringPtr arg : req.arguments)
 			heapArgs.add(const_cast<char*>(arg.cStr()));
 		heapArgs.add(nullptr);
 		
@@ -211,7 +217,7 @@ struct UnixProcessJobScheduler : public JobLauncher, kj::Refcounted, BaseDirProv
 				KJ_SYSCALL(chdir(workDir.cStr()));
 			}
 			
-			execvp(path, args);
+			KJ_SYSCALL(execvp(path, args));
 			exit(-1);
 		}
 			
@@ -236,17 +242,12 @@ struct UnixProcessJobScheduler : public JobLauncher, kj::Refcounted, BaseDirProv
 	}
 };
 
-struct SlurmJob {
-	JobScheduler::Client localScheduler;
-	uint64_t jobId;
-};
-
 }
 
 // API
 
-JobScheduler::Client newProcessScheduler() {
-	return kj::refcounted<UnixProcessJobScheduler>();
+Own<JobLauncher> newProcessScheduler(kj::StringPtr jobDir) {
+	return kj::refcounted<UnixProcessJobScheduler>(jobDir);
 }
 
 }

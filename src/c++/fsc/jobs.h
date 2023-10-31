@@ -13,12 +13,12 @@ struct JobDir {
 	kj::Path absPath = nullptr;
 	
 	virtual Own<JobDir> addRef() = 0;
-	virtual ~JobDir() = 0;
+	inline virtual ~JobDir() {};
 };
 
 struct JobDirProvider {
 	virtual Own<JobDir> createDir() = 0;
-	virtual ~JobDirProvider() noexcept(false) = 0;
+	inline virtual ~JobDirProvider() noexcept(false) {};
 };
 
 struct JobRequest {
@@ -42,13 +42,13 @@ struct JobLauncher : public JobDirProvider {
 	
 	virtual Own<JobLauncher> addRef() = 0;
 	
-	~JobLauncher();
+	inline virtual ~JobLauncher() {};
 };
 
 Own<JobLauncher> newProcessScheduler(kj::StringPtr jobDir);
 Own<JobLauncher> newSlurmScheduler(kj::StringPtr jobDir);
 
-Job::Client runJob(JobLauncher&, kj::StringPtr cmd, kj::ArrayPtr<kj::StringPtr> args = {}, kj::StringPtr wd = nullptr);
+Job::Client runJob(JobLauncher&, kj::StringPtr cmd, kj::ArrayPtr<kj::StringPtr> args = {}, kj::PathPtr wd = nullptr);
 Promise<kj::String> runToCompletion(Job::Client job);
 
 // Implementation helpers

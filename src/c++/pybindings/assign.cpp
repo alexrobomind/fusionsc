@@ -105,6 +105,39 @@ struct MessageSlot : public BuilderSlot {
 	}
 };
 
+struct CapSlot : public BuilderSlot {
+	DynamicCapability::Client cap;
+	
+	CapSlot(capnp::InterfaceSchema schema) {
+		capnp::Capability::Client raw = nullptr;
+		cap = raw.castAs<capnp::DynamicCapability>(schema);
+	}
+	
+	void set(DynamicValue::Reader newVal) const override {
+		KJ_REQUIRE(newVal.getType() == DynamicValue::INTERFACE, "Can only assign capabilities to capability slots");
+		auto newCap = newVal.as<capnp::DynamicCapability>();
+		KJ_REQUIRE(newCap.getSchema().extends(cap.getSchema()));
+		cap = mv(newCap);
+	}
+	void adopt(capnp::Orphan<DynamicValue>&& orphan) const override {
+		KJ_REQUIRE(newVal.getType() == DynamicValue::INTERFACE, "Can only assign capabilities to capability slots");
+		auto newCap = orphan.releaseAs<capnp::DynamicCapability>();
+		KJ_REQUIRE(newCap.getSchema() == cap.getSchema());
+		cap = mv(newCap);
+	}
+	DynamicValue::Builder get() const override {
+		return cap;
+	}
+	DynamicValue::Builder init() const override {
+		capnp::Capability::Client raw = nullptr;
+		cap = raw.castAs<capnp::DynamicCapability>(cap.getSchema());
+	}
+	
+	DynamicValue::Builder init(unsigned int size) const override {
+		KJ_FAIL_REQUIRE("Capabilities may not be initialized with list content");
+	}
+};
+
 }
 
 void assign(const BuilderSlot& dst, py::object object) {
@@ -145,7 +178,14 @@ void assign(const BuilderSlot& dst, py::object object) {
 	pybind11::detail::make_caster<DynamicValueReader> dynValCaster;
 	if(dynValCaster.load(object, false)) {
 		try {
-			dst.set((DynamicValueReader&) dynValCaster);
+			auto& val = (DynamicValueReader&) dynValCaster;
+			
+			// Assigning from void in our case means clearing the field / resetting to default
+			if(val.getType() == capnp::DynamicValue::VOID) {
+				dst.init();
+			}
+			
+			dst.set(val);
 			return;
 		} catch(kj::Exception e) {
 			assignmentFailureLog = strTree(mv(assignmentFailureLog), "Error while trying to assign from primitive: ", e, "\n");
@@ -231,6 +271,27 @@ void assign(const BuilderSlot& dst, py::object object) {
 	
 	// This label exists in case we add more conversion routines later
 	tensor_conversion_failed:
+	
+	// Attempt 7: Capabilities can also be assigned from promises
+	if(dst.type.isInterface()) {
+		if(py::hasattr(object, "_asyncio_future_blocking")) {
+			auto targetSchema = dst.type.asInterface();
+			
+			capnp::Capability::Client promisedCap = py::cast<Promise<DynamicCapabilityClient>>()
+			.then([targetSchema](DynamicCapabilityClient obj) -> capnp::Capability::Client {
+				auto newSchema = client.getSchema();
+				KJ_REQUIRE(newSchema.extends(targetSchema), "Returned capability does not extend the required interface");
+				
+				return client;
+			});
+			
+			slot.set(promisedCap.castAs<capnp::DynamicCapability>(targetSchema));
+		} else {
+			assignmentFailureLog = strTree(mv(assignmentFailureLog), "Skipped assigning capability from future because object is no future\n");
+		}
+	} else {
+		assignmentFailureLog = strTree(mv(assignmentFailureLog), "Skipped assigning capability from future because slot type is not a capability interface\n");
+	}
 	
 	throw std::invalid_argument(kj::str("Could not find a way to assign object of type ", py::cast<kj::StringPtr>(py::str(py::type::of(object))), ".\n", assignmentFailureLog.flatten()).cStr());
 }

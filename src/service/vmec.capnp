@@ -112,23 +112,23 @@ struct VmecResult {
 	energy @3 : Float64;
 }
 
-interface VmecDriver {
-	struct RunInfo {	
-		# Original request
-		request @0 : VmecRequest;
-		
-		# Output from the code
-		stdout @1 : DataRef(Text);
-		stderr @2 : DataRef(Text);
-		
-		# Reference to the result
-		result : union {
-			failed @3 : Text;
-			ok @4 : DataRef(VmecResult);
-		}
-	}
+struct VmecResponse {
+	# Input file that was generated
+	inputFile @0 : Text;
 	
-	run @0 VmecRequest -> (info : DataRef(RunInfo));
+	# Output from the code
+	stdout @1 : Text;
+	stderr @2 : Text;
+	
+	# Reference to the result
+	result : union {
+		failed @3 : Text;
+		ok @4 : DataRef(VmecResult);
+	}
+}
+
+interface VmecDriver {	
+	run @0 VmecRequest -> VmecResponse;
 	computePhiEdge @1 (field : Magnetics.ComputedField, surface : VmecSurfaces) -> (phiEdge : Float64);
 }
 

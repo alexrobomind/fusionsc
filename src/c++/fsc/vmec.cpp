@@ -263,58 +263,86 @@ kj::StringTree makeBoundaryData(VmecSurfaces::Reader in) {
 
 struct VmecRun {
 	Own<JobDir> workDir;
-	VmecDriver::Server::RunContext ctx;
+	VmecRequest::Reader in;
+	VmecResponse::Builder out;
 	
-	VmecRun(VmecDriver::RunContext ctx, Own<JobDir> d) :
+	VmecRun(VmecRequest::Reader in, VmecResponse::Builder out, Own<JobDir> d) :
 		workDir(mv(d)),
-		ctx(mv(ctx))
+		in(in), out(out)
 	{}
 	
 	Promise<void> run(JobLauncher& launcher) {
-		auto mgridPath = workDir.absPath.append("vacField.nc4");
-		auto inputPath = workDir.absPath.append("vmecInput.input");
+		auto mgridPath = workDir -> absPath.append("vacField.nc4");
+		KJ_DBG(mgridPath);
 		
-		auto params = ctx.getParams();
-		if(params.isFreeBoundary()) {	
+		Promise<void> prepareInput = READY_NOW;
+		
+		if(in.isFreeBoundary()) {	
 			// Write the mgrid file
-			writeMGridFile(mgridPath, params.getFreeBoundary().getVacuumField();
+			prepareInput = writeMGridFile(mgridPath, in.getFreeBoundary().getVacuumField());
 		}
 		
 		// Prepare the VMEC input file
-		auto inputFile = workDir.dir -> open("vmecInput.input", kj::WriteMode::CREATE);
+		auto inputFile = workDir -> dir -> openFile(kj::Path("vmecInput.input"), kj::WriteMode::CREATE);
 		
-		auto inputString = generateVmecInput(params, mgridPath);
+		auto inputString = generateVmecInput(in, mgridPath);
 		inputFile -> writeAll(inputString);
+		out.setInputFile(inputString);
 		
-		// Launch the VMEC code
-		JobRequest req;
-		req.command = kj::str("xvmec2000");
-		req.setArguments({"vmecInput"});
-		req.workDir = workDir.absPath.clone();
-		
-		auto job = launcher.launch(mv(req));
-		
-		auto extractLog = [](auto stream) -> DataRef<capnp::Text>::Client {
-			return stream.readAllTextRequest().send()
-			.then([ctx](auto response) mutable {
-				auto ref = getActiveThread().dataService().publish(response.getText());
-				ctx.getResults().setStdout(ref);
-			})
-		};
-		
-		auto streams = job.attachRequest().sendForPipeline();
-		ctx.getResults().setStdout(extractLog(streams.getStdout()));
-		ctx.getResults().setStderr(extractLog(streams.getStderr()));
-		
-		auto readStdout = streams.getStdout().readAllTextRequest().send()
-		
-		// Wait for job to finish
-		return job.whenCompleted()
-		
-		.then(
-			[this]() {}, // Success
-			[this](kj::Exception&& e) {} // Failure
-		);
+		return prepareInput.then([this, &launcher]() {
+			// Launch the VMEC code
+			JobRequest req;
+			req.command = kj::str("xvmec2000");
+			req.setArguments({"vmecInput"});
+			req.workDir = workDir -> absPath.clone();
+			
+			auto job = launcher.launch(mv(req));
+			
+			// Extract output streams		
+			auto streams = job.attachRequest().sendForPipeline();
+			
+			auto readStdout = streams.getStdout().readAllStringRequest().send()
+			.then([this](auto resp) mutable {
+				out.setStdout(resp.getText());
+			});
+			
+			auto readStderr = streams.getStderr().readAllStringRequest().send()
+			.then([this](auto resp) mutable {
+				out.setStderr(resp.getText());
+			});
+			
+			// Wait for job to finish
+			auto actualJob = job.whenCompletedRequest().send()
+			.then(
+				// Success
+				[this](auto wcResponse) {
+					Temporary<VmecResult> tmp;
+					
+					auto& ds = getActiveThread().dataService();
+					
+					// Read in wout.nc
+					auto woutNcRaw = workDir -> dir -> openFile(kj::Path("wout.nc")) -> readAllBytes();
+					tmp.setWoutNc(ds.publish(woutNcRaw));
+					
+					// Publish results into response struct
+					out.getResult().setOk(ds.publish(mv(tmp)));
+					
+					// TODO: Parse file
+					KJ_LOG(WARNING, "Incomplete code: No parsing of VMEC result");
+				}, 
+				
+				// Failure
+				[this](kj::Exception&& e) {
+					out.getResult().setFailed(kj::str("VMEC run failed - ", e));
+				} 
+			);
+			
+			auto pBuilder = kj::heapArrayBuilder<Promise<void>>(3);
+			pBuilder.add(mv(actualJob));
+			pBuilder.add(mv(readStdout));
+			pBuilder.add(mv(readStderr));
+			return kj::joinPromises(pBuilder.finish());
+		});
 	}
 	
 	
@@ -323,11 +351,20 @@ struct VmecRun {
 struct VmecDriverImpl : public VmecDriver::Server {
 	Own<JobLauncher> launcher;
 	
-	VmecDriverImpl(JobLauncher& l) :
-		launcher(l -> addRef())
+	VmecDriverImpl(Own<JobLauncher> l) :
+		launcher(mv(l))
 	{}
 	
-	
+	Promise<void> run(RunContext ctx) {
+		auto run = heapHeld<VmecRun>(ctx.getParams(), ctx.initResults(), launcher -> createDir());
+		
+		// Wrap inside evalLater so that we don't get the bogus "unwind across heapHeld" warning
+		// when the inner part throws.
+		return kj::evalLater([this, run]() mutable {
+			return run -> run(*launcher);
+		})
+		.attach(run.x());
+	}
 };
 
 }
@@ -417,9 +454,11 @@ kj::String generateVmecInput(VmecRequest::Reader request, kj::PathPtr mgridFile)
 
 Promise<void> writeMGridFile(kj::PathPtr path, ComputedField::Reader cField) {
 	return getActiveThread().dataService().download(cField.getData())
-	.then([path = mv(path), grid = cField.getGrid()](LocalDataRef<Float64Tensor> data) {
+	.then([path = path.clone(), grid = cField.getGrid()](LocalDataRef<Float64Tensor> data) {
 		// File
-		H5::H5File file(path.toWin32String(true).cStr(), H5F_ACC_TRUNC);
+		KJ_DBG(path.toNativeString(true).cStr());
+		H5::H5File file(path.toNativeString(true).cStr(), H5F_ACC_TRUNC);
+		KJ_DBG(path.toNativeString(true).cStr());
 		
 		// Scalars
 		auto nR = grid.getNR();
@@ -471,11 +510,13 @@ Promise<void> writeMGridFile(kj::PathPtr path, ComputedField::Reader cField) {
 			writeArray<double>(createDataSet<double>(file, "bz_001", {dimP, dimZ, dimR}), bz);
 			writeArray<double>(createDataSet<double>(file, "br_001", {dimP, dimZ, dimR}), br);
 		}
+		
+		file.close();
 	});
 }
 
-VmecDriver::Client createVmecDriver(JobScheduler::Client scheduler, kj::PathPtr workDir) {
-	return kj::heap<VmecDriverImpl>(mv(scheduler), workDir);
+VmecDriver::Client createVmecDriver(Own<JobLauncher>&& scheduler) {
+	return kj::heap<VmecDriverImpl>(mv(scheduler));
 }
 
 }

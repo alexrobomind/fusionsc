@@ -10,7 +10,7 @@
 
 namespace fsc {
 
-VmecDriver::Client createVmecDriver(JobLauncher& launcher, kj::PathPtr workRoot);
+VmecDriver::Client createVmecDriver(Own<JobLauncher>&& launcher);
 
 kj::String generateVmecInput(VmecRequest::Reader request, kj::PathPtr mgridPath);
 Promise<void> writeMGridFile(kj::PathPtr path, ComputedField::Reader cField);

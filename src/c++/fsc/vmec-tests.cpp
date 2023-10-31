@@ -104,3 +104,16 @@ TEST_CASE("vmec-mgrid") {
 	
 	writeMGridFile(mgridPath, req.getFreeBoundary().getVacuumField()).wait(ws);
 }
+
+TEST_CASE("vmec-run", "[.]") {
+    auto l = newLibrary();
+    auto lt = l -> newThread();
+    auto& ws = lt -> waitScope();
+	
+	auto driver = createVmecDriver(newProcessScheduler("."));
+	auto req = driver.runRequest();
+	vmecRequest(req);
+	
+	auto resp = req.send().wait(ws);
+	KJ_DBG(resp);
+}
