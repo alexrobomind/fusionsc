@@ -115,5 +115,5 @@ TEST_CASE("vmec-run", "[.]") {
 	vmecRequest(req);
 	
 	auto resp = req.send().wait(ws);
-	KJ_DBG(resp);
+	KJ_DBG(asYaml(resp));
 }

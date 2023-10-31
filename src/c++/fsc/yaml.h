@@ -12,14 +12,24 @@ namespace fsc {
 	YAML::Emitter& operator<<(YAML::Emitter&, capnp::DynamicValue::Reader);
 	
 	template<typename Reader, typename = capnp::FromReader<Reader>>
-	YAML::Emitter& operator<<(YAML::Emitter&, Reader);
+	YAML::Emitter& operator<<(YAML::Emitter&, Reader&&);
+	
+	template<typename T>
+	kj::String asYaml(T&&);
 }
 
 // Implementation
 
 namespace fsc {
 	template<typename Reader, typename>
-	YAML::Emitter& operator<<(YAML::Emitter& emitter, Reader r) {
+	YAML::Emitter& operator<<(YAML::Emitter& emitter, Reader&& r) {
 		return emitter << capnp::DynamicValue::Reader(r);
+	}
+	
+	template<typename T>
+	kj::String asYaml(T&& in) {
+		YAML::Emitter e;
+		e << fwd<T>(in);
+		return kj::heapString(e.c_str());
 	}
 }

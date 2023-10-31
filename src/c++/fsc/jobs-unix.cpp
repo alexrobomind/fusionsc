@@ -214,10 +214,10 @@ struct UnixProcessJobScheduler : public JobLauncher, kj::Refcounted, BaseDirProv
 			close(dummyPipe[1]);
 			
 			if(workDir != nullptr) {
-				KJ_SYSCALL(chdir(workDir.cStr()));
+				KJ_SYSCALL(chdir(workDir.cStr()), workDir);
 			}
 			
-			KJ_SYSCALL(execvp(path, args));
+			KJ_SYSCALL(execvp(path, args), path, args);
 			exit(-1);
 		}
 			
