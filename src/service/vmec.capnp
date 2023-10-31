@@ -56,6 +56,13 @@ struct VmecProfile {
 			values @2 : List(Float64);
 			type @3 : SplineType;
 		}
+		
+		# Profile of the form base * (1 - s ** inner) ** outer
+		twoPower : group {
+			base @4 : Float64;
+			inner @5 : Float64;
+			outer @6 : Float64;
+		}
 	}
 }
 

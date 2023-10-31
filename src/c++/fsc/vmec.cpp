@@ -38,7 +38,23 @@ kj::StringPtr decodeSplineType(VmecProfile::SplineType type) {
 	KJ_FAIL_REQUIRE("Unknown spline type", type);
 }
 
+void validateProfile(VmecProfile::Reader p) {
+	if(p.isSpline()) {
+		auto s = p.getSpline();
+		
+		KJ_REQUIRE(s.getLocations().size() == s.getValues().size(), "Spline profile has mismatch between support points and values");
+		
+		if(s.getType() == VmecProfile::SplineType::AKIMA) {
+			KJ_REQUIRE(s.getValues().size() >= 3, "Akima splines need at least 3 support points");
+		} else if(s.getType() == VmecProfile::SplineType::CUBIC) {
+			KJ_REQUIRE(s.getValues().size() >= 4, "Cubic splines need at least 4 support points");
+		}
+	}
+}
+
 kj::StringTree makeCurrentProfile(VmecProfile::Reader cp) {	
+	validateProfile(cp);
+	
 	if(cp.isPowerSeries()) {
 		return kj::strTree(
 			"PCURR_TYPE = 'power_series_I'\n"
@@ -48,28 +64,44 @@ kj::StringTree makeCurrentProfile(VmecProfile::Reader cp) {
 		auto s = cp.getSpline();
 		
 		return kj::strTree(
-			"PCURR_TYPE = ", decodeSplineType(s.getType()), "_I\n"
+			"PCURR_TYPE = '", decodeSplineType(s.getType()), "_I'\n"
 			"ac_aux_s = ", fArray(s.getLocations()), "\n"
 			"ac_aux_f = ", fArray(s.getValues()), "\n"
+		);
+	} else if(cp.isTwoPower()) {
+		auto tp = cp.getTwoPower();
+		
+		return kj::strTree(
+			"PCURR_TYPE = 'two_power'\n"
+			"AC = ", tp.getBase(), " ", tp.getInner(), " ", tp.getOuter(), "\n"
 		);
 	}
 	
 	KJ_FAIL_REQUIRE("Unknown profile type", cp);
 }
 
-kj::StringTree makeCurrentDensityProfile(VmecProfile::Reader cp) {	
+kj::StringTree makeCurrentDensityProfile(VmecProfile::Reader cp) {
+	validateProfile(cp);
+	
 	if(cp.isPowerSeries()) {
 		return kj::strTree(
-			"PCURR_TYPE = 'power_series'\n"
+			"PCURR_TYPE = 'power_series_I'\n"
 			"AC = ", fArray(cp.getPowerSeries()), "\n"
 		);
 	} else if(cp.isSpline()) {
 		auto s = cp.getSpline();
 		
 		return kj::strTree(
-			"PCURR_TYPE = ", decodeSplineType(s.getType()), "_Ip\n"
+			"PCURR_TYPE = '", decodeSplineType(s.getType()), "_I'\n"
 			"ac_aux_s = ", fArray(s.getLocations()), "\n"
 			"ac_aux_f = ", fArray(s.getValues()), "\n"
+		);
+	} else if(cp.isTwoPower()) {
+		auto tp = cp.getTwoPower();
+		
+		return kj::strTree(
+			"PCURR_TYPE = 'two_power'\n"
+			"AC = ", tp.getBase(), " ", tp.getInner(), " ", tp.getOuter(), "\n"
 		);
 	}
 	
@@ -77,6 +109,8 @@ kj::StringTree makeCurrentDensityProfile(VmecProfile::Reader cp) {
 }
 
 kj::StringTree makeIotaProfile(VmecProfile::Reader cp) {	
+	validateProfile(cp);
+	
 	if(cp.isPowerSeries()) {
 		return kj::strTree(
 			"PIOTA_TYPE = 'power_series'\n"
@@ -86,7 +120,7 @@ kj::StringTree makeIotaProfile(VmecProfile::Reader cp) {
 		auto s = cp.getSpline();
 		
 		return kj::strTree(
-			"PIOTA_TYPE = ", decodeSplineType(s.getType()), "\n"
+			"PIOTA_TYPE = '", decodeSplineType(s.getType()), "'\n"
 			"ai_aux_s = ", fArray(s.getLocations()), "\n"
 			"ai_aux_f = ", fArray(s.getValues()), "\n"
 		);
@@ -95,7 +129,9 @@ kj::StringTree makeIotaProfile(VmecProfile::Reader cp) {
 	KJ_FAIL_REQUIRE("Unknown profile type", cp);
 }
 
-kj::StringTree makeMassProfile(VmecProfile::Reader mp) {	
+kj::StringTree makeMassProfile(VmecProfile::Reader mp) {
+	validateProfile(mp);
+	
 	if(mp.isPowerSeries()) {
 		return kj::strTree(
 			"PMASS_TYPE = 'power_series'\n"
@@ -105,9 +141,16 @@ kj::StringTree makeMassProfile(VmecProfile::Reader mp) {
 		auto s = mp.getSpline();
 		
 		return kj::strTree(
-			"PMASS_TYPE = ", decodeSplineType(s.getType()), "\n"
+			"PMASS_TYPE = '", decodeSplineType(s.getType()), "'\n"
 			"am_aux_s = ", fArray(s.getLocations()), "\n"
 			"am_aux_f = ", fArray(s.getValues()), "\n"
+		);
+	} else if(mp.isTwoPower()) {
+		auto tp = mp.getTwoPower();
+		
+		return kj::strTree(
+			"PMASS_TYPE = 'two_power'\n"
+			"AM = ", tp.getBase(), " ", tp.getInner(), " ", tp.getOuter(), "\n"
 		);
 	}
 	
@@ -272,7 +315,7 @@ struct VmecRun {
 	{}
 	
 	Promise<void> run(JobLauncher& launcher) {
-		auto mgridPath = workDir -> absPath.append("vacField.nc4");
+		auto mgridPath = workDir -> absPath.append("vacField.nc");
 		KJ_DBG(mgridPath);
 		
 		Promise<void> prepareInput = READY_NOW;
@@ -283,7 +326,7 @@ struct VmecRun {
 		}
 		
 		// Prepare the VMEC input file
-		auto inputFile = workDir -> dir -> openFile(kj::Path("vmecInput.input"), kj::WriteMode::CREATE);
+		auto inputFile = workDir -> dir -> openFile(kj::Path("input.inputFile"), kj::WriteMode::CREATE);
 		
 		auto inputString = generateVmecInput(in, mgridPath);
 		inputFile -> writeAll(inputString);
@@ -293,7 +336,7 @@ struct VmecRun {
 			// Launch the VMEC code
 			JobRequest req;
 			req.command = kj::str("xvmec2000");
-			req.setArguments({"vmecInput"});
+			req.setArguments({"inputFile"});
 			req.workDir = workDir -> absPath.clone();
 			
 			auto job = launcher.launch(mv(req));
@@ -329,8 +372,9 @@ struct VmecRun {
 					
 					// TODO: Parse file
 					KJ_LOG(WARNING, "Incomplete code: No parsing of VMEC result");
-				}, 
-				
+				}
+			)
+			.catch_(
 				// Failure
 				[this](kj::Exception&& e) {
 					out.getResult().setFailed(kj::str("VMEC run failed - ", e));
@@ -465,27 +509,33 @@ Promise<void> writeMGridFile(kj::PathPtr path, ComputedField::Reader cField) {
 		auto nZ = grid.getNZ();
 		auto nPhi = grid.getNPhi();
 		
-		writeScalar(createDataSet<uint32_t>(file, "ir"), nR);
-		writeScalar(createDataSet<uint32_t>(file, "jz"), nZ);
-		writeScalar(createDataSet<uint32_t>(file, "kp"), nPhi);
+		writeScalar(createDataSet<int32_t>(file, "ir"), nR);
+		writeScalar(createDataSet<int32_t>(file, "jz"), nZ);
+		writeScalar(createDataSet<int32_t>(file, "kp"), nPhi);
 		
-		writeScalar(createDataSet<uint32_t>(file, "nfp"), grid.getNSym());
+		writeScalar(createDataSet<int32_t>(file, "nfp"), grid.getNSym());
 		writeScalar(createDataSet<double>(file, "rmin"), grid.getRMin());
 		writeScalar(createDataSet<double>(file, "rmax"), grid.getRMax());
 		writeScalar(createDataSet<double>(file, "zmin"), grid.getZMin());
 		writeScalar(createDataSet<double>(file, "zmax"), grid.getZMax());
-		writeScalar(createDataSet<uint32_t>(file, "nextcur"), 1);
+		writeScalar(createDataSet<int32_t>(file, "nextcur"), 1);
 		
 		// Named dimensions
 		auto dimR = createDimension<double>(file, "r", nR, true);
 		auto dimZ = createDimension<double>(file, "z", nZ, true);
 		auto dimP = createDimension<double>(file, "phi", nPhi, true);
 		
+		auto dim1 = createDimension<double>(file, "dim001", 1, true);
+		auto dim4 = createDimension<double>(file, "dim004", 4, true);
+		
 		// Mgrid mode
-		writeScalar<char>(createDataSet<char>(file, "mgrid_mode", {1}), 'H');
+		writeScalar<char>(createDataSet<char>(file, "mgrid_mode", {dim1}), 'S');
 		
 		// Coil groups
-		writeArray<char>(createDataSet<char>(file, "coil_group", {1, 5}), {'C', 'O', 'I', 'L', '\0'});
+		writeArray<char>(createDataSet<char>(file, "coil_group", {dim4}), {'C', 'O', 'I', 'L'});
+		
+		// External currents
+		writeArray<double>(createDataSet<double>(file, "raw_coil_cur", {dim1}), {1});
 		
 		// Field data
 		
