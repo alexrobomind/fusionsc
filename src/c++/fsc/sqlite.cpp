@@ -250,7 +250,8 @@ Own<db::Connection> connectSqlite(kj::StringPtr url, bool readOnly) {
 	auto result = kj::refcounted<db::SQLiteConnection>(url, readOnly);
 	
 	// Set up connection parameters
-	result -> exec("PRAGMA journal_mode=WAL");
+	result -> exec("PRAGMA journal_mode = WAL");
+	result -> exec("PRAGMA synchronous = NORMAL");
 	result -> exec("PRAGMA foreign_keys = ON");
 	result -> exec("PRAGMA busy_timeout = 50");
 	
