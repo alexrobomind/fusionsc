@@ -63,7 +63,7 @@ private:
 		file = dir->createTemporary();
 	}
 	
-	kj::Array<byte> alloc(uint64_t size) {
+	inline kj::Array<byte> alloc(uint64_t size) {
 		auto mapping = file->mmapWritable(offset, size);
 		offset += size;
 		

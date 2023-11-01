@@ -20,16 +20,16 @@ freeBoundary:
       zMin: -0.25
       zMax: 0.25
       
-      nPhi: 3
-      nR: 4
-      nZ: 5
+      nPhi: 10
+      nR: 10
+      nZ: 10
       
-      nSym: 7
+      nSym: 5
       
 startingPoint:
   nTor: 2
   mPol: 1
-  period: 7
+  period: 5
   
   rCos:
     shape: [2, 3, 2]
@@ -56,8 +56,8 @@ startingPoint:
 massProfile:
   spline:
     type: akima
-    locations: [0, 0.5, 1]
-    values: [1, 0.5, 0]
+    locations: [0, 0.3, 0.7, 1]
+    values: [1, 0.7, 0.5, 0]
 iota:
   fromCurrent:
     totalCurrent: 0
@@ -116,4 +116,25 @@ TEST_CASE("vmec-run", "[.]") {
 	
 	auto resp = req.send().wait(ws);
 	KJ_DBG(asYaml(resp));
+	KJ_DBG(resp.getInputFile());
+	KJ_DBG(resp.getStdout());
+	KJ_DBG(resp.getStderr());
+}
+
+TEST_CASE("vmec-run-fb", "[.]") {
+    auto l = newLibrary();
+    auto lt = l -> newThread();
+    auto& ws = lt -> waitScope();
+	
+	auto driver = createVmecDriver(newProcessScheduler("."));
+	auto req = driver.runRequest();
+	vmecRequest(req);
+	
+	req.setFixedBoundary();
+	
+	auto resp = req.send().wait(ws);
+	KJ_DBG(asYaml(resp));
+	KJ_DBG(resp.getInputFile());
+	KJ_DBG(resp.getStdout());
+	KJ_DBG(resp.getStderr());
 }
