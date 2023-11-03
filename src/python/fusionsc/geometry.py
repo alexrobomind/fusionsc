@@ -225,8 +225,8 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		
 		if phi1 is not None:
 			range = wt.initPhiRange()
-			range.phiStart = phi1
-			range.phiEnd = phi2
+			range.phiStart.rad = phi1
+			range.phiEnd.rad = phi2
 			range.close = close
 			
 		return result.withTags(tags)
