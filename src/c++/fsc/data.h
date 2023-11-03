@@ -200,7 +200,11 @@ public:
 	template<typename Reader, typename T = capnp::FromAny<Reader>>
 	LocalDataRef<T> publish(Reader reader);
 	
+	//! Publish the contents of an array (no hash neede since the array has to be copied anyway)
 	LocalDataRef<capnp::Data> publish(kj::ArrayPtr<const byte> bytes);
+	
+	//! Take ownership of array and publish it, potentially with precomputed hash
+	LocalDataRef<capnp::Data> publish(kj::Array<const byte> bytes, kj::ArrayPtr<const kj::byte> hash = nullptr);
 	
 	///@}
 	
@@ -230,8 +234,11 @@ public:
 	template<typename T>
 	LocalDataRef<T> publishConstant(kj::ArrayPtr<const byte> in);
 	
-	//! Publish the contents of a file as a data ref via mmap
-	LocalDataRef<capnp::Data> publishFile(const kj::ReadableFile& in, kj::ArrayPtr<const kj::byte> fileHash = nullptr);
+	//! Publish the contents of a file as a data ref via mmap or copy
+	LocalDataRef<capnp::Data> publishFile(const kj::ReadableFile& in, kj::ArrayPtr<const kj::byte> fileHash = nullptr, bool copy = false);
+	
+	//! Shorthand for publishing without hash
+	inline LocalDataRef<capnp::Data> publishFile(const kj::ReadableFile& in, bool copy = false);
 	
 	///@}
 	
@@ -246,6 +253,13 @@ public:
 	
 	template<typename T>
 	LocalDataRef<T> publishFlat(kj::Array<kj::Array<const byte>> data);
+	
+	///@}
+	
+	//! \name Raw data files
+	///@{
+	
+	Promise<void> downloadIntoFile(DataRef<capnp::Data>::Client, Own<const kj::File>&& out);
 	
 	///@}
 	

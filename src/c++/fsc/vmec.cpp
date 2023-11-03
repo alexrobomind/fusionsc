@@ -364,11 +364,12 @@ struct VmecRun {
 					auto& ds = getActiveThread().dataService();
 					
 					// Read in wout.nc
-					auto woutNcRaw = workDir -> dir -> openFile(kj::Path("wout.nc")) -> readAllBytes();
-					tmp.setWoutNc(ds.publish(woutNcRaw));
-					
-					// Publish results into response struct
-					out.getResult().setOk(ds.publish(mv(tmp)));
+					out.getResult.setOk(
+						getActiveDataService.publishFile(
+							workDir -> dir -> openFile(kj::Path("wout_inputFile.nc")),
+							true // make copy
+						)
+					);
 					
 					// TODO: Parse file
 					KJ_LOG(WARNING, "Incomplete code: No parsing of VMEC result");
@@ -495,6 +496,92 @@ kj::String generateVmecInput(VmecRequest::Reader request, kj::PathPtr mgridFile)
 	return result.flatten();
 }
 
+void interpretOutputFile(kj::PathPtr path, VmecResult::Builder out) {
+	H5::H5File file(path.toNativeString(true).cStr(), 0);
+	
+	uint32_t nTor = readScalar<uint32_t>(file.openDataset("ntor"));
+	uint32_t mPol = readScalar<uint32_t>(file.openDataset("mpol"));
+	uint32_t nFP  = readScalar<uint32_t>(file.openDataset("nfp"));
+	
+	out.setNTor(nTor);
+	out.setMPol(mPol - 1);
+	out.setPeriod(nFP);
+	
+	auto arrayDims = getDimensions(file.openDataset("rmnc"));
+	size_t nSurf = arrayDims[0].length;
+	size_t nPerSurf = arrayDims[1].length;
+	
+	KJ_REQUIRE(nPerSurf == nTor + 1 + (mPol - 1) * (2 * nTor + 1), "Unexpected output format");
+	
+	// Note:
+	//
+	// The data in these arrays is (per surface) ordered as
+	// m/n = 0/0, ..., 0/nTor, 1/-nTor, ..., 1/ntor, 2/-nTor, ..., ..., mTor/nTor
+	// This means when reading we can simply take our indexing scheme (which goes
+	// from 0 to nTor, then starts from -nTor to -1) and write to that. We just need
+	// to increment the m accordingly.
+	
+	size_t offset = 0;
+	
+	Tensor<3, double> rmncT(mPol, 2 * nTor + 1, nSurf);
+	Tensor<3, double> zmnsT(mPol, 2 * nTor + 1, nSurf);
+	
+	auto rmnc = readArray<double>(file.openDataset("rmnc"));
+	auto zmns = readArray<double>(file.openDataset("zmns"));
+	
+	for(auto iPol : kj::range(0, mPol)) {
+		for(auto iLinear : kj::range(0, 2 * nTor + 1)) {
+			// No negative n for m == 0
+			if(iPol == 0 && iLinear >= nTor + 1)
+				break;
+			
+			// Here we use the linear index shift above
+			size_t iTor = offset % (2 * nTor + 1);
+			for(auto iSurf : kj::range(0, nSurf)) {
+				rmncT(iPol, iTor, iSurf) = rmnc[iSurf * nPerSurf + offset];
+				zmnsT(iPol, iTor, iSurf) = zmns[iSurf * nPerSurf + offset];
+			}
+			
+			++offset;
+		}
+	}
+	
+	writeTensor(rmncT, out.initRCos());
+	writeTensor(zmnsT, out.initZSin());
+	
+	if(file.nameExists("zmnc")) {
+		// We also have non-symmetric components
+		// Extract these as well
+		offset = 0;
+		
+		Tensor<3, double> rmnsT(mPol, 2 * nTor + 1, nSurf);
+		Tensor<3, double> zmncT(mPol, 2 * nTor + 1, nSurf);
+		
+		auto rmns = readArray<double>(file.openDataset("rmns"));
+		auto zmnc = readArray<double>(file.openDataset("zmnc"));
+		
+		for(auto iPol : kj::range(0, mPol)) {
+			for(auto iLinear : kj::range(0, 2 * nTor + 1)) {
+				// No negative n for m == 0
+				if(iPol == 0 && iLinear >= nTor + 1)
+					break;
+				
+				// Here we use the linear index shift above
+				size_t iTor = offset % (2 * nTor + 1);
+				for(auto iSurf : kj::range(0, nSurf)) {
+					rmnsT(iPol, iTor, iSurf) = rmns[iSurf * nPerSurf + offset];
+					zmncT(iPol, iTor, iSurf) = zmnc[iSurf * nPerSurf + offset];
+				}
+				
+				++offset;
+			}
+		}
+		
+		auto nonsym = out.initNonSymmetric();
+		writeTensor(rmnsT, nonsym.initRSin());
+		writeTensor(zmncT, nonsym.initZCos());
+	}
+}
 
 Promise<void> writeMGridFile(kj::PathPtr path, ComputedField::Reader cField) {
 	return getActiveThread().dataService().download(cField.getData())
