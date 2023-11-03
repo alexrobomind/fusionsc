@@ -174,14 +174,14 @@ void validateSurfaces(VmecSurfaces::Reader in) {
 	auto mPol = in.getMPol();
 	
 	auto nSurf = in.getRCos().getShape()[0];
-	KJ_REQUIRE(nSurf >= 2);
+	KJ_REQUIRE(nSurf >= 1);
 	
-	validateTensor(in.getRCos(), {nSurf, 2 * mPol + 1, nTor});
-	validateTensor(in.getZSin(), {nSurf, 2 * mPol + 1, nTor});
+	validateTensor(in.getRCos(), {nSurf, 2 * nTor + 1, mPol + 1});
+	validateTensor(in.getZSin(), {nSurf, 2 * nTor + 1, mPol + 1});
 	
 	if(in.isNonSymmetric()) {
-		validateTensor(in.getNonSymmetric().getRSin(), {nSurf, 2 * mPol + 1, nTor});
-		validateTensor(in.getNonSymmetric().getZCos(), {nSurf, 2 * mPol + 1, nTor});
+		validateTensor(in.getNonSymmetric().getRSin(), {nSurf, 2 * nTor + 1, mPol + 1});
+		validateTensor(in.getNonSymmetric().getZCos(), {nSurf, 2 * nTor + 1, mPol + 1});
 	}
 }
 
@@ -202,8 +202,8 @@ kj::StringTree makeAxisData(VmecSurfaces::Reader in) {
 	auto zAxisCS = kj::heapArrayBuilder<double>(nTor);
 	
 	for(auto iTor : kj::range(0, nTor)) {
-		rAxisCC.add(rCos(iTor, mPol, 0));
-		zAxisCS.add(zSin(iTor, mPol, 0));
+		rAxisCC.add(rCos(0, iTor, 0));
+		zAxisCS.add(zSin(0, iTor, 0));
 	}
 	
 	result = kj::strTree(
@@ -222,8 +222,8 @@ kj::StringTree makeAxisData(VmecSurfaces::Reader in) {
 		auto rAxisCS = kj::heapArrayBuilder<double>(nTor);
 		auto zAxisCC = kj::heapArrayBuilder<double>(nTor);
 		for(auto iTor : kj::range(0, nTor)) {
-			rAxisCS.add(rCos(iTor, mPol, 0));
-			zAxisCC.add(zSin(iTor, mPol, 0));
+			rAxisCS.add(rCos(0, iTor, 0));
+			zAxisCC.add(zSin(0, iTor, 0));
 		}
 		
 		result = kj::strTree(
@@ -257,18 +257,26 @@ kj::StringTree makeBoundaryData(VmecSurfaces::Reader in) {
 		"! --- Symmetric flux surface coefficients --- \n"
 	);
 	
-	for(auto iTor : kj::range(0, nTor)) {
+	for(auto iTorUnsigned : kj::range(0, 2 * nTor + 1)) {
+		int64_t iTorSigned = iTorUnsigned;
+		if(iTorSigned > nTor)
+			iTorSigned -= 2 * nTor + 1;
+	
 		result = kj::strTree(
 			mv(result),
-			"! n = ", iTor, "\n"
+			"! n = ", iTorSigned, "\n"
 		);
-		for(auto jPol : kj::range(0, 2 * mPol + 1)) {
-			int64_t jReal = static_cast<int64_t>(jPol) - mPol;
+		for(auto jPol : kj::range(0, mPol + 1)) {
+			if(jPol == 0 && iTorSigned < 0) {
+				KJ_REQUIRE(rCos(jPol, iTorUnsigned, iMax) == 0, "n<1, m=0 components must be 0", jPol, iTorSigned);
+				KJ_REQUIRE(zSin(jPol, iTorUnsigned, iMax) == 0, "n<1, m=0 components must be 0", jPol, iTorSigned);
+				continue;
+			}
 			
 			result = kj::strTree(
 				mv(result),
-				"RBC(", jReal, ", ", iTor, ") = ", rCos(iTor, jPol, iMax), "  "
-				"ZBS(", jReal, ", ", iTor, ") = ", zSin(iTor, jPol, iMax), "\n"
+				"RBC(", iTorSigned, ", ", jPol, ") = ", rCos(jPol, iTorUnsigned, iMax), "  "
+				"ZBS(", iTorSigned, ", ", jPol, ") = ", zSin(jPol, iTorUnsigned, iMax), "\n"
 			);
 		}
 	}
@@ -284,18 +292,26 @@ kj::StringTree makeBoundaryData(VmecSurfaces::Reader in) {
 			"! --- Antisymmetric flux surface coefficients --- \n"
 		);
 	
-		for(auto iTor : kj::range(0, nTor)) {
+		for(auto iTorUnsigned : kj::range(0, 2 * nTor + 1)) {
+			int64_t iTorSigned = iTorUnsigned;
+			if(iTorSigned > nTor)
+				iTorUnsigned -= 2 * nTor + 1;
+			
 			result = kj::strTree(
 				mv(result),
-				"! n = ", iTor, "\n"
+				"! n = ", iTorSigned, "\n"
 			);
-			for(auto jPol : kj::range(0, 2 * mPol + 1)) {
-				int64_t jReal = static_cast<int64_t>(jPol) - mPol;
+			for(auto jPol : kj::range(0, mPol + 1)) {
+				if(jPol == 0 && iTorSigned < 0) {
+					KJ_REQUIRE(rSin(jPol, iTorUnsigned, iMax) == 0, "n<1, m=0 components must be 0", jPol, iTorSigned);
+					KJ_REQUIRE(zCos(jPol, iTorUnsigned, iMax) == 0, "n<1, m=0 components must be 0", jPol, iTorSigned);
+					continue;
+				}
 				
 				result = kj::strTree(
 					mv(result),
-					"RBZ(", jReal, ", ", iTor, ") = ", rSin(iTor, jPol, iMax), "  "
-					"ZBC(", jReal, ", ", iTor, ") = ", zCos(iTor, jPol, iMax), "\n"
+					"RBZ(", jPol, ", ", iTorSigned, ") = ", rSin(jPol, iTorUnsigned, iMax), "  "
+					"ZBC(", jPol, ", ", iTorSigned, ") = ", zCos(jPol, iTorUnsigned, iMax), "\n"
 				);
 			}
 		}
@@ -364,7 +380,7 @@ struct VmecRun {
 					auto& ds = getActiveThread().dataService();
 					
 					// Read in wout.nc
-					auto woutNcRaw = workDir -> dir -> openFile(kj::Path("wout.nc")) -> readAllBytes();
+					auto woutNcRaw = workDir -> dir -> openFile(kj::Path("wout_inputFile.nc")) -> readAllBytes();
 					tmp.setWoutNc(ds.publish(woutNcRaw));
 					
 					// Publish results into response struct
@@ -420,7 +436,29 @@ kj::String generateVmecInput(VmecRequest::Reader request, kj::PathPtr mgridFile)
 	auto runParams = request.getRunParams();
 	
 	KJ_REQUIRE(request.getPhiEdge() != 0, "phiEdge must be provided");
-	KJ_REQUIRE(runParams.getNGridPoloidal() >= 2 * runParams.getMPolMax() + 6, "Poloidal grid resolution too low");
+	KJ_REQUIRE(request.getNTor() != 0, "Maximum toroidal Fourier number must be provided");
+	KJ_REQUIRE(request.getMPol() != 0, "Maximum poloidal Fourier number must be provided ");
+	
+	KJ_REQUIRE(request.getMPol() >= request.getStartingPoint().getMPol(), "Run data must be able to house all input poloidal modes");
+	KJ_REQUIRE(request.getNTor() >= request.getStartingPoint().getNTor(), "Run data must be able to house all input toroidal modes");
+	
+	// Compute reasonable defaults for grid
+	uint32_t nGridTor = runParams.getNGridToroidal();
+	if(nGridTor == 0) {
+		if(request.isFreeBoundary()) {
+			nGridTor = request.getFreeBoundary().getVacuumField().getGrid().getNPhi();
+		} else {
+			nGridTor = 2 * request.getNTor() + 4;
+		}
+	}
+	
+	uint32_t nGridPol = runParams.getNGridToroidal();
+	uint32_t nGridPolMin = 2 * (request.getMPol() + 1) + 6;
+	
+	if(nGridPol == 0)
+		nGridPol = nGridPolMin;
+	
+	KJ_REQUIRE(nGridPol >= nGridPolMin, "Poloidal grid resolution to small");
 	
 	kj::StringTree result = kj::strTree(
 		"! --- Fixed settings ---\n"
@@ -438,10 +476,11 @@ kj::String generateVmecInput(VmecRequest::Reader request, kj::PathPtr mgridFile)
 		"! --- General settings ---\n"
 		"LFREEB = ", fBool(request.isFreeBoundary()), " ! Whether to use a free boundary run\n"
 		"DELT = ", runParams.getTimeStep(), " ! Blend factor between runs\n"
-		"NTOR = ", runParams.getNTorMax(), "\n"
-		"MPOL = ", runParams.getMPolMax(), "\n"
+		"NTOR = ", request.getNTor(), "\n"
+		"MPOL = ", request.getMPol() + 1, "\n"
 		"NFP = ", sp.getPeriod(), "\n"
-		"NTHETA = ", runParams.getNGridPoloidal(), "\n"
+		"NTHETA = ", nGridPol, "\n"
+		"NZETA = ", nGridTor, "\n"
 		"NS_ARRAY = ", fArray(runParams.getNGridRadial()), "\n"
 		"NITER = ", runParams.getMaxIterationsPerSequence(), "\n"
 		"NSTEP = ", runParams.getConvergenceSteps(), "\n"
@@ -478,12 +517,12 @@ kj::String generateVmecInput(VmecRequest::Reader request, kj::PathPtr mgridFile)
 	
 	if(request.isFreeBoundary()) {
 		KJ_REQUIRE(request.getFreeBoundary().getVacuumField().getGrid().getNSym() == sp.getPeriod(), "Vacuum field symmetry must match field period of start surfaces");
+		KJ_REQUIRE(nGridTor == request.getFreeBoundary().getVacuumField().getGrid().getNPhi(), "Toroidal grid dimension of VMEC and vacuum file must match");
 		
 		result = kj::strTree(
 			mv(result), "\n",
 			"! --- Free boundary inputs ---\n",
 			"MGRID_FILE = '", mgridFile.toNativeString(true), "'\n",
-			"NZETA = ", request.getFreeBoundary().getVacuumField().getGrid().getNPhi(), "\n",
 			"EXTCUR = 1\n"
 		);
 	}
@@ -529,7 +568,7 @@ Promise<void> writeMGridFile(kj::PathPtr path, ComputedField::Reader cField) {
 		auto dim4 = createDimension<double>(file, "dim004", 4, true);
 		
 		// Mgrid mode
-		writeScalar<char>(createDataSet<char>(file, "mgrid_mode", {dim1}), 'S');
+		writeScalar<char>(createDataSet<char>(file, "mgrid_mode", {dim1}), 'R');
 		
 		// Coil groups
 		writeArray<char>(createDataSet<char>(file, "coil_group", {dim4}), {'C', 'O', 'I', 'L'});
