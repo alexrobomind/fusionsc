@@ -144,7 +144,7 @@ LocalDataRef<capnp::Data> LocalDataService::publish(kj::ArrayPtr<const byte> byt
 }
 
 LocalDataRef<capnp::Data> LocalDataService::publish(kj::Array<const byte> bytes, kj::ArrayPtr<const byte> hash) {
-	Temporary<DataRefMetadata> metadata;
+	Temporary<DataRefMetadata> metaData;
 	
 	metaData.setId(getActiveThread().randomID());
 	metaData.getFormat().setRaw();
@@ -152,7 +152,7 @@ LocalDataRef<capnp::Data> LocalDataService::publish(kj::Array<const byte> bytes,
 	metaData.setDataSize(bytes.size());
 	metaData.setDataHash(hash);
 	
-	return publisH(metaData, mv(bytes));
+	return publish(metaData, mv(bytes));
 }
 
 LocalDataRef<capnp::Data> LocalDataService::publishFile(const kj::ReadableFile& file, kj::ArrayPtr<const kj::byte> fileHash, bool copy) {
@@ -1143,7 +1143,7 @@ Promise<void> internal::LocalDataServiceImpl::store(StoreContext context) {
 
 namespace {
 
-struct FileWriter : public DataRef<capnp::Data>::Receiver {
+struct FileWriter : public DataRef<capnp::Data>::Receiver::Server {
 	Own<const kj::File> out;
 	uint64_t offset = 0;
 	
@@ -1158,7 +1158,7 @@ struct FileWriter : public DataRef<capnp::Data>::Receiver {
 	Promise<void> receive(ReceiveContext ctx) {
 		auto data = ctx.getParams().getData();
 		out -> write(offset, data);
-		offset += data;
+		offset += data.size();
 		
 		return READY_NOW;
 	}
@@ -1174,19 +1174,7 @@ struct FileWriter : public DataRef<capnp::Data>::Receiver {
 Promise<void> LocalDataService::downloadIntoFile(DataRef<capnp::Data>::Client clt, Own<const kj::File>&& dst) {
 	auto transmitRequest = clt.transmitRequest();
 	transmitRequest.setReceiver(kj::heap<FileWriter>(mv(dst)));
-	return transmitRequest.send();
-}
-
-Promise<void> LocalDataService::publishFile(const kj::File& f, bool copy) {
-	Array<const byte> arr;
-	
-	if(copy) {
-		arr = f.readAllBytes();
-	} else {
-		arr = f.mmap(0, f.stat().size);
-	}
-	
-	return publish(mv(arr));
+	return transmitRequest.send().ignoreResult();
 }
 
 // === function attachToClient ===

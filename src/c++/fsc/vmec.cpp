@@ -359,17 +359,18 @@ struct VmecRun {
 			.then(
 				// Success
 				[this](auto wcResponse) {
-					Temporary<VmecResult> tmp;
-					
 					auto& ds = getActiveThread().dataService();
 					
+					Temporary<VmecResult> tmp;
+					
 					// Read in wout.nc
-					out.getResult.setOk(
-						getActiveDataService.publishFile(
-							workDir -> dir -> openFile(kj::Path("wout_inputFile.nc")),
-							true // make copy
-						)
-					);
+					tmp.setWoutNc(ds.publishFile(
+						*workDir -> dir -> openFile(kj::Path("wout_inputFile.nc")),
+						true
+					));
+					interpretOutputFile(workDir -> absPath.append("wout_inputFile.nc"), tmp);
+					
+					out.getResult().setOk(ds.publish(tmp.asReader()));
 					
 					// TODO: Parse file
 					KJ_LOG(WARNING, "Incomplete code: No parsing of VMEC result");
@@ -499,16 +500,18 @@ kj::String generateVmecInput(VmecRequest::Reader request, kj::PathPtr mgridFile)
 void interpretOutputFile(kj::PathPtr path, VmecResult::Builder out) {
 	H5::H5File file(path.toNativeString(true).cStr(), 0);
 	
-	uint32_t nTor = readScalar<uint32_t>(file.openDataset("ntor"));
-	uint32_t mPol = readScalar<uint32_t>(file.openDataset("mpol"));
-	uint32_t nFP  = readScalar<uint32_t>(file.openDataset("nfp"));
+	uint32_t nTor = readScalar<uint32_t>(file.openDataSet("ntor"));
+	uint32_t mPol = readScalar<uint32_t>(file.openDataSet("mpol"));
+	uint32_t nFP  = readScalar<uint32_t>(file.openDataSet("nfp"));
 	
-	out.setNTor(nTor);
-	out.setMPol(mPol - 1);
-	out.setPeriod(nFP);
+	auto surf = out.initSurfaces();
 	
-	auto arrayDims = getDimensions(file.openDataset("rmnc"));
-	size_t nSurf = arrayDims[0].length;
+	surf.setNTor(nTor);
+	surf.setMPol(mPol - 1);
+	surf.setPeriod(nFP);
+	
+	auto arrayDims = getDimensions(file.openDataSet("rmnc"));
+	int64_t nSurf = arrayDims[0].length;
 	size_t nPerSurf = arrayDims[1].length;
 	
 	KJ_REQUIRE(nPerSurf == nTor + 1 + (mPol - 1) * (2 * nTor + 1), "Unexpected output format");
@@ -521,13 +524,13 @@ void interpretOutputFile(kj::PathPtr path, VmecResult::Builder out) {
 	// from 0 to nTor, then starts from -nTor to -1) and write to that. We just need
 	// to increment the m accordingly.
 	
-	size_t offset = 0;
+	int64_t offset = 0;
 	
-	Tensor<3, double> rmncT(mPol, 2 * nTor + 1, nSurf);
-	Tensor<3, double> zmnsT(mPol, 2 * nTor + 1, nSurf);
+	Tensor<double, 3> rmncT(mPol, 2 * nTor + 1, nSurf);
+	Tensor<double, 3> zmnsT(mPol, 2 * nTor + 1, nSurf);
 	
-	auto rmnc = readArray<double>(file.openDataset("rmnc"));
-	auto zmns = readArray<double>(file.openDataset("zmns"));
+	auto rmnc = readArray<double>(file.openDataSet("rmnc"));
+	auto zmns = readArray<double>(file.openDataSet("zmns"));
 	
 	for(auto iPol : kj::range(0, mPol)) {
 		for(auto iLinear : kj::range(0, 2 * nTor + 1)) {
@@ -546,19 +549,19 @@ void interpretOutputFile(kj::PathPtr path, VmecResult::Builder out) {
 		}
 	}
 	
-	writeTensor(rmncT, out.initRCos());
-	writeTensor(zmnsT, out.initZSin());
+	writeTensor(rmncT, surf.initRCos());
+	writeTensor(zmnsT, surf.initZSin());
 	
 	if(file.nameExists("zmnc")) {
 		// We also have non-symmetric components
 		// Extract these as well
 		offset = 0;
 		
-		Tensor<3, double> rmnsT(mPol, 2 * nTor + 1, nSurf);
-		Tensor<3, double> zmncT(mPol, 2 * nTor + 1, nSurf);
+		Tensor<double, 3> rmnsT(mPol, 2 * nTor + 1, nSurf);
+		Tensor<double, 3> zmncT(mPol, 2 * nTor + 1, nSurf);
 		
-		auto rmns = readArray<double>(file.openDataset("rmns"));
-		auto zmnc = readArray<double>(file.openDataset("zmnc"));
+		auto rmns = readArray<double>(file.openDataSet("rmns"));
+		auto zmnc = readArray<double>(file.openDataSet("zmnc"));
 		
 		for(auto iPol : kj::range(0, mPol)) {
 			for(auto iLinear : kj::range(0, 2 * nTor + 1)) {
@@ -577,7 +580,7 @@ void interpretOutputFile(kj::PathPtr path, VmecResult::Builder out) {
 			}
 		}
 		
-		auto nonsym = out.initNonSymmetric();
+		auto nonsym = surf.initNonSymmetric();
 		writeTensor(rmnsT, nonsym.initRSin());
 		writeTensor(zmncT, nonsym.initZCos());
 	}

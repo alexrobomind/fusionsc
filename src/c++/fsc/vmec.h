@@ -14,5 +14,6 @@ VmecDriver::Client createVmecDriver(Own<JobLauncher>&& launcher);
 
 kj::String generateVmecInput(VmecRequest::Reader request, kj::PathPtr mgridPath);
 Promise<void> writeMGridFile(kj::PathPtr path, ComputedField::Reader cField);
+void interpretOutputFile(kj::PathPtr path, VmecResult::Builder out);
 
 }

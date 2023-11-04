@@ -238,7 +238,7 @@ public:
 	LocalDataRef<capnp::Data> publishFile(const kj::ReadableFile& in, kj::ArrayPtr<const kj::byte> fileHash = nullptr, bool copy = false);
 	
 	//! Shorthand for publishing without hash
-	inline LocalDataRef<capnp::Data> publishFile(const kj::ReadableFile& in, bool copy = false);
+	LocalDataRef<capnp::Data> publishFile(const kj::ReadableFile& in, bool copy = false);
 	
 	///@}
 	
