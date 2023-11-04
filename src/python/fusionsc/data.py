@@ -4,7 +4,7 @@ from . import backends
 from . import service
 from . import asnc
 from . import capnp
-from . import serialization
+from . import serialize
 
 from .asnc import asyncFunction
 
@@ -40,7 +40,7 @@ def publish(data: Any) -> service.DataRef -> service.DataRef.Client:
 	Returns:
 		A DataRef pointing to an in-memory copy of 'data'.
 	"""
-	inThreadRef = native.data.publish(serialization.wrap(data))
+	inThreadRef = native.data.publish(serialize.wrap(data))
 	cloneResult = backends.localResources().download(inThreadRef).pipeline.ref
 	return cloneResult
 
@@ -59,7 +59,7 @@ async def download(ref: service.DataRef) -> asnc.Future[Any]:
 		data, or a subtype of CapabilityClient or StructReader typed to the appropriate Cap'n'proto schema).
 	"""
 	data = await native.data.downloadAsync(ref)
-	return serialization.unwrap.asnc(data)
+	return serialize.unwrap.asnc(data)
 
 @asyncFunction
 def writeArchive(data: Any, filename: str) -> asnc.Future:

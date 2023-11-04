@@ -143,18 +143,33 @@ LocalDataRef<capnp::Data> LocalDataService::publish(kj::ArrayPtr<const byte> byt
 	return publish<capnp::Data::Reader>(bytes);
 }
 
-LocalDataRef<capnp::Data> LocalDataService::publishFile(const kj::ReadableFile& file, kj::ArrayPtr<const kj::byte> fileHash) {
-	auto fileData = file.stat();
-	kj::Array<const kj::byte> data = file.mmap(0, fileData.size);
+LocalDataRef<capnp::Data> LocalDataService::publish(kj::Array<const byte> bytes, kj::ArrayPtr<const byte> hash) {
+	Temporary<DataRefMetadata> metadata;
 	
-	Temporary<DataRefMetadata> metaData;
 	metaData.setId(getActiveThread().randomID());
-	metaData.getFormat().setUnknown();
+	metaData.getFormat().setRaw();
 	metaData.setCapTableSize(0);
-	metaData.setDataSize(data.size());
-	metaData.setDataHash(fileHash);
+	metaData.setDataSize(bytes.size());
+	metaData.setDataHash(hash);
 	
-	return publish(metaData, mv(data));
+	return publisH(metaData, mv(bytes));
+}
+
+LocalDataRef<capnp::Data> LocalDataService::publishFile(const kj::ReadableFile& file, kj::ArrayPtr<const kj::byte> fileHash, bool copy) {
+	kj::Array<const byte> data;
+	
+	if(copy) {
+		data = file.readAllBytes();
+	} else {
+		auto metadata = file.stat();
+		data = file.mmap(0, metadata.size);
+	}
+	
+	return publish(mv(data), fileHash);
+}
+
+LocalDataRef<capnp::Data> LocalDataService::publishFile(const kj::ReadableFile& file, bool copy) {
+	return publishFile(file, nullptr, copy);
 }
 
 void LocalDataService::setLimits(Limits newLimits) { impl->setLimits(newLimits); }
@@ -1122,6 +1137,56 @@ Promise<void> internal::LocalDataServiceImpl::store(StoreContext context) {
 	context.getResults().setRef(mv(cachedRef));
 	
 	return READY_NOW;
+}
+
+// === Flat file storage ===
+
+namespace {
+
+struct FileWriter : public DataRef<capnp::Data>::Receiver {
+	Own<const kj::File> out;
+	uint64_t offset = 0;
+	
+	FileWriter(Own<const kj::File>&& newOut) : out(mv(newOut)) {}
+	
+	Promise<void> begin(BeginContext ctx) {
+		out -> truncate(0);
+		
+		return READY_NOW;
+	}
+	
+	Promise<void> receive(ReceiveContext ctx) {
+		auto data = ctx.getParams().getData();
+		out -> write(offset, data);
+		offset += data;
+		
+		return READY_NOW;
+	}
+	
+	Promise<void> done(DoneContext ctx) {
+		out -> sync();
+		return READY_NOW;
+	}
+};
+
+}
+
+Promise<void> LocalDataService::downloadIntoFile(DataRef<capnp::Data>::Client clt, Own<const kj::File>&& dst) {
+	auto transmitRequest = clt.transmitRequest();
+	transmitRequest.setReceiver(kj::heap<FileWriter>(mv(dst)));
+	return transmitRequest.send();
+}
+
+Promise<void> LocalDataService::publishFile(const kj::File& f, bool copy) {
+	Array<const byte> arr;
+	
+	if(copy) {
+		arr = f.readAllBytes();
+	} else {
+		arr = f.mmap(0, f.stat().size);
+	}
+	
+	return publish(mv(arr));
 }
 
 // === function attachToClient ===
