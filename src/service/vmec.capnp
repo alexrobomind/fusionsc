@@ -16,15 +16,19 @@ using DataRef = DataPkg.DataRef;
 struct VmecSurfaces {
 	# Surface Fourier coefficients coefficients for input and output
 	# All tensors must have identical shapes
-	# - nPoloidalCoeffs must be 2 * mPol + 1
-	# - nToroidalCoeffs must be nTor
+	# - nToroidalCoeffs must be 2 * nTor + 1
+	# - nPoloidalCoeffs must be mPol + 1
 	#
-	# The poloidal indices are laid out in increasing order from -mPol to mPol.
+	# The order of storage for toroidal modes is [0, ..., nTor, -nTor, ..., -1]
+	# so that slicing with negative indices can be interpreted
+	# as slicing from the end (as is done in NumPy).
+	#
+	# The order of storage for polidal modes is [0, ..., mPol]
 	
-	# Tensor of shape [nSurfaces, nPoloidalCoeffs, nToroidalCoeffs]
+	# Tensor of shape [nSurfaces, nToroidalCoeffs, nPoloidalCoeffs]
 	rCos @0 : FTensor;
 	
-	# Tensor of shape [nSurfaces, nPoloidalCoeffs, nToroidalCoeffs]
+	# Tensor of shape [nSurfaces, nToroidalCoeffs, nPoloidalCoeffs]
 	zSin @1 : FTensor;
 	
 	period @2 : UInt32 = 1;
@@ -34,10 +38,10 @@ struct VmecSurfaces {
 	union {
 		symmetric @5 : Void;
 		nonSymmetric : group {
-			# Tensor of shape [nSurfaces, nPoloidalCoeffs, nToroidalCoeffs]
+			# Tensor of shape [nSurfaces, nToroidalCoeffs, nPoloidalCoeffs]
 			rSin @6 : FTensor;
 			
-			# Tensor of shape [nSurfaces, nPoloidalCoeffs, nToroidalCoeffs]
+			# Tensor of shape [nSurfaces, nToroidalCoeffs, nPoloidalCoeffs]
 			zCos @7 : FTensor;
 		}
 	}
@@ -96,19 +100,27 @@ struct VmecRequest {
 	}
 	
 	runParams : group {
-		nGridToroidal @10 : UInt32 = 32;
-		nGridPoloidal @11 : UInt32 = 32;
+		# Toroidal grid size (NZETA)
+		# Default for free boundary: Vacuum field grid size
+		# Default for fixed boundary: 2 * nTor + 4
+		nGridToroidal @10 : UInt32 = 0;
+		
+		# Poloidal grid size (NTHETA)
+		# Must be at least 2 * mPol + 6
+		# Default is 2 * mPol + 6
+		nGridPoloidal @11 : UInt32 = 0;
+		
 		nGridRadial @12 : List(UInt32) = [4, 9, 28, 99];
 		maxIterationsPerSequence @13 : UInt32 = 6000;
 		convergenceSteps @14 : UInt32 = 100;
 		vacuumCalcSteps @15 : UInt32 = 6;
 		timeStep @16 : Float32 =  0.9;
 		forceToleranceLevels @17 : List(Float32) = [1.0E-5, 1.0E-7, 1.E-10, 1.E-15];
-		mPolMax @19 : UInt32 = 6;
-		nTorMax @20 : UInt32 = 9;
 	}
 	
 	phiEdge @18 : Float64 = 0;
+	mPol @19 : UInt32 = 0;
+	nTor @20 : UInt32 = 0;
 }
 
 struct VmecResult {

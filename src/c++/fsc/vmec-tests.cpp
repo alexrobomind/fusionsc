@@ -11,7 +11,10 @@ using namespace fsc;
 
 static inline kj::StringPtr vmecRequestYaml =
 R"(
-phiEdge: 1
+phiEdge: 0.01
+nTor: 1
+mPol: 1
+
 freeBoundary:
   vacuumField:
     grid:
@@ -27,20 +30,20 @@ freeBoundary:
       nSym: 5
       
 startingPoint:
-  nTor: 2
+  nTor: 1
   mPol: 1
   period: 5
   
   rCos:
     shape: [2, 3, 2]
     data: [
-      0, 0,
       1, 0,
+      0, 0,
       0, 0,
       
+      1, 0.1,
       0, 0,
-      1, 0,
-      0.1, 0
+      0, 0
     ]
   zSin:
     shape: [2, 3, 2]
@@ -49,9 +52,9 @@ startingPoint:
       0, 0,
       0, 0,
       
+      0, 0.1,
       0, 0,
-      0, 0,
-      0.1, 0
+      0, 0
     ]
 massProfile:
   spline:
