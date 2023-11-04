@@ -49,13 +49,18 @@ def unwrap(obj):
 		return load.asnc(obj)
 	
 	return obj
-		
 
-def dump(obj: Any, builder: Optional[service.DynamicObject.Builder] = None):
-	if builder is None:
-		builder = service.DynamicObject.newMessage()
-		
-	if isinstance(obj, str):
+def dump(obj: Any):
+	return _dump(obj, service.DynamicObject.newMessage(), set())
+
+def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: set):
+	key = id(obj)
+	builder.memoKey = key
+	
+	if key in memoSet:
+		builder.memoized = None
+	
+	elif isinstance(obj, str):
 		builder.text = obj
 		
 	elif isinstance(obj, bytes):
@@ -185,20 +190,20 @@ def dump(obj: Any, builder: Optional[service.DynamicObject.Builder] = None):
 		out = array.initData(len(flat))
 		
 		for i, el in enumerate(flat):
-			dump(el, out[i])
+			_dump(el, out[i], memoSet)
 		
 	elif isinstance(obj, collections.abc.Sequence):
 		out = builder.initSequence(len(obj))
 		
 		for i, el in enumerate(obj):
-			dump(el, out[i])
+			_dump(el, out[i], memoSet)
 	
 	elif isinstance(obj, collections.abc.Mapping):
 		out = builder.initMapping(len(obj))
 		
 		for i, (k, v) in enumerate(obj.items()):
-			dump(k, out[i].key)
-			dump(v, out[i].value)
+			_dump(k, out[i].key, memoSet)
+			_dump(v, out[i].value, memoSet)
 	
 	else:
 		assert _pickleEnabled.get(), """
@@ -213,12 +218,24 @@ def dump(obj: Any, builder: Optional[service.DynamicObject.Builder] = None):
 		
 		import pickle
 		builder.pythonPickle = pickle.dumps(obj)
+	
+	memoSet.add(key)
 
 	return builder
 
 @asyncFunction
-async def load(reader: service.DynamicObject.Reader):
+async def _load(reader: service.DynamicObject.Reader, memoDict: dict):
 	which = reader.which_()
+	
+	if which == "memoized":
+		key = reader.memoKey
+		
+		assert key in memoDict, "Could not locate memoized object. This implies an incorrect store/load ordering"
+		return memoDict[key]
+	
+	if reader.memoKey != 0:
+		memoDict[reader.memoKey] 
+		
 	if which == "text":
 		return str(reader.text)
 	
@@ -229,11 +246,11 @@ async def load(reader: service.DynamicObject.Reader):
 		return await data.download.asnc(reader.bigData)
 	
 	if which == "sequence":
-		return [await load.asnc(x) for x in reader.sequence]
+		return [await _load.asnc(x, memoDict) for x in reader.sequence]
 	
 	if which == "mapping":
 		return {
-			await load.asnc(e.key) : await load.asnc(e.value)
+			await _load.asnc(e.key, memoDict) : await _load.asnc(e.value, memoDict)
 			for e in reader.mapping
 		}
 	
@@ -329,7 +346,7 @@ async def load(reader: service.DynamicObject.Reader):
 	
 	if which == "dynamicObjectArray":
 		doa = reader.dynamicObjectArray
-		flat = [await load.asnc(e) for e in doa.data]
+		flat = [await _load.asnc(e) for e in doa.data]
 		return np.asarray(flat).reshape(doa.shape)
 	
 	if which == "pythonBigInt":

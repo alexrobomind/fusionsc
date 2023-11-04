@@ -39,6 +39,8 @@ struct DynamicObject {
 		}
 	}
 	
+	memoKey @28 : UInt64;
+	
 	union {
 		text @0 : Text;
 		data @1 : Data;
@@ -98,5 +100,9 @@ struct DynamicObject {
 			data @19 : Data;
 			bigData @20 : DataRef(Data);
 		}
+		
+		# Indicates that the object is already
+		# memoized under the given memo key.
+		memoized @29 : Void;
 	}
 }
