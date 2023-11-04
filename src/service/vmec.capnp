@@ -114,7 +114,7 @@ struct VmecRequest {
 struct VmecResult {
 	woutNc @0 : DataRef(Data);
 	
-	surfaces @1 : DataRef(VmecSurfaces);
+	surfaces @1 : VmecSurfaces;
 	volume @2 : Float64;
 	energy @3 : Float64;
 }
