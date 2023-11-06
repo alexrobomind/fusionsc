@@ -149,5 +149,14 @@ struct VmecResponse {
 interface VmecDriver {	
 	run @0 VmecRequest -> VmecResponse;
 	computePhiEdge @1 (field : Magnetics.ComputedField, surface : VmecSurfaces) -> (phiEdge : Float64);
+	
+	computePositions @2 (surfaces : VmecSurfaces, sPhiTheta : FTensor) -> (phiZR : FTensor);
+	invertPositions @3 (surfaces : VmecSurfaces, xyz : FTensor) -> (sphitheta : FTensor);
+}
+
+struct VmecKernelComm {
+	surfaces @0 : VmecSurfaces;
+	pzr @1 : List(Float64);
+	spt @2 : List(Float64);
 }
 

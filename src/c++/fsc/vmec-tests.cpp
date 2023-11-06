@@ -113,7 +113,7 @@ TEST_CASE("vmec-run", "[.]") {
     auto lt = l -> newThread();
     auto& ws = lt -> waitScope();
 	
-	auto driver = createVmecDriver(newProcessScheduler("."));
+	auto driver = createVmecDriver(kj::heap<LoopDevice>(), newProcessScheduler("."));
 	auto req = driver.runRequest();
 	vmecRequest(req);
 	
@@ -129,7 +129,7 @@ TEST_CASE("vmec-run-fb", "[.]") {
     auto lt = l -> newThread();
     auto& ws = lt -> waitScope();
 	
-	auto driver = createVmecDriver(newProcessScheduler("."));
+	auto driver = createVmecDriver(kj::heap<LoopDevice>(), newProcessScheduler("."));
 	auto req = driver.runRequest();
 	vmecRequest(req);
 	
@@ -140,4 +140,48 @@ TEST_CASE("vmec-run-fb", "[.]") {
 	KJ_DBG(resp.getInputFile());
 	KJ_DBG(resp.getStdout());
 	KJ_DBG(resp.getStderr());
+}
+
+TEST_CASE("vmec-surf") {
+    auto l = newLibrary();
+    auto lt = l -> newThread();
+    auto& ws = lt -> waitScope();
+	
+	auto driver = createVmecDriver(kj::heap<LoopDevice>(), newProcessScheduler("."));
+	auto req = driver.computePositionsRequest();
+	
+	auto surf = req.initSurfaces();
+	surf.setMPol(1);
+	surf.setNTor(1);
+	
+	auto rcos = surf.getRCos();
+	rcos.setShape({2, 3, 2});
+	rcos.setData({
+		1.0, 0.0,
+		0.0, 0.0,
+		0.0, 0.0,
+		
+		1.0, 0.1,
+		0.0, 0.0,
+		0.0, 0.0
+	});
+	
+	auto zsin = surf.getZSin();
+	zsin.setShape({2, 3, 2});
+	zsin.setData({
+		0.0, 0.0,
+		0.0, 0.0,
+		0.0, 0.0,
+		
+		0.0, 0.1,
+		0.0, 0.0,
+		0.0, 0.0
+	});
+	
+	auto spt = req.getSPhiTheta();
+	spt.setShape({3});
+	spt.setData({0.5, 0, 0});
+	
+	auto result = req.send().wait(ws);
+	KJ_DBG(result.getPhiZR());
 }

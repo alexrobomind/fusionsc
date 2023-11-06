@@ -92,6 +92,7 @@ interface RootService {
 	newHFCamProvider   @3 () -> (service : HFCam.HFCamProvider);
 	newKDTreeService   @4 () -> (service : Index.KDTreeService);
 	newMapper          @5 () -> (service : FLT.Mapper);
+	newVmecDriver      @11() -> (service : Vmec.VmecDriver);
 	
 	dataService @6 () -> (service : Data.DataService);
 	

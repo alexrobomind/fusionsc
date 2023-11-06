@@ -1,5 +1,6 @@
 #include "assign.h"
 #include "tensor.h"
+#include "async.h"
 
 #include <fsc/yaml.h>
 
@@ -106,24 +107,28 @@ struct MessageSlot : public BuilderSlot {
 };
 
 struct CapSlot : public BuilderSlot {
-	DynamicCapability::Client cap;
+	mutable DynamicCapability::Client cap;
 	
-	CapSlot(capnp::InterfaceSchema schema) {
+	CapSlot(capnp::InterfaceSchema schema) :
+		BuilderSlot(schema)
+	{
 		capnp::Capability::Client raw = nullptr;
 		cap = raw.castAs<capnp::DynamicCapability>(schema);
 	}
 	
+	~CapSlot() noexcept {}
+	
 	void set(DynamicValue::Reader newVal) const override {
-		KJ_REQUIRE(newVal.getType() == DynamicValue::INTERFACE, "Can only assign capabilities to capability slots");
+		KJ_REQUIRE(newVal.getType() == DynamicValue::CAPABILITY, "Can only assign capabilities to capability slots");
 		auto newCap = newVal.as<capnp::DynamicCapability>();
 		KJ_REQUIRE(newCap.getSchema().extends(cap.getSchema()));
 		cap = mv(newCap);
 	}
 	void adopt(capnp::Orphan<DynamicValue>&& orphan) const override {
-		KJ_REQUIRE(newVal.getType() == DynamicValue::INTERFACE, "Can only assign capabilities to capability slots");
+		KJ_REQUIRE(orphan.getType() == DynamicValue::CAPABILITY, "Can only assign capabilities to capability slots");
 		auto newCap = orphan.releaseAs<capnp::DynamicCapability>();
-		KJ_REQUIRE(newCap.getSchema() == cap.getSchema());
-		cap = mv(newCap);
+		KJ_REQUIRE(newCap.get().getSchema() == cap.getSchema());
+		cap = newCap.get();
 	}
 	DynamicValue::Builder get() const override {
 		return cap;
@@ -131,6 +136,7 @@ struct CapSlot : public BuilderSlot {
 	DynamicValue::Builder init() const override {
 		capnp::Capability::Client raw = nullptr;
 		cap = raw.castAs<capnp::DynamicCapability>(cap.getSchema());
+		return cap;
 	}
 	
 	DynamicValue::Builder init(unsigned int size) const override {
@@ -274,18 +280,20 @@ void assign(const BuilderSlot& dst, py::object object) {
 	
 	// Attempt 7: Capabilities can also be assigned from promises
 	if(dst.type.isInterface()) {
-		if(py::hasattr(object, "_asyncio_future_blocking")) {
+		using PromiseType = Promise<DynamicCapabilityClient>;
+		py::detail::make_caster<PromiseType> caster;
+		if(caster.load(object, false)) {
 			auto targetSchema = dst.type.asInterface();
 			
-			capnp::Capability::Client promisedCap = py::cast<Promise<DynamicCapabilityClient>>()
+			capnp::Capability::Client promisedCap = static_cast<PromiseType&>(caster)
 			.then([targetSchema](DynamicCapabilityClient obj) -> capnp::Capability::Client {
-				auto newSchema = client.getSchema();
+				auto newSchema = obj.getSchema();
 				KJ_REQUIRE(newSchema.extends(targetSchema), "Returned capability does not extend the required interface");
 				
-				return client;
+				return obj;
 			});
 			
-			slot.set(promisedCap.castAs<capnp::DynamicCapability>(targetSchema));
+			dst.set(promisedCap.castAs<capnp::DynamicCapability>(targetSchema));
 		} else {
 			assignmentFailureLog = strTree(mv(assignmentFailureLog), "Skipped assigning capability from future because object is no future\n");
 		}

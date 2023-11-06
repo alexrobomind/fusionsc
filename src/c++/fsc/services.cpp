@@ -10,6 +10,7 @@
 #include "networking.h"
 #include "jobs.h"
 #include "matcher.h"
+#include "vmec.h"
 
 #include "odb.h"
 #include "sqlite.h"
@@ -188,6 +189,12 @@ struct RootServer : public RootService::Server {
 		auto idx = thisCap().newKDTreeServiceRequest().sendForPipeline().getService();
 		
 		ctx.initResults().setService(fsc::newMapper(mv(flt), mv(idx)));
+		return READY_NOW;
+	}
+	
+	Promise<void> newVmecDriver(NewVmecDriverContext ctx) override {
+		ctx.initResults().setService(::fsc::createVmecDriver(device -> addRef(), selectScheduler()));
+		
 		return READY_NOW;
 	}
 	

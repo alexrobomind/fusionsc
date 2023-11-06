@@ -28,6 +28,10 @@ inline kj::Array<const capnp::word> EMPTY_MESSAGE = internal::newEmptyMessage();
 
 }
 
+// Marker that means we want to map a new message
+
+struct MapNewMessage {};
+
 // Helpers to attach types to message builders & readers
 
 template<typename HostType, typename CupnpType>
@@ -51,6 +55,11 @@ CuTypedMessageBuilder<HostType, CupnpType> cuBuilder(Own<capnp::MessageBuilder> 
 template<typename HostType, typename CupnpType>
 CuTypedMessageBuilder<HostType, CupnpType> cuBuilder(Temporary<HostType>&& tmp) {
 	return cuBuilder<HostType, CupnpType>(mv(tmp.holder));
+}
+
+template<typename HostType, typename CupnpType>
+CuTypedMessageBuilder<HostType, CupnpType> cuBuilder(MapNewMessage) {
+	return { kj::heap<capnp::MallocMessageBuilder>() };
 }
 
 template<typename HostType, typename CupnpType>

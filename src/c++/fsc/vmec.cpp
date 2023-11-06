@@ -6,6 +6,11 @@
 
 #include "hdf5.h"
 
+#include "vmec-kernels.h"
+
+#include "kernels/message.h"
+#include "kernels/launch.h"
+
 #include <kj/filesystem.h>
 
 namespace fsc {
@@ -412,12 +417,14 @@ struct VmecRun {
 
 struct VmecDriverImpl : public VmecDriver::Server {
 	Own<JobLauncher> launcher;
+	Own<DeviceBase> device;
 	
-	VmecDriverImpl(Own<JobLauncher> l) :
-		launcher(mv(l))
+	VmecDriverImpl(Own<DeviceBase> dev, Own<JobLauncher> l) :
+		launcher(mv(l)),
+		device(mv(dev))
 	{}
 	
-	Promise<void> run(RunContext ctx) {
+	Promise<void> run(RunContext ctx) override {
 		auto run = heapHeld<VmecRun>(ctx.getParams(), ctx.initResults(), launcher -> createDir());
 		
 		// Wrap inside evalLater so that we don't get the bogus "unwind across heapHeld" warning
@@ -426,6 +433,46 @@ struct VmecDriverImpl : public VmecDriver::Server {
 			return run -> run(*launcher);
 		})
 		.attach(run.x());
+	}
+	
+	Promise<void> computePositions(ComputePositionsContext ctx) override {
+		auto params = ctx.getParams();
+		auto spt = params.getSPhiTheta();
+		
+		validateTensor(spt);
+		KJ_REQUIRE(spt.getShape().size() >= 1);
+		KJ_REQUIRE(spt.getShape()[0] == 3);
+		
+		auto output = ctx.initResults().getPhiZR();
+		output.setShape(spt.getShape());
+		
+		auto surf = params.getSurfaces();
+		validateSurfaces(surf);
+		
+		auto mapping = FSC_MAP_BUILDER(
+			fsc, VmecKernelComm, MapNewMessage(), *device, true
+		);
+		
+		auto host = mapping -> getHost();
+		host.setSurfaces(surf);
+		host.setSpt(spt.getData());
+		host.initPzr(spt.getData().size());
+		
+		// Update segment structure
+		mapping -> updateStructureOnDevice();
+		
+		// Fill in results
+		Promise<void> result = FSC_LAUNCH_KERNEL(
+			computeSurfaceKernel,
+			
+			*device,
+			spt.getData().size() / 3,
+			mapping
+		);
+		
+		return result.then([mapping = mv(mapping), host, ctx]() mutable {
+			ctx.getResults().getPhiZR().setData(host.getPzr());
+		});
 	}
 };
 
@@ -694,8 +741,8 @@ Promise<void> writeMGridFile(kj::PathPtr path, ComputedField::Reader cField) {
 	});
 }
 
-VmecDriver::Client createVmecDriver(Own<JobLauncher>&& scheduler) {
-	return kj::heap<VmecDriverImpl>(mv(scheduler));
+VmecDriver::Client createVmecDriver(Own<DeviceBase>&& dev, Own<JobLauncher>&& scheduler) {
+	return kj::heap<VmecDriverImpl>(mv(dev), mv(scheduler));
 }
 
 }
