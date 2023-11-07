@@ -8,5 +8,6 @@ MainGen loadBalancer(kj::ProcessContext&);
 MainGen server(kj::ProcessContext&);
 MainGen worker(kj::ProcessContext&);
 MainGen warehouse(kj::ProcessContext&);
+MainGen capnp(kj::ProcessContext&);
 
 }

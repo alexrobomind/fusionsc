@@ -47,8 +47,7 @@ Own<DeviceBase> selectDevice(LocalConfig::Reader config) {
 	#endif
 	
 	if(config.getPreferredDeviceType() == ComputationDeviceType::LOOP) {
-		static LoopDevice loopDevice;
-		return kj::attachRef(loopDevice);
+		return LoopDevice::create();
 	}
 	
 	auto numThreadsRequested = config.getCpuBackend().getNumThreads();
@@ -59,7 +58,7 @@ Own<DeviceBase> selectDevice(LocalConfig::Reader config) {
 	}
 	
 	KJ_LOG(INFO, "Creating CPU backend", numThreads);
-	return kj::refcounted<CPUDevice>(numThreads);
+	return CPUDevice::create(numThreads);
 }
 
 Promise<Warehouse::Folder::Client> connectWarehouse(kj::StringPtr urlString, NetworkInterface::Client networkInterface) {

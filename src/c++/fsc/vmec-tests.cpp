@@ -75,7 +75,7 @@ static void vmecRequest(VmecRequest::Builder req) {
     auto field = req.getFreeBoundary().initVacuumFieldHl();
     parseGeqdsk(field.initAxisymmetricEquilibrium(), devices::jtext::EXAMPLE_GFILE.get());
     
-    auto calculator = newFieldCalculator(kj::refcounted<CPUDevice>(CPUDevice::estimateNumThreads()));
+    auto calculator = newFieldCalculator(CPUDevice::create(CPUDevice::estimateNumThreads()));
     auto computeRequest = calculator.computeRequest();
     computeRequest.setField(field);
     computeRequest.setGrid(req.getFreeBoundary().getVacuumField().getGrid());
@@ -113,7 +113,7 @@ TEST_CASE("vmec-run", "[.]") {
     auto lt = l -> newThread();
     auto& ws = lt -> waitScope();
 	
-	auto driver = createVmecDriver(kj::heap<LoopDevice>(), newProcessScheduler("."));
+	auto driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."));
 	auto req = driver.runRequest();
 	vmecRequest(req);
 	
@@ -129,7 +129,7 @@ TEST_CASE("vmec-run-fb", "[.]") {
     auto lt = l -> newThread();
     auto& ws = lt -> waitScope();
 	
-	auto driver = createVmecDriver(kj::heap<LoopDevice>(), newProcessScheduler("."));
+	auto driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."));
 	auto req = driver.runRequest();
 	vmecRequest(req);
 	
@@ -147,7 +147,7 @@ TEST_CASE("vmec-surf") {
     auto lt = l -> newThread();
     auto& ws = lt -> waitScope();
 	
-	auto driver = createVmecDriver(kj::heap<LoopDevice>(), newProcessScheduler("."));
+	auto driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."));
 	auto req = driver.computePositionsRequest();
 	
 	auto surf = req.initSurfaces();
@@ -179,9 +179,53 @@ TEST_CASE("vmec-surf") {
 	});
 	
 	auto spt = req.getSPhiTheta();
-	spt.setShape({3});
-	spt.setData({0.5, 0, 0});
+	spt.setShape({3, 4});
+	spt.setData({0.5, 0.5, 0.5, 0.5, 0, 0, 0, 0, 0, 0.5 * fsc::pi, fsc::pi, 1.5 * fsc::pi});
 	
 	auto result = req.send().wait(ws);
 	KJ_DBG(result.getPhiZR());
+}
+
+TEST_CASE("vmec-surf-inv") {
+    auto l = newLibrary();
+    auto lt = l -> newThread();
+    auto& ws = lt -> waitScope();
+	
+	auto driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."));
+	auto req = driver.invertPositionsRequest();
+	
+	auto surf = req.initSurfaces();
+	surf.setMPol(1);
+	surf.setNTor(1);
+	
+	auto rcos = surf.getRCos();
+	rcos.setShape({2, 3, 2});
+	rcos.setData({
+		1.0, 0.0,
+		0.0, 0.0,
+		0.0, 0.0,
+		
+		1.0, 0.1,
+		0.0, 0.0,
+		0.0, 0.0
+	});
+	
+	auto zsin = surf.getZSin();
+	zsin.setShape({2, 3, 2});
+	zsin.setData({
+		0.0, 0.0,
+		0.0, 0.0,
+		0.0, 0.0,
+		
+		0.0, 0.1,
+		0.0, 0.0,
+		0.0, 0.0
+	});
+	
+	auto pzr = req.getPhiZR();
+	pzr.setShape({3, 4});
+	pzr.setData({0, 0, 0, 0, 0, 0.05, 0, -0.05, 1.05, 1, 0.95, 1});
+	
+	auto result = req.send().wait(ws);
+	KJ_DBG(result.getSPhiTheta());
 }

@@ -151,7 +151,7 @@ interface VmecDriver {
 	computePhiEdge @1 (field : Magnetics.ComputedField, surface : VmecSurfaces) -> (phiEdge : Float64);
 	
 	computePositions @2 (surfaces : VmecSurfaces, sPhiTheta : FTensor) -> (phiZR : FTensor);
-	invertPositions @3 (surfaces : VmecSurfaces, xyz : FTensor) -> (sphitheta : FTensor);
+	invertPositions @3 (surfaces : VmecSurfaces, phiZR : FTensor) -> (sPhiTheta : FTensor);
 }
 
 struct VmecKernelComm {

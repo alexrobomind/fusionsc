@@ -474,6 +474,46 @@ struct VmecDriverImpl : public VmecDriver::Server {
 			ctx.getResults().getPhiZR().setData(host.getPzr());
 		});
 	}
+	
+	Promise<void> invertPositions(InvertPositionsContext ctx) override {
+		auto params = ctx.getParams();
+		auto pzr = params.getPhiZR();
+		
+		validateTensor(pzr);
+		KJ_REQUIRE(pzr.getShape().size() >= 1);
+		KJ_REQUIRE(pzr.getShape()[0] == 3);
+		
+		auto output = ctx.initResults().getSPhiTheta();
+		output.setShape(pzr.getShape());
+		
+		auto surf = params.getSurfaces();
+		validateSurfaces(surf);
+		
+		auto mapping = FSC_MAP_BUILDER(
+			fsc, VmecKernelComm, MapNewMessage(), *device, true
+		);
+		
+		auto host = mapping -> getHost();
+		host.setSurfaces(surf);
+		host.setPzr(pzr.getData());
+		host.initSpt(pzr.getData().size());
+		
+		// Update segment structure
+		mapping -> updateStructureOnDevice();
+		
+		// Fill in results
+		Promise<void> result = FSC_LAUNCH_KERNEL(
+			invertSurfaceKernel,
+			
+			*device,
+			pzr.getData().size() / 3,
+			mapping
+		);
+		
+		return result.then([mapping = mv(mapping), host, ctx]() mutable {
+			ctx.getResults().getSPhiTheta().setData(host.getSpt());
+		});
+	}
 };
 
 }

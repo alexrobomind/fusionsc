@@ -40,12 +40,12 @@ DeviceMappingBase::~DeviceMappingBase() {}
 
 void DeviceMappingBase::updateHost() {
 	doUpdateHost();
-	device -> attach(addRef());
+	device -> addToBarrier(addRef());
 }
 
 void DeviceMappingBase::updateDevice() {
 	doUpdateDevice();
-	device -> attach(addRef());
+	device -> addToBarrier(addRef());
 }
 
 Own<DeviceMappingBase> DeviceMappingBase::addRef() {
@@ -103,7 +103,7 @@ namespace {
 
 int CPUDevice::BRAND = 0;
 
-CPUDevice::CPUDevice(unsigned int numThreads) :
+CPUDevice::CPUDevice(kj::Badge<CPUDevice>, unsigned int numThreads) :
 	CPUDeviceBase(&BRAND),
 	eigenDevice(createEigenDevice(numThreads))
 {}
@@ -118,17 +118,24 @@ unsigned int CPUDevice::estimateNumThreads() {
 	return std::thread::hardware_concurrency();
 }
 
+Own<CPUDevice> CPUDevice::create(unsigned int numThreads) {
+	return kj::refcounted<CPUDevice>(kj::Badge<CPUDevice>(), numThreads);
+}
+
 // === LoopDevice ===
 
 int LoopDevice::BRAND = 0;
 
-LoopDevice::LoopDevice() :
+LoopDevice::LoopDevice(kj::Badge<LoopDevice>) :
 	CPUDeviceBase(&BRAND)
 {}
 
 Own<DeviceBase> LoopDevice::addRef() {
-	static LoopDevice instance;
-	return kj::attachRef(instance);
+	return kj::addRef(*this);
+}
+
+Own<LoopDevice> LoopDevice::create() {
+	return kj::refcounted<LoopDevice>(kj::Badge<LoopDevice>());
 }
 
 #ifdef FSC_WITH_CUDA
@@ -203,6 +210,5 @@ void synchronizeGpuDevice(Eigen::GpuDevice& device, const Operation& op) {
 }
 
 #endif
-
 
 }

@@ -4,10 +4,18 @@
 
 #include <fsc/vmec.capnp.cu.h>
 
+#include <iostream>
+
 namespace fsc {
 
 FSC_DECLARE_KERNEL(
 	computeSurfaceKernel,
+	
+	cu::VmecKernelComm::Builder
+);
+
+FSC_DECLARE_KERNEL(
+	invertSurfaceKernel,
 	
 	cu::VmecKernelComm::Builder
 );
@@ -62,8 +70,6 @@ EIGEN_DEVICE_FUNC inline void computeRZ(
 		n2 = nSurf - 1;
 		w = s;
 	}
-	
-	KJ_DBG(n1, n2, w);
 		
 	auto rCos = surfaces.getRCos().getData();
 	auto zSin = surfaces.getZSin().getData();
@@ -103,6 +109,21 @@ EIGEN_DEVICE_FUNC inline void computeRZ(
 	zOut = z;
 }
 
+EIGEN_DEVICE_FUNC inline void computeRZFromVxVy(
+	cu::VmecSurfaces::Reader surfaces,
+	
+	double phi, double vx, double vy,
+	double& rOut, double& zOut
+) {
+	double s = sqrt(vx * vx + vy * vy);
+	double theta = atan2(vy, vx);
+	
+	if(s < 1e-5)
+		theta = 0;
+	
+	computeRZ(surfaces, s, phi, theta, rOut, zOut);
+}
+
 }}
 
 EIGEN_DEVICE_FUNC inline void computeSurfaceKernel(
@@ -124,6 +145,75 @@ EIGEN_DEVICE_FUNC inline void computeSurfaceKernel(
 	posOut.set(idx + 0 * blockSize, phi);
 	posOut.set(idx + 1 * blockSize, z);
 	posOut.set(idx + 2 * blockSize, r);
+}
+
+EIGEN_DEVICE_FUNC inline void invertSurfaceKernel(
+	unsigned int idx,
+	
+	cu::VmecKernelComm::Builder comm
+) {
+	auto posIn = comm.getPzr();
+	size_t blockSize = posIn.size() / 3;
+	
+	double phi = posIn[idx + 0 * blockSize];
+	double z   = posIn[idx + 1 * blockSize];
+	double r   = posIn[idx + 2 * blockSize];
+	
+	double vx = 0;
+	double vy = 0;
+	
+	// Iterate over successively smaller linearization region
+	unsigned int i = 0;
+	for(double h = 0.3; h > 1e-6 && i < 10; ++i) {
+		//std::cout << "C: " << c << std::endl;
+		//std::cout << "h: " << h << std::endl;
+
+		// Calculate 4-point star around current point
+		double starX[4] = { vx - h, vx + h, vx, vx };
+		double starY[4] = { vy, vy, vy - h, vy + h };
+		
+		double starR[4];
+		double starZ[4];
+		double rAv = 0; double zAv = 0;
+		for(unsigned int i = 0; i < 4; ++i) {
+			internal::computeRZFromVxVy(comm.getSurfaces(), phi, starX[i], starY[i], starR[i], starZ[i]);
+			rAv += starR[i];
+			zAv += starZ[i];
+		}
+		
+		rAv *= 0.25;
+		zAv *= 0.25;
+		
+		// Calculate Jacobian
+		Mat2d jacobian;
+		jacobian(0, 0) = starR[1] - starR[0];
+		jacobian(1, 0) = starZ[1] - starZ[0];
+		jacobian(0, 1) = starR[3] - starR[2];
+		jacobian(1, 1) = starZ[3] - starZ[2];
+		jacobian /= 2 * h;
+		
+		if(jacobian.determinant() < 1e-8) {
+			jacobian.setIdentity();
+		}
+		
+		// Mat2d invJacobian = jacobian.inverse();
+		Vec2d deltaRZ(r - rAv, z - zAv);
+		Vec2d deltaXY = jacobian.inverse() * deltaRZ;
+		
+		vx += deltaXY[0];
+		vy += deltaXY[1];
+		
+		h = deltaXY.norm();
+	}
+	
+	double s = sqrt(vx * vx + vy * vy);
+	double theta = s > 1e-5 ? atan2(vy, vx) : 0;
+	
+	auto posOut = comm.mutateSpt();
+	posOut.set(idx + 0 * blockSize, s);
+	posOut.set(idx + 1 * blockSize, phi);
+	posOut.set(idx + 2 * blockSize, theta);
+	
 }
 
 }	

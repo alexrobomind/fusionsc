@@ -17,7 +17,7 @@ struct DeviceBase {
 	virtual ~DeviceBase();
 	
 	template<typename... T>
-	void attach(T&&... args) {
+	void addToBarrier(T&&... args) {
 		attachments = attachments.attach(kj::fwd<T>(args)...);
 	}
 	
@@ -112,8 +112,10 @@ struct CPUDeviceBase : public DeviceBase {
 struct CPUDevice : public CPUDeviceBase, public kj::Refcounted {
 	static int BRAND;
 	
-	CPUDevice(unsigned int numThreads);
+	CPUDevice(kj::Badge<CPUDevice>, unsigned int numThreads);
 	~CPUDevice();
+	
+	static Own<CPUDevice> create(unsigned int numThreads);
 	
 	Own<DeviceBase> addRef() override;
 	
@@ -122,12 +124,13 @@ struct CPUDevice : public CPUDeviceBase, public kj::Refcounted {
 	Own<Eigen::ThreadPoolDevice> eigenDevice;
 };
 
-struct LoopDevice : public CPUDeviceBase {
+struct LoopDevice : public CPUDeviceBase, public kj::Refcounted {
 	static int BRAND;
 	
-	LoopDevice();
-	
+	LoopDevice(kj::Badge<LoopDevice>);
 	Own<DeviceBase> addRef() override;
+	
+	static Own<LoopDevice> create();
 };
 
 /*

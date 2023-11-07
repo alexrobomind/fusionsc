@@ -22,6 +22,7 @@ struct MainCls {
 			.addSubCommand("worker", fsc_tool::worker(context), "Worker node that registers itself at a remote server")
 			.addSubCommand("warehouse", fsc_tool::warehouse(context), "Serves and maintains object warehouses (databases)")
 			.addSubCommand("load-balancer", fsc_tool::loadBalancer(context), "Provides a load-balancing tool")
+			.addSubCommand("capnp", fsc_tool::capnp(context), "Tool for Cap'n'proto related operations")
 			.build()
 		;
 	}

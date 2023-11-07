@@ -8,6 +8,7 @@ add_executable(
 	fsc-tool-worker.cpp
 	fsc-tool-load-balancer.cpp
 	fsc-tool-server.cpp
+	fsc-tool-capnp.cpp
 )	
 target_link_libraries(fsc-tool fsc)
 set_target_properties(fsc-tool PROPERTIES OUTPUT_NAME "fusionsc")
