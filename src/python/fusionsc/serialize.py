@@ -224,7 +224,18 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 	return builder
 
 @asyncFunction
+async def load(reader: service.DynamicObject.Reader):
+	return await _load(reader, dict())
+
 async def _load(reader: service.DynamicObject.Reader, memoDict: dict):
+	result = await _interpret(reader, memoDict)
+	
+	if reader.memoKey != 0 and reader.memoKey not in memoDict:
+		memoDict[reader.memoKey] = result
+	
+	return result
+
+async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 	which = reader.which_()
 	
 	if which == "memoized":
@@ -232,9 +243,6 @@ async def _load(reader: service.DynamicObject.Reader, memoDict: dict):
 		
 		assert key in memoDict, "Could not locate memoized object. This implies an incorrect store/load ordering"
 		return memoDict[key]
-	
-	if reader.memoKey != 0:
-		memoDict[reader.memoKey] 
 		
 	if which == "text":
 		return str(reader.text)
@@ -246,11 +254,11 @@ async def _load(reader: service.DynamicObject.Reader, memoDict: dict):
 		return await data.download.asnc(reader.bigData)
 	
 	if which == "sequence":
-		return [await _load.asnc(x, memoDict) for x in reader.sequence]
+		return [await _load(x, memoDict) for x in reader.sequence]
 	
 	if which == "mapping":
 		return {
-			await _load.asnc(e.key, memoDict) : await _load.asnc(e.value, memoDict)
+			await _load(e.key, memoDict) : await _load(e.value, memoDict)
 			for e in reader.mapping
 		}
 	
@@ -346,7 +354,7 @@ async def _load(reader: service.DynamicObject.Reader, memoDict: dict):
 	
 	if which == "dynamicObjectArray":
 		doa = reader.dynamicObjectArray
-		flat = [await _load.asnc(e) for e in doa.data]
+		flat = [await _load(e, memoDict) for e in doa.data]
 		return np.asarray(flat).reshape(doa.shape)
 	
 	if which == "pythonBigInt":

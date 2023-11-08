@@ -8,6 +8,7 @@ def _driver():
 	return backends.activeBackend().vmecDriver().service
 
 def newRequest():
+	"""Returns a new builder for the request message type"""
 	return service.VmecRequest.newMessage()
 
 @asyncFunction

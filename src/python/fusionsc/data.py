@@ -10,7 +10,7 @@ from .asnc import asyncFunction
 
 from typing import Any, Union
 
-def openArchive(filename: str) -> service.DataRef:
+def openArchive(filename: str) -> service.DataRef.Client:
 	"""
 	Opens the given archive file and provides a DataRef representing its root.
 	
@@ -30,7 +30,7 @@ def openArchive(filename: str) -> service.DataRef:
 	return native.data.openArchive(filename, backends.localResources())
 	
 
-def publish(data: Any) -> service.DataRef -> service.DataRef.Client:
+def publish(data: Any) -> service.DataRef.Client:
 	"""
 	Copies the provided data and provides a DataRef to the in-memory copy.
 	
@@ -45,7 +45,7 @@ def publish(data: Any) -> service.DataRef -> service.DataRef.Client:
 	return cloneResult
 
 @asyncFunction
-async def download(ref: service.DataRef) -> asnc.Future[Any]:
+async def download(ref: service.DataRef.Client) -> asnc.Future[Any]:
 	"""
 	Retrieves a local copy of the information stored in 'ref'. If possible, transfer of data will be avoided. The retrieved data
 	are immutable and the backing storage is shared across all users in this process. If 'ref' was obtained from an archive file,

@@ -3,7 +3,7 @@ import numpy as np
 
 from pytest import approx, fixture
 
-from fusionsc.serialization import dump, load
+from fusionsc.serialize import dump, load
 
 import time
 
@@ -25,7 +25,7 @@ def test_serialize_simple():
 		np.asarray([3, 5.0]),
 		np.asarray(["Hi","there"]),
 		np.asarray([b'ABC', b'DEF', b'G']),
-		np.asarray([{"ABC" : "DEF"}]),
+		np.asarray([{"ABC" : "ABC"}]),
 		
 		fsc.service.MagneticField.newMessage({"invert" : {"sum" : []}}),
 		fsc.service.FLTStopReason.get(0),
@@ -34,7 +34,9 @@ def test_serialize_simple():
 			fsc.service.FLTStopReason.get(0),
 			fsc.service.FLTStopReason.get(1),
 			fsc.service.FLTStopReason.get(2)
-		])
+		]),
+		
+		[4, 4, 4]
 	]
 	
 	for val in values:

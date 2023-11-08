@@ -34,7 +34,16 @@ struct FieldSlot : public BuilderSlot {
 	void set(DynamicValue::Reader newVal) const override { builder.set(field, newVal); }
 	void adopt(capnp::Orphan<DynamicValue>&& orphan) const override { builder.adopt(field, mv(orphan)); }
 	DynamicValue::Builder get() const override { return builder.get(field); }
-	DynamicValue::Builder init() const override { return builder.init(field); }
+	DynamicValue::Builder init() const override {
+		auto t = field.getType();
+		
+		if(t.isStruct()) {
+			return builder.init(field);
+		}
+		
+		builder.clear(field);
+		return builder.get(field);
+	}
 	DynamicValue::Builder init(unsigned int size) const override { return builder.init(field, size); }
 };
 
