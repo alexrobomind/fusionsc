@@ -1126,6 +1126,11 @@ Promise<Maybe<TempFile&>> checkTempFile(Warehouse::File<>::Client clt) {
 
 struct ImportContext;
 struct DatarefDownloadProcess;
+	
+struct ImportTask {
+	Maybe<Own<ObjectDBEntry>> entry;
+	Promise<void> task = READY_NOW;
+};
 
 /** Context to import external capabilities.
  *
@@ -1144,7 +1149,9 @@ struct ImportContext {
 	~ImportContext();
 	
 	//! Create an (unresolved) object representing a future import.
-	Maybe<Own<ObjectDBEntry>> import(Capability::Client target);
+	ImportTask import(Capability::Client target);
+	
+	Promise<void> whenDone();
 	
 private:
 	//! Kicks off import tasks, called by destructor.
@@ -1158,6 +1165,7 @@ private:
 	struct PendingImport {
 		int64_t id;
 		Capability::Client src;
+		Own<PromiseFulfiller<Promise<void>>> fulfiller;
 	};
 	std::list<PendingImport> pendingImports;
 };
@@ -1175,6 +1183,8 @@ struct DatarefDownloadProcess : public internal::DownloadTask<Own<ObjectDBEntry>
 	int64_t id;
 	
 	Own<BlobBuilder> builder;
+	
+	kj::Vector<Promise<void>> childImports;
 };
 
 // class ImportContext
@@ -1193,26 +1203,38 @@ ImportContext::~ImportContext() {
 	}
 }
 
-Maybe<Own<ObjectDBEntry>> ImportContext::import(Capability::Client target) {
+ImportTask ImportContext::import(Capability::Client target) {
 	auto unwrapped = parent -> unwrap(target);
 	
 	if(unwrapped.is<decltype(nullptr)>())
-		return nullptr;
+		return ImportTask();
 	
-	if(unwrapped.is<Own<ObjectDBEntry>>())
-		return mv(unwrapped.get<Own<ObjectDBEntry>>());
+	if(unwrapped.is<Own<ObjectDBEntry>>()) {
+		ImportTask result;
+		result.entry = mv(unwrapped.get<Own<ObjectDBEntry>>());
+		
+		return result;
+	}
 	
 	auto newEntry = parent -> create();
 	
-	PendingImport import { newEntry -> id, target };
+	ImportTask result;
+	result.entry = newEntry -> addRef();
+	
+	auto paf = kj::newPromiseAndFulfiller<Promise<void>>();
+	result.task = mv(paf.promise);
+	
+	PendingImport import { newEntry -> id, target, mv(paf.fulfiller) };
 	pendingImports.push_back(mv(import));
 	
-	return newEntry;
+	return result;
 }
 
 void ImportContext::scheduleImports() {
 	for(auto& import : pendingImports) {
-		parent -> importTasks.add(importTask(import.id, mv(import.src)));
+		auto it = importTask(import.id, mv(import.src)).fork();
+		import.fulfiller -> fulfill(it.addBranch());
+		parent -> importTasks.add(it.addBranch());
 	}
 }
 
@@ -1226,8 +1248,10 @@ Promise<void> ImportContext::importTask(int64_t id, Capability::Client src) {
 	.then([src, id, &myParent](Maybe<TempFile&> maybeTempFile) mutable {
 		// Step 1: If we have a temporary file, import that temp file into the
 		// database.
-		KJ_IF_MAYBE(pTempFile, maybeTempFile) {
+		KJ_IF_MAYBE(pTempFile, maybeTempFile) {			
 			return withODBBackoff([src, &storage = pTempFile -> storage, &myParent, id]() mutable {
+				ImportTask result;
+				
 				auto handle = myParent.open(id);
 				
 				using Attached = TempFile::Attached;
@@ -1243,15 +1267,15 @@ Promise<void> ImportContext::importTask(int64_t id, Capability::Client src) {
 					
 					auto acc = handle -> open();
 					acc -> setLink(target);
-					return;
-				} else {
-					// Actual transaction
+					
+					return result;
+				} else {					
 					{
 						ImportContext ic(myParent);
 						auto acc = handle -> open();
-						auto newTarget = ic.import(storage.get<Detached>());
+						result = ic.import(storage.get<Detached>());
 						
-						acc -> setFile(myParent.wrap(mv(newTarget)));
+						acc -> setFile(myParent.wrap(mv(result.entry)));
 					}
 					
 					// If that all worked, register myself as backend to temp file
@@ -1259,6 +1283,11 @@ Promise<void> ImportContext::importTask(int64_t id, Capability::Client src) {
 				}
 				
 				myParent.changed();
+				
+				return result;
+			})
+			.then([](ImportTask&& it) {
+				return mv(it.task);
 			});
 		}
 	
@@ -1348,8 +1377,11 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
 		ref.setMetadata(metadata);
 		
 		auto capTableOut = ref.initCapTable(capTable.size());
-		for(auto i : kj::indices(capTable))
-			capTableOut.set(i, db.wrap(ic.import(capTable[i])));
+		for(auto i : kj::indices(capTable)) {
+			auto importTask = ic.import(capTable[i]);
+			capTableOut.set(i, db.wrap(mv(importTask.entry)));
+			childImports.add(mv(importTask.task));
+		}
 		
 		// Check if we have hash in blob store
 		KJ_IF_MAYBE(pBlob, db.blobStore -> find(metadata.getDataHash())) {
@@ -1359,6 +1391,8 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
 			ref.getDownloadStatus().setFinished();
 			
 			return mv(dst);
+		} else {
+			KJ_DBG("Hash not found", id, metadata.getDataHash());
 		}
 		
 		// Transfer data
@@ -1373,6 +1407,14 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
 		db.setBlob(id, builder -> getBlobUnderConstruction() -> getId());
 		
 		return nullptr;
+	}).then([this](Maybe<Own<ObjectDBEntry>> e) -> Promise<Maybe<Own<ObjectDBEntry>>> {
+		if(e == nullptr)
+			return e;
+		
+		return kj::joinPromises(childImports.releaseAsArray())
+		.then([e = mv(e)]() mutable {
+			return mv(e);
+		});
 	});
 }
 	
@@ -1399,8 +1441,14 @@ Promise<void> DatarefDownloadProcess::finishDownload() {
 			KJ_REQUIRE(finishedBlob -> isFinished(), "Blob unfinished after finish() call");
 			db.setBlob(id, finishedBlob -> getId());
 			
-			// Mark ref as done
-			db.open(id) -> open() -> getDataRef().getDownloadStatus().setFinished();
+			// Mark ref as done and store hash
+			{
+				auto acc = db.open(id) -> open();
+				auto ref = acc -> getDataRef();
+				
+				ref.getDownloadStatus().setFinished();
+				ref.getMetadata().setDataHash(finishedBlob -> getHash());
+			}
 			t.commit();
 		}
 		
@@ -1410,7 +1458,10 @@ Promise<void> DatarefDownloadProcess::finishDownload() {
 }
 
 Promise<Own<ObjectDBEntry>> DatarefDownloadProcess::buildResult() {
-	return db.open(id);
+	return kj::joinPromises(childImports.releaseAsArray())
+	.then([this]() {
+		return db.open(id);
+	});
 }	
 
 // ======================= Export interfaces ===================
@@ -1509,11 +1560,15 @@ struct TransmissionProcess {
 
 Promise<void> FileInterface::setImpl(Capability::Client clt) {
 	return withODBBackoff([this, clt = mv(clt)]() mutable {
+		ImportTask it;
 		{
 			ImportContext ic(object -> getDb());
 			
 			auto acc = object -> open();
-			KJ_IF_MAYBE(pImported, ic.import(clt)) {
+			
+			it = ic.import(clt);
+			
+			KJ_IF_MAYBE(pImported, it.entry) {
 				acc -> setFile(object -> getDb().wrap(mv(*pImported)));
 			} else {
 				acc -> setFile(nullptr);
@@ -1521,6 +1576,11 @@ Promise<void> FileInterface::setImpl(Capability::Client clt) {
 		}
 		
 		object -> getDb().changed();
+		
+		return it;
+	})
+	.then([](ImportTask&& it) {
+		return mv(it.task);
 	});
 }
 
@@ -1613,6 +1673,7 @@ Promise<void> FolderInterface::get(GetContext ctx) {
 
 Promise<void> FolderInterface::put(PutContext ctx) {
 	return withODBBackoff([this, ctx]() mutable {
+		ImportTask it;
 		auto& db = object -> getDb();
 		
 		kj::Path path = kj::Path::parse(ctx.getParams().getPath());
@@ -1630,7 +1691,9 @@ Promise<void> FolderInterface::put(PutContext ctx) {
 				oldId = oldIdQuery[0].asInt64();
 			}
 			
-			KJ_IF_MAYBE(pEntry, ic.import(ctx.getParams().getValue())) {
+			it = ic.import(ctx.getParams().getValue());
+			
+			KJ_IF_MAYBE(pEntry, it.entry) {
 				int64_t id = (**pEntry).id;
 				
 				db.incRefcount(id);
@@ -1650,6 +1713,11 @@ Promise<void> FolderInterface::put(PutContext ctx) {
 		}
 		
 		db.changed();
+		
+		return it;
+	})
+	.then([](ImportTask&& it) {
+		return mv(it.task);
 	});
 }
 

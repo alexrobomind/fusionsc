@@ -674,8 +674,10 @@ Promise<py::object> adaptAsyncioFuture(py::object future) {
 			
 	// Python awaitables can be wrapped in tasks
 	if(!hasattr(future, "_asyncio_future_blocking")) {
-		auto loop = py::module_::import("asyncio").attr("get_event_loop")();
-		future = loop.attr("create_task")(mv(future));
+		auto aio = py::module_::import("asyncio");
+		auto loop = aio.attr("get_event_loop")();
+		future = aio.attr("ensure_future")(mv(future), py::arg("loop") = loop);
+		// future = loop.attr("create_task")(.attr("__await__")());
 	}
 	
 	Promise<py::object> adaptedPromise = kj::newAdaptedPromise<py::object, AsyncioFutureAdapter>(mv(future));
@@ -791,6 +793,10 @@ void initAsync(py::module_& m) {
 		.def("__next__", &AsyncioFutureLike::FutureIterator::next, py::return_value_policy::take_ownership)
 		.def("send", &AsyncioFutureLike::FutureIterator::send, py::return_value_policy::take_ownership)
 		.def("throw", &AsyncioFutureLike::FutureIterator::throw_, py::arg("type"), py::arg("value") = py::none(), py::arg("traceback") = py::none())
+		
+		.def("__iter__", [](AsyncioFutureLike::FutureIterator& it) -> AsyncioFutureLike::FutureIterator& {
+			return it;
+		})
 	;
 	
 	py::class_<RemotePromise, AsyncioFutureLike>(asyncModule, "PromiseForResult")

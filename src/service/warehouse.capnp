@@ -29,7 +29,7 @@ interface Warehouse {
 					downloading @7 : Void;
 					finished @8 : Void;
 				}
-				asRef @9 : Data.DataRef;
+				asRef @9 : Data.DataRef(AnyPointer);
 			}
 		}
 	}
@@ -83,7 +83,7 @@ interface Warehouse {
 		getAny @3 () -> StoredObject;
 	}
 	
-	interface GenericObject extends (Data.DataRef, Folder, File) {
+	interface GenericObject extends (Data.DataRef(AnyPointer), Folder, File) {
 	}
 	
 	getRoot @0 (name : Text = "root") -> (root : Folder);

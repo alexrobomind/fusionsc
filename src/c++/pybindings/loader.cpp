@@ -111,7 +111,7 @@ struct TypeInference {
 				return false;
 			}
 			
-			KJ_IF_MAYBE(pImplicit, to.getImplicitParameter()) {				
+			KJ_IF_MAYBE(pImplicit, to.getImplicitParameter()) {	
 				unsigned int idx = pImplicit -> index;
 				
 				if(idx >= paramBindings.size()) {
@@ -130,10 +130,7 @@ struct TypeInference {
 		return true;
 	}
 	
-	capnp::Type specialize(capnp::Type type) {
-		if(paramBindings.empty())
-			return type;
-		
+	capnp::Type specialize(capnp::Type type) {		
 		Temporary<capnp::schema::Type> proto;
 		extractType(type, proto);
 		
@@ -149,11 +146,11 @@ private:
 			return false;
 		}
 		
-		for(auto scopeId : t1.getGenericScopeIds()) {
+		for(auto scopeId : t2.getGenericScopeIds()) {
 			auto brands1 = t1.getBrandArgumentsAtScope(scopeId);
 			auto brands2 = t2.getBrandArgumentsAtScope(scopeId);
 			
-			for(auto iBrand : kj::range(0, kj::max(brands1.size(), brands2.size()))) {
+			for(auto iBrand : kj::range(0, kj::min(brands1.size(), brands2.size()))) {
 				if(!infer(brands1[iBrand], brands2[iBrand], true)) return false;
 			}
 		}
@@ -216,8 +213,9 @@ private:
 				continue;
 			
 			for(auto binding : scope.getBind()) {
-				if(binding.isType())
+				if(binding.isType()) {					
 					specialize(binding.getType());
+				}
 			}
 		}
 	}
@@ -340,7 +338,7 @@ struct InterfaceMethod {
 					}
 					
 					KJ_IF_MAYBE(pType, asType) {
-						typeInference.infer(*pType, dst, false);
+						KJ_REQUIRE(typeInference.infer(*pType, dst, false), "Failed to match parameter type", typeInference.errorMsg);
 					}
 				};
 				

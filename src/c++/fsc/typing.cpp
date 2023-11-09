@@ -1,4 +1,5 @@
 #include "typing.h"
+#include "common.h"
 
 void fsc::extractType(capnp::Type in, capnp::schema::Type::Builder out) {	
 	switch(in.which()) {
@@ -100,6 +101,7 @@ void fsc::extractBrand(capnp::Schema in, capnp::schema::Brand::Builder out) {
 		
 		auto inBindings  = in.getBrandArgumentsAtScope(scopeIds[iScope]);
 		auto outBindings = outScope.initBind(inBindings.size());
+		
 		for(auto iBinding : kj::indices(outBindings)) {
 			capnp::Type inType = inBindings[iBinding];
 			auto outBinding = outBindings[iBinding];

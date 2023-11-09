@@ -198,9 +198,10 @@ void assign(const BuilderSlot& dst, py::object object) {
 			// Assigning from void in our case means clearing the field / resetting to default
 			if(val.getType() == capnp::DynamicValue::VOID) {
 				dst.init();
+			} else {
+				dst.set(val);
 			}
 			
-			dst.set(val);
 			return;
 		} catch(kj::Exception e) {
 			assignmentFailureLog = strTree(mv(assignmentFailureLog), "Error while trying to assign from primitive: ", e, "\n");
