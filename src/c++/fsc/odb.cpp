@@ -337,6 +337,8 @@ private:
  */
 struct ObjectDB : public ObjectDBBase, kj::Refcounted, Warehouse::Server {
 	ObjectDB(db::Connection& conn, kj::StringPtr tablePrefix, bool readOnly);
+	~ObjectDB();
+	
 	Own<ObjectDB> addRef() { return kj::addRef(*this); }
 	
 	//! Returns a current frozen representation of the database
@@ -413,6 +415,8 @@ private:
 	friend class ImportContext;
 	
 	kj::Promise<void> syncPromise;
+	
+	uint32_t checkpointCounter = 0;
 };
 
 //! Snapshot to a frozen representation of the database
@@ -458,9 +462,19 @@ struct ObjectDBHook : public ClientHook, kj::Refcounted {
 		return inner -> call(interfaceId, methodId, mv(context), mv(hints));
 	}
 
-	kj::Maybe<ClientHook&> getResolved() override {	return *inner; }
+	kj::Maybe<ClientHook&> getResolved() override {	return nullptr; /*return *inner;*/ }
 	kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
-		return inner -> whenMoreResolved();
+		if(resolved)
+			return nullptr;
+		
+		KJ_IF_MAYBE(pPromise, inner -> whenMoreResolved()) {
+			return pPromise  -> ignoreResult()
+			.then([ref = addRef()]() mutable {
+				return mv(ref);
+			});
+		} else {
+			return nullptr;
+		}
 	}
 
 	virtual kj::Own<ClientHook> addRef() override { return kj::addRef(*this); }
@@ -469,6 +483,7 @@ struct ObjectDBHook : public ClientHook, kj::Refcounted {
 	
 	// Implementation method
 	ObjectDBHook(Own<ObjectDBEntry> objectIn);
+	~ObjectDBHook();
 	
 	//! Checks whether the backing object has resolved / thrown.
 	kj::Maybe<Capability::Client> checkResolved();
@@ -480,6 +495,7 @@ struct ObjectDBHook : public ClientHook, kj::Refcounted {
 	inline static const uint BRAND = 0;
 	Own<ObjectDBEntry> entry;
 	Own<ClientHook> inner;
+	bool resolved = false;
 };
 
 struct ImportErrorHandler : public kj::TaskSet::ErrorHandler {
@@ -505,9 +521,13 @@ ObjectDB::ObjectDB(db::Connection& conn, kj::StringPtr tablePrefix, bool readOnl
 	syncPromise(kj::evalLater([this]() { return syncTask(); }).eagerlyEvaluate(nullptr))
 {}
 
+ObjectDB::~ObjectDB() {
+	KJ_DBG("Closing DB");
+}
+
 Promise<void> ObjectDB::syncTask() {
 	changed();
-	syncAll();
+	// syncAll();
 	
 	return getActiveThread().timer().afterDelay(1 * kj::SECONDS)
 	.then([this]() { return syncTask(); });
@@ -551,10 +571,26 @@ ObjectDBSnapshot& ObjectDB::getCurrentSnapshot() {
 }
 
 void ObjectDB::changed() {
-	currentSnapshot = nullptr;
+	if(checkpointCounter++ >= 1000) {
+		try {
+			syncAll();
+			conn -> exec("PRAGMA wal_checkpoint(PASSIVE)");
+			
+			syncAll();
+			conn -> exec("PRAGMA wal_checkpoint(RESTART)");
+			
+			checkpointCounter = 0;
+		} catch(kj::Exception& e) {
+			KJ_DBG(e);
+		}
+	} else {
+		currentSnapshot = nullptr;
+		syncAll();
+	}
 }
 
 void ObjectDB::syncAll() {
+	currentSnapshot = nullptr;
 	for(auto& e : liveEntries) {
 		try {
 			e.trySync();
@@ -769,9 +805,9 @@ void ObjectDBEntry::trySync() {
 	
 	// Check if the object exists
 	auto& getRefcount = dbSnapshot.getRefcount;
-	getRefcount.bind(id);
+	auto q = getRefcount.bind(id);
 	
-	if(!getRefcount.step()) {
+	if(!q.step()) {
 		// Either object is dead, or not yet in the database
 		KJ_IF_MAYBE(pId, dbSnapshot.getNewestId()) {
 			if(*pId >= id) {
@@ -954,12 +990,12 @@ void ObjectDBEntry::Accessor::save() {
 	transaction.commit();
 	
 	// Register change with database (and immediately resync same object)
-	target -> parent -> changed();
-	for(auto& e : target -> parent -> liveEntries) {
+	// target -> parent -> changed();
+	/*for(auto& e : target -> parent -> liveEntries) {
 		if(e.id == target -> id) {
 			e.trySync();
 		}
-	}
+	}*/
 }
 
 // class ObjectDBHook
@@ -968,11 +1004,19 @@ ObjectDBHook::ObjectDBHook(Own<ObjectDBEntry> paramEntry) :
 	entry(mv(paramEntry))
 {	
 	inner = capnp::newLocalPromiseClient(resolveTask());
+	//KJ_DBG("Hook created", this);
+}
+
+ObjectDBHook::~ObjectDBHook()
+{	
+	inner = capnp::newLocalPromiseClient(resolveTask());
+	//KJ_DBG("Hook deleted", this);
 }
 
 Promise<Own<ClientHook>> ObjectDBHook::resolveTask() {
 	return withODBBackoff([this]() -> Promise<Own<ClientHook>>  {
 		KJ_IF_MAYBE(pClient, checkResolved()) {
+			resolved = true;
 			return ClientHook::from(mv(*pClient));
 		}
 		
@@ -1967,6 +2011,9 @@ namespace fsc {
 Warehouse::Client openWarehouse(db::Connection& conn, bool readOnly, kj::StringPtr tablePrefix) {
 	// Make sure we use a forkable connection
 	conn.fork(true);
+	
+	// We do not want the connection to auto-checkpoint (this will cause a large number of fsync calls)
+	conn.exec("PRAGMA wal_autocheckpoint = 0");
 	
 	return kj::refcounted<ObjectDB>(conn, tablePrefix, readOnly);
 }

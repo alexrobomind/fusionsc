@@ -105,7 +105,11 @@ namespace internal {
 }
 
 struct MessageHook : public kj::Refcounted {	
-	inline MessageHook(Own<const void> data) : data(mv(data)) {}
+	inline MessageHook(Own<const void> data) : data(mv(data)) {
+		//KJ_DBG("Message created", this);
+	}
+	inline ~MessageHook() { /*KJ_DBG("Message deleted", this);*/ }
+	
 	Own<MessageHook> addRef() { return kj::addRef(*this); }
 	
 private:
@@ -606,8 +610,8 @@ struct AnyBuilder : public WithMessage<capnp::AnyPointer::Builder>, AnyCommon, C
 struct DynamicCapabilityClient : public capnp::DynamicCapability::Client, CapnpObject {
 	using Client::Client;
 	
-	DynamicCapabilityClient(Client& c) : Client(c) {}
-	DynamicCapabilityClient(Client&& c) : Client(mv(c)) {}
+	inline DynamicCapabilityClient(Client& c) : Client(c) {}
+	inline DynamicCapabilityClient(Client&& c) : Client(mv(c)) {}
 	
 	capnp::Type getType() override;
 };

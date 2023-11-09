@@ -214,6 +214,7 @@ void AsyncioEventPort::waitForEvents() {
 }
 
 void AsyncioEventPort::setRunnable(bool newVal) {	
+	//KJ_DBG("EvtPort::setRunnable", newVal);
 	runnable = newVal;
 	
 	if(newVal) {
@@ -433,7 +434,7 @@ struct AsyncioFutureLike {
 	{
 	}
 	
-	~AsyncioFutureLike() {
+	virtual ~AsyncioFutureLike() {
 		canceler.release();
 	}
 		
@@ -658,7 +659,7 @@ struct RemotePromise : public AsyncioFutureLike {
 		pipeline(mv(pipeline))
 	{}
 	
-	DynamicStructPipeline& getPipeline() {
+	DynamicStructPipeline getPipeline() {
 		return pipeline;
 	}
 };
@@ -685,7 +686,10 @@ Promise<py::object> adaptAsyncioFuture(py::object future) {
 py::object convertToAsyncioFuture(Promise<py::object> promise) {
 	promise = getActiveThread().lifetimeScope().wrap(mv(promise));
 	auto loop = py::module_::import("asyncio").attr("get_event_loop")();
-	auto result = py::cast(new AsyncioFutureLike(loop, mv(promise)));
+	auto result = py::cast(
+		new AsyncioFutureLike(loop, mv(promise)),
+		py::return_value_policy::take_ownership
+	);
 	
 	// It might be that the asyncio port is currently using a different 
 	// event loop. If the asyncio loop is in charge, and the KJ loop
@@ -703,7 +707,10 @@ py::object convertToAsyncioFuture(Promise<py::object> promise) {
 py::object convertCallPromise(Promise<py::object> promise, DynamicStructPipeline pipeline) {
 	promise = getActiveThread().lifetimeScope().wrap(mv(promise));
 	auto loop = py::module_::import("asyncio").attr("get_event_loop")();
-	auto result = py::cast(new RemotePromise(loop, mv(promise), mv(pipeline)));
+	auto result = py::cast(
+		new RemotePromise(loop, mv(promise), mv(pipeline)),
+		py::return_value_policy::take_ownership
+	);
 	
 	// It might be that the asyncio port is currently using a different 
 	// event loop. If the asyncio loop is in charge, and the KJ loop

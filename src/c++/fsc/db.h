@@ -38,17 +38,15 @@ struct PreparedStatement {
 	PreparedStatement(PreparedStatement&&) = default;
 	PreparedStatement& operator=(PreparedStatement&&) = default;
 	
+	struct Column;
+	struct Query;
+	
 	template<typename P>
 	void setParameter(size_t, P);
 	
 	//! Assigns all parameters from arguments
 	template<typename... Params>
-	PreparedStatement& bind(Params... params);
-	
-	struct Column;
-	inline Column operator[](size_t idx);
-	
-	bool step();
+	Query bind(Params... params);
 	
 	inline void reset() { hook -> reset(); }
 	
@@ -109,6 +107,18 @@ struct PreparedStatement::Column {
 	inline Column& operator  *() { return *this; }
 };
 
+struct PreparedStatement::Query {
+	PreparedStatement& parent;
+	
+	inline Query(PreparedStatement& p) :
+		parent(p)
+	{}
+	inline ~Query() { parent.hook -> reset(); }
+	
+	inline Column operator[](size_t idx);
+	bool step();
+};
+
 struct Connection {
 	virtual Own<Connection> addRef() = 0;
 	virtual Own<Connection> fork(bool readOnly) = 0;
@@ -158,8 +168,8 @@ struct Transaction {
 
 namespace fsc { namespace db {
 
-PreparedStatement::Column PreparedStatement::operator[](size_t idx) {
-	return Column(*this, idx);
+PreparedStatement::Column PreparedStatement::Query::operator[](size_t idx) {
+	return Column(parent, idx);
 }
 
 template<typename P>
@@ -168,10 +178,10 @@ void PreparedStatement::setParameter(size_t idx, P p) {
 }
 
 template<typename... Params>
-PreparedStatement& PreparedStatement::bind(Params... params) {
+PreparedStatement::Query PreparedStatement::bind(Params... params) {
 	hook -> reset();
 	bindInternal(std::index_sequence_for<Params...>(), params...);
-	return *this;
+	return Query(*this);
 }
 	
 template<typename... Params, size_t... indices>

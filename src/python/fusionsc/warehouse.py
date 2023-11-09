@@ -10,14 +10,14 @@ from . import data
 
 from .wrappers import asyncFunction
 
-from typing import OneOf
+from typing import Union
 
 class Object:
 	def __init__(self, backend):
 		self.backend = backend
 
 # Types of objects that can be stored in a warehouse
-Storable = OneOf[
+Storable = Union[
 	service.DataRef,
 	wrappers.RefWrapper,
 	capnp.StructReader,
@@ -33,12 +33,12 @@ async def lsRemote():
 @asyncFunction
 async def openRemote(name: str):
 	response = await backends.activeBackend().getWarehouse(name)
-	return Folder(response.warehouse)
+	return Folder(response.root)
 
 @asyncFunction
 async def open(url: str):
 	response = await backends.localResources().openWarehouse(url)
-	return Folder(response.warehouse)
+	return Folder(response.root)
 
 class Folder(Object):
 	"""
@@ -64,7 +64,7 @@ class Folder(Object):
 		"""
 		
 		response = await self.backend.getAll(path)
-		return { str(entry.key) : _decode(entry.value) }
+		return { str(entry.key) : _decode(entry.value) for entry in response.entries }
 	
 	@asyncFunction
 	async def get(self, path: str):
@@ -149,8 +149,8 @@ class Unknown(Folder, File, wrappers.RefWrapper):
 		super().__init__(backend)
 		wrappers.RefWrapper.__init__(self, backend)
 
-def _encode(obj: Storable) -> capnp.CapabilityClient):
-	if isinstance(obj, service.DataRef):
+def _encode(obj: Storable) -> capnp.CapabilityClient:
+	if isinstance(obj, service.DataRef.Client):
 		return obj
 	
 	if isinstance(obj, Object):
@@ -161,8 +161,8 @@ def _encode(obj: Storable) -> capnp.CapabilityClient):
 		
 	return data.publish(obj)
 
-def _decode(obj: service.warehouse.StoredObject.Reader):
-	which = obj.which()
+def _decode(obj: service.Warehouse.StoredObject.Reader):
+	which = obj.which_()
 	
 	# Cases where the object type is already known
 	if which == "folder":

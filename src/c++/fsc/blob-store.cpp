@@ -86,6 +86,7 @@ struct BlobReaderImpl : public kj::InputStream {
 	
 	Decompressor decompressor;
 	db::PreparedStatement readStatement;
+	db::PreparedStatement::Query query;
 };
 
 // Implementation
@@ -139,9 +140,9 @@ Own<BlobStore> BlobStoreImpl::addRef() {
 }
 
 Maybe<Own<Blob>> BlobStoreImpl::find(kj::ArrayPtr<const byte> hash) {	
-	findBlob.bind(hash);
-	if(findBlob.step()) {
-		return get(findBlob[0]);
+	auto q = findBlob.bind(hash);
+	if(q.step()) {
+		return get(q[0]);
 	}
 	
 	return nullptr;
@@ -184,19 +185,19 @@ void BlobImpl::decRef() {
 int64_t BlobImpl::getRefcount() {
 	auto& rc = parent -> readRefcount;
 	
-	rc.bind(id);
-	KJ_REQUIRE(rc.step(), "Blob not found");
+	auto q = rc.bind(id);
+	KJ_REQUIRE(q.step(), "Blob not found");
 	
-	return rc[0];
+	return q[0];
 }
 
 kj::Array<const byte> BlobImpl::getHash() {
 	auto& gbh = parent -> getBlobHash;
 	
-	gbh.bind(id);
-	KJ_REQUIRE(gbh.step(), "Blob not found");
+	auto q = gbh.bind(id);
+	KJ_REQUIRE(q.step(), "Blob not found");
 		
-	return kj::heapArray<byte>(gbh[0].asBlob());
+	return kj::heapArray<byte>(q[0].asBlob());
 }
 
 int64_t BlobImpl::getId() {
@@ -312,9 +313,9 @@ void BlobBuilderImpl::flushBuffer() {
 // class BlobReaderImpl
 
 BlobReaderImpl::BlobReaderImpl(BlobStoreImpl& parent, int64_t id) :
-	readStatement(parent.conn -> prepare(str("SELECT data FROM ", parent.tablePrefix, "_chunks WHERE id = ? ORDER BY chunkNo")))
+	readStatement(parent.conn -> prepare(str("SELECT data FROM ", parent.tablePrefix, "_chunks WHERE id = ? ORDER BY chunkNo"))),
+	query(readStatement.bind(id))
 {
-	readStatement.bind(id);
 }
 
 size_t BlobReaderImpl::tryRead(void* output, size_t minSize, size_t maxSize) {
@@ -330,8 +331,8 @@ size_t BlobReaderImpl::tryRead(void* output, size_t minSize, size_t maxSize) {
 			break;
 		
 		KJ_ASSERT(decompressor.remainingIn() == 0);
-		KJ_REQUIRE(readStatement.step(), "Missing chunks despite expecting more");
-		decompressor.setInput(readStatement[0]);		
+		KJ_REQUIRE(query.step(), "Missing chunks despite expecting more");
+		decompressor.setInput(query[0]);		
 	}
 	
 	return maxSize - decompressor.remainingOut();

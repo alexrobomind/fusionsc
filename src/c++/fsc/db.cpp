@@ -12,11 +12,11 @@ PreparedStatement::PreparedStatement(Own<PreparedStatementHook>&& hook) :
 PreparedStatement::~PreparedStatement() {
 }
 	
-bool PreparedStatement::step() {
-	if(hook -> step()) {
+bool PreparedStatement::Query::step() {
+	if(parent.hook -> step()) {
 		return true;
 	} else {
-		hook -> reset();
+		parent.hook -> reset();
 		return false;
 	}
 }

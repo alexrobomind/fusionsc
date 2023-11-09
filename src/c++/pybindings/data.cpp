@@ -94,7 +94,7 @@ Promise<DynamicValueReader> download(capnp::DynamicCapability::Client capability
 	using capnp::DynamicValue;
 	
 	DataRef<AnyPointer>::Client dataRef = capability.castAs<DataRef<AnyPointer>>();
-	auto promise = getActiveThread().dataService().download(dataRef)
+	auto promise = getActiveThread().dataService().download(dataRef, false)
 	.then([payloadType = getRefPayload(capability.getSchema())](LocalDataRef<AnyPointer> localRef) mutable {
 		return openRef(payloadType, mv(localRef));
 	}).eagerlyEvaluate(nullptr);

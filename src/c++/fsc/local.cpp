@@ -21,7 +21,7 @@ LibraryHandle::LibraryHandle(StartupParameters params) :
 		sharedStore = createStore();
 	}
 	
-	stewardThread.detach();
+	// stewardThread.detach();
 	
 	// Wait for steward thread to finish starting.
 	steward();

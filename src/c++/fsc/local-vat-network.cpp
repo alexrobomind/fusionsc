@@ -52,6 +52,10 @@ namespace fsc { namespace {
 			KJ_REQUIRE(!sent);
 			sent = true;
 			
+			// Debug to inspect message content
+			//auto root = builder.getRoot<capnp::rpc::Message>();
+			//KJ_DBG(root);
+			
 			auto segments = builder.getSegmentsForOutput();
 			
 			auto infoBuilder = kj::heapArrayBuilder<fusionsc_SegmentInfo>(segments.size());

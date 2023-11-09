@@ -31,6 +31,7 @@ from . import remote
 from . import data
 from . import resolve
 from . import wrappers
+from . import warehouse
 
 # Load core services
 from . import magnetics
