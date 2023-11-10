@@ -104,5 +104,7 @@ struct DynamicObject {
 		# Indicates that the object is already
 		# memoized under the given memo key.
 		memoized @29 : Void;
+		
+		nested @30 : DynamicObject;
 	}
 }

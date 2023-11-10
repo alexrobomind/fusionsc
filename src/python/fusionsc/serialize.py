@@ -8,7 +8,7 @@ import contextlib
 import contextvars
 
 from typing import Any, Optional
-from .wrappers import asyncFunction
+from .wrappers import asyncFunction, structWrapper
 
 from . import data
 from . import service
@@ -27,6 +27,9 @@ _minInt = -2**63 + 1
 _maxLen = 2**29 # Maximum size for inline data
 
 _pickleEnabled = contextvars.ContextVar('fusionsc.serialize._pickleEnabled', default = False)
+
+class UnknownObject(structWrapper(service.DynamicObject)):
+	pass
 
 @contextlib.contextmanager
 def allowPickle():
@@ -59,6 +62,9 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 	
 	if key in memoSet:
 		builder.memoized = None
+	
+	elif isinstance(obj, UnknownObject):
+		builder.nested = obj.data
 	
 	elif isinstance(obj, str):
 		builder.text = obj
@@ -375,5 +381,17 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 			data = await data.download.asnc(reader.pythonPickle.bigData)
 			
 		return pickle.loads(data)
+	
+	if which == "nested":
+		return await _interpret(reader.nested, memoDict)
 			
-	raise ValueError("I don't know how to interpret the given binary reader of type '" + which + "'")
+	import warnings
+	warnings.warn(
+		"""An unknown type of dynamic object was encountered. This usually means that
+		the data being loaded were saved by a newer version of this library. The
+		'UnknownObject' returned contains all information stored in this section of
+		the message and can still be saved (the data will be written back as encountered
+		here"""
+	)
+	
+	return UnknownObject(reader)
