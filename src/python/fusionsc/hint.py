@@ -105,8 +105,8 @@ def loadFortranSnapfile(filename, big_endian = True, real_bytes = 8):
 	p_field = p_field.reshape([n_p, n_z, n_r])
 	
 	# Convert from r, phi, z to phi, z, r component order
-	b_field = b_field[[1, 2, 0]]
-	v_field = v_field[[1, 2, 0]]
+	b_field = b_field[..., [1, 2, 0]]
+	v_field = v_field[..., [1, 2, 0]]
 
 	f.close()
 	
