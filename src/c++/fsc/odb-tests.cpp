@@ -49,7 +49,7 @@ TEST_CASE("warehouse-rw-1", "[warehouse]") {
 	putRequest.setPath("obj");
 	putRequest.setValue(promiseRef.asGeneric());
 	
-	auto putResponse = putRequest.send().wait(ws);
+	auto putResponse = putRequest.send();
 	auto storedObject = putResponse.getAsGeneric().castAs<HolderRef>();
 	
 	SECTION("fast termination") {
@@ -76,7 +76,8 @@ TEST_CASE("warehouse-rw-1", "[warehouse]") {
 			paf.fulfiller -> reject(cp(*pExc));
 		
 			try {
-				storedObject.whenResolved().wait(ws);			
+				storedObject.whenResolved().wait(ws);
+				KJ_DBG(putResponse.wait(ws));
 				FAIL("We should never get here");
 			} catch(kj::Exception& e) {
 				REQUIRE(e.getDescription() == pExc -> getDescription());
@@ -130,7 +131,7 @@ TEST_CASE("warehouse-rw-2", "[warehouse]") {
 	putRequest.setPath("obj");
 	putRequest.setValue(promiseRef);
 	
-	auto putResponse = putRequest.send().wait(ws);
+	auto putResponse = putRequest.send();
 	auto storedObject = putResponse.getAsGeneric().castAs<HolderRef>();
 	
 	Temporary<test::DataRefHolder<capnp::Data>> refHolder;

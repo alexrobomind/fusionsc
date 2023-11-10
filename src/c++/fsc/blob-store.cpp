@@ -61,7 +61,6 @@ struct BlobBuilderImpl : public BlobBuilder {
 	BlobBuilderImpl(BlobStoreImpl& parent, size_t chunkSize);
 	
 	void write(const void* buffer, size_t size) override;
-	void prepareFinish() override;
 	Own<Blob> finish() override;
 	Own<Blob> getBlobUnderConstruction() override;
 	
@@ -224,8 +223,10 @@ BlobBuilderImpl::BlobBuilderImpl(BlobStoreImpl& parent, size_t chunkSize) :
 	compressor.setOutput(buffer);
 }
 
-void BlobBuilderImpl::write(const void* buf, size_t count) {
-	KJ_REQUIRE(!parent -> conn -> inTransaction(), "Can not call write() inside transaction");
+void BlobBuilderImpl::write(const void* buf, size_t count) {	
+	// !! This must be restartable in case the first
+	// !! flushBuffer call fails.
+	db::Transaction transaction(*parent -> conn);
 	
 	kj::ArrayPtr<const byte> data((const byte*) buf, count);
 	
@@ -257,31 +258,30 @@ Own<Blob> BlobBuilderImpl::getBlobUnderConstruction() {
 	return kj::refcounted<BlobImpl>(*parent, id);
 }
 
-void BlobBuilderImpl::prepareFinish() {
-	KJ_REQUIRE(!parent -> conn -> inTransaction(), "Can not call prepareFinish() inside transaction");
-	if(buffer == nullptr)
-		return;
+Own<Blob> BlobBuilderImpl::finish() {
+	db::Transaction transaction(*parent -> conn);
 	
-	// Write out remaining data inside zlib stream
-	compressor.setInput(nullptr);
-	
-	while(compressor.step(true) != ZLib::FINISHED) {
+	// !! This must be restartable in case the first
+	// !! flushBuffer call fails or setting the hash fails
+	if(buffer != nullptr) {	
+		// Write out remaining data inside zlib stream
+		compressor.setInput(nullptr);
+		
+		while(compressor.step(true) != ZLib::FINISHED) {
+			flushBuffer();
+		}
+		
 		flushBuffer();
+		buffer = nullptr;
 	}
 	
-	flushBuffer();
-	buffer = nullptr;
-	
-	hash = kj::heapArray<uint8_t>(hashFunction -> output_length());
-	hashFunction -> final(hash.begin());
-}
-
-Own<Blob> BlobBuilderImpl::finish() {
+	if(hash == nullptr) {	
+		hash = kj::heapArray<uint8_t>(hashFunction -> output_length());
+		hashFunction -> final(hash.begin());
+	}
 	KJ_REQUIRE(hash != nullptr, "Must call prepareFinish() before calling finish()");
 	
-	db::Transaction(*parent -> conn);
-	
-	auto& gbh = parent -> getBlobHash.bind(id);
+	auto gbh = parent -> getBlobHash.bind(id);
 	KJ_REQUIRE(gbh.step(), "finish() was already called and blob under construction was deleted");
 	KJ_REQUIRE(gbh[0].isNull(), "finish() was already called and blob has hash assigned");
 	

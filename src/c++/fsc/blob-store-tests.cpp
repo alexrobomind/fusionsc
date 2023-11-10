@@ -20,7 +20,6 @@ TEST_CASE("blob-store") {
 	auto builder = store -> create(128);
 	builder -> write(data1.begin(), data1.size());
 	
-	builder -> prepareFinish();
 	auto blob = builder -> finish();
 	REQUIRE_THROWS(builder -> finish());
 		
@@ -44,7 +43,6 @@ TEST_CASE("blob-store") {
 	auto builder2 = store -> create(128);
 	builder2 -> write(data1.begin(), 213);
 	builder2 -> write(data1.begin() + 213, 1024 - 213);
-	builder2 -> prepareFinish();
 	auto blob2 = builder2 -> finish();
 	
 	// Check that hashes are cached

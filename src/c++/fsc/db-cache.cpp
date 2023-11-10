@@ -261,7 +261,6 @@ Promise<void> DownloadProcess::receiveData(kj::ArrayPtr<const byte> data) {
 
 Promise<void> DownloadProcess::finishDownload() {
 	return withCacheBackoff([this]() mutable {
-		blobOrBuilder.get<Own<BlobBuilder>>() -> prepareFinish();
 		blobOrBuilder = blobOrBuilder.get<Own<BlobBuilder>>() -> finish();
 	});
 }

@@ -50,9 +50,7 @@ struct Blob {
  * if that object gets deleted.
  */
 struct BlobBuilder : public kj::OutputStream {	
-	virtual void prepareFinish() = 0;
-	virtual Own<Blob> finish() = 0;
-	
+	virtual Own<Blob> finish() = 0;	
 	virtual Own<Blob> getBlobUnderConstruction() = 0;
 };
 
