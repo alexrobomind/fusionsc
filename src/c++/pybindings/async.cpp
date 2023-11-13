@@ -701,8 +701,6 @@ py::object convertToAsyncioFuture(Promise<py::object> promise) {
 	// correct loop at hand.
 	AsyncioEventPort::adjustEventLoop(loop);
 	
-	py::print(result);
-	
 	return result;
 }
 
