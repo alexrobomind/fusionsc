@@ -59,7 +59,7 @@ async def download(ref: service.DataRef.Client) -> asnc.Future[Any]:
 		data, or a subtype of CapabilityClient or StructReader typed to the appropriate Cap'n'proto schema).
 	"""
 	data = await native.data.downloadAsync(ref)
-	return serialize.unwrap.asnc(data)
+	return await serialize.unwrap.asnc(data)
 
 @asyncFunction
 def writeArchive(data: Any, filename: str) -> asnc.Future:

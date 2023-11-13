@@ -44,12 +44,12 @@ def wrap(obj: Any):
 	return dump(obj)
 
 @asyncFunction
-def unwrap(obj):
+async def unwrap(obj):
 	if isinstance(obj, service.DynamicObject.Reader):
-		return load.asnc(obj)
+		return await load.asnc(obj)
 	
 	if isinstance(obj, service.DynamicObject.Builder):
-		return load.asnc(obj)
+		return await load.asnc(obj)
 	
 	return obj
 
@@ -187,6 +187,27 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 				enumArray.schema = firstType.toProto()
 				enumArray.shape = obj.shape
 				enumArray.data = [el.raw for el in flat]
+				
+				return builder
+		
+		if isinstance(first, capnp.Struct):
+			firstType = first.type_
+			
+			sameType = True
+			for el in flat:
+				if not isinstance(el, capnp.Struct) or el.type_ != firstType:
+					sameType = False
+					break
+			
+			if sameType:
+				# Qualified to be a homogenous struct array
+				structArray = builder.initStructArray()
+				structArray.schema = firstType.toProto()
+				structArray.shape = obj.shape
+				
+				sData = structArray.initData(len(flat))
+				for i in range(len(flat)):
+					sData[i].target = flat[i]
 				
 				return builder
 		
@@ -360,8 +381,21 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 	
 	if which == "dynamicObjectArray":
 		doa = reader.dynamicObjectArray
-		flat = [await _load(e, memoDict) for e in doa.data]
-		return np.asarray(flat).reshape(doa.shape)
+		result = np.empty([len(doa.data)], "O")
+		for i in range(len(doa.data)):
+			result[i] = await _load(doa.data[i], memoDict)
+		
+		return result.reshape(doa.shape)
+	
+	if which == "structArray":
+		sa = reader.structArray
+		type = capnp.Type.fromProto(sa.schema)
+		
+		result = np.empty([len(sa.data)], "O")
+		for i in range(len(sa.data)):
+			result[i] = sa.data[i].target.interpretAs(type)
+		
+		return result.reshape(sa.shape)
 	
 	if which == "pythonBigInt":
 		return int.from_bytes(bytes = reader.pythonBigInt, byteorder="little", signed = True)

@@ -39,6 +39,10 @@ struct DynamicObject {
 		}
 	}
 	
+	struct StructPointer {
+		target @0 : AnyStruct;
+	}
+	
 	memoKey @28 : UInt64;
 	
 	union {
@@ -93,6 +97,12 @@ struct DynamicObject {
 			schema @25 : AnyStruct;
 			shape @26 : List(UInt64);
 			data @27 : List(UInt16);
+		}
+		
+		structArray : group {
+			schema @31 : AnyStruct;
+			shape @32 : List(UInt64);
+			data @33 : List(StructPointer);
 		}
 		
 		pythonBigInt @18 : Data;

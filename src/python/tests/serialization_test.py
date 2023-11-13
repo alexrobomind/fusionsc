@@ -7,6 +7,21 @@ from fusionsc.serialize import dump, load
 
 import time
 
+def test_serialize_complex():
+	values = [
+		np.asarray([fsc.service.MagneticField.newMessage(), fsc.service.MagneticField.newMessage({"invert" : None})], dtype = object),
+	]
+	
+	for val in values:
+		dumped = dump(val)
+		read = load(dumped)
+		
+		print(dumped)
+		print(type(val))
+		print(val)
+		print(type(read))
+		print(read)
+
 def test_serialize_simple():
 	values = [
 		0,
@@ -38,6 +53,8 @@ def test_serialize_simple():
 		
 		[4, 4, 4]
 	]
+	
+	print('Initing')
 	
 	for val in values:
 		dumped = dump(val)

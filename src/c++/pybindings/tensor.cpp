@@ -403,19 +403,38 @@ py::buffer getAsBufferViaNumpy(py::object input, capnp::Type type, int minDims, 
 }
 
 template<typename T>
+py::buffer_info scalarFallback(DynamicStructInterface<T> tensor) {
+	kj::ArrayPtr<uint64_t> shape = nullptr; // Size 0 array
+	
+	auto resultHolder = ContiguousCArray::alloc<PyObject*>(shape, "O");
+	auto outData = resultHolder.template as<PyObject*>();
+	
+	DynamicValueType<T> readerOrBuilder(shareMessage(tensor), tensor);
+	py::object asObject = py::cast(readerOrBuilder);
+	outData[0] = asObject.inc_ref().ptr();
+	
+	py::buffer asPyBuffer = py::cast(mv(resultHolder));
+	return asPyBuffer.request(true);
+}
+
+template<typename T>
 py::buffer_info getTensorImpl(T tensor) {
-	auto schema = tensor.getSchema();
-	auto scalarType = schema.getFieldByName("data").getType().asList().getElementType();
-	
-	if(isObjectType(scalarType)) {
-		return getObjectTensor(tensor);
+	try {
+		auto schema = tensor.getSchema();
+		auto scalarType = schema.getFieldByName("data").getType().asList().getElementType();
+		
+		if(isObjectType(scalarType)) {
+			return getObjectTensor(tensor);
+		}
+		
+		if(scalarType.isBool()) {
+			return getBoolTensor(toReader(tensor.wrapped()));
+		}
+		
+		return getDataTensor(tensor);
+	} catch(kj::Exception& e) {
+		return scalarFallback(tensor);
 	}
-	
-	if(scalarType.isBool()) {
-		return getBoolTensor(toReader(tensor.wrapped()));
-	}
-	
-	return getDataTensor(tensor);
 }
 
 py::buffer_info getTensor(DynamicStructInterface<capnp::DynamicStruct::Reader> reader) {
