@@ -9,12 +9,15 @@ magnetic confinement fusion calculations.
 Built-in physics
 ----------------
 
-FusionSC comes with a series of fast built-in physics modules:
+FusionSC comes with a series of fast built-in physics modules intended to handle the
+basic aspects of 3D MCF physics:
 
 - Biot-Savart calculations to obtain 3D vacuum fields from coil descriptions
 - Interpolation of axisymmetric 3D fields from 2D equilibria (incl. EFIT files)
 - An advanced field line tracer module, including the following capabilities:
 
+  - Computation of reversible field line mappings and usage of these mappings
+    to accelerate all field line calculations
   - Calculation of Poincare-plots with forward- and backward-connection-lengths
     (at no extra cost)
   - Convective-diffusive and doubly-diffusive field line tracing
@@ -28,11 +31,11 @@ External code interfaces
 ------------------------
 
 Beyond the internally provided physics modules, FusionSC also can launch HPC
-codes, either by directly launching system processes (shell-style), via mpiexec,
-or using slurm.
+codes, either by directly launching system processes (shell-style) or via mpiexec
+(support for SLURM is in development).
 
 - Execution of VMEC runs
-- HINT support is planned
+- Currently work in progress: Execution of HINT runs
 
 Machine geometry handling
 -------------------------
@@ -53,9 +56,11 @@ Remote & asynchronous computation
 
 While shipping with a fully functional local backend, FusionSC has first-class
 support for remote execution. Calculation (and some data handling) requests can
-be delegated to a remote instance of the user's choice. FusionSC is integrated
-with asyncio to allow the simultaneous scheduling and execution of a large
-number of different tasks.
+be delegated to a remote instance of the user's choice. The connection is es-
+tablished through a fast asynchronous RPC protocol based on HTTP & websocket.
+
+FusionSC is integrated with asyncio to allow the simultaneous scheduling and
+execution of a large number of different tasks.
 
 Data storage and distribution
 -----------------------------
@@ -83,20 +88,22 @@ data objects:
   
   Trading raw speed for scalability, warehouses are designed as an endpoint
   to share large databases, incorporating the following features:
-    - Multi-user access (multiple processes and remote network-based access)
-	- Compressed data storage
-	- Protection against system crashes
-	- Backup facilities
+  
+  - Multi-user access (multiple processes and remote network-based access)
+  - Compressed data storage
+  - Protection against system crashes
+  - Backup facilities
 
 Beyond its built-in static schema types, FusionSC also supports the storage
 of a large number of common python types:
 
-- Primitive types (bytes, str, int) with zero-copy loading for bytes
-- Numpy arrays (with the exception of struct types), including special
-  optimized representations for numpy arrays holding native FusionSC
+- Primitive types (:code:`bytes`, :code:`str`, :code:`int`) with zero-copy
+  loading for :code:`bytes`
+- Numpy arrays (with the exception of struct-typed arrays, which are WIP),
+  including optimized representations for numpy arrays holding native FusionSC
   objects
-- Sequences (e.g. list, tuple)
-- Mapping (e.g. dict)
+- Sequences (e.g. :code:`list`, :code:`tuple`)
+- Mapping (e.g. :code:`dict`)
 
 Furthermore, FusionSC can also use optionally leverage pickle to store and
 load a larger variety of objects. Due to the security concerns surrounding the
