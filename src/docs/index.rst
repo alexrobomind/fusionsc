@@ -24,6 +24,7 @@ version 2 will possibly implement additional feedback.
    :maxdepth: 2
    :caption: Contents:
    
+   overview
    installation
    setup
    howto/index
