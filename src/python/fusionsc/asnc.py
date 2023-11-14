@@ -17,7 +17,8 @@ from .native.asnc import (
 
 from .native.asnc import wait as nativeWait
 
-from .native.timer import delay
+# Note: The timer functionality is not yet supported
+#from .native.timer import delay
 
 from typing import Callable, Any, Union, TypeVar, Awaitable
 from typing_extensions import ParamSpec
