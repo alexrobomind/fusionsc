@@ -738,6 +738,48 @@ DynamicValueBuilder AnyBuilder::interpretAs(capnp::Type type) {
 	KJ_FAIL_REQUIRE("The target type is neither struct, list, nor interface");
 }
 
+DynamicValueBuilder AnyBuilder::initBuilderAs(capnp::Type type, uint32_t size) {
+	if(type.isStruct()) {
+		return DynamicStructBuilder(shareMessage(*this), this -> template initAs<capnp::DynamicStruct>(type.asStruct()));
+	} else if(type.isList()) {
+		return DynamicListBuilder(shareMessage(*this), this -> template initAs<capnp::DynamicList>(type.asList(), size));
+	}
+	
+	KJ_FAIL_REQUIRE("The target type is neither struct nor list");
+}
+
+DynamicValueBuilder AnyBuilder::assignAs(DynamicValueReader reader) {
+	auto type = reader.getType();
+	
+	if(type == capnp::DynamicValue::Type::VOID) {
+		this -> clear();
+		return capnp::Void();
+	} else if(type == capnp::DynamicValue::Type::ANY_POINTER) {
+		this -> setAs<capnp::AnyPointer>(reader.as<capnp::AnyPointer>());
+		return *this;
+	} else if(type == capnp::DynamicValue::Type::STRUCT) {
+		auto asStruct = reader.as<capnp::DynamicStruct>();
+		auto schema = asStruct.getSchema();
+		
+		this -> setAs<capnp::DynamicStruct>(asStruct);
+		return DynamicStructBuilder(shareMessage(*this), this -> template getAs<capnp::DynamicStruct>(schema));
+	} else if(type == capnp::DynamicValue::Type::LIST) {
+		auto asList = reader.as<capnp::DynamicList>();
+		auto schema = asList.getSchema();
+		
+		this -> setAs<capnp::DynamicList>(asList);
+		return DynamicListBuilder(shareMessage(*this), this -> template getAs<capnp::DynamicList>(schema));
+	} else if(type == capnp::DynamicValue::Type::CAPABILITY) {
+		auto asCap = reader.as<capnp::DynamicCapability>();
+		auto schema = asCap.getSchema();
+		
+		this -> setAs<capnp::DynamicCapability>(asCap);
+		return this -> template getAs<capnp::DynamicCapability>(schema);
+	}
+	
+	KJ_FAIL_REQUIRE("The target object must be a struct, list, capability, or null");
+}
+
 // -------------------------------------------- Capabilities --------------------------------------
 
 // DynamicCapabilityClient

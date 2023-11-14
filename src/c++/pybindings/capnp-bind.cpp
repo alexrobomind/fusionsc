@@ -131,6 +131,8 @@ void bindAnyClasses() {
 		.def("set", &AB::setCap)
 		.def("set", &AB::adopt)
 		.def("interpretAs", &AB::interpretAs)
+		.def("initAs", &AB::initBuilderAs, py::arg("type"), py::arg("size") = 0)
+		.def("setAs", &AB::assignAs)
 	;
 	
 	py::implicitly_convertible<AB, AR>();
@@ -287,6 +289,9 @@ void bindType() {
 		})
 		.def(py::self == py::self)
 		.def(py::self != py::self)
+		.def("listOf", [](capnp::Type t, unsigned int depth) {
+			return t.wrapInList(depth);
+		}, py::arg("depth") = 1)
 	;
 }	
 

@@ -603,6 +603,8 @@ struct AnyBuilder : public WithMessage<capnp::AnyPointer::Builder>, AnyCommon, C
 	AnyBuilder clone();
 	
 	DynamicValueBuilder interpretAs(capnp::Type);
+	DynamicValueBuilder initBuilderAs(capnp::Type, uint32_t size);
+	DynamicValueBuilder assignAs(DynamicValueReader);
 	
 	static AnyBuilder cloneFrom(capnp::AnyPointer::Reader);
 };
