@@ -46,7 +46,9 @@ struct JobLauncher : public JobDirProvider {
 };
 
 Own<JobLauncher> newProcessScheduler(kj::StringPtr jobDir);
-Own<JobLauncher> newSlurmScheduler(kj::StringPtr jobDir);
+
+Own<JobLauncher> newSlurmScheduler(Own<JobLauncher> backend);
+Own<JobLauncher> newMpiScheduler(Own<JobLauncher> backend);
 
 Job::Client runJob(JobLauncher&, kj::StringPtr cmd, kj::ArrayPtr<kj::StringPtr> args = {}, kj::PathPtr wd = nullptr);
 Promise<kj::String> runToCompletion(Job::Client job);

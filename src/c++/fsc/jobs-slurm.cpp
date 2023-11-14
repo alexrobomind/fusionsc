@@ -252,8 +252,8 @@ struct SlurmJobLauncher : public JobLauncher, kj::Refcounted {
 
 }
 
-Own<JobLauncher> newSlurmScheduler(kj::StringPtr baseDir) {
-	return kj::refcounted<SlurmJobLauncher>(newProcessScheduler(baseDir));
+Own<JobLauncher> newSlurmScheduler(Own<JobLauncher> backend) {
+	return kj::refcounted<SlurmJobLauncher>(mv(backend));
 }
 	
 

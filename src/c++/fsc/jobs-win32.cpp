@@ -261,7 +261,8 @@ struct Win32ProcessJobScheduler : public JobLauncher, kj::Refcounted, BaseDirPro
 		return kj::addRef(*this);
 	}
 	
-	Job::Client launch(JobRequest req) override {		
+	Job::Client launch(JobRequest req) override {
+		KJ_REQUIRE(req.numTasks == 1, "Can not launch multi-task jobs on the system launcher");
 		kj::Vector<kj::StringPtr> cmdLine;
 		
 		cmdLine.add(req.command);

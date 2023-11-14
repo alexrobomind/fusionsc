@@ -140,7 +140,9 @@ struct RootServer : public RootService::Server {
 			case LocalConfig::JobScheduler::SYSTEM:
 				return newProcessScheduler(config.getJobDir());
 			case LocalConfig::JobScheduler::SLURM:
-				return newSlurmScheduler(config.getJobDir());
+				return newSlurmScheduler(newProcessScheduler(config.getJobDir()));
+			case LocalConfig::JobScheduler::MPI:
+				return newMpiScheduler(newProcessScheduler(config.getJobDir()));
 			default:
 				KJ_UNIMPLEMENTED("Unknown scheduler type requested.");
 		}

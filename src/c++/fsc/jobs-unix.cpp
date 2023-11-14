@@ -156,6 +156,8 @@ struct UnixProcessJobScheduler : public JobLauncher, kj::Refcounted, BaseDirProv
 	}
 	
 	Job::Client launch(JobRequest req) override {
+		KJ_REQUIRE(req.numTasks == 1, "Can not launch multi-task jobs on the system launcher");
+		
 		// All signal-related things should run on the steward thread
 		auto& executor = getActiveThread().library() -> steward();
 		

@@ -42,6 +42,7 @@ add_library(
 	jobs-unix.cpp
 	jobs-win32.cpp
 	jobs-slurm.cpp
+	jobs-mpi.cpp
 	
 	db.h
 	db.cpp
