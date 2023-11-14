@@ -40,6 +40,7 @@ struct LocalConfig {
 	jobScheduler : union {
 		system @3 : Void;
 		slurm @4 : Void;
+		mpi @13 : Void;
 	}
 	
 	# Root directory for temporary worker dirs
