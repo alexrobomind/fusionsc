@@ -89,19 +89,25 @@ data objects:
   Trading raw speed for scalability, warehouses are designed as an endpoint
   to share large databases, incorporating the following features:
   
-  - Multi-user access (multiple processes and remote network-based access)
-  - Compressed data storage
-  - Protection against system crashes
-  - Backup facilities
+  - *Multi-user access*: Warehouses can be safely read and modified
+    simultaneously by multiple threads and/or processes. Additionally, they
+	can be served for remote access.
+  - *Compact storage*: Objects containing identical data will always share
+    their underlying storage, eliminating data duplication (archive files do
+	this as well). In addition, all stored data are compressed using deflate.
+  - *Protection against corruption*: Being based on SQLite, warehouses inherit
+    its strong protection against system crashes, allowing recovery to a
+	consistent state.
+  - *Backup facilities*: The underlying database can be backed up during
+    during operation to guard against fatal storage loss.
 
 Beyond its built-in static schema types, FusionSC also supports the storage
 of a large number of common python types:
 
 - Primitive types (:code:`bytes`, :code:`str`, :code:`int`) with zero-copy
   loading for :code:`bytes`
-- Numpy arrays (with the exception of struct-typed arrays, which are WIP),
-  including optimized representations for numpy arrays holding native FusionSC
-  objects
+- Numpy arrays, including optimized representations for numpy arrays holding
+  native FusionSC objects
 - Sequences (e.g. :code:`list`, :code:`tuple`)
 - Mapping (e.g. :code:`dict`)
 
