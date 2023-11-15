@@ -244,7 +244,13 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 			"""
 		
 		import pickle
-		builder.pythonPickle = pickle.dumps(obj)
+		data = pickle.dumps(obj)
+		
+		pickled = builder.initPythonPickle()
+		if len(data) < _maxLen:
+			pickled.data = data
+		else:
+			pickled.bigData = data.publish(pickled)
 	
 	memoSet.add(key)
 
