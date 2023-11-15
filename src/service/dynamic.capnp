@@ -16,6 +16,12 @@ struct DynamicObject {
 	}
 	
 	struct DType {
+		struct Field {
+			name @0 : Text;
+			dType @1 : DType;
+			offset @2 : Int32;
+		}
+		
 		union {
 			bool @0 : Void;
 			numeric : group {
@@ -35,6 +41,13 @@ struct DynamicObject {
 				}
 				littleEndian @9 : Bool;
 				length @10 : UInt64;
+			}
+			subArray : group {
+				itemType @11 : DType;
+				shape @12 : List(UInt32);
+			}
+			struct : group {
+				fields @13 : List(Field);
 			}
 		}
 	}

@@ -56,6 +56,128 @@ async def unwrap(obj):
 def dump(obj: Any):
 	return _dump(obj, service.DynamicObject.newMessage(), set())
 
+def _dumpDType(dtype, odt: service.DynamicObject.DType.Builder):
+	assert dtype.kind != "O", "Can not export objects in primitive arrays (e.g. as struct fields)"
+	
+	if dtype.subdtype is not None:
+		itemType, shape = dtype.subdtype
+		outArr = odt.initSubArray()
+		
+		_dumpDType(itemType, outArr.itemType)
+		outArr.shape = shape
+		
+		return
+	
+	if dtype.fields is not None:
+		outFields = odt.initStruct().initFields(len(dtype.fields))
+		
+		for i, (name, info) in enumerate(dtype.fields.items()):
+			field = outFields[i]
+			field.name = name
+			field.offset = info[1]
+			_dumpDType(info[0], field.dType)
+		
+		return
+	
+	if dtype.kind == "b":
+		odt.bool = True
+	elif dtype.kind in "iufc":
+		numeric = odt.initNumeric()
+		
+		if dtype.kind == "i":
+			numeric.base.signedInt = None
+		elif dtype.kind == "u":
+			numeric.base.unsignedInt = None
+		elif dtype.kind == "c":
+			numeric.base.complex = None
+		else:
+			numeric.base.float = None
+		
+		numeric.numBytes = dtype.itemsize
+		numeric.littleEndian = (
+			True
+			if _endianMap[dtype.byteorder] == 'little'
+			else False
+		)
+		
+	elif dtype.kind in "SU":
+		special = odt.initSpecial()
+		
+		special.length = dtype.itemsize
+		
+		if dtype.kind == "S":
+			special.byteArray = None
+		elif dtype.kind == "U":
+			special.unicodeString = None
+			special.length /= 4
+		#elif dtype.kind == "m":
+		#	special.timedelta = None
+		#else:
+		#	special.datetime = None
+		
+		special.littleEndian = (
+			True
+			if _endianMap[dtype.byteorder] == 'little'
+			else False
+		)
+	else:
+		struct = odt.init
+
+def _loadDType(dtype):	
+	whichType = dtype.which_()
+
+	if whichType == "bool":
+		return "b"
+	elif whichType == "numeric":
+		whichNumber = dtype.numeric.base.which_()
+		
+		if whichNumber == "float":
+			baseNum = "f"
+		elif whichNumber == "signedInt":
+			baseNum = "i"
+		elif whichNumber == "unsignedInt":
+			baseNum = "u"
+		elif whichNumber == "complex":
+			baseNum = "c"
+		else:
+			raise ValueError("Unknown numeric type for numpy array")
+		
+		if dtype.numeric.littleEndian:
+			endian = "<"
+		else:
+			endian = ">"
+		
+		return f"{endian}{baseNum}{dtype.numeric.numBytes}"
+	elif whichType == "special":
+		special = dtype.special
+		whichSpecial = special.which_()
+		
+		if whichSpecial == "byteArray":
+			formatCode = "S"
+		elif whichSpecial == "unicodeString":
+			formatCode = "U"
+		#elif whichSpecial == "datetime":
+		#	formatCode = "M"
+		#elif whichSpecial == "timedelta":
+		#	formatCode = "m"
+		
+		if dtype.special.littleEndian:
+			endian = "<"
+		else:
+			endian = ">"
+		
+		return f"{endian}{formatCode}{dtype.special.length}"
+	elif whichType == "subArray":
+		sa = dtype.subArray
+		return (_loadDType(sa.itemType), tuple(sa.shape))
+	elif whichType == "struct":
+		return {
+			str(field.name) : (_loadDType(field.dType), field.offset) 
+			for field in dtype.struct.fields
+		}
+	else:
+		assert False, "Unknown DType for array"
+
 def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: set):
 	key = id(obj)
 	builder.memoKey = key
@@ -112,55 +234,13 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 		c.real = obj.real
 		c.imag = obj.imag
 		
-	elif isinstance(obj, np.ndarray) and obj.dtype.kind in "biufcSU":
+	elif isinstance(obj, np.ndarray) and obj.dtype.kind in "biufcSUV":
 		dtype = obj.dtype
 		
 		array = builder.initArray()
-		odt = array.dType
-		
-		if dtype.kind == "b":
-			odt.bool = True
-		elif dtype.kind in "iufc":
-			numeric = odt.initNumeric()
-			
-			if dtype.kind == "i":
-				numeric.base.signedInt = None
-			elif dtype.kind == "u":
-				numeric.base.unsignedInt = None
-			elif dtype.kind == "c":
-				numeric.base.complex = None
-			else:
-				numeric.base.float = None
-			
-			numeric.numBytes = dtype.itemsize
-			numeric.littleEndian = (
-				True
-				if _endianMap[dtype.byteorder] == 'little'
-				else False
-			)
-			
-		elif dtype.kind in "SU":
-			special = odt.initSpecial()
-			
-			special.length = dtype.itemsize
-			
-			if dtype.kind == "S":
-				special.byteArray = None
-			elif dtype.kind == "U":
-				special.unicodeString = None
-				special.length /= 4
-			#elif dtype.kind == "m":
-			#	special.timedelta = None
-			#else:
-			#	special.datetime = None
-			
-			special.littleEndian = (
-				True
-				if _endianMap[dtype.byteorder] == 'little'
-				else False
-			)			
-		
 		array.shape = obj.shape
+		
+		_dumpDType(dtype, array.dType)		
 		
 		byteData = obj.tobytes()
 		if len(byteData) < _maxLen:
@@ -318,60 +398,14 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 		return complex(reader.complex.real, reader.complex.imag)
 	
 	if which == "array":
-		dtype = reader.array.dType
-		
-		whichType = dtype.which_()
-
-		if whichType == "bool":
-			typeStr = "b"
-		elif whichType == "numeric":
-			whichNumber = dtype.numeric.base.which_()
-			
-			if whichNumber == "float":
-				baseNum = "f"
-			elif whichNumber == "signedInt":
-				baseNum = "i"
-			elif whichNumber == "unsignedInt":
-				baseNum = "u"
-			elif whichNumber == "complex":
-				baseNum = "c"
-			else:
-				raise ValueError("Unknown numeric type for numpy array")
-			
-			if dtype.numeric.littleEndian:
-				endian = "<"
-			else:
-				endian = ">"
-			
-			typeStr = f"{endian}{baseNum}{dtype.numeric.numBytes}"
-		elif whichType == "special":
-			special = dtype.special
-			whichSpecial = special.which_()
-			
-			if whichSpecial == "byteArray":
-				formatCode = "S"
-			elif whichSpecial == "unicodeString":
-				formatCode = "U"
-			#elif whichSpecial == "datetime":
-			#	formatCode = "M"
-			#elif whichSpecial == "timedelta":
-			#	formatCode = "m"
-			
-			if dtype.special.littleEndian:
-				endian = "<"
-			else:
-				endian = ">"
-			
-			typeStr = f"{endian}{formatCode}{dtype.special.length}"
-		else:
-			assert False, "Unknown DType for array"
+		typeDesc = _loadDType(reader.array.dType)
 		
 		if reader.array.which_() == "data":
 			data = reader.array.data
 		else:
 			data = await data.download.asnc(reader.array.bigData)
 		
-		return np.frombuffer(data, typeStr).reshape(reader.array.shape)
+		return np.frombuffer(data, typeDesc).reshape(reader.array.shape)
 	
 	if which == "enumArray":
 		ea = reader.enumArray

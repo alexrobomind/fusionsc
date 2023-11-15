@@ -42,6 +42,8 @@ def test_serialize_simple():
 		np.asarray([b'ABC', b'DEF', b'G']),
 		np.asarray([{"ABC" : "ABC"}]),
 		
+		np.ones(2, [('x', np.uint16, (2, 2)), ('y', np.float32)]),
+		
 		fsc.service.MagneticField.newMessage({"invert" : {"sum" : []}}),
 		fsc.service.FLTStopReason.get(0),
 		
