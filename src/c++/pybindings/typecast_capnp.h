@@ -346,7 +346,7 @@ namespace pybind11 { namespace detail {
 			}
 			
 			if(py::isinstance<py::str>(src)) {
-				value = fscpy::TextReader::from(py::cast<kj::String>(src));
+				value = fscpy::TextReader::from(kj::heapString(py::cast<kj::StringPtr>(src)));
 				return true;
 			}
 			

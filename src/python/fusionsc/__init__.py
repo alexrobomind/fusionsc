@@ -9,6 +9,7 @@ from . import native
 from .native import kj
 from .native import capnp
 from .native import schema
+from .native import loader
 from .native import service
 
 from .native import efit

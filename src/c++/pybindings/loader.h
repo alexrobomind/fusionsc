@@ -58,4 +58,6 @@ namespace fscpy {
 	capnp::Schema Loader::importBuiltin() {
 		return import(capnp::Schema::from<T>());
 	}
+	
+	void parseSchemas(py::object localScope, py::module target, py::dict globalScope);
 }

@@ -473,7 +473,7 @@ enum class FSCPyClassType {
 
 kj::String qualName(py::object scope, kj::StringPtr name) {
 	if(py::hasattr(scope, "__qualname__"))
-		return kj::str(scope.attr("__qualname__").cast<kj::String>(), ".", name);
+		return kj::str(scope.attr("__qualname__").cast<kj::StringPtr>(), ".", name);
 	else
 		return kj::heapString(name);
 }
@@ -1095,4 +1095,22 @@ capnp::Schema fscpy::Loader::import(capnp::Schema input) {
 
 fscpy::Loader fscpy::defaultLoader;
 
-void fscpy::initLoader(py::module_& m) {}
+void fscpy::initLoader(py::module_& m) {
+	auto loader = m.def_submodule("loader", "Gives access to the schema loader");
+	
+	py::dict defaultGlobalScope;
+	
+	auto ires = py::module::import("importlib_resources");
+	auto fscRoot = ires.attr("files")("fusionsc").attr("joinpath")("service");
+	
+	defaultGlobalScope["fusionsc"] = fscRoot.attr("joinpath")("fusionsc");
+	defaultGlobalScope["capnp"] = fscRoot.attr("joinpath")("capnp");
+	
+	loader.attr("defaultScope") = defaultGlobalScope;
+	
+	loader.def("getType", [](uint64_t id) {
+		return globalClasses -> attr("get")(id, py::none());
+	});
+	
+	loader.def("parseSchemas", &parseSchemas, py::arg("schemaFolder"), py::arg("destModule"), py::arg("globalScope") = defaultGlobalScope);
+}

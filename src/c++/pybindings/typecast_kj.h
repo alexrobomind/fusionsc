@@ -75,13 +75,9 @@ template<>
 struct type_caster<kj::StringPtr> {
 	
 	PYBIND11_TYPE_CASTER(kj::StringPtr, const_name("str"));
-	FSCPY_MOVE_ONLY_CASTER;
+	FSCPY_MOVE_ONLY_CASTER;	
 	
-	type_caster<char> strCaster;	
-	
-	bool load(handle src, bool convert) {			
-		object isInstance = eval("isinstance");
-		
+	bool load(handle src, bool convert) {
 		if(PyUnicode_Check(src.ptr())) {
 			Py_ssize_t bufSize;
 			
@@ -114,8 +110,8 @@ struct type_caster<kj::String> {
 	PYBIND11_TYPE_CASTER(kj::String, const_name("str"));
 	FSCPY_MOVE_ONLY_CASTER;
 	
-	bool load(handle src, bool convert) {			
-		object isInstance = eval("isinstance");
+	/*bool load(handle src, bool convert) {			
+		py::print("Loading kj::String", py::type::of(src), src);
 		
 		type_caster<kj::StringPtr> ptrCaster;
 		if(ptrCaster.load(src, convert)) {
@@ -129,6 +125,11 @@ struct type_caster<kj::String> {
 			return true;
 		}
 		
+		return false;
+	}*/
+	template<typename T>
+	bool load(T src, bool convert) {
+		static_assert(sizeof(T) == 0, "Do not load arguments as kj::String. Use kj::StringPtr instead");
 		return false;
 	}
 	

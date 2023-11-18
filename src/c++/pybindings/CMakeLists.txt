@@ -14,6 +14,7 @@ if(FSC_WITH_PYTHON)
 		fscpy.cpp
 		async.cpp
 		loader.cpp
+		loader-parse.cpp
 		data.cpp
 		devices.cpp
 		
@@ -48,5 +49,5 @@ if(FSC_WITH_PYTHON)
 	message(STATUS "Python package installation root: ${INSTALL_DIR}")
 	
 	INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION ${INSTALL_DIR}/fusionsc)
-	INSTALL(DIRECTORY ${PROJECT_SOURCE_DIR}/src/python/fusionsc/ DESTINATION ${INSTALL_DIR}/fusionsc FILES_MATCHING PATTERN "*.py")
+	INSTALL(DIRECTORY ${PROJECT_SOURCE_DIR}/src/python/fusionsc/ DESTINATION ${INSTALL_DIR}/fusionsc FILES_MATCHING PATTERN "*.py" PATTERN "*.capnp")
 endif()

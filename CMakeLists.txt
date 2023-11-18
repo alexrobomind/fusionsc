@@ -149,6 +149,10 @@ unset(WITH_ZLIB)
 if(CapnProto_VENDORED)
 	target_compile_definitions(kj-http PRIVATE KJ_HAS_ZLIB)
 	target_link_libraries(kj-http PUBLIC ZLIB::ZLIB)
+	
+	if(NOT TARGET CapnProto::capnpc)
+		add_library(CapnProto::capnpc ALIAS capnpc)
+	endif()
 endif()
 
 add_vendored_dependency(
@@ -296,6 +300,7 @@ target_link_libraries(
 	INTERFACE
 	Botan::botan
 	CapFuzz::capfuzz
+	CapnProto::capnpc
 	CapnProto::capnp-rpc
 	CapnProto::capnp-json
 	CapnProto::capnp-websocket
@@ -351,7 +356,7 @@ add_subdirectory(src/c++/capnpc-java)
 add_subdirectory(src/c++/capnp-sphinx)
 
 # Build and install the libraries
-add_subdirectory(src/service)
+add_subdirectory(src/python/fusionsc/service/fusionsc) # This directory contains the service interface
 add_subdirectory(src/c++)
 
 # Build the documentation

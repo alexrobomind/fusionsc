@@ -86,23 +86,27 @@ namespace fscpy {
 		>();
 		
 		// Schema submodule
-		{
+		/*{
 			auto schemas = getBuiltinSchemas<capnp::schema::Node>();
 			py::module_ subM = m.def_submodule("schema", "Cap'n'proto structs describing Cap'n'proto types and schemas");
 			
 			for(auto node : schemas) {
 				defaultLoader.importNodeIfRoot(node.getId(), subM);
 			}
-		}
+		}*/
+	
+		py::dict defaultGlobalScope;
 		
-		// Root module
-		{		
-			auto schemas = getBuiltinSchemas<FSC_BUILTIN_SCHEMAS>();
-			py::module_ subM = m.def_submodule("service", "Cap'n'proto service interface for fusionsc library");
-				
-			for(auto node : schemas) {
-				defaultLoader.importNodeIfRoot(node.getId(), subM);
-			}
-		}
+		auto ires = py::module::import("importlib_resources");
+		auto fscRoot = ires.attr("files")("fusionsc").attr("joinpath")("service");
+		
+		defaultGlobalScope["fusionsc"] = fscRoot.attr("joinpath")("fusionsc");
+		defaultGlobalScope["capnp"] = fscRoot.attr("joinpath")("capnp");
+		
+		py::module_ schemaMod = m.def_submodule("schema", "Cap'n'proto structs describing Cap'n'proto types and schemas");
+		py::module_ serviceMod = m.def_submodule("service", "Cap'n'proto service interface for fusionsc library");
+		
+		parseSchemas(defaultGlobalScope["capnp"], schemaMod, defaultGlobalScope);
+		parseSchemas(defaultGlobalScope["fusionsc"], serviceMod, defaultGlobalScope);
 	}
 }
