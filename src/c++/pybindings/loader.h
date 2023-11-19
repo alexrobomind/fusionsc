@@ -59,5 +59,5 @@ namespace fscpy {
 		return import(capnp::Schema::from<T>());
 	}
 	
-	void parseSchemas(py::object localScope, py::module target, py::dict globalScope);
+	void parseSchema(py::object anchor, kj::StringPtr path, py::module target, py::dict roots);
 }

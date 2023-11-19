@@ -106,7 +106,14 @@ namespace fscpy {
 		py::module_ schemaMod = m.def_submodule("schema", "Cap'n'proto structs describing Cap'n'proto types and schemas");
 		py::module_ serviceMod = m.def_submodule("service", "Cap'n'proto service interface for fusionsc library");
 		
-		parseSchemas(defaultGlobalScope["capnp"], schemaMod, defaultGlobalScope);
-		parseSchemas(defaultGlobalScope["fusionsc"], serviceMod, defaultGlobalScope);
+		auto filesDir = fscRoot.attr("joinpath")("service/capnp");
+		for(py::object name : filesDir.attr("iterdir")()) {
+			parseSchema(filesDir, name, schemaMod, defaultGlobalScope);
+		}
+		
+		filesDir = fscRoot.attr("joinpath")("service/fusionsc");
+		for(py::object name : filesDir.attr("iterdir")()) {
+			parseSchema(filesDir, name, serviceMod, defaultGlobalScope);
+		}
 	}
 }

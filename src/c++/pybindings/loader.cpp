@@ -1112,5 +1112,5 @@ void fscpy::initLoader(py::module_& m) {
 		return globalClasses -> attr("get")(id, py::none());
 	});
 	
-	loader.def("parseSchemas", &parseSchemas, py::arg("schemaFolder"), py::arg("destModule"), py::arg("globalScope") = defaultGlobalScope);
+	loader.def("parseSchema", &parseSchema, py::arg("rootResources"), py::arg("path"), py::arg("destModule"), py::arg("globalScope") = defaultGlobalScope);
 }

@@ -14,8 +14,8 @@ struct SourceLoader : public kj::Refcounted {
 	
 	py::dict roots;
 	
-	SourceLoader(py::dict rootScope) :
-		roots(mv(rootScope))
+	SourceLoader(py::dict roots) :
+		roots(mv(roots))
 	{}
 	
 	void check() {
@@ -43,9 +43,9 @@ struct SourceLoader : public kj::Refcounted {
 	}
 	
 	// Implemented below due to requiring PyResourceFile
-	capnp::ParsedSchema parseFile(kj::PathPtr path);
+	capnp::ParsedSchema parseFile(py::object pathRoot, kj::PathPtr path);
 	
-	Maybe<Own<capnp::SchemaFile>> openFile(kj::PathPtr pth);
+	Maybe<Own<capnp::SchemaFile>> openFile(py::object pathRoot, kj::PathPtr pth);
 	
 private:
 	struct Error {
@@ -60,11 +60,14 @@ private:
 };
 
 struct PyResourceFile : public capnp::SchemaFile {
+	py::object pathRoot;
 	kj::Path pth;
+	
 	mutable py::object pyPath;
 	mutable Own<SourceLoader> loader;
 	
-	PyResourceFile(kj::PathPtr pth, py::object pyPath, SourceLoader& loader) :
+	PyResourceFile(py::object pathRoot, kj::PathPtr pth, py::object pyPath, SourceLoader& loader) :
+		pathRoot(mv(pathRoot))
 		pth(pth.clone()),
 		pyPath(mv(pyPath)),
 		loader(loader.addRef())
@@ -74,30 +77,22 @@ struct PyResourceFile : public capnp::SchemaFile {
 		return pth.basename()[0];
 	}
 	
-	kj::Array<const char> readContent() const override {		
-		auto opened = pyPath.attr("open")();
-		
-		try {
-			auto data = opened.attr("read")();
-			opened.attr("close")();
-			
-			auto asArray = kj::heapString(py::cast<kj::StringPtr>(data)).releaseArray();
-			
-			// Get rid of 0 terminator
-			return asArray.slice(0, asArray.size() - 1).attach(mv(asArray));
-		} catch(...) {
-			opened.attr("close")();
-			throw;
-		}
+	kj::Array<const char> readContent() const override {
+		return py::cast<kj::Array<const byte>>(pyPath.attr("read_bytes")());
 	}
 	
 	Maybe<Own<SchemaFile>> import(kj::StringPtr path) const override {
-		auto subPath = pth.parent().eval(path);
-		return loader -> openFile(subPath);
-	}
-	
-	kj::String strPath() const {
-		return kj::heapString(py::cast<kj::StringPtr>(py::str(pyPath)));
+		try {
+			// Absolute paths are indicated by using "none" as root
+			if(path.startsWith("/"))
+				return loader -> openFile(py::none(), kj::Path().eval(path));
+			
+			// Parse relative path
+			return loader -> openFile(pathRoot, this -> pth.parse(path));
+		} catch(std::exception& e) {
+			py::print("Error occurred opening file", e.what());
+			return nullptr;
+		}
 	}
 	
 	bool operator==(const SchemaFile& other) const override {
@@ -106,14 +101,17 @@ struct PyResourceFile : public capnp::SchemaFile {
 		if(downcast == nullptr)
 			return false;
 		
-		return strPath() == downcast -> strPath();
+		if(pathRoot.ptr() != downcast -> pathRoot.ptr())
+			return false;
+		
+		return pth == downcast -> pth;
 	}
 	bool operator!=(const SchemaFile& other) const override {
 		return ! operator==(other);
 	}
 	
 	size_t hashCode() const override {
-		return kj::hashCode(strPath());
+		return pathRoot.ptr() + kj::hashCode(pth);
 	}
 	
 	void reportError(SourcePos pos1, SourcePos pos2, kj::StringPtr message) const override {
@@ -121,7 +119,7 @@ struct PyResourceFile : public capnp::SchemaFile {
 	}
 };
 
-capnp::ParsedSchema SourceLoader::parseFile(kj::PathPtr path) {
+capnp::ParsedSchema SourceLoader::parseFile(py::object pathRoot, kj::PathPtr path) {
 	KJ_IF_MAYBE(ppFile, openFile(path)) {
 		auto result = parser.parseFile(mv(*ppFile));
 		check();
@@ -131,11 +129,24 @@ capnp::ParsedSchema SourceLoader::parseFile(kj::PathPtr path) {
 	}
 }
 
-Maybe<Own<capnp::SchemaFile>> SourceLoader::openFile(kj::PathPtr path) {			
-	auto current = roots[py::cast(path[0])];
-	for(kj::StringPtr el : path.slice(1, path.size())) {
+Maybe<Own<capnp::SchemaFile>> SourceLoader::openFile(py::object pathRoot, kj::PathPtr path) {
+	auto current = pathRoot;
+	if(current.is_none()) {
+		if(path.size() == 0)
+			return nullptr;
+		
+		auto rootName = py::cast(path[0]);
+		if(!roots.contains(rootName))
+			return nullptr;
+		
+		current = roots[rootName];
+		path = path.slice(1, path.size());
+	}
+	
+	for(kj::StringPtr el : path) {
 		if(!py::bool_(current.attr("is_dir")()))
 			return nullptr;
+		
 		current = current.attr("joinpath")(el);
 	}
 			
@@ -147,35 +158,15 @@ Maybe<Own<capnp::SchemaFile>> SourceLoader::openFile(kj::PathPtr path) {
 
 }
 
-void parseSchemas(py::object localScope, py::module target, py::dict globalScope) {
-	KJ_REQUIRE(!globalScope.contains(":"), "The scope key ':' is reserved");
+void parseSchema(py::object anchor, kj::StringPtr path, py::module target, py::dict roots) {
+	auto loader = kj::refcounted<SourceLoader>(roots);
 	
-	globalScope = globalScope.attr("copy")();
-	globalScope[":"] = localScope;
-	
-	auto loader = kj::refcounted<SourceLoader>(globalScope);
-	
-	kj::Vector<capnp::ParsedSchema> parsed;
-	for(auto child : localScope.attr("iterdir")()) {
-		if(!py::bool_(child.attr("is_file")()))
-			continue;
-		
-		kj::Path pth({":", py::cast<kj::StringPtr>(child.attr("name"))});
-		
-		if(!pth.basename()[0].endsWith(".capnp"))
-			continue;
-		
-		parsed.add(loader -> parseFile(pth));
-	}
+	auto parsed = loader -> parseFile(anchor, kj::Path().parse(path));
 	
 	auto loaded = loader -> getAllLoaded();
-	for(auto& schema : loaded) {
-		defaultLoader.add(schema.getProto());
-	}
+	defaultLoader.add(parsed.getProto());
 	
-	for(auto& schema : parsed) {
-		defaultLoader.importNodeIfRoot(schema.getProto().getId(), target);
-	}
+	defaultLoader.importNodeIfRoot(parsed, schema.getProto().getId(), target);
 }
 
 }
