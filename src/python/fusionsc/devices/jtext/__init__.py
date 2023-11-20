@@ -5,7 +5,7 @@ def defaultGrid() -> service.ToroidalGrid.Reader:
 	return service.devices.jtext.defaultGrid.value.clone_()
 
 def defaultGeometryGrid() -> service.CartesianGrid.Reader:
-	return service.devices.jtext.defaultGeometryGrid.value.clone_()
+	return service.devices.jtext.defaultGeoGrid.value.clone_()
 
 def firstWall():
 	result = geometry.Geometry()
