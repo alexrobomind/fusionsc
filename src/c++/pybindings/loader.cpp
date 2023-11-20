@@ -492,14 +492,16 @@ kj::String sanitizedStructName(kj::StringPtr input) {
 }
 
 // Declaration for recursive calls
-py::object interpretSchema(capnp::SchemaLoader& loader, uint64_t id, py::object rootScope, Maybe<py::object> methodScope = nullptr);
+py::object interpretSchema(fscpy::Loader& loader, uint64_t id, py::object rootScope, Maybe<py::object> methodScope = nullptr);
 
-py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchema schema, py::object rootScope, py::object scope) {	
+py::object interpretStructSchema(fscpy::Loader& loader, capnp::StructSchema schema, py::object rootScope, py::object scope) {	
 	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
 	auto structName = sanitizedStructName(schema.getUnqualifiedName());
 	
 	py::module_ collections = py::module_::import("collections");
 	py::type mappingAbstractBaseClass = collections.attr("abc").attr("Mapping");
+	
+	auto maybeSource = loader.sourceInfo.find(schema.getProto().getId());
 	
 	py::dict attrs;
 	attrs["__qualname__"] = qualName(scope, structName);
@@ -508,6 +510,15 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 	attrs["__init__"] = py::cpp_function([]() {
 		KJ_UNIMPLEMENTED("Do not create instances of this class. Use StructType.newMessage() instead");
 	});
+		
+	KJ_IF_MAYBE(pSrc, maybeSource) {
+		auto comment = pSrc -> getDocComment();
+		if(comment.size() > 0) {
+			attrs["__doc__"] = py::str(comment.cStr());
+		}
+	} else {
+		// KJ_DBG("Class has no doc info", structName);
+	}
 	
 	py::object output = (*baseMetaType)(structName, py::make_tuple(), attrs);
 	
@@ -548,7 +559,16 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 				}
 			}
 			
-			attributes[name.cStr()] = FieldDescriptor(field);
+			kj::String docString;
+			KJ_IF_MAYBE(pSrc, maybeSource) {
+				auto comment = pSrc -> getMembers()[field.getIndex()].getDocComment().asReader();
+				// KJ_DBG("Field comment", structName, field.getProto().getName(), field.getIndex(), comment);
+				if(comment.size() > 0) {
+					docString = kj::heapString(comment);
+				}
+			}
+			
+			attributes[name.cStr()] = FieldDescriptor(field, mv(docString));
 		}
 		
 		for(StructSchema::Field field : schema.getUnionFields()) {
@@ -580,22 +600,39 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		// Determine base class and class suffix
 		py::type baseClass = py::type::of(py::none());
 		kj::StringPtr suffix;
+		kj::StringTree docString;
 		
 		switch(classType) {
 			case FSCPyClassType::BUILDER: 
 				baseClass = py::type::of<DynamicStructBuilder>();
 				suffix = "Builder";
+				docString = strTree("A modifidable instance of ", qualName(scope, structName));
 				break;
 				
 			case FSCPyClassType::READER :
 				baseClass = py::type::of<DynamicStructReader>();
 				suffix = "Reader";
+				docString = strTree("A read-only instance of ", qualName(scope, structName));
 				break;
 				
 			case FSCPyClassType::PIPELINE:
 				baseClass = py::type::of<DynamicStructPipeline>();
 				suffix = "Pipeline";
+				docString = strTree("A pipeline for ", qualName(scope, structName), " that"
+					"allows access to capabilities returned in the future by an on-going call"
+				);
 				break;  
+		}
+		
+		KJ_IF_MAYBE(pSrc, maybeSource) {
+			auto comment = pSrc -> getDocComment();
+			if(comment.size() > 0) {
+				docString = kj::strTree(
+					mv(docString),
+					"\n\n --- Documentation for class ", qualName(scope, structName), " ---\n",
+					comment
+				);
+			}
 		}
 		
 		attributes["__init__"] = fscpy::methodDescriptor(py::cpp_function(
@@ -615,6 +652,7 @@ py::object interpretStructSchema(capnp::SchemaLoader& loader, capnp::StructSchem
 		attributes["__module__"] = moduleName;
 		
 		attributes["__slots__"] = py::make_tuple();
+		attributes["__doc__"] = py::str(docString.flatten().cStr());
 			
 		py::object newCls = (*baseMetaType)(kj::str(structName, ".", suffix).cStr(), py::make_tuple(baseClass /*, mappingAbstractBaseClass*/), attributes);
 				
@@ -762,7 +800,7 @@ py::object interpretEnumSchema(capnp::EnumSchema schema, py::object scope) {
 				return capnp::DynamicEnum(schema, from.as<uint16_t>());
 			}
 			
-			KJ_DBG(from, from.getType());
+			// KJ_DBG(from, from.getType());
 			throw std::invalid_argument("Input must be an enum value, a string, or an integer");
 		}
 	);
@@ -770,7 +808,7 @@ py::object interpretEnumSchema(capnp::EnumSchema schema, py::object scope) {
 	return output;
 }
 
-py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::InterfaceSchema schema, py::object rootScope, py::object scope) {		
+py::object interpretInterfaceSchema(fscpy::Loader& loader, capnp::InterfaceSchema schema, py::object rootScope, py::object scope) {		
 	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
 	auto methods = schema.getMethods();
 	
@@ -791,7 +829,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 	for(auto i : kj::indices(methods)) {
 		auto method = methods[i];
 		
-		InterfaceMethod backend(method, loader);
+		InterfaceMethod backend(method, loader.capnpLoader);
 		kj::StringTree desc = backend.description();
 		kj::String name = kj::heapString(backend.name);
 				
@@ -869,7 +907,7 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 	
 	for(auto i : kj::indices(methods)) {
 		auto method = methods[i];
-		InterfaceMethod backend(method, loader);
+		InterfaceMethod backend(method, loader.capnpLoader);
 		kj::String name = kj::heapString(backend.name);
 		
 		py::object holder = simpleObject();
@@ -893,16 +931,28 @@ py::object interpretInterfaceSchema(capnp::SchemaLoader& loader, capnp::Interfac
 	return outerCls;
 }
 
-py::object interpretSchema(capnp::SchemaLoader& loader, uint64_t id, py::object rootScope, Maybe<py::object> methodScope) {	
+py::object interpretConstSchema(capnp::ConstSchema schema, py::object scope) {	
+	py::str moduleName = py::hasattr(scope, "__module__") ? scope.attr("__module__") : scope.attr("__name__");
+	
+	py::object result = py::cast(new ConstantValue(schema));
+	
+	//auto outerName = qualName(scope, schema.getUnqualifiedName());
+	//result.attr("__qualname__") = outerName;
+	//result.attr("__module__") = moduleName;
+	
+	return result;
+}
+
+py::object interpretSchema(fscpy::Loader& loader, uint64_t id, py::object rootScope, Maybe<py::object> methodScope) {	
 	if(globalClasses->contains(id))
 		return (*globalClasses)[py::cast(id)];
 	
-	KJ_IF_MAYBE(dontCare, loader.tryGet(id)) {
+	KJ_IF_MAYBE(dontCare, loader.capnpLoader.tryGet(id)) {
 	} else {
 		return py::none();
 	}
 	
-	capnp::Schema schema = loader.get(id);
+	capnp::Schema schema = loader.capnpLoader.get(id);
 		
 	// Find parent object
 	py::object parent;
@@ -942,6 +992,9 @@ py::object interpretSchema(capnp::SchemaLoader& loader, uint64_t id, py::object 
 			break;
 		case capnp::schema::Node::ENUM:
 			output = interpretEnumSchema(schema.asEnum(), parent);
+			break;
+		case capnp::schema::Node::CONST:
+			output = interpretConstSchema(schema.asConst(), parent);
 			break;
 		
 		default:
@@ -1041,7 +1094,7 @@ kj::StringTree fscpy::typeName(capnp::Type type) {
 // ================== Implementation of fscpy::Loader =====================
 
 bool fscpy::Loader::importNode(uint64_t nodeID, py::module scope) {
-	auto obj = interpretSchema(capnpLoader, nodeID, scope);
+	auto obj = interpretSchema(*this, nodeID, scope);
 	auto schema = capnpLoader.get(nodeID);
 	
 	if(!obj.is_none()) {
@@ -1079,6 +1132,14 @@ void fscpy::Loader::add(capnp::schema::Node::Reader reader) {
 	capnpLoader.loadOnce(reader);
 }
 
+void fscpy::Loader::addSource(capnp::schema::Node::SourceInfo::Reader reader) {
+	KJ_IF_MAYBE(pSrc, sourceInfo.find(reader.getId())) {
+		return;
+	}
+	
+	sourceInfo.insert(reader.getId(), reader);
+}
+
 capnp::Schema fscpy::Loader::import(capnp::Schema input) {
 	KJ_IF_MAYBE(pSchema, imported.find(input)) {
 		return *pSchema;
@@ -1108,9 +1169,26 @@ void fscpy::initLoader(py::module_& m) {
 	
 	loader.attr("defaultScope") = defaultGlobalScope;
 	
-	loader.def("getType", [](uint64_t id) {
-		return globalClasses -> attr("get")(id, py::none());
-	});
+	loader.def(
+		"getType",
+		
+		[](uint64_t id) {
+			return globalClasses -> attr("get")(id, py::none());
+		}
+	);
 	
-	loader.def("parseSchema", &parseSchema, py::arg("rootResources"), py::arg("path"), py::arg("destModule"), py::arg("globalScope") = defaultGlobalScope);
+	globalClasses = kj::heap<py::dict>();
+	
+	loader.attr("roots") = py::dict();
+	loader.def(
+		"parseSchema",
+		
+		[loader](kj::StringPtr path, py::object scope, py::object root) {			
+			parseSchema(root, path, scope, loader.attr("roots"));
+		},
+		
+		py::arg("path"),
+		py::arg("destination"),
+		py::arg("pathRoot") = py::none()
+	);
 }

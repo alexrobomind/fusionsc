@@ -6,26 +6,13 @@
 #include "fscpy.h"
 
 
-namespace fscpy {
-	namespace {
-		WithMessage<fsc::ToroidalGrid::Reader> w7xDefaultGrid() {
-			return noMessage(fsc::devices::w7x::DEFAULT_GRID.get());
-		}
-
-		WithMessage<fsc::CartesianGrid::Reader> w7xDefaultGeometryGrid() {
-			return noMessage(fsc::devices::w7x::DEFAULT_GEO_GRID.get());
-		}
-	}
-	
+namespace fscpy {	
 	void initDevices(py::module_& root) {
 		py::module_ devices = root.def_submodule("devices", "Device-specific native functions");
 		
 		// ================ W7-X ==================
 		
 		py::module_ w7x = devices.def_submodule("w7x", "W7-X specific native functions");
-		
-		w7x.def("defaultGrid", &w7xDefaultGrid);
-		w7x.def("defaultGeometryGrid", &w7xDefaultGeometryGrid);		
 		
 		// The webservice connections use I/O and have to go through the localResources interface.
 		/* w7x.def("webserviceCoilsDB", &fsc::devices::w7x::newCoilsDBFromWebservice);
@@ -51,18 +38,10 @@ namespace fscpy {
 		jtext.def("geometryResolver", &fsc::devices::jtext::newGeometryResolver);
 		jtext.def("fieldResolver", &fsc::devices::jtext::newFieldResolver);
 		jtext.def("exampleGeqdsk", &fsc::devices::jtext::exampleGeqdsk);
-		
-		jtext.def("defaultGrid", []() {
-			return bundleWithMessage(fsc::devices::jtext::defaultGrid(), nullptr);
-		});
-		
-		jtext.def("defaultGeometryGrid", []() {
-			return bundleWithMessage(fsc::devices::jtext::defaultGeometryGrid(), nullptr);
-		});
 	}
 	
 	void loadDeviceSchema(py::module_& m) {
-		py::module_ devices = m.attr("devices");
+		/*py::module_ devices = m.attr("devices");
 		py::module_ w7x = devices.attr("w7x");
 		
 		defaultLoader.addBuiltin<
@@ -74,6 +53,6 @@ namespace fscpy {
 			
 		for(auto node : schemas) {
 			defaultLoader.importNodeIfRoot(node.getId(), w7x);
-		}
+		}*/
 	}
 }

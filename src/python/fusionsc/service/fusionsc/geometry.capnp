@@ -83,6 +83,8 @@ struct CartesianGrid {
 }
 
 struct Angle {
+	# Angle specified in either degrees or radian.
+	
 	union {
 		deg @0 : Float64;
 		rad @1 : Float64;

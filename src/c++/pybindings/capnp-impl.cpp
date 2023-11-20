@@ -842,8 +842,14 @@ DynamicValuePipeline FieldDescriptor::get3(DynamicStructPipeline& reader, py::ob
 	return reader.get(getProto().getName());
 }
 
-kj::String FieldDescriptor::get4(py::none, py::type type) {
-	return kj::str("Field ", getProto().getName(), " of class ", py::cast<kj::StringPtr>(py::str(type)));
+FieldDescriptor& FieldDescriptor::get4(py::none, py::type type) {
+	return *this;
+	
+	/*if(docString != nullptr) {
+		return kj::heapString(docString);
+	}
+	
+	return kj::str("Field ", getProto().getName(), " of class ", py::cast<kj::StringPtr>(py::str(type)));*/
 }
 
 void FieldDescriptor::set(DynamicStructBuilder obj, py::object value) {
@@ -851,6 +857,13 @@ void FieldDescriptor::set(DynamicStructBuilder obj, py::object value) {
 }
 void FieldDescriptor::del(DynamicStructBuilder obj) {
 	obj.wrapped().init(getProto().getName());
+}
+
+py::object FieldDescriptor::doc() {
+	if(docString == nullptr)
+		return py::none();
+	
+	return py::str(docString.cStr());
 }
 
 };

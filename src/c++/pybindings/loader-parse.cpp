@@ -2,6 +2,7 @@
 #include "loader.h"
 
 #include <list>
+#include <string_view>
 
 #include <capnp/schema-parser.h>
 
@@ -67,7 +68,7 @@ struct PyResourceFile : public capnp::SchemaFile {
 	mutable Own<SourceLoader> loader;
 	
 	PyResourceFile(py::object pathRoot, kj::PathPtr pth, py::object pyPath, SourceLoader& loader) :
-		pathRoot(mv(pathRoot))
+		pathRoot(mv(pathRoot)),
 		pth(pth.clone()),
 		pyPath(mv(pyPath)),
 		loader(loader.addRef())
@@ -78,17 +79,20 @@ struct PyResourceFile : public capnp::SchemaFile {
 	}
 	
 	kj::Array<const char> readContent() const override {
-		return py::cast<kj::Array<const byte>>(pyPath.attr("read_bytes")());
+		py::bytes bytes = pyPath.attr("read_bytes")();
+		std::string_view view = bytes;
+		
+		return kj::heapArray<const char>(view.data(), view.size());
 	}
 	
 	Maybe<Own<SchemaFile>> import(kj::StringPtr path) const override {
 		try {
 			// Absolute paths are indicated by using "none" as root
 			if(path.startsWith("/"))
-				return loader -> openFile(py::none(), kj::Path().eval(path));
+				return loader -> openFile(py::none(), kj::Path(nullptr).eval(path));
 			
 			// Parse relative path
-			return loader -> openFile(pathRoot, this -> pth.parse(path));
+			return loader -> openFile(pathRoot, this -> pth.parent().eval(path));
 		} catch(std::exception& e) {
 			py::print("Error occurred opening file", e.what());
 			return nullptr;
@@ -111,7 +115,7 @@ struct PyResourceFile : public capnp::SchemaFile {
 	}
 	
 	size_t hashCode() const override {
-		return pathRoot.ptr() + kj::hashCode(pth);
+		return reinterpret_cast<uintptr_t>(pathRoot.ptr()) + kj::hashCode(pth);
 	}
 	
 	void reportError(SourcePos pos1, SourcePos pos2, kj::StringPtr message) const override {
@@ -120,7 +124,7 @@ struct PyResourceFile : public capnp::SchemaFile {
 };
 
 capnp::ParsedSchema SourceLoader::parseFile(py::object pathRoot, kj::PathPtr path) {
-	KJ_IF_MAYBE(ppFile, openFile(path)) {
+	KJ_IF_MAYBE(ppFile, openFile(pathRoot, path)) {
 		auto result = parser.parseFile(mv(*ppFile));
 		check();
 		return result;
@@ -130,8 +134,7 @@ capnp::ParsedSchema SourceLoader::parseFile(py::object pathRoot, kj::PathPtr pat
 }
 
 Maybe<Own<capnp::SchemaFile>> SourceLoader::openFile(py::object pathRoot, kj::PathPtr path) {
-	auto current = pathRoot;
-	if(current.is_none()) {
+	if(pathRoot.is_none()) {
 		if(path.size() == 0)
 			return nullptr;
 		
@@ -139,10 +142,11 @@ Maybe<Own<capnp::SchemaFile>> SourceLoader::openFile(py::object pathRoot, kj::Pa
 		if(!roots.contains(rootName))
 			return nullptr;
 		
-		current = roots[rootName];
+		pathRoot = roots[rootName];
 		path = path.slice(1, path.size());
 	}
 	
+	auto current = pathRoot;
 	for(kj::StringPtr el : path) {
 		if(!py::bool_(current.attr("is_dir")()))
 			return nullptr;
@@ -153,20 +157,36 @@ Maybe<Own<capnp::SchemaFile>> SourceLoader::openFile(py::object pathRoot, kj::Pa
 	if(!py::bool_(current.attr("is_file")))
 		return nullptr;
 	
-	return kj::heap<PyResourceFile>(path, mv(current), *this);
+	return kj::heap<PyResourceFile>(pathRoot, path, mv(current), *this);
 }
 
 }
 
-void parseSchema(py::object anchor, kj::StringPtr path, py::module target, py::dict roots) {
+void parseSchema(py::object anchor, kj::StringPtr path, py::object target, py::dict roots) {
 	auto loader = kj::refcounted<SourceLoader>(roots);
 	
-	auto parsed = loader -> parseFile(anchor, kj::Path().parse(path));
+	if(!path.startsWith("/")) {
+		KJ_REQUIRE(!anchor.is_none(), "Must specify a path root if using a relative path");
+	} else {
+		anchor = py::none();
+	}
 	
-	auto loaded = loader -> getAllLoaded();
-	defaultLoader.add(parsed.getProto());
+	auto parsed = loader -> parseFile(anchor, kj::Path(nullptr).eval(path));
 	
-	defaultLoader.importNodeIfRoot(parsed, schema.getProto().getId(), target);
+	std::list<capnp::ParsedSchema> allParsed;
+	allParsed.push_back(parsed);
+	for(auto& node : allParsed) {
+		defaultLoader.addSource(node.getSourceInfo());
+		
+		for(auto& nested : node.getAllNested())
+			allParsed.push_back(nested);
+	}
+	
+	for(auto& schema : loader -> getAllLoaded()) {
+		defaultLoader.add(schema.getProto());
+	}
+		
+	defaultLoader.importNodeIfRoot(parsed.getProto().getId(), target);
 }
 
 }

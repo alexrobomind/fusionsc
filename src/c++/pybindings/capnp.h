@@ -47,6 +47,7 @@ struct EnumInterface;
 struct DynamicOrphan;
 
 struct FieldDescriptor;
+struct ConstantValue;
 
 /** 
  * Catch-all converter for various things that look like scalar numbers from the python side.
@@ -646,17 +647,37 @@ struct EnumInterface : public capnp::DynamicEnum {
 
 //! Implements the descriptor protocol for Cap'n'Proto fields
 struct FieldDescriptor : public capnp::StructSchema::Field {
-	using Field::Field;
+	// using Field::Field;
 	
-	inline FieldDescriptor(const Field& field) : Field(field) {}
+	inline FieldDescriptor(const Field& field, kj::String docString) : Field(field), docString(mv(docString)) {}
 	
 	DynamicValueBuilder get1(DynamicStructBuilder&, py::object);
 	DynamicValueReader get2(DynamicStructReader&, py::object);
 	DynamicValuePipeline get3(DynamicStructPipeline&, py::object);
-	kj::String get4(py::none, py::type);
+	FieldDescriptor& get4(py::none, py::type);
 	
 	void set(DynamicStructBuilder obj, py::object value);
 	void del(DynamicStructBuilder obj);
+	
+	py::object doc();
+	
+	kj::String docString;
+};
+
+struct ConstantValue {
+	capnp::ConstSchema schema;
+	
+	inline ConstantValue(capnp::ConstSchema schema) :
+		schema(mv(schema))
+	{}
+	
+	inline DynamicValueReader value() {
+		return DynamicValueReader(noMessage(capnp::DynamicValue::Reader(schema)));
+	}
+	
+	inline capnp::Type type() {
+		return schema.getType();
+	}
 };
 
 }

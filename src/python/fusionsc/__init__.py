@@ -8,11 +8,11 @@ from . import native
 # Add sub-packages from native library
 from .native import kj
 from .native import capnp
-from .native import schema
 from .native import loader
-from .native import service
-
 from .native import efit
+
+# Load service definitions
+from . import service
 
 # Load helpers for pickling
 from . import pickle_support

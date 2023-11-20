@@ -2,10 +2,10 @@
 from ... import service, geometry, magnetics, native
 
 def defaultGrid() -> service.ToroidalGrid.Reader:
-	return native.devices.jtext.defaultGrid()
+	return service.devices.jtext.defaultGrid.value.clone_()
 
 def defaultGeometryGrid() -> service.CartesianGrid.Reader:
-	return native.devices.jtext.defaultGeometryGrid()
+	return service.devices.jtext.defaultGeometryGrid.value.clone_()
 
 def firstWall():
 	result = geometry.Geometry()

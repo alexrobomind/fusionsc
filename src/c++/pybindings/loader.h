@@ -14,6 +14,7 @@ namespace fscpy {
 		bool importNodeIfRoot(uint64_t nodeID, py::module scope);
 		
 		void add(capnp::schema::Node::Reader reader);
+		void addSource(capnp::schema::Node::SourceInfo::Reader reader);
 		
 		template<typename... T>
 		void addBuiltin();
@@ -26,6 +27,7 @@ namespace fscpy {
 		capnp::SchemaLoader capnpLoader;
 		
 		kj::HashMap<capnp::Schema, capnp::Schema> imported;
+		kj::HashMap<uint64_t, fsc::Temporary<capnp::schema::Node::SourceInfo>> sourceInfo;
 	};
 	
 	extern Loader defaultLoader;
@@ -59,5 +61,5 @@ namespace fscpy {
 		return import(capnp::Schema::from<T>());
 	}
 	
-	void parseSchema(py::object anchor, kj::StringPtr path, py::module target, py::dict roots);
+	void parseSchema(py::object anchor, kj::StringPtr path, py::object target, py::dict roots);
 }

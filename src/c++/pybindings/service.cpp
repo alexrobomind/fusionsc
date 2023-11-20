@@ -74,6 +74,7 @@ namespace fscpy {
 	}
 
 	void loadDefaultSchema(py::module_& m) {
+		/*
 		// Here we need to specify datatypes that need to be loaded because they are passed to the python interface
 		
 		#define FSC_BUILTIN_SCHEMAS FieldResolver, GeometryResolver, NetworkInterface, LocalResources, OfflineData, \
@@ -86,14 +87,14 @@ namespace fscpy {
 		>();
 		
 		// Schema submodule
-		/*{
+		{
 			auto schemas = getBuiltinSchemas<capnp::schema::Node>();
 			py::module_ subM = m.def_submodule("schema", "Cap'n'proto structs describing Cap'n'proto types and schemas");
 			
 			for(auto node : schemas) {
 				defaultLoader.importNodeIfRoot(node.getId(), subM);
 			}
-		}*/
+		}
 	
 		py::dict defaultGlobalScope;
 		
@@ -114,6 +115,6 @@ namespace fscpy {
 		filesDir = fscRoot.attr("joinpath")("service/fusionsc");
 		for(py::object name : filesDir.attr("iterdir")()) {
 			parseSchema(filesDir, name, serviceMod, defaultGlobalScope);
-		}
+		}*/
 	}
 }

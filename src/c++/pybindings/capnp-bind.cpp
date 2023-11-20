@@ -241,9 +241,19 @@ void bindFieldDescriptors() {
 		
 		.def("__set__", &FD::set)
 		.def("__del__", &FD::del)
+		
+		.def_property_readonly("__doc__", &FD::doc)
 	;
 }
 
+void bindConstants() {
+	using C = ConstantValue;
+	
+	ClassBinding<C>("Constant")
+		.def_property_readonly("value", &C::value)
+		.def_property_readonly("type", &C::type)
+	;
+}
 
 void bindEnumClasses() {
 	using EI = EnumInterface;
@@ -325,6 +335,7 @@ void initCapnp(py::module_& m) {
 	bindEnumClasses();
 	bindAnyClasses();
 	bindType();
+	bindConstants();
 	bindUnpicklers();
 	
 	capnpModule = py::module();

@@ -168,6 +168,27 @@ capnp::DynamicCapability::Client openArchive(kj::StringPtr path, LocalResources:
 	return asAny.castAs<capnp::DynamicCapability>(dataRefSchema);
 }
 
+capnp::DynamicCapability::Client openMemArchive(DataReader storage) {
+	using capnp::AnyPointer;
+	using capnp::DynamicCapability;
+	
+	// Attaching self to the ArrayPtr interpretation creates kj::Array
+	kj::Array<const kj::byte> asArray = storage.attach(storage);
+	
+	LocalDataRef<AnyPointer> root = getActiveThread().dataService().publishArchive<AnyPointer>(mv(asArray));
+	
+	capnp::Type type = capnp::Type(capnp::schema::Type::DATA);
+	auto format = root.getFormat();
+	if(format.isSchema()) {
+		type = defaultLoader.capnpLoader.getType(format.getSchema().getAs<capnp::schema::Type>());
+	} else if(format.isUnknown()) {
+		KJ_FAIL_REQUIRE("Internal error: The root of the archive file has no format specified. This should not be the case");
+	}
+	
+	auto dataRefSchema = createRefSchema(type);
+	return capnp::Capability::Client(root).castAs<capnp::DynamicCapability>(dataRefSchema);
+}
+
 Promise<void> writeArchive1(capnp::DynamicCapability::Client ref, kj::StringPtr path) {
 	constexpr uint64_t DR_ID = capnp::typeId<DataRef<capnp::AnyPointer>>();
 	KJ_REQUIRE(ref.getSchema().getProto().getId() == DR_ID, "Can only publish capabilities of type DataRef");
@@ -202,6 +223,7 @@ void initData(py::module_& m) {
 	dataModule.def("publish", &publishReader, "Creates a DataRef containing the given data");
 	
 	dataModule.def("openArchive", &openArchive, "Opens an archive file and returns a DataRef to its root");
+	dataModule.def("openMemoryArchive", &openMemArchive, "Interprets a data reader as an archive file, opens it, and returns a pointer to its root");
 	
 	dataModule.def("writeArchiveAsync", &writeArchive1, "Downloads (recursively) the given DataRef and asynchronously waits an Archive containing its contents. Must wait on the returned promise.");
 	dataModule.def("writeArchiveAsync", &writeArchive2);
