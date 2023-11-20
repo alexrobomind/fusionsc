@@ -14,10 +14,6 @@ namespace fscpy {
 		
 		py::module_ w7x = devices.def_submodule("w7x", "W7-X specific native functions");
 		
-		// The webservice connections use I/O and have to go through the localResources interface.
-		/* w7x.def("webserviceCoilsDB", &fsc::devices::w7x::newCoilsDBFromWebservice);
-		w7x.def("webserviceComponentsDB", &fsc::devices::w7x::newComponentsDBFromWebservice); */
-		
 		w7x.def("componentsDBResolver", &fsc::devices::w7x::newComponentsDBResolver);
 		w7x.def("coilsDBResolver", &fsc::devices::w7x::newCoilsDBResolver);
 		w7x.def("configDBResolver", &fsc::devices::w7x::newConfigDBResolver);
@@ -38,21 +34,5 @@ namespace fscpy {
 		jtext.def("geometryResolver", &fsc::devices::jtext::newGeometryResolver);
 		jtext.def("fieldResolver", &fsc::devices::jtext::newFieldResolver);
 		jtext.def("exampleGeqdsk", &fsc::devices::jtext::exampleGeqdsk);
-	}
-	
-	void loadDeviceSchema(py::module_& m) {
-		/*py::module_ devices = m.attr("devices");
-		py::module_ w7x = devices.attr("w7x");
-		
-		defaultLoader.addBuiltin<
-			devices::w7x::CoilsDB,
-			devices::w7x::ComponentsDB
-		>();
-		
-		auto schemas = getBuiltinSchemas<devices::w7x::CoilsDB, devices::w7x::ComponentsDB>();
-			
-		for(auto node : schemas) {
-			defaultLoader.importNodeIfRoot(node.getId(), w7x);
-		}*/
 	}
 }

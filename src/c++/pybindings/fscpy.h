@@ -54,12 +54,6 @@ namespace fscpy {
 	void initService(py::module_& m);
 	void initHelpers(py::module_& m);
 	
-	// Defined in service.cpp
-	void loadDefaultSchema(py::module_& m);
-	
-	// Defined in devices.cpp
-	void loadDeviceSchema(py::module_& m);
-	
 	// constexpr inline kj::StringPtr INTERNAL_ACCESS_KEY = "9821736419873251235"_kj;
 	
 	py::object methodDescriptor(py::object method);

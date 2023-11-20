@@ -160,10 +160,6 @@ PYBIND11_MODULE(native, m) {
 	initService(m);
 	initHelpers(m);
 	
-	// Load built-in schema
-	loadDefaultSchema(m);
-	loadDeviceSchema(m);
-	
 	auto atexitModule = py::module_::import("atexit");
 	atexitModule.attr("register")(py::cpp_function(&atExitFunction));
 }

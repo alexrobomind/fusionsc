@@ -72,49 +72,4 @@ namespace fscpy {
 			.def("connect", &LocalRootServer::connect)
 		;
 	}
-
-	void loadDefaultSchema(py::module_& m) {
-		/*
-		// Here we need to specify datatypes that need to be loaded because they are passed to the python interface
-		
-		#define FSC_BUILTIN_SCHEMAS FieldResolver, GeometryResolver, NetworkInterface, LocalResources, OfflineData, \
-			MergedGeometry, FLTStopReason, HintEquilibrium, ReversibleFieldlineMapping, \
-			SimpleHttpServer, Warehouse, Warehouse::Folder, DynamicObject
-		
-		defaultLoader.addBuiltin<
-			capnp::schema::Node,
-			FSC_BUILTIN_SCHEMAS
-		>();
-		
-		// Schema submodule
-		{
-			auto schemas = getBuiltinSchemas<capnp::schema::Node>();
-			py::module_ subM = m.def_submodule("schema", "Cap'n'proto structs describing Cap'n'proto types and schemas");
-			
-			for(auto node : schemas) {
-				defaultLoader.importNodeIfRoot(node.getId(), subM);
-			}
-		}
-	
-		py::dict defaultGlobalScope;
-		
-		auto ires = py::module::import("importlib_resources");
-		auto fscRoot = ires.attr("files")("fusionsc").attr("joinpath")("service");
-		
-		defaultGlobalScope["fusionsc"] = fscRoot.attr("joinpath")("fusionsc");
-		defaultGlobalScope["capnp"] = fscRoot.attr("joinpath")("capnp");
-		
-		py::module_ schemaMod = m.def_submodule("schema", "Cap'n'proto structs describing Cap'n'proto types and schemas");
-		py::module_ serviceMod = m.def_submodule("service", "Cap'n'proto service interface for fusionsc library");
-		
-		auto filesDir = fscRoot.attr("joinpath")("service/capnp");
-		for(py::object name : filesDir.attr("iterdir")()) {
-			parseSchema(filesDir, name, schemaMod, defaultGlobalScope);
-		}
-		
-		filesDir = fscRoot.attr("joinpath")("service/fusionsc");
-		for(py::object name : filesDir.attr("iterdir")()) {
-			parseSchema(filesDir, name, serviceMod, defaultGlobalScope);
-		}*/
-	}
 }
