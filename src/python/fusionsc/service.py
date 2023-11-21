@@ -33,6 +33,6 @@ for _file in _fscFiles.iterdir():
 # Populate device submodules
 devices = _createModule("devices")
 for _device in ["w7x", "jtext"]:
-	_submodule = _createModule("devices.{_device}")
+	_submodule = _createModule(f"devices.{_device}")
 	setattr(devices, _device, _submodule)
 	loader.parseSchema(f"/fusionsc/devices/{_device}.capnp", _submodule)

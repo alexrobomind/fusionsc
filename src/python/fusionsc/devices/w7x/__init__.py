@@ -269,7 +269,7 @@ def defaultGrid():
 	return service.devices.w7x.defaultGrid.value.clone_()
 
 def defaultGeometryGrid():
-	return service.devices.w7x.defaultGeometryGrid.value.clone_()
+	return service.devices.w7x.defaultGeoGrid.value.clone_()
 
 @asyncFunction
 def axisCurrent(field, current, grid = None, startPoint = [6.0, 0, 0], stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = "cw", mapping = None):
