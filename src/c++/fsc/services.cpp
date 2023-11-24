@@ -273,7 +273,7 @@ struct LocalResourcesImpl : public LocalResources::Server, public LocalNetworkIn
 	Promise<void> openArchive(OpenArchiveContext ctx) override {
 		auto fs = kj::newDiskFilesystem();
 		auto currentPath = fs -> getCurrentPath();
-		auto realPath = currentPath.eval(ctx.getParams().getFilename());
+		auto realPath = currentPath.evalNative(ctx.getParams().getFilename());
 		
 		Own<const kj::ReadableFile> file = fs -> getRoot().openFile(realPath);
 		auto result = getActiveThread().dataService().publishArchive<capnp::AnyPointer>(*file);
@@ -285,7 +285,7 @@ struct LocalResourcesImpl : public LocalResources::Server, public LocalNetworkIn
 	Promise<void> writeArchive(WriteArchiveContext ctx) override {
 		auto fs = kj::newDiskFilesystem();
 		auto currentPath = fs -> getCurrentPath();
-		auto realPath = currentPath.eval(ctx.getParams().getFilename());
+		auto realPath = currentPath.evalNative(ctx.getParams().getFilename());
 		
 		Own<const kj::File> file = fs -> getRoot().openFile(realPath, kj::WriteMode::CREATE | kj::WriteMode::MODIFY | kj::WriteMode::CREATE_PARENT);
 		Promise<void> result = getActiveThread().dataService().writeArchive(ctx.getParams().getRef(), *file);

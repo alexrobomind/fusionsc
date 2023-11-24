@@ -322,6 +322,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		}
 		
 		// KJ_DBG(displacementStep);
+		double stepSize = request.getStepSize();
 		
 		if(displacementStep) {
 			double prevFreePath = parModel.getMeanFreePath() + displacementCount * parModel.getMeanFreePathGrowth();
@@ -385,7 +386,6 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 				flm.map(x2, tracingDirection * forwardDirection > 0);
 			}				
 		} else {
-			double stepSize = request.getStepSize();
 			if(processDisplacements) {
 				stepSize = std::min(stepSize, nextDisplacementStep - distance + 0.001);
 			}
@@ -592,7 +592,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			if(useFLM) {
 				distance += fabs(flm.getFieldlinePosition(flm.phi));
 			} else {
-				distance += std::abs(request.getStepSize());
+				distance += stepSize;
 			}
 		} else {
 			distance += (x2 - x).norm();
