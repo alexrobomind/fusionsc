@@ -173,6 +173,9 @@ DynamicValueReader::DynamicValueReader(DynamicValueBuilder& other) :
 		case DV::ANY_POINTER:
 			*this = AnyReader(other.asAny());
 			return;
+		case DV::UNKNOWN:
+			*this = DynamicValueReader(noMessage(nullptr));
+			return;
 	}
 	
 	KJ_UNREACHABLE;
@@ -264,6 +267,8 @@ DynamicValueBuilder DynamicValueBuilder::cloneFrom(capnp::DynamicValue::Reader r
 			return DynamicStructBuilder::cloneFrom(reader.as<capnp::DynamicStruct>());
 		case DV::ANY_POINTER:
 			return AnyBuilder::cloneFrom(reader.as<capnp::AnyPointer>());
+		case DV::UNKNOWN:
+			return DynamicValueBuilder(noMessage(nullptr));
 	}
 	
 	KJ_UNREACHABLE;

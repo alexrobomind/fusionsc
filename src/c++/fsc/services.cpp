@@ -123,7 +123,7 @@ struct RootServer : public RootService::Server {
 			getReq.setPath(entry.getPath());
 			
 			Warehouse::Folder::Client actualRoot = getReq.sendForPipeline().getAsGeneric();
-			warehouses.insert(std::make_pair(kj::heapString(entry.getName()), mv(actualRoot)));
+			warehouses.insert(kj::heapString(entry.getName()), mv(actualRoot));
 		}
 	}
 	
@@ -132,7 +132,7 @@ struct RootServer : public RootService::Server {
 	
 	Matcher::Client myMatcher = newMatcher();
 	
-	std::map<kj::String, Warehouse::Folder::Client> warehouses;
+	kj::TreeMap<kj::String, Warehouse::Folder::Client> warehouses;
 	
 	Own<JobLauncher> selectScheduler() {
 		// Select correct scheduler
@@ -228,18 +228,19 @@ struct RootServer : public RootService::Server {
 		
 		size_t i = 0;
 		for(auto& e : warehouses) {
-			out.set(i++, e.first);
+			out.set(i++, e.key);
 		}
 		return READY_NOW;
 	}
 	
 	Promise<void> getWarehouse(GetWarehouseContext ctx) override {
 		auto name = kj::heapString(ctx.getParams().getName());
-		auto it = warehouses.find(name);
 		
-		KJ_REQUIRE(it != warehouses.end(), "Warehouse not found", name);
-		
-		ctx.getResults().setWarehouse(it -> second);
+		KJ_IF_MAYBE(pWh, warehouses.find(name)) {
+			ctx.getResults().setWarehouse(*pWh);
+		} else {
+			KJ_FAIL_REQUIRE("Warehouse not found", name);
+		}
 		
 		return READY_NOW;
 	}
