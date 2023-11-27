@@ -763,11 +763,12 @@ void initAsync(py::module_& m) {
 	// Allows expressions like "Future[T]"
 	futureCls
 		.def_static("__class_getitem__", [pyGeneric](py::object key) {
-			return pyGeneric.attr("__dict__")["__class_getitem__"].attr("__get__")(py::none(), py::type::of<AsyncioFutureLike>())(key);
+			return py::type::of<AsyncioFutureLike>();
+			//return pyGeneric.attr("__dict__")["__class_getitem__"].attr("__get__")(py::none(), py::type::of<AsyncioFutureLike>())(key);
 		})
-		.def_property_readonly_static("__parameters__", [promiseParam](py::object cls) {
+		/*.def_property_readonly_static("__parameters__", [promiseParam](py::object cls) {
 			return py::make_tuple(promiseParam);
-		})
+		})*/
 	;
 	
 	futureCls
