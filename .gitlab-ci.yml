@@ -130,7 +130,7 @@ pybuild:pybuild-manylinux:
   image: quay.io/pypa/manylinux2014_x86_64
   parallel:
     matrix:
-      - PYTHON: [cp38-cp38, cp39-cp39, cp310-cp310, cp311-cp311, cp312-312]
+      - PYTHON: [cp38-cp38, cp39-cp39, cp310-cp310, cp311-cp311, cp312-cp312]
   
   rules:
     - when: manual
