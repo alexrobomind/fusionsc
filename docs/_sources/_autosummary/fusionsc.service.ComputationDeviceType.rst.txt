@@ -1,0 +1,39 @@
+fusionsc.service.ComputationDeviceType
+======================================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: ComputationDeviceType
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~ComputationDeviceType.__init__
+  ~ComputationDeviceType.get
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: ComputationDeviceType.__init__
+.. automethod:: ComputationDeviceType.get
+
+
+
+
+

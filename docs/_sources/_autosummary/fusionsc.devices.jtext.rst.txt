@@ -1,0 +1,57 @@
+fusionsc.devices.jtext
+======================
+
+.. automodule:: fusionsc.devices.jtext
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autosummary::
+
+	bottomLimiter
+	defaultGeometryGrid
+	defaultGrid
+	exampleGeqdsk
+	firstWall
+	hfsLimiter
+	islandCoils
+	lfsLimiter
+	pfcs
+	singleIslandCoil
+	target
+	topLimiter
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autofunction:: bottomLimiter
+.. autofunction:: defaultGeometryGrid
+.. autofunction:: defaultGrid
+.. autofunction:: exampleGeqdsk
+.. autofunction:: firstWall
+.. autofunction:: hfsLimiter
+.. autofunction:: islandCoils
+.. autofunction:: lfsLimiter
+.. autofunction:: pfcs
+.. autofunction:: singleIslandCoil
+.. autofunction:: target
+.. autofunction:: topLimiter
+
+
+
+

@@ -1,0 +1,55 @@
+fusionsc.service.Warehouse
+==========================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: Warehouse
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~Warehouse.__init__
+  ~Warehouse.castAs
+  ~Warehouse.newDeferred
+  ~Warehouse.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type Warehouse.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~Warehouse.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: Warehouse.__init__
+.. automethod:: Warehouse.castAs
+.. automethod:: Warehouse.newDeferred
+.. automethod:: Warehouse.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::Warehouse.Client
+	:members:
+
+

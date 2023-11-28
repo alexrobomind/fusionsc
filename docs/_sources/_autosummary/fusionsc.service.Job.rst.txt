@@ -1,0 +1,55 @@
+fusionsc.service.Job
+====================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: Job
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~Job.__init__
+  ~Job.castAs
+  ~Job.newDeferred
+  ~Job.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type Job.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~Job.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: Job.__init__
+.. automethod:: Job.castAs
+.. automethod:: Job.newDeferred
+.. automethod:: Job.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::Job.Client
+	:members:
+
+

@@ -1,0 +1,55 @@
+fusionsc.service.SSHConnection
+==============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: SSHConnection
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~SSHConnection.__init__
+  ~SSHConnection.castAs
+  ~SSHConnection.newDeferred
+  ~SSHConnection.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type SSHConnection.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~SSHConnection.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: SSHConnection.__init__
+.. automethod:: SSHConnection.castAs
+.. automethod:: SSHConnection.newDeferred
+.. automethod:: SSHConnection.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::SSHConnection.Client
+	:members:
+
+

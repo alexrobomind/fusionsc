@@ -1,0 +1,39 @@
+fusionsc.service.FLTStopReason
+==============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: FLTStopReason
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~FLTStopReason.__init__
+  ~FLTStopReason.get
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: FLTStopReason.__init__
+.. automethod:: FLTStopReason.get
+
+
+
+
+

@@ -1,0 +1,55 @@
+fusionsc.service.GeometryResolver
+=================================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: GeometryResolver
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~GeometryResolver.__init__
+  ~GeometryResolver.castAs
+  ~GeometryResolver.newDeferred
+  ~GeometryResolver.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type GeometryResolver.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~GeometryResolver.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: GeometryResolver.__init__
+.. automethod:: GeometryResolver.castAs
+.. automethod:: GeometryResolver.newDeferred
+.. automethod:: GeometryResolver.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::GeometryResolver.Client
+	:members:
+
+

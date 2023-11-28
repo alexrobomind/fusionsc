@@ -1,0 +1,53 @@
+fusionsc.service.FLTKernelEvent
+===============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: FLTKernelEvent
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~FLTKernelEvent.__init__
+  ~FLTKernelEvent.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: FLTKernelEvent.__init__
+.. automethod:: FLTKernelEvent.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::FLTKernelEvent.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::FLTKernelEvent.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::FLTKernelEvent.Pipeline
+	:members:

@@ -1,0 +1,46 @@
+fusionsc.capnp.Enum
+===================
+
+.. currentmodule:: fusionsc
+
+.. autoclass:: capnp.Enum
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~capnp.Enum.__init__
+  ~capnp.Enum.fromRaw
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~capnp.Enum.raw
+	~capnp.Enum.type
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: capnp.Enum.__init__
+.. automethod:: capnp.Enum.fromRaw
+
+
+
+
+

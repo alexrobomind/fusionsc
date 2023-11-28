@@ -1,0 +1,55 @@
+fusionsc.service.LocalResources
+===============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: LocalResources
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~LocalResources.__init__
+  ~LocalResources.castAs
+  ~LocalResources.newDeferred
+  ~LocalResources.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type LocalResources.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~LocalResources.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: LocalResources.__init__
+.. automethod:: LocalResources.castAs
+.. automethod:: LocalResources.newDeferred
+.. automethod:: LocalResources.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::LocalResources.Client
+	:members:
+
+

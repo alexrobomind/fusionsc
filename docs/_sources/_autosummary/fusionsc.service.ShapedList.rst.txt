@@ -1,0 +1,53 @@
+fusionsc.service.ShapedList
+===========================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: ShapedList
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~ShapedList.__init__
+  ~ShapedList.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: ShapedList.__init__
+.. automethod:: ShapedList.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::ShapedList.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::ShapedList.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::ShapedList.Pipeline
+	:members:

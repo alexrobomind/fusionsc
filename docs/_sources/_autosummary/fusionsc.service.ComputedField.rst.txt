@@ -1,0 +1,53 @@
+fusionsc.service.ComputedField
+==============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: ComputedField
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~ComputedField.__init__
+  ~ComputedField.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: ComputedField.__init__
+.. automethod:: ComputedField.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::ComputedField.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::ComputedField.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::ComputedField.Pipeline
+	:members:

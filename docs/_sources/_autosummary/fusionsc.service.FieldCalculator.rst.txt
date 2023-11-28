@@ -1,0 +1,55 @@
+fusionsc.service.FieldCalculator
+================================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: FieldCalculator
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~FieldCalculator.__init__
+  ~FieldCalculator.castAs
+  ~FieldCalculator.newDeferred
+  ~FieldCalculator.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type FieldCalculator.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~FieldCalculator.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: FieldCalculator.__init__
+.. automethod:: FieldCalculator.castAs
+.. automethod:: FieldCalculator.newDeferred
+.. automethod:: FieldCalculator.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::FieldCalculator.Client
+	:members:
+
+

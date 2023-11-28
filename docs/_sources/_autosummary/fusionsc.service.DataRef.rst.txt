@@ -1,0 +1,55 @@
+fusionsc.service.DataRef
+========================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: DataRef
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~DataRef.__init__
+  ~DataRef.castAs
+  ~DataRef.newDeferred
+  ~DataRef.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type DataRef.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~DataRef.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: DataRef.__init__
+.. automethod:: DataRef.castAs
+.. automethod:: DataRef.newDeferred
+.. automethod:: DataRef.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::DataRef.Client
+	:members:
+
+

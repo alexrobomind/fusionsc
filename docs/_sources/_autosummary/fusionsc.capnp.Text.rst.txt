@@ -1,0 +1,43 @@
+fusionsc.capnp.Text
+===================
+
+.. currentmodule:: fusionsc
+
+.. autoclass:: capnp.Text
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~capnp.Text.__init__
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~capnp.Text.type_
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: capnp.Text.__init__
+
+
+
+
+

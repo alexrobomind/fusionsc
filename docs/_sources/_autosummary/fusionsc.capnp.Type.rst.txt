@@ -1,0 +1,43 @@
+fusionsc.capnp.Type
+===================
+
+.. currentmodule:: fusionsc
+
+.. autoclass:: capnp.Type
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~capnp.Type.__init__
+  ~capnp.Type.fromProto
+  ~capnp.Type.listOf
+  ~capnp.Type.toProto
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: capnp.Type.__init__
+.. automethod:: capnp.Type.fromProto
+.. automethod:: capnp.Type.listOf
+.. automethod:: capnp.Type.toProto
+
+
+
+
+

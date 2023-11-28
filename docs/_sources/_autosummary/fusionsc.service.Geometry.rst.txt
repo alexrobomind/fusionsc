@@ -1,0 +1,53 @@
+fusionsc.service.Geometry
+=========================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: Geometry
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~Geometry.__init__
+  ~Geometry.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: Geometry.__init__
+.. automethod:: Geometry.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::Geometry.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::Geometry.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::Geometry.Pipeline
+	:members:

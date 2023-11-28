@@ -1,0 +1,55 @@
+fusionsc.service.RemoteIoStream
+===============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: RemoteIoStream
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~RemoteIoStream.__init__
+  ~RemoteIoStream.castAs
+  ~RemoteIoStream.newDeferred
+  ~RemoteIoStream.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type RemoteIoStream.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~RemoteIoStream.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: RemoteIoStream.__init__
+.. automethod:: RemoteIoStream.castAs
+.. automethod:: RemoteIoStream.newDeferred
+.. automethod:: RemoteIoStream.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::RemoteIoStream.Client
+	:members:
+
+

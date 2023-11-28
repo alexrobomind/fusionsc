@@ -1,0 +1,53 @@
+fusionsc.service.VmecKernelComm
+===============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: VmecKernelComm
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~VmecKernelComm.__init__
+  ~VmecKernelComm.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: VmecKernelComm.__init__
+.. automethod:: VmecKernelComm.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::VmecKernelComm.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::VmecKernelComm.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::VmecKernelComm.Pipeline
+	:members:

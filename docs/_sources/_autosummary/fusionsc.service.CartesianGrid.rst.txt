@@ -1,0 +1,53 @@
+fusionsc.service.CartesianGrid
+==============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: CartesianGrid
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~CartesianGrid.__init__
+  ~CartesianGrid.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: CartesianGrid.__init__
+.. automethod:: CartesianGrid.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::CartesianGrid.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::CartesianGrid.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::CartesianGrid.Pipeline
+	:members:

@@ -1,0 +1,57 @@
+fusionsc.capnp
+==============
+
+.. automodule:: fusionsc.capnp
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Classes
+
+.. autosummary::
+  :toctree:
+  :template: summary-class.rst
+
+	AnyBuilder
+	AnyPointer
+	AnyReader
+	Builder
+	CapabilityClient
+	CapabilityServer
+	Constant
+	Data
+	DataBuilder
+	DataReader
+	Enum
+	FieldDescriptor
+	List
+	ListBuilder
+	ListReader
+	Object
+	Reader
+	Struct
+	StructBuilder
+	StructPipeline
+	StructReader
+	Text
+	TextBuilder
+	TextReader
+	Type
+
+
+
+
+
+
+
+
+
+
+

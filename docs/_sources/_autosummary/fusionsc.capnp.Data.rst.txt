@@ -1,0 +1,43 @@
+fusionsc.capnp.Data
+===================
+
+.. currentmodule:: fusionsc
+
+.. autoclass:: capnp.Data
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~capnp.Data.__init__
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~capnp.Data.type_
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: capnp.Data.__init__
+
+
+
+
+

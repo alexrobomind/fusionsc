@@ -1,0 +1,53 @@
+fusionsc.service.VmecResponse
+=============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: VmecResponse
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~VmecResponse.__init__
+  ~VmecResponse.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: VmecResponse.__init__
+.. automethod:: VmecResponse.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::VmecResponse.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::VmecResponse.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::VmecResponse.Pipeline
+	:members:

@@ -1,0 +1,53 @@
+fusionsc.service.ThirdPartyCapId
+================================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: ThirdPartyCapId
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~ThirdPartyCapId.__init__
+  ~ThirdPartyCapId.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: ThirdPartyCapId.__init__
+.. automethod:: ThirdPartyCapId.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::ThirdPartyCapId.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::ThirdPartyCapId.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::ThirdPartyCapId.Pipeline
+	:members:

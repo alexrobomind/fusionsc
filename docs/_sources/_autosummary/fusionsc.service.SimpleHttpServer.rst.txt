@@ -1,0 +1,55 @@
+fusionsc.service.SimpleHttpServer
+=================================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: SimpleHttpServer
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~SimpleHttpServer.__init__
+  ~SimpleHttpServer.castAs
+  ~SimpleHttpServer.newDeferred
+  ~SimpleHttpServer.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type SimpleHttpServer.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~SimpleHttpServer.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: SimpleHttpServer.__init__
+.. automethod:: SimpleHttpServer.castAs
+.. automethod:: SimpleHttpServer.newDeferred
+.. automethod:: SimpleHttpServer.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::SimpleHttpServer.Client
+	:members:
+
+

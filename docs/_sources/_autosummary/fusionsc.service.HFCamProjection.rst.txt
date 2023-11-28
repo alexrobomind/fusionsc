@@ -1,0 +1,53 @@
+fusionsc.service.HFCamProjection
+================================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: HFCamProjection
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~HFCamProjection.__init__
+  ~HFCamProjection.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: HFCamProjection.__init__
+.. automethod:: HFCamProjection.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::HFCamProjection.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::HFCamProjection.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::HFCamProjection.Pipeline
+	:members:

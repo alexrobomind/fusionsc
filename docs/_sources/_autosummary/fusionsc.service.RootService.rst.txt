@@ -1,0 +1,55 @@
+fusionsc.service.RootService
+============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: RootService
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~RootService.__init__
+  ~RootService.castAs
+  ~RootService.newDeferred
+  ~RootService.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type RootService.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~RootService.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: RootService.__init__
+.. automethod:: RootService.castAs
+.. automethod:: RootService.newDeferred
+.. automethod:: RootService.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::RootService.Client
+	:members:
+
+

@@ -1,0 +1,53 @@
+fusionsc.service.TagValue
+=========================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: TagValue
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~TagValue.__init__
+  ~TagValue.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: TagValue.__init__
+.. automethod:: TagValue.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::TagValue.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::TagValue.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::TagValue.Pipeline
+	:members:

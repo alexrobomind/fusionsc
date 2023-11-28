@@ -1,0 +1,53 @@
+fusionsc.service.MagneticField
+==============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: MagneticField
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~MagneticField.__init__
+  ~MagneticField.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: MagneticField.__init__
+.. automethod:: MagneticField.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::MagneticField.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::MagneticField.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::MagneticField.Pipeline
+	:members:

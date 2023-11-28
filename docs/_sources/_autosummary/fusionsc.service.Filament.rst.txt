@@ -1,0 +1,53 @@
+fusionsc.service.Filament
+=========================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: Filament
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~Filament.__init__
+  ~Filament.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: Filament.__init__
+.. automethod:: Filament.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::Filament.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::Filament.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::Filament.Pipeline
+	:members:

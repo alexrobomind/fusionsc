@@ -1,0 +1,55 @@
+fusionsc.service.HFCam
+======================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: HFCam
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~HFCam.__init__
+  ~HFCam.castAs
+  ~HFCam.newDeferred
+  ~HFCam.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type HFCam.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~HFCam.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: HFCam.__init__
+.. automethod:: HFCam.castAs
+.. automethod:: HFCam.newDeferred
+.. automethod:: HFCam.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::HFCam.Client
+	:members:
+
+

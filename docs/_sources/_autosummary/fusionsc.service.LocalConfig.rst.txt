@@ -1,0 +1,53 @@
+fusionsc.service.LocalConfig
+============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: LocalConfig
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~LocalConfig.__init__
+  ~LocalConfig.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: LocalConfig.__init__
+.. automethod:: LocalConfig.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::LocalConfig.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::LocalConfig.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::LocalConfig.Pipeline
+	:members:

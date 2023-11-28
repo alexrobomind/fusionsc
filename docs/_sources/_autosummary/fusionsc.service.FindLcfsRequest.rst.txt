@@ -1,0 +1,53 @@
+fusionsc.service.FindLcfsRequest
+================================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: FindLcfsRequest
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~FindLcfsRequest.__init__
+  ~FindLcfsRequest.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: FindLcfsRequest.__init__
+.. automethod:: FindLcfsRequest.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::FindLcfsRequest.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::FindLcfsRequest.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::FindLcfsRequest.Pipeline
+	:members:

@@ -1,0 +1,53 @@
+fusionsc.service.ToroidalGrid
+=============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: ToroidalGrid
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~ToroidalGrid.__init__
+  ~ToroidalGrid.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: ToroidalGrid.__init__
+.. automethod:: ToroidalGrid.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::ToroidalGrid.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::ToroidalGrid.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::ToroidalGrid.Pipeline
+	:members:

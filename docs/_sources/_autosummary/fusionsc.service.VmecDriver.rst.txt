@@ -1,0 +1,55 @@
+fusionsc.service.VmecDriver
+===========================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: VmecDriver
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~VmecDriver.__init__
+  ~VmecDriver.castAs
+  ~VmecDriver.newDeferred
+  ~VmecDriver.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type VmecDriver.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~VmecDriver.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: VmecDriver.__init__
+.. automethod:: VmecDriver.castAs
+.. automethod:: VmecDriver.newDeferred
+.. automethod:: VmecDriver.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::VmecDriver.Client
+	:members:
+
+

@@ -1,0 +1,53 @@
+fusionsc.service.MergedGeometry
+===============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: MergedGeometry
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~MergedGeometry.__init__
+  ~MergedGeometry.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: MergedGeometry.__init__
+.. automethod:: MergedGeometry.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::MergedGeometry.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::MergedGeometry.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::MergedGeometry.Pipeline
+	:members:

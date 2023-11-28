@@ -1,0 +1,53 @@
+fusionsc.service.HttpRoot
+=========================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: HttpRoot
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~HttpRoot.__init__
+  ~HttpRoot.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: HttpRoot.__init__
+.. automethod:: HttpRoot.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::HttpRoot.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::HttpRoot.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::HttpRoot.Pipeline
+	:members:

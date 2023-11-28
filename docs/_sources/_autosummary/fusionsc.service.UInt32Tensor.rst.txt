@@ -1,0 +1,53 @@
+fusionsc.service.UInt32Tensor
+=============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: UInt32Tensor
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~UInt32Tensor.__init__
+  ~UInt32Tensor.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: UInt32Tensor.__init__
+.. automethod:: UInt32Tensor.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::UInt32Tensor.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::UInt32Tensor.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::UInt32Tensor.Pipeline
+	:members:

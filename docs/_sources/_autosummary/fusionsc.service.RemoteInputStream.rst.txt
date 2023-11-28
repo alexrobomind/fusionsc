@@ -1,0 +1,55 @@
+fusionsc.service.RemoteInputStream
+==================================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: RemoteInputStream
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~RemoteInputStream.__init__
+  ~RemoteInputStream.castAs
+  ~RemoteInputStream.newDeferred
+  ~RemoteInputStream.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type RemoteInputStream.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~RemoteInputStream.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: RemoteInputStream.__init__
+.. automethod:: RemoteInputStream.castAs
+.. automethod:: RemoteInputStream.newDeferred
+.. automethod:: RemoteInputStream.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::RemoteInputStream.Client
+	:members:
+
+

@@ -1,0 +1,53 @@
+fusionsc.service.Float32Tensor
+==============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: Float32Tensor
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~Float32Tensor.__init__
+  ~Float32Tensor.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: Float32Tensor.__init__
+.. automethod:: Float32Tensor.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::Float32Tensor.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::Float32Tensor.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::Float32Tensor.Pipeline
+	:members:

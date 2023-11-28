@@ -1,0 +1,55 @@
+fusionsc.service.NetworkInterface
+=================================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: NetworkInterface
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~NetworkInterface.__init__
+  ~NetworkInterface.castAs
+  ~NetworkInterface.newDeferred
+  ~NetworkInterface.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type NetworkInterface.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~NetworkInterface.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: NetworkInterface.__init__
+.. automethod:: NetworkInterface.castAs
+.. automethod:: NetworkInterface.newDeferred
+.. automethod:: NetworkInterface.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::NetworkInterface.Client
+	:members:
+
+

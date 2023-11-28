@@ -1,0 +1,37 @@
+fusionsc.capnp.AnyPointer
+=========================
+
+.. currentmodule:: fusionsc
+
+.. autoclass:: capnp.AnyPointer
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~capnp.AnyPointer.__init__
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: capnp.AnyPointer.__init__
+
+
+
+
+

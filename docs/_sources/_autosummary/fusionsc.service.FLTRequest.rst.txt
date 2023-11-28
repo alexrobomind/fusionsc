@@ -1,0 +1,53 @@
+fusionsc.service.FLTRequest
+===========================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: FLTRequest
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~FLTRequest.__init__
+  ~FLTRequest.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: FLTRequest.__init__
+.. automethod:: FLTRequest.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::FLTRequest.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::FLTRequest.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::FLTRequest.Pipeline
+	:members:

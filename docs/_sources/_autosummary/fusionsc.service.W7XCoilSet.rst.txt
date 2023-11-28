@@ -1,0 +1,53 @@
+fusionsc.service.W7XCoilSet
+===========================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: W7XCoilSet
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~W7XCoilSet.__init__
+  ~W7XCoilSet.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: W7XCoilSet.__init__
+.. automethod:: W7XCoilSet.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::W7XCoilSet.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::W7XCoilSet.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::W7XCoilSet.Pipeline
+	:members:

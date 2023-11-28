@@ -1,0 +1,55 @@
+fusionsc.service.Matcher
+========================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: Matcher
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~Matcher.__init__
+  ~Matcher.castAs
+  ~Matcher.newDeferred
+  ~Matcher.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type Matcher.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~Matcher.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: Matcher.__init__
+.. automethod:: Matcher.castAs
+.. automethod:: Matcher.newDeferred
+.. automethod:: Matcher.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::Matcher.Client
+	:members:
+
+

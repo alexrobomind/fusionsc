@@ -1,0 +1,55 @@
+fusionsc.service.DataService
+============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: DataService
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~DataService.__init__
+  ~DataService.castAs
+  ~DataService.newDeferred
+  ~DataService.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type DataService.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~DataService.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: DataService.__init__
+.. automethod:: DataService.castAs
+.. automethod:: DataService.newDeferred
+.. automethod:: DataService.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::DataService.Client
+	:members:
+
+

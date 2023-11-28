@@ -1,0 +1,53 @@
+fusionsc.service.FLTConfig
+==========================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: FLTConfig
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~FLTConfig.__init__
+  ~FLTConfig.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: FLTConfig.__init__
+.. automethod:: FLTConfig.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::FLTConfig.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::FLTConfig.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::FLTConfig.Pipeline
+	:members:

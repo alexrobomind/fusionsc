@@ -1,0 +1,53 @@
+fusionsc.service.WarehouseConfig
+================================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: WarehouseConfig
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~WarehouseConfig.__init__
+  ~WarehouseConfig.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: WarehouseConfig.__init__
+.. automethod:: WarehouseConfig.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::WarehouseConfig.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::WarehouseConfig.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::WarehouseConfig.Pipeline
+	:members:

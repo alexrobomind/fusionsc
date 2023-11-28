@@ -1,0 +1,53 @@
+fusionsc.service.VatId
+======================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: VatId
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~VatId.__init__
+  ~VatId.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: VatId.__init__
+.. automethod:: VatId.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::VatId.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::VatId.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::VatId.Pipeline
+	:members:

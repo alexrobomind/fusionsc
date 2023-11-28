@@ -1,0 +1,53 @@
+fusionsc.service.ReversibleFieldlineMapping
+===========================================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: ReversibleFieldlineMapping
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~ReversibleFieldlineMapping.__init__
+  ~ReversibleFieldlineMapping.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: ReversibleFieldlineMapping.__init__
+.. automethod:: ReversibleFieldlineMapping.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::ReversibleFieldlineMapping.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::ReversibleFieldlineMapping.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::ReversibleFieldlineMapping.Pipeline
+	:members:

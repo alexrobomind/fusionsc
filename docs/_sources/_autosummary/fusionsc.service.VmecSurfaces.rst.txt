@@ -1,0 +1,53 @@
+fusionsc.service.VmecSurfaces
+=============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: VmecSurfaces
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~VmecSurfaces.__init__
+  ~VmecSurfaces.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: VmecSurfaces.__init__
+.. automethod:: VmecSurfaces.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::VmecSurfaces.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::VmecSurfaces.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::VmecSurfaces.Pipeline
+	:members:

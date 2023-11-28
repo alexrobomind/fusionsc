@@ -1,0 +1,55 @@
+fusionsc.service.FieldResolver
+==============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: FieldResolver
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~FieldResolver.__init__
+  ~FieldResolver.castAs
+  ~FieldResolver.newDeferred
+  ~FieldResolver.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type FieldResolver.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~FieldResolver.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: FieldResolver.__init__
+.. automethod:: FieldResolver.castAs
+.. automethod:: FieldResolver.newDeferred
+.. automethod:: FieldResolver.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::FieldResolver.Client
+	:members:
+
+

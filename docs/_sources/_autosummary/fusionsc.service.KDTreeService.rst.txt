@@ -1,0 +1,55 @@
+fusionsc.service.KDTreeService
+==============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: KDTreeService
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~KDTreeService.__init__
+  ~KDTreeService.castAs
+  ~KDTreeService.newDeferred
+  ~KDTreeService.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type KDTreeService.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~KDTreeService.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: KDTreeService.__init__
+.. automethod:: KDTreeService.castAs
+.. automethod:: KDTreeService.newDeferred
+.. automethod:: KDTreeService.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::KDTreeService.Client
+	:members:
+
+

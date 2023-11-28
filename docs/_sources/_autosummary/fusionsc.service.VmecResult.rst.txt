@@ -1,0 +1,53 @@
+fusionsc.service.VmecResult
+===========================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: VmecResult
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~VmecResult.__init__
+  ~VmecResult.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: VmecResult.__init__
+.. automethod:: VmecResult.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::VmecResult.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::VmecResult.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::VmecResult.Pipeline
+	:members:

@@ -1,0 +1,72 @@
+﻿fusionsc
+========
+
+.. automodule:: fusionsc
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Modules
+
+.. autosummary::
+	:toctree:
+	:recursive:
+	:template: summary-module.rst
+
+
+	fusionsc.native
+
+
+	fusionsc.kj
+
+
+	fusionsc.capnp
+
+
+	fusionsc.service
+
+
+	fusionsc.efit
+
+
+	fusionsc.asnc
+
+
+	fusionsc.backends
+
+
+	fusionsc.data
+
+
+	fusionsc.resolve
+
+
+	fusionsc.magnetics
+
+
+	fusionsc.flt
+
+
+	fusionsc.hfcam
+
+
+	fusionsc.devices
+
+

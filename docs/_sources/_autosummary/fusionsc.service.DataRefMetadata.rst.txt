@@ -1,0 +1,53 @@
+fusionsc.service.DataRefMetadata
+================================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: DataRefMetadata
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~DataRefMetadata.__init__
+  ~DataRefMetadata.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: DataRefMetadata.__init__
+.. automethod:: DataRefMetadata.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::DataRefMetadata.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::DataRefMetadata.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::DataRefMetadata.Pipeline
+	:members:

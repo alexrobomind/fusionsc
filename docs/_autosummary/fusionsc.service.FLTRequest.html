@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>fusionsc.service.FLTRequest &mdash; FusionSC 2.0.0a0 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/mystnb.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/togglebutton.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+        <script>let toggleHintShow = 'Click to show';</script>
+        <script>let toggleHintHide = 'Click to hide';</script>
+        <script>let toggleOpenOnPrint = 'true';</script>
+        <script src="../_static/togglebutton.js"></script>
+        <script>var togglebuttonSelector = '.toggle, .admonition.dropdown, .tag_hide_input div.cell_input, .tag_hide-input div.cell_input, .tag_hide_output div.cell_output, .tag_hide-output div.cell_output, .tag_hide_cell.cell, .tag_hide-cell.cell';</script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="fusionsc.service.FLTResponse" href="fusionsc.service.FLTResponse.html" />
+    <link rel="prev" title="fusionsc.service.FLTKernelState" href="fusionsc.service.FLTKernelState.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC for your device</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/index.html">Usage examples (How To …)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../reference.html">Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="fusionsc.html">fusionsc</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.native.html">fusionsc.native</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.kj.html">fusionsc.kj</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.capnp.html">fusionsc.capnp</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="fusionsc.service.html">fusionsc.service</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.Angle.html">fusionsc.service.Angle</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.ArchiveInfo.html">fusionsc.service.ArchiveInfo</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.AxisymmetricEquilibrium.html">fusionsc.service.AxisymmetricEquilibrium</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.BiotSavartSettings.html">fusionsc.service.BiotSavartSettings</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.CartesianGrid.html">fusionsc.service.CartesianGrid</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.ComputationDeviceType.html">fusionsc.service.ComputationDeviceType</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.ComputedField.html">fusionsc.service.ComputedField</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.DataRef.html">fusionsc.service.DataRef</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.DataRefMetadata.html">fusionsc.service.DataRefMetadata</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.DataService.html">fusionsc.service.DataService</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.DynamicObject.html">fusionsc.service.DynamicObject</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.FLT.html">fusionsc.service.FLT</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.FLTConfig.html">fusionsc.service.FLTConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.FLTKernelData.html">fusionsc.service.FLTKernelData</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.FLTKernelEvent.html">fusionsc.service.FLTKernelEvent</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.FLTKernelRequest.html">fusionsc.service.FLTKernelRequest</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.FLTKernelState.html">fusionsc.service.FLTKernelState</a></li>
+<li class="toctree-l4 current"><a class="current reference internal" href="#">fusionsc.service.FLTRequest</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.FLTResponse.html">fusionsc.service.FLTResponse</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.FLTStopReason.html">fusionsc.service.FLTStopReason</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.FieldCalculator.html">fusionsc.service.FieldCalculator</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.FieldResolver.html">fusionsc.service.FieldResolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.Filament.html">fusionsc.service.Filament</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.FindAxisRequest.html">fusionsc.service.FindAxisRequest</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.FindLcfsRequest.html">fusionsc.service.FindLcfsRequest</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.Float32Tensor.html">fusionsc.service.Float32Tensor</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.Float64Tensor.html">fusionsc.service.Float64Tensor</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.Geometry.html">fusionsc.service.Geometry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.GeometryLib.html">fusionsc.service.GeometryLib</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.GeometryResolver.html">fusionsc.service.GeometryResolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.HFCam.html">fusionsc.service.HFCam</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.HFCamData.html">fusionsc.service.HFCamData</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.HFCamProjection.html">fusionsc.service.HFCamProjection</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.HFCamProvider.html">fusionsc.service.HFCamProvider</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.HintEquilibrium.html">fusionsc.service.HintEquilibrium</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.HttpRoot.html">fusionsc.service.HttpRoot</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.IndexedGeometry.html">fusionsc.service.IndexedGeometry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.Int32Tensor.html">fusionsc.service.Int32Tensor</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.Int64Tensor.html">fusionsc.service.Int64Tensor</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.Job.html">fusionsc.service.Job</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.JoinKeyPart.html">fusionsc.service.JoinKeyPart</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.JoinResult.html">fusionsc.service.JoinResult</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.KDTree.html">fusionsc.service.KDTree</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.KDTreeService.html">fusionsc.service.KDTreeService</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.LoadBalancerConfig.html">fusionsc.service.LoadBalancerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.LocalConfig.html">fusionsc.service.LocalConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.LocalResources.html">fusionsc.service.LocalResources</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.MT19937State.html">fusionsc.service.MT19937State</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.MagneticField.html">fusionsc.service.MagneticField</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.Mapper.html">fusionsc.service.Mapper</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.Matcher.html">fusionsc.service.Matcher</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.MergedGeometry.html">fusionsc.service.MergedGeometry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.Mesh.html">fusionsc.service.Mesh</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.NetworkInterface.html">fusionsc.service.NetworkInterface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.NodeInfo.html">fusionsc.service.NodeInfo</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.OfflineData.html">fusionsc.service.OfflineData</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.Plane.html">fusionsc.service.Plane</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.ProvisionId.html">fusionsc.service.ProvisionId</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.RFLMRequest.html">fusionsc.service.RFLMRequest</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.RecipientId.html">fusionsc.service.RecipientId</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.RemoteInputStream.html">fusionsc.service.RemoteInputStream</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.RemoteIoStream.html">fusionsc.service.RemoteIoStream</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.RemoteOutputStream.html">fusionsc.service.RemoteOutputStream</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.ReversibleFieldlineMapping.html">fusionsc.service.ReversibleFieldlineMapping</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.RootService.html">fusionsc.service.RootService</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.SSHConnection.html">fusionsc.service.SSHConnection</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.ShapedList.html">fusionsc.service.ShapedList</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.SimpleHttpServer.html">fusionsc.service.SimpleHttpServer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.Tag.html">fusionsc.service.Tag</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.TagValue.html">fusionsc.service.TagValue</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.ThirdPartyCapId.html">fusionsc.service.ThirdPartyCapId</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.ToroidalGrid.html">fusionsc.service.ToroidalGrid</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.Transformed.html">fusionsc.service.Transformed</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.UInt32Tensor.html">fusionsc.service.UInt32Tensor</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.UInt64Tensor.html">fusionsc.service.UInt64Tensor</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.VatId.html">fusionsc.service.VatId</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.VmecDriver.html">fusionsc.service.VmecDriver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.VmecKernelComm.html">fusionsc.service.VmecKernelComm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.VmecProfile.html">fusionsc.service.VmecProfile</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.VmecRequest.html">fusionsc.service.VmecRequest</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.VmecResponse.html">fusionsc.service.VmecResponse</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.VmecResult.html">fusionsc.service.VmecResult</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.VmecSurfaces.html">fusionsc.service.VmecSurfaces</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.W7XCoilSet.html">fusionsc.service.W7XCoilSet</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.Warehouse.html">fusionsc.service.Warehouse</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.WarehouseConfig.html">fusionsc.service.WarehouseConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.outerClassname.html">fusionsc.service.outerClassname</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.service.package.html">fusionsc.service.package</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.efit.html">fusionsc.efit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.asnc.html">fusionsc.asnc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.backends.html">fusionsc.backends</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.data.html">fusionsc.data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.resolve.html">fusionsc.resolve</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.magnetics.html">fusionsc.magnetics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.flt.html">fusionsc.flt</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.hfcam.html">fusionsc.hfcam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.devices.html">fusionsc.devices</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../reference.html">Reference</a> &raquo;</li>
+          <li><a href="fusionsc.html">fusionsc</a> &raquo;</li>
+          <li><a href="fusionsc.service.html">fusionsc.service</a> &raquo;</li>
+      <li>fusionsc.service.FLTRequest</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/_autosummary/fusionsc.service.FLTRequest.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="fusionsc-service-fltrequest">
+<h1>fusionsc.service.FLTRequest<a class="headerlink" href="#fusionsc-service-fltrequest" title="Permalink to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="fusionsc.service.FLTRequest">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusionsc.service.</span></span><span class="sig-name descname"><span class="pre">FLTRequest</span></span><a class="headerlink" href="#fusionsc.service.FLTRequest" title="Permalink to this definition"></a></dt>
+<dd><p>Tensor of shape [3, …] indicating tracing start points</p>
+</dd></dl>
+
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.service.FLTRequest.__init__" title="fusionsc.service.FLTRequest.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a></p></td>
+<td><p>() -&gt; None</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.service.FLTRequest.newMessage" title="fusionsc.service.FLTRequest.newMessage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">newMessage</span></code></a>([copyFrom, initialSize])</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+<p>This class represents a struct type. The accessor types are .Reader and .Builder (see below)</p>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.service.FLTRequest.__init__">
+<span class="sig-prename descclassname"><span class="pre">FLTRequest.</span></span><span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.service.FLTRequest.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>() -&gt; None</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.service.FLTRequest.newMessage">
+<span class="sig-prename descclassname"><span class="pre">FLTRequest.</span></span><span class="sig-name descname"><span class="pre">newMessage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">copyFrom</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">object</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initialSize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1024</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">fusionsc.native.capnp.StructBuilder</span></span></span><a class="headerlink" href="#fusionsc.service.FLTRequest.newMessage" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<p class="rubric">Builder class</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="fusionsc.service.FLTRequest.Builder">
+<span class="sig-prename descclassname"><span class="pre">FLTRequest.</span></span><span class="sig-name descname"><span class="pre">Builder</span></span><a class="headerlink" href="#fusionsc.service.FLTRequest.Builder" title="Permalink to this definition"></a></dt>
+<dd><p>alias of <a class="reference internal" href="#fusionsc.service.FLTRequest.Builder" title="fusionsc.service.FLTRequest.Builder"><code class="xref py py-class docutils literal notranslate"><span class="pre">Builder</span></code></a></p>
+</dd></dl>
+
+<p class="rubric">Reader class</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="fusionsc.service.FLTRequest.Reader">
+<span class="sig-prename descclassname"><span class="pre">FLTRequest.</span></span><span class="sig-name descname"><span class="pre">Reader</span></span><a class="headerlink" href="#fusionsc.service.FLTRequest.Reader" title="Permalink to this definition"></a></dt>
+<dd><p>alias of <a class="reference internal" href="#fusionsc.service.FLTRequest.Reader" title="fusionsc.service.FLTRequest.Reader"><code class="xref py py-class docutils literal notranslate"><span class="pre">Reader</span></code></a></p>
+</dd></dl>
+
+<p class="rubric">Pipeline class</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="fusionsc.service.FLTRequest.Pipeline">
+<span class="sig-prename descclassname"><span class="pre">FLTRequest.</span></span><span class="sig-name descname"><span class="pre">Pipeline</span></span><a class="headerlink" href="#fusionsc.service.FLTRequest.Pipeline" title="Permalink to this definition"></a></dt>
+<dd><p>alias of <a class="reference internal" href="#fusionsc.service.FLTRequest.Pipeline" title="fusionsc.service.FLTRequest.Pipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">Pipeline</span></code></a></p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="fusionsc.service.FLTKernelState.html" class="btn btn-neutral float-left" title="fusionsc.service.FLTKernelState" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="fusionsc.service.FLTResponse.html" class="btn btn-neutral float-right" title="fusionsc.service.FLTResponse" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022 - 2023, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

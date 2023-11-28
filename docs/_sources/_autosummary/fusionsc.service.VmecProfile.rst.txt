@@ -1,0 +1,53 @@
+fusionsc.service.VmecProfile
+============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: VmecProfile
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~VmecProfile.__init__
+  ~VmecProfile.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: VmecProfile.__init__
+.. automethod:: VmecProfile.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::VmecProfile.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::VmecProfile.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::VmecProfile.Pipeline
+	:members:

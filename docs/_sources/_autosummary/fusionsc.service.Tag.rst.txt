@@ -1,0 +1,53 @@
+fusionsc.service.Tag
+====================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: Tag
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~Tag.__init__
+  ~Tag.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: Tag.__init__
+.. automethod:: Tag.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::Tag.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::Tag.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::Tag.Pipeline
+	:members:

@@ -1,0 +1,55 @@
+fusionsc.service.RemoteOutputStream
+===================================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: RemoteOutputStream
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~RemoteOutputStream.__init__
+  ~RemoteOutputStream.castAs
+  ~RemoteOutputStream.newDeferred
+  ~RemoteOutputStream.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type RemoteOutputStream.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~RemoteOutputStream.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: RemoteOutputStream.__init__
+.. automethod:: RemoteOutputStream.castAs
+.. automethod:: RemoteOutputStream.newDeferred
+.. automethod:: RemoteOutputStream.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::RemoteOutputStream.Client
+	:members:
+
+

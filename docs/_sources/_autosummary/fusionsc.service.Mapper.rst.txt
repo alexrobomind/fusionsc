@@ -1,0 +1,55 @@
+fusionsc.service.Mapper
+=======================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: Mapper
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~Mapper.__init__
+  ~Mapper.castAs
+  ~Mapper.newDeferred
+  ~Mapper.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type Mapper.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~Mapper.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: Mapper.__init__
+.. automethod:: Mapper.castAs
+.. automethod:: Mapper.newDeferred
+.. automethod:: Mapper.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::Mapper.Client
+	:members:
+
+

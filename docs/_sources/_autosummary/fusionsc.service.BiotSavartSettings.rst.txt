@@ -1,0 +1,53 @@
+fusionsc.service.BiotSavartSettings
+===================================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: BiotSavartSettings
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~BiotSavartSettings.__init__
+  ~BiotSavartSettings.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: BiotSavartSettings.__init__
+.. automethod:: BiotSavartSettings.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::BiotSavartSettings.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::BiotSavartSettings.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::BiotSavartSettings.Pipeline
+	:members:

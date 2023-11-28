@@ -1,0 +1,37 @@
+fusionsc.service.package
+========================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: package
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~package.__init__
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: package.__init__
+
+
+
+
+

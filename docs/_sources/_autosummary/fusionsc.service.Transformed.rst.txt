@@ -1,0 +1,53 @@
+fusionsc.service.Transformed
+============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: Transformed
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~Transformed.__init__
+  ~Transformed.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: Transformed.__init__
+.. automethod:: Transformed.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::Transformed.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::Transformed.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::Transformed.Pipeline
+	:members:

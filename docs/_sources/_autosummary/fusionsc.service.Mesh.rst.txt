@@ -1,0 +1,53 @@
+fusionsc.service.Mesh
+=====================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: Mesh
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~Mesh.__init__
+  ~Mesh.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: Mesh.__init__
+.. automethod:: Mesh.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::Mesh.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::Mesh.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::Mesh.Pipeline
+	:members:

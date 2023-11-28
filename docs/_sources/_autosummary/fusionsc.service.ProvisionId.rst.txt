@@ -1,0 +1,53 @@
+fusionsc.service.ProvisionId
+============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: ProvisionId
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~ProvisionId.__init__
+  ~ProvisionId.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: ProvisionId.__init__
+.. automethod:: ProvisionId.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::ProvisionId.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::ProvisionId.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::ProvisionId.Pipeline
+	:members:

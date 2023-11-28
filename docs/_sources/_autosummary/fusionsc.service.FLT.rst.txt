@@ -1,0 +1,55 @@
+fusionsc.service.FLT
+====================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: FLT
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~FLT.__init__
+  ~FLT.castAs
+  ~FLT.newDeferred
+  ~FLT.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type FLT.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~FLT.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: FLT.__init__
+.. automethod:: FLT.castAs
+.. automethod:: FLT.newDeferred
+.. automethod:: FLT.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::FLT.Client
+	:members:
+
+

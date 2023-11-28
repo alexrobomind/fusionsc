@@ -1,0 +1,322 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "ef4d8194-b159-44ce-a523-be02cb1b0571",
+   "metadata": {
+    "tags": []
+   },
+   "source": [
+    "# Setting up FusionSC for your device\n",
+    "\n",
+    "Fusionsc is extremely simple to start. Simply import the \"fusionsc\" package and the relevant machinery starts up in the background."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "f12579c9-728b-410d-b67c-441e6da10763",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import fusionsc as fsc"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "f2d9161a-1be6-4486-b5e5-efd70a50ba6e",
+   "metadata": {
+    "tags": []
+   },
+   "source": [
+    "## Specifying the sources for machine geometry information\n",
+    "\n",
+    "### Using offline data files\n",
+    "\n",
+    "FusionSC supports high-level descriptions for magnetic configurations and geometries. However, the data backing these fields\n",
+    "or components are often restricted by team membership limitations, and can therefore usually not be shipped inside FusionSC.\n",
+    "\n",
+    "The `resolve` submodule drives the conversion of these machine-specific data nodes into generic nodes. This module\n",
+    "can be connected to various data sources, with the most important ones being *site-bound intranet databases* and *offline\n",
+    "data files*.\n",
+    "\n",
+    "Opening an offline data file will result in the stored machine-specific information to be globally registered for the resolution\n",
+    "process.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "c109a728-bab4-4f46-976b-8b1bcc8f9295",
+   "metadata": {
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "fsc.resolve.importOfflineData('yourDeviceFile.fsc')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b419273f-05dd-4ef0-9a14-6e96063fc889",
+   "metadata": {},
+   "source": [
+    "### Using online databases\n",
+    "\n",
+    "Facilities to use site-specific online databases are exposed through device-specific submodules (see below)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "564fb827-1426-47e4-87ff-c1a582feada2",
+   "metadata": {},
+   "source": [
+    "## (Re-)Configuring the local backend\n",
+    "\n",
+    "While fusionsc is capable of connecting to remote servers for execution and data management, by default it uses a local backend started at import time. The backend is started with a default configuration (all services enabled, CPU execution, auto-detected no. of computation threads). Sometimes it is desirable to override this default behavior. You can use the `backends.reconfigureLocalBackend` function for this purpose.\n",
+    "\n",
+    "*Note*: This function creates a **new** backend to be used by all future calls. The old backend will be closed once all references to it coming from previous pending calls are dropped. If the local backend has been exposed (e.g. as a network service or by storing the result of backends.activeBackend) it will not shut down until these external references are dropped as well."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "3ff03968-d9b2-4df9-b461-1f29033cd8fe",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      " --- Default configuration --- \n",
+      "\n",
+      "preferredDeviceType: cpu\n",
+      "enableCompute: true\n",
+      "enableStorage: true\n",
+      "jobScheduler: system\n",
+      "flt:\n",
+      "  eventBuffer:\n",
+      "    minSize: 100\n",
+      "    maxSize: 2500\n",
+      "    targetTotalMb: 500\n",
+      "cpuBackend:\n",
+      "  numThreads: autoDetect\n",
+      "\n",
+      " --- Adjusted configuration --- \n",
+      "\n",
+      "preferredDeviceType: cpu\n",
+      "enableCompute: true\n",
+      "enableStorage: true\n",
+      "jobScheduler: system\n",
+      "flt:\n",
+      "  eventBuffer:\n",
+      "    minSize: 100\n",
+      "    maxSize: 2500\n",
+      "    targetTotalMb: 500\n",
+      "cpuBackend:\n",
+      "  numThreads:\n",
+      "    fixed: 2\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "# Get default configuration\n",
+    "config = fsc.service.LocalConfig.newMessage()\n",
+    "print(' --- Default configuration --- ')\n",
+    "print()\n",
+    "print(config)\n",
+    "print()\n",
+    "\n",
+    "# Adjust configuration\n",
+    "config.cpuBackend.numThreads.fixed = 2\n",
+    "\n",
+    "print(' --- Adjusted configuration --- ')\n",
+    "print()\n",
+    "print(config)\n",
+    "print()\n",
+    "\n",
+    "# Apply adjusted configuration\n",
+    "fsc.backends.reconfigureLocalBackend(config)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "fd5e54c2-7655-4942-b35e-872b5de26d94",
+   "metadata": {},
+   "source": [
+    "## Using verbose logging\n",
+    "\n",
+    "Sometimes it is desirable to enable the internal log output to see progress on the calculation. This can be achieved by setting the `FUSIONSC_VERBOSE` environment variable to any other value than `0`. This has to be done **before** importing the package."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "eff8e98a-91c6-4df8-b957-1bc159491222",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import os\n",
+    "os.environ['FUSIONSC_VERBOSE'] = '1'\n",
+    "\n",
+    "import fusionsc as fsc"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "bc3e54cd-ad08-4c69-b1ce-187d9b8bf9cb",
+   "metadata": {},
+   "source": [
+    "When using the standalone server, verbose logging can be activated through the `--verbose` command-line switch."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "2cd67718-d00b-4900-937b-21bd694e7e8a",
+   "metadata": {},
+   "source": [
+    "## Device setup - J-TEXT\n",
+    "\n",
+    "Currently, all used J-TEXT geometry is bundled inside the binary library and no actions should be neccessary. The coils and geometries are exposed in the `device.jtext` module."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "id": "0c1c0751-be6e-4c4c-8121-056cad74965a",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from fusionsc.devices import jtext"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "6efcfd05-580a-4d05-974e-69930cda221f",
+   "metadata": {
+    "tags": []
+   },
+   "source": [
+    "## Device setup - Wendelstein 7-X\n",
+    "\n",
+    "### On-site in the IPP network\n",
+    "\n",
+    "When working on-site at Wendelstein 7-X and connected to the IPP network, you can use the on-premise coil and component data-\n",
+    "bases for resolution directly. Please note that these can be **substantially slower** than using coils and components from the\n",
+    "offline files (which are optimized for fast loading speed)."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "a26cef2f-11dd-4500-bf56-760dd5bec63a",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from fusionsc.devices import w7x\n",
+    "w7x.connectIPPSite()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "0e435780-7efe-4a01-a950-4dd92ac2f406",
+   "metadata": {},
+   "source": [
+    "### Off-site\n",
+    "\n",
+    "Use an offline data file as outlined above."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "d3a67adf-e557-42ed-9ddc-5e01397d3292",
+   "metadata": {},
+   "source": [
+    "### Pre-calculating fields for Biot-Savart calculation\n",
+    "\n",
+    "A generally expensive calculation is the Biot-Savart rule to obtain the magnetic field from the coil geometries. For W7-X\n",
+    ", there is a high-level support to precompute the coil fields. These fields can then be saved and loaded later for\n",
+    "usage. When using precomputed coil fields, the offline data files are not required (unless required for other reasons, such\n",
+    "as geometry data or other field information). W7-X has special support to pre-compute all coils so that they can be re-used\n",
+    "later.\n",
+    "\n",
+    "The precomputation is performed through the `devices.w7x.CoilPack` class, which can be used as a handle to override the coils\n",
+    "used in the generation of W7-X configurations."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "47c0a1ad-12b7-4c26-85fa-db0d7d3cb793",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from fusionsc.devices import w7x\n",
+    "\n",
+    "# Obtain default coils\n",
+    "coils = w7x.cadCoils()\n",
+    "\n",
+    "# Compute\n",
+    "coils = coils.computeFields(w7x.defaultGrid())\n",
+    "\n",
+    "# Use in configuration\n",
+    "config1 = w7x.standard(coils = coils)\n",
+    "config2 = w7x.highIota(coils = coils)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "f2cd2a39-9771-4a45-95ee-e6e74b6be93d",
+   "metadata": {},
+   "source": [
+    "The precalculated fields can be saved and loaded like other field or geometry classes."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "b12d163b-a012-4020-8dad-185f6db8b2c7",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Save\n",
+    "coils.save(\"coils.fsc\")\n",
+    "\n",
+    "# Restore\n",
+    "coils = w7x.CoilPack.load(\"coils.fsc\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "fe0c23d0-2555-491c-8e56-4fdef3a1eb22",
+   "metadata": {},
+   "source": [
+    "## Other devices\n",
+    "\n",
+    "Other devices do not have built-in support, but you can load your own geometries and coil filaments from numpy arrays. If you can provide us specifications and data sources for your device, we will gladly incoroporate a support library for your machine. Simpler geometries can also be bundled into the library itself."
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.10.4"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

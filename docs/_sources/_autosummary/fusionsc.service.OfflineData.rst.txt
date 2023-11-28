@@ -1,0 +1,53 @@
+fusionsc.service.OfflineData
+============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: OfflineData
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~OfflineData.__init__
+  ~OfflineData.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: OfflineData.__init__
+.. automethod:: OfflineData.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::OfflineData.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::OfflineData.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::OfflineData.Pipeline
+	:members:

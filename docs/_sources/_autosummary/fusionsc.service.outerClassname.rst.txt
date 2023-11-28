@@ -1,0 +1,37 @@
+fusionsc.service.outerClassname
+===============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: outerClassname
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~outerClassname.__init__
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: outerClassname.__init__
+
+
+
+
+

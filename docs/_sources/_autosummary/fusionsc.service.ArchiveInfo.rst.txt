@@ -1,0 +1,53 @@
+fusionsc.service.ArchiveInfo
+============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: ArchiveInfo
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~ArchiveInfo.__init__
+  ~ArchiveInfo.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: ArchiveInfo.__init__
+.. automethod:: ArchiveInfo.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::ArchiveInfo.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::ArchiveInfo.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::ArchiveInfo.Pipeline
+	:members:

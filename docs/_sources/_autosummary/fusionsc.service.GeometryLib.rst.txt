@@ -1,0 +1,55 @@
+fusionsc.service.GeometryLib
+============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: GeometryLib
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~GeometryLib.__init__
+  ~GeometryLib.castAs
+  ~GeometryLib.newDeferred
+  ~GeometryLib.newDisconnected
+
+
+
+
+This class represents a capability type. To use it, use the type GeometryLib.Client (see below).
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~GeometryLib.methods
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: GeometryLib.__init__
+.. automethod:: GeometryLib.castAs
+.. automethod:: GeometryLib.newDeferred
+.. automethod:: GeometryLib.newDisconnected
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc.service::GeometryLib.Client
+	:members:
+
+

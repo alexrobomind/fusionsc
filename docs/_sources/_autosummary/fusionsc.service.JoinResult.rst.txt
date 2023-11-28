@@ -1,0 +1,53 @@
+fusionsc.service.JoinResult
+===========================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: JoinResult
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~JoinResult.__init__
+  ~JoinResult.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: JoinResult.__init__
+.. automethod:: JoinResult.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::JoinResult.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::JoinResult.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::JoinResult.Pipeline
+	:members:

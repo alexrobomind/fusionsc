@@ -1,0 +1,53 @@
+fusionsc.service.IndexedGeometry
+================================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: IndexedGeometry
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~IndexedGeometry.__init__
+  ~IndexedGeometry.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: IndexedGeometry.__init__
+.. automethod:: IndexedGeometry.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::IndexedGeometry.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::IndexedGeometry.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::IndexedGeometry.Pipeline
+	:members:

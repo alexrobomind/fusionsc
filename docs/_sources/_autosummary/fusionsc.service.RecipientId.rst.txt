@@ -1,0 +1,53 @@
+fusionsc.service.RecipientId
+============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: RecipientId
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~RecipientId.__init__
+  ~RecipientId.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: RecipientId.__init__
+.. automethod:: RecipientId.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::RecipientId.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::RecipientId.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::RecipientId.Pipeline
+	:members:

@@ -1,0 +1,47 @@
+fusionsc.hfcam.HFCam
+====================
+
+.. currentmodule:: fusionsc.hfcam
+
+.. autoclass:: HFCam
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~HFCam.__init__
+  ~HFCam.addPoints
+  ~HFCam.clear
+  ~HFCam.clone
+  ~HFCam.get
+  ~HFCam.getData
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: HFCam.__init__
+.. automethod:: HFCam.addPoints
+.. automethod:: HFCam.clear
+.. automethod:: HFCam.clone
+.. automethod:: HFCam.get
+.. automethod:: HFCam.getData
+
+
+
+
+

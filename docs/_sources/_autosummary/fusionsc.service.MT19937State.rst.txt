@@ -1,0 +1,53 @@
+fusionsc.service.MT19937State
+=============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: MT19937State
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~MT19937State.__init__
+  ~MT19937State.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: MT19937State.__init__
+.. automethod:: MT19937State.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::MT19937State.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::MT19937State.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::MT19937State.Pipeline
+	:members:

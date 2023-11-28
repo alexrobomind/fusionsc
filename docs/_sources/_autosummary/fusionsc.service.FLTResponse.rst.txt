@@ -1,0 +1,53 @@
+fusionsc.service.FLTResponse
+============================
+
+.. currentmodule:: fusionsc.service
+
+.. autoclass:: FLTResponse
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~FLTResponse.__init__
+  ~FLTResponse.newMessage
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+.. automethod:: FLTResponse.__init__
+.. automethod:: FLTResponse.newMessage
+
+
+
+
+
+
+.. rubric:: Builder class
+.. autoclass:: fusionsc.service::FLTResponse.Builder
+	:members:
+	
+.. rubric:: Reader class
+.. autoclass:: fusionsc.service::FLTResponse.Reader
+	:members:
+	
+.. rubric:: Pipeline class
+.. autoclass:: fusionsc.service::FLTResponse.Pipeline
+	:members:
