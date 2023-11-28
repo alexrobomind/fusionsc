@@ -1,13 +1,7 @@
 Installation
 ============
 
-**Note: Currently we are in pre-release for version 2. Please install the newest version with
-
-::
-
-  pip install --pre fusionsc
-
-FSC can be installed from PyPi. Binaries are provided for Windows, while for Linux generally a source-build is run.
+FusionSC can be installed from PyPi. Binaries are provided for Windows, while for Linux generally a source-build is run.
 To install, simply run
 
 ::
