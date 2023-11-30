@@ -656,6 +656,24 @@ struct FLTImpl : public FLT::Server {
 					writeTensor(fieldStrengths, results.getFieldStrengths());
 				}
 				
+				if(request.getFieldLineAnalysis().isCalculateIota()) {
+					auto iotas = results.getIotas().initData(nStartPoints);
+					
+					for(auto iStartPoint : kj::indices(iotas)) {
+						auto state = kData[iStartPoint].getState();
+						
+						double myIota = state.getTheta() / state.getTurnCount();
+						iotas.set(iStartPoint, myIota);
+					}
+					
+					auto iotasShape = results.getIotas().initShape(startPointShape.size() - 1);
+					for(auto i : kj::range(1, startPointShape.size())) {
+						iotasShape.set(i - 1, startPointShape[1]);
+					}
+				} else {
+					results.getIotas().setShape({0});
+				}
+				
 				auto pcHitsShape = results.getPoincareHits().initShape(startPointShape.size() + 2);
 				pcHitsShape.set(0, 5);
 				pcHitsShape.set(1, nSurfs);

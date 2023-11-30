@@ -634,6 +634,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		statePos.set(i, x[i]);
 	state.setNumSteps(step);
 	state.setDistance(distance);
+	state.setTheta(theta);
 	
 	// Note: The event count is not updated here but at the end of the loop
 	// This ensures that events from unfinished steps do not get added
