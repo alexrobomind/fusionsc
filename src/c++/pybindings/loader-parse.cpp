@@ -178,7 +178,7 @@ void parseSchema(py::object anchor, kj::StringPtr path, py::object target, py::d
 	for(auto& node : allParsed) {
 		defaultLoader.addSource(node.getSourceInfo());
 		
-		for(auto& nested : node.getAllNested())
+		for(auto nested : node.getAllNested())
 			allParsed.push_back(nested);
 	}
 	
