@@ -174,7 +174,7 @@ DynamicValueReader::DynamicValueReader(DynamicValueBuilder& other) :
 			*this = AnyReader(other.asAny());
 			return;
 		case DV::UNKNOWN:
-			*this = nullptr;
+			*this = DynamicValueReader(noMessage(nullptr));
 			return;
 	}
 	
@@ -268,7 +268,7 @@ DynamicValueBuilder DynamicValueBuilder::cloneFrom(capnp::DynamicValue::Reader r
 		case DV::ANY_POINTER:
 			return AnyBuilder::cloneFrom(reader.as<capnp::AnyPointer>());
 		case DV::UNKNOWN:
-			return nullptr;
+			return DynamicValueBuilder(noMessage(nullptr));
 	}
 	
 	KJ_UNREACHABLE;
@@ -811,7 +811,7 @@ capnp::Orphan<capnp::DynamicValue>&& DynamicOrphan::release() {
 
 kj::String EnumInterface::repr() {
 	KJ_IF_MAYBE(pEnumerant, getEnumerant()) {
-		return kj::str("'", pEnumerant -> getProto().getName(), "'");
+		return kj::str(pEnumerant -> getProto().getName());
 	}
 	return kj::str("<unknown> (", getRaw(), ")");
 }

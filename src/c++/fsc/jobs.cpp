@@ -26,7 +26,7 @@ struct BaseJobDir : public JobDir, kj::Refcounted {
 	}
 	
 	Own<const kj::Directory> parent;
-	kj::StringPtr name;
+	kj::String name;
 	
 	kj::UnwindDetector ud;
 };

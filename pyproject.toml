@@ -6,7 +6,8 @@ dependencies = [
 	"typing-extensions >= 3.10",
 	"importlib_resources",
 	"numpy>=1.19.5 ; python_version < '3.10'",
-	"numpy>=1.23.4 ; python_version >= '3.10'",
+	"numpy>=1.23.4 ; python_version >= '3.10' and python_version < '3.12'",
+	"numpy>=1.26.2 ; python_version >= '3.12'",
 	"nest-asyncio",
 	"netCDF4",
 	"scipy"
@@ -17,7 +18,8 @@ requires = [
   "scikit-build-core",
   "setuptools_scm[toml]>=6.2",
   "numpy==1.19.5 ; python_version < '3.10'",
-  "numpy==1.23.4 ; python_version >= '3.10'",
+  "numpy==1.23.4 ; python_version >= '3.10' and python_version < '3.12'",
+  "numpy==1.26.2 ; python_version >= '3.12'",
 ]
 build-backend = "scikit_build_core.build"
 
@@ -25,8 +27,8 @@ build-backend = "scikit_build_core.build"
 sdist.exclude = [
 	"/examples/",
 	"/util/",
-	"/src/service/devices/w7x-resources/components.json",
-	"/src/service/devices/w7x-resources/compile-index.py"
+	"/src/python/fusionsc/serviceDefs/fusionsc/devices/w7x-resources/components.json",
+	"/src/python/fusionsc/serviceDefs/fusionsc/devices/w7x-resources/compile-index.py"
 ]
 
 cmake.targets = ["fsc-skbuild-target"]

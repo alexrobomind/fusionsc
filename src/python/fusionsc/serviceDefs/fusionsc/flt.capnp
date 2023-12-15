@@ -146,6 +146,9 @@ struct FLTResponse {
 	# Tensor of shape startPoints.shape[1:] + [max. field line length]
 	fieldStrengths @8 : Data.Float64Tensor;
 	
+	# Tensor of shape startPoints.shape[1:]
+	iotas @9 : Data.Float64Tensor;
+	
 	rngSeed @6 : UInt64;
 }
 

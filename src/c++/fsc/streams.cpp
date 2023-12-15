@@ -223,8 +223,8 @@ struct InputBuffer : public kj::Refcounted {
 		kj::ListLink<Cursor> link;
 		
 		Cursor() = default;
-		Cursor(Cursor&&) = default;
-		Cursor(Cursor& other) :
+		Cursor(Cursor&&) = delete; // ListLink can not be moved
+		Cursor(const Cursor& other) :
 			pos(other.pos), bytes(other.bytes)
 		{}
 	};
@@ -411,7 +411,7 @@ struct BufferedInputStream : public kj::AsyncInputStream {
 			buf -> gc();
 	}
 	
-	Promise<size_t> tryRead(void* bufPtr, size_t minBytes, size_t maxBytes) {
+	Promise<size_t> tryRead(void* bufPtr, size_t minBytes, size_t maxBytes) override {
 		ArrayPtr<byte> outBuf((byte*) bufPtr, minBytes);
 		
 		// Consume as many bytes as possible
@@ -477,7 +477,7 @@ struct OutputMultiplexerImpl : public MultiplexedOutputStream, kj::Refcounted {
 	
 	~OutputMultiplexerImpl() {}
 	
-	Own<MultiplexedOutputStream> addRef() {
+	Own<MultiplexedOutputStream> addRef() override {
 		return kj::addRef(*this);
 	}
 	

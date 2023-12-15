@@ -356,7 +356,7 @@ add_subdirectory(src/c++/capnpc-java)
 add_subdirectory(src/c++/capnp-sphinx)
 
 # Build and install the libraries
-add_subdirectory(src/python/fusionsc/service/fusionsc) # This directory contains the service interface
+add_subdirectory(src/python/fusionsc/serviceDefs/fusionsc) # This directory contains the service interface
 add_subdirectory(src/c++)
 
 # Build the documentation
