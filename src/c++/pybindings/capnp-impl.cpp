@@ -811,7 +811,7 @@ capnp::Orphan<capnp::DynamicValue>&& DynamicOrphan::release() {
 
 kj::String EnumInterface::repr() {
 	KJ_IF_MAYBE(pEnumerant, getEnumerant()) {
-		return kj::str("'", pEnumerant -> getProto().getName(), "'");
+		return kj::str(pEnumerant -> getProto().getName());
 	}
 	return kj::str("<unknown> (", getRaw(), ")");
 }

@@ -1,14 +1,18 @@
 from . import service
 
-def _determineFormat(filename):
-	if filename.endswith(".nc"):
-		return "netcdf4"
-	if filename.endswith(".mat"):
-		return "matlab"
-	
-	raise ValueError(f"Could not determine format from filename {filename}")
-
 def exportTrace(trace, filename, format = None):
+	"""
+	Exports a fieldline trace result (from the fsc.flt.trace function) to a file
+	for third party code use.
+	
+	Parameters:
+	
+	- trace: Tracing result
+	- filename: Filename for the target file.
+	- format: Format specifier. Must be "matlab", "netcdf4", or None (in which case
+	  the file format is inferred from the filename)
+	"""
+	
 	if format is None:
 		format = _determineFormat(filename)
 	
@@ -19,31 +23,43 @@ def exportTrace(trace, filename, format = None):
 	
 	if format == "matlab":
 		return _dumpTraceMatlab(trace, filename)
+	
+	raise ValueError(f"Unknown format '{format}'")
+
+def _determineFormat(filename):
+	if filename.endswith(".nc"):
+		return "netcdf4"
+	if filename.endswith(".mat"):
+		return "matlab"
+	
+	raise ValueError(f"Could not determine format from filename {filename}. Known endings are .nc (netcdf4) and .mat (matlab).")
 
 def _dumpTraceMatlab(trace, filename):
 	import scipy.io
 	import numpy as np
-		
+	
 	def tagToPy(tag):		
 		if tag.which_() == "uInt64":
 			return tag.uInt64
 		
-		if tag.which()_ == "text":
+		if tag.which_() == "text":
 			return str(tag.text)
 		
-		return None
+		return "<NotSet>"
+		
+	tagToPy = np.vectorize(tagToPy, otypes=[object])
 	
 	matlabDict = {
 		"endPoints" : trace["endPoints"],
 		"poincareHits" : trace["poincareHits"],
-		"stopReasons" : np.vectorize(str)(trace["stopReasons"]),
+		"stopReasons" : np.vectorize(str, otypes=[object])(trace["stopReasons"]),
 		"fieldLines" : trace["fieldLines"],
 		"fieldStrengths" : trace["fieldStrengths"],
 		"endTags" : {
-			name : np.vectorize(tagToPy)(values)
+			name : tagToPy(values)
 			for name, values in trace["endTags"].items()
 		},
-		"responseSize" : response.totalBytes_()
+		"responseSize" : trace["responseSize"]
 	}
 	
 	return scipy.io.savemat(filename, matlabDict)
@@ -61,7 +77,7 @@ def _dumpTraceNc(trace, filename):
 		for i, dim in enumerate(pointsShape)
 	]
 	
-	# Neccessary types
+	# Neccessary types		
 	stopReasonsEnum = root.createEnumType(np.uint16, "StopReason", {
 		str(value) : value.raw
 		for value in service.FLTStopReason.values
@@ -69,7 +85,7 @@ def _dumpTraceNc(trace, filename):
 	tagWhichEnum = root.createEnumType(np.uint8, "WhichKind", {
 		"unknown" : 0,
 		"notSet" : 1,
-		"text": : 2,
+		"text" : 2,
 		"uint64" : 3
 	})
 	
@@ -91,10 +107,10 @@ def _dumpTraceNc(trace, filename):
 	
 	def getRaw(x):
 		raw = x.raw
-		if x >= len(enumDict):
+		if raw >= len(service.FLTStopReason.values):
 			return 0 # 0 means Unknown
 			
-		return x
+		return raw
 	
 	stopReasons = trace["stopReasons"]
 	varStopReasons = root.createVariable("stopReasons", stopReasonsEnum, pointDims)
@@ -122,7 +138,7 @@ def _dumpTraceNc(trace, filename):
 			return 1
 		if x.which_() == "text":
 			return 2
-		if x.which_() == "uint64":
+		if x.which_() == "uInt64":
 			return 3
 		
 		return 0
@@ -136,8 +152,8 @@ def _dumpTraceNc(trace, filename):
 	
 	@np.vectorize
 	def getUint64(x):
-		if x.which_() == "uint64":
-			return x.uint64
+		if x.which_() == "uInt64":
+			return x.uInt64
 		
 		return 0
 		
@@ -150,9 +166,11 @@ def _dumpTraceNc(trace, filename):
 		varText = subGroup.createVariable("text", str, pointDims)
 		varText[:] = getText(values)
 		
-		varUint64 = subgroup.createVariable("uint64", np.uint64, pointDims)
+		varUint64 = subGroup.createVariable("uint64", np.uint64, pointDims)
 		varUint64[:] = getUint64(values)
 	
 	# Response size
 	varResponseSize = root.createVariable("responseSize", np.uint64, ())
 	varResponseSize[:] = trace["responseSize"]
+	
+	root.close()

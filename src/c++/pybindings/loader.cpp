@@ -805,6 +805,13 @@ py::object interpretEnumSchema(capnp::EnumSchema schema, py::object scope) {
 		}
 	);
 	
+	// Values list
+	py::list vals;
+	for(auto enumerant : schema.getEnumerants()) {
+		vals.append(py::cast(EnumInterface(enumerant)));
+	}
+	output.attr("values") = vals;
+	
 	return output;
 }
 
