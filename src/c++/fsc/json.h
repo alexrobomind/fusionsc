@@ -15,8 +15,8 @@ void writeCbor(capnp::DynamicStruct::Reader, kj::OutputStream&);
 void writeCbor(capnp::DynamicList::Reader, kj::OutputStream&);
 void writeCbor(capnp::DynamicValue::Reader, kj::OutputStream&);
 
-void writeJson(capnp::DynamicStruct::Reader, kj::OutputStream&);
-void writeJson(capnp::DynamicList::Reader, kj::OutputStream&);
-void writeJson(capnp::DynamicValue::Reader, kj::OutputStream&);
+void writeJson(capnp::DynamicStruct::Reader, kj::OutputStream&, bool strict = true);
+void writeJson(capnp::DynamicList::Reader, kj::OutputStream&, bool strict = true);
+void writeJson(capnp::DynamicValue::Reader, kj::OutputStream&, bool strict = true);
 
 }

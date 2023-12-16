@@ -59,13 +59,27 @@ namespace {
 		if(type.isAnyPointer()) return nullptr;
 		if(type.isInterface()) return nullptr;
 		
-		if(type.isFloat32())
-			return static_cast<float>(reader.as_double());
+		if((type.isFloat32() || type.isFloat64()) && reader.is_exactly<goldfish::tags::string>()) {			
+			// We also allow string to number conversion
+			std::string asString = reader.as_string();
+			for(unsigned char& c : asString)
+				c = std::tolower(c);
+			
+			if(asString == ".nan")
+				return std::numeric_limits<double>::quiet_NaN();
+			if(asString == ".inf")
+				return std::numeric_limits<double>::infinity();
+			if(asString == "-.inf")
+				return -std::numeric_limits<double>::infinity();
+						
+			return std::stod(asString);
+		}
 		
 		#define HANDLE_TYPE(checkFun, convFun) \
 			if(type.checkFun()) return reader.convFun();
 		
 		HANDLE_TYPE(isBool, as_bool);
+		HANDLE_TYPE(isFloat32, as_double);
 		HANDLE_TYPE(isFloat64, as_double);
 		
 		HANDLE_TYPE(isInt8, as_int8);
@@ -83,7 +97,7 @@ namespace {
 	}
 	
 	template<typename Writer>
-	void emitPrimitive(DynamicValue::Reader val, Writer& writer) {
+	void emitPrimitive(DynamicValue::Reader val, Writer& writer, bool strict) {
 		auto type = val.getType();
 				
 		KJ_REQUIRE(type != DynamicValue::STRUCT);
@@ -134,9 +148,21 @@ namespace {
 				writer.write(val.as<bool>());
 				break;
 			
-			case DynamicValue::FLOAT:
-				writer.write(val.as<double>()(;
+			case DynamicValue::FLOAT: {
+				double dVal = val.as<double>();
+				if(!std::isfinite(dVal)) {
+					if(dVal > 0) {
+						writer.write(".inf");
+					} else if(dVal < 0) {
+						writer.write("-.inf");
+					} else {
+						writer.write(".nan");
+					}
+				} else {
+					writer.write(dVal);
+				}
 				break;
+			}
 			
 			case DynamicValue::INT:
 				writer.write(val.as<int64_t>());
@@ -293,29 +319,29 @@ namespace {
 	}
 	
 	template<typename Writer>
-	void writeValue(capnp::DynamicValue::Reader src, Writer& writer) {
+	void writeValue(capnp::DynamicValue::Reader src, Writer& writer, bool strictJson) {
 		auto type = src.getType();
 		
 		if(type == DynamicValue::STRUCT) {
-			writeStruct(src.as<DynamicStruct>(), writer);
+			writeStruct(src.as<DynamicStruct>(), writer, strictJson);
 		} else if(type == DynamicValue::LIST) {
-			writeList(src.as<DynamicList>(), writer);
+			writeList(src.as<DynamicList>(), writer, strictJson);
 		} else {
-			emitPrimitive(src, writer);
+			emitPrimitive(src, writer, strictJson);
 		}
 		
 		return dst;
 	}
 	
 	template<typename Writer>
-	void writeList(capnp::DynamicList::Builder src, Writer& writer) {
+	void writeList(capnp::DynamicList::Builder src, Writer& writer, bool strictJson) {
 		auto asArray = writer.start_array();
 		for(capnp::DynamicValue::Reader el : src)
-			writeValue(el, asArray);
+			writeValue(el, asArray, strictJson);
 	}
 		
 	template<typename Writer>
-	void writeStruct(capnp::DynamicStruct::Builder src, Writer& writer) {	
+	void writeStruct(capnp::DynamicStruct::Builder src, Writer& writer, bool strictJson) {	
 		auto structSchema = src.getSchema();
 		
 		// If we have no non-union fields and the active union field is a
@@ -347,11 +373,11 @@ namespace {
 			auto valWriter = asMap.append(field.getProto().getName().cStr());
 			
 			if(type.isStruct()) {
-				writeStruct(val.as<DynamicStruct>(), valWriter);
+				writeStruct(val.as<DynamicStruct>(), valWriter, strictJson);
 			} else if(type.isList()) {
-				writeList(val.as<DynamicList>(), valWriter);
+				writeList(val.as<DynamicList>(), valWriter, strictJson);
 			} else {
-				emitPrimitive(val, valWriter);
+				emitPrimitive(val, valWriter, strictJson);
 			}
 		};
 			
