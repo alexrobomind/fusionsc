@@ -1,6 +1,8 @@
 from . import service
 
-def exportTrace(trace, filename, format = None):
+from typing import Literal
+
+def exportTrace(trace: dict, filename: str, format: Literal[None, "matlab", "netcdf4"] = None):
 	"""
 	Exports a fieldline trace result (from the fsc.flt.trace function) to a file
 	for third party code use.
@@ -62,7 +64,7 @@ def _dumpTraceMatlab(trace, filename):
 		"responseSize" : trace["responseSize"]
 	}
 	
-	return scipy.io.savemat(filename, matlabDict)
+	scipy.io.savemat(filename, matlabDict)
 
 def _dumpTraceNc(trace, filename):
 	import netCDF4 as nc

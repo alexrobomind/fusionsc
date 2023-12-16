@@ -115,6 +115,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		return result
 	
 	def scale(self, by = 1.0):
+		"""Returns a geometry scaled by the given factor"""
 		import numbers
 		
 		if isinstance(by, numbers.Number):
@@ -230,6 +231,32 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 			range.close = close
 			
 		return result.withTags(tags)
+	
+	@staticmethod
+	def fromPyista(polyData):
+		"""Creates a geometry from a pyvista.PolyData object"""
+		vertices = polyData.verts
+		
+		linesIn = polyData.lines
+		linesOut = []
+		
+		i = 0
+		while i < len(linesIn):
+			polySize = linesIn[i]
+			++i
+			
+			linesOut.append([linesIn[i + j] for j in range(polySize)])
+			i += polySize
+		
+		return Geometry.polyMesh(vertices, linesOut)
+	
+	@staticmethod
+	def importFrom(filename: str):
+		"""Creates a geometry from a file (loaded using pyvista)"""
+		import pyvista as pv
+		polyData = pv.PolyData(filename)
+		
+		return Geometry.fromPyvista(polyData)
 
 	@asyncFunction
 	async def planarCut(self, phi = None, normal = None, center = None):
@@ -339,8 +366,12 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		]
 		
 		return pv.MultiBlock(dataSets)
-
-
+	
+	@asyncFunction
+	async def exportTo(self, filename: str, binary: bool = True):
+		"""Saves the geometry to the given filename. Supports '.ply', '.stl', and '.vtk' files."""
+		asPv = await self.asPyvista.asnc()
+		asPv.save(filename, binary = binary)
 
 def asTagValue(x):
 	"""Convert a possible tag value into an instance of fsc.service.TagValue"""
