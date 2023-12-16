@@ -131,6 +131,8 @@ add_library(
 )
 
 target_link_libraries(fsc PUBLIC deps cupnp fsc-service-genapi)
+target_link_libraries(fsc PRIVATE fusionsc_goldfish)
+
 target_include_directories(
 	fsc
 	PUBLIC
