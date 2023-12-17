@@ -71,24 +71,24 @@ namespace goldfish
 		optional& operator = (const T& t) { m_data = t; return *this; }
 		optional& operator = (T&& t) { m_data = std::move(t); return *this; }
 
-		T& operator*() & noexcept { return m_data.as_unchecked<T>(); }
-		const T& operator*() const & noexcept { return m_data.as_unchecked<T>(); }
-		T&& operator*() && noexcept { return std::move(m_data.as_unchecked<T>()); }
+		T& operator*() & noexcept { return m_data.template as_unchecked<T>(); }
+		const T& operator*() const & noexcept { return m_data.template as_unchecked<T>(); }
+		T&& operator*() && noexcept { return std::move(m_data.template as_unchecked<T>()); }
 
-		T* operator ->() { return &m_data.as_unchecked<T>(); }
-		const T* operator ->() const { return &m_data.as_unchecked<T>(); }
-		explicit operator bool() const { return m_data.is<T>(); }
+		T* operator ->() { return &m_data.template as_unchecked<T>(); }
+		const T* operator ->() const { return &m_data.template as_unchecked<T>(); }
+		explicit operator bool() const { return m_data.template is<T>(); }
 
 		T& value() & { if (*this) return **this; else throw bad_optional_access{}; }
 		const T& value() const & { if (*this) return **this; else throw bad_optional_access{}; }
 		T&& value() && { if (*this) return *std::move(*this); else throw bad_optional_access{}; }
 
-		friend bool operator == (const optional& lhs, nullopt_t) { return lhs.m_data.is<nullopt_t>(); }
-		friend bool operator == (const optional& lhs, const T& t) { return lhs.m_data.is<T>() && lhs.m_data.as_unchecked<T>() == t; }
+		friend bool operator == (const optional& lhs, nullopt_t) { return lhs.m_data.template is<nullopt_t>(); }
+		friend bool operator == (const optional& lhs, const T& t) { return lhs.m_data.template is<T>() && lhs.m_data.template as_unchecked<T>() == t; }
 		friend bool operator == (const optional& lhs, const optional& rhs) { return lhs.m_data == rhs.m_data; }
 
-		friend bool operator != (const optional& lhs, nullopt_t) { return !lhs.m_data.is<nullopt_t>(); }
-		friend bool operator != (const optional& lhs, const T& t) { return !lhs.m_data.is<T>() || lhs.m_data.as_unchecked<T>() != t; }
+		friend bool operator != (const optional& lhs, nullopt_t) { return !lhs.m_data.template is<nullopt_t>(); }
+		friend bool operator != (const optional& lhs, const T& t) { return !lhs.m_data.template is<T>() || lhs.m_data.template as_unchecked<T>() != t; }
 		friend bool operator != (const optional& lhs, const optional& rhs) { return lhs.m_data != rhs.m_data; }
 
 	private:
@@ -125,31 +125,40 @@ namespace goldfish
 		optional(nullopt_t) {}
 		optional(const T& t)
 		{
-			// Work around VC++ bug: the new operator would do a null check on &m_data
-			// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
-			__pragma(warning(suppress:4127))
-			if (std::is_trivially_copy_constructible<T>::value)
-				memcpy(&m_data, &t, sizeof(T));
-			else
-				new (&m_data) T(t);
+			#ifdef _WIN32
+				// Work around VC++ bug: the new operator would do a null check on &m_data
+				// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
+				__pragma(warning(suppress:4127))
+				if (std::is_trivially_copy_constructible<T>::value)
+					memcpy(&this -> m_data, &t, sizeof(T));
+				else
+					new (&this -> m_data) T(t);
+			#else
+				new(&this -> m_data) T(t);
+			#endif
 			assert(*this);
 		}
 		optional(T&& t)
 		{
-			// Work around VC++ bug: the new operator would do a null check on &m_data
-			// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
-			__pragma(warning(suppress:4127))
-			if (std::is_trivially_move_constructible<T>::value)
-				memcpy(&m_data, &t, sizeof(T));
-			else
-				new (&m_data) T(std::move(t));
+			#ifdef _WIN32
+				// Work around VC++ bug: the new operator would do a null check on &m_data
+				// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
+				__pragma(warning(suppress:4127))
+				if (std::is_trivially_move_constructible<T>::value)
+					memcpy(&this -> m_data, &t, sizeof(T));
+				else
+					new (&this -> m_data) T(std::move(t));
+			#else
+				new (&this -> m_data) T(t);
+			#endif
+			
 			assert(*this);
 		}
 		optional& operator = (nullopt_t)
 		{
 			if (*this)
 				(*this)->~T();
-			invalid_state::set(m_data);
+			this -> invalid_state::set(this -> m_data);
 			assert(!*this);
 			return *this;
 		}
@@ -161,13 +170,17 @@ namespace goldfish
 				return *this;
 			}
 
-			// Work around VC++ bug: the new operator would do a null check on &m_data
-			// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
-			__pragma(warning(suppress:4127))
-			if (std::is_trivially_copy_assignable<T>::value)
-				memcpy(&m_data, &data, sizeof(T));
-			else
-				new (&m_data) T(data);
+			#ifdef _WIN32
+				// Work around VC++ bug: the new operator would do a null check on &m_data
+				// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
+				__pragma(warning(suppress:4127))
+				if (std::is_trivially_copy_constructible<T>::value)
+					memcpy(&this -> m_data, &t, sizeof(T));
+				else
+					new (&this -> m_data) T(t);
+			#else
+					new (&this -> m_data) T(t);
+			#endif
 			assert(*this);
 			return *this;
 		}
@@ -179,25 +192,29 @@ namespace goldfish
 				return *this;
 			}
 
+			#ifdef _WIN32
 			// Work around VC++ bug: the new operator would do a null check on &m_data
 			// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
 			__pragma(warning(suppress:4127))
-			if (std::is_trivially_move_assignable<T>::value)
-				memcpy(&m_data, &data, sizeof(T));
+			if (std::is_trivially_move_constructible<T>::value)
+				memcpy(&m_data, &t, sizeof(T));
 			else
-				new (&m_data) T(std::move(data));
+				new (&m_data) T(std::move(t));
+			#else
+				new (&this -> m_data) T(std::move(t));
+			#endif
 			assert(*this);
 			return *this;
 		}
 
-		T& operator*() & { assert(*this); return reinterpret_cast<T&>(m_data); }
-		const T& operator*() const & { assert(*this); return reinterpret_cast<const T&>(m_data); }
-		T&& operator*() && { assert(*this); return std::move(reinterpret_cast<T&>(m_data)); }
+		T& operator*() & { assert(*this); return reinterpret_cast<T&>(this -> m_data); }
+		const T& operator*() const & { assert(*this); return reinterpret_cast<const T&>(this -> m_data); }
+		T&& operator*() && { assert(*this); return std::move(reinterpret_cast<T&>(this -> m_data)); }
 
-		T* operator ->() { assert(*this); return &reinterpret_cast<T&>(m_data); }
-		const T* operator ->() const { assert(*this); return &reinterpret_cast<const T&>(m_data); }
+		T* operator ->() { assert(*this); return &reinterpret_cast<T&>(this -> m_data); }
+		const T* operator ->() const { assert(*this); return &reinterpret_cast<const T&>(this -> m_data); }
 
-		explicit operator bool() const { return !invalid_state::is(m_data); }
+		explicit operator bool() const { return !this -> invalid_state::is(this -> m_data); }
 
 		T& value() & { if (*this) return **this; else throw bad_optional_access{}; }
 		const T& value() const & { if (*this) return **this; else throw bad_optional_access{}; }

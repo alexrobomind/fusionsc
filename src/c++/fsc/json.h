@@ -1,4 +1,9 @@
+#pragma once
+
 #include "common.h"
+
+#include <capnp/dynamic.h>
+#include <kj/io.h>
 
 namespace fsc {
 

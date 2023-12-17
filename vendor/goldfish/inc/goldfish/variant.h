@@ -51,7 +51,7 @@ namespace goldfish
 			{
 				if (which() != N)
 					throw bad_variant_access();
-				return std::move(*this).as_unchecked<N>();
+				return std::move(*this).template as_unchecked<N>();
 			}
 			template <size_t N> auto& as_unchecked() & noexcept
 			{
@@ -71,15 +71,15 @@ namespace goldfish
 
 			template <class T> auto& as() & { return as<index_of<T, types...>::value>(); }
 			template <class T> auto& as() const & { return as<index_of<T, types...>::value>(); }
-			template <class T> auto&& as() && { return std::move(*this).as<index_of<T, types...>::value>(); }
+			template <class T> auto&& as() && { return std::move(*this).template as<index_of<T, types...>::value>(); }
 			template <class T> auto& as_unchecked() & noexcept { return as_unchecked<index_of<T, types...>::value>(); }
 			template <class T> auto& as_unchecked() const & noexcept { return as_unchecked<index_of<T, types...>::value>(); }
-			template <class T> auto&& as_unchecked() && noexcept { return std::move(*this).as_unchecked<index_of<T, types...>::value>(); }
+			template <class T> auto&& as_unchecked() && noexcept { return std::move(*this).template as_unchecked<index_of<T, types...>::value>(); }
 
 		private:
 			template <class Return, size_t N, class TLambda> static Return eval(variant_base<types...>& v, TLambda&& l) { return std::forward<TLambda>(l)(v.as_unchecked<N>()); }
-			template <class Return, size_t N, class TLambda> static Return const_eval(const variant_base<types...>& v, TLambda&& l) { return std::forward<TLambda>(l)(v.as_unchecked<N>()); }
-			template <class Return, size_t N, class TLambda> static Return move_eval(variant_base<types...>&& v, TLambda&& l) { return std::forward<TLambda>(l)(std::move(v).as_unchecked<N>()); }
+			template <class Return, size_t N, class TLambda> static Return const_eval(const variant_base<types...>& v, TLambda&& l) { return std::forward<TLambda>(l)(v.template as_unchecked<N>()); }
+			template <class Return, size_t N, class TLambda> static Return move_eval(variant_base<types...>&& v, TLambda&& l) { return std::forward<TLambda>(l)(std::move(v).template as_unchecked<N>()); }
 			template <class TLambda, std::size_t... Is> decltype(auto) visit_helper(TLambda&& l, std::index_sequence<Is...>) &
 			{
 				using Return = decltype(std::forward<TLambda>(l)(std::declval<nth_type_t<0, types...>&>()));
@@ -148,14 +148,14 @@ namespace goldfish
 		protected:
 			template <class U> std::enable_if_t<std::is_nothrow_move_constructible<U>::value, void> safe_destroy_construct(std::decay_t<U>&& u) noexcept
 			{
-				destroy();
-				new (&m_data) std::decay_t<U>(std::move(u));
+				this -> destroy();
+				new (&this -> m_data) std::decay_t<U>(std::move(u));
 				set_which(details::index_of<std::decay_t<U>, types...>::value);
 			}
 			template <class U> std::enable_if_t<std::is_nothrow_copy_constructible<U>::value, void> safe_destroy_construct(const std::decay_t<U>& u) noexcept
 			{
-				destroy();
-				new (&m_data) std::decay_t<U>(u);
+				this -> destroy();
+				new (&this -> m_data) std::decay_t<U>(u);
 				set_which(details::index_of<std::decay_t<U>, types...>::value);
 			}
 			template <class U> std::enable_if_t<std::is_nothrow_move_constructible<U>::value && !std::is_nothrow_copy_constructible<U>::value, void> safe_destroy_construct(const std::decay_t<U>& u)
@@ -175,7 +175,7 @@ namespace goldfish
 				rhs.visit([&](auto& x)
 				{
 					using T = std::decay_t<decltype(x)>;
-					new (&m_data) T(std::move(x));
+					new (&this -> m_data) T(std::move(x));
 				});
 				set_which(rhs.which());
 			}
@@ -201,7 +201,7 @@ namespace goldfish
 				rhs.visit([&](auto& x)
 				{
 					using T = std::decay_t<decltype(x)>;
-					new (&m_data) T(x);
+					new (&this -> m_data) T(x);
 				});
 				set_which(rhs.which());
 			}
@@ -226,58 +226,68 @@ namespace goldfish
 			add_constructors() = default;
 			add_constructors(const head& data)
 			{
-				// Work around VC++ bug: the new operator would do a null check on &m_data
-				// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
-				__pragma(warning(suppress:4127))
-				if (std::is_trivially_copy_constructible<head>::value)
-					memcpy(&m_data, &data, sizeof(head));
-				else
-					new (&m_data) head(data);
-				set_which(index);
+				#ifdef _WIN32
+					// Work around VC++ bug: the new operator would do a null check on &m_data
+					// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
+					__pragma(warning(suppress:4127))
+					if (std::is_trivially_copy_constructible<head>::value)
+						memcpy(&this -> m_data, &data, sizeof(head));
+					else
+						new (&this -> m_data) head(data);
+				#else
+					new (&this -> m_data) head(data);
+				#endif
+				
+				this -> set_which(index);
 			}
 			add_constructors(head&& data)
 			{
-				// Work around VC++ bug: the new operator would do a null check on &m_data
-				// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
-				__pragma(warning(suppress:4127))
-				if (std::is_trivially_move_constructible<head>::value)
-					memcpy(&m_data, &data, sizeof(head));
-				else
-					new (&m_data) head(std::move(data));
-				set_which(index);
+				#ifdef _WIN32
+					// Work around VC++ bug: the new operator would do a null check on &m_data
+					// Because most of our objects are trivially copy constructible, we can "just" memcpy and bypass that nullcheck
+					__pragma(warning(suppress:4127))
+					if (std::is_trivially_move_constructible<head>::value)
+						memcpy(&this -> m_data, &data, sizeof(head));
+					else
+						new (&this -> m_data) head(std::move(data));
+				#else
+					new (&this -> m_data) head(data);
+				#endif
+				
+				this -> set_which(index);
 			}
 		protected:
 			using base::assign;
 			void assign(const head& data)
 			{
-				__pragma(warning(suppress:4127))
+				// __pragma(warning(suppress:4127))
 				if (conjunction<std::is_trivially_destructible<types>...>::value && std::is_trivially_copyable<head>::value)
 				{
 					// Avoid branching on "which()" when the difference between destroying and rebuilding vs assigning is not observable
-					safe_destroy_construct<head>(data);
+					this -> template safe_destroy_construct<head>(data);
 				}
 				else
 				{
-					if (which() == index)
-						as_unchecked<head>() = data;
+					if (this -> which() == index)
+						this -> template as_unchecked<head>() = data;
 					else
-						safe_destroy_construct<head>(data);
+						this -> template safe_destroy_construct<head>(data);
 				}
 			}
 			void assign(head&& data)
 			{
-				__pragma(warning(suppress:4127))
+				// __pragma(warning(suppress:4127))
 				if (conjunction<std::is_trivially_destructible<types>...>::value && std::is_trivially_move_assignable<head>::value)
 				{
 					// Avoid branching on "which()" when the difference between destroying and rebuilding vs assigning is not observable
-					safe_destroy_construct<head>(std::move(data));
+					this -> template safe_destroy_construct<head>(std::move(data));
 				}
 				else
 				{
-					if (which() == index)
-						as_unchecked<head>() = std::move(data);
+					if (this -> which() == index)
+						this -> template as_unchecked<head>() = std::move(data);
 					else
-						safe_destroy_construct<head>(std::move(data));
+						this -> template safe_destroy_construct<head>(std::move(data));
 				}
 			}
 		};
@@ -326,7 +336,7 @@ namespace goldfish
 		{
 			return lhs.which() == rhs.which() && lhs.visit([&](auto&& x)
 			{
-				return x == rhs.as_unchecked<std::decay_t<decltype(x)>>();
+				return x == rhs.template as_unchecked<std::decay_t<decltype(x)>>();
 			});
 		}
 		friend bool operator < (const variant& lhs, const variant& rhs)
@@ -335,7 +345,7 @@ namespace goldfish
 			{
 				return lhs.visit([&](auto&& x)
 				{
-					return x < rhs.as_unchecked<std::decay_t<decltype(x)>>();
+					return x < rhs.template as_unchecked<std::decay_t<decltype(x)>>();
 				});
 			}
 			else

@@ -6,6 +6,7 @@
 #include "base64_stream.h"
 #include "buffered_stream.h"
 #include "schema.h"
+#include "json_number.h"
 #include <type_traits>
 
 namespace goldfish
@@ -46,7 +47,7 @@ namespace goldfish
 			#ifndef NDEBUG
 			m_moved_from = true;
 			#endif
-			return std::move(m_data).as<type_with_tag_t<tags::string>>();
+			return std::move(m_data).template as<type_with_tag_t<tags::string>>();
 		}
 		auto as_binary() { return as_binary(std::integral_constant<bool, does_json_conversions>()); }
 		auto as_array()
@@ -55,7 +56,7 @@ namespace goldfish
 			#ifndef NDEBUG
 			m_moved_from = true;
 			#endif
-			return std::move(m_data).as<type_with_tag_t<tags::array>>();
+			return std::move(m_data).template as<type_with_tag_t<tags::array>>();
 		}
 		auto as_map()
 		{
@@ -63,7 +64,7 @@ namespace goldfish
 			#ifndef NDEBUG
 			m_moved_from = true;
 			#endif
-			return std::move(m_data).as<type_with_tag_t<tags::map>>();
+			return std::move(m_data).template as<type_with_tag_t<tags::map>>();
 		}
 		template <class FirstKey, class... OtherKeys> auto as_map(FirstKey&& first_key, OtherKeys&&... other_keys)
 		{
@@ -251,17 +252,17 @@ namespace goldfish
 			#endif
 			return result;
 		}
-		bool is_undefined_or_null() const { return m_data.is<undefined>() || m_data.is<nullptr_t>(); }
-		bool is_null() const { return m_data.is<nullptr_t>(); }
+		bool is_undefined_or_null() const { return m_data.template is<undefined>() || m_data.template is<std::nullptr_t>(); }
+		bool is_null() const { return m_data.template is<std::nullptr_t>(); }
 
-		template <class tag> bool is_exactly() { return m_data.is<type_with_tag_t<tag>>(); }
+		template <class tag> bool is_exactly() { return m_data.template is<type_with_tag_t<tag>>(); }
 
 		#ifdef NDEBUG
 		using invalid_state = typename variant<types...>::invalid_state;
 		#endif
 	private:
 		auto as_binary(std::true_type /*does_json_conversion*/) { return stream::decode_base64(as_string()); }
-		auto as_binary(std::false_type /*does_json_conversion*/) { return std::move(m_data).as<type_with_tag_t<tags::binary>>(); }
+		auto as_binary(std::false_type /*does_json_conversion*/) { return std::move(m_data).template as<type_with_tag_t<tags::binary>>(); }
 
 		static uint64_t cast_signed_to_unsigned(int64_t x)
 		{

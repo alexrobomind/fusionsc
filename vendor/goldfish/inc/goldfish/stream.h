@@ -29,7 +29,7 @@ namespace goldfish { namespace stream
 	template <class T> static std::false_type test_has_seek(...) { return{}; }
 	template <class T> struct has_seek : decltype(test_has_seek<T>(nullptr)) {};
 
-	template <class T, class elem> static std::true_type test_has_read(decltype(std::declval<T>().read<elem>())*) { return{}; }
+	template <class T, class elem> static std::true_type test_has_read(decltype(std::declval<T>().template read<elem>())*) { return{}; }
 	template <class T, class elem> static std::false_type test_has_read(...) { return{}; }
 	template <class T, class elem> struct has_read : decltype(test_has_read<T, elem>(nullptr)) {};
 
@@ -66,7 +66,7 @@ namespace goldfish { namespace stream
 
 	template <class T, class Stream> std::enable_if_t< has_read<Stream, T>::value && std::is_standard_layout<T>::value, T> read(Stream& s)
 	{
-		return s.read<T>();
+		return s.template read<T>();
 	}
 
 	template <class T, class Stream> std::enable_if_t<is_reader<std::decay_t<Stream>>::value && !has_read<Stream, T>::value && std::is_standard_layout<T>::value, T> read(Stream& s)
@@ -100,7 +100,7 @@ namespace goldfish { namespace stream
 		size_t read_partial_buffer(buffer_ref data) { return m_stream.read_partial_buffer(data); }
 		template <class T> auto read() { return stream::read<T>(m_stream); }
 		uint64_t seek(uint64_t x) { return stream::seek(m_stream, x); }
-		template <class T> auto peek() { return m_stream.peek<T>(); }
+		template <class T> auto peek() { return m_stream.template peek<T>(); }
 	private:
 		inner& m_stream;
 	};

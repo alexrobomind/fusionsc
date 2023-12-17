@@ -6,21 +6,19 @@
 #include "variant.h"
 #include "stream.h"
 #include "optional.h"
+#include "json_number.h"
 #include "sax_reader.h"
 
 namespace goldfish { namespace json
 {
-	struct ill_formatted_json_data : ill_formatted { using ill_formatted::ill_formatted; };
-	struct integer_overflow_in_json : ill_formatted_json_data { using ill_formatted_json_data::ill_formatted_json_data; };
-
 	class byte_string;
 	template <class Stream> class text_string;
 	template <class Stream> class array;
 	template <class Stream> class map;
-	template <class Stream> struct document : document_impl<
+	template <class Stream> using document_base = document_impl<
 		true /*does_json_conversions*/,
 		bool,
-		nullptr_t,
+		std::nullptr_t,
 		uint64_t,
 		int64_t,
 		double,
@@ -28,9 +26,12 @@ namespace goldfish { namespace json
 		text_string<Stream>,
 		byte_string,
 		array<Stream>,
-		map<Stream>>
+		map<Stream>
+	>;
+	
+	template <class Stream> struct document : document_base<Stream>
 	{
-		using document_impl::document_impl;
+		using document_base<Stream>::document_base;
 	};
 	template <class Stream> document<std::decay_t<Stream>> read_no_debug_check(Stream&& s);
 
@@ -40,7 +41,7 @@ namespace goldfish { namespace json
 		{
 			for (;;)
 			{
-				auto c = s.peek<char>();
+				auto c = s.template peek<char>();
 				if (c != ' ' && c != '\t' && c != '\r' && c != '\n')
 					return c;
 				else
@@ -61,7 +62,7 @@ namespace goldfish { namespace json
 			for (auto c : string)
 			{
 				if (stream::read<char>(s) != c)
-					throw ill_formatted_json_data{ "Unexpected JSON document value" };
+					throw ::goldfish::json::ill_formatted_json_data{ "Unexpected JSON document value" };
 			}
 		}
 	}
@@ -156,7 +157,7 @@ namespace goldfish { namespace json
 						copy_from_converted(buffer);
 						break;
 					}
-					default: throw ill_formatted_json_data("Invalid escape sequence in JSON string");
+					default: throw ::goldfish::json::ill_formatted_json_data("Invalid escape sequence in JSON string");
 					}
 					break;
 
@@ -165,7 +166,7 @@ namespace goldfish { namespace json
 					return original - buffer.size();
 
 				default:
-					throw ill_formatted_json_data{ "Invalid character in JSON string" };
+					throw ::goldfish::json::ill_formatted_json_data{ "Invalid character in JSON string" };
 				}
 			}
 			return original - buffer.size();
@@ -190,7 +191,7 @@ namespace goldfish { namespace json
 			if ('0' <= c && c <= '9') return c - '0';
 			else if ('a' <= c && c <= 'f') return c - 'a' + 10;
 			else if ('A' <= c && c <= 'F') return c - 'A' + 10;
-			else throw ill_formatted_json_data{ "Invalid hexadecimal digit" };
+			else throw ::goldfish::json::ill_formatted_json_data{ "Invalid hexadecimal digit" };
 		}
 		uint16_t read_utf16_character()
 		{
@@ -207,14 +208,14 @@ namespace goldfish { namespace json
 			if (0xD800 <= a && a <= 0xDFFF)
 			{
 				if (a > 0xDBFF)
-					throw ill_formatted_json_data{ "Invalid UTF32 encoding" };
+					throw ::goldfish::json::ill_formatted_json_data{ "Invalid UTF32 encoding" };
 
 				// We need a second character
-				if (stream::read<char>(m_stream) != '\\') throw ill_formatted_json_data{ "Invalid serialization of surrogate pair" };
-				if (stream::read<char>(m_stream) != 'u') throw ill_formatted_json_data{ "Invalid serialization of surrogate pair" };
+				if (stream::read<char>(m_stream) != '\\') throw ::goldfish::json::ill_formatted_json_data{ "Invalid serialization of surrogate pair" };
+				if (stream::read<char>(m_stream) != 'u') throw ::goldfish::json::ill_formatted_json_data{ "Invalid serialization of surrogate pair" };
 				uint32_t b = read_utf16_character();
 				if (b < 0xDC00 || b > 0xDFFF)
-					throw ill_formatted_json_data{ "Invalid serialization of surrogate pair" };
+					throw ::goldfish::json::ill_formatted_json_data{ "Invalid serialization of surrogate pair" };
 
 				a -= 0xD800;
 				b -= 0xDC00;
@@ -241,7 +242,7 @@ namespace goldfish { namespace json
 			else if (codepoint <= 0x10FFFF)
 				return{ static_cast<byte>(0b11110000 | (codepoint >> 18)), get_6_bits(codepoint, 12), get_6_bits(codepoint, 6), get_6_bits(codepoint, 0) };
 			else
-				throw ill_formatted_json_data{ "Invalid UTF32 encoding" };
+				throw ::goldfish::json::ill_formatted_json_data{ "Invalid UTF32 encoding" };
 		}
 
 		Stream m_stream;
@@ -292,7 +293,7 @@ namespace goldfish { namespace json
 					{
 					case ',': return read_no_debug_check(stream::ref(m_stream));
 					case end_character: m_state = state::ended; return nullopt;
-					default: throw ill_formatted_json_data{ "Invalid delimiter in JSON array or map" };
+					default: throw ::goldfish::json::ill_formatted_json_data{ "Invalid delimiter in JSON array or map" };
 					}
 				}
 
@@ -320,7 +321,7 @@ namespace goldfish { namespace json
 	public:
 		using tag = tags::array;
 		using comma_separated_reader<Stream, ']'>::comma_separated_reader;
-		auto read() { return read_comma_separated(); }
+		auto read() { return this -> read_comma_separated(); }
 	};
 	template <class Stream> class map : public comma_separated_reader<Stream, '}'>
 	{
@@ -330,122 +331,18 @@ namespace goldfish { namespace json
 
 		auto read_key()
 		{
-			auto key = read_comma_separated();
-			if (key && !key->is_exactly<tags::string>())
-				throw ill_formatted_json_data{ "Only strings are supported for JSON keys" };
+			auto key = this -> read_comma_separated();
+			if (key && !key->template is_exactly<tags::string>())
+				throw ::goldfish::json::ill_formatted_json_data{ "Only strings are supported for JSON keys" };
 			return key;
 		}
 		document<stream::reader_ref_type_t<Stream>> read_value()
 		{
-			if (details::read_non_space(m_stream) != ':')
-				throw ill_formatted_json_data{ "':' expected between JSON key and value" };
-			return read_no_debug_check(stream::ref(m_stream));
+			if (details::read_non_space(this -> m_stream) != ':')
+				throw ::goldfish::json::ill_formatted_json_data{ "':' expected between JSON key and value" };
+			return read_no_debug_check(stream::ref(this -> m_stream));
 		}
 	};
-
-	template <class Stream> uint64_t read_unsigned_integer(Stream& s, char first, bool allow_leading_zeroes)
-	{
-		if (allow_leading_zeroes)
-		{
-			if (first < '0' || first > '9')
-				throw ill_formatted_json_data{ "Invalid digit in JSON integer" };
-		}
-		else
-		{
-			if (first == '0')
-				return 0u;
-
-			if (first < '1' || first > '9')
-				throw ill_formatted_json_data{ "Invalid digit in JSON integer" };
-		}
-
-		uint64_t result = (first - '0');
-		for (;;)
-		{
-			auto c = s.peek<char>();
-			if (c == nullopt || *c < '0' || *c > '9')
-				return result;
-
-			if (result > (std::numeric_limits<uint64_t>::max() - (*c - '0')) / 10)
-				throw integer_overflow_in_json{ "JSON integer too large" };
-			result = (result * 10) + *c - '0';
-			stream::read<char>(s);
-		}
-	}
-	template <class Stream> double read_decimals(Stream& s)
-	{
-		auto first = s.peek<char>();
-		if (first == nullopt || *first < '0' || *first > '9')
-			throw ill_formatted_json_data{ "Invalid digit in JSON integer" };
-
-		double result = 0;
-		double divider = 1;
-		for (;;)
-		{
-			auto c = s.peek<char>();
-			if (c == nullopt || *c < '0' || *c > '9')
-				return result;
-
-			divider *= 10;
-			result += (*c - '0') / divider;
-			stream::read<char>(s);
-		}
-	}
-	template <class Stream> variant<uint64_t, int64_t, double> read_number(Stream& s, char first)
-	{
-		bool negative = false;
-		if (first == '-')
-		{
-			negative = true;
-			first = stream::read<char>(s);
-		}
-
-		auto integer = read_unsigned_integer(s, first, false /*allow_leading_zeroes*/);
-
-		auto floating_point_marker = s.peek<char>();
-		if (floating_point_marker != '.' && floating_point_marker != 'e' && floating_point_marker != 'E')
-		{
-			if (negative)
-			{
-				static_assert(std::numeric_limits<int64_t>::min() + 1 == -std::numeric_limits<int64_t>::max(),
-					"our overflow check relies on int64_t range to be [-2^63 .. 2^63-1]");
-				if (integer > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1)
-					throw integer_overflow_in_json{ "JSON integer too large" };
-				return -static_cast<int64_t>(integer);
-			}
-			else
-			{
-				return integer;
-			}
-		}
-
-		double decimals = 0;
-		if (floating_point_marker == '.')
-		{
-			stream::read<char>(s);
-			decimals = read_decimals(s);
-			floating_point_marker = s.peek<char>();
-		}
-
-		double multiplier = 1.;
-		if (floating_point_marker == 'e' || floating_point_marker == 'E')
-		{
-			stream::read<char>(s);
-			first = stream::read<char>(s);
-			bool negative_exponent = false;
-			if (first == '+' || first == '-')
-			{
-				negative_exponent = (first == '-');
-				first = stream::read<char>(s);
-			}
-			auto exponent_value = read_unsigned_integer(s, first, true /*allow_leading_zeroes*/);
-			multiplier = pow(10., exponent_value);
-			if (negative_exponent)
-				multiplier = 1 / multiplier;
-		}
-
-		return (negative ? -1 : 1) * multiplier * ((double)integer + decimals);
-	}
 
 	template <class Stream> document<std::decay_t<Stream>> read_no_debug_check(Stream&& s)
 	{
@@ -463,7 +360,7 @@ namespace goldfish { namespace json
 			case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
 				return read_number(s, c).visit([](auto&& x) -> document<Stream> { return x; });
 
-			default: throw ill_formatted_json_data{ "Invalid first character for JSON document" };
+			default: throw ::goldfish::json::ill_formatted_json_data{ "Invalid first character for JSON document" };
 		}
 	}
 

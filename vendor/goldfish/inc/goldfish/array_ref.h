@@ -77,7 +77,7 @@ namespace goldfish
 		}
 		constexpr array_ref<T> without_front(size_t c) const
 		{
-			assert(s <= size());
+			assert(c <= size());
 			return{ m_begin + c, m_end };
 		}
 		constexpr array_ref<T> without_end(size_t c) const

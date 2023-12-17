@@ -289,7 +289,7 @@ endif()
 #)
 
 add_library(fusionsc_goldfish INTERFACE)
-target_include_directories(fusionsc_goldfish vendor/goldfish/inc)
+target_include_directories(fusionsc_goldfish INTERFACE vendor/goldfish/inc)
 
 # Re-enable BUILD_TESTING if desired
 set(BUILD_TESTING ${BUILD_TESTING_TMP} CACHE BOOL "" FORCE)

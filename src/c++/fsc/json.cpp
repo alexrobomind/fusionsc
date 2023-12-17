@@ -1,5 +1,17 @@
 #include "json.h"
 
+#include <goldfish/json_reader.h>
+#include <goldfish/json_writer.h>
+#include <goldfish/cbor_reader.h>
+#include <goldfish/cbor_writer.h>
+#include <goldfish/stream.h>
+
+using capnp::DynamicList;
+using capnp::DynamicValue;
+using capnp::DynamicStruct;
+using capnp::DynamicEnum;
+using capnp::DynamicCapability;
+
 // This file is based on yaml.cpp, but adapted to use the goldfish CBOR / JSON writer.
 
 namespace fsc {
@@ -48,9 +60,9 @@ namespace {
 		
 		if(type.isEnum()) {
 			KJ_IF_MAYBE(pEnumerant, type.asEnum().findEnumerantByName(reader.as_string())) {
-				return capnp::DynamicEnum(*pEnumerant);
+				return DynamicEnum(*pEnumerant);
 			} else {
-				return capnp::DynamicEnum(type.asEnum(), reader.as_uint16());
+				return DynamicEnum(type.asEnum(), reader.as_uint16());
 			}
 		}
 		
@@ -105,7 +117,7 @@ namespace {
 		
 		switch(type) {
 			case DynamicValue::CAPABILITY: {
-				auto asCap = val.as<capnp::DynamicCapability>();
+				auto asCap = val.as<DynamicCapability>();
 				auto hook = capnp::ClientHook::from(kj::mv(asCap));
 				if(hook -> isNull())
 					writer.write(nullptr);
@@ -135,11 +147,11 @@ namespace {
 				break;
 				
 			case DynamicValue::ENUM: {
-				auto enumerant = val.as<capnp::DynamicEnum>().getEnumerant();
+				auto enumerant = val.as<DynamicEnum>().getEnumerant();
 				KJ_IF_MAYBE(pEn, enumerant) {
 					writer.write(pEn -> getProto().getName().cStr());
 				} else {
-					writer.write(val.as<capnp::DynamicEnum>().getRaw());
+					writer.write(val.as<DynamicEnum>().getRaw());
 				}
 				break;
 			}
@@ -204,7 +216,7 @@ namespace {
 		std::vector<char> tmpDocument = tmpWriter.flush();
 		
 		// Step 2: Allocate list
-		capnp::DynamicList::Builder dst = initializer(listSize);
+		DynamicList::Builder dst = initializer(listSize);
 		
 		// Step 3: Load list
 		auto listReader = goldfish::cbor::create_reader(
@@ -238,7 +250,7 @@ namespace {
 	}
 	
 	template<typename Reader>
-	void loadStruct(capnp::DynamicStruct::Builder dst, Reader& reader) {
+	void loadStruct(DynamicStruct::Builder dst, Reader& reader) {
 		// If the node is scalar, this means we set that field with default value
 		if(!reader.is_exactly<goldfish::map>()) {
 			auto field = dst.getSchema().getFieldByName(reader.as_string());
@@ -286,13 +298,13 @@ namespace {
 				auto valueReader = reader.read_value();
 				
 				if(type.isStruct()) {
-					auto fieldVal = dst.init(field).as<capnp::DynamicStruct>();
+					auto fieldVal = dst.init(field).as<DynamicStruct>();
 					loadStruct(fieldVal, valueReader);
 					continue;
 				}
 				if(type.isList()) {
 					auto initializer = [&](size_t listSize) {
-						return dst.init(field, listSize).as<capnp::DynamicList>();
+						return dst.init(field, listSize).as<DynamicList>();
 					};
 					loadList(initializer, valueReader);
 					
@@ -319,7 +331,7 @@ namespace {
 	}
 	
 	template<typename Writer>
-	void writeValue(capnp::DynamicValue::Reader src, Writer& writer, bool strictJson) {
+	void writeValue(DynamicValue::Reader src, Writer& writer, bool strictJson) {
 		auto type = src.getType();
 		
 		if(type == DynamicValue::STRUCT) {
@@ -334,14 +346,14 @@ namespace {
 	}
 	
 	template<typename Writer>
-	void writeList(capnp::DynamicList::Builder src, Writer& writer, bool strictJson) {
+	void writeList(DynamicList::Builder src, Writer& writer, bool strictJson) {
 		auto asArray = writer.start_array();
-		for(capnp::DynamicValue::Reader el : src)
+		for(DynamicValue::Reader el : src)
 			writeValue(el, asArray, strictJson);
 	}
 		
 	template<typename Writer>
-	void writeStruct(capnp::DynamicStruct::Builder src, Writer& writer, bool strictJson) {	
+	void writeStruct(DynamicStruct::Builder src, Writer& writer, bool strictJson) {	
 		auto structSchema = src.getSchema();
 		
 		// If we have no non-union fields and the active union field is a

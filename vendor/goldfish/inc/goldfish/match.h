@@ -26,7 +26,7 @@ namespace goldfish
 			};
 
 			template <class... Args> struct first_callable_helper<true, Args...> { enum { value = 0 }; };
-			template <class... Args> struct first_callable_helper<false, Args...> { enum { value = 1 + lambda_trait<Tail...>::first_callable_index<Args...>::value }; };
+			template <class... Args> struct first_callable_helper<false, Args...> { enum { value = 1 + lambda_trait<Tail...>::template first_callable_index<Args...>::value }; };
 		};
 
 		template <class... T> struct best_match_object : T...
@@ -41,7 +41,7 @@ namespace goldfish
 	{
 		return [lambdas = std::make_tuple(std::forward<Lambdas>(lambdas)...)](auto&&... args) -> decltype(auto)
 		{
-			return std::get<details::lambda_trait<Lambdas...>::first_callable_index<decltype(args)...>::value>(lambdas)(std::forward<decltype(args)>(args)...);
+			return std::get<goldfish::details::lambda_trait<Lambdas...>::template first_callable_index<decltype(args)...>::value>(lambdas)(std::forward<decltype(args)>(args)...);
 		}; 
 	}
 

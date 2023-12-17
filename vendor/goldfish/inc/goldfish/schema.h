@@ -141,7 +141,7 @@ namespace goldfish
 			else
 				std::terminate();
 		}
-		friend void seek_to_end(map_with_schema& m)
+		friend void seek_to_end(map_with_schema<Map, Schema>& m)
 		{
 			if (m.m_on_value)
 			{
