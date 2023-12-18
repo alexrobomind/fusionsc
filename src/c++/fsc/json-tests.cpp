@@ -21,7 +21,6 @@ TEST_CASE("json") {
 	loadJson(reread, ais);
 	
 	KJ_DBG(field, reread.asReader());
-	//KJ_DBG(kj::heapString(arr));
 }
 
 TEST_CASE("cbor") {
@@ -48,5 +47,4 @@ TEST_CASE("cbor") {
 	loadCbor(reread, ais);
 	
 	KJ_DBG(field, reread.asReader());
-	//KJ_DBG(kj::heapString(arr));
 }
