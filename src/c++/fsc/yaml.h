@@ -7,8 +7,6 @@ namespace fsc {
 	
 	capnp::DynamicValue::Reader loadPrimitive(capnp::Type type, YAML::Node src);
 	
-	YAML::Emitter& operator<<(YAML::Emitter&, capnp::DynamicStruct::Reader);
-	YAML::Emitter& operator<<(YAML::Emitter&, capnp::DynamicList::Reader);
 	YAML::Emitter& operator<<(YAML::Emitter&, capnp::DynamicValue::Reader);
 	
 	template<typename Reader, typename = capnp::FromReader<Reader>>

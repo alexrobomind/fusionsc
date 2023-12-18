@@ -28,6 +28,9 @@ add_library(
 	yaml.h
 	yaml.cpp
 	
+	json.h
+	json.cpp
+	
 	hdf5.h
 	hdf5.cpp
 	
@@ -131,7 +134,7 @@ add_library(
 )
 
 target_link_libraries(fsc PUBLIC deps cupnp fsc-service-genapi)
-target_link_libraries(fsc PRIVATE fusionsc_goldfish)
+target_link_libraries(fsc PRIVATE fusionsc_jsonscons)
 
 target_include_directories(
 	fsc
@@ -161,6 +164,7 @@ if(BUILD_TESTING)
 		vmec-tests.cpp
 		blob-store-tests.cpp
 		db-cache-tests.cpp
+		json-tests.cpp
 		
 		efit-tests.cpp
 		

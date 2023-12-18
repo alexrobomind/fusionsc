@@ -4,6 +4,8 @@ using capnp::DynamicStruct;
 using capnp::DynamicList;
 using capnp::DynamicValue;
 
+namespace fsc {
+	
 namespace {
 	DynamicValue::Reader parsePrimitive(capnp::Type type, YAML::Node src) {
 		KJ_REQUIRE(!type.isData());
@@ -111,9 +113,75 @@ namespace {
 				KJ_FAIL_REQUIRE("Internal error: Unhandled type");
 		}
 	}
+	
+	void emitList(YAML::Emitter& dst, DynamicList::Reader src) {
+		auto listSchema = src.getSchema();
+		auto elType = listSchema.getElementType();
+		
+		if(!elType.isStruct() && !elType.isList() && !elType.isData() && !elType.isText())
+			dst << YAML::Flow;
+		
+		dst << YAML::BeginSeq;
+		
+		for(auto el : src) {
+			dst << el;
+		}
+		
+		dst << YAML::EndSeq;
+	}
+		
+	void emitStruct(YAML::Emitter& dst, DynamicStruct::Reader src) {
+		auto structSchema = src.getSchema();
+		
+		// If we have no non-union fields and the active union field is a
+		// default-valued one, then we write only the field name (reads nicer)
+		if(structSchema.getNonUnionFields().size() == 0) {
+			auto maybeActive = src.which();
+			KJ_IF_MAYBE(pActive, maybeActive) {
+				auto& active = *pActive;
+				if(!src.has(active, capnp::HasMode::NON_DEFAULT)) {
+					dst << active.getProto().getName().cStr();
+					return;
+				}
+			}
+		}
+		dst << YAML::BeginMap;
+		
+		auto emitField = [&](capnp::StructSchema::Field field) {
+			auto type = field.getType();
+			
+			// Inspect inner-most type for lists
+			auto elType = type;
+			while(elType.isList()) {
+				auto asList = elType.asList();
+				elType = asList.getElementType();
+			}
+			
+			auto val = src.get(field);
+			
+			dst << YAML::Key << field.getProto().getName().cStr();
+			dst << YAML::Value << val;
+		};
+			
+		for(auto field : structSchema.getNonUnionFields()) {
+			// There is no point in emitting a non-union void field.
+			if(field.getType().isVoid())
+				continue;
+			
+			// Don't emit interface- or any-typed fields or nested lists
+			if(field.getType().isInterface() || field.getType().isAnyPointer())
+				continue;
+			
+			emitField(field);
+		}
+		
+		KJ_IF_MAYBE(pField, src.which()) {
+			emitField(*pField);
+		}	
+				
+		dst << YAML::EndMap;
+	}
 }
-
-namespace fsc {
 
 capnp::DynamicValue::Reader loadPrimitive(capnp::Type type, YAML::Node src) {
 	return parsePrimitive(mv(type), mv(src));
@@ -220,92 +288,12 @@ YAML::Emitter& operator<<(YAML::Emitter& dst, DynamicValue::Reader src) {
 	auto type = src.getType();
 	
 	if(type == DynamicValue::STRUCT) {
-		dst << src.as<DynamicStruct>();
+		emitStruct(dst, src.as<DynamicStruct>());
 	} else if(type == DynamicValue::LIST) {
-		dst << src.as<DynamicList>();
+		emitList(dst, src.as<DynamicList>());
 	} else {
 		emitPrimitive(dst, src);
 	}
-	
-	return dst;
-}
-
-YAML::Emitter& operator<<(YAML::Emitter& dst, DynamicList::Reader src) {
-	auto listSchema = src.getSchema();
-	auto elType = listSchema.getElementType();
-	
-	if(!elType.isStruct() && !elType.isList() && !elType.isData() && !elType.isText())
-		dst << YAML::Flow;
-	
-	dst << YAML::BeginSeq;
-	
-	for(auto el : src) {
-		dst << el;
-	}
-	
-	dst << YAML::EndSeq;
-	
-	return dst;
-}
-	
-YAML::Emitter& operator<<(YAML::Emitter& dst, DynamicStruct::Reader src) {
-	auto structSchema = src.getSchema();
-	
-	// If we have no non-union fields and the active union field is a
-	// default-valued one, then we write only the field name (reads nicer)
-	if(structSchema.getNonUnionFields().size() == 0) {
-		auto maybeActive = src.which();
-		KJ_IF_MAYBE(pActive, maybeActive) {
-			auto& active = *pActive;
-			if(!src.has(active, capnp::HasMode::NON_DEFAULT)) {
-				dst << active.getProto().getName().cStr();
-				return dst;
-			}
-		}
-	}
-	dst << YAML::BeginMap;
-	
-	auto emitField = [&](capnp::StructSchema::Field field) {
-		auto type = field.getType();
-		
-		// Inspect inner-most type for lists
-		auto elType = type;
-		while(elType.isList()) {
-			auto asList = elType.asList();
-			elType = asList.getElementType();
-		}
-		
-		auto val = src.get(field);
-		
-		dst << YAML::Key << field.getProto().getName().cStr();
-		dst << YAML::Value;
-		
-		if(type.isStruct()) {
-			dst << val.as<DynamicStruct>();
-		} else if(type.isList()) {
-			dst << val.as<DynamicList>();
-		} else {
-			emitPrimitive(dst, val);
-		}
-	};
-		
-	for(auto field : structSchema.getNonUnionFields()) {
-		// There is no point in emitting a non-union void field.
-		if(field.getType().isVoid())
-			continue;
-		
-		// Don't emit interface- or any-typed fields or nested lists
-		if(field.getType().isInterface() || field.getType().isAnyPointer())
-			continue;
-		
-		emitField(field);
-	}
-	
-	KJ_IF_MAYBE(pField, src.which()) {
-		emitField(*pField);
-	}	
-			
-	dst << YAML::EndMap;
 	
 	return dst;
 }

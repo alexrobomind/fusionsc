@@ -7,21 +7,16 @@
 
 namespace fsc {
 
-void loadJson(capnp::DynamicStruct::Builder, kj::InputStream&);
-void loadCbor(capnp::DynamicList::Builder, kj::InputStream&);
+void loadJson(capnp::DynamicStruct::Builder, kj::BufferedInputStream&);
+void loadJson(capnp::ListSchema, kj::Function<capnp::DynamicList::Builder(size_t)>, kj::BufferedInputStream&);
 
-void loadCbor(capnp::DynamicStruct::Builder, kj::InputStream&);
-void loadCbor(capnp::DynamicList::Builder, kj::InputStream&);
+void loadCbor(capnp::DynamicStruct::Builder, kj::BufferedInputStream&);
+void loadCbor(capnp::ListSchema, kj::Function<capnp::DynamicList::Builder(size_t)>, kj::BufferedInputStream&);
 
-capnp::DynamicValue::Reader loadJsonPrimitive(capnp::Type, kj::InputStream&);
-capnp::DynamicValue::Reader loadCborPrimitive(capnp::Type, kj::InputStream&);
+capnp::DynamicValue::Reader loadJsonPrimitive(capnp::Type, kj::BufferedInputStream&);
+capnp::DynamicValue::Reader loadCborPrimitive(capnp::Type, kj::BufferedInputStream&);
 
-void writeCbor(capnp::DynamicStruct::Reader, kj::OutputStream&);
-void writeCbor(capnp::DynamicList::Reader, kj::OutputStream&);
-void writeCbor(capnp::DynamicValue::Reader, kj::OutputStream&);
-
-void writeJson(capnp::DynamicStruct::Reader, kj::OutputStream&, bool strict = true);
-void writeJson(capnp::DynamicList::Reader, kj::OutputStream&, bool strict = true);
-void writeJson(capnp::DynamicValue::Reader, kj::OutputStream&, bool strict = true);
+void writeCbor(capnp::DynamicValue::Reader, kj::BufferedOutputStream&);
+void writeJson(capnp::DynamicValue::Reader, kj::BufferedOutputStream&, bool strict = true);
 
 }

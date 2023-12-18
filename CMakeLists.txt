@@ -288,8 +288,8 @@ endif()
 #	DOWNLOAD_ONLY
 #)
 
-add_library(fusionsc_goldfish INTERFACE)
-target_include_directories(fusionsc_goldfish INTERFACE vendor/goldfish/inc)
+add_library(fusionsc_jsonscons INTERFACE)
+target_include_directories(fusionsc_jsonscons INTERFACE vendor/jsonscons/include)
 
 # Re-enable BUILD_TESTING if desired
 set(BUILD_TESTING ${BUILD_TESTING_TMP} CACHE BOOL "" FORCE)

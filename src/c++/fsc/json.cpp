@@ -1,10 +1,12 @@
 #include "json.h"
 
-#include <goldfish/json_reader.h>
-#include <goldfish/json_writer.h>
-#include <goldfish/cbor_reader.h>
-#include <goldfish/cbor_writer.h>
-#include <goldfish/stream.h>
+#include <jsoncons/json_encoder.hpp>
+#include <jsoncons/json_cursor.hpp>
+
+#include <jsoncons_ext/cbor/cbor_encoder.hpp>
+#include <jsoncons_ext/cbor/cbor_cursor.hpp>
+
+#include <kj/function.h>
 
 using capnp::DynamicList;
 using capnp::DynamicValue;
@@ -17,99 +19,236 @@ using capnp::DynamicCapability;
 namespace fsc {
 
 namespace {
-	struct GoldfishInputStream {
-		kj::InputStream& backend;
-		
-		GoldfishInputStream(kj::InputStream& backend) :
-			backend(backend)
-		{}
-		
-		size_t read_partial_buffer(goldfish::buffer_ref ref) {
-			void* data = ref.data();
-			size_t size = ref.size();
-			
-			return backend.read(data, 0, size);
-		}
-	};
 	
-	struct GoldfishOutputStream {
-		kj::OutputStream& backend;
+	template<typename T>
+	struct InputSource {
+		static_assert(sizeof(T) == 1, "T must be a char type");
 		
-		GoldfishOutputStream(kj::OutputStream& backend) :
-			backend(backend)
-		{}
+		using value_type = T;
 		
-		void write_buffer(goldfish::const_buffer_ref ref) {
-			const void* data = ref.data();
-			size_t size = ref.size();
-			
-			backend.write(data, size);
+		struct PeekResult {
+			T value;
+			bool eof;
+		};
+		
+		InputSource(kj::BufferedInputStream& s) : stream(s) {}
+		
+		bool eof() const {
+			return eofFlag;
 		}
 		
-		size_t flush() {
-			return 0;
+		bool is_error() {
+			return false;
 		}
-	};
-	
-	template<typename Reader>
-	DynamicValue::Reader parsePrimitive(capnp::Type type, Reader& reader) {
-		KJ_REQUIRE(!type.isData());
-		KJ_REQUIRE(!type.isText());
-		KJ_REQUIRE(!type.isStruct());
-		KJ_REQUIRE(!type.isList());
 		
-		if(type.isEnum()) {
-			KJ_IF_MAYBE(pEnumerant, type.asEnum().findEnumerantByName(reader.as_string())) {
-				return DynamicEnum(*pEnumerant);
+		size_t position() const {
+			return streamPosition;
+		}
+		
+		void ignore(size_t skip) {
+			if(skip <= buffer.size()) {
+				buffer = buffer.slice(skip, buffer.size());
 			} else {
-				return DynamicEnum(type.asEnum(), reader.as_uint16());
+				buffer = nullptr;
+			}
+			
+			consumedFromBuffer += skip;
+			streamPosition += skip;
+		}
+		
+		PeekResult peek() {
+			fill();
+			
+			if(eof())
+				return PeekResult{0, true};
+			
+			return PeekResult{buffer[0], false};
+		}
+			
+		jsoncons::span<const T> read_buffer() {
+			fill();
+			
+			jsoncons::span<const T> result(
+				reinterpret_cast<const T*>(buffer.begin()), buffer.size()
+			);
+			
+			streamPosition += buffer.size();
+			
+			consumedFromBuffer += buffer.size();
+			buffer = nullptr;
+			
+			return result;
+		}
+		
+		size_t read(T* dst, size_t length) {
+			if(length < buffer.size()) {
+				// Try to serve read from buffer
+				memcpy(dst, buffer.begin(), length);
+				
+				buffer = buffer.slice(length, buffer.size());
+				consumedFromBuffer += length;
+				
+				streamPosition += length;
+				
+				return length;
+			} else {
+				// Indicate skipped bytes
+				stream.skip(consumedFromBuffer);
+				consumedFromBuffer = 0;
+				
+				buffer = nullptr;
+				
+				size_t bytesRead = stream.tryRead(dst, 1, length);
+				streamPosition += bytesRead;
+				
+				return bytesRead;
+			}
+		}
+			
+		
+	private:
+		void fill() {
+			if(buffer == nullptr) {
+				stream.skip(consumedFromBuffer);
+				consumedFromBuffer = 0;
+				
+				buffer = stream.tryGetReadBuffer();
+			}
+			
+			if(buffer == nullptr)
+				eofFlag = true;
+		}
+		
+		kj::BufferedInputStream& stream;
+		ArrayPtr<const kj::byte> buffer = nullptr;
+		
+		size_t streamPosition = 0;
+		size_t consumedFromBuffer = 0; // This can be bigger than buffer size
+		bool eofFlag = false;
+	};
+	
+	template<typename T>
+	struct OutputSink {
+		static_assert(sizeof(T) == 1, "T must be a char type");
+		
+		using value_type = T;
+		
+		OutputSink(kj::BufferedOutputStream& s) : stream(s) {}
+		
+		void flush() {
+			stream.write(buffer.begin(), bytesUsed);
+			buffer = stream.getWriteBuffer();
+			bytesUsed = 0;
+		}
+		
+		void push_back(T b) {
+			if(bytesUsed >= buffer.size()) {
+				flush();
+			}
+			
+			KJ_ASSERT(buffer.size() > 0);
+			buffer[bytesUsed++] = static_cast<kj::byte>(b);
+		}
+		
+		void append(const T* start, size_t length) {
+			if(bytesUsed + length > buffer.size()) {
+				kj::FixedArray<kj::ArrayPtr<const kj::byte>, 2> pieces;
+				pieces[0] = buffer.slice(0, bytesUsed);
+				pieces[1] = ArrayPtr<const kj::byte>(reinterpret_cast<const kj::byte*>(start), length);
+				
+				stream.write(pieces);
+				
+				buffer = stream.getWriteBuffer();
+				bytesUsed = 0;
+			} else {
+				memcpy(buffer.begin() + bytesUsed, start, length);
+				bytesUsed += length;
 			}
 		}
 		
-		if(type.isVoid()) return capnp::Void();		
-
-		if(type.isAnyPointer()) return nullptr;
-		if(type.isInterface()) return nullptr;
+	private:
+		kj::BufferedOutputStream& stream;
 		
-		if((type.isFloat32() || type.isFloat64()) && reader.is_exactly<goldfish::tags::string>()) {			
-			// We also allow string to number conversion
-			std::string asString = reader.as_string();
-			for(unsigned char& c : asString)
-				c = std::tolower(c);
+		ArrayPtr<kj::byte> buffer = nullptr;
+		size_t bytesUsed = 0;
+	};
+	
+	using CborSource = InputSource<uint8_t>;
+	using CborSink = OutputSink<uint8_t>;
+	
+	using JsonSource = InputSource<char>;
+	using JsonSink = OutputSink<char>;
+	
+	using EventType = jsoncons::staj_event_type;
+	using Cursor = jsoncons::basic_staj_cursor<char>;
+	using Event = const jsoncons::basic_staj_event<char>;
+	
+	using Encoder = jsoncons::basic_json_visitor<char>;
+	
+	DynamicValue::Reader parsePrimitive(capnp::Type type, Event& event) {
+		using ST = capnp::schema::Type;
+		
+		switch(type.which()) {
+			case ST::ENUM:
+				KJ_IF_MAYBE(pEnumerant, type.asEnum().findEnumerantByName(event.get<std::string>())) {
+					return DynamicEnum(*pEnumerant);
+				} else {
+					return DynamicEnum(type.asEnum(), event.get<uint16_t>());
+				}
 			
-			if(asString == ".nan")
-				return std::numeric_limits<double>::quiet_NaN();
-			if(asString == ".inf")
-				return std::numeric_limits<double>::infinity();
-			if(asString == "-.inf")
-				return -std::numeric_limits<double>::infinity();
-						
-			return std::stod(asString);
+			case ST::DATA:
+			case ST::TEXT:
+			case ST::STRUCT:
+			case ST::LIST:
+				KJ_FAIL_REQUIRE("parsePrimitive may not be used to decode pointer types");
+			
+			case ST::VOID:
+				return capnp::Void();
+			
+			case ST::BOOL:
+				return event.get<bool>();
+			
+			case ST::ANY_POINTER:
+			case ST::INTERFACE:
+				return nullptr;
+			
+			case ST::FLOAT32:
+			case ST::FLOAT64:
+				// Custom parsing for String values
+				if(event.event_type() == EventType::string_value) {
+					std::string asString = event.get<std::string>();
+					for(char& c : asString)
+						c = std::tolower(c);
+					
+					if(asString == ".nan")
+						return std::numeric_limits<double>::quiet_NaN();
+					if(asString == ".inf")
+						return std::numeric_limits<double>::infinity();
+					if(asString == "-.inf")
+						return -std::numeric_limits<double>::infinity();
+								
+					return std::stod(asString);
+				} else {
+					return event.get<double>();
+				}
+			
+			case ST::UINT8:
+			case ST::UINT16:
+			case ST::UINT32:
+			case ST::UINT64:
+				return event.get<uint64_t>();
+			
+			case ST::INT8:
+			case ST::INT16:
+			case ST::INT32:
+			case ST::INT64:
+				return event.get<int64_t>();
 		}
 		
-		#define HANDLE_TYPE(checkFun, convFun) \
-			if(type.checkFun()) return reader.convFun();
-		
-		HANDLE_TYPE(isBool, as_bool);
-		HANDLE_TYPE(isFloat32, as_double);
-		HANDLE_TYPE(isFloat64, as_double);
-		
-		HANDLE_TYPE(isInt8, as_int8);
-		HANDLE_TYPE(isInt16, as_int16);
-		HANDLE_TYPE(isInt32, as_int32);
-		HANDLE_TYPE(isInt64, as_int64);
-		
-		HANDLE_TYPE(isUInt8, as_uint8);
-		HANDLE_TYPE(isUInt16, as_uint16);
-		HANDLE_TYPE(isUInt32, as_uint32);
-		HANDLE_TYPE(isUInt64, as_uint64);
-		#undef HANDLE_TYPE
-		
-		return capnp::Void();
-	}
+		KJ_FAIL_REQUIRE("Unknown target primitive type");
+	}	
 	
-	template<typename Writer>
-	void emitPrimitive(DynamicValue::Reader val, Writer& writer, bool strict) {
+	void emitPrimitive(DynamicValue::Reader val, Encoder& encoder, bool strict) {
 		auto type = val.getType();
 				
 		KJ_REQUIRE(type != DynamicValue::STRUCT);
@@ -120,155 +259,217 @@ namespace {
 				auto asCap = val.as<DynamicCapability>();
 				auto hook = capnp::ClientHook::from(kj::mv(asCap));
 				if(hook -> isNull())
-					writer.write(nullptr);
+					encoder.null_value();
 				else
-					writer.write("<capability>");
+					encoder.string_value("<capability>");
 				
 				break;
 			}
 			case DynamicValue::ANY_POINTER:
-				writer.write("<unknown>");
+				encoder.string_value("<unknown>");
 				break;
 				
 			case DynamicValue::VOID:
-				writer.write(nullptr);
+				encoder.null_value();
 				break;
 				
 			case DynamicValue::DATA: {
 				auto asBin = val.as<capnp::Data>();
-				
-				writer.startBinary(asBin.size());
-				writer.write(goldfish::const_buffer_ref(asBin.begin(), asBin.size()));
+				encoder.byte_string_value(jsoncons::byte_string_view(asBin.begin(), asBin.size()));
 				break;
 			}
 			
-			case DynamicValue::TEXT:
-				writer.write(val.as<capnp::Text>().cStr());
+			case DynamicValue::TEXT: {
+				auto asText = val.as<capnp::Data>();
+				encoder.string_value(jsoncons::string_view((const char*) asText.begin(), asText.size()));
 				break;
+			}
 				
 			case DynamicValue::ENUM: {
 				auto enumerant = val.as<DynamicEnum>().getEnumerant();
 				KJ_IF_MAYBE(pEn, enumerant) {
-					writer.write(pEn -> getProto().getName().cStr());
+					encoder.string_value(pEn -> getProto().getName().cStr());
 				} else {
-					writer.write(val.as<DynamicEnum>().getRaw());
+					encoder.half_value(val.as<DynamicEnum>().getRaw());
 				}
 				break;
 			}
 			
 			case DynamicValue::BOOL:
-				writer.write(val.as<bool>());
+				encoder.bool_value(val.as<bool>());
 				break;
 			
 			case DynamicValue::FLOAT: {
 				double dVal = val.as<double>();
-				if(!std::isfinite(dVal)) {
+				if(strict && !std::isfinite(dVal)) {
 					if(dVal > 0) {
-						writer.write(".inf");
+						encoder.string_value(".inf");
 					} else if(dVal < 0) {
-						writer.write("-.inf");
+						encoder.string_value("-.inf");
 					} else {
-						writer.write(".nan");
+						encoder.string_value(".nan");
 					}
 				} else {
-					writer.write(dVal);
+					encoder.double_value(dVal);
 				}
 				break;
 			}
 			
 			case DynamicValue::INT:
-				writer.write(val.as<int64_t>());
+				encoder.int64_value(val.as<int64_t>());
 				break;
 			
 			case DynamicValue::UINT:
-				writer.write(val.as<uint64_t>());
+				encoder.uint64_value(val.as<uint64_t>());
 				break;
 			
-			default:
+			case DynamicValue::UNKNOWN:
 				KJ_FAIL_REQUIRE("Internal error: Unhandled type");
 		}
 	}
 	
-	template<typename ListInitializer, typename Reader>
-	void loadList(ListInitializer initializer, Reader& reader) {
-		// Unfortunately, we do not know the size of the list beforehand in JSON, but we need
-		// to know the list size to allocate the output buffer. There is only one solution for
-		// this: Allocate a temporary document, dump the input there, then scan that document.
-		
-		// Step 1: Dump to temporary document & determine list size
-		size_t listSize = 0;
-		auto tmpWriter = goldfish::cbor::create_writer(
-			goldfish::stream::vector_writer()
-		).begin_array();
-		
-		{
-			auto inArray = reader.as_array();
-			while(true) {
-				auto optVal = inArray.read();
-				if(!optVal)
-					break;
-				
-				tmpWriter.write(*optVal);
-				++listSize;
-			}
-		}
-		
-		std::vector<char> tmpDocument = tmpWriter.flush();
-		
-		// Step 2: Allocate list
-		DynamicList::Builder dst = initializer(listSize);
-		
-		// Step 3: Load list
-		auto listReader = goldfish::cbor::create_reader(
-			goldfish::stream::read_vector(mv(tmpDocument))
-		).as_array();
-		
-		auto listSchema = dst.getSchema();
+	// Forward declarations
+	void loadStruct(DynamicStruct::Builder dst, Cursor& cursor);
+	void loadList(capnp::ListSchema listSchema, kj::Function<capnp::DynamicList::Builder(size_t)> initializer, Cursor& cursor);
+	
+	void loadList(capnp::ListSchema listSchema, kj::Function<capnp::DynamicList::Builder(size_t)> initializer, Cursor& cursor) {
 		auto elType = listSchema.getElementType();
 		
-		for(auto i : kj::indices(dst)) {
-			auto valReader = listReader.read();
-			
-			if(elType.isStruct()) {
-				loadStruct(dst[i].as<DynamicStruct>(), *valReader);
-			} else if(elType.isList()) {
-				auto initializer = [&](size_t listSize) {
-					return dst.init(i, listSize);
-				};
-				loadList(initializer, *valReader);
-			} else if(elType.isData()) {
-				auto asBinary = valReader -> as_binary();
-				capnp::Data::Reader dataPtr(asBinary.data(), asBinary.size());
-				dst.set(i, dataPtr);
-			} else if(elType.isText()) {
-				auto asString = valReader -> as_string();
-				dst.set(i, capnp::Text::Reader(asString));
-			} else {
-				dst.set(i, parsePrimitive(elType, *valReader));
+		Event& arrayOpen = cursor.current();
+		KJ_REQUIRE(arrayOpen.event_type() == EventType::begin_array);
+		size_t initialSize = arrayOpen.size();
+		cursor.next();
+		
+		// Unfortunately, we do not know the size of the list beforehand in JSON, but we need
+		// to know the list size to allocate the output buffer. We allocate a temporary list
+		// that we extend as needed
+		capnp::MallocMessageBuilder tmpMessage;
+		capnp::Orphanage tmpOrphanage = tmpMessage.getOrphanage();
+		
+		const size_t baseSize = elType.isBool() ? 64 : 8;
+		if(initialSize == 0)
+			initialSize = baseSize;
+		
+		using O = capnp::Orphan<capnp::DynamicList>;
+		
+		kj::Vector<O> previous;
+		
+		capnp::Orphan<capnp::DynamicList> storage = tmpOrphanage.newOrphan(listSchema, initialSize);
+		capnp::DynamicList::Builder dst = storage.get();
+		
+		size_t storageUsed = 0;
+		
+		// Process all entries
+		while(true) {			
+			Event& current = cursor.current();
+			if(current.event_type() == EventType::end_array) {
+				cursor.next();
+				break;
 			}
+				
+			// Make sure we can fit the index
+			if(storageUsed >= dst.size()) {
+				previous.add(mv(storage));
+				
+				storage = tmpOrphanage.newOrphan(listSchema, 2 * dst.size());
+				dst = storage.get();
+				
+				storageUsed = 0;
+			}
+			
+			using ST = capnp::schema::Type;
+			switch(elType.which()) {
+				case ST::STRUCT:
+					loadStruct(dst[storageUsed].as<DynamicStruct>(), cursor);
+					break;
+					
+				case ST::LIST: {
+					auto initializer = [&](size_t size) {
+						return dst.init(storageUsed, size).as<DynamicList>();
+					};
+					
+					loadList(elType.asList(), initializer, cursor);
+					break;
+				}
+				
+				case ST::TEXT: {
+					auto strView = current.get<jsoncons::string_view>();
+					dst.set(storageUsed, capnp::Text::Reader(strView.data(), strView.size()));
+					
+					cursor.next();
+					break;
+				}
+				
+				case ST::DATA: {
+					auto byteView = current.get<jsoncons::byte_string_view>();
+					dst.set(storageUsed, capnp::Data::Reader(byteView.data(), byteView.size()));
+					cursor.next();
+					break;
+				}
+				
+				default: {
+					dst.set(storageUsed, parsePrimitive(elType, current));
+					cursor.next();
+					break;
+				}
+			}
+			
+			++storageUsed;
+		}
+		
+		// Initialize target orphan
+		size_t totalSize = 0;
+		for(auto& p : previous)
+			totalSize += p.get().size();
+		totalSize += storageUsed;
+		
+		// Copy all data over
+		DynamicList::Builder builder = initializer(totalSize);
+		
+		size_t outIdx = 0;
+		for(auto& p : previous) {
+			auto reader = p.getReader();
+			for(auto el : reader)
+				builder.set(outIdx++, el);
+		}
+		
+		for(auto i : kj::range(0, storageUsed)) {
+			builder.set(outIdx++, dst[i].asReader());
 		}
 	}
 	
-	template<typename Reader>
-	void loadStruct(DynamicStruct::Builder dst, Reader& reader) {
+	void loadStruct(DynamicStruct::Builder dst, Cursor& cursor) {
+		Event& initial = cursor.current();
+		
 		// If the node is scalar, this means we set that field with default value
-		if(!reader.is_exactly<goldfish::map>()) {
-			auto field = dst.getSchema().getFieldByName(reader.as_string());
+		if(initial.event_type() != EventType::begin_object) {
+			auto strView = initial.get<jsoncons::string_view>();
+			kj::StringPtr strPtr(strView.data(), strView.size());
+			
+			auto field = dst.getSchema().getFieldByName(strPtr);
 			dst.clear(field);
+			
+			cursor.next();
 			
 			return;
 		}
 		
+		cursor.next();
+		
 		Maybe<kj::String> previouslySetUnionField = nullptr;
 		
-		auto as_map = reader.as_map();
-		
 		while(true) {
-			auto optionalKey = reader.read_key();
-			if(!optionalKey)
+			Event& keyEvt = cursor.current();
+			if(keyEvt.event_type() == EventType::end_object) {
+				cursor.next();
 				break;
+			}
 			
-			std::string key = optionalKey -> as_string();
+			KJ_REQUIRE(keyEvt.event_type() == EventType::key, "Expected key");
+			std::string key = keyEvt.get<std::string>();
+			cursor.next();
+			
+			Event& valueEvt = cursor.current();
 			
 			// Check if we can match the field name
 			KJ_IF_MAYBE(pField, dst.getSchema().findFieldByName(key)) {
@@ -286,74 +487,75 @@ namespace {
 				}
 				
 				capnp::Type type = field.getType();
-				
-				auto elType = type;
-				while(elType.isList()) {
-					elType = elType.asList().getElementType();
-				}
-				
-				KJ_REQUIRE(!elType.isAnyPointer(), "Can not specify AnyPointer-typed fields with JSON/CBOR");
-				KJ_REQUIRE(!elType.isInterface(), "Interface capabilities can not be set via JSON/CBOR");
-				
-				auto valueReader = reader.read_value();
-				
-				if(type.isStruct()) {
-					auto fieldVal = dst.init(field).as<DynamicStruct>();
-					loadStruct(fieldVal, valueReader);
-					continue;
-				}
-				if(type.isList()) {
-					auto initializer = [&](size_t listSize) {
-						return dst.init(field, listSize).as<DynamicList>();
-					};
-					loadList(initializer, valueReader);
+								
+				using ST = capnp::schema::Type;
+				switch(type.which())  {
+					case ST::STRUCT:
+						loadStruct(dst.init(field).as<DynamicStruct>(), cursor);
+						break;
+						
+					case ST::LIST: {
+						auto initializer = [&](size_t size) {
+							return dst.init(field, size).as<DynamicList>();
+						};
+						loadList(type.asList(), initializer, cursor);
+						
+						break;
+					}
 					
-					continue;
+					case ST::TEXT: {
+						auto strView = valueEvt.get<jsoncons::string_view>();
+						dst.set(field, capnp::Text::Reader(strView.data(), strView.size()));
+						
+						cursor.next();
+						break;
+					}
+					
+					case ST::DATA: {
+						auto byteView = valueEvt.get<jsoncons::byte_string_view>();
+						dst.set(field, capnp::Data::Reader(byteView.data(), byteView.size()));
+						cursor.next();
+						break;
+					}
+					
+					default: {
+						dst.set(field, parsePrimitive(type, valueEvt));
+						cursor.next();
+						break;
+					}
 				}
-				if(type.isData()) {
-					auto asBinary = reader.as_binary();
-					capnp::Data::Reader dataPtr(asBinary.data(), asBinary.size());
-					dst.set(field, dataPtr);
-					continue;
-				}
-				if(type.isText()) {				
-					auto asString = reader.as_string();
-					dst.set(field, capnp::Text::Reader(asString));
-					continue;
-				}
-				
-				dst.set(field, parsePrimitive(type, reader));
 			} else {
 				KJ_LOG(WARNING, "Could not find matching field for map entry", key);
-				// KJ_DBG(dst.getSchema(), kj::StringPtr(key));
 			}
 		}
 	}
 	
-	template<typename Writer>
-	void writeValue(DynamicValue::Reader src, Writer& writer, bool strictJson) {
+	void writeValue(DynamicValue::Reader src, Encoder& encoder, bool strictJson);
+	void writeList(DynamicList::Reader src, Encoder& encoder, bool strictJson);
+	void writeStruct(DynamicStruct::Reader src, Encoder& encoder, bool strictJson);
+	
+	void writeValue(DynamicValue::Reader src, Encoder& encoder, bool strictJson) {
 		auto type = src.getType();
 		
 		if(type == DynamicValue::STRUCT) {
-			writeStruct(src.as<DynamicStruct>(), writer, strictJson);
+			writeStruct(src.as<DynamicStruct>(), encoder, strictJson);
 		} else if(type == DynamicValue::LIST) {
-			writeList(src.as<DynamicList>(), writer, strictJson);
+			writeList(src.as<DynamicList>(), encoder, strictJson);
 		} else {
-			emitPrimitive(src, writer, strictJson);
+			emitPrimitive(src, encoder, strictJson);
 		}
-		
-		return dst;
 	}
 	
-	template<typename Writer>
-	void writeList(DynamicList::Builder src, Writer& writer, bool strictJson) {
-		auto asArray = writer.start_array();
+	void writeList(DynamicList::Reader src, Encoder& encoder, bool strictJson) {
+		encoder.begin_array(src.size());
+		
 		for(DynamicValue::Reader el : src)
-			writeValue(el, asArray, strictJson);
+			writeValue(el, encoder, strictJson);
+		
+		encoder.end_array();
 	}
 		
-	template<typename Writer>
-	void writeStruct(DynamicStruct::Builder src, Writer& writer, bool strictJson) {	
+	void writeStruct(DynamicStruct::Reader src, Encoder& encoder, bool strictJson) {	
 		auto structSchema = src.getSchema();
 		
 		// If we have no non-union fields and the active union field is a
@@ -363,34 +565,19 @@ namespace {
 			KJ_IF_MAYBE(pActive, maybeActive) {
 				auto& active = *pActive;
 				if(!src.has(active, capnp::HasMode::NON_DEFAULT)) {
-					writer.write(active.getProto().getName().cStr());
+					encoder.string_value(active.getProto().getName().cStr());
 					return;
 				}
 			}
 		}
 		
-		auto asMap = writer.start_map();
+		encoder.begin_object();
 		
 		auto emitField = [&](capnp::StructSchema::Field field) {
 			auto type = field.getType();
 			
-			// Inspect inner-most type for lists
-			auto elType = type;
-			while(elType.isList()) {
-				auto asList = elType.asList();
-				elType = asList.getElementType();
-			}
-			
-			auto val = src.get(field);
-			auto valWriter = asMap.append(field.getProto().getName().cStr());
-			
-			if(type.isStruct()) {
-				writeStruct(val.as<DynamicStruct>(), valWriter, strictJson);
-			} else if(type.isList()) {
-				writeList(val.as<DynamicList>(), valWriter, strictJson);
-			} else {
-				emitPrimitive(val, valWriter, strictJson);
-			}
+			encoder.key(field.getProto().getName().cStr());
+			writeValue(src.get(field), encoder, strictJson);
 		};
 			
 		for(auto field : structSchema.getNonUnionFields()) {
@@ -398,7 +585,7 @@ namespace {
 			if(field.getType().isVoid())
 				continue;
 			
-			// Don't emit interface- or any-typed fields or nested lists
+			// Don't emit interface- or any-typed fields
 			if(field.getType().isInterface() || field.getType().isAnyPointer())
 				continue;
 			
@@ -408,7 +595,75 @@ namespace {
 		KJ_IF_MAYBE(pField, src.which()) {
 			emitField(*pField);
 		}
+		
+		encoder.end_object();
 	}
+	
+	using JsonCursor = jsoncons::basic_json_cursor<char, JsonSource>;
+	using CborCursor = jsoncons::cbor::basic_cbor_cursor<CborSource>;
+	
+	using JsonEncoder = jsoncons::basic_json_encoder<char, JsonSink>;
+	using CborEncoder = jsoncons::cbor::basic_cbor_encoder<CborSink>;
 }
+
+void loadJson(capnp::DynamicStruct::Builder dst, kj::BufferedInputStream& stream) {
+	JsonSource src(stream);
+	JsonCursor cursor(src);
+	
+	loadStruct(dst, cursor);
+}
+
+void loadJson(capnp::ListSchema schema, kj::Function<capnp::DynamicList::Builder(size_t)> slot, kj::BufferedInputStream& stream) {
+	JsonSource src(stream);
+	JsonCursor cursor(src);
+	
+	loadList(schema, mv(slot), cursor);
+}
+
+void loadCbor(capnp::DynamicStruct::Builder dst, kj::BufferedInputStream& stream) {
+	CborSource src(stream);
+	CborCursor cursor(src);
+	
+	loadStruct(dst, cursor);
+}
+
+void loadCbor(capnp::ListSchema schema, kj::Function<capnp::DynamicList::Builder(size_t)> slot, kj::BufferedInputStream& stream) {
+	CborSource src(stream);
+	CborCursor cursor(src);
+	
+	loadList(schema, mv(slot), cursor);
+}
+
+capnp::DynamicValue::Reader loadJsonPrimitive(capnp::Type type, kj::BufferedInputStream& stream) {
+	JsonSource src(stream);
+	JsonCursor cursor(src);
+	
+	return parsePrimitive(type, cursor.current());
+}
+
+capnp::DynamicValue::Reader loadCborPrimitive(capnp::Type type, kj::BufferedInputStream& stream) {
+	CborSource src(stream);
+	CborCursor cursor(src);
+	
+	return parsePrimitive(type, cursor.current());
+}
+
+void writeCbor(capnp::DynamicValue::Reader src, kj::BufferedOutputStream& stream) {
+	CborSink sink(stream);
+	CborEncoder encoder(stream);
+	
+	writeValue(src, encoder, false);
+	
+	encoder.flush();
+}
+void writeJson(capnp::DynamicValue::Reader src, kj::BufferedOutputStream& stream, bool strict) {
+	JsonSink sink(stream);
+	JsonEncoder encoder(stream);
+	
+	writeValue(src, encoder, strict);
+	
+	encoder.flush();
+}
+
 
 }
