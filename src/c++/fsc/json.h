@@ -7,16 +7,26 @@
 
 namespace fsc {
 
-void loadJson(capnp::DynamicStruct::Builder, kj::BufferedInputStream&);
-void loadJson(capnp::ListSchema, kj::Function<capnp::DynamicList::Builder(size_t)>, kj::BufferedInputStream&);
+struct JsonOptions {
+	enum Dialect {
+		JSON, CBOR, BSON
+	};
+	
+	Dialect dialect = JSON;
+	
+	bool quoteSpecialNums = true;
+	kj::StringPtr jsonInf = "inf";
+	kj::StringPtr jsonNegInf = "-.inf";
+	kj::StringPtr jsonNan = ".nan";
+	
+	inline bool isBinary() { return dialect != JSON; }
+};
 
-void loadCbor(capnp::DynamicStruct::Builder, kj::BufferedInputStream&);
-void loadCbor(capnp::ListSchema, kj::Function<capnp::DynamicList::Builder(size_t)>, kj::BufferedInputStream&);
+void loadJson(capnp::DynamicStruct::Builder, kj::BufferedInputStream&, const JsonOptions& = JsonOptions());
+void loadJson(capnp::ListSchema, kj::Function<capnp::DynamicList::Builder(size_t)>, kj::BufferedInputStream&, const JsonOptions& = JsonOptions());
 
-capnp::DynamicValue::Reader loadJsonPrimitive(capnp::Type, kj::BufferedInputStream&);
-capnp::DynamicValue::Reader loadCborPrimitive(capnp::Type, kj::BufferedInputStream&);
+capnp::DynamicValue::Reader loadJsonPrimitive(capnp::Type, kj::BufferedInputStream&, const JsonOptions& = JsonOptions());
 
-void writeCbor(capnp::DynamicValue::Reader, kj::BufferedOutputStream&);
-void writeJson(capnp::DynamicValue::Reader, kj::BufferedOutputStream&, bool strict = true);
+void writeJson(capnp::DynamicValue::Reader, kj::BufferedOutputStream&, const JsonOptions& = JsonOptions());
 
 }

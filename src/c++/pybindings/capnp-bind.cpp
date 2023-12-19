@@ -6,6 +6,7 @@
 #include "data.h"
 #include "loader.h"
 #include "pickle.h"
+#include "assign.h"
 
 #include <fsc/common.h>
 
@@ -303,7 +304,11 @@ void bindType() {
 			return t.wrapInList(depth);
 		}, py::arg("depth") = 1)
 	;
-}	
+}
+
+void bindAssignable() {
+	ClassBinding<Assignable>("Assignable");
+}
 
 void initCapnp(py::module_& m) {
 	// Make sure numpy is initialized
@@ -337,6 +342,7 @@ void initCapnp(py::module_& m) {
 	bindType();
 	bindConstants();
 	bindUnpicklers();
+	bindAssignable();
 	
 	capnpModule = py::module();
 	

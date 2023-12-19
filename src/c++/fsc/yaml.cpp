@@ -26,11 +26,34 @@ namespace {
 		if(type.isAnyPointer()) return nullptr;
 		if(type.isInterface()) return nullptr;
 		
+		if(type.isFloat32() || type.isFloat64()) {
+			// Pre-check the number type for some non-YAML literals
+			std::string asString = src.Scalar();
+			
+			for(char& c : asString)
+				c = std::tolower(c);
+			
+			// yaml-cpp handles the builtin literals just fine
+			/*if(asString == ".nan")
+				return std::numeric_limits<double>::quiet_NaN();
+			if(asString == ".inf")
+				return std::numeric_limits<double>::infinity();
+			if(asString == "-.inf")
+				return -std::numeric_limits<double>::infinity();*/
+			
+			if(asString.substr(0, 3) == "nan")
+				return std::numeric_limits<double>::quiet_NaN();
+			if(asString.substr(0, 3) == "inf")
+				return std::numeric_limits<double>::infinity();
+			if(asString.substr(0, 4) == "-inf")
+				return -std::numeric_limits<double>::infinity();
+			
+			return src.as<double>();
+		}
+		
 		#define HANDLE_TYPE(checkFun, tp) \
 			if(type.checkFun()) return src.as<tp>();
 		HANDLE_TYPE(isBool, bool);
-		HANDLE_TYPE(isFloat64, double);
-		HANDLE_TYPE(isFloat32, float);
 		
 		HANDLE_TYPE(isInt8, int);
 		HANDLE_TYPE(isInt16, int16_t);

@@ -1,6 +1,7 @@
 #include "assign.h"
 #include "tensor.h"
 #include "async.h"
+#include "formats.h"
 
 #include <fsc/yaml.h>
 
@@ -158,6 +159,12 @@ struct CapSlot : public BuilderSlot {
 void assign(const BuilderSlot& dst, py::object object) {
 	auto assignmentFailureLog = kj::strTree();
 	
+	// Attempt 0: Check if assignable
+	if(py::isinstance<Assignable>(object)) {
+		py::cast<Assignable&>(object).assign(dst);
+		return;
+	}
+	
 	// Attempt 1: Check if target is orphan that can be adopted
 	pybind11::detail::make_caster<DynamicOrphan> orphanCaster;
 	if(orphanCaster.load(object, false)) {
@@ -168,19 +175,10 @@ void assign(const BuilderSlot& dst, py::object object) {
 	
 	// Attempt 2: Try to parse structs / lists as YAML
 	pybind11::detail::make_caster<kj::StringPtr> strCaster;
-	if(strCaster.load(object, false) && (dst.type.isList() || dst.type.isStruct())) {
+	if(py::isinstance<py::str>(object) && (dst.type.isList() || dst.type.isStruct())) {
 		KJ_IF_MAYBE(pException, kj::runCatchingExceptions([&]() {
-			auto node = YAML::Load(((kj::StringPtr) strCaster).cStr());
-			
-			if(dst.type.isList()) {
-				auto asList = dst.init(node.size()).as<capnp::DynamicList>();
-				load(asList, node);
-				return;
-			} else if(dst.type.isStruct()) {
-				auto asStruct = dst.init().as<capnp::DynamicStruct>();
-				load(asStruct, node);
-				return;
-			}
+			formats::YAML().loads(py::reinterpret_borrow<py::str>(object)).assign(dst);
+			return;
 		})) {
 			auto& error = *pException;
 			assignmentFailureLog = strTree(mv(assignmentFailureLog), "Error while trying to assign from YAML: ", error, "\n");

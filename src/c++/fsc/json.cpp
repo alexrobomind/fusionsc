@@ -6,6 +6,9 @@
 #include <jsoncons_ext/cbor/cbor_encoder.hpp>
 #include <jsoncons_ext/cbor/cbor_cursor.hpp>
 
+#include <jsoncons_ext/bson/bson_encoder.hpp>
+#include <jsoncons_ext/bson/bson_cursor.hpp>
+
 #include <kj/function.h>
 
 using capnp::DynamicList;
@@ -226,6 +229,13 @@ namespace {
 						return std::numeric_limits<double>::infinity();
 					if(asString == "-.inf")
 						return -std::numeric_limits<double>::infinity();
+					
+					if(asString.substr(0, 3) == "nan")
+						return std::numeric_limits<double>::quiet_NaN();
+					if(asString.substr(0, 3) == "inf")
+						return std::numeric_limits<double>::infinity();
+					if(asString.substr(0, 4) == "-inf")
+						return -std::numeric_limits<double>::infinity();
 								
 					return std::stod(asString);
 				} else {
@@ -248,7 +258,7 @@ namespace {
 		KJ_FAIL_REQUIRE("Unknown target primitive type");
 	}	
 	
-	void emitPrimitive(DynamicValue::Reader val, Encoder& encoder, bool strict) {
+	void emitPrimitive(DynamicValue::Reader val, Encoder& encoder) {
 		auto type = val.getType();
 				
 		KJ_REQUIRE(type != DynamicValue::STRUCT);
@@ -300,18 +310,7 @@ namespace {
 				break;
 			
 			case DynamicValue::FLOAT: {
-				double dVal = val.as<double>();
-				if(strict && !std::isfinite(dVal)) {
-					if(dVal > 0) {
-						encoder.string_value(".inf");
-					} else if(dVal < 0) {
-						encoder.string_value("-.inf");
-					} else {
-						encoder.string_value(".nan");
-					}
-				} else {
-					encoder.double_value(dVal);
-				}
+				encoder.double_value(val.as<double>());
 				break;
 			}
 			
@@ -530,32 +529,32 @@ namespace {
 		}
 	}
 	
-	void writeValue(DynamicValue::Reader src, Encoder& encoder, bool strictJson);
-	void writeList(DynamicList::Reader src, Encoder& encoder, bool strictJson);
-	void writeStruct(DynamicStruct::Reader src, Encoder& encoder, bool strictJson);
+	void writeValue(DynamicValue::Reader src, Encoder& encoder);
+	void writeList(DynamicList::Reader src, Encoder& encoder);
+	void writeStruct(DynamicStruct::Reader src, Encoder& encoder);
 	
-	void writeValue(DynamicValue::Reader src, Encoder& encoder, bool strictJson) {
+	void writeValue(DynamicValue::Reader src, Encoder& encoder) {
 		auto type = src.getType();
 		
 		if(type == DynamicValue::STRUCT) {
-			writeStruct(src.as<DynamicStruct>(), encoder, strictJson);
+			writeStruct(src.as<DynamicStruct>(), encoder);
 		} else if(type == DynamicValue::LIST) {
-			writeList(src.as<DynamicList>(), encoder, strictJson);
+			writeList(src.as<DynamicList>(), encoder);
 		} else {
-			emitPrimitive(src, encoder, strictJson);
+			emitPrimitive(src, encoder);
 		}
 	}
 	
-	void writeList(DynamicList::Reader src, Encoder& encoder, bool strictJson) {
+	void writeList(DynamicList::Reader src, Encoder& encoder) {
 		encoder.begin_array(src.size());
 		
 		for(DynamicValue::Reader el : src)
-			writeValue(el, encoder, strictJson);
+			writeValue(el, encoder);
 		
 		encoder.end_array();
 	}
 		
-	void writeStruct(DynamicStruct::Reader src, Encoder& encoder, bool strictJson) {	
+	void writeStruct(DynamicStruct::Reader src, Encoder& encoder) {	
 		auto structSchema = src.getSchema();
 		
 		// If we have no non-union fields and the active union field is a
@@ -577,7 +576,7 @@ namespace {
 			auto type = field.getType();
 			
 			encoder.key(field.getProto().getName().cStr());
-			writeValue(src.get(field), encoder, strictJson);
+			writeValue(src.get(field), encoder);
 		};
 			
 		for(auto field : structSchema.getNonUnionFields()) {
@@ -599,70 +598,113 @@ namespace {
 		encoder.end_object();
 	}
 	
-	using JsonCursor = jsoncons::basic_json_cursor<char, JsonSource>;
-	using CborCursor = jsoncons::cbor::basic_cbor_cursor<CborSource>;
+	Own<Cursor> makeCursor(kj::BufferedInputStream& stream, const JsonOptions& options) {
+		switch(options.dialect) {
+			case JsonOptions::JSON: {
+				using JsonCursor = jsoncons::basic_json_cursor<char, JsonSource>;
+				
+				using DecodeOptions = jsoncons::basic_json_options<char>;
+				DecodeOptions opts;
+				
+				KJ_REQUIRE(options.quoteSpecialNums, "Can not parse unquoted JSON special numbers");
+				
+				if(options.jsonNan != nullptr)
+					opts.nan_to_str(options.jsonNan);
+				
+				if(options.jsonInf != nullptr)
+					opts.inf_to_str(options.jsonInf);
+				
+				if(options.jsonNegInf != nullptr)
+					opts.neginf_to_str(options.jsonNegInf);
+				
+				auto src = kj::heap<JsonSource>(stream);
+				auto cur = kj::heap<JsonCursor>(*src, opts);
+				
+				return cur.attach(mv(src));
+			}
+			case JsonOptions::CBOR: {
+				using CborCursor = jsoncons::cbor::basic_cbor_cursor<CborSource>;
+				
+				auto src = kj::heap<CborSource>(stream);
+				auto cur = kj::heap<CborCursor>(*src);
+				
+				return cur.attach(mv(src));
+			}
+			case JsonOptions::BSON: {
+				using BsonCursor = jsoncons::bson::basic_bson_cursor<CborSource>;
+				
+				auto src = kj::heap<CborSource>(stream);
+				auto cur = kj::heap<BsonCursor>(*src);
+				
+				return cur.attach(mv(src));
+			}
+		}
+		KJ_FAIL_REQUIRE("Unknown dialect");
+	}
 	
-	using JsonEncoder = jsoncons::basic_json_encoder<char, JsonSink>;
-	using CborEncoder = jsoncons::cbor::basic_cbor_encoder<CborSink>;
+	Own<Encoder> makeEncoder(kj::BufferedOutputStream& stream, const JsonOptions& options) {
+		switch(options.dialect) {
+			case JsonOptions::JSON: {
+				using JsonEncoder = jsoncons::basic_json_encoder<char, JsonSink>;
+				
+				using EncodeOptions = jsoncons::basic_json_options<char>;
+				EncodeOptions opts;
+				
+				if(options.quoteSpecialNums) {
+					opts
+						.nan_to_str(options.jsonNan)
+						.inf_to_str(options.jsonInf)
+						.neginf_to_str(options.jsonNegInf)
+					;
+				} else {
+					opts
+						.nan_to_num(options.jsonNan)
+						.inf_to_num(options.jsonInf)
+						.neginf_to_num(options.jsonNegInf)
+					;
+				}
+				
+				
+				auto encoder = kj::heap<JsonEncoder>(JsonSink(stream), opts);
+				
+				return encoder;
+			}
+			case JsonOptions::CBOR: {
+				using CborEncoder = jsoncons::cbor::basic_cbor_encoder<CborSink>;
+				
+				auto encoder = kj::heap<CborEncoder>(CborSink(stream));
+				
+				return encoder;
+			}
+			case JsonOptions::BSON: {
+				using BsonEncoder = jsoncons::bson::basic_bson_encoder<CborSink>;
+				
+				auto encoder = kj::heap<BsonEncoder>(CborSink(stream));
+				
+				return encoder;
+			}
+		}
+		KJ_FAIL_REQUIRE("Unknown dialect");
+	}
 }
 
-void loadJson(capnp::DynamicStruct::Builder dst, kj::BufferedInputStream& stream) {
-	JsonSource src(stream);
-	JsonCursor cursor(src);
-	
-	loadStruct(dst, cursor);
+void loadJson(capnp::DynamicStruct::Builder dst, kj::BufferedInputStream& stream, const JsonOptions& options) {	
+	loadStruct(dst, *makeCursor(stream, options));
 }
 
-void loadJson(capnp::ListSchema schema, kj::Function<capnp::DynamicList::Builder(size_t)> slot, kj::BufferedInputStream& stream) {
-	JsonSource src(stream);
-	JsonCursor cursor(src);
-	
-	loadList(schema, mv(slot), cursor);
+void loadJson(capnp::ListSchema schema, kj::Function<capnp::DynamicList::Builder(size_t)> slot, kj::BufferedInputStream& stream, const JsonOptions& options) {	
+	loadList(schema, mv(slot), *makeCursor(stream, options));
 }
 
-void loadCbor(capnp::DynamicStruct::Builder dst, kj::BufferedInputStream& stream) {
-	CborSource src(stream);
-	CborCursor cursor(src);
-	
-	loadStruct(dst, cursor);
+capnp::DynamicValue::Reader loadJsonPrimitive(capnp::Type type, kj::BufferedInputStream& stream, const JsonOptions& options) {
+	return parsePrimitive(type, makeCursor(stream, options) -> current());
 }
 
-void loadCbor(capnp::ListSchema schema, kj::Function<capnp::DynamicList::Builder(size_t)> slot, kj::BufferedInputStream& stream) {
-	CborSource src(stream);
-	CborCursor cursor(src);
+void writeJson(capnp::DynamicValue::Reader src, kj::BufferedOutputStream& stream, const JsonOptions& options) {		
+	auto encoder = makeEncoder(stream, options);
 	
-	loadList(schema, mv(slot), cursor);
-}
-
-capnp::DynamicValue::Reader loadJsonPrimitive(capnp::Type type, kj::BufferedInputStream& stream) {
-	JsonSource src(stream);
-	JsonCursor cursor(src);
-	
-	return parsePrimitive(type, cursor.current());
-}
-
-capnp::DynamicValue::Reader loadCborPrimitive(capnp::Type type, kj::BufferedInputStream& stream) {
-	CborSource src(stream);
-	CborCursor cursor(src);
-	
-	return parsePrimitive(type, cursor.current());
-}
-
-void writeCbor(capnp::DynamicValue::Reader src, kj::BufferedOutputStream& stream) {
-	CborSink sink(stream);
-	CborEncoder encoder(stream);
-	
-	writeValue(src, encoder, false);
-	
-	encoder.flush();
-}
-void writeJson(capnp::DynamicValue::Reader src, kj::BufferedOutputStream& stream, bool strict) {
-	JsonSink sink(stream);
-	JsonEncoder encoder(stream);
-	
-	writeValue(src, encoder, strict);
-	
-	encoder.flush();
+	writeValue(src, *encoder);
+	encoder -> flush();
 }
 
 
