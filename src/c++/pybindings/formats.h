@@ -13,8 +13,12 @@ namespace fscpy {
 			Own<kj::InputStream&> src;
 			py::object input;
 			
+			bool used = false;
+			
 			inline void assign(const BuilderSlot& dst) override {
+				KJ_REQUIRE(!used, "Can only assign from a formatted load object once");
 				parent.read(dst, *src);
+				used = true;
 			}
 		};
 		
