@@ -526,4 +526,96 @@ Own<MultiplexedOutputStream> multiplex(Own<kj::AsyncOutputStream>&& os) {
 	return kj::refcounted<OutputMultiplexerImpl>(mv(os));
 }
 
+// ===================== std::stream compatibility layer =====================
+
+
+namespace {
+	struct OStreamBuffer : public virtual std::streambuf {		
+		kj::BufferedOutputStream& os;
+		
+		OStreamBuffer(kj::OutputStream& nos) :
+			os(nos)
+		{
+			resetBuffer();
+		}
+		
+		void resetBuffer() {
+			auto buf = os.getWriteBuffer();
+			setp(buf.begin(), buf.end());
+		}
+				
+		int overflow(int c = std::EOF) override {
+			// Write buffered data
+			os.write(pbase(), (pptr() - pbase()));
+			os.flush();
+			
+			resetBuffer();
+			
+			if(c != std::EOF) {
+				*pptr() = c;
+				pbump(1);
+			}
+		}
+		
+		std::streamsize xsputn(const char* s, std::streamsize n) override {
+			os.write(pbase(), (pptr() - pbase()));
+			os.write(s, n);
+			
+			resetBuffer();
+			
+			return n;
+		}
+	};
+	
+	struct IStreamBuffer : public virtual std::streambuf {
+		kj::BufferedInputStream& is;
+		
+		IStreamBuffer(kj::BufferedInputStream& nos) :
+			os(nos)
+		{}
+		
+		void syncStream() {
+			os.skip(gptr() - eback());
+		}
+		
+		kj::ArrayPtr<const kj::byte> syncBuf() {	
+			auto buf = os.tryGetReadBuffer();
+			setg(buf.begin(), buf.begin(), buf.end());
+			
+			return buf;
+		}
+		
+		std::streamsize xsgetn(char* s, std::streamsize n) override {
+			syncStream();
+			auto result = is.tryGet(s, n, n);
+			syncBuf();
+			return result;
+		}
+		
+		int underflow() override {
+			syncStream();
+			auto buf = syncBuf();
+			
+			if(buf.size() == 0)
+				return std::EOF;
+			
+			return buf[0];
+		}
+	};
+}
+	
+Own<std::istream> wrapStream(kj::BufferedInputStream& is) {
+	auto buf = kj::heap<IStreamBuffer>(is);
+	auto stream = kj::heap<std::istream>(buf.get());
+	
+	return stream.attach(mv(buf));
+}
+
+Own<std::ostream> wrapStream(kj::BufferedOutputStream& is) {
+	auto buf = kj::heap<OStreamBuffer>(is);
+	auto stream = kj::heap<std::ostream>(buf.get());
+	
+	return stream.attach(mv(buf));
+}
+
 }

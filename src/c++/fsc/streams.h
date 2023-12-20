@@ -2,6 +2,9 @@
 
 #include <fsc/streams.capnp.h>
 #include <kj/async-io.h>
+#include <kj/io.h>
+
+#include <iostream>
 
 #include "common.h"
 
@@ -39,5 +42,11 @@ struct MultiplexedOutputStream : public kj::AsyncOutputStream {
  * output stream by multiplexing write calls in turn with a FIFO.
  */
 Own<MultiplexedOutputStream> multiplex(Own<kj::AsyncOutputStream>&&);
+
+//! Wraps a buffered input stream into an std::istream	
+Own<std::istream> wrapStream(kj::BufferedInputStream& is);
+
+//! Wraps a buffered output stream into an std::ostream
+Own<std::ostream> wrapStream(kj::BufferedOutputStream& is);
 
 }
