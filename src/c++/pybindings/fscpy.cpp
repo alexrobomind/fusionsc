@@ -159,6 +159,7 @@ PYBIND11_MODULE(native, m) {
 	initDevices(m);
 	initService(m);
 	initHelpers(m);
+	initFormats(m);
 	
 	auto atexitModule = py::module_::import("atexit");
 	atexitModule.attr("register")(py::cpp_function(&atExitFunction));

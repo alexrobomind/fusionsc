@@ -533,7 +533,7 @@ namespace {
 	struct OStreamBuffer : public virtual std::streambuf {		
 		kj::BufferedOutputStream& os;
 		
-		OStreamBuffer(kj::OutputStream& nos) :
+		OStreamBuffer(kj::BufferedOutputStream& nos) :
 			os(nos)
 		{
 			resetBuffer();
@@ -541,20 +541,21 @@ namespace {
 		
 		void resetBuffer() {
 			auto buf = os.getWriteBuffer();
-			setp(buf.begin(), buf.end());
+			setp((char*) buf.begin(), (char*) buf.end());
 		}
 				
-		int overflow(int c = std::EOF) override {
+		int overflow(int c = EOF) override {
 			// Write buffered data
 			os.write(pbase(), (pptr() - pbase()));
-			os.flush();
 			
 			resetBuffer();
 			
-			if(c != std::EOF) {
+			if(c != EOF) {
 				*pptr() = c;
 				pbump(1);
 			}
+			
+			return c;
 		}
 		
 		std::streamsize xsputn(const char* s, std::streamsize n) override {
@@ -570,24 +571,24 @@ namespace {
 	struct IStreamBuffer : public virtual std::streambuf {
 		kj::BufferedInputStream& is;
 		
-		IStreamBuffer(kj::BufferedInputStream& nos) :
-			os(nos)
+		IStreamBuffer(kj::BufferedInputStream& nis) :
+			is(nis)
 		{}
 		
 		void syncStream() {
-			os.skip(gptr() - eback());
+			is.skip(gptr() - eback());
 		}
 		
 		kj::ArrayPtr<const kj::byte> syncBuf() {	
-			auto buf = os.tryGetReadBuffer();
-			setg(buf.begin(), buf.begin(), buf.end());
+			auto buf = is.tryGetReadBuffer();
+			setg((char*) buf.begin(), (char*) buf.begin(), (char*) buf.end());
 			
 			return buf;
 		}
 		
 		std::streamsize xsgetn(char* s, std::streamsize n) override {
 			syncStream();
-			auto result = is.tryGet(s, n, n);
+			auto result = is.tryRead(s, n, n);
 			syncBuf();
 			return result;
 		}
@@ -597,21 +598,21 @@ namespace {
 			auto buf = syncBuf();
 			
 			if(buf.size() == 0)
-				return std::EOF;
+				return EOF;
 			
 			return buf[0];
 		}
 	};
 }
 	
-Own<std::istream> wrapStream(kj::BufferedInputStream& is) {
+Own<std::istream> asStdStream(kj::BufferedInputStream& is) {
 	auto buf = kj::heap<IStreamBuffer>(is);
 	auto stream = kj::heap<std::istream>(buf.get());
 	
 	return stream.attach(mv(buf));
 }
 
-Own<std::ostream> wrapStream(kj::BufferedOutputStream& is) {
+Own<std::ostream> asStdStream(kj::BufferedOutputStream& is) {
 	auto buf = kj::heap<OStreamBuffer>(is);
 	auto stream = kj::heap<std::ostream>(buf.get());
 	

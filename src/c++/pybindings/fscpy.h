@@ -53,6 +53,7 @@ namespace fscpy {
 	void initLoader(py::module_& m);	
 	void initService(py::module_& m);
 	void initHelpers(py::module_& m);
+	void initFormats(py::module_& m);
 	
 	// constexpr inline kj::StringPtr INTERNAL_ACCESS_KEY = "9821736419873251235"_kj;
 	

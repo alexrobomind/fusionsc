@@ -165,6 +165,7 @@ if(BUILD_TESTING)
 		blob-store-tests.cpp
 		db-cache-tests.cpp
 		json-tests.cpp
+		streams-tests.cpp
 		
 		efit-tests.cpp
 		

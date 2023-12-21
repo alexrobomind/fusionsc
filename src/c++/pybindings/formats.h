@@ -32,8 +32,8 @@ namespace fscpy {
 			void dump(DynamicValueReader, py::object);
 			
 			Formatted load(py::object);
-			Formatted loads(py::buffer);
-			Formatted loads(py::str);
+			Formatted loads1(py::buffer);
+			Formatted loads2(py::str);
 			
 			const bool isBinary;
 		};
