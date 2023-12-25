@@ -327,6 +327,408 @@ namespace {
 		}
 	}
 	
+	struct Sink {
+		using Initializer = kj::Function<capnp::DynamicList::Builder(size_t)>;
+		virtual ~Sink() {};
+		
+		virtual DynamicStruct::Builder newObject() = 0;
+		virtual Initializer newList() = 0;
+		virtual void accept(Orphan<DynamicValue>) = 0;
+		virtual capnp::Type expectedType() = 0;
+		virtual void finish() = 0;
+		
+		virtual void acceptKey(kj::StringPtr) = 0;
+		
+		
+		capnp::Orphanage orphanage() = 0;
+	};
+	
+	struct StructSink : public Sink {
+		DynamicStruct::Builder builder;
+		Maybe<capnp::StructSchema::Field> currentField = nullptr;
+		
+		StructSink(DynamicStruct::Builder builder) :
+			builder(builder)
+		{}
+		
+		// WARNING: The builder returned is only valid until the next call to this
+		// object
+		DynamicStruct::Builder newObject() override {
+			KJ_IF_MAYBE(pField, currentField) {
+				auto field = *pField;
+				currentField = nullptr;
+				KJ_REQUIRE(field.getType().isStruct(), "Can only decode maps as structs");
+				
+				return dst.init(field);
+			}
+			KJ_FAIL_REQUIRE("Trying to allocate map entry without key");
+		}
+		
+		// WARNING: The initializer returned is only valid until the next call to this
+		// object
+		Initializer newList() override {
+			KJ_IF_MAYBE(pField, currentField) {
+				auto field = *pField;
+				currentField = nullptr;
+				
+				KJ_REQUIRE(field.getType().isList(), "Can only decode arrays as lists");
+				
+				return [builder, field](size_t size) {
+					return builder.init(field, size);
+				};
+			}
+			KJ_FAIL_REQUIRE("Trying to allocate map entry without key");
+		}
+		
+		void accept(DynamicValue::Builder val) override {
+			KJ_IF_MAYBE(pField, currentField) {
+				auto field = *pField;
+				currentField = nullptr;
+				
+				builder.set(field, val);
+			}
+			KJ_FAIL_REQUIRE("Trying to set map entry without key");
+		}
+		
+		capnp::Type expectedType() override {
+			KJ_IF_MAYBE(pField, currentField) {
+				return pField -> getType();
+			}
+			
+			// Key types are text
+			return capnp::Type(capnp::schema::Type::TEXT);
+		}
+		
+		void acceptKey(kj::StringPtr key) override {
+			KJ_REQUIRE(currentField == nullptr, "Can only select one field at once");
+			currentField = builder.getFieldByName(key);
+		}
+		
+		void beginList(Maybe<size_t>) override {
+			KJ_FAIL_REQUIRE("Can not assign a list to a struct slot");
+		}
+		
+		void beginObject() override {}
+		void finish() override {}
+		
+		capnp::Orphanage orphanage() override {
+			return capnp::Orphanage::getForMessageContaining(builder);
+		}
+	};
+	
+	struct ListSink {
+		Initializer initializer;
+		capnp::ListSchema listSchema;
+		
+		capnp::MallocMessageBuilder tmpMessage;
+		
+		using TmpList = capnp::Orphan<capnp::DynamicList>;
+		kj::Vector<TmpList> finishedLists;
+		TmpList currentList;
+		size_t currentListComplete = 0;
+		
+		ListSink(capnp::ListSchema listSchema, ListSink::Initializer&& initializer, Maybe<size_t> maybeSize) :
+				initializer(mv(initializer))
+				listSchema(listSchema))
+		{
+			auto elType = listSchema.getElementType();
+			size_t size = elType.isBool() ? 64 : 8;
+			KJ_IF_MAYBE(pSize, maybeSize) {
+				size = *pSize;
+			}
+			
+			currentList = tmpMessage.getOrphanage().newOrphan(listSchema, size);
+		}
+		
+		void finish() override {
+			// Initialize target orphan
+			size_t totalSize = 0;
+			for(auto& f : finishedLists)
+				totalSize += f.get().size();
+			totalSize += currentListComplete;
+			
+			// Copy all data over
+			DynamicList::Builder builder = initializer(totalSize);
+			
+			size_t outIdx = 0;
+			for(auto& f : finishedLists) {
+				auto reader = f.getReader();
+				for(auto el : reader)
+					builder.set(outIdx++, el);
+			}
+			
+			auto current = currentList.getReader();
+			for(auto i : kj::range(0, currentListComplete)) {
+				builder.set(outIdx++, current[i]);
+			}
+		}
+		
+		// WARNING: The builder returned is only valid until the next call to this
+		// object
+		DynamicStruct::Builder newObject() override {
+			grow();
+			return currentList.get()[currentListComplete++];
+		}
+		
+		// WARNING: The initializer returned is only valid until the next call to this
+		// object
+		Initializer newList() override {
+			grow();
+			return [dst = currentList.get(), offset = currentListComplete++](size_t size) {
+				return dst.init(offset, size);
+			};
+		}
+		
+		void accept(DynamicValue::Builder val) override {
+			grow();
+			auto dst = currentList.get();
+			dst.set(currentListComplete++, val);
+		}
+		
+		capnp::Type expectedType() override {
+			return listSchema.getElementType();
+		}
+		
+		void acceptKey(kj::StringPtr) override {
+			KJ_FAIL_REQUIRE("Can not assign keys to lists, only in objects");
+		}
+		
+		capnp::Orphanage orphanage() override {
+			return tmpMessage.getOrphanage();
+		}
+		
+	private:
+		void grow() {
+			size_t currentSize = currentList.getReader().size();
+			if(currentListComplete >= currentSize) {
+				finishedLists.append(mv(currentList));
+				currentList = tmpMessage.getOrphanage().newOrphan(listSchema, 2 * currentSize);
+				currentListComplete = 0;
+			}
+		}
+	};
+	
+	struct BuilderStack {
+		kj::Vector<Own<Sink>> stack;
+		size_t ignoreDepth = 0;
+		
+		CapnpVisitor(capnp::ListSchema schema, ListSink::Initializer&& initializer) {
+			stack.append(kj::heap<ListSink>(schema, mv(initializer)));
+		}
+		
+		CapnpVisitor(DynamicStruct::Builder structBuilder) {
+			stack.append(kj::heap<StructSink>(structBuilder));
+		}
+		
+		capnp::Type expectedType() {
+			KJ_REQUIRE(!stack.empty());
+			
+			return stack.back().expectedType();
+		}
+		
+		void beginObject() {
+			if(ignoreDepth > 0) {
+				++ignoreDepth;
+				return;
+			}
+			
+			KJ_REQUIRE(!stack.empty());
+			
+			auto elType = stack.back().expectedType();
+			if(elType.isInterface() || elType.isAnyPointer()) {
+				beginNull();
+				return;
+			}
+			KJ_REQUIRE(elType.isStruct(), "Trying to assign a map to a non-struct destination");
+			
+			stack.append(kj::heap<StructSink>(stack.back().newObject()));
+		}
+		
+		void endObject() {
+			if(ignoreDepth > 0) {
+				--ignoreDepth;
+				return;
+			}
+			
+			KJ_REQUIRE(!stack.empty());
+			stack.back().finish();
+			stack.removeLast();
+		}
+		
+		void beginArray(Maybe<size_t> size = nullptr) {
+			if(ignoreDepth > 0) {
+				++ignoreDepth;
+				return;
+			}
+			
+			KJ_REQUIRE(!stack.empty());
+			
+			auto elType = stack.back().expectedType();
+			if(elType.isInterface() || elType.isAnyPointer()) {
+				beginNull();
+				return;
+			}
+			KJ_REQUIRE(elType.isList(), "Trying to assign a list to a non-list destination");
+			
+			stack.append(kj::heap<ListSink>(elType.asList(), stack.back().newList(), size));
+		}
+		
+		void endArray() {
+			if(ignoreDepth > 0) {
+				--ignoreDepth;
+				return;
+			}
+			
+			KJ_REQUIRE(!stack.empty());
+			stack.back().finish();
+			stack.removeLast();
+		}
+		
+		void accept(capnp::DynamicValue::Reader input) {
+			KJ_REQUIRE(!stack.empty());			
+			auto& back = stack.back();
+			
+			auto type = expectedType();
+			
+			using ST = capnp::schema::Type;
+			switch(type.which()) {
+				case ST::ENUM: {
+					auto asEnum = type.asEnum();
+					
+					// Enums can be decoded from text or integer values
+					if(input.getType() == DynamicValue::TEXT) {
+						KJ_IF_MAYBE(pEnumerant, asEnum.findEnumerantByName(input.getAs<capnp::Text>())) {
+							back.accept(DynamicEnum(*pEnumerant));
+							break;
+						}
+					}
+					back.accept(DynamicEnum(asEnum, input.as<uint16_t>>()));
+					break;
+				}
+				
+				case ST::DATA:
+				case ST::TEXT:
+				case ST::LIST:
+				case ST::ANY_POINTER:
+					back.accept(input);
+					break;
+				
+				case ST::STRUCT: {
+					if(input.getType() == DynamicValue::TEXT) {
+						auto dst = back.newObject();
+						auto schema = dst.getSchema();
+						
+						auto field = schema.getFieldByName(input.as<capnp::Text>());
+						dst.clear(field);
+					} else {
+						back.accept(input);
+					}
+					break;
+				}
+				
+				case ST::VOID:
+					back.accept(capnp::Void());
+					break;
+				
+				case ST::FLOAT32:
+				case ST::FLOAT64:
+					// Custom parsing for String values
+					if(input.getType() == DynamicValue::TEXT) {
+						kj::String asString = kj::heapString(input.as<capnp::Text>());
+						for(char& c : asString)
+							c = std::tolower(c);
+						
+						#define HANDLE_VAL(val, result) \
+							if(asString == val) { \
+								back.accept(result); \
+								break; \
+							}
+							
+						HANDLE_VAL(".nan", std::numeric_limits<double>::quiet_NaN())
+						HANDLE_VAL(".inf", std::numeric_limits<double>::infinity())
+						HANDLE_VAL("-.inf", -std::numeric_limits<double>::infinity())
+						
+						#define HANDLE_VAL(size, val, result) \
+							if(asString.substr(0, size) == val) { \
+								back.accept(result); \
+								break; \
+							}
+							
+						HANDLE_VAL(3, "nan", std::numeric_limits<double>::quiet_NaN())
+						HANDLE_VAL(3, "inf", std::numeric_limits<double>::infinity())
+						HANDLE_VAL(4, "-inf", -std::numeric_limits<double>::infinity())
+						
+						#undef HANDLE_VAL
+									
+						back.accept(std::stod(asString));
+					} else {
+						back.accept(input);
+					}
+					break;
+				
+				case ST::UINT8:
+				case ST::UINT16:
+				case ST::UINT32:
+				case ST::UINT64: {
+					if(input.getType() == DynamicValue::TEXT) {
+						back.accept(input.as<capnp::Text>().parseAs<uint64_t>());
+					} else {
+						back.accept(input);
+					}
+					break;
+				}
+				
+				case ST::INT8:
+				case ST::INT16:
+				case ST::INT32:
+				case ST::INT64: {
+					if(input.getType() == DynamicValue::TEXT) {
+						back.accept(input.as<capnp::Text>().parseAs<int64_t>());
+					} else {
+						back.accept(input);
+					}
+					break;
+				}
+				
+				case ST::BOOL:
+					// Custom parsing for String values
+					if(input.getType() == DynamicValue::TEXT) {
+						kj::String asString = kj::heapString(input.as<capnp::Text>());
+						for(char& c : asString)
+							c = std::tolower(c);
+						
+						#define HANDLE_VAL(val, result) \
+							if(asString == val) { \
+								back.accept(result); \
+								break; \
+							}
+							
+						HANDLE_VAL("true", true);
+						HANDLE_VAL("false", false);
+						HANDLE_VAL(".true", true);
+						HANDLE_VAL(".false", false);
+						HANDLE_VAL("yes", true);
+						HANDLE_VAL("no", false);
+						HANDLE_VAL("on", true);
+						HANDLE_VAL("off", false);
+						
+						#undef HANDLE_VAL
+						
+						KJ_FAIL_REQUIRE("Unable to convert value to bool", asString);
+					} else {
+						back.accept(input);
+					}
+					break;
+			}	
+		}
+	
+	private:
+		void beginNull() {
+			stack.back().accept(nullptr);
+			++ignoreDepth;
+		}
+	};
+	
 	// Forward declarations
 	void loadStruct(DynamicStruct::Builder dst, Cursor& cursor);
 	void loadList(capnp::ListSchema listSchema, kj::Function<capnp::DynamicList::Builder(size_t)> initializer, Cursor& cursor);
