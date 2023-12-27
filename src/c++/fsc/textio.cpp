@@ -239,19 +239,6 @@ namespace {
 		capnp::Orphanage orphanage() override {
 			return capnp::Orphanage::getForMessageContaining(dst);
 		}
-		
-	private:
-		void grow() {
-			size_t currentSize = currentList.size();
-			if(currentListComplete >= currentSize) {
-				KJ_REQUIRE(!preInitialized, "The number of elements presented exceeded the advertised number");
-				
-				finishedLists.append(mv(currentStorage));
-				currentStorage = tmpMessage.getOrphanage().newOrphan(listSchema, 2 * currentSize);
-				currentList = currentStorage.get();
-				currentListComplete = 0;
-			}
-		}
 	};
 	
 	struct BuilderStack {
