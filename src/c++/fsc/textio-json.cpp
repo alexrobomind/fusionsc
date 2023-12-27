@@ -17,7 +17,7 @@ using capnp::DynamicStruct;
 using capnp::DynamicEnum;
 using capnp::DynamicCapability;
 
-// This file is based on yaml.cpp, but adapted to use the goldfish CBOR / JSON writer.
+// Shim between jsoncons and our text IO
 
 namespace fsc { namespace textio {
 
@@ -277,8 +277,9 @@ namespace {
 		KJ_FAIL_REQUIRE("Unknown dialect");
 	}
 	
-	struct EncoderVisitor : public Visitor {
+	struct JsonVisitor : public Visitor {
 		Encoder& enc;
+		size_t depth = 0;
 		
 		capnp::Type expectedType() override {
 			return capnp::schema::Type::VOID;
@@ -290,10 +291,12 @@ namespace {
 			} else {
 				enc.begin_object();
 			}
+			++depth;
 		}
 		
 		void endObject() override {
 			enc.end_object();
+			--depth;
 		}
 		
 		void beginArray(Maybe<size_t s>) override {
@@ -302,59 +305,44 @@ namespace {
 			} else {
 				enc.begin_array();
 			}
+			++depth;
+		}
+		
+		void endArray() override {
+			enc.end_array();
+			--depth;
 		}
 		
 		void acceptKey(kj::StringPtr key) override {
 			enc.key(key.c_str());
 		}
 		
-		void accept(DynamicValue::Reader r) {
-			switch(r.getType()) {
-				case DynamicValue::VOID:
-					enc.null_value();
-					break;
-				case DynamicValue::BOOL:
-					enc.bool_value(r.as<bool>());
-					break;
-				case DynamicValue::INT:
-					enc.int64_value(r.as<int64_t>());
-					break;
-				case DynamicValue::UINT:
-					enc.uint64_value(r.as<uint64_t>());
-					break;
-				case DynamicValue::FLOAT:
-					enc.double_value(r.as<double>());
-					break;
-				case DynamicValue::TEXT:
-					enc.string_value(r.as<capnp::Text>().c_str());
-					break;
-				case DynamicValue::DATA:
-					auto asBin = r.as<capnp::Data>();
-					enc.byte_string_value(jsoncons::byte_string_view(asBin.begin(), asBin.size()));
-					break;
-				case DynamicValue::ENUM: {
-					auto enumerant = val.as<DynamicEnum>().getEnumerant();
-					KJ_IF_MAYBE(pEn, enumerant) {
-						encoder.string_value(pEn -> getProto().getName().cStr());
-					} else {
-						encoder.uint64_value(val.as<DynamicEnum>().getRaw());
-					}
-					break;
-				}
-				case DynamicValue::CAPABILITY:
-					encoder.string_value("<capability>");
-					break;
-				case DynamicValue::ANY_POINTER:
-					encoder.string_value("<unknown>");
-					break;
-				case DynamicValue::UNKNOWN:
-					encoder.string_value("<unknown>");
-					break;
-				case DynamicValue::LIST:
-				case DynamicValue::STRUCT:
-					KJ_FAIL_REQUIRE("Can not serialize list / struct via accept(), use beginObject / beginArray instead");
-					break;
-			}
+		void acceptNull() override {
+			enc.null_value();
+		}
+		
+		void acceptBool(bool v) override {
+			enc.bool_value(v);
+		}
+		
+		void acceptInt(int64_t v) override {
+			enc.int64_value(v);
+		}
+		
+		void acceptDouble(double d) override {
+			enc.double_value(d);
+		}
+		
+		void acceptData(kj::ArrayPtr<const byte> data) override {
+			enc.byte_string_value(jsoncons::byte_string_view(asBin.begin(), asBin.size()));
+		}
+		
+		void acceptString(kj::StringPtr str) override {
+			enc.string_value(str.cStr());
+		}
+		
+		bool done() override {
+			return depth == 0;
 		}
 	};
 	
@@ -403,35 +391,33 @@ namespace {
 				
 				case jsoncons::EventType::string_value:
 					auto strView = valueEvt.get<jsoncons::string_view>();
-					capnp::Text::Reader asText(strView.data(), strView.size());
-					v.accept(asText);
+					v.acceptString(kj::StringPtr(strView.data(), strView.size()));
 					break;
 				
 				case jsoncons::EventType::byte_string_value:
 					auto byteView = current.get<jsoncons::byte_string_view>();
-					capnp::Data::Reader asData(byteView.data(), byteView.size());
-					v.accept(asData);
+					v.acceptData(kj::ArrayPtr<const byte>(byteView.data(), byteView.size()));
 					break;
 
 				case jsoncons::EventType::null_value:
-					v.accept(capnp::Void());
+					v.acceptNull();
 					break;
 				
 				case jsoncons::EventType::bool_value:
-					v.accept(evt.get<bool>());
+					v.acceptBool(evt.get<bool>());
 					break;
 				
 				case jsoncons::EventType::int64_value:
-					v.accept(evt.get<int64_t>());
+					v.acceptInt(evt.get<int64_t>());
 					break;
 				
 				case jsoncons::EventType::uint64_value:
-					v.accept(evt.get<uint64_t>());
+					v.acceptUInt(evt.get<uint64_t>());
 					break;
 				
 				case jsoncons::EventType::half_value:
 				case jsoncons::EventType::double_value:
-					v.accept(evt.get<double>());
+					v.acceptDouble(evt.get<double>());
 					break;
 			}
 			
@@ -443,7 +429,7 @@ namespace {
 namespace internal {
 	Own<Visitor> createJsonconsWriter(kj::BufferedOutputStream&, const Dialect& dialect) {
 		auto encoder = makeEncoder(stream, dialect);
-		auto writer = kj::heap<EncoderVisitor>(*encoder);
+		auto writer = kj::heap<JsonVisito>(*encoder);
 		return writer.attach(mv(encoder));
 	}
 

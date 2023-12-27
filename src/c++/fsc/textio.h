@@ -2,10 +2,38 @@
 
 #include "data.h"
 
+/*
+
+This module translates between hierarchical formats with structured object
+representations. Formats should support the following types:
+- String-keyed maps
+- Lists
+- Null
+- double, int64, uint64
+- Strings
+- Binary string
+
+*/
+
 namespace fsc { namespace textio {
+	// Tree node that can hold our text IO structures
+	struct Node {		
+		using MapPayload = kj::TreeMap<kj::String, Node>;
+		using ListPayload = kj::Vector<Node>;
+		struct NullValue {};
+		
+		using Payload = OneOf<
+			MapPayload, ListPayload,
+			kj::String, kj::Array<kj::byte>,
+			double, uint64_t, int64_t, bool,
+			NullValue
+		>;
+		
+		Payload payload;
+	};
+	
 	struct Visitor {
 		inline virtual ~Visitor() {};
-		virtual capnp::Type expectedType() = 0;
 		
 		virtual void beginObject(Maybe<size_t>) = 0;
 		virtual void endObject() = 0;
@@ -13,8 +41,17 @@ namespace fsc { namespace textio {
 		virtual void beginArray(Maybe<size_t>) = 0;
 		virtual void endArray() = 0;
 		
-		virtual void accept(DynamicValue::Reader value) = 0;
-		virtual void acceptKey(kj::StringPtr key) = 0;
+		virtual void acceptNull() = 0;
+		virtual void acceptDouble(double) = 0;
+		virtual void acceptInt(int64_t) = 0;
+		virtual void acceptUInt(uint64_t) = 0;
+		virtual void acceptString(kj::StringPtr) = 0;
+		virtual void acceptData(ArrayPtr<const byte>) = 0;
+		virtual void acceptBool(bool) = 0;
+		
+		virtual void acceptKey(kj::StringPtr) = 0;
+		
+		bool done() = 0;
 	};
 	
 	struct Dialect {
@@ -44,14 +81,16 @@ namespace fsc { namespace textio {
 	
 	using ListInitializer = kj::Function<capnp::DynamicList::Builder(size_t)>;
 	
-	void load(kj::BufferedInputStream&, Visitor&, const Dialect&);
-	
 	Own<Visitor> createVisitor(DynamicStruct::Builder);
 	Own<Visitor> createVisitor(capnp::ListSchema, ListInitializer);
+	Own<Visitor> createVisitor(Node&);
 	
+	void load(kj::BufferedInputStream&, Visitor&, const Dialect&);
+	void load(kj::BufferedInputStream&, Node&, const Dialect&);
 	void load(kj::BufferedInputStream&, DynamicStruct::Builder, const Dialect&);
 	void load(kj::BufferedInputStream&, capnp::ListSchema, ListInitializer, const Dialect&);
 	
+	void save(Node&, Visitor&);
 	void save(DynamicValue::Reader, Visitor&);
 	void save(DynamicValue::Reader, kj::BufferedOutputStream&, const Dialect&);
 	
