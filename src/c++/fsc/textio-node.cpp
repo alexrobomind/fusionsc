@@ -1,5 +1,7 @@
 // Methods for saving and loading into textio::Node
 
+#include "textio.h"
+
 namespace fsc { namespace textio {
 
 namespace {
@@ -8,41 +10,42 @@ namespace {
 		struct Append {};
 		struct WriteObject {};
 		struct Done {};
-		using Field = capnp::String;
+		using Field = Node;
 		
 		using State = OneOf<WriteInto, WriteObject, Append, Field, Done>;
 		
-		kj::Vector<Node&> stack;
+		kj::Vector<Node*> stack;
 		State state = WriteInto();
 		
 		NodeStack(Node& first) {
-			stack.append(first);
+			stack.add(&first);
+			this -> supportsIntegerKeys = true;
 		}
 		
 		Node& back() {
 			KJ_ASSERT(!stack.empty());
-			return stack.back();
+			return *stack.back();
 		}
 		
 		void push(Node& n) {
-			stack.add(n);
+			stack.add(&n);
 		}
 		
 		void pop() {
 			stack.removeLast();
 			
 			if(stack.empty()) {
-				state.emplace<Done>();
+				state.init<Done>();
 				return;
 			}
 			
 			if(back().payload.is<Node::MapPayload>()) {
-				state.emplace<WriteObject>();
+				state.init<WriteObject>();
 				return;
 			}
 			
 			if(back().payload.is<Node::ListPayload>()) {
-				state.emplace<Append>();
+				state.init<Append>();
 				return;
 			}
 			
@@ -54,22 +57,21 @@ namespace {
 			KJ_REQUIRE(!state.is<Done>());
 			
 			if(state.is<WriteInto>()) {
-				dst = &top;
-				dstType = type();
 				return;
 			}
 			
 			if(state.is<Append>()) {
-				Node& dst = top.payload.as<Node::ListPayload>().add();
-				dstType = elementType(type());
-				push(dst, dstType);
+				Node& dst = back().payload.get<Node::ListPayload>().add();
+				push(dst);
 				return;
 			}
 			
 			if(state.is<Field>()) {
-				Node& dst = &(top.payload.as<Node::MapPayload>().insert(state.get<Field>()));
-				auto dstType = fieldType(top.type);
-				push(dst, dstType);
+				Tuple<Node, Node>& container = back().payload.get<Node::MapPayload>().add(kj::tuple(
+					mv(state.get<Field>()), Node()
+				));
+				
+				push(kj::get<1>(container));
 				return;
 			}
 			
@@ -79,33 +81,33 @@ namespace {
 		void beginObject(Maybe<size_t> size) override {
 			prepareTop();
 			
-			checkStruct(type());
-			back().payload.emplace<Node::MapPayload>();
-			state.emplace<WriteObject>();
+			back().payload.init<Node::MapPayload>();
+			state.init<WriteObject>();
 			
 			return;
 		}
 		
 		void endObject() override {
+			KJ_REQUIRE(!state.is<Done>());
 			pop();
 		}
 		
 		void beginArray(Maybe<size_t> size) override {
 			prepareTop();
 			
-			checkList(type());
-			back().payload.emplace<Node::ListPayload>();
+			back().payload.init<Node::ListPayload>();
 			
 			KJ_IF_MAYBE(pSize, size) {
-				back().payload.as<Node::ListPayload>().reserve(*pSize);
+				back().payload.get<Node::ListPayload>().reserve(*pSize);
 			}
 			
-			state.emplace<Append>();
+			state.init<Append>();
 			
 			return;
 		}
 		
 		void endArray() override {
+			KJ_REQUIRE(!state.is<Done>());
 			pop();
 		}
 		
@@ -113,14 +115,9 @@ namespace {
 			return state.is<Done>();
 		}
 		
-		void acceptKey(kj::StringPtr key) override {
-			KJ_REQUIRE(state.is<WriteObject>());
-			state = kj::heapString(key);
-		}
-		
 		void acceptNull() override {
 			prepareTop();
-			back().payload.emplace<capnp::Void>();
+			back().payload.init<Node::NullValue>();
 			pop();
 		}
 		
@@ -149,9 +146,14 @@ namespace {
 		}
 		
 		void acceptString(kj::StringPtr v) override {
-			prepareTop();
-			back().payload = kj::heapString(v);
-			pop();
+			if(state.is<WriteObject>()) {
+				Node& s = state.init<Field>();
+				s.payload = kj::heapString(v);
+			} else {
+				prepareTop();
+				back().payload = kj::heapString(v);
+				pop();
+			}
 		}
 		
 		void acceptData(kj::ArrayPtr<const byte> v) override {
@@ -173,25 +175,25 @@ void save(Node& n, Visitor& v) {
 		v.acceptNull();
 	
 	if(p.is<double>())
-		v.acceptDouble(p.as<double>());
+		v.acceptDouble(p.get<double>());
 	
 	if(p.is<uint64_t>())
-		v.acceptUInt(p.as<uint64_t>());
+		v.acceptUInt(p.get<uint64_t>());
 	
 	if(p.is<int64_t>())
-		v.acceptInt(p.as<int64_t>());
+		v.acceptInt(p.get<int64_t>());
 	
 	if(p.is<bool>())
-		v.acceptInt(p.as<bool>());
+		v.acceptInt(p.get<bool>());
 	
 	if(p.is<kj::String>())
-		v.acceptString(p.as<kj::String>());
+		v.acceptString(p.get<kj::String>());
 	
-	if(p.is<kj::Array<kj::byte>())
-		v.acceptData(p.as<kj::Array<kj::byte>>());
+	if(p.is<kj::Array<kj::byte>>())
+		v.acceptData(p.get<kj::Array<kj::byte>>());
 	
 	if(p.is<Node::ListPayload>()) {
-		auto& lpl = p.as<Node::ListPayload>();
+		auto& lpl = p.get<Node::ListPayload>();
 		
 		v.beginArray(lpl.size());
 		for(Node& el : lpl)
@@ -200,12 +202,12 @@ void save(Node& n, Visitor& v) {
 	}
 	
 	if(p.is<Node::MapPayload>()) {
-		auto& mpl = p.as<Node::MapPayload>();
+		auto& mpl = p.get<Node::MapPayload>();
 		
-		v.beginObject();
+		v.beginObject(mpl.size());
 		for(auto& row : mpl) {
-			v.acceptKey(row.key);
-			save(row.value, v);
+			save(kj::get<0>(row), v);
+			save(kj::get<1>(row), v);
 		}
 		v.endObject();
 	}

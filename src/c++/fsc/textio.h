@@ -55,10 +55,7 @@ namespace fsc { namespace textio {
 		virtual bool done() = 0;
 		
 		//! Whether this visitor allows integer map keys
-		bool integerKeys = false;
-		
-		//! Whether this visitor would like human-readable outputs
-		bool humanReadable = false;
+		bool supportsIntegerKeys = false;
 	};
 	
 	struct Dialect {
@@ -88,6 +85,28 @@ namespace fsc { namespace textio {
 		}
 	};
 	
+	struct SaveOptions {
+		/** Enable compact representation
+		 *
+		 * Compact representation allows hiding default valued fields
+		 * and substituting structures of the form { "onlyField" : defaultValue }
+		 * with the field key ("onlyField" or the field ID).
+		 */
+		bool compact = true;
+		
+		/** Enable integer field keys
+		 *
+		 * Some formats (YAML / CBOR) permit arbitrary objects to be used as
+		 * keys. In such a case, we can save space and improve protcol
+		 * migration by preferentially using the numeric IDs instead of names
+		 * for a lot of objects (field keys, enumerants).
+		 *
+		 * Since this eliminates the value of the saved data as self-describing
+		 * structures, it is disabled by default.
+		 */
+		 bool integerKeys = false;
+	};
+	
 	using ListInitializer = kj::Function<capnp::DynamicList::Builder(size_t)>;
 	
 	Own<Visitor> createVisitor(capnp::DynamicStruct::Builder);
@@ -100,8 +119,8 @@ namespace fsc { namespace textio {
 	void load(kj::BufferedInputStream&, capnp::ListSchema, ListInitializer, const Dialect&);
 	
 	void save(Node&, Visitor&);
-	void save(capnp::DynamicValue::Reader, Visitor&);
-	void save(capnp::DynamicValue::Reader, kj::BufferedOutputStream&, const Dialect&);
+	void save(capnp::DynamicValue::Reader, Visitor&, const SaveOptions& = SaveOptions());
+	void save(capnp::DynamicValue::Reader, kj::BufferedOutputStream&, const Dialect&, const SaveOptions& = SaveOptions());
 	
 	namespace internal {
 		void jsonconsLoad(kj::BufferedInputStream&, Visitor&, const Dialect&);

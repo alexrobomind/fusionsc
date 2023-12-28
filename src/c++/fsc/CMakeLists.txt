@@ -30,6 +30,9 @@ add_library(
 	
 	textio.h
 	textio.cpp
+	textio-node.cpp
+	textio-json.cpp
+	textio-yaml.cpp
 	
 	hdf5.h
 	hdf5.cpp

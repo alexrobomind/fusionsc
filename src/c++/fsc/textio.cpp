@@ -304,7 +304,7 @@ namespace {
 			
 			stack.removeLast();
 			
-			if(stack.size() == 1)
+			if(stack.size() <= 1)
 				isDone = true;
 		}
 	};
@@ -328,7 +328,9 @@ namespace {
 		
 		ValueConverter(Own<Sink>&& firstSink) :
 			backend(mv(firstSink))
-		{}
+		{
+			this -> supportsIntegerKeys = true;
+		}
 		
 		#define ACCEPT_FWD(expr) \
 			KJ_IF_MAYBE(pTape, tape) { \
@@ -608,17 +610,17 @@ namespace {
 		}
 	};
 	
-	void saveValue(DynamicValue::Reader, Visitor&);
-	void saveStruct(DynamicStruct::Reader, Visitor&);
-	void saveList(DynamicList::Reader, Visitor&);
+	void saveValue(DynamicValue::Reader, Visitor&, const SaveOptions&);
+	void saveStruct(DynamicStruct::Reader, Visitor&, const SaveOptions&);
+	void saveList(DynamicList::Reader, Visitor&, const SaveOptions&);
 	
-	void saveValue(DynamicValue::Reader in, Visitor& v) {
+	void saveValue(DynamicValue::Reader in, Visitor& v, const SaveOptions& opts) {
 		switch(in.getType()) {
 			case DynamicValue::STRUCT:
-				saveStruct(in.as<DynamicStruct>(), v);
+				saveStruct(in.as<DynamicStruct>(), v, opts);
 				break;
 			case DynamicValue::LIST:
-				saveList(in.as<DynamicList>(), v);
+				saveList(in.as<DynamicList>(), v, opts);
 				break;
 			case DynamicValue::CAPABILITY: {
 				auto asCap = in.as<DynamicCapability>();
@@ -630,7 +632,7 @@ namespace {
 				break;
 			}
 			case DynamicValue::ENUM:
-				if(v.humanReadable) {
+				if(opts.integerKeys) {
 					KJ_IF_MAYBE(pEnumerant, in.as<DynamicEnum>().getEnumerant()) {
 						v.acceptString(pEnumerant -> getProto().getName());
 						break;
@@ -658,16 +660,16 @@ namespace {
 		}
 	}
 	
-	void saveStruct(DynamicStruct::Reader in, Visitor& v) {
+	void saveStruct(DynamicStruct::Reader in, Visitor& v, const SaveOptions& opts) {
 		// If we have no non-union fields and the active union field is a
 		// default-valued one, then we write only the field name (reads nicer
 		
-		if(in.getSchema().getNonUnionFields().size() == 0) {
+		if(in.getSchema().getNonUnionFields().size() == 0 && opts.compact) {
 			auto maybeActive = in.which();
 			KJ_IF_MAYBE(pActive, maybeActive) {
 				auto& active = *pActive;
 				if(!in.has(active, capnp::HasMode::NON_DEFAULT)) {
-					if(v.humanReadable) {
+					if(opts.integerKeys) {
 						v.acceptString(active.getProto().getName());
 					} else {
 						v.acceptUInt(active.getIndex());
@@ -681,6 +683,7 @@ namespace {
 			// Check if field is inactive union field
 			if(field.getProto().getDiscriminantValue() != capnp::schema::Field::NO_DISCRIMINANT) {
 				KJ_IF_MAYBE(pField, in.which()) {
+					// Active union fields ALWAYS HAVE to be emitted
 					return *pField == field;
 				}
 				return false;
@@ -694,6 +697,11 @@ namespace {
 			if(field.getType().isAnyPointer() || field.getType().isInterface()) {
 				if(!in.has(field, capnp::HasMode::NON_DEFAULT))
 					return false;
+			}
+			
+			// In compact representation we can omit default-valued fields of any kind
+			if(opts.compact && !in.has(field, capnp::HasMode::NON_DEFAULT)) {
+				return false;
 			}
 			
 			return true;
@@ -710,12 +718,19 @@ namespace {
 		auto emitField = [&](capnp::StructSchema::Field field) {
 			auto type = field.getType();
 			
-			if(v.integerKeys && !v.humanReadable)
+			if(opts.integerKeys && v.supportsIntegerKeys)
 				v.acceptUInt(field.getIndex());
 			else
 				v.acceptString(field.getProto().getName());
 			
-			saveValue(in.get(field), v);
+			// We CAN NOT emit nullptr structs, since this can cause
+			// infinite depth on recursive structures.
+			if(field.getType().isStruct() && !in.has(field)) {
+				v.acceptNull();
+				return;
+			}
+			
+			saveValue(in.get(field), v, opts);
 		};
 		
 		for(auto field : in.getSchema().getFields()) {
@@ -726,11 +741,11 @@ namespace {
 		v.endObject();
 	}
 	
-	void saveList(DynamicList::Reader list, Visitor& v) {
+	void saveList(DynamicList::Reader list, Visitor& v, const SaveOptions& opts) {
 		v.beginArray(list.size());
 		
 		for(auto el : list)
-			saveValue(el, v);
+			saveValue(el, v, opts);
 		
 		v.endArray();
 	}
@@ -771,11 +786,11 @@ void load(kj::BufferedInputStream& is, Visitor& visitor, const Dialect& dialect)
 	}
 }
 
-void save(DynamicValue::Reader reader, Visitor& v) {
-	saveValue(reader, v);
+void save(DynamicValue::Reader reader, Visitor& v, const SaveOptions& opts) {
+	saveValue(reader, v, opts);
 }
 
-void save(DynamicValue::Reader reader, kj::BufferedOutputStream& os, Dialect& dialect) {
+void save(DynamicValue::Reader reader, kj::BufferedOutputStream& os, Dialect& dialect, const SaveOptions& opts) {
 	Own<Visitor> v;
 	
 	if(dialect.language == Dialect::YAML) {
@@ -784,7 +799,7 @@ void save(DynamicValue::Reader reader, kj::BufferedOutputStream& os, Dialect& di
 		v = internal::createJsonconsWriter(os, dialect);
 	}
 	
-	save(reader, *v);
+	save(reader, *v, opts);
 }
 
 }}

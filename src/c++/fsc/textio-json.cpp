@@ -279,70 +279,143 @@ namespace {
 	
 	struct JsonVisitor : public Visitor {
 		Encoder& enc;
-		size_t depth = 0;
+		bool allowGenericKeys = false;
+		bool isDone = false;
 		
-		capnp::Type expectedType() override {
-			return capnp::schema::Type::VOID;
+		enum State {
+			VALUE, MAP_KEY, MAP_VALUE
+		};
+		kj::Vector<State> states;
+		
+		JsonVisitor(Encoder& e, bool genericKeys) :
+			enc(e),
+			allowGenericKeys(genericKeys)
+		{
+			states.add(VALUE);
+		}
+		
+		State& state() { KJ_REQUIRE(!states.empty()); return states.back(); }
+		
+		void advanceMap(bool strKey) {
+			if(state() == MAP_KEY) {
+				state() = MAP_VALUE;
+				KJ_REQUIRE(allowGenericKeys || strKey, "This language only supports string keys");
+			} else if(state() == MAP_VALUE) {
+				state() = MAP_KEY;
+			}
 		}
 		
 		void beginObject(Maybe<size_t> s) override {
+			advanceMap(false);
+			states.add(MAP_KEY);
+			
 			KJ_IF_MAYBE(pSize, s) {
 				enc.begin_object(*pSize);
 			} else {
 				enc.begin_object();
 			}
-			++depth;
 		}
 		
 		void endObject() override {
+			KJ_REQUIRE(state() != MAP_VALUE, "Object ended without receiving value");
+			KJ_REQUIRE(state() != VALUE, "Object ended without corresponding beginObject()");
+			states.removeLast();
+			
 			enc.end_object();
-			--depth;
+			
+			if(states.size() == 1)
+				isDone = true;
 		}
 		
-		void beginArray(Maybe<size_t s>) override {
+		void beginArray(Maybe<size_t> s) override {
+			advanceMap(false);
+			states.add(VALUE);
+			
 			KJ_IF_MAYBE(pSize, s) {
 				enc.begin_array(*pSize);
 			} else {
 				enc.begin_array();
 			}
-			++depth;
 		}
 		
 		void endArray() override {
+			KJ_REQUIRE(state() == VALUE, "Array ended without corresponding beginArray()");
+			states.removeLast();
+			
 			enc.end_array();
-			--depth;
-		}
-		
-		void acceptKey(kj::StringPtr key) override {
-			enc.key(key.c_str());
+			
+			if(states.size() == 1)
+				isDone = true;
 		}
 		
 		void acceptNull() override {
+			advanceMap(false);
 			enc.null_value();
+			
+			if(states.size() == 1)
+				isDone = true;
 		}
 		
 		void acceptBool(bool v) override {
+			advanceMap(false);
 			enc.bool_value(v);
+			
+			if(states.size() == 1)
+				isDone = true;
 		}
 		
 		void acceptInt(int64_t v) override {
+			advanceMap(false);
 			enc.int64_value(v);
+			
+			if(states.size() == 1)
+				isDone = true;
+		}
+		
+		void acceptUInt(uint64_t v) override {
+			advanceMap(false);
+			enc.uint64_value(v);
+			
+			if(states.size() == 1)
+				isDone = true;
 		}
 		
 		void acceptDouble(double d) override {
+			advanceMap(false);
 			enc.double_value(d);
+			
+			if(states.size() == 1)
+				isDone = true;
 		}
 		
 		void acceptData(kj::ArrayPtr<const byte> data) override {
-			enc.byte_string_value(jsoncons::byte_string_view(asBin.begin(), asBin.size()));
+			advanceMap(false);
+			enc.byte_string_value(jsoncons::byte_string_view(data.begin(), data.size()));
+			
+			if(states.size() == 1)
+				isDone = true;
 		}
 		
 		void acceptString(kj::StringPtr str) override {
-			enc.string_value(str.cStr());
+			switch(state()) {
+				case MAP_VALUE:
+				case VALUE:
+					enc.string_value(str.cStr());
+					break;
+				
+				case MAP_KEY:
+					enc.key(str.cStr());
+					break;
+			}
+			
+			advanceMap(true);
+			
+			if(states.size() == 1)
+				isDone = true;
 		}
 		
 		bool done() override {
-			return depth == 0;
+			return isDone;
 		}
 	};
 	
@@ -351,10 +424,10 @@ namespace {
 			if(c.done())
 				break;
 			
-			Evet& evt = c.current();
+			Event& evt = c.current();
 			
-			switch(evt.get_type()) {
-				case jsoncons::EventType::begin_array: {
+			switch(evt.event_type()) {
+				case EventType::begin_array: {
 					size_t s = evt.size();
 					
 					if(s != 0)
@@ -365,11 +438,11 @@ namespace {
 					break;
 				}
 				
-				case jsoncons::EventType::end_array:
+				case EventType::end_array:
 					v.endArray();
-					break
+					break;
 					
-				case jsoncons::EventType::begin_object: {
+				case EventType::begin_object: {
 					size_t s = evt.size();
 					
 					if(s != 0)
@@ -380,7 +453,7 @@ namespace {
 					break;
 				}
 				
-				case jsoncons::EventType::end_object:
+				case EventType::end_object:
 					v.endObject();
 					break;
 				
@@ -389,35 +462,37 @@ namespace {
 					v.acceptKey(str);
 					break;*/
 				
-				case jsoncons::EventType::key:
-				case jsoncons::EventType::string_value:
-					auto strView = valueEvt.get<jsoncons::string_view>();
+				case EventType::key:
+				case EventType::string_value: {
+					auto strView = evt.get<jsoncons::string_view>();
 					v.acceptString(kj::StringPtr(strView.data(), strView.size()));
 					break;
+				}
 				
-				case jsoncons::EventType::byte_string_value:
-					auto byteView = current.get<jsoncons::byte_string_view>();
+				case EventType::byte_string_value: {
+					auto byteView = evt.get<jsoncons::byte_string_view>();
 					v.acceptData(kj::ArrayPtr<const byte>(byteView.data(), byteView.size()));
 					break;
+				}
 
-				case jsoncons::EventType::null_value:
+				case EventType::null_value:
 					v.acceptNull();
 					break;
 				
-				case jsoncons::EventType::bool_value:
+				case EventType::bool_value:
 					v.acceptBool(evt.get<bool>());
 					break;
 				
-				case jsoncons::EventType::int64_value:
+				case EventType::int64_value:
 					v.acceptInt(evt.get<int64_t>());
 					break;
 				
-				case jsoncons::EventType::uint64_value:
+				case EventType::uint64_value:
 					v.acceptUInt(evt.get<uint64_t>());
 					break;
 				
-				case jsoncons::EventType::half_value:
-				case jsoncons::EventType::double_value:
+				case EventType::half_value:
+				case EventType::double_value:
 					v.acceptDouble(evt.get<double>());
 					break;
 			}
@@ -428,9 +503,9 @@ namespace {
 }
 
 namespace internal {
-	Own<Visitor> createJsonconsWriter(kj::BufferedOutputStream&, const Dialect& dialect) {
+	Own<Visitor> createJsonconsWriter(kj::BufferedOutputStream& stream, const Dialect& dialect) {
 		auto encoder = makeEncoder(stream, dialect);
-		auto writer = kj::heap<JsonVisito>(*encoder);
+		auto writer = kj::heap<JsonVisitor>(*encoder, dialect.language == Dialect::CBOR);
 		return writer.attach(mv(encoder));
 	}
 
