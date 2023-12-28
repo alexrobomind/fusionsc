@@ -5,6 +5,7 @@ using capnp::DynamicValue;
 using capnp::DynamicStruct;
 using capnp::DynamicEnum;
 using capnp::DynamicCapability;
+using capnp::StructSchema;
 
 namespace fsc { namespace textio {
 
@@ -16,7 +17,7 @@ namespace {
 			
 			if(pType -> isAnyPointer()) {
 				auto apKind = pType -> whichAnyPointerKind();
-				KJ_REQUIRE(apKind == capnp::schema::Type::AnyPointer::UNCONSTRAINED || apKind == capnp::schema::Type::AnyPointer::ANY_LIST);
+				KJ_REQUIRE(apKind == capnp::schema::Type::AnyPointer::Unconstrained::ANY_KIND || apKind == capnp::schema::Type::AnyPointer::Unconstrained::LIST);
 				return ;
 			}
 			
@@ -26,16 +27,16 @@ namespace {
 	
 	void checkStruct(Maybe<capnp::Type> tp) {
 		KJ_IF_MAYBE(pType, tp) {
-			if(pType -> isList())
+			if(pType -> isStruct())
 				return;
 			
 			if(pType -> isAnyPointer()) {
 				auto apKind = pType -> whichAnyPointerKind();
-				KJ_REQUIRE(apKind == capnp::schema::Type::AnyPointer::UNCONSTRAINED || apKind == capnp::schema::Type::AnyPointer::ANY_LIST);
+				KJ_REQUIRE(apKind == capnp::schema::Type::AnyPointer::Unconstrained::ANY_KIND || apKind == capnp::schema::Type::AnyPointer::Unconstrained::STRUCT);
 				return;
 			}
 			
-			KJ_FAIL_REQUIRE("Type is not a valid list type");
+			KJ_FAIL_REQUIRE("Type is not a valid struct type");
 		}
 	}
 	
@@ -59,11 +60,11 @@ namespace {
 	}
 	
 	struct Sink {
-		virtual ~Sink() {};
+		virtual ~Sink() noexcept(false) {};
 		
 		virtual DynamicStruct::Builder newObject() = 0;
 		virtual DynamicList::Builder newList(size_t) = 0;
-		virtual void accept(Orphan<DynamicValue>) = 0;
+		virtual void accept(DynamicValue::Reader) = 0;
 		virtual capnp::Type expectedType() = 0;
 		
 		// virtual void acceptKey(kj::StringPtr) = 0;
@@ -75,13 +76,15 @@ namespace {
 		DynamicStruct::Builder builder;
 		bool consumed = false;
 		
+		ExternalStructSink(DynamicStruct::Builder b) : builder(b) {}
+		
 		DynamicStruct::Builder newObject() override {
 			KJ_REQUIRE(!consumed, "Internal error");
 			consumed = true;
 			return builder;
 		}
 		
-		Sink::ListInitializer newList() override {
+		DynamicList::Builder newList(size_t) override {
 			KJ_FAIL_REQUIRE("Internal error");
 		}
 		
@@ -111,7 +114,7 @@ namespace {
 			KJ_FAIL_REQUIRE("Can not assign a map to an array");
 		}
 		
-		ListInitializer newList(size_t s) override {
+		DynamicList::Builder newList(size_t s) override {
 			KJ_REQUIRE(!consumed, "Internal error");
 			consumed = true;
 			return initializer(s);
@@ -124,10 +127,6 @@ namespace {
 		capnp::Type expectedType() {
 			return listSchema;
 		}
-		
-		/*void acceptKey(kj::StringPtr) override {
-			KJ_FAIL_REQUIRE("Internal error");
-		}*/
 	};
 	
 	struct StructSink : public Sink {
@@ -145,55 +144,59 @@ namespace {
 				currentField = nullptr;
 				KJ_REQUIRE(field.getType().isStruct(), "Can only decode maps as structs");
 				
-				return dst.init(field);
+				return builder.init(field).as<DynamicStruct>();
 			}
 			KJ_FAIL_REQUIRE("Trying to allocate map entry without key");
 		}
 		
-		ListInitializer newList(size_t s) override {
+		DynamicList::Builder newList(size_t size) override {
 			KJ_IF_MAYBE(pField, currentField) {
 				auto field = *pField;
 				currentField = nullptr;
 				
 				KJ_REQUIRE(field.getType().isList(), "Can only decode arrays as lists");
-				return builder.init(field, size);
+				return builder.init(field, size).as<DynamicList>();
 			}
 			KJ_FAIL_REQUIRE("Trying to allocate map entry without key");
 		}
 		
-		void accept(DynamicValue::Builder val) override {
+		void accept(DynamicValue::Reader val) override {
 			KJ_IF_MAYBE(pField, currentField) {
 				auto field = *pField;
 				currentField = nullptr;
-			
-				// Make sure we don't set union fields twice
-				if(field.getProto().getDiscriminantValue() != capnp::schema::Field::NO_DISCRIMINANT) {
-					KJ_IF_MAYBE(pPrevSet, previouslySetUnionField) {
-						kj::StringPtr currentField = field.getProto().getName();
-						kj::StringPtr previousField = pPrevSet -> getProto() -> getName();
-						
-						KJ_FAIL_REQUIRE("Can not set two fields of the same union", currentField, previousField);
-					}
-					previouslySetUnionField = field;
-				}
 				
 				if(val.getType() == DynamicValue::VOID)
 					builder.clear(field);
 				else
 					builder.set(field, val);
 			} else {
+				StructSchema::Field newField;
+				
 				// val is the field key
 				switch(val.getType()) {
 					case DynamicValue::INT:
 					case DynamicValue::UINT:
-						currentField = builder.getSchema().getFields()[val.as<unsigned int>()];
+						newField = builder.getSchema().getFields()[val.as<unsigned int>()];
 						break;
 					case DynamicValue::TEXT:
-						currentField = builder.getSchema().getFieldByName(val.as<capnp::Text::Reader>());
+						newField = builder.getSchema().getFieldByName(val.as<capnp::Text>());
 						break;
 					default:
 						KJ_FAIL_REQUIRE("Only integer and text map keys supported");
-				}				
+				}	
+			
+				// Make sure we don't set union fields twice
+				if(newField.getProto().getDiscriminantValue() != capnp::schema::Field::NO_DISCRIMINANT) {
+					KJ_IF_MAYBE(pPrevSet, previouslySetUnionField) {
+						if(*pPrevSet != newField) {
+							kj::StringPtr currentField = newField.getProto().getName();
+							kj::StringPtr previousField = pPrevSet -> getProto().getName();
+							
+							KJ_FAIL_REQUIRE("Can not set two fields of the same union", currentField, previousField);
+						}
+					}
+					previouslySetUnionField = newField;
+				}			
 			}
 		}
 		
@@ -224,7 +227,7 @@ namespace {
 		}*/
 	};
 	
-	struct ListSink {
+	struct ListSink : public Sink {
 		DynamicList::Builder dst;
 		size_t offset = 0;
 		
@@ -233,31 +236,33 @@ namespace {
 		{}
 		
 		DynamicStruct::Builder newObject() override {
-			return currentList.get()[offset++].as<DynamicStruct>();
+			return dst[offset++].as<DynamicStruct>();
 		}
 		
-		ListInitializer newList(size_t s) override {
-			return currentList.init(offset++, s).as<DynamicList>();
+		DynamicList::Builder newList(size_t s) override {
+			return dst.init(offset++, s).as<DynamicList>();
 		}
 		
-		void accept(DynamicValue::Builder val) override {			
-			if(val.getType() == DynamicValue::VOID)
-				dst.clear(offset++);
-			else
-				dst.set(offset++, val);
+		void accept(DynamicValue::Reader val) override {		
+			if(val.getType() == DynamicValue::VOID) {
+				// Since these lists are freshly initialized, we can just skip this value
+				++offset;
+				return;
+			}
+			dst.set(offset++, val);
 		}
 		
 		capnp::Type expectedType() override {
-			return listSchema.getElementType();
+			return dst.getSchema().getElementType();
 		}
 		
-		void acceptKey(kj::StringPtr) override {
+		/*void acceptKey(kj::StringPtr) override {
 			KJ_FAIL_REQUIRE("Can not assign keys to lists, only in objects");
 		}
 		
 		capnp::Orphanage orphanage() override {
 			return capnp::Orphanage::getForMessageContaining(dst);
-		}
+		}*/
 	};
 	
 	struct BuilderStack {
@@ -265,39 +270,38 @@ namespace {
 		bool isDone = false;
 		
 		BuilderStack(Own<Sink>&& first) {
-			stack.append(mv(first));
+			stack.add(mv(first));
 		}
 		
 		capnp::Type expectedType() {
-			KJ_ASSERT(!stack.empty());
+			KJ_REQUIRE(!stack.empty());
 			
-			return stack.back().expectedType();
+			return stack.back() -> expectedType();
 		}
 		
 		void beginObject() {
-			KJ_ASSERT(!isDone);
+			KJ_REQUIRE(!isDone);
 			
-			stack.append(kj::heap<StructSink>(stack.back().newObject()));
+			stack.add(kj::heap<StructSink>(stack.back() -> newObject()));
 		}
 		
 		void beginArray(size_t size) {			
-			KJ_ASSERT(!isDone);
+			KJ_REQUIRE(!isDone);
 			
-			stack.append(kj::heap<ListSink>(elType.asList(), stack.back().newList(), size));
+			stack.add(kj::heap<ListSink>(stack.back() -> newList(size)));
 		}
 		
 		void accept(capnp::DynamicValue::Reader input) {
-			KJ_ASSERT(!isDone);
-			stack.back().accept(input);
+			KJ_REQUIRE(!isDone);
+			stack.back() -> accept(input);
 			
 			if(stack.size() == 1)
 				isDone = true;
 		}
 		
 		void finish() {	
-			KJ_ASSERT(!isDone);
+			KJ_REQUIRE(!isDone);
 			
-			stack.back().finish();
 			stack.removeLast();
 			
 			if(stack.size() == 1)
@@ -315,21 +319,18 @@ namespace {
 		size_t ignoreDepth = 0;
 		
 		struct Tape {
-			Node dst;
+			Node node;
 			Own<Visitor> recorder;
 			
-			Tape() : recorder(createVisitor(dst)) {}
+			Tape() : recorder(createVisitor(node)) {}
 		};
-		Maybe<Type> tape;
+		Maybe<Tape> tape;
 		
 		ValueConverter(Own<Sink>&& firstSink) :
 			backend(mv(firstSink))
 		{}
 		
 		#define ACCEPT_FWD(expr) \
-			if(ignoreDepth > 0) \
-				return; \
-			\
 			KJ_IF_MAYBE(pTape, tape) { \
 				pTape -> recorder -> expr; \
 				\
@@ -348,7 +349,7 @@ namespace {
 				return;
 			}
 			
-			backend.beginObject(s);
+			backend.beginObject();
 		}
 		
 		void endObject() override {
@@ -373,11 +374,10 @@ namespace {
 			KJ_IF_MAYBE(pSize, size) {
 				backend.beginArray(*pSize);
 			} else {
-				KJ_ASSERT(tape == nullptr, "Tape state error");
+				KJ_REQUIRE(tape == nullptr, "Internal error");
 				
 				Tape& newTape = tape.emplace();
-				newTape.recorder.beginArray(nullptr);
-				++newTape.depth;
+				newTape.recorder -> beginArray(nullptr);
 			}
 		}
 		
@@ -414,46 +414,66 @@ namespace {
 				return;
 			}
 			
+			if(type.isStruct()) {
+				backend.beginObject();
+				backend.accept(i);
+				backend.accept(capnp::Void());
+				backend.finish();
+				return;
+			}
+			
 			backend.accept(i);
 		}
 		
 		void acceptNull() override {
 			ACCEPT_FWD(acceptNull())
+			if(ignoreDepth > 0)
+				return;
 			backend.accept(capnp::Void());
 		}
 		
 		void acceptDouble(double d) override {
 			ACCEPT_FWD(acceptDouble(d))
+			if(ignoreDepth > 0)
+				return;
 			backend.accept(d);
 		}
 		
 		void acceptInt(int64_t i) override {
 			ACCEPT_FWD(acceptInt(i))
+			if(ignoreDepth > 0)
+				return;
 			acceptInteger<int64_t>(i);
 		}
 		
 		void acceptUInt(uint64_t i) override {
 			ACCEPT_FWD(acceptUInt(i))
+			if(ignoreDepth > 0)
+				return;
 			acceptInteger<uint64_t>(i);
 		}
 		
 		void acceptBool(bool b) override {
 			ACCEPT_FWD(acceptBool(b))
+			if(ignoreDepth > 0)
+				return;
 			backend.accept(b);
 		}
 		
 		void acceptString(kj::StringPtr s) override {
 			ACCEPT_FWD(acceptString(s))
-			backend.accept(capnp::Text::Reader(s));
 			
-			auto type = expectedType();
+			if(ignoreDepth > 0)
+				return;
+			
+			auto type = backend.expectedType();
 			using ST = capnp::schema::Type;
 			
 			switch(type.which()) {
 				case ST::DATA:
 				case ST::ANY_POINTER:
 				case ST::LIST:
-					KJ_FAIL_REQUIRE("Value type mismatch. Can not cast string as type", type);
+					KJ_FAIL_REQUIRE("Value type mismatch. Can not cast string as target type");
 				
 				case ST::TEXT:
 					backend.accept(capnp::Text::Reader(s));
@@ -471,7 +491,7 @@ namespace {
 				
 				case ST::STRUCT: {
 					backend.beginObject();
-					backend.acceptKey(s);
+					backend.accept(capnp::Text::Reader(s));
 					backend.accept(capnp::Void());
 					backend.finish();
 					break;
@@ -479,7 +499,7 @@ namespace {
 				
 				case ST::FLOAT32:
 				case ST::FLOAT64: {
-					kj::String asString = kj::heapString(input.as<capnp::Text>());
+					kj::String asString = kj::heapString(s);
 					for(char& c : asString)
 						c = std::tolower(c);
 					
@@ -493,8 +513,10 @@ namespace {
 					HANDLE_VAL(".inf", std::numeric_limits<double>::infinity())
 					HANDLE_VAL("-.inf", -std::numeric_limits<double>::infinity())
 					
+					#undef HANDLE_VAL
+					
 					#define HANDLE_VAL(size, val, result) \
-						if(asString.substr(0, size) == val) { \
+						if(asString.slice(0, size) == kj::StringPtr(val)) { \
 							backend.accept(result); \
 							break; \
 						}
@@ -571,12 +593,12 @@ namespace {
 	
 	private:		
 		bool ignoreBegin() {
-			auto tp = expectedType();
+			auto tp = backend.expectedType();
 			
 			if(tp.isVoid() || tp.isAnyPointer()) {
 				backend.accept(capnp::Void());
 				return true;
-			} else if(tp.isCapability()) {
+			} else if(tp.isInterface()) {
 				capnp::Capability::Client brokenCap(KJ_EXCEPTION(FAILED, "Can not restore capability"));
 				backend.accept(brokenCap.castAs<DynamicCapability>(tp.asInterface()));
 				return true;
@@ -608,10 +630,14 @@ namespace {
 				break;
 			}
 			case DynamicValue::ENUM:
-				if(v.humanReadable)
-					v.acceptString(in.as<DynamicEnum>().getEnumerant().getProto().getName());
-				else
-					v.acceptUInt(in.as<DynamicCapability>().getRaw());
+				if(v.humanReadable) {
+					KJ_IF_MAYBE(pEnumerant, in.as<DynamicEnum>().getEnumerant()) {
+						v.acceptString(pEnumerant -> getProto().getName());
+						break;
+					}
+				}
+				
+				v.acceptUInt(in.as<DynamicEnum>().getRaw());
 				break;
 			case DynamicValue::UINT:
 				v.acceptUInt(in.as<uint64_t>());
@@ -619,8 +645,8 @@ namespace {
 			case DynamicValue::INT:
 				v.acceptInt(in.as<int64_t>());
 				break;
-			case DynamicValue:TEXT:
-				v.acceptText(in.as<capnp::Text>());
+			case DynamicValue::TEXT:
+				v.acceptString(in.as<capnp::Text>());
 				break;
 			case DynamicValue::DATA:
 				v.acceptData(in.as<capnp::Data>());
@@ -636,7 +662,7 @@ namespace {
 		// If we have no non-union fields and the active union field is a
 		// default-valued one, then we write only the field name (reads nicer
 		
-		if(structSchema.getNonUnionFields().size() == 0) {
+		if(in.getSchema().getNonUnionFields().size() == 0) {
 			auto maybeActive = in.which();
 			KJ_IF_MAYBE(pActive, maybeActive) {
 				auto& active = *pActive;
@@ -654,19 +680,19 @@ namespace {
 		auto shouldEmitField = [&](capnp::StructSchema::Field field) {
 			// Check if field is inactive union field
 			if(field.getProto().getDiscriminantValue() != capnp::schema::Field::NO_DISCRIMINANT) {
-				KJ_IF_MAYBE(pField, src.which()) {
+				KJ_IF_MAYBE(pField, in.which()) {
 					return *pField == field;
 				}
 				return false;
-			} else {
-				// No point in emitting void non-union fields
-				if(field.getType().isVoid())
-					return false;
-			}
+			} 
+			
+			// No point in emitting void non-union fields
+			if(field.getType().isVoid())
+				return false;
 			
 			// Don't emit null-valued fields for capabilities & AnyPointer
-			if(field.getType().isAnyPointer() || field.getType().isCapability()) {
-				if(!in.has(active, capnp::HasMode::NON_DEFAULT))
+			if(field.getType().isAnyPointer() || field.getType().isInterface()) {
+				if(!in.has(field, capnp::HasMode::NON_DEFAULT))
 					return false;
 			}
 			
@@ -674,7 +700,7 @@ namespace {
 		};
 		
 		size_t fieldCount = 0;
-		for(auto field : structSchema.getFields()) {
+		for(auto field : in.getSchema().getFields()) {
 			if(shouldEmitField(field))
 				++fieldCount;
 		}
@@ -684,15 +710,15 @@ namespace {
 		auto emitField = [&](capnp::StructSchema::Field field) {
 			auto type = field.getType();
 			
-			if(v.integerKeys)
+			if(v.integerKeys && !v.humanReadable)
 				v.acceptUInt(field.getIndex());
 			else
 				v.acceptString(field.getProto().getName());
 			
-			saveValue(src.get(field), v);
+			saveValue(in.get(field), v);
 		};
 		
-		for(auto field : structSchema.getFields()) {
+		for(auto field : in.getSchema().getFields()) {
 			if(shouldEmitField(field))
 				emitField(field);
 		}
@@ -701,46 +727,17 @@ namespace {
 	}
 	
 	void saveList(DynamicList::Reader list, Visitor& v) {
-		v.beginList(list.size());
+		v.beginArray(list.size());
 		
 		for(auto el : list)
 			saveValue(el, v);
 		
-		v.endList();
+		v.endArray();
 	}
 	
-	Visitor makeBuilderStack(Own<Sink>&& sink) {
-		auto stack = kj::heap<BuilderStack>(mv(sink));
-		auto conv = kj::heap<ValueConverter>(*stack);
-		return conv.attach(stack);
+	Own<Visitor> makeBuilderStack(Own<Sink>&& sink) {
+		return kj::heap<ValueConverter>(mv(sink));
 	}
-}
-
-DynamicValue::Reader Node::asValue() {
-	KJ_REQUIRE(!payload.is<MapPayload>() && !payload.is<ListPayload>(), "Can not convert map or list payloads to value");
-	
-	if(payload.is<kj::String>())
-		return capnp::Text::Reader(payload.get<kj::String>());
-	
-	if(payload.is<Array<byte>>())
-		return capnp::Data::Reader(payload.get<Array<byte>>());
-	
-	if(payload.is<double>())
-		return payload.get<double>();
-	
-	if(payload.is<uint64_t>())
-		return payload.get<uint64_t>();
-	
-	if(payload.is<int64_t>())
-		return payload.get<int64_t>();
-	
-	if(payload.is<bool>())
-		return payload.get<bool>();
-
-	if(payload.is<capnp::Void>())
-		return capnp::Void();
-	
-	payload.allHandled<9>();
 }
 
 Own<Visitor> createVisitor(DynamicStruct::Builder b) {
@@ -752,27 +749,25 @@ Own<Visitor> createVisitor(capnp::ListSchema schema, ListInitializer initializer
 }
 
 void load(kj::BufferedInputStream& is, DynamicStruct::Builder builder, const Dialect& dialect) {
-	BuilderStack stack(kj::heap<ExternalStructSink>(builder));
-	ValueConverter conv(stack);
+	ValueConverter conv(kj::heap<ExternalStructSink>(builder));
 	load(is, conv, dialect);
 }
 
-void load(kj::BufferedInputStream& is, capnp::ListSchema schema, ListInitializer initializer, const Dialect&) {
-	BuilderStack stack(kj::heap<ExternalListSink>({schema, mv(initializer)});
-	ValueConverter conv(stack);
+void load(kj::BufferedInputStream& is, capnp::ListSchema schema, ListInitializer initializer, const Dialect& dialect) {
+	ValueConverter conv(kj::heap<ExternalListSink>({schema, mv(initializer)}));
 	load(is, conv, dialect);
 }
 
-void load(kj::BufferedInputStream& is, Node& n, const Dialect&) {
+void load(kj::BufferedInputStream& is, Node& n, const Dialect& dialect) {
 	auto v = createVisitor(n);
 	load(is, *v, dialect);
 }
 
 void load(kj::BufferedInputStream& is, Visitor& visitor, const Dialect& dialect) {
 	if(dialect.language == Dialect::YAML) {
-		yamlcppLoad(is, visitor, dialect);
+		internal::yamlcppLoad(is, visitor, dialect);
 	} else {
-		jsonconsLoad(is, visitor, dialect);
+		internal::jsonconsLoad(is, visitor, dialect);
 	}
 }
 

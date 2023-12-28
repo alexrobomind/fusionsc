@@ -28,8 +28,8 @@ add_library(
 	yaml.h
 	yaml.cpp
 	
-	json.h
-	json.cpp
+	textio.h
+	textio.cpp
 	
 	hdf5.h
 	hdf5.cpp

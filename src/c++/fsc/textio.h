@@ -34,7 +34,7 @@ namespace fsc { namespace textio {
 	};
 	
 	struct Visitor {
-		inline virtual ~Visitor() {};
+		inline virtual ~Visitor() noexcept(false) {};
 		
 		virtual void beginObject(Maybe<size_t>) = 0;
 		virtual void endObject() = 0;
@@ -52,9 +52,12 @@ namespace fsc { namespace textio {
 		
 		// virtual void acceptKey(kj::StringPtr) = 0;
 		
-		bool done() = 0;
+		virtual bool done() = 0;
 		
-		bool integerKeys = true;
+		//! Whether this visitor allows integer map keys
+		bool integerKeys = false;
+		
+		//! Whether this visitor would like human-readable outputs
 		bool humanReadable = false;
 	};
 	
@@ -69,6 +72,8 @@ namespace fsc { namespace textio {
 		kj::StringPtr jsonInf = "inf";
 		kj::StringPtr jsonNegInf = "-.inf";
 		kj::StringPtr jsonNan = ".nan";
+		
+		bool humanReadable = true;
 		
 		inline bool isBinary() {
 			switch(language) {
@@ -85,18 +90,18 @@ namespace fsc { namespace textio {
 	
 	using ListInitializer = kj::Function<capnp::DynamicList::Builder(size_t)>;
 	
-	Own<Visitor> createVisitor(DynamicStruct::Builder);
+	Own<Visitor> createVisitor(capnp::DynamicStruct::Builder);
 	Own<Visitor> createVisitor(capnp::ListSchema, ListInitializer);
 	Own<Visitor> createVisitor(Node&);
 	
 	void load(kj::BufferedInputStream&, Visitor&, const Dialect&);
 	void load(kj::BufferedInputStream&, Node&, const Dialect&);
-	void load(kj::BufferedInputStream&, DynamicStruct::Builder, const Dialect&);
+	void load(kj::BufferedInputStream&, capnp::DynamicStruct::Builder, const Dialect&);
 	void load(kj::BufferedInputStream&, capnp::ListSchema, ListInitializer, const Dialect&);
 	
 	void save(Node&, Visitor&);
-	void save(DynamicValue::Reader, Visitor&);
-	void save(DynamicValue::Reader, kj::BufferedOutputStream&, const Dialect&);
+	void save(capnp::DynamicValue::Reader, Visitor&);
+	void save(capnp::DynamicValue::Reader, kj::BufferedOutputStream&, const Dialect&);
 	
 	namespace internal {
 		void jsonconsLoad(kj::BufferedInputStream&, Visitor&, const Dialect&);
