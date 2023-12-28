@@ -18,7 +18,8 @@ representations. Formats should support the following types:
 namespace fsc { namespace textio {
 	// Tree node that can hold our text IO structures
 	struct Node {		
-		using MapPayload = kj::TreeMap<kj::String, Node>;
+		// using MapPayload = kj::TreeMap<kj::String, Node>;
+		using MapPayload = kj::Vector<kj::Tuple<Node, Node>>;
 		using ListPayload = kj::Vector<Node>;
 		struct NullValue {};
 		
@@ -49,9 +50,12 @@ namespace fsc { namespace textio {
 		virtual void acceptData(ArrayPtr<const byte>) = 0;
 		virtual void acceptBool(bool) = 0;
 		
-		virtual void acceptKey(kj::StringPtr) = 0;
+		// virtual void acceptKey(kj::StringPtr) = 0;
 		
 		bool done() = 0;
+		
+		bool integerKeys = true;
+		bool humanReadable = false;
 	};
 	
 	struct Dialect {

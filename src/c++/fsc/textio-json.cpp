@@ -384,11 +384,12 @@ namespace {
 					v.endObject();
 					break;
 				
-				case jsoncons::EventType::key:
+				/*case jsoncons::EventType::key:
 					auto str = event.get<std::string>();
 					v.acceptKey(str);
-					break;
+					break;*/
 				
+				case jsoncons::EventType::key:
 				case jsoncons::EventType::string_value:
 					auto strView = valueEvt.get<jsoncons::string_view>();
 					v.acceptString(kj::StringPtr(strView.data(), strView.size()));

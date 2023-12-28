@@ -66,9 +66,9 @@ namespace {
 		virtual void accept(Orphan<DynamicValue>) = 0;
 		virtual capnp::Type expectedType() = 0;
 		
-		virtual void acceptKey(kj::StringPtr) = 0;
+		// virtual void acceptKey(kj::StringPtr) = 0;
 		
-		capnp::Orphanage orphanage() = 0;
+		// capnp::Orphanage orphanage() = 0;
 	};
 	
 	struct ExternalStructSink : public Sink {
@@ -93,9 +93,9 @@ namespace {
 			return builder.getSchema();
 		}
 		
-		void acceptKey(kj::StringPtr) override {
+		/*void acceptKey(kj::StringPtr) override {
 			KJ_FAIL_REQUIRE("Internal error");
-		}
+		}*/
 	};
 			
 	struct ExternalListSink : public Sink {
@@ -125,22 +125,20 @@ namespace {
 			return listSchema;
 		}
 		
-		void acceptKey(kj::StringPtr) override {
+		/*void acceptKey(kj::StringPtr) override {
 			KJ_FAIL_REQUIRE("Internal error");
-		}
+		}*/
 	};
 	
 	struct StructSink : public Sink {
 		DynamicStruct::Builder builder;
 		Maybe<capnp::StructSchema::Field> currentField = nullptr;
-		Maybe<kj::String> previouslySetUnionField = nullptr;
+		Maybe<capnp::StructSchema::Field> previouslySetUnionField = nullptr;
 		
 		StructSink(DynamicStruct::Builder builder) :
 			builder(builder)
 		{}
 		
-		// WARNING: The builder returned is only valid until the next call to this
-		// object
 		DynamicStruct::Builder newObject() override {
 			KJ_IF_MAYBE(pField, currentField) {
 				auto field = *pField;
@@ -152,8 +150,6 @@ namespace {
 			KJ_FAIL_REQUIRE("Trying to allocate map entry without key");
 		}
 		
-		// WARNING: The initializer returned is only valid until the next call to this
-		// object
 		ListInitializer newList(size_t s) override {
 			KJ_IF_MAYBE(pField, currentField) {
 				auto field = *pField;
@@ -169,13 +165,36 @@ namespace {
 			KJ_IF_MAYBE(pField, currentField) {
 				auto field = *pField;
 				currentField = nullptr;
+			
+				// Make sure we don't set union fields twice
+				if(field.getProto().getDiscriminantValue() != capnp::schema::Field::NO_DISCRIMINANT) {
+					KJ_IF_MAYBE(pPrevSet, previouslySetUnionField) {
+						kj::StringPtr currentField = field.getProto().getName();
+						kj::StringPtr previousField = pPrevSet -> getProto() -> getName();
+						
+						KJ_FAIL_REQUIRE("Can not set two fields of the same union", currentField, previousField);
+					}
+					previouslySetUnionField = field;
+				}
 				
 				if(val.getType() == DynamicValue::VOID)
 					builder.clear(field);
 				else
 					builder.set(field, val);
+			} else {
+				// val is the field key
+				switch(val.getType()) {
+					case DynamicValue::INT:
+					case DynamicValue::UINT:
+						currentField = builder.getSchema().getFields()[val.as<unsigned int>()];
+						break;
+					case DynamicValue::TEXT:
+						currentField = builder.getSchema().getFieldByName(val.as<capnp::Text::Reader>());
+						break;
+					default:
+						KJ_FAIL_REQUIRE("Only integer and text map keys supported");
+				}				
 			}
-			KJ_FAIL_REQUIRE("Trying to set map entry without key");
 		}
 		
 		capnp::Type expectedType() override {
@@ -187,7 +206,7 @@ namespace {
 			return capnp::Type(capnp::schema::Type::TEXT);
 		}
 		
-		void acceptKey(kj::StringPtr key) override {
+		/*void acceptKey(kj::StringPtr key) override {
 			KJ_REQUIRE(currentField == nullptr, "Can only select one field at once");
 			
 			// Make sure we don't set union fields twice
@@ -202,7 +221,7 @@ namespace {
 			}
 			
 			currentField = builder.getFieldByName(key);
-		}
+		}*/
 	};
 	
 	struct ListSink {
@@ -583,13 +602,33 @@ namespace {
 				auto asCap = in.as<DynamicCapability>();
 				auto hook = capnp::ClientHook::from(kj::mv(asCap));
 				if(hook -> isNull())
-					v.accept(capnp::Void());
+					v.acceptNull();
 				else
-					v.accept(in);
+					v.acceptString("<capability>");
 				break;
 			}
-			default:
-				v.accept(in);
+			case DynamicValue::ENUM:
+				if(v.humanReadable)
+					v.acceptString(in.as<DynamicEnum>().getEnumerant().getProto().getName());
+				else
+					v.acceptUInt(in.as<DynamicCapability>().getRaw());
+				break;
+			case DynamicValue::UINT:
+				v.acceptUInt(in.as<uint64_t>());
+				break;
+			case DynamicValue::INT:
+				v.acceptInt(in.as<int64_t>());
+				break;
+			case DynamicValue:TEXT:
+				v.acceptText(in.as<capnp::Text>());
+				break;
+			case DynamicValue::DATA:
+				v.acceptData(in.as<capnp::Data>());
+				break;
+			case DynamicValue::ANY_POINTER:
+			case DynamicValue::UNKNOWN:
+				v.acceptString("<unknown>");
+				break;
 		}
 	}
 	
@@ -602,8 +641,11 @@ namespace {
 			KJ_IF_MAYBE(pActive, maybeActive) {
 				auto& active = *pActive;
 				if(!in.has(active, capnp::HasMode::NON_DEFAULT)) {
-					capnp::Text::Reader fieldName = active.getProto().getName();
-					v.accept(fieldName);
+					if(v.humanReadable) {
+						v.acceptString(active.getProto().getName());
+					} else {
+						v.acceptUInt(active.getIndex());
+					}
 					return;
 				}
 			}
@@ -642,7 +684,11 @@ namespace {
 		auto emitField = [&](capnp::StructSchema::Field field) {
 			auto type = field.getType();
 			
-			v.acceptKey(field.getProto().getName());
+			if(v.integerKeys)
+				v.acceptUInt(field.getIndex());
+			else
+				v.acceptString(field.getProto().getName());
+			
 			saveValue(src.get(field), v);
 		};
 		
