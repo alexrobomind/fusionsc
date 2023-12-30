@@ -1,5 +1,7 @@
-#include <yaml-cpp/yaml.h>
+#include "textio.h"
 
+#include <yaml-cpp/yaml.h>
+#include <yaml-cpp/eventhandler.h>
 #include <kj/encoding.h>
 
 namespace fsc { namespace textio {
@@ -7,78 +9,140 @@ namespace fsc { namespace textio {
 namespace {
 	struct YAMLVisitor : public Visitor {
 		YAML::Emitter& emitter;
-		bool listStart = false;
 		
-		void doListBegin(bool flow) {
-			if(listStart) {
+		enum State {
+			VALUE, LIST_START, MAP_KEY, MAP_VALUE, DONE
+		};
+		kj::Vector<State> states;
+		
+		YAMLVisitor(YAML::Emitter& e) :
+			emitter(e)
+		{
+			this -> supportsIntegerKeys = true;
+			states.add(VALUE);
+		}
+		
+		State& state() { return states.back(); }
+				
+		void beginValue(bool flow) {
+			KJ_REQUIRE(state() != DONE, "API misuse");
+			
+			if(state() == LIST_START) {
 				if(flow)
 					emitter << YAML::Flow;
 				emitter << YAML::BeginSeq;
-				listStart = false;
+				state() = VALUE;
+			}
+			if(state() == MAP_KEY) {
+				emitter << YAML::Key;
+				state() = MAP_VALUE;
+			}
+			if(state() == MAP_VALUE) {
+				emitter << YAML::Value;
+				state() = MAP_KEY;
 			}
 		}
 		
+		void push(State s) {
+			states.add(s);
+		}
+		
+		void pop() {
+			states.removeLast();
+			KJ_REQUIRE(!states.empty(), "API misuse");
+			
+			if(states.size() == 1)
+				state() = DONE;
+		}
+				
 		void beginObject(Maybe<size_t>) override {
-			doListBegin(false);
+			beginValue(false);
+			push(MAP_KEY);
+			
 			emitter << YAML::BeginMap;
 		}
 		
 		void endObject() override {
-			doListBegin(false); // In case API is misused
+			KJ_REQUIRE(state() == MAP_KEY, "API misuse");
+			pop();
+			
 			emitter << YAML::EndMap;
 		}
 		
 		void beginArray(Maybe<size_t>) override {
-			doListBegin(false);
-			listStart = true;
+			beginValue(false);
+			push(LIST_START);
+			// Emission follows later
 		}
 		
-		void endArray(Maybe<size_t>) override {
+		void endArray() override {
 			// Perhaps the list was empty
-			doListBegin(true);
+			beginValue(true);
+			pop();
+			
 			emitter << YAML::EndSeq;
 		}
 		
 		void acceptNull() override {
 			// Null in list should in principle not happen, but who knows...
 			// Let's use block style to be sure
-			doListBegin(false);
+			beginValue(false);
 			emitter << YAML::Null;
+			
+			if(states.size() == 1)
+				state() = DONE;
 		}
 		
 		void acceptBool(bool v) override {
-			doListBegin(true);
+			beginValue(true);
 			emitter << v;
+			
+			if(states.size() == 1)
+				state() = DONE;
 		}
 		
 		void acceptDouble(double v) override {
-			doListBegin(true);
+			beginValue(true);
 			emitter << v;
+			
+			if(states.size() == 1)
+				state() = DONE;
 		}
 		
 		void acceptInt(int64_t v) override {
-			doListBegin(true);
+			beginValue(true);
 			emitter << v;
+			
+			if(states.size() == 1)
+				state() = DONE;
 		}
 		
 		void acceptUInt(uint64_t v) override {
-			doListBegin(true);
+			beginValue(true);
 			emitter << v;
+			
+			if(states.size() == 1)
+				state() = DONE;
 		}
 		
 		void acceptString(kj::StringPtr v) override {
-			doListBegin(false);
+			beginValue(false);
 			emitter << v.cStr();
+			
+			if(states.size() == 1)
+				state() = DONE;
 		}
 		
 		void acceptData(kj::ArrayPtr<const kj::byte> v) override {
-			doListBegin(false);
+			beginValue(false);
 			emitter << YAML::Binary(v.begin(), v.size());
+			
+			if(states.size() == 1)
+				state() = DONE;
 		}
-
-		void acceptKey(kj::StringPtr key) override {
-			doListBegin(false);
-			emitter << YAML::Key << key.cStr() << YAML::Value;
+		
+		bool done() override {
+			return state() == DONE;
 		}
 	};
 	
@@ -105,16 +169,24 @@ namespace {
 		Visitor& visitor;
 		kj::Vector<State> states;
 		
-		State& state() { return states.back(); }
-		
 		std::list<Tape> tapes;
 		kj::TreeMap<Anchor, Node> anchors;
 		
+		YAMLEventHandler(Visitor& v) :
+			visitor(v)
+		{
+			states.add(VALUE);
+		}
+		
+		~YAMLEventHandler() noexcept {}
+		
+		State& state() { return states.back(); }
+		
 		#define ACCEPT_IMPL_NOFIN(callExpr) \
 			for(auto& t : tapes) { \
-				t -> visitor -> callExpr; \
+				t.visitor -> callExpr; \
 			} \
-			visitor -> callExpr;
+			visitor.callExpr;
 		
 		#define ACCEPT_IMPL(callExpr) \
 			ACCEPT_IMPL_NOFIN(callExpr) \
@@ -123,65 +195,78 @@ namespace {
 		void checkTapes() {
 			for(auto it = tapes.begin(); it != tapes.end();) {
 				auto& t = *it;
-				if(t -> visitor -> done()) {
-					auto row = anchors.insert(t -> anchor, mv(t -> node));					
-					(it++) -> erase();
+				if(t.visitor -> done()) {
+					anchors.insert(t.anchor, mv(t.node));					
+					tapes.erase(it++);
 				} else {
 					++it;
 				}
 			}
 		}
 		
-		void checkAnchor(Anchor a) {
-			auto ownedName = mv(anchorName);
-			
+		void checkAnchor(Anchor a) {			
 			if(a == NULL_ANCHOR)
 				return;
 			
-			tapes.add(a, ownedName);
+			tapes.emplace(tapes.end(), a);
 		}	
 		
 		void OnDocumentStart(const Mark&) override {}
 		void OnDocumentEnd() override {}
 		
-		void OnNull(Mark& mark, Anchor a) override {
-			KJ_REQUIRE(state() == VALUE || State() == MAP_VALUE, "Null values only supported as values");
-			
-			checkAnchor(a);
-			ACCEPT_IMPL(acceptNull());
+		void OnNull(const Mark& mark, Anchor a) override {
+			switch(state()) {
+				case MERGE_KEY:
+				case MERGE_KEY_ENTRY:
+					KJ_FAIL_REQUIRE("Merge key must be alias");
+					break;
+				
+				case MAP_VALUE:
+					state() = MAP_KEY;
+					// No break
+				case VALUE:
+					checkAnchor(a);
+					ACCEPT_IMPL(acceptNull());
+					break;
+				
+				case MAP_KEY:
+					KJ_FAIL_REQUIRE("Null map keys not supported");
+			}
 		}
 		
-		void OnAlias(Mark& mark, Anchor a) override {
-			Node& node = aliases.get(a);
+		void OnAlias(const Mark& mark, Anchor a) override {
+			Node* nodePtr = nullptr;
+			KJ_IF_MAYBE(pNode, anchors.find(a)) {
+				nodePtr = pNode;
+			}
+			Node& node = *nodePtr;
 			
 			switch(state()) {
 				case MERGE_KEY:
 					state() = MAP_KEY;
 					// No break
 					
-				case MERGE_KEY_ENTRY: {
-					kj::StringPtr asKJ = value;
-					
-					// Retrieve target
-					Node& node = anchors.get(anchor);
-					
+				case MERGE_KEY_ENTRY: {										
 					KJ_REQUIRE(node.payload.is<Node::MapPayload>(), "Can only merge map-type payloads");
 					for(auto& row : node.payload.get<Node::MapPayload>()) {
-						ACCEPT_IMPL_NOFIN(acceptKey(row.key))
+						for(auto& tape : tapes) {
+							save(kj::get<0>(row), *tape.visitor);
+							save(kj::get<1>(row), *tape.visitor);
+						}
 						
-						for(auto& tape : tapes)
-							save(row.value, tape -> visitor);
-						save(row.value, visitor);
+						save(kj::get<0>(row), visitor);
+						save(kj::get<1>(row), visitor);
 					}
+					break;
 				}
 				
 				case MAP_VALUE:
-					state() = MAP_ENTRY;
+					state() = MAP_KEY;
 					// No break
 				
 				case VALUE: {
 					for(auto& tape : tapes)
-						save(node, tape -> visitor);
+						save(node, *tape.visitor);
 					save(node, visitor);
 					checkTapes();
 					break;
@@ -192,45 +277,64 @@ namespace {
 			}
 		}
 		
-		void OnScalar(Mark& mark, const std::string& tag, Anchor anchor, const std::string& value) override {
+		void handleScalar(const std::string& value, const std::string& tag) {
+			kj::StringPtr asKJ = value;
+			if(tag == "!") {
+				ACCEPT_IMPL(acceptString(asKJ))
+				return;
+			}
+			
+			if(tag == "!!binary") {
+				auto decResult = kj::decodeBase64(asKJ);
+				ACCEPT_IMPL(acceptData(decResult))
+				return;
+			}
+			
+			KJ_IF_MAYBE(pUInt, asKJ.tryParseAs<uint64_t>()) {
+				ACCEPT_IMPL(acceptUInt(*pUInt))
+				return;
+			}
+			
+			KJ_IF_MAYBE(pInt, asKJ.tryParseAs<int64_t>()) {
+				ACCEPT_IMPL(acceptInt(*pInt))
+				return;
+			}
+			
+			KJ_IF_MAYBE(pFloat, asKJ.tryParseAs<double>()) {
+				ACCEPT_IMPL(acceptDouble(*pFloat))
+				return;
+			}
+			
+			if(asKJ.startsWith(".inf") || asKJ.startsWith(".Inf")) {
+				ACCEPT_IMPL(acceptDouble(std::numeric_limits<double>::infinity()));
+				return;
+			}
+			
+			if(asKJ.startsWith("-.inf") || asKJ.startsWith("-.Inf")) {
+				ACCEPT_IMPL(acceptDouble(-std::numeric_limits<double>::infinity()));
+				return;
+			}
+			
+			if(asKJ.startsWith(".nan") || asKJ.startsWith(".NaN")) {
+				ACCEPT_IMPL(acceptDouble(std::numeric_limits<double>::quiet_NaN()));
+				return;
+			}
+			
+			ACCEPT_IMPL(acceptString(asKJ))
+		}
+		
+		void OnScalar(const Mark& mark, const std::string& tag, Anchor anchor, const std::string& value) override {
 			switch(state()) {
 				case MAP_VALUE:
-					state() = MAP_KEY;
-					// No break
-					
-				case VALUE: {
 					checkAnchor(anchor);
-					
-					kj::StringPtr asKJ = value;
-					if(tag == "!") {
-						ACCEPT_IMPL(acceptString(asKJ))
-						break;
-					}
-					
-					if(tag == "!!binary") {
-						auto decResult = kj::decodeBase64(asKJ);
-						ACCEPT_IMPL(acceptData(decResult))
-						break;
-					}
-					
-					KJ_IF_MAYBE(pUInt, asKJ.tryParseAs<uint64_t>()) {
-						ACCEPT_IMPL(acceptUInt(*pUInt))
-						break;
-					}
-					
-					KJ_IF_MAYBE(pInt, asKJ.tryParseAs<int64_t>()) {
-						ACCEPT_IMPL(acceptInt(*pInt))
-						break;
-					}
-					
-					KJ_IF_MAYBE(pFloat, asKJ.tryParseAs<double>()) {
-						ACCEPT_IMPL(acceptDouble(*pFloat))
-						break;
-					}
-					
-					ACCEPT_IMPL(acceptString(asKJ))
+					handleScalar(value, tag);
+					state() = MAP_KEY;
 					break;
-				}
+									
+				case VALUE:
+					checkAnchor(anchor);
+					handleScalar(value, tag);
+					break;
 				
 				case MAP_KEY: {
 					kj::StringPtr asKJ = value;
@@ -240,7 +344,7 @@ namespace {
 						break;
 					}
 					
-					ACCEPT_IMPL_NOFIN(acceptKey(asKJ))
+					handleScalar(value, tag);
 					state() = MAP_VALUE;
 					
 					break;
@@ -248,7 +352,7 @@ namespace {
 				
 				case MERGE_KEY:
 				case MERGE_KEY_ENTRY:
-					KJ_FAIL_REQUIRE("API Misuse");
+					KJ_FAIL_REQUIRE("Merge keys must be aliases");
 			}
 		}
 		
@@ -256,8 +360,10 @@ namespace {
 			checkAnchor(anchor);
 			
 			switch(state()) {
-				case VALUE:
 				case MAP_VALUE: 
+					state() = MAP_KEY;
+					// No break
+				case VALUE:
 					states.add(VALUE);
 					ACCEPT_IMPL_NOFIN(beginArray(nullptr))
 					break;
@@ -299,6 +405,8 @@ namespace {
 			
 			switch(state()) {
 				case MAP_VALUE:
+					state() = MAP_KEY;
+					// No break
 				case VALUE:
 					ACCEPT_IMPL(beginObject(nullptr))
 					states.add(MAP_KEY);
@@ -326,6 +434,23 @@ namespace {
 			}
 		}
 	};
+}
+
+namespace internal {
+	void yamlcppLoad(kj::BufferedInputStream& bis, Visitor& v, const Dialect&) {
+		auto inStream = asStdStream(bis);
+		YAML::Parser parser(*inStream);
+		
+		YAMLEventHandler handler(v);
+		parser.HandleNextDocument(handler);
+	}
+	Own<Visitor> createYamlcppWriter(kj::BufferedOutputStream& bos, const Dialect& d) {
+		auto outStream = asStdStream(bos);
+		auto emitter = kj::heap<YAML::Emitter>(*outStream);
+		auto visitor = kj::heap<YAMLVisitor>(*emitter);
+		
+		return visitor.attach(mv(outStream), mv(emitter));
+	}
 }
 
 

@@ -115,51 +115,44 @@ namespace {
 			return state.is<Done>();
 		}
 		
-		void acceptNull() override {
-			prepareTop();
-			back().payload.init<Node::NullValue>();
-			pop();
-		}
-		
-		void acceptDouble(double v) override {
-			prepareTop();
-			back().payload = v;
-			pop();
-		}
-		
-		void acceptInt(int64_t v) override {
-			prepareTop();
-			back().payload = v;
-			pop();
-		}
-		
-		void acceptUInt(uint64_t v) override {
-			prepareTop();
-			back().payload = v;
-			pop();
-		}
-		
-		void acceptBool(bool v) override {
-			prepareTop();
-			back().payload = v;
-			pop();
-		}
-		
-		void acceptString(kj::StringPtr v) override {
+		template<typename T>
+		void acceptValue(T t) {
 			if(state.is<WriteObject>()) {
 				Node& s = state.init<Field>();
-				s.payload = kj::heapString(v);
+				s.payload = mv(t);
 			} else {
 				prepareTop();
-				back().payload = kj::heapString(v);
+				back().payload = mv(t);
 				pop();
 			}
 		}
 		
+		void acceptNull() override {
+			acceptValue(Node::NullValue());
+		}
+		
+		void acceptDouble(double v) override {
+			acceptValue(v);
+		}
+		
+		void acceptInt(int64_t v) override {
+			acceptValue(v);
+		}
+		
+		void acceptUInt(uint64_t v) override {
+			acceptValue(v);
+		}
+		
+		void acceptBool(bool v) override {
+			acceptValue(v);
+		}
+		
+		void acceptString(kj::StringPtr v) override {
+			acceptValue(kj::heapString(v));
+		}
+		
 		void acceptData(kj::ArrayPtr<const byte> v) override {
-			prepareTop();
-			back().payload = kj::heapArray<byte>(v);
-			pop();
+			acceptValue(kj::heapArray<byte>(v));
 		}
 	};
 }

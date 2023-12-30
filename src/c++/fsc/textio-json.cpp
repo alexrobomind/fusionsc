@@ -215,8 +215,11 @@ namespace {
 			case Dialect::CBOR: {
 				using CborCursor = jsoncons::cbor::basic_cbor_cursor<CborSource>;
 				
+				jsoncons::cbor::cbor_options opts;
+				opts.pack_strings(true);
+				
 				auto src = kj::heap<CborSource>(stream);
-				auto cur = kj::heap<CborCursor>(*src);
+				auto cur = kj::heap<CborCursor>(*src, opts);
 				
 				return cur.attach(mv(src));
 			}
@@ -292,6 +295,7 @@ namespace {
 			allowGenericKeys(genericKeys)
 		{
 			states.add(VALUE);
+			this -> supportsIntegerKeys = genericKeys;
 		}
 		
 		State& state() { KJ_REQUIRE(!states.empty()); return states.back(); }
@@ -429,6 +433,7 @@ namespace {
 			switch(evt.event_type()) {
 				case EventType::begin_array: {
 					size_t s = evt.size();
+					KJ_DBG("BEGIN ARRAY", s);
 					
 					if(s != 0)
 						v.beginArray(s);
@@ -465,7 +470,7 @@ namespace {
 				case EventType::key:
 				case EventType::string_value: {
 					auto strView = evt.get<jsoncons::string_view>();
-					v.acceptString(kj::StringPtr(strView.data(), strView.size()));
+					v.acceptString(kj::heapString(strView.data(), strView.size()));
 					break;
 				}
 				
@@ -505,7 +510,7 @@ namespace {
 namespace internal {
 	Own<Visitor> createJsonconsWriter(kj::BufferedOutputStream& stream, const Dialect& dialect) {
 		auto encoder = makeEncoder(stream, dialect);
-		auto writer = kj::heap<JsonVisitor>(*encoder, dialect.language == Dialect::CBOR);
+		auto writer = kj::heap<JsonVisitor>(*encoder, /*dialect.language == Dialect::CBOR*/false);
 		return writer.attach(mv(encoder));
 	}
 

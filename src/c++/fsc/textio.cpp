@@ -196,7 +196,9 @@ namespace {
 						}
 					}
 					previouslySetUnionField = newField;
-				}			
+				}
+
+				currentField = newField;
 			}
 		}
 		
@@ -317,6 +319,7 @@ namespace {
 	struct ValueConverter : public Visitor {
 		BuilderStack backend;
 		size_t ignoreDepth = 0;
+		bool replaying = false;
 		
 		struct Tape {
 			Node node;
@@ -333,15 +336,17 @@ namespace {
 		}
 		
 		#define ACCEPT_FWD(expr) \
-			KJ_IF_MAYBE(pTape, tape) { \
+			KJ_IF_MAYBE(pTape, tape) { if(!replaying) { \
 				pTape -> recorder -> expr; \
 				\
-				if(pTape -> recorder -> done() == 0) { \
+				if(pTape -> recorder -> done()) { \
+					replaying = true; \
 					save(pTape -> node, *this); \
+					replaying = false; \
 					tape = nullptr; \
 				} \
 				return; \
-			}
+			}}
 		
 		void beginObject(Maybe<size_t> s) override {
 			ACCEPT_FWD(beginObject(s))
@@ -641,6 +646,9 @@ namespace {
 				
 				v.acceptUInt(in.as<DynamicEnum>().getRaw());
 				break;
+			case DynamicValue::FLOAT:
+				v.acceptDouble(in.as<double>());
+				break;
 			case DynamicValue::UINT:
 				v.acceptUInt(in.as<uint64_t>());
 				break;
@@ -670,9 +678,9 @@ namespace {
 				auto& active = *pActive;
 				if(!in.has(active, capnp::HasMode::NON_DEFAULT)) {
 					if(opts.integerKeys) {
-						v.acceptString(active.getProto().getName());
-					} else {
 						v.acceptUInt(active.getIndex());
+					} else {
+						v.acceptString(active.getProto().getName());
 					}
 					return;
 				}
@@ -753,6 +761,57 @@ namespace {
 	Own<Visitor> makeBuilderStack(Own<Sink>&& sink) {
 		return kj::heap<ValueConverter>(mv(sink));
 	}
+	
+	struct DebugVisitor : public Visitor {		
+		virtual void beginObject(Maybe<size_t> s) {
+			KJ_IF_MAYBE(pSize, s) {
+				KJ_DBG("beginObject(s)", *pSize);
+			} else {
+				KJ_DBG("beginObject(nullptr)");
+			}
+		}
+		virtual void endObject() {
+			KJ_DBG("endObject()");
+		}
+		
+		virtual void beginArray(Maybe<size_t> s) {
+			KJ_IF_MAYBE(pSize, s) {
+				KJ_DBG("beginArray(s)", *pSize);
+			} else {
+				KJ_DBG("beginArray(nullptr)");
+			}
+		}
+		virtual void endArray() {
+			KJ_DBG("endArray()");
+		}
+		
+		virtual void acceptNull() {
+			KJ_DBG("acceptNull()");
+		}
+		virtual void acceptDouble(double d) {
+			KJ_DBG("acceptDouble(d)", d);
+		}
+		virtual void acceptInt(int64_t i) {
+			KJ_DBG("acceptInt(i)", i);
+		}
+		virtual void acceptUInt(uint64_t u) {
+			KJ_DBG("acceptUInt(u)", u);
+		}
+		virtual void acceptString(kj::StringPtr s) {
+			KJ_DBG("acceptString(s)", s);
+		}
+		virtual void acceptData(ArrayPtr<const byte> b) {
+			KJ_DBG("acceptData(b)", b);
+		}
+		virtual void acceptBool(bool b) {
+			KJ_DBG("acceptBool(b)", b);
+		}
+		
+		virtual bool done() { return false; }
+		
+		//! Whether this visitor allows integer map keys
+		bool supportsIntegerKeys = true;
+	};
 }
 
 Own<Visitor> createVisitor(DynamicStruct::Builder b) {
@@ -763,19 +822,13 @@ Own<Visitor> createVisitor(capnp::ListSchema schema, ListInitializer initializer
 	return makeBuilderStack(kj::heap<ExternalListSink>(schema, mv(initializer)));
 }
 
-void load(kj::BufferedInputStream& is, DynamicStruct::Builder builder, const Dialect& dialect) {
-	ValueConverter conv(kj::heap<ExternalStructSink>(builder));
-	load(is, conv, dialect);
+Own<Visitor> createDebugVisitor() {
+	return kj::heap<DebugVisitor>();
 }
 
-void load(kj::BufferedInputStream& is, capnp::ListSchema schema, ListInitializer initializer, const Dialect& dialect) {
-	ValueConverter conv(kj::heap<ExternalListSink>({schema, mv(initializer)}));
-	load(is, conv, dialect);
-}
-
-void load(kj::BufferedInputStream& is, Node& n, const Dialect& dialect) {
-	auto v = createVisitor(n);
-	load(is, *v, dialect);
+void load(kj::ArrayPtr<const kj::byte> buf, Visitor& v, const Dialect& d) {
+	kj::ArrayInputStream is(buf);
+	load(is, v, d);
 }
 
 void load(kj::BufferedInputStream& is, Visitor& visitor, const Dialect& dialect) {
@@ -790,7 +843,7 @@ void save(DynamicValue::Reader reader, Visitor& v, const SaveOptions& opts) {
 	saveValue(reader, v, opts);
 }
 
-void save(DynamicValue::Reader reader, kj::BufferedOutputStream& os, Dialect& dialect, const SaveOptions& opts) {
+void save(DynamicValue::Reader reader, kj::BufferedOutputStream& os, const Dialect& dialect, const SaveOptions& opts) {
 	Own<Visitor> v;
 	
 	if(dialect.language == Dialect::YAML) {

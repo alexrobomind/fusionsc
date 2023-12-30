@@ -31,6 +31,10 @@ namespace fsc { namespace textio {
 		>;
 		
 		Payload payload;
+		
+		Node() = default;
+		Node(Node&&) = default;
+		Node(const Node&) = delete;
 	};
 	
 	struct Visitor {
@@ -70,8 +74,6 @@ namespace fsc { namespace textio {
 		kj::StringPtr jsonNegInf = "-.inf";
 		kj::StringPtr jsonNan = ".nan";
 		
-		bool humanReadable = true;
-		
 		inline bool isBinary() {
 			switch(language) {
 				case CBOR:
@@ -92,7 +94,7 @@ namespace fsc { namespace textio {
 		 * and substituting structures of the form { "onlyField" : defaultValue }
 		 * with the field key ("onlyField" or the field ID).
 		 */
-		bool compact = true;
+		bool compact = false;
 		
 		/** Enable integer field keys
 		 *
@@ -112,11 +114,10 @@ namespace fsc { namespace textio {
 	Own<Visitor> createVisitor(capnp::DynamicStruct::Builder);
 	Own<Visitor> createVisitor(capnp::ListSchema, ListInitializer);
 	Own<Visitor> createVisitor(Node&);
+	Own<Visitor> createDebugVisitor();
 	
+	void load(kj::ArrayPtr<const kj::byte>, Visitor&, const Dialect&);
 	void load(kj::BufferedInputStream&, Visitor&, const Dialect&);
-	void load(kj::BufferedInputStream&, Node&, const Dialect&);
-	void load(kj::BufferedInputStream&, capnp::DynamicStruct::Builder, const Dialect&);
-	void load(kj::BufferedInputStream&, capnp::ListSchema, ListInitializer, const Dialect&);
 	
 	void save(Node&, Visitor&);
 	void save(capnp::DynamicValue::Reader, Visitor&, const SaveOptions& = SaveOptions());

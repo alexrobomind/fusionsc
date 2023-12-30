@@ -167,7 +167,7 @@ if(BUILD_TESTING)
 		vmec-tests.cpp
 		blob-store-tests.cpp
 		db-cache-tests.cpp
-		json-tests.cpp
+		textio-tests.cpp
 		streams-tests.cpp
 		
 		efit-tests.cpp
