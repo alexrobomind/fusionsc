@@ -1,18 +1,208 @@
-#incldyue "common.h"
+#include "common.h"
 #include "assign.h"
+#include "capnp.h"
 
 
 namespace fscpy {
 
+namespace {
+	struct PythonVisitor : public textio::Visitor {
+		struct Uninitialized {};
+		
+		using NewList = py::list;
+		struct PresetList {
+			py::list list;
+			size_t offset;
+		};
+		struct Dict {
+			py::dict dict;
+			kj::Maybe<py::object> key = nullptr;
+		};
+		struct Forward {
+			Own<textio::Visitor>;
+			py::object original;
+		};
+		struct Done { py::object result };
+		
+		using State = kj::OneOf<Uninitialized, Preset, List, Dict, Forward, Done>;
+		kj::Vector<State> states;
+		
+		State& state() { return states.back(); }
+		
+		void pop() {
+			if(states.size() > 1)
+				states.removeLast();
+			else {
+				KJ_REQUIRE(!state().is<Uninitialized>());
+				KJ_REQUIRE(!state().is<Done>());
+				
+				if(state().is<NewList>()) {
+					state() = Done { state().get<NewList>() };
+				} else if(state().is<PresetList>()) {
+					states.add(Done {p.as<PresetList>().list});
+				} else if(state().is<Dict>()) {
+					states.add(Done {p.as<Dict>().dict});
+				} else if(state().is<Forward>()) {
+					states.add(Done {p.as<Forward>().original});
+				}
+			}
+		}
+				
+		#define ACCEPT_FWD(expr) \
+			KJ_REQUIRE(!state().is<Done>()); \
+			\
+			if(state().is<Forward>()) { \
+				auto& to = state().get<Forward>(); \
+				to -> expr; \
+				if(to -> done()) { \
+					pop(); \
+				} \
+				return; \
+			}
+				
+		void beginObject(Maybe<size_t> s) override {
+			ACCEPT_FWD(beginObject(s));
+			
+			auto checkObject = [&](py::object o) {
+				if(py::isinstance<DynamicStructCommon>(o)) {
+					states.add(Forward {createVisitor(o), o});
+				} else {
+					KJ_REQUIRE(py::isinstance<py::dict>(o));
+					states.add(Dict {o});
+				}
+			};
+			
+			
+			if(state().is<Uninitialized>()) {
+				state().init<Dict()>();
+			} else if(state().is<NewList>()) {
+				py::dict newDict;
+				state().get<NewList>().append(newDict);
+				states.add(Dict { newDict });
+			} else if(state().is<PresetList>()) {
+				auto& p = state().get<PresetList>();
+				KJ_REQUIRE(p.list.size() > p.offset, "List to small to add to");
+				
+				py::object entry = p.list[p.offset];
+				if(entry.is_none()) {
+					py::dict newDict;
+					states().add(Dict {newDict});
+					
+					p.list[p.offset] = newDict;
+				} else {
+					checkObject(entry);
+				}
+				++offset;
+			} else if(state().is<Dict>()) {
+				auto& dict = state().get<Dict>();
+				KJ_IF_MAYBE(pKey, dict.key) {
+					py::object key = mv(*pKey);
+					dict.key = nullptr;
+					
+					if(dict.dict.contains(key)) {
+						checkObject(dict.dict[key]);
+					} else {
+						py::dict newDict;
+						states.add(Dict {newDict});
+						dict.dict[key] = newDict;
+					}
+				} else {
+					KJ_FAIL_REQUIRE("Map key must be int, float, or str, not map");
+				}
+			}
+		}
+		
+		void endObject() override {
+			ACCEPT_FWD(endObject())
+			pop();
+		}
+		
+		void beginArray(Maybe<size_t> s) override {
+			ACCEPT_FWD(beginArray(s));
+			
+			auto checkList = [&](py::object o) {
+				KJ_REQUIRE(py::isinstance<py::list>(o));
+				states.add(Dict {o});
+			};
+			
+			if(state().is<Uninitialized>()) {
+				state().init<NewList>();
+			} else if(state().is<NewList>()) {
+				py::list newList;
+				state().get<NewList>().append(newList);
+				states.add(newList);
+			} else if(state().is<PresetList>()) {
+				auto& p = state().get<PresetList>();
+				KJ_REQUIRE(p.list.size() > p.offset, "List to small to add to");
+				
+				py::object entry = p.list[p.offset];
+				if(entry.is_none()) {
+					py::list newList;
+					states().add(newList);
+					p.list[p.offset] = newList;
+				} else {
+					checkList(entry);
+				}
+				++offset;
+			} else if(state().is<Dict>()) {
+				auto& dict = state().get<Dict>();
+				KJ_IF_MAYBE(pKey, dict.key) {
+					py::object key = mv(*pKey);
+					dict.key = nullptr;
+					
+					if(dict.dict.contains(key)) {
+						checkList(dict.dict[key]);
+					} else {
+						py::list newList;
+						states().add(newList);
+						dict.dict[key] = newList;
+					}
+				} else {
+					KJ_FAIL_REQUIRE("Map key must be int, float, or str, not list");
+				}
+			}
+		}
+		
+		void endArray() override {
+			ACCEPT_FWD(endArray())
+			
+			if(state().is<PresetList>()) {
+				auto& p = state().get<PresetList>();
+				KJ_REQUIRE(p.offset == p.list.size(), "Size of list loaded is smaller than template");
+			}
+			pop();
+		}
+		
+		template<typename T>
+		void acceptPrimitive(T t) {
+			KJ_REQUIRE(!state().is<Done>());
+			KJ_REQUIRE(!state().is<Forward>());
+			KJ_REQUIRE(!state().is<Uninitialized>(), "Can not store primitive values in root");
+		
+		void acceptInt(int64_t i) override {
+			acceptFwd(i);
+		
+		PythonVisitor(py::object pObj) {
+			if(pObj.is_none()) {
+			} else {
+				states.add(Uninitialized([
+	};		
+}
+
 namespace formats {
-	void Format::dump(DynamicValueReader r, py::object o) {
+	void Format::dump(DynamicValueReader r, py::object o, bool compact) {
 		int fd = o.attr("fileno")();
 		kj::FdOutputStream os(fd);
 		
 		// Flush python-side buffers before writing
 		o.attr("flush")();
 		
-		write(r, os);
+		// Prepare write options
+		textio::WriteOptions wopts {
+			.compact = compact
+		};
+		
+		write(r, os, wopts);
 	}
 	
 	Formatted Format::load(py::object o) {
@@ -20,9 +210,14 @@ namespace formats {
 		return Formatted { *this, kj::heap<kj::FdInputStream>(fd), o };
 	}
 	
-	void Format::dumps(DynamicValueReader r) {
+	void Format::dumps(DynamicValueReader r, bool compact) {
+		// Prepare write options
+		textio::WriteOptions wopts {
+			.compact = compact
+		};
+		
 		kj::VectorOutputStream os;
-		write(r, os);
+		write(r, os, wopts);
 		
 		auto arr = os.getArray();
 		
@@ -62,56 +257,35 @@ namespace formats {
 		auto arr = os.getArray();
 	}
 	
-	void YAML::write(DynamicValueReader reader, kj::BufferedOutputStream& os) {
-		Own<std::ostream> wrapped = toStdStream(os);		
-		YAML::Emitter document(*wrapped);
-
-		document << reader;
-		
-		wrapped -> flush();
-		os.flush();
+	TextIOFormat::TextIOFormat(const textio::Dialect& d, const textio::WriteOptions& wo) :
+		dialect(d), writeOptions(wo)
+	{}
+	
+	void TextIOFormat::write(DynamicValueReader r, kj::BufferedOutputStream& os, const textio::WriteOptions& writeOptions) {
+		textio::save(r, *textio::createVisitor(os), dialect, writeOptions);
 	}
 	
-	void YAML::read(const BuilderSlot& dst, kj::BufferedInputStream& is) {
-		Own<std::istream> wrapped = toStdStream(is);		
-		YAML::Node node = YAML::Load(*wrapped);
-		
-		if(dst.type.isList()) {
-			auto asList = dst.init(node.size()).as<capnp::DynamicList>();
-			load(asList, node);
-			return;
-		} else if(dst.type.isStruct()) {
-			auto asStruct = dst.init().as<capnp::DynamicStruct>();
-			load(asStruct, node);
-			return;
-		}
-		
-		KJ_FAIL_REQUIRE("Can only assign struct and list types from YAML");
-	}
-	
-	void JsonDialect::write(DynamicValueReader reader, kj::BufferedOutputStream& os) {
-		writeJson(reader, os, opts);
-	}
-	
-	void JsonDialect::read(const BuilderSlot& dst, kj::BufferedInputStream& is) {
+	void TextIOFormat::read(const BuilderSlot& slot, kj::BufferedInputStream& bis) {		
 		if(dst.type.isList()) {
 			auto initializer = [&](size_t s) {
 				return dst.init(s).as<capnp::DynamicList>();
 			};
-			
-			loadJson(dst.type.asList(), initializer, is, node);
-			
+			textio::load(bis, *createVisitor(dst.type.asList(), mv(initializer)), dialect);
 			return;
 		} else if(dst.type.isStruct()) {
 			auto asStruct = dst.init().as<capnp::DynamicStruct>();
-			
-			loadJson(asStruct, is, opts);
-			
+			textio::load(bis, *createVisitor(asStruct), dialect);
 			return;
 		}
 		
-		KJ_FAIL_REQUIRE("Can only assign struct and list types from JSON / BSON / CBOR");
-		
+		KJ_FAIL_REQUIRE("Can only assign struct and list types");
+	}
+	
+	void YAML::YAML(
+	
+	namespace {
+		struct YAML : TextIOFormat {
+			YAML(bool compact) : TextIOFormat(textio::Dialect {
 	}
 }
 
@@ -136,7 +310,23 @@ void initFormats(py::module_& m) {
 		.def(&Format::dumps, "dumps")
 	;
 	
-	static YAML yaml;
+	using Dialect = textio::Dialect;
+	using F = TextIOFormat;
+	
+	static TextIOFormat yaml(Dialect{
+		.language = Dialect::YAML;
+	});
+	static TextIOFormat json(Dialect{
+		.language = Dialect::JSON;
+	});
+	static TextIOFormat bson(Dialect{
+		.language = Dialect::BSON;
+	});
+	static TextIOFormat cbor(Dialect{
+		.language = Dialect::CBOR;
+	});
+	
+	static D yaml { .language = D::YAML; }
 	static JsonDialect json;
 	static JsonDialect cbor(JsonOptions { dialect = JsonOptions::CBOR });
 	static JsonDialect bson(JsonOptions { dialect = JsonOptions::BSON });

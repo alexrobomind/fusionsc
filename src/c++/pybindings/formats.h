@@ -4,7 +4,7 @@
 #include "assign.h"
 #include "capnp.h"
 
-#include <fsc/json.cpp>
+#include <fsc/textio.cpp>
 
 namespace fscpy {
 	namespace formats {
@@ -25,11 +25,11 @@ namespace fscpy {
 		struct Format {
 			Format(bool binary) : isBinary(binary) {}
 			
-			virtual void write(DynamicValueReader, kj::BufferedOutputStream&) = 0;
+			virtual void write(DynamicValueReader, kj::BufferedOutputStream&, const textio::WriteOptions& = textio::WriteOptions()) = 0;
 			virtual void read(const BuilderSlot&, kj::BufferedInputStream&) = 0;
 			
-			py::object dumps(DynamicValueReader);
-			void dump(DynamicValueReader, py::object);
+			py::object dumps(DynamicValueReader, bool compact);
+			void dump(DynamicValueReader, py::object, bool compact);
 			
 			Formatted load(py::object);
 			Formatted loads1(py::buffer);
@@ -38,23 +38,29 @@ namespace fscpy {
 			const bool isBinary;
 		};
 		
-		struct YAML : public Format {
-			inline YAML() : Format(false) {}
+		struct TextIOFormat : public Format {
+			textio::Dialect dialect;
+			
+			TextIOFormat(const textio::Dialect&);
 			
 			void write(DynamicValueReader, kj::BufferedOutputStream&) override;
 			void read(const BuilderSlot&, kj::BufferedInputStream&) override;
 		};
 		
-		struct JsonDialect : public Format {
-			inline JsonDialect(const JsonOpts& nOpts) :
-				Format(nOpts.isBinary()),
-				opts(nOpts)
-			{}
-			
-			JsonOptions opts;
-			
-			void write(DynamicValueReader, kj::BufferedOutputStream&) override;
-			void read(const BuilderSlot&, kj::BufferedInputStream&) override;
+		struct YAML : public TextIOFormat {
+			YAML();
+		};
+		
+		struct BSON : public TextIOFormat {
+			BSON();
+		};
+		
+		struct JSON : public TextIOFormat {
+			JSON();
+		};
+		
+		struct CBOR : public TextIOFormat {
+			CBOR();
 		};
 	}
 }
