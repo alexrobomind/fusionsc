@@ -12,7 +12,7 @@ namespace {
 		using NewList = py::list;
 		struct PresetList {
 			py::list list;
-			size_t offset;
+			size_t offset = 0;
 		};
 		struct Dict {
 			py::dict dict;
@@ -72,7 +72,7 @@ namespace {
 				}
 			};
 			
-			
+
 			if(state().is<Uninitialized>()) {
 				state().init<Dict()>();
 			} else if(state().is<NewList>()) {
@@ -178,14 +178,65 @@ namespace {
 			KJ_REQUIRE(!state().is<Done>());
 			KJ_REQUIRE(!state().is<Forward>());
 			KJ_REQUIRE(!state().is<Uninitialized>(), "Can not store primitive values in root");
+			
+			auto asPy = py::cast(t);
+			
+			if(state().is<PresetList>()) {
+				auto& p = state.get<PresetList>();
+				p.list[p.offset++] = asPy;
+			} else if(state().is<NewList>()) {
+				state.get<NewList>().append(asPy);
+			} else if(state().is<Dict>()) {
+				auto& d = state.get<Dict>();
+				KJ_IF_MAYBE(pKey, d.key) {
+					d.dict[*pKey] = asPy;
+					d.key = nullptr;
+				} else {
+					d.key = asPy;
+				}
+			}
+		}
 		
 		void acceptInt(int64_t i) override {
-			acceptFwd(i);
+			ACCEPT_FWD(acceptInt(i));
+			acceptPrimitive(i);
+		}
 		
-		PythonVisitor(py::object pObj) {
-			if(pObj.is_none()) {
+		void acceptUInt(uint64_t i) override {
+			ACCEPT_FWD(acceptUInt(i));
+			acceptPrimitive(i);
+		}
+		
+		void acceptDouble(double d) override {
+			ACCEPT_FWD(acceptDouble(d));
+			acceptPrimitive(d);
+		}
+		
+		void acceptString(kj::StringPtr s) override {
+			ACCEPT_FWD(acceptUInt(s));
+			acceptPrimitive(s);
+		}
+		
+		void acceptData(kj::ArrayPtr<const kj::byte> d) override {
+			ACCEPT_FWD(acceptData(d));
+			acceptPrimitive(py::bytes(d.begin(), d.size()));
+		}
+		
+		PythonVisitor(py::object o) {
+			if(o.is_none()) {
+				states.add(Uninitialized());
+			} else if(py::isinstance<py::list>()) {
+				states.add(PresetList { py::cast<py::list>(o) });
+			} else if(py::isinstance<py::dict>()) {
+				states.add(Dict { py::cast<py::dict>(o) });
+			} else if(py::isinstance<DynamicStructCommon>(o)) {
+				auto& ds = py::cast<DynamicStructCommon&>(o);
+				states.add(Forward {createVisitor(ds), o});
 			} else {
-				states.add(Uninitialized([
+				KJ_FAIL_REQUIRE("Can not read into object of specfied type. Must be None, list, dict, or a struct builder");
+			}
+		}
+
 	};		
 }
 
