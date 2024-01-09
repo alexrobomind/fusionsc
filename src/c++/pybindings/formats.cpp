@@ -189,6 +189,8 @@ namespace {
 			} else if(state().is<Dict>()) {
 				auto& d = state.get<Dict>();
 				KJ_IF_MAYBE(pKey, d.key) {
+					KJ_REQUIRE(!d.dict.contains(*pKey), "Dict already contains key");
+					
 					d.dict[*pKey] = asPy;
 					d.key = nullptr;
 				} else {
