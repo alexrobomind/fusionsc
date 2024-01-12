@@ -120,6 +120,9 @@ namespace fsc { namespace textio {
 	void load(kj::BufferedInputStream&, Visitor&, const Dialect&);
 	
 	void save(Node&, Visitor&);
+	
+	Own<Visitor> createVisitor(kj::BufferedInputStream&, const Dialect&, const SaveOptions& = SaveOptions());
+	
 	void save(capnp::DynamicValue::Reader, Visitor&, const SaveOptions& = SaveOptions());
 	void save(capnp::DynamicValue::Reader, kj::BufferedOutputStream&, const Dialect&, const SaveOptions& = SaveOptions());
 	

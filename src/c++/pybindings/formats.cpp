@@ -29,6 +29,10 @@ namespace {
 		
 		State& state() { return states.back(); }
 		
+		bool done() override {
+			return state().is<Done>();
+		}
+		
 		void pop() {
 			if(states.size() > 1)
 				states.removeLast();
@@ -64,8 +68,8 @@ namespace {
 			ACCEPT_FWD(beginObject(s));
 			
 			auto checkObject = [&](py::object o) {
-				if(py::isinstance<DynamicStructCommon>(o)) {
-					states.add(Forward {createVisitor(o), o});
+				if(py::isinstance<DynamicStructBuilder>(o)) {
+					states.add(Forward {textio::createVisitor(o), o});
 				} else {
 					KJ_REQUIRE(py::isinstance<py::dict>(o));
 					states.add(Dict {o});
@@ -74,7 +78,7 @@ namespace {
 			
 
 			if(state().is<Uninitialized>()) {
-				state().init<Dict()>();
+				state().init<Dict>();
 			} else if(state().is<NewList>()) {
 				py::dict newDict;
 				state().get<NewList>().append(newDict);
@@ -231,8 +235,8 @@ namespace {
 				states.add(PresetList { py::cast<py::list>(o) });
 			} else if(py::isinstance<py::dict>()) {
 				states.add(Dict { py::cast<py::dict>(o) });
-			} else if(py::isinstance<DynamicStructCommon>(o)) {
-				auto& ds = py::cast<DynamicStructCommon&>(o);
+			} else if(py::isinstance<DynamicStructBuilder>(o)) {
+				auto& ds = py::cast<DynamicStructBuilder&>(o);
 				states.add(Forward {createVisitor(ds), o});
 			} else {
 				KJ_FAIL_REQUIRE("Can not read into object of specfied type. Must be None, list, dict, or a struct builder");
@@ -243,7 +247,115 @@ namespace {
 }
 
 namespace formats {
-	void Format::dump(DynamicValueReader r, py::object o, bool compact) {
+	FormattedReader* Format::open(py::object o) {
+		using BufferPtr = kj::ArrayPtr<const kj::byte>;
+		
+		if(py::isinstance<py::str>(o)) {
+			Py_ssize_t size;
+			const char* utf8 = PyUnicode_AsUTF8AndSize(o.ptr, &size);
+			if(utf8 == nullptr)
+				throw py::error_already_set();
+			
+			auto inputStream = kj::heap<kj::ArrayInputStream>(
+				BufferPtr(utf8, size)
+			);
+			inputStream = inputStream.attach(o);
+			
+			return new Formatted { *this, mv(inputStream) };
+		}
+		
+		if(py::isinstance<py::buffer>(o)) {
+			auto buf = py::cast<py::buffer>(o);
+			
+			py::buffer_info info = buf.request();
+			
+			KJ_REQUIRE(info.itemsize == 1, "Can only read from character buffers");
+			
+			auto inputStream = kj::heap<kj::ArrayInputStream>(
+				BufferPtr(info.ptr, info.size)
+			);
+			inputStream = inputStream.attach(mv(info));
+			
+			return new Formatted { *this, mv(inputStream) };
+		}
+		
+		if(o.hasattr("fileno")) {
+			int fd = o.attr("fileno")();
+			return new Formatted { *this, kj::heap<kj::FdInputStream>(fd).attach(o) };
+		}
+		
+		KJ_FAIL_REQUIRE("Input object must be either str, file-like (with a file descriptor) or support the buffer protocol");
+	}
+	
+	namespace {
+		void dumpToVisitor(py::object src, textio::Visitor& dst);
+		
+		template<typename T>
+		void dumpList(py::object src, textio::Visitor& dst) {
+			auto asList = py::cast<T>(src);
+			dst.beginArray(asList.size());
+			for(auto e : asList)
+				dumpToVisitor(e, dst);
+			dst.endArray();
+		}
+		
+		void dumpToVisitor(py::object src, textio::Visitor& dst) {
+			// Fast non-copy path for string pointers
+			py::detail::make_caster<kj::StringPtr> strCaster;
+			if(strCaster.load(src)) {
+				dst.acceptString(strCaster);
+				return;
+			}
+			
+			// Collection types
+			if(py::isinstance<py::tuple>(src)) {
+				dumpList<py::tuple>(src, dst);
+				return;
+			}
+			
+			if(py::isinstance<py::list>(src)) {
+				dumpList<py::list>(src, dst);
+				return;
+			}
+			
+			if(py::isinstance<py::dict>(src)) {
+				auto asDict = py::cast<py::dict>(src);
+				
+				dst.beginObject(asDict.size());
+				for(std::pair<py::handle, py::handle> entry : asDict) {
+					dumpToVisitor(entry.first, dst);
+					dumpToVisitor(entry.second, dst);
+				}
+				dst.endObject();
+				return;
+			}
+			
+			// Dynamic value
+			DynamicValueReader r = py::cast<DynamicValueReader>(src);
+			textio::save(r, dst);
+		}
+	}
+	
+	void Format::dumps(py::object r, bool compact, bool asBytes) {
+		// Prepare write options
+		textio::SaveOptions wopts {
+			.compact = compact
+		};
+		
+		kj::VectorOutputStream os;
+		auto v = this -> createVisitor(os, wopts);
+		dumpToVisitor(r, *v);
+		
+		auto arr = os.getArray();
+		
+		if(asBytes) {
+			return py::bytes(arr.begin(), arr.size());
+		} else {
+			return py::str(arr.begin(), arr.size());
+		}
+	}
+	
+	void Format::dump(py::object r, py::object o, bool compact) {
 		int fd = o.attr("fileno")();
 		kj::FdOutputStream os(fd);
 		
@@ -255,98 +367,59 @@ namespace formats {
 			.compact = compact
 		};
 		
-		write(r, os, wopts);
+		auto v = this -> createVisitor(os, wopts);
+		dumpToVisitor(r, *v);
 	}
 	
-	Formatted Format::load(py::object o) {
-		int fd = o.attr("fileno")();
-		return Formatted { *this, kj::heap<kj::FdInputStream>(fd), o };
-	}
-	
-	void Format::dumps(DynamicValueReader r, bool compact) {
-		// Prepare write options
-		textio::WriteOptions wopts {
-			.compact = compact
-		};
-		
-		kj::VectorOutputStream os;
-		write(r, os, wopts);
-		
-		auto arr = os.getArray();
-		
-		if(isBinary) {
-			return py::bytes(arr.begin(), arr.size());
-		} else {
-			return py::str(arr.begin(), arr.size());
-		}
-	}
-	
-	Formatted Format::loads1(py::buffer buf) {
-		py::buffer_info info = buf.request();
-		
-		KJ_REQUIRE(info.itemsize == 1, "Can only read from character buffers");
-		
-		return Formatted {
-			*this,
-			kj::heap<kj::ArrayInputStream>(
-				kj::ArrayPtr<const kj::byte>(info.ptr, info.size)
-			),
-			buf
-		};
-	}
-	
-	Formatted Format::loads2(py::str str) {		
-		return loads1(
-			py::reinterpret_steal<py::buffer>(
-				PyUnicode_AsUTF8String(str)
-			)
-		);
-	}
-		
-	py::object Format::get(DynamicValueReader reader) {
-		VectorOutputStream os;
-		write(reader, os);
-		
-		auto arr = os.getArray();
-	}
-	
-	TextIOFormat::TextIOFormat(const textio::Dialect& d, const textio::WriteOptions& wo) :
-		dialect(d), writeOptions(wo)
+	TextIOFormat::TextIOFormat(const textio::Dialect& d) :
+		dialect(d)
 	{}
 	
-	void TextIOFormat::write(DynamicValueReader r, kj::BufferedOutputStream& os, const textio::WriteOptions& writeOptions) {
-		textio::save(r, *textio::createVisitor(os), dialect, writeOptions);
+	Own<textio::Visitor> TextIOFormat::createVisitor(kj::BufferedOutputStream& os, const textio::SaveOptions& options) {
+		return textio::createVisitor(os, dialect, options);
 	}
 	
-	void TextIOFormat::read(const BuilderSlot& slot, kj::BufferedInputStream& bis) {		
-		if(dst.type.isList()) {
+	void TextIOFormat::read(const textio::Visitor& dst, kj::BufferedInputStream& bis) {
+		textio::load(bis, dst, dialect);
+	}
+	
+	void FormattedReader::assign(const BuilderSlot& dst) {
+		KJ_REQUIRE(!used, "Can only assign from a formatted load object once");
+		used = true;
+		
+		auto t = dst.getType();
+		KJ_REQUIRE(t.isList() || t.isStruct(), "Can only assign to list and struct types");
+		
+		kj::BufferedInputStreamWrapper bis(*src);
+		
+		if(t.isList()) {
 			auto initializer = [&](size_t s) {
 				return dst.init(s).as<capnp::DynamicList>();
 			};
-			textio::load(bis, *createVisitor(dst.type.asList(), mv(initializer)), dialect);
-			return;
-		} else if(dst.type.isStruct()) {
-			auto asStruct = dst.init().as<capnp::DynamicStruct>();
-			textio::load(bis, *createVisitor(asStruct), dialect);
-			return;
+			auto v = textio::createVisitor(t.asList(), initializer);
+			format.load(*v, bis);
+		} else {
+			auto v = textio::createVisitor(dst.init().as<capnp::DynamicStruct>());
+			format.load(*v, bis);
 		}
-		
-		KJ_FAIL_REQUIRE("Can only assign struct and list types");
 	}
 	
-	void YAML::YAML(
-	
-	namespace {
-		struct YAML : TextIOFormat {
-			YAML(bool compact) : TextIOFormat(textio::Dialect {
+	py::object FormattedReader::read(py::object input) {
+		PythonVisitor v(input);
+		kj::BufferedInputStreamWrapper bis(*src);
+		
+		format.load(v, bis);
+		KJ_REQUIRE(v.done(), "Target was filled incompletely");
+		
+		return v.state().get<Done>().result;
 	}
 }
 
 void initFormats(py::module_& m) {
 	auto formatsMod = m.def_submodule("formats");
 	
-	py::class_<Formatted, Assignable>(
-		"Formatted",
+	py::class_<FormattedReader, Assignable>(
+		"FormattedReader",
 		"A format-aware data stream. The object can not access the data directly,"
 		" but can be assigned to a struct / list builder or used as an argument to"
 		" StructType.newMessage(...)."
@@ -356,8 +429,6 @@ void initFormats(py::module_& m) {
 		.def_readonly(&Format::isBinary, "isBinary")
 		
 		.def(&Format::load, "load")
-		.def(&Format::loads1, "loads")
-		.def(&Format::loads2, "loads")
 		
 		.def(&Format::dump, "dump")
 		.def(&Format::dumps, "dumps")

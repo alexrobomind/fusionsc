@@ -1,41 +1,35 @@
 #pragma once
 
-#include "common.h"
+#include "fscpy.h"
 #include "assign.h"
 #include "capnp.h"
 
-#include <fsc/textio.cpp>
+#include <fsc/textio.h>
 
 namespace fscpy {
 	namespace formats {
-		struct Formatted : public Assignable {
-			Format& parent;
-			Own<kj::InputStream&> src;
-			py::object input;
-			
-			bool used = false;
-			
-			inline void assign(const BuilderSlot& dst) override {
-				KJ_REQUIRE(!used, "Can only assign from a formatted load object once");
-				parent.read(dst, *src);
-				used = true;
-			}
-		};
+		struct FormattedReader;
 		
 		struct Format {
 			Format(bool binary) : isBinary(binary) {}
 			
-			virtual void write(DynamicValueReader, kj::BufferedOutputStream&, const textio::WriteOptions& = textio::WriteOptions()) = 0;
-			virtual void read(const BuilderSlot&, kj::BufferedInputStream&) = 0;
+			virtual Own<textio::Visitor> createVisitor(kj::BufferedOutputStream&, const textio::SaveOptions& = textio::SaveOptions()) = 0;
+			virtual void read(textio::Visitor& dst, kj::BufferedInputStream&) = 0;
 			
-			py::object dumps(DynamicValueReader, bool compact);
-			void dump(DynamicValueReader, py::object, bool compact);
+			py::object dumps(py::object, bool compact);
+			void dump(py::object, py::object, bool compact);
 			
-			Formatted load(py::object);
-			Formatted loads1(py::buffer);
-			Formatted loads2(py::str);
+			FormattedReader* open(py::object);
+		};
+		
+		struct FormattedReader : public Assignable {
+			Format& parent;
+			Own<kj::InputStream> src;
 			
-			const bool isBinary;
+			bool used = false;
+			
+			void assign(const BuilderSlot& dst) override;
+			py::object read(py::object dst);
 		};
 		
 		struct TextIOFormat : public Format {
@@ -43,8 +37,8 @@ namespace fscpy {
 			
 			TextIOFormat(const textio::Dialect&);
 			
-			void write(DynamicValueReader, kj::BufferedOutputStream&) override;
-			void read(const BuilderSlot&, kj::BufferedInputStream&) override;
+			void Own<textio::Visitor> createVisitor(kj::BufferedOutputStream&, const textio::SaveOptions&) override;
+			void read(textio::Visitor& dst, kj::BufferedInputStream&) override;
 		};
 		
 		struct YAML : public TextIOFormat {

@@ -826,6 +826,14 @@ Own<Visitor> createDebugVisitor() {
 	return kj::heap<DebugVisitor>();
 }
 
+Own<Visitor> createVisitor(kj::BufferedOutputStream& os, const Dialect& dialect, const SaveOptions& opts) {
+	if(dialect.language == Dialect::YAML) {
+		return internal::createYamlcppWriter(os, dialect);
+	} else {
+		return internal::createJsonconsWriter(os, dialect);
+	}
+}
+
 void load(kj::ArrayPtr<const kj::byte> buf, Visitor& v, const Dialect& d) {
 	kj::ArrayInputStream is(buf);
 	load(is, v, d);
@@ -843,16 +851,8 @@ void save(DynamicValue::Reader reader, Visitor& v, const SaveOptions& opts) {
 	saveValue(reader, v, opts);
 }
 
-void save(DynamicValue::Reader reader, kj::BufferedOutputStream& os, const Dialect& dialect, const SaveOptions& opts) {
-	Own<Visitor> v;
-	
-	if(dialect.language == Dialect::YAML) {
-		v = internal::createYamlcppWriter(os, dialect);
-	} else {
-		v = internal::createJsonconsWriter(os, dialect);
-	}
-	
-	save(reader, *v, opts);
+void save(DynamicValue::Reader reader, kj::BufferedOutputStream& os, const Dialect& dialect, const SaveOptions& opts) {	
+	saveValue(reader, *createVisitor(os, dialect, opts), opts);
 }
 
 }}

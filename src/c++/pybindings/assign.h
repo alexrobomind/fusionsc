@@ -22,7 +22,7 @@ struct BuilderSlot {
 };
 
 struct Assignable {
-	virtual assign(const BuilderSlot& dst) = 0;
+	virtual void assign(const BuilderSlot& dst) = 0;
 	virtual inline ~Assignable() {};
 };
 
