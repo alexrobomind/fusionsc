@@ -10,6 +10,8 @@ if(FSC_WITH_PYTHON)
 		capnp-bind.cpp
 		pickle.cpp
 		
+		formats.cpp
+		
 		kj.cpp
 		fscpy.cpp
 		async.cpp

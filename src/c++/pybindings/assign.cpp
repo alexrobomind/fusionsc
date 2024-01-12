@@ -177,7 +177,9 @@ void assign(const BuilderSlot& dst, py::object object) {
 	pybind11::detail::make_caster<kj::StringPtr> strCaster;
 	if(py::isinstance<py::str>(object) && (dst.type.isList() || dst.type.isStruct())) {
 		KJ_IF_MAYBE(pException, kj::runCatchingExceptions([&]() {
-			formats::YAML().loads(py::reinterpret_borrow<py::str>(object)).assign(dst);
+			formats::YAML yml;
+			auto reader = yml.open(object);
+			reader.assign(dst);
 			return;
 		})) {
 			auto& error = *pException;

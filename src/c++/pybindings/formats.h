@@ -10,21 +10,24 @@ namespace fscpy {
 	namespace formats {
 		struct FormattedReader;
 		
-		struct Format {
-			Format(bool binary) : isBinary(binary) {}
-			
+		struct Format {			
 			virtual Own<textio::Visitor> createVisitor(kj::BufferedOutputStream&, const textio::SaveOptions& = textio::SaveOptions()) = 0;
 			virtual void read(textio::Visitor& dst, kj::BufferedInputStream&) = 0;
 			
-			py::object dumps(py::object, bool compact);
+			py::object dumps(py::object, bool compact, bool asBytes);
 			void dump(py::object, py::object, bool compact);
 			
-			FormattedReader* open(py::object);
+			FormattedReader open(py::object);
 		};
 		
 		struct FormattedReader : public Assignable {
 			Format& parent;
-			Own<kj::InputStream> src;
+			Own<kj::BufferedInputStream> src;
+			
+			FormattedReader(Format& p, Own<kj::BufferedInputStream>&& nSrc) :
+				parent(p), src(mv(nSrc))
+			{}
+			inline ~FormattedReader() noexcept {};
 			
 			bool used = false;
 			
@@ -37,7 +40,7 @@ namespace fscpy {
 			
 			TextIOFormat(const textio::Dialect&);
 			
-			void Own<textio::Visitor> createVisitor(kj::BufferedOutputStream&, const textio::SaveOptions&) override;
+			Own<textio::Visitor> createVisitor(kj::BufferedOutputStream&, const textio::SaveOptions&) override;
 			void read(textio::Visitor& dst, kj::BufferedInputStream&) override;
 		};
 		
