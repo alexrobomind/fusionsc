@@ -1,6 +1,7 @@
 #include "fscpy.h"
 #include "assign.h"
 #include "capnp.h"
+#include "tensor.h"
 
 #include "formats.h"
 
@@ -9,7 +10,7 @@ namespace fscpy {
 
 namespace {
 	struct PythonVisitor : public textio::Visitor {
-		struct Uninitialized {};
+		struct Preset { py::object object; };
 		
 		using NewList = py::list;
 		struct PresetList {
@@ -26,7 +27,7 @@ namespace {
 		};
 		struct Done { py::object result; };
 		
-		using State = kj::OneOf<Uninitialized, PresetList, NewList, Dict, Forward, Done>;
+		using State = kj::OneOf<Preset, PresetList, NewList, Dict, Forward, Done>;
 		kj::Vector<State> states;
 		
 		State& state() { return states.back(); }
@@ -36,22 +37,23 @@ namespace {
 		}
 		
 		void pop() {
-			if(states.size() > 1)
+			if(states.size() > 1) {
 				states.removeLast();
-			else {
+			} else {
 				auto& s = state();
 				
-				KJ_REQUIRE(!s.is<Uninitialized>());
 				KJ_REQUIRE(!s.is<Done>());
 				
-				if(s.is<NewList>()) {
+				if(s.is<Preset>()) {
+					s = Done { s.get<Preset>().object };
+				} else if(s.is<NewList>()) {
 					s = Done { s.get<NewList>() };
 				} else if(s.is<PresetList>()) {
-					states.add(Done {s.get<PresetList>().list});
+					s = Done {s.get<PresetList>().list};
 				} else if(s.is<Dict>()) {
-					states.add(Done {s.get<Dict>().dict});
+					s = Done {s.get<Dict>().dict};
 				} else if(s.is<Forward>()) {
-					states.add(Done {s.get<Forward>().original});
+					s = Done {s.get<Forward>().original};
 				}
 			}
 		}
@@ -81,8 +83,15 @@ namespace {
 			};
 			
 
-			if(state().is<Uninitialized>()) {
-				state().init<Dict>();
+			if(state().is<Preset>()) {
+				py::object o = state().get<Preset>().object;
+				
+				if(o.is_none()) {
+					state().init<Dict>();
+				} else {
+					states.removeLast();
+					checkObject(o);
+				}	
 			} else if(state().is<NewList>()) {
 				py::dict newDict;
 				state().get<NewList>().append(newDict);
@@ -100,7 +109,7 @@ namespace {
 				} else {
 					checkObject(entry);
 				}
-				++state().get<PresetList>().offset;
+				++p.offset;
 			} else if(state().is<Dict>()) {
 				auto& dict = state().get<Dict>();
 				KJ_IF_MAYBE(pKey, dict.key) {
@@ -130,11 +139,17 @@ namespace {
 			
 			auto checkList = [&](py::object o) {
 				KJ_REQUIRE(py::isinstance<py::list>(o));
-				states.add(Dict {o});
+				states.add(PresetList {o});
 			};
 			
-			if(state().is<Uninitialized>()) {
-				state().init<NewList>();
+			if(state().is<Preset>()) {
+				py::object o = state().get<Preset>().object;
+				if(o.is_none()) {
+					state().init<NewList>();
+				} else {
+					states.removeLast();
+					checkList(o);
+				}
 			} else if(state().is<NewList>()) {
 				py::list newList;
 				state().get<NewList>().append(newList);
@@ -184,10 +199,16 @@ namespace {
 		void acceptPrimitive(py::object asPy) {
 			KJ_REQUIRE(!state().is<Done>());
 			KJ_REQUIRE(!state().is<Forward>());
-			KJ_REQUIRE(!state().is<Uninitialized>(), "Can not store primitive values in root");
 			
-			if(state().is<PresetList>()) {
+			if(state().is<Preset>()) {
+				auto& ps = state().get<Preset>();
+				KJ_REQUIRE(ps.object.is_none(), "Primitive value can only be unified with None");
+				ps.object = asPy;
+			} else if(state().is<PresetList>()) {
 				auto& p = state().get<PresetList>();
+				
+				KJ_REQUIRE(p.offset < p.list.size(), "List too small");
+				KJ_REQUIRE(p.list[p.offset].is_none(), "Primitive value can only be unified with None");
 				p.list[p.offset++] = asPy;
 			} else if(state().is<NewList>()) {
 				state().get<NewList>().append(asPy);
@@ -240,18 +261,13 @@ namespace {
 		}
 		
 		PythonVisitor(py::object o) {
-			if(o.is_none()) {
-				states.add(Uninitialized());
-			} else if(py::isinstance<py::list>(o)) {
-				states.add(PresetList { py::cast<py::list>(o) });
-			} else if(py::isinstance<py::dict>(o)) {
-				states.add(Dict { py::cast<py::dict>(o) });
-			} else if(py::isinstance<DynamicStructBuilder>(o)) {
+			if(py::isinstance<DynamicStructBuilder>(o)) {
 				auto& ds = py::cast<DynamicStructBuilder&>(o);
 				states.add(Forward {textio::createVisitor(ds), o});
-			} else {
-				KJ_FAIL_REQUIRE("Can not read into object of specfied type. Must be None, list, dict, or a struct builder");
+				return;
 			}
+			
+			states.add(Preset {o});
 		}
 
 	};		
@@ -301,10 +317,31 @@ namespace formats {
 	}
 	
 	namespace {
-		void dumpToVisitor(py::object src, textio::Visitor& dst);
+		void dumpToVisitor(py::handle src, textio::Visitor& dst);
+		
+		void dumpNumpyArray(py::handle o, textio::Visitor& dst) {
+			py::list shape = o.attr("shape");
+			py::object flat = o.attr("flatten")();
+			dst.beginObject(2);
+			
+			dst.acceptString("shape");
+			
+			dst.beginArray(shape.size());
+			for(auto el : shape)
+				dumpToVisitor(el, dst);
+			dst.endArray();
+			
+			dst.acceptString("data");
+			
+			dst.beginArray(py::len(flat));
+			for(auto el : flat)
+				dumpToVisitor(el, dst);
+			dst.endArray();
+			dst.endObject();
+		}
 		
 		template<typename T>
-		void dumpList(py::object src, textio::Visitor& dst) {
+		void dumpList(py::handle src, textio::Visitor& dst) {
 			auto asList = py::cast<T>(src);
 			dst.beginArray(asList.size());
 			for(auto e : asList)
@@ -312,7 +349,12 @@ namespace formats {
 			dst.endArray();
 		}
 		
-		void dumpToVisitor(py::object src, textio::Visitor& dst) {
+		void dumpToVisitor(py::handle src, textio::Visitor& dst) {
+			if(PyArray_Check(src.ptr())) {
+				dumpNumpyArray(src, dst);
+				return;
+			}
+			
 			// Fast non-copy path for string pointers
 			py::detail::make_caster<kj::StringPtr> strCaster;
 			if(strCaster.load(src, false)) {
@@ -427,18 +469,24 @@ namespace formats {
 void initFormats(py::module_& m) {
 	auto formatsMod = m.def_submodule("formats");
 	
-	py::class_<formats::FormattedReader, Assignable>(m,
+	py::class_<formats::FormattedReader, Assignable>(formatsMod,
 		"FormattedReader",
 		"A format-aware data stream. The object can be assigned to a struct"
 		" / list builder or used as an argument to"
 		" StructType.newMessage(...)."
-	);
+	)
+		.def("read", &formats::FormattedReader::read,
+			"Read the message in structured format. Takes an optional"
+			" destination with which the message will be unified.",
+			py::arg("dst") = py::none()
+		);
+	;
 	
-	py::class_<formats::Format>(m, "Format")	
+	py::class_<formats::TextIOFormat>(formatsMod, "Format")	
 		.def("open", &formats::Format::open)
 		
-		.def("dump", &formats::Format::dump)
-		.def("dumps", &formats::Format::dumps)
+		.def("dump", &formats::Format::dump, py::arg("value"), py::arg("destination"), py::arg("compact") = false)
+		.def("dumps", &formats::Format::dumps, py::arg("value"), py::arg("compact") = false, py::arg("binary") = false)
 	;
 	
 	using Dialect = textio::Dialect;
@@ -457,10 +505,20 @@ void initFormats(py::module_& m) {
 	static F bson(MAKE_DIALECT(BSON));
 	static F cbor(MAKE_DIALECT(CBOR));
 	
-	formatsMod.attr("yaml") = py::cast(yaml, py::return_value_policy::reference);
-	formatsMod.attr("json") = py::cast(json, py::return_value_policy::reference);
-	formatsMod.attr("cbor") = py::cast(cbor, py::return_value_policy::reference);
-	formatsMod.attr("bson") = py::cast(bson, py::return_value_policy::reference);
+	auto check = [&]() {
+		if(PyErr_Occurred())
+			throw py::error_already_set();
+	};
+	
+	check();
+	formatsMod.add_object("yaml", py::cast(yaml, py::return_value_policy::reference));
+	check();
+	formatsMod.add_object("json", py::cast(json, py::return_value_policy::reference));
+	check();
+	formatsMod.add_object("cbor", py::cast(cbor, py::return_value_policy::reference));
+	check();
+	formatsMod.add_object("bson", py::cast(bson, py::return_value_policy::reference));
+	check();
 }
 
 }

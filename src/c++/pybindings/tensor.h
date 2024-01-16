@@ -5,6 +5,8 @@
 
 #include <capnp/dynamic.h>
 
+// The Numpy API is imported in capnp.cpp
+
 #ifndef FSCPY_IMPORT_ARRAY
 #define NO_IMPORT_ARRAY
 #endif

@@ -302,6 +302,13 @@ namespace {
 		
 		State& state() { KJ_REQUIRE(!states.empty()); return states.back(); }
 		
+		void checkDone() {
+			if(states.size() == 1) {
+				isDone = true;
+				enc.flush();
+			}
+		}
+		
 		void advanceMap(bool strKey) {
 			if(state() == MAP_KEY) {
 				state() = MAP_VALUE;
@@ -328,9 +335,7 @@ namespace {
 			states.removeLast();
 			
 			enc.end_object();
-			
-			if(states.size() == 1)
-				isDone = true;
+			checkDone();
 		}
 		
 		void beginArray(Maybe<size_t> s) override {
@@ -349,57 +354,43 @@ namespace {
 			states.removeLast();
 			
 			enc.end_array();
-			
-			if(states.size() == 1)
-				isDone = true;
+			checkDone();
 		}
 		
 		void acceptNull() override {
 			advanceMap(false);
 			enc.null_value();
-			
-			if(states.size() == 1)
-				isDone = true;
+			checkDone();
 		}
 		
 		void acceptBool(bool v) override {
 			advanceMap(false);
 			enc.bool_value(v);
-			
-			if(states.size() == 1)
-				isDone = true;
+			checkDone();
 		}
 		
 		void acceptInt(int64_t v) override {
 			advanceMap(false);
 			enc.int64_value(v);
-			
-			if(states.size() == 1)
-				isDone = true;
+			checkDone();
 		}
 		
 		void acceptUInt(uint64_t v) override {
 			advanceMap(false);
 			enc.uint64_value(v);
-			
-			if(states.size() == 1)
-				isDone = true;
+			checkDone();
 		}
 		
 		void acceptDouble(double d) override {
 			advanceMap(false);
 			enc.double_value(d);
-			
-			if(states.size() == 1)
-				isDone = true;
+			checkDone();
 		}
 		
 		void acceptData(kj::ArrayPtr<const byte> data) override {
 			advanceMap(false);
 			enc.byte_string_value(jsoncons::byte_string_view(data.begin(), data.size()));
-			
-			if(states.size() == 1)
-				isDone = true;
+			checkDone();
 		}
 		
 		void acceptString(kj::StringPtr str) override {
@@ -415,9 +406,7 @@ namespace {
 			}
 			
 			advanceMap(true);
-			
-			if(states.size() == 1)
-				isDone = true;
+			checkDone();
 		}
 		
 		bool done() override {
@@ -435,7 +424,6 @@ namespace {
 			switch(evt.event_type()) {
 				case EventType::begin_array: {
 					size_t s = evt.size();
-					KJ_DBG("BEGIN ARRAY", s);
 					
 					if(s != 0)
 						v.beginArray(s);

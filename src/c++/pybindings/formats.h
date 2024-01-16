@@ -29,6 +29,7 @@ namespace fscpy {
 			FormattedReader(Format& p, Own<kj::BufferedInputStream>&& nSrc) :
 				parent(p), src(mv(nSrc))
 			{}
+			FormattedReader(FormattedReader&&) = default;
 			inline ~FormattedReader() noexcept {};
 			
 			bool used = false;
