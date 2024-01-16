@@ -10,6 +10,7 @@ from .native import kj
 from .native import capnp
 from .native import loader
 from .native import efit
+from .native import formats
 
 # Load service definitions
 from . import service
@@ -56,6 +57,6 @@ __all__ = [
 	'native',
 	'kj', 'capnp', 'schema', 'service', 'efit',
 	'asnc', 'backends', 'data', 'ipython_integration', 'resolve',
-	'magnetics', 'flt', 'hfcam', 'devices', 'export'
+	'magnetics', 'flt', 'hfcam', 'devices', 'export', 'format'
 ]
 	
