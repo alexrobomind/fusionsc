@@ -18,6 +18,8 @@ namespace fscpy {
 			void dump(py::object, py::object, bool compact);
 			
 			FormattedReader open(py::object);
+			
+			inline virtual ~Format() {};
 		};
 		
 		struct FormattedReader : public Assignable {
@@ -42,22 +44,6 @@ namespace fscpy {
 			
 			Own<textio::Visitor> createVisitor(kj::BufferedOutputStream&, const textio::SaveOptions&) override;
 			void read(textio::Visitor& dst, kj::BufferedInputStream&) override;
-		};
-		
-		struct YAML : public TextIOFormat {
-			YAML();
-		};
-		
-		struct BSON : public TextIOFormat {
-			BSON();
-		};
-		
-		struct JSON : public TextIOFormat {
-			JSON();
-		};
-		
-		struct CBOR : public TextIOFormat {
-			CBOR();
 		};
 	}
 }

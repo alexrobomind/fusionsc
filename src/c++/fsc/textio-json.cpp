@@ -231,8 +231,9 @@ namespace {
 				
 				return cur.attach(mv(src));
 			}
+			default:
+				KJ_FAIL_REQUIRE("Invalid language");
 		}
-		KJ_FAIL_REQUIRE("Unknown language");
 	}
 	
 	Own<Encoder> makeEncoder(kj::BufferedOutputStream& stream, const Dialect& options) {
@@ -276,8 +277,9 @@ namespace {
 				
 				return encoder;
 			}
+			default:
+				KJ_FAIL_REQUIRE("Invalid language");
 		}
-		KJ_FAIL_REQUIRE("Unknown dialect");
 	}
 	
 	struct JsonVisitor : public Visitor {

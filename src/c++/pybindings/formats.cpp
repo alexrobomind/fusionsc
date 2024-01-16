@@ -181,13 +181,10 @@ namespace {
 			pop();
 		}
 		
-		template<typename T>
-		void acceptPrimitive(T t) {
+		void acceptPrimitive(py::object asPy) {
 			KJ_REQUIRE(!state().is<Done>());
 			KJ_REQUIRE(!state().is<Forward>());
 			KJ_REQUIRE(!state().is<Uninitialized>(), "Can not store primitive values in root");
-			
-			auto asPy = py::cast(t);
 			
 			if(state().is<PresetList>()) {
 				auto& p = state().get<PresetList>();
@@ -209,22 +206,22 @@ namespace {
 		
 		void acceptInt(int64_t i) override {
 			ACCEPT_FWD(acceptInt(i));
-			acceptPrimitive(i);
+			acceptPrimitive(py::cast(i));
 		}
 		
 		void acceptUInt(uint64_t i) override {
 			ACCEPT_FWD(acceptUInt(i));
-			acceptPrimitive(i);
+			acceptPrimitive(py::cast(i));
 		}
 		
 		void acceptDouble(double d) override {
 			ACCEPT_FWD(acceptDouble(d));
-			acceptPrimitive(d);
+			acceptPrimitive(py::cast(d));
 		}
 		
 		void acceptString(kj::StringPtr s) override {
 			ACCEPT_FWD(acceptString(s));
-			acceptPrimitive(s);
+			acceptPrimitive(py::cast(s));
 		}
 		
 		void acceptData(kj::ArrayPtr<const kj::byte> d) override {
@@ -239,7 +236,7 @@ namespace {
 		
 		void acceptBool(bool b) override {
 			ACCEPT_FWD(acceptBool(b))
-			acceptPrimitive(b);
+			acceptPrimitive(py::cast(b));
 		}
 		
 		PythonVisitor(py::object o) {
@@ -311,7 +308,7 @@ namespace formats {
 			auto asList = py::cast<T>(src);
 			dst.beginArray(asList.size());
 			for(auto e : asList)
-				dumpToVisitor(e, dst);
+				dumpToVisitor(py::reinterpret_borrow<py::object>(e), dst);
 			dst.endArray();
 		}
 		
@@ -437,38 +434,33 @@ void initFormats(py::module_& m) {
 		" StructType.newMessage(...)."
 	);
 	
-	py::class_<formats::Format>(m, "Format")		
-		.def(&formats::Format::open, "open")
+	py::class_<formats::Format>(m, "Format")	
+		.def("open", &formats::Format::open)
 		
-		.def(&formats::Format::dump, "dump")
-		.def(&formats::Format::dumps, "dumps")
+		.def("dump", &formats::Format::dump)
+		.def("dumps", &formats::Format::dumps)
 	;
 	
 	using Dialect = textio::Dialect;
-	using F = TextIOFormat;
+	using F = formats::TextIOFormat;
 	
-	static TextIOFormat yaml(Dialect{
-		.language = Dialect::YAML;
-	});
-	static TextIOFormat json(Dialect{
-		.language = Dialect::JSON;
-	});
-	static TextIOFormat bson(Dialect{
-		.language = Dialect::BSON;
-	});
-	static TextIOFormat cbor(Dialect{
-		.language = Dialect::CBOR;
-	});
+	auto makeDialect = [](Dialect::Language lang) {
+		Dialect result;
+		result.language = lang;
+		return result;
+	};
 	
-	static D yaml { .language = D::YAML; }
-	static JsonDialect json;
-	static JsonDialect cbor(JsonOptions { dialect = JsonOptions::CBOR });
-	static JsonDialect bson(JsonOptions { dialect = JsonOptions::BSON });
+	#define MAKE_DIALECT(x) makeDialect(Dialect::x)
 	
-	formatsMod.attr("yaml") = py::cast<Format&>(yaml);
-	formatsMod.attr("json") = py::cast<Format&>(json);
-	formatsMod.attr("cbor") = py::cast<Format&>(cbor);
-	formatsMod.attr("bson") = py::cast<Format&>(bson);
+	static F yaml(MAKE_DIALECT(YAML));
+	static F json(MAKE_DIALECT(JSON));
+	static F bson(MAKE_DIALECT(BSON));
+	static F cbor(MAKE_DIALECT(CBOR));
+	
+	formatsMod.attr("yaml") = py::cast(yaml, py::return_value_policy::reference);
+	formatsMod.attr("json") = py::cast(json, py::return_value_policy::reference);
+	formatsMod.attr("cbor") = py::cast(cbor, py::return_value_policy::reference);
+	formatsMod.attr("bson") = py::cast(bson, py::return_value_policy::reference);
 }
 
 }

@@ -124,7 +124,7 @@ namespace {
 			KJ_FAIL_REQUIRE("Internal error");
 		}
 		
-		capnp::Type expectedType() {
+		capnp::Type expectedType() override {
 			return listSchema;
 		}
 	};
@@ -388,7 +388,7 @@ namespace {
 			}
 		}
 		
-		void endArray() {
+		void endArray() override {
 			ACCEPT_FWD(endArray())
 			
 			if(ignoreDepth > 0) {
@@ -654,6 +654,12 @@ namespace {
 				break;
 			case DynamicValue::INT:
 				v.acceptInt(in.as<int64_t>());
+				break;
+			case DynamicValue::BOOL:
+				v.acceptBool(in.as<bool>());
+				break;
+			case DynamicValue::VOID:
+				v.acceptNull();
 				break;
 			case DynamicValue::TEXT:
 				v.acceptString(in.as<capnp::Text>());
