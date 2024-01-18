@@ -67,6 +67,8 @@ namespace {
 		virtual void accept(DynamicValue::Reader) = 0;
 		virtual capnp::Type expectedType() = 0;
 		
+		virtual void finish() {};
+		
 		// virtual void acceptKey(kj::StringPtr) = 0;
 		
 		// capnp::Orphanage orphanage() = 0;
@@ -229,6 +231,100 @@ namespace {
 		}*/
 	};
 	
+	struct DataRefSink : public Sink {
+		enum KeyState { NO_KEY, UNKNOWN_KEY, DATA_KEY };
+		KeyState keyState = NO_KEY;
+		
+		capnp::MallocMessageBuilder message;
+		
+		capnp::InterfaceSchema refSchema;
+		capnp::Type valueType;
+		Sink& parentSink;
+		
+		DataRefSink(capnp::InterfaceSchema newRefType, Sink& parent) :
+			refSchema(newRefType), valueType(extractValueType(refSchema)), parentSink(parent)
+		{
+			KJ_REQUIRE(valueType.isData() || valueType.isStruct(), "Only Data and Struct types supported for DataRef");
+		}
+		
+		capnp::Type expectedType() override {
+			switch(keyState) {
+				case NO_KEY: return capnp::Type(capnp::schema::Type::TEXT);
+				case UNKNOWN_KEY: return capnp::Type(capnp::schema::Type::VOID);
+				case DATA_KEY: return valueType;
+			}
+			KJ_FAIL_REQUIRE("Invalid key state");
+		}
+		
+		DynamicStruct::Builder newObject() override {
+			KJ_REQUIRE(keyState == DATA_KEY, "Internal error");
+			KJ_REQUIRE(valueType.isStruct(), "Can only load structured data into struct targets");
+			
+			return message.initRoot<capnp::DynamicStruct>(valueType.asStruct());
+		}
+		
+		DynamicList::Builder newList(size_t size) override {
+			KJ_UNIMPLEMENTED("List refs not supported");
+			/*KJ_REQUIRE(keyState == DATA_KEY, "Internal error");
+			KJ_REQUIRE(valueType.isList(), "Can only load list data into list targets");
+			
+			return message.initRoot<capnp::DynamicList>(valueType.asList(), size);*/
+		}
+		
+		void accept(DynamicValue::Reader val) override {
+			switch(keyState) {
+				case DATA_KEY:
+					KJ_REQUIRE(valueType.isData(), "Target type must be binary");
+					KJ_REQUIRE(val.getType() == DynamicValue::DATA, "Source data must be a binary literal");
+					
+					message.setRoot(val.as<capnp::Data>());
+					keyState = NO_KEY;
+					break;
+				case UNKNOWN_KEY:
+					keyState = NO_KEY;
+					break;
+				
+				case NO_KEY:
+					if(val.getType() == DynamicValue::TEXT) {
+						auto textReader = val.as<capnp::Text>();
+						if(textReader == "data") {
+							keyState = DATA_KEY;
+							break;
+						}
+					}
+					keyState = NO_KEY;
+			}
+		}
+		
+		void finish() override {
+			auto ds = getActiveThread().dataService();
+			
+			capnp::Capability::Client untyped = nullptr;
+			
+			if(valueType.isData()) {
+				untyped = ds.publish(message.getRoot<capnp::Data>());
+			} else if(valueType.isStruct()) {
+				untyped = ds.publish(message.getRoot<capnp::DynamicStruct>(valueType.asStruct()).asReader());
+			} else {
+				KJ_FAIL_REQUIRE("Internal error");
+			}
+			
+			auto typed = untyped.castAs<capnp::DynamicCapability>(refSchema);
+			parentSink.accept(typed);
+		}
+	private:
+		static capnp::Type extractValueType(capnp::InterfaceSchema refSchema) {
+			constexpr uint64_t DR_ID = capnp::typeId<DataRef<capnp::AnyPointer>>();
+			
+			KJ_REQUIRE(
+				refSchema.getProto().getId() == DR_ID,
+				"Type must be a DataRef instance"
+			);
+			
+			return refSchema.getBrandArgumentsAtScope(DR_ID)[0];
+		}
+	};
+	
 	struct ListSink : public Sink {
 		DynamicList::Builder dst;
 		size_t offset = 0;
@@ -304,6 +400,7 @@ namespace {
 		void finish() {	
 			KJ_REQUIRE(!isDone);
 			
+			stack.back() -> finish();
 			stack.removeLast();
 			
 			if(stack.size() <= 1)

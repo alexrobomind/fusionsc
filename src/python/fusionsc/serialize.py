@@ -27,17 +27,38 @@ _minInt = -2**63 + 1
 _maxLen = 2**29 # Maximum size for inline data
 
 _pickleEnabled = contextvars.ContextVar('fusionsc.serialize._pickleEnabled', default = False)
+_pickleBlocked = False
+
+import os
+if 'FUSIONSC_BLOCK_PICKLE' in os.environ and os.environ['FUSIONSC_BLOCK_PICKLE'] != '0':
+	_pickleBlocked = True
+
+def blockPickle():
+	_pickleBlocked = True
 
 class UnknownObject(structWrapper(service.DynamicObject)):
 	pass
 
 @contextlib.contextmanager
 def allowPickle():
-	_pickleEnabled.set(True)
+	if _pickleBlocked:
+		import warnings
+		warning.warn("""
+			An attempt to enable pickling while pickling was blocked because either fsc.serialize.blockPickle()
+			was called or because the environment variable FUSIONSC_BLOCK_PICKLE was set to a value
+			other than '0'.
+		""")
+	
+	token = _pickleEnabled.set(True)
 	yield None
-	_pickleEnabled.set(False)
+	_pickleEnabled.reset(token)
+
+def pickleEnabled():
+	"""Returns whether pickling is allowed in the current context"""
+	return _pickleEnabled.get() and not _pickleBlocked
 
 def wrap(obj: Any):
+	"""Converts python objects into a service.DynamicObject.Builder but returns native messages as-is"""
 	if isinstance(obj, capnp.Object):
 		return obj
 	
@@ -45,6 +66,7 @@ def wrap(obj: Any):
 
 @asyncFunction
 async def unwrap(obj):
+	"""Unfolds service.DynamicObject instances into python objects and returns others as-is"""
 	if isinstance(obj, service.DynamicObject.Reader):
 		return await load.asnc(obj)
 	
@@ -54,6 +76,9 @@ async def unwrap(obj):
 	return obj
 
 def dump(obj: Any):
+	"""
+	Converts python objects into nested structures of service.DynamicObject
+	"""
 	return _dump(obj, service.DynamicObject.newMessage(), set())
 
 def _dumpDType(dtype, odt: service.DynamicObject.DType.Builder):
@@ -313,7 +338,7 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 			_dump(v, out[i].value, memoSet)
 	
 	else:
-		assert _pickleEnabled.get(), """
+		assert pickleEnabled(), """
 			Writing arbitrary objects requires pickling to be enabled explicitly. This is neccessary
 			because pickle is an arbitrary execution format that poses substantial security
 			risks. Please consider requesting the serialization format to be extended to
@@ -338,6 +363,9 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 
 @asyncFunction
 async def load(reader: service.DynamicObject.Reader):
+	"""
+	Loads a service.DynamicObject as a python object
+	"""
 	return await _load(reader, dict())
 
 async def _load(reader: service.DynamicObject.Reader, memoDict: dict):
@@ -441,10 +469,10 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 		return int.from_bytes(bytes = reader.pythonBigInt, byteorder="little", signed = True)
 	
 	if which == "pythonPickle":
-		assert _pickleEnabled.get(), """
+		assert pickleEnabled(), """
 			For security reasons, unpickling objects must be explicitly enabled. ONLY
 			DO THIS IF YOU 100% TRUST THE DATA YOU ARE READING. PICKLE IS AN EXECUTABLE
-			FORMAT, NOT DATA.
+			FORMAT, NOT PURE DATA.
 		"""
 		
 		import pickle

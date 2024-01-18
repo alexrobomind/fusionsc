@@ -27,16 +27,25 @@ Storable = Union[
 
 @asyncFunction
 async def lsRemote():
+	"""Lists the warehouses available through the current (possibly remote) backend"""
 	response = await backends.activeBackend().listWarehouses()
 	return [str(name) for name in names]
 
 @asyncFunction
 async def openRemote(name: str):
+	"""Opens the named warehouse exposed by the current backend"""
 	response = await backends.activeBackend().getWarehouse(name)
 	return Folder(response.root)
 
 @asyncFunction
 async def open(url: str):
+	"""
+	Opens a warehouse via a URL.
+	
+	Supported url schemes are:
+		'sqlite': SQLite database on current file system
+		'ws' or 'http': Remote warehouse server that can be connected to via network.
+	"""
 	response = await backends.localResources().openWarehouse(url)
 	return Folder(response.root)
 

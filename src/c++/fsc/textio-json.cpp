@@ -138,23 +138,26 @@ namespace {
 		
 		OutputSink(kj::BufferedOutputStream& s) : stream(s) {}
 		
-		void flush() {
+		/*void flush() {
 			stream.write(buffer.begin(), bytesUsed);
 			buffer = stream.getWriteBuffer();
 			bytesUsed = 0;
-		}
+		}*/
+		void flush() {}
 		
 		void push_back(T b) {
-			if(bytesUsed >= buffer.size()) {
+			/*if(bytesUsed >= buffer.size()) {
 				flush();
 			}
 			
 			KJ_ASSERT(buffer.size() > 0);
-			buffer[bytesUsed++] = static_cast<kj::byte>(b);
+			buffer[bytesUsed++] = static_cast<kj::byte>(b);*/
+			append(&b, 1);
 		}
 		
 		void append(const T* start, size_t length) {
-			if(bytesUsed + length > buffer.size()) {
+			stream.write(start, length);
+			/*if(bytesUsed + length > buffer.size()) {
 				kj::FixedArray<kj::ArrayPtr<const kj::byte>, 2> pieces;
 				pieces[0] = buffer.slice(0, bytesUsed);
 				pieces[1] = ArrayPtr<const kj::byte>(reinterpret_cast<const kj::byte*>(start), length);
@@ -166,14 +169,15 @@ namespace {
 			} else {
 				memcpy(buffer.begin() + bytesUsed, start, length);
 				bytesUsed += length;
-			}
+			}*/
+			
 		}
 		
 	private:
 		kj::BufferedOutputStream& stream;
 		
-		ArrayPtr<kj::byte> buffer = nullptr;
-		size_t bytesUsed = 0;
+		// ArrayPtr<kj::byte> buffer = nullptr;
+		// size_t bytesUsed = 0;
 	};
 	
 	using CborSource = InputSource<uint8_t>;

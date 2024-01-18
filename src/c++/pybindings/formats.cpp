@@ -105,11 +105,11 @@ namespace {
 					py::dict newDict;
 					states.add(Dict {newDict});
 					
-					p.list[p.offset] = newDict;
+					p.list[p.offset++] = newDict;
 				} else {
+					++p.offset;
 					checkObject(entry);
 				}
-				++p.offset;
 			} else if(state().is<Dict>()) {
 				auto& dict = state().get<Dict>();
 				KJ_IF_MAYBE(pKey, dict.key) {
@@ -120,8 +120,8 @@ namespace {
 						checkObject(dict.dict[key]);
 					} else {
 						py::dict newDict;
-						states.add(Dict {newDict});
 						dict.dict[key] = newDict;
+						states.add(Dict {newDict});
 					}
 				} else {
 					KJ_FAIL_REQUIRE("Map key must be int, float, or str, not map");
@@ -161,12 +161,12 @@ namespace {
 				py::object entry = p.list[p.offset];
 				if(entry.is_none()) {
 					py::list newList;
+					p.list[p.offset++] = newList;
 					states.add(newList);
-					p.list[p.offset] = newList;
 				} else {
+					++p.offset;
 					checkList(entry);
 				}
-				++p.offset;
 			} else if(state().is<Dict>()) {
 				auto& dict = state().get<Dict>();
 				KJ_IF_MAYBE(pKey, dict.key) {
@@ -177,8 +177,8 @@ namespace {
 						checkList(dict.dict[key]);
 					} else {
 						py::list newList;
-						states.add(newList);
 						dict.dict[key] = newList;
+						states.add(newList);
 					}
 				} else {
 					KJ_FAIL_REQUIRE("Map key must be int, float, or str, not list");
@@ -423,6 +423,8 @@ namespace formats {
 		
 		auto v = this -> createVisitor(buffered, wopts);
 		dumpToVisitor(r, *v);
+		
+		buffered.flush();
 	}
 	
 	TextIOFormat::TextIOFormat(const textio::Dialect& d) :

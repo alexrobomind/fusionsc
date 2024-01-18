@@ -312,6 +312,9 @@ typename T::Reader getDataRefAs(LocalDataRefImpl& impl, const capnp::ReaderOptio
 template<>
 capnp::Data::Reader getDataRefAs<capnp::Data>(LocalDataRefImpl& impl, const capnp::ReaderOptions& options);
 
+template<>
+inline capnp::DynamicStruct::Reader getDataRefAs<capnp::DynamicStruct>(LocalDataRefImpl& impl, const capnp::ReaderOptions& options);
+
 template<typename T>
 Array<const byte> buildData(typename T::Reader reader, capnp::BuilderCapabilityTable& builderTable);
 
@@ -659,6 +662,11 @@ typename T::Reader internal::getDataRefAs(internal::LocalDataRefImpl& impl, cons
 	
 	// Copy root onto the heap and attach objects needed to keep it running
 	return root.getAs<T>();
+}
+
+template<>
+capnp::DynamicStruct::Reader internal::getDataRefAs<capnp::DynamicStruct>(internal::LocalDataRefImpl& impl, const capnp::ReaderOptions& options) {
+	KJ_UNIMPLEMENTED("Reading a DataRef<DynamicStruct> is unsupported because that would require a global schema loader");
 }
 
 // === class DownloadTask ===

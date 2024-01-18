@@ -11,6 +11,7 @@ from . import wrappers
 from .asnc import asyncFunction
 
 import numpy as np
+import copy
 
 from typing import Optional
 
@@ -103,7 +104,14 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 	
 	@asyncFunction
 	async def compute(self, grid):
-		"""Computes the magnetic field on the specified grid."""
+		"""
+		Computes the magnetic field on the specified grid. Doesn't download the field to the local machine.
+		
+		Returns:
+			A magnetic field of type 'computedField' that holds a reference to the (eventually computed,
+			possible remotely held) computed field.
+		
+		"""
 		if grid is None:
 			assert self.data.which_() == 'computedField', 'Must specify grid or use pre-computed field'
 			return MagneticConfig(self.data)
@@ -133,13 +141,27 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			- grid: An optional grid parameter required if the field is not yet computed. The grid
 		
 		Returns:
-			A numpy array of shape points.shape with the field as x, y, z field.
+			A numpy array of shape points.shape with the field as x, y, z field (cartesian).
 		"""
 		compField = (await self.compute.asnc(grid)).data.computedField
 		
 		response = await _calculator().evaluateXyz(compField, points)
 		return np.asarray(response.values)
+	
+	@asyncFunction
+	async def download(self):
+		"""
+		For a field of type "computed", returns the grid and the downloaded field tensor on the grid.
 		
+		Returns:
+			- A service.ToroidalGrid.Builder describing the grid.
+			- A tensor of shape [nPhi, nZ, nR, 3] holding the magnetic field. The last axis describes
+			  the magnetic field component. The components are (indices 0 to 2) bPhi, bZ, bR.
+		"""
+		assert self.data.which_() == 'computedField', 'Can only download fields for which the compute operation was initialized (returned by .compute)'
+		computed = self.data.computedField
+		
+		return copy.copy(computed.grid), np.asarray(await data.download.asnc(computed.data))
 	
 	def __neg__(self):
 		result = MagneticConfig()
@@ -216,6 +238,25 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 				contents = f.read()
 			
 		return MagneticConfig({'axisymmetricEquilibrium' : efit.eqFromGFile(contents)})
+	
+	@staticmethod
+	def fromComputed(grid, field):
+		"""
+		Creates a field by loading a computed field.
+		
+		Parameters:
+			- grid: An object that can be assigned to a service.MagneticField (e.g. YAML string, service.MagneticField.Reader or .Builder, apprioriate python dict)
+			- field: A tensor of shape [nPhi, nZ, nR, 3] holding the magnetic field. The last axis describes
+			  the magnetic field component. The components are (indices 0 to 2) bPhi, bZ, bR.
+		
+		Returns:
+			A magnetic field object matching the given grid and the field values at the interpolation points
+		"""
+		tensorData = service.Float64Tensor.newMessage(field)
+		return MagneticConfig({'computedField' : {
+			'grid' : grid,
+			'data' : data.publish(tensorData)
+		}})
 
 
 @asyncFunction
