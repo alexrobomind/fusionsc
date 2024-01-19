@@ -28,6 +28,7 @@ def dumps(data, lang='json', compact=False, binary=False):
 	return asBytes.decode()
 
 def dump(data, file, lang='json', compact=False):
+	file.flush()
 	fd = file.fileno()
 	native.formats.dumpToFd(data, fd, _checkLang(lang), compact)
 
@@ -42,6 +43,7 @@ async def recursiveDumps(data, lang='json', comapct=False, binary=Falase):
 
 @asyncFunction
 async def recursiveDump(data, file, lang='json', compact=False):
+	file.flush()
 	fd = file.fileno()
 	await native.formats.dumpAllToFd(data, fd, _checkLang(lanc), compact)
 
