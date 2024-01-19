@@ -123,8 +123,8 @@ namespace fsc { namespace textio {
 	
 	Own<Visitor> createVisitor(kj::BufferedOutputStream&, const Dialect&, const SaveOptions& = SaveOptions());
 	
-	void save(capnp::DynamicValue::Reader, Visitor&, const SaveOptions& = SaveOptions());
-	void save(capnp::DynamicValue::Reader, kj::BufferedOutputStream&, const Dialect&, const SaveOptions& = SaveOptions());
+	void save(capnp::DynamicValue::Reader, Visitor&, const SaveOptions& = SaveOptions(), Maybe<kj::WaitScope&> = nullptr);
+	void save(capnp::DynamicValue::Reader, kj::BufferedOutputStream&, const Dialect&, const SaveOptions& = SaveOptions(), Maybe<kj::WaitScope&> = nullptr);
 	
 	namespace internal {
 		void jsonconsLoad(kj::BufferedInputStream&, Visitor&, const Dialect&);

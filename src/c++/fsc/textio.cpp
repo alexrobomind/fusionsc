@@ -726,25 +726,69 @@ namespace {
 		}
 	};
 	
-	void saveValue(DynamicValue::Reader, Visitor&, const SaveOptions&);
-	void saveStruct(DynamicStruct::Reader, Visitor&, const SaveOptions&);
-	void saveList(DynamicList::Reader, Visitor&, const SaveOptions&);
+	void saveValue(DynamicValue::Reader, Visitor&, const SaveOptions&, Maybe<kj::WaitScope&> ws);
+	void saveStruct(DynamicStruct::Reader, Visitor&, const SaveOptions&, Maybe<kj::WaitScope&> ws);
+	void saveList(DynamicList::Reader, Visitor&, const SaveOptions&, Maybe<kj::WaitScope&> ws);
 	
-	void saveValue(DynamicValue::Reader in, Visitor& v, const SaveOptions& opts) {
+	bool trySaveRef(DynamicCapability::Client ref, Visitor& v, const SaveOptions& opts, Maybe<kj::WaitScope&> maybeWS) {
+		using GenericRef = DataRef<capnp::AnyPointer>;
+		
+		KJ_IF_MAYBE(pWS, maybeWS) {
+			kj::WaitScope& ws = *pWS;
+			
+			// Check whether we actually are a DataRef
+			auto schema = ref.getSchema();
+			
+			constexpr uint64_t DR_ID = capnp::typeId<GenericRef>();
+			if(schema.getProto().getId() != DR_ID)
+				return false;
+			
+			auto asRef = capnp::Capability::Client(ref).castAs<DataRef<capnp::AnyPointer>>();
+			auto localRef = getActiveThread().dataService().download(asRef).wait(ws);
+			auto payloadType = schema.getBrandArgumentsAtScope(DR_ID)[0];
+			
+			v.beginObject(1);
+			v.acceptString("data");
+			
+			if(payloadType.isData()) {
+				KJ_REQUIRE(localRef.getFormat().isRaw(), "Data-typed messages not supported");
+				
+				capnp::Data::Reader rawData = localRef.getRaw();
+				saveValue(rawData, v, opts, ws);
+			} else {
+				KJ_REQUIRE(payloadType.isStruct(), "Only data and struct refs supported");
+				KJ_REQUIRE(localRef.getFormat().isSchema(), "Type mismatch between ref and expected data");
+				
+				capnp::AnyPointer::Reader untyped = localRef.get();
+				DynamicStruct::Reader typed = untyped.getAs<DynamicStruct>(payloadType.asStruct());
+				
+				saveValue(typed, v, opts, ws);
+			}
+			
+			v.endObject();
+			return true;
+		} else {
+			return false;
+		}
+	}
+	
+	void saveValue(DynamicValue::Reader in, Visitor& v, const SaveOptions& opts, Maybe<kj::WaitScope&> ws) {
 		switch(in.getType()) {
 			case DynamicValue::STRUCT:
-				saveStruct(in.as<DynamicStruct>(), v, opts);
+				saveStruct(in.as<DynamicStruct>(), v, opts, ws);
 				break;
 			case DynamicValue::LIST:
-				saveList(in.as<DynamicList>(), v, opts);
+				saveList(in.as<DynamicList>(), v, opts, ws);
 				break;
 			case DynamicValue::CAPABILITY: {
 				auto asCap = in.as<DynamicCapability>();
 				auto hook = capnp::ClientHook::from(kj::mv(asCap));
 				if(hook -> isNull())
 					v.acceptNull();
-				else
-					v.acceptString("<capability>");
+				else {
+					if(!trySaveRef(asCap, v, opts, ws))
+						v.acceptString("<capability>");
+				}
 				break;
 			}
 			case DynamicValue::ENUM:
@@ -785,7 +829,7 @@ namespace {
 		}
 	}
 	
-	void saveStruct(DynamicStruct::Reader in, Visitor& v, const SaveOptions& opts) {
+	void saveStruct(DynamicStruct::Reader in, Visitor& v, const SaveOptions& opts, Maybe<kj::WaitScope&> ws) {
 		// If we have no non-union fields and the active union field is a
 		// default-valued one, then we write only the field name (reads nicer
 		
@@ -855,7 +899,7 @@ namespace {
 				return;
 			}
 			
-			saveValue(in.get(field), v, opts);
+			saveValue(in.get(field), v, opts, ws);
 		};
 		
 		for(auto field : in.getSchema().getFields()) {
@@ -866,11 +910,11 @@ namespace {
 		v.endObject();
 	}
 	
-	void saveList(DynamicList::Reader list, Visitor& v, const SaveOptions& opts) {
+	void saveList(DynamicList::Reader list, Visitor& v, const SaveOptions& opts, Maybe<kj::WaitScope&> ws) {
 		v.beginArray(list.size());
 		
 		for(auto el : list)
-			saveValue(el, v, opts);
+			saveValue(el, v, opts, ws);
 		
 		v.endArray();
 	}
@@ -964,12 +1008,12 @@ void load(kj::BufferedInputStream& is, Visitor& visitor, const Dialect& dialect)
 	}
 }
 
-void save(DynamicValue::Reader reader, Visitor& v, const SaveOptions& opts) {
-	saveValue(reader, v, opts);
+void save(DynamicValue::Reader reader, Visitor& v, const SaveOptions& opts, Maybe<kj::WaitScope&> ws) {
+	saveValue(reader, v, opts, ws);
 }
 
-void save(DynamicValue::Reader reader, kj::BufferedOutputStream& os, const Dialect& dialect, const SaveOptions& opts) {	
-	saveValue(reader, *createVisitor(os, dialect, opts), opts);
+void save(DynamicValue::Reader reader, kj::BufferedOutputStream& os, const Dialect& dialect, const SaveOptions& opts, Maybe<kj::WaitScope&> ws) {	
+	saveValue(reader, *createVisitor(os, dialect, opts), opts, ws);
 }
 
 }}

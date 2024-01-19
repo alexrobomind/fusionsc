@@ -1,5 +1,7 @@
 from . import native
 
+from .asnc import asyncFunction
+
 """
 This module can be used to perform import and export operations between python objects
 (dicts, lists, data readers / builders, numpy arrays) and self-describing nested data
@@ -28,6 +30,20 @@ def dumps(data, lang='json', compact=False, binary=False):
 def dump(data, file, lang='json', compact=False):
 	fd = file.fileno()
 	native.formats.dumpToFd(data, fd, _checkLang(lang), compact)
+
+@asyncFunction
+async def recursiveDumps(data, lang='json', comapct=False, binary=Falase):
+	asBytes = await native.formats.dumpAllToBytes(data, _checkLang(lanc), compact)
+	
+	if binary:
+		return asBytes
+	
+	return asBytes.decode()
+
+@asyncFunction
+async def recursiveDump(data, file, lang='json', compact=False):
+	fd = file.fileno()
+	await native.formats.dumpAllToFd(data, fd, _checkLang(lanc), compact)
 
 def read(src, dst=None, lang='json'):
 	cl = _checkLang(lang)

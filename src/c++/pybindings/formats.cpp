@@ -375,7 +375,7 @@ namespace formats {
 			textio::save(r, dst);
 		}
 		
-		void dumpToStream(py::handle src, kj::BufferedOutputStream& os, Language lang, bool compact) {
+		void dumpToStream(py::handle src, kj::BufferedOutputStream& os, Language lang, bool compact, Maybe<kj::WaitScope&> ws) {
 			textio::SaveOptions opts;
 			opts.compact = compact;
 			
@@ -389,7 +389,7 @@ namespace formats {
 	
 	py::object dumpToBytes(py::object o, Language lang, bool compact) {
 		kj::VectorOutputStream os;
-		dumpToStream(o, os, lang, compact);
+		dumpToStream(o, os, lang, compact, nullptr);
 		
 		auto arr = os.getArray();
 		return py::bytes((const char*) arr.begin(), arr.size());
@@ -399,8 +399,32 @@ namespace formats {
 		kj::FdOutputStream os(fd);
 		kj::BufferedOutputStreamWrapper buffered(os);
 		
-		dumpToStream(o, buffered, lang, compact);
+		dumpToStream(o, buffered, lang, compact, nullptr);
 		buffered.flush();
+	}
+	
+	Promise<py::bytes> dumpAllToBytes(py::object o, Language lang, bool compact) {
+		auto inner = [=](kj::WaitScope& ws) {
+			kj::VectorOutputStream os;
+			dumpToStream(o, os, lang, compact, ws);
+			
+			auto arr = os.getArray();
+			return py::bytes((const char*) arr.begin(), arr.size());
+		};
+		
+		return kj::startFiber(1024 * 1024 * 8, mv(inner));
+	}
+	
+	Promise<void> dumpAllToFd(py::object o, int fd, Language lang, bool compact)  {
+		auto inner = [=](kj::WaitScope& ws) {
+			kj::FdOutputStream os(fd);
+			kj::BufferedOutputStreamWrapper buffered(os);
+			
+			dumpToStream(o, buffered, lang, compact, ws);
+			buffered.flush();
+		};
+		
+		return kj::startFiber(1024 * 1024 * 8, mv(inner));
 	}
 }
 
@@ -412,6 +436,9 @@ void initFormats(py::module_& m) {
 	
 	formatsMod.def("dumpToBytes", &formats::dumpToBytes);
 	formatsMod.def("dumpToFd", &formats::dumpToFd);
+	
+	formatsMod.def("dumpAllToBytes", &formats::dumpAllToBytes);
+	formatsMod.def("dumpAllToFd", &formats::dumpAllToFd);
 	
 	py::enum_<formats::Language>(formatsMod, "Language")
 		.value("YAML", formats::Language::YAML)
