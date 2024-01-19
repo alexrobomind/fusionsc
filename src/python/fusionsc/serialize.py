@@ -337,6 +337,9 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 			_dump(k, out[i].key, memoSet)
 			_dump(v, out[i].value, memoSet)
 	
+	elif hasattr(obj, "_fusionsc_wraps"):
+		_dump(obj._fusionsc_wraps, out, memoSet)
+	
 	else:
 		assert pickleEnabled(), """
 			Writing arbitrary objects requires pickling to be enabled explicitly. This is neccessary

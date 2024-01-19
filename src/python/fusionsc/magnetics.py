@@ -149,7 +149,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		return np.asarray(response.values)
 	
 	@asyncFunction
-	async def download(self):
+	async def getComputed(self):
 		"""
 		For a field of type "computed", returns the grid and the downloaded field tensor on the grid.
 		

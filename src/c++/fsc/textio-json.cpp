@@ -262,6 +262,8 @@ namespace {
 					;
 				}
 				
+				opts.byte_string_format(jsoncons::byte_string_chars_format::base64);
+				
 				
 				auto encoder = kj::heap<JsonEncoder>(JsonSink(stream), opts);
 				

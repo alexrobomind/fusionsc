@@ -306,9 +306,9 @@ void bindType() {
 	;
 }
 
-void bindAssignable() {
+/*void bindAssignable() {
 	ClassBinding<Assignable>("Assignable");
-}
+}*/
 
 void initCapnp(py::module_& m) {
 	// Make sure numpy is initialized
@@ -342,7 +342,7 @@ void initCapnp(py::module_& m) {
 	bindType();
 	bindConstants();
 	bindUnpicklers();
-	bindAssignable();
+	//bindAssignable();
 	
 	capnpModule = py::module();
 	

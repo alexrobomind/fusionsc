@@ -159,9 +159,14 @@ struct CapSlot : public BuilderSlot {
 void assign(const BuilderSlot& dst, py::object object) {
 	auto assignmentFailureLog = kj::strTree();
 	
-	// Attempt 0: Check if assignable
+	/*// Attempt 0: Check if assignable
 	if(py::isinstance<Assignable>(object)) {
 		py::cast<Assignable&>(object).assign(dst);
+		return;
+	}*/
+	// Check if object is wrapper
+	if(py::hasattr(object, "_fusionsc_wraps")) {
+		assign(dst, object.attr("_fusionsc_wraps"));
 		return;
 	}
 	

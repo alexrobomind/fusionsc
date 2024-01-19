@@ -18,6 +18,10 @@ class StructWrapperBase:
 		self._val = self.type.newMessage(val, msgSize)
 	
 	@property
+	def _fusionsc_wraps(self):
+		return self._val
+	
+	@property
 	def data(self):
 		"""
 		Underlying Cap'n'proto struct (usually a builder type).
@@ -81,6 +85,10 @@ class RefWrapper:
 			dataOrRef = data.publish(dataOrRef)
 			
 		self._ref = dataOrRef
+	
+	@property
+	def _fusionsc_wraps(self):
+		return self._ref
 	
 	@property
 	def ref(self):

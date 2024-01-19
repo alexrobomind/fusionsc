@@ -259,6 +259,7 @@ namespace {
 		DynamicStruct::Builder newObject() override {
 			KJ_REQUIRE(keyState == DATA_KEY, "Internal error");
 			KJ_REQUIRE(valueType.isStruct(), "Can only load structured data into struct targets");
+			keyState = NO_KEY;
 			
 			return message.initRoot<capnp::DynamicStruct>(valueType.asStruct());
 		}
@@ -292,12 +293,12 @@ namespace {
 							break;
 						}
 					}
-					keyState = NO_KEY;
+					keyState = UNKNOWN_KEY;
 			}
 		}
 		
 		void finish() override {
-			auto ds = getActiveThread().dataService();
+			auto& ds = getActiveThread().dataService();
 			
 			capnp::Capability::Client untyped = nullptr;
 			
@@ -745,11 +746,15 @@ namespace {
 			
 			auto asRef = capnp::Capability::Client(ref).castAs<DataRef<capnp::AnyPointer>>();
 			auto localRef = getActiveThread().dataService().download(asRef).wait(ws);
-			auto payloadType = schema.getBrandArgumentsAtScope(DR_ID)[0];
 			
-			v.beginObject(1);
+			v.beginObject(2);
+			
+			v.acceptString("metadata");
+			saveStruct(localRef.getMetadata(), v, opts, maybeWS);
+			
 			v.acceptString("data");
 			
+			auto payloadType = schema.getBrandArgumentsAtScope(DR_ID)[0];
 			if(payloadType.isData()) {
 				KJ_REQUIRE(localRef.getFormat().isRaw(), "Data-typed messages not supported");
 				
@@ -782,10 +787,10 @@ namespace {
 				break;
 			case DynamicValue::CAPABILITY: {
 				auto asCap = in.as<DynamicCapability>();
-				auto hook = capnp::ClientHook::from(kj::mv(asCap));
-				if(hook -> isNull())
+				auto hook = capnp::ClientHook::from(kj::cp(asCap));
+				if(hook -> isNull()) {
 					v.acceptNull();
-				else {
+				} else {
 					if(!trySaveRef(asCap, v, opts, ws))
 						v.acceptString("<capability>");
 				}

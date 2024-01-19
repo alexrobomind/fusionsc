@@ -533,7 +533,6 @@ ObjectDB::ObjectDB(db::Connection& conn, kj::StringPtr tablePrefix, bool readOnl
 {}
 
 ObjectDB::~ObjectDB() {
-	KJ_DBG("Closing DB");
 }
 
 Promise<void> ObjectDB::syncTask() {
@@ -550,7 +549,6 @@ Promise<void> ObjectDB::writer() {
 	return kj::evalLast([this]() {
 		return withODBBackoff([this]() {
 			{
-				KJ_DBG("Writer", writeTasks.size());
 				db::Transaction t(*conn);
 				
 				for(auto it = writeTasks.begin(); it != writeTasks.end(); ) {

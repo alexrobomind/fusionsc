@@ -1,12 +1,11 @@
-from . import native
-
-from .asnc import asyncFunction
-
 """
 This module can be used to perform import and export operations between python objects
 (dicts, lists, data readers / builders, numpy arrays) and self-describing nested data
 formats (currently JSON, YAML, CBOR, and BSON).
 """
+
+from . import native
+from .asnc import asyncFunction
 
 _langs = {
 	'json' : native.formats.Language.JSON,
@@ -19,7 +18,19 @@ def _checkLang(lang):
 	assert lang in _langs, f"Language must be one of {list(_langs)}"
 	return _langs[lang]
 
-def dumps(data, lang='json', compact=False, binary=False):
+def dumps(data, lang='yaml', compact=False, binary=False):
+	"""
+	Write the object into a bytes or str representation according to 'lang'.
+	
+	Arguments:
+		- data: Target object to serialize
+		- lang: Name of the output language (must be json, yaml, cbor, or bson)
+		- compact: Whether to write outputs in a short-handed notation where possible.
+		- binary; Whether to return the result as bytes instead of str
+	
+	Returns:
+		A bytes or str object holding the stored data according to the requested format.
+	"""
 	asBytes = native.formats.dumpToBytes(data, _checkLang(lang), compact)
 	
 	if binary:
@@ -27,14 +38,27 @@ def dumps(data, lang='json', compact=False, binary=False):
 	
 	return asBytes.decode()
 
-def dump(data, file, lang='json', compact=False):
+def dump(data, file, lang='yaml', compact=False):
+	"""
+	Write the object into a file object. The object needs to have a fileno method
+	returning a C file descriptor.
+	
+	Arguments:
+		- data: Target object to serialize
+		- file: File-like object
+		- lang: Name of the output language (must be json, yaml, cbor, or bson)
+		- compact: Whether to write outputs in a short-handed notation where possible.
+	"""
 	file.flush()
 	fd = file.fileno()
 	native.formats.dumpToFd(data, fd, _checkLang(lang), compact)
 
 @asyncFunction
-async def recursiveDumps(data, lang='json', comapct=False, binary=Falase):
-	asBytes = await native.formats.dumpAllToBytes(data, _checkLang(lanc), compact)
+async def recursiveDumps(data, lang='yaml', compact=False, binary=False):
+	"""
+	Like dumps(...), but also serializes nested DataRefs.
+	"""
+	asBytes = await native.formats.dumpAllToBytes(data, _checkLang(lang), compact)
 	
 	if binary:
 		return asBytes
@@ -42,12 +66,33 @@ async def recursiveDumps(data, lang='json', comapct=False, binary=Falase):
 	return asBytes.decode()
 
 @asyncFunction
-async def recursiveDump(data, file, lang='json', compact=False):
+async def recursiveDump(data, file, lang='yaml', compact=False):
+	"""
+	Like dump(...), but also serializes nested DataRefs.
+	"""
 	file.flush()
 	fd = file.fileno()
-	await native.formats.dumpAllToFd(data, fd, _checkLang(lanc), compact)
+	await native.formats.dumpAllToFd(data, fd, _checkLang(lang), compact)
 
-def read(src, dst=None, lang='json'):
+def load(src, dst=None, lang='yaml'):
+	"""
+	Load the formatted data. Can either deserialize the input as a nested structure of
+	bytes, str, dict, and list, or alternatively deserialize INTO a target object (returning
+	the result in either case).
+	
+	Deserializing into a target object allows a large amount of conversions based on the
+	destination types (shorthand notations for struct, decoding base64-encoded binary data, etc.)
+	and reduces the amount of intermediate copies required. Target objects can be nested structures
+	of dicts, lists, and struct builders.
+	
+	Arguments:
+		- src: file (with fileno. attribute), str, or bytes-like object serving as data source
+		- dst: Optional target to deserialize into
+		- lang: Language in which the source data is stored
+	
+	Returns:
+		- The deserialized data. If "dst" is specified, this same object is returned.
+	"""
 	cl = _checkLang(lang)
 	
 	if hasattr(src, 'fileno'):

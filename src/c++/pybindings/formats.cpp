@@ -2,6 +2,7 @@
 #include "assign.h"
 #include "capnp.h"
 #include "tensor.h"
+#include "async.h"
 
 #include "formats.h"
 
@@ -59,6 +60,7 @@ namespace {
 		}
 				
 		#define ACCEPT_FWD(expr) \
+			KJ_DBG(#expr); \
 			KJ_REQUIRE(!state().is<Done>()); \
 			\
 			if(state().is<Forward>()) { \
@@ -74,8 +76,12 @@ namespace {
 			ACCEPT_FWD(beginObject(s));
 			
 			auto checkObject = [&](py::object o) {
-				if(py::isinstance<DynamicStructBuilder>(o)) {
-					states.add(Forward {textio::createVisitor(py::cast<DynamicStructBuilder>(o)), o});
+				py::object unwrapped = o;
+				while(py::hasattr(unwrapped, "_fusionsc_wraps"))
+					unwrapped = unwrapped.attr("_fusionsc_wraps");
+				
+				if(py::isinstance<DynamicStructBuilder>(unwrapped)) {
+					states.add(Forward {textio::createVisitor(py::cast<DynamicStructBuilder>(unwrapped)), o});
 				} else {
 					KJ_REQUIRE(py::isinstance<py::dict>(o));
 					states.add(Dict {o});
@@ -137,7 +143,7 @@ namespace {
 		void beginArray(Maybe<size_t> s) override {
 			ACCEPT_FWD(beginArray(s));
 			
-			auto checkList = [&](py::object o) {
+			auto checkList = [&](py::object o) {				
 				KJ_REQUIRE(py::isinstance<py::list>(o));
 				states.add(PresetList {o});
 			};
@@ -203,7 +209,8 @@ namespace {
 			if(state().is<Preset>()) {
 				auto& ps = state().get<Preset>();
 				KJ_REQUIRE(ps.object.is_none(), "Primitive value can only be unified with None");
-				ps.object = asPy;
+				
+				state() = Done { asPy };
 			} else if(state().is<PresetList>()) {
 				auto& p = state().get<PresetList>();
 				
@@ -224,7 +231,7 @@ namespace {
 				}
 			}
 		}
-		
+				
 		void acceptInt(int64_t i) override {
 			ACCEPT_FWD(acceptInt(i));
 			acceptPrimitive(py::cast(i));
@@ -242,6 +249,45 @@ namespace {
 		
 		void acceptString(kj::StringPtr s) override {
 			ACCEPT_FWD(acceptString(s));
+			
+			auto checkStruct = [&](py::object o) {
+				while(py::hasattr(o, "_fusionsc_wraps"))
+					o = o.attr("_fusionsc_wraps");
+				
+				if(py::isinstance<DynamicStructBuilder>(o)) {
+					auto v = textio::createVisitor(py::cast<DynamicStructBuilder>(o));
+					v -> acceptString(s);
+					return true;
+				}
+				
+				return false;
+			};
+			
+			// There are cases where strings can get converted into compound objects
+			// To handle these correctly, we need to check whether the target is a struct
+			// builder
+			if(state().is<Preset>()) {
+				auto& ps = state().get<Preset>();
+				if(checkStruct(ps.object))
+					return;
+			} else if(state().is<PresetList>()) {
+				auto& p = state().get<PresetList>();
+				KJ_REQUIRE(p.offset < p.list.size(), "List too small");
+				
+				if(checkStruct(p.list[p.offset])) {
+					++p.offset;
+					return;
+				}
+			} else if(state().is<Dict>()) {
+				auto& d = state().get<Dict>();
+				KJ_IF_MAYBE(pKey, d.key) {
+					if(d.dict.contains(*pKey) && checkStruct(d.dict[*pKey])) {
+						d.key = nullptr;
+						return;
+					}
+				}
+			}
+			
 			acceptPrimitive(py::cast(s));
 		}
 		
@@ -261,8 +307,12 @@ namespace {
 		}
 		
 		PythonVisitor(py::object o) {
-			if(py::isinstance<DynamicStructBuilder>(o)) {
-				auto& ds = py::cast<DynamicStructBuilder&>(o);
+			py::object unwrapped = o;
+			while(py::hasattr(unwrapped, "_fusionsc_wraps"))
+				unwrapped = unwrapped.attr("_fusionsc_wraps");
+			
+			if(py::isinstance<DynamicStructBuilder>(unwrapped)) {
+				auto& ds = py::cast<DynamicStructBuilder&>(unwrapped);
 				states.add(Forward {textio::createVisitor(ds), o});
 				return;
 			}
@@ -302,9 +352,9 @@ namespace formats {
 	}
 	
 	namespace {
-		void dumpToVisitor(py::handle src, textio::Visitor& dst);
+		void dumpToVisitor(py::handle src, textio::Visitor& dst, const textio::SaveOptions& opts, Maybe<kj::WaitScope&> ws);
 		
-		void dumpNumpyArray(py::handle o, textio::Visitor& dst) {
+		void dumpNumpyArray(py::handle o, textio::Visitor& dst, const textio::SaveOptions& opts, Maybe<kj::WaitScope&> ws) {
 			py::list shape = o.attr("shape");
 			py::object flat = o.attr("flatten")();
 			dst.beginObject(2);
@@ -313,30 +363,30 @@ namespace formats {
 			
 			dst.beginArray(shape.size());
 			for(auto el : shape)
-				dumpToVisitor(el, dst);
+				dumpToVisitor(el, dst, opts, ws);
 			dst.endArray();
 			
 			dst.acceptString("data");
 			
 			dst.beginArray(py::len(flat));
 			for(auto el : flat)
-				dumpToVisitor(el, dst);
+				dumpToVisitor(el, dst, opts, ws);
 			dst.endArray();
 			dst.endObject();
 		}
 		
 		template<typename T>
-		void dumpList(py::handle src, textio::Visitor& dst) {
+		void dumpList(py::handle src, textio::Visitor& dst, const textio::SaveOptions& opts, Maybe<kj::WaitScope&> ws) {
 			auto asList = py::cast<T>(src);
 			dst.beginArray(asList.size());
 			for(auto e : asList)
-				dumpToVisitor(py::reinterpret_borrow<py::object>(e), dst);
+				dumpToVisitor(py::reinterpret_borrow<py::object>(e), dst, opts, ws);
 			dst.endArray();
 		}
 		
-		void dumpToVisitor(py::handle src, textio::Visitor& dst) {
+		void dumpToVisitor(py::handle src, textio::Visitor& dst, const textio::SaveOptions& opts, Maybe<kj::WaitScope&> ws) {
 			if(PyArray_Check(src.ptr())) {
-				dumpNumpyArray(src, dst);
+				dumpNumpyArray(src, dst, opts, ws);
 				return;
 			}
 			
@@ -349,12 +399,12 @@ namespace formats {
 			
 			// Collection types
 			if(py::isinstance<py::tuple>(src)) {
-				dumpList<py::tuple>(src, dst);
+				dumpList<py::tuple>(src, dst, opts, ws);
 				return;
 			}
 			
 			if(py::isinstance<py::list>(src)) {
-				dumpList<py::list>(src, dst);
+				dumpList<py::list>(src, dst, opts, ws);
 				return;
 			}
 			
@@ -363,16 +413,22 @@ namespace formats {
 				
 				dst.beginObject(asDict.size());
 				for(std::pair<py::handle, py::handle> entry : asDict) {
-					dumpToVisitor(py::reinterpret_borrow<py::object>(entry.first), dst);
-					dumpToVisitor(py::reinterpret_borrow<py::object>(entry.second), dst);
+					dumpToVisitor(py::reinterpret_borrow<py::object>(entry.first), dst, opts, ws);
+					dumpToVisitor(py::reinterpret_borrow<py::object>(entry.second), dst, opts, ws);
 				}
 				dst.endObject();
 				return;
 			}
 			
+			// Wrapper types
+			if(py::hasattr(src, "_fusionsc_wraps")) {
+				dumpToVisitor(src.attr("_fusionsc_wraps"), dst, opts, ws);
+				return;
+			}
+			
 			// Dynamic value
 			DynamicValueReader r = py::cast<DynamicValueReader>(src);
-			textio::save(r, dst);
+			textio::save(r, dst, opts, ws);
 		}
 		
 		void dumpToStream(py::handle src, kj::BufferedOutputStream& os, Language lang, bool compact, Maybe<kj::WaitScope&> ws) {
@@ -382,8 +438,8 @@ namespace formats {
 			textio::Dialect dialect;
 			dialect.language = lang;
 			
-			auto v = textio::createVisitor(os, dialect, opts);
-			dumpToVisitor(src, *v);
+			auto v = textio::createVisitor(os, dialect);
+			dumpToVisitor(src, *v, opts, ws);
 		}
 	}
 	
@@ -403,13 +459,14 @@ namespace formats {
 		buffered.flush();
 	}
 	
-	Promise<py::bytes> dumpAllToBytes(py::object o, Language lang, bool compact) {
+	Promise<py::object> dumpAllToBytes(py::object o, Language lang, bool compact) {
 		auto inner = [=](kj::WaitScope& ws) {
+			KJ_DBG("Beginning recursive dump");
 			kj::VectorOutputStream os;
 			dumpToStream(o, os, lang, compact, ws);
 			
 			auto arr = os.getArray();
-			return py::bytes((const char*) arr.begin(), arr.size());
+			return (py::object) py::bytes((const char*) arr.begin(), arr.size());
 		};
 		
 		return kj::startFiber(1024 * 1024 * 8, mv(inner));

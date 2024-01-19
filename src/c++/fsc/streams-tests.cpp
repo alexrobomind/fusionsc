@@ -27,5 +27,5 @@ TEST_CASE("ostream") {
 	auto arr = os.getArray();
 
 	KJ_DBG(arr);
-	KJ_REQUIRE(input == kj::StringPtr((char*) arr.begin(), arr.size()));
+	KJ_REQUIRE(input.asArray() == arr);
 }

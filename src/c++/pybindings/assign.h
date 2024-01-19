@@ -21,10 +21,10 @@ struct BuilderSlot {
 	virtual ~BuilderSlot() {};
 };
 
-struct Assignable {
+/*struct Assignable {
 	virtual void assign(const BuilderSlot& dst) = 0;
 	virtual inline ~Assignable() {};
-};
+};*/
 
 void assign(const BuilderSlot& dst, py::object object);
 
