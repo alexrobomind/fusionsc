@@ -8,9 +8,10 @@
 
 namespace fscpy {
 	namespace formats {
-		struct FormattedReader;
+		using Language = textio::Dialect::Language;
+		// struct FormattedReader;
 		
-		struct Format {			
+		/*struct Format {			
 			virtual Own<textio::Visitor> createVisitor(kj::BufferedOutputStream&, const textio::SaveOptions& = textio::SaveOptions()) = 0;
 			virtual void read(textio::Visitor& dst, kj::BufferedInputStream&) = 0;
 			
@@ -45,6 +46,11 @@ namespace fscpy {
 			
 			Own<textio::Visitor> createVisitor(kj::BufferedOutputStream&, const textio::SaveOptions&) override;
 			void read(textio::Visitor& dst, kj::BufferedInputStream&) override;
-		};
+		};*/
+		
+		py::object dumps(py::object, Language, bool compact, bool asBytes);
+		void dump(py::object, int, Language, bool compact);
+		
+		py::object read(py::object src, py::object dst);
 	}
 }

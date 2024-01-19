@@ -177,12 +177,31 @@ void assign(const BuilderSlot& dst, py::object object) {
 	pybind11::detail::make_caster<kj::StringPtr> strCaster;
 	if(py::isinstance<py::str>(object) && (dst.type.isList() || dst.type.isStruct())) {
 		KJ_IF_MAYBE(pException, kj::runCatchingExceptions([&]() {
+			// Create destination visitor
+			Own<textio::Visitor> v;
+			auto t = dst.type;			
+			if(t.isList()) {
+				auto initializer = [&](size_t s) {
+					return dst.init(s).as<capnp::DynamicList>();
+				};
+				v = textio::createVisitor(t.asList(), initializer);
+			} else {
+				v = textio::createVisitor(dst.init().as<capnp::DynamicStruct>());
+			}
+			
+			// Load buffer
+			Py_ssize_t size;
+			const char* utf8 = PyUnicode_AsUTF8AndSize(object.ptr(), &size);
+			if(utf8 == nullptr)
+				throw py::error_already_set();
+			kj::ArrayPtr<const kj::byte> bufferPtr((const kj::byte*) utf8, size);
+			
+			// Set language
 			textio::Dialect dialect;
 			dialect.language = textio::Dialect::YAML;
 			
-			formats::TextIOFormat format(dialect);
-			auto reader = format.open(object);
-			reader.assign(dst);
+			// Perform load
+			textio::load(bufferPtr, *v, dialect);
 			return;
 		})) {
 			auto& error = *pException;

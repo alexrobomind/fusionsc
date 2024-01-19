@@ -270,50 +270,35 @@ namespace {
 			states.add(Preset {o});
 		}
 
-	};		
+	};
+	
+	py::object readStream(kj::BufferedInputStream& is, py::object dst, textio::Dialect::Language lang) {
+		textio::Dialect dialect;
+		dialect.language = lang;
+		
+		PythonVisitor v(dst);
+		
+		textio::load(is, v, dialect);
+		
+		KJ_REQUIRE(v.done(), "Target was filled incompletely");
+		return v.state().get<PythonVisitor::Done>().result;
+	}
 }
 
-namespace formats {
-	FormattedReader Format::open(py::object o) {
-		using BufferPtr = kj::ArrayPtr<const kj::byte>;
+namespace formats {		
+	py::object readFd(int fd, py::object dst, Language lang) {
+		kj::FdInputStream is(fd);
+		kj::BufferedInputStreamWrapper buffered(is);
 		
-		if(py::isinstance<py::str>(o)) {
-			Py_ssize_t size;
-			const char* utf8 = PyUnicode_AsUTF8AndSize(o.ptr(), &size);
-			if(utf8 == nullptr)
-				throw py::error_already_set();
-			
-			auto inputStream = kj::heap<kj::ArrayInputStream>(
-				BufferPtr((const kj::byte*) utf8, size)
-			);
-			inputStream = inputStream.attach(o);
-			
-			return FormattedReader(*this, mv(inputStream));
-		}
+		return readStream(buffered, dst, lang);
+	}
+	
+	py::object readBuffer(py::buffer buffer, py::object dst, Language lang) {
+		py::buffer_info info = buffer.request();
+		KJ_REQUIRE(info.itemsize == 1, "Can only read from character buffers");
 		
-		if(py::isinstance<py::buffer>(o)) {
-			auto buf = py::cast<py::buffer>(o);
-			
-			py::buffer_info info = buf.request();
-			
-			KJ_REQUIRE(info.itemsize == 1, "Can only read from character buffers");
-			
-			auto inputStream = kj::heap<kj::ArrayInputStream>(
-				BufferPtr((const kj::byte*) info.ptr, info.size)
-			);
-			inputStream = inputStream.attach(mv(info));
-			
-			return FormattedReader(*this, mv(inputStream));
-		}
-		
-		if(py::hasattr(o, "fileno")) {
-			int fd = py::cast<int>(o.attr("fileno")());
-			auto unbuffered = kj::heap<kj::FdInputStream>(fd).attach(o);
-			auto buffered = kj::heap<kj::BufferedInputStreamWrapper>(*unbuffered);
-			return FormattedReader(*this, buffered.attach(mv(unbuffered)));
-		}
-		
-		KJ_FAIL_REQUIRE("Input object must be either str, file-like (with a file descriptor) or support the buffer protocol");
+		kj::ArrayInputStream is(ArrayPtr<const kj::byte>((const kj::byte*) info.ptr, info.size));
+		return readStream(is, dst, lang);
 	}
 	
 	namespace {
@@ -389,138 +374,51 @@ namespace formats {
 			DynamicValueReader r = py::cast<DynamicValueReader>(src);
 			textio::save(r, dst);
 		}
-	}
-	
-	py::object Format::dumps(py::object r, bool compact, bool asBytes) {
-		// Prepare write options
-		textio::SaveOptions wopts;
-		wopts.compact = compact;
 		
-		kj::VectorOutputStream os;
-		auto v = this -> createVisitor(os, wopts);
-		dumpToVisitor(r, *v);
-		
-		auto arr = os.getArray();
-		
-		if(asBytes) {
-			return py::bytes((const char*) arr.begin(), arr.size());
-		} else {
-			return py::str((const char*) arr.begin(), arr.size());
+		void dumpToStream(py::handle src, kj::BufferedOutputStream& os, Language lang, bool compact) {
+			textio::SaveOptions opts;
+			opts.compact = compact;
+			
+			textio::Dialect dialect;
+			dialect.language = lang;
+			
+			auto v = textio::createVisitor(os, dialect, opts);
+			dumpToVisitor(src, *v);
 		}
 	}
 	
-	void Format::dump(py::object r, py::object o, bool compact) {
-		int fd = py::cast<int>(o.attr("fileno")());
+	py::object dumpToBytes(py::object o, Language lang, bool compact) {
+		kj::VectorOutputStream os;
+		dumpToStream(o, os, lang, compact);
+		
+		auto arr = os.getArray();
+		return py::bytes((const char*) arr.begin(), arr.size());
+	}
+	
+	void dumpToFd(py::object o, int fd, Language lang, bool compact) {
 		kj::FdOutputStream os(fd);
 		kj::BufferedOutputStreamWrapper buffered(os);
 		
-		// Flush python-side buffers before writing
-		o.attr("flush")();
-		
-		// Prepare write options
-		textio::SaveOptions wopts;
-		wopts.compact = compact;
-		
-		auto v = this -> createVisitor(buffered, wopts);
-		dumpToVisitor(r, *v);
-		
+		dumpToStream(o, buffered, lang, compact);
 		buffered.flush();
-	}
-	
-	TextIOFormat::TextIOFormat(const textio::Dialect& d) :
-		dialect(d)
-	{}
-	
-	Own<textio::Visitor> TextIOFormat::createVisitor(kj::BufferedOutputStream& os, const textio::SaveOptions& options) {
-		return textio::createVisitor(os, dialect, options);
-	}
-	
-	void TextIOFormat::read(textio::Visitor& dst, kj::BufferedInputStream& bis) {
-		textio::load(bis, dst, dialect);
-	}
-	
-	void FormattedReader::assign(const BuilderSlot& dst) {
-		KJ_REQUIRE(!used, "Can only assign from a formatted load object once");
-		used = true;
-		
-		auto t = dst.type;
-		KJ_REQUIRE(t.isList() || t.isStruct(), "Can only assign to list and struct types");
-		
-		if(t.isList()) {
-			auto initializer = [&](size_t s) {
-				return dst.init(s).as<capnp::DynamicList>();
-			};
-			auto v = textio::createVisitor(t.asList(), initializer);
-			parent.read(*v, *src);
-		} else {
-			auto v = textio::createVisitor(dst.init().as<capnp::DynamicStruct>());
-			parent.read(*v, *src);
-		}
-	}
-	
-	py::object FormattedReader::read(py::object input) {
-		PythonVisitor v(input);
-		
-		parent.read(v, *src);
-		KJ_REQUIRE(v.done(), "Target was filled incompletely");
-		
-		return v.state().get<PythonVisitor::Done>().result;
 	}
 }
 
 void initFormats(py::module_& m) {
 	auto formatsMod = m.def_submodule("formats");
 	
-	py::class_<formats::FormattedReader, Assignable>(formatsMod,
-		"FormattedReader",
-		"A format-aware data stream. The object can be assigned to a struct"
-		" / list builder or used as an argument to"
-		" StructType.newMessage(...)."
-	)
-		.def("read", &formats::FormattedReader::read,
-			"Read the message in structured format. Takes an optional"
-			" destination with which the message will be unified.",
-			py::arg("dst") = py::none()
-		);
+	formatsMod.def("readFd", &formats::readFd);
+	formatsMod.def("readBuffer", &formats::readBuffer);
+	
+	formatsMod.def("dumpToBytes", &formats::dumpToBytes);
+	formatsMod.def("dumpToFd", &formats::dumpToFd);
+	
+	py::enum_<formats::Language>(formatsMod, "Language")
+		.value("YAML", formats::Language::YAML)
+		.value("JSON", formats::Language::JSON)
+		.value("CBOR", formats::Language::CBOR)
+		.value("BSON", formats::Language::BSON)
 	;
-	
-	py::class_<formats::TextIOFormat>(formatsMod, "Format")	
-		.def("open", &formats::Format::open)
-		
-		.def("dump", &formats::Format::dump, py::arg("value"), py::arg("destination"), py::arg("compact") = false)
-		.def("dumps", &formats::Format::dumps, py::arg("value"), py::arg("compact") = false, py::arg("binary") = false)
-	;
-	
-	using Dialect = textio::Dialect;
-	using F = formats::TextIOFormat;
-	
-	auto makeDialect = [](Dialect::Language lang) {
-		Dialect result;
-		result.language = lang;
-		return result;
-	};
-	
-	#define MAKE_DIALECT(x) makeDialect(Dialect::x)
-	
-	static F yaml(MAKE_DIALECT(YAML));
-	static F json(MAKE_DIALECT(JSON));
-	static F bson(MAKE_DIALECT(BSON));
-	static F cbor(MAKE_DIALECT(CBOR));
-	
-	auto check = [&]() {
-		if(PyErr_Occurred())
-			throw py::error_already_set();
-	};
-	
-	check();
-	formatsMod.add_object("yaml", py::cast(yaml, py::return_value_policy::reference));
-	check();
-	formatsMod.add_object("json", py::cast(json, py::return_value_policy::reference));
-	check();
-	formatsMod.add_object("cbor", py::cast(cbor, py::return_value_policy::reference));
-	check();
-	formatsMod.add_object("bson", py::cast(bson, py::return_value_policy::reference));
-	check();
 }
 
 }

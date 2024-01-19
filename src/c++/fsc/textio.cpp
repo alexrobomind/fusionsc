@@ -380,6 +380,15 @@ namespace {
 		void beginObject() {
 			KJ_REQUIRE(!isDone);
 			
+			// If the destination type is a DataRef, we add a different type of object sink
+			// that passes through to the parent object. Cases where we are a non-DR interface
+			// get caught by the value converter.
+			auto type = stack.back() -> expectedType();
+			if(type.isInterface()) {
+				stack.add(kj::heap<DataRefSink>(type.asInterface(), *stack.back()));
+				return;
+			}
+			
 			stack.add(kj::heap<StructSink>(stack.back() -> newObject()));
 		}
 		
@@ -408,10 +417,10 @@ namespace {
 		}
 	};
 	
-	/* This class implements three important conversions:
+	/* This class implements multiple important conversions:
 	   - Contains ways of constructing most value types from texts
 	   - Supports the shorthand notation "field" for {"field" : null} on structs
-	   - Allows placeholder objects to be used for capabilities (that might later become meaningful)
+	   - Filters out objects for non-dataref capabilities
 	*/
 	struct ValueConverter : public Visitor {
 		BuilderStack backend;
@@ -678,7 +687,7 @@ namespace {
 					KJ_FAIL_REQUIRE("Unable to convert value to bool", asString);
 				}
 			
-				case ST::INTERFACE: {
+				case ST::INTERFACE: {					
 					capnp::Capability::Client brokenCap(KJ_EXCEPTION(FAILED, s));
 					backend.accept(brokenCap.castAs<DynamicCapability>(type.asInterface()));
 					break;
@@ -703,6 +712,11 @@ namespace {
 				backend.accept(capnp::Void());
 				return true;
 			} else if(tp.isInterface()) {
+				// DataRef targets have beginObject passed through (they get redirected to a special sink)
+				constexpr uint64_t DR_ID = capnp::typeId<DataRef<capnp::AnyPointer>>();
+				if(tp.asInterface().getProto().getId() == DR_ID)
+					return false;
+				
 				capnp::Capability::Client brokenCap(KJ_EXCEPTION(FAILED, "Can not restore capability"));
 				backend.accept(brokenCap.castAs<DynamicCapability>(tp.asInterface()));
 				return true;

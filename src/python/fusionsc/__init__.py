@@ -10,7 +10,6 @@ from .native import kj
 from .native import capnp
 from .native import loader
 from .native import efit
-from .native import formats
 
 # Load service definitions
 from . import service
@@ -34,6 +33,7 @@ from . import data
 from . import resolve
 from . import wrappers
 from . import warehouse
+from . import formats
 
 # Load core services
 from . import magnetics
