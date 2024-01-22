@@ -60,7 +60,6 @@ namespace {
 		}
 				
 		#define ACCEPT_FWD(expr) \
-			KJ_DBG(#expr); \
 			KJ_REQUIRE(!state().is<Done>()); \
 			\
 			if(state().is<Forward>()) { \
@@ -461,7 +460,6 @@ namespace formats {
 	
 	Promise<py::object> dumpAllToBytes(py::object o, Language lang, bool compact) {
 		auto inner = [=](kj::WaitScope& ws) {
-			KJ_DBG("Beginning recursive dump");
 			kj::VectorOutputStream os;
 			dumpToStream(o, os, lang, compact, ws);
 			
