@@ -1,5 +1,8 @@
 #include "textio.h"
 
+#include <kj/encoding.h>
+#include <capnp/serialize-packed.h>
+
 using capnp::DynamicList;
 using capnp::DynamicValue;
 using capnp::DynamicStruct;
@@ -584,10 +587,23 @@ namespace {
 			using ST = capnp::schema::Type;
 			
 			switch(type.which()) {
-				case ST::DATA:
-				case ST::ANY_POINTER:
+				case ST::DATA: {
+					auto decoded = kj::decodeBase64(s);					
+					backend.accept(capnp::Data::Reader(decoded));
+					return;
+				}
+					
+				case ST::ANY_POINTER: {
+					auto decoded = kj::decodeBase64(s);
+					kj::ArrayInputStream inputStream(decoded);
+
+					capnp::PackedMessageReader messageReader(inputStream);
+					backend.accept(messageReader.getRoot<capnp::AnyPointer>());
+					return;
+				}
+					
 				case ST::LIST:
-					KJ_FAIL_REQUIRE("Value type mismatch. Can not cast string as target type");
+					KJ_FAIL_REQUIRE("Value type mismatch. Can not cast string as list type");
 				
 				case ST::TEXT:
 					backend.accept(capnp::Text::Reader(s));
@@ -698,7 +714,46 @@ namespace {
 		
 		void acceptData(kj::ArrayPtr<const kj::byte> d) override {
 			ACCEPT_FWD(acceptData(d))
-			backend.accept(capnp::Data::Reader(d));
+			
+			auto type = backend.expectedType();
+			using ST = capnp::schema::Type;
+			
+			switch(type.which()) {
+				case ST::VOID:
+					backend.accept(capnp::Void());
+					break;
+					
+				case ST::DATA:
+					backend.accept(capnp::Data::Reader(d));
+					return;
+					
+				case ST::ANY_POINTER: {			
+					// Check alignment
+					kj::ArrayInputStream inputStream(d);
+
+					capnp::PackedMessageReader messageReader(inputStream);
+					backend.accept(messageReader.getRoot<capnp::AnyPointer>());
+					return;
+				}
+					
+				case ST::LIST:
+				case ST::TEXT:				
+				case ST::ENUM:
+				case ST::STRUCT:
+				case ST::FLOAT32:
+				case ST::FLOAT64:				
+				case ST::UINT8:
+				case ST::UINT16:
+				case ST::UINT32:
+				case ST::UINT64:				
+				case ST::INT8:
+				case ST::INT16:
+				case ST::INT32:
+				case ST::INT64:
+				case ST::BOOL:
+				case ST::INTERFACE:
+					KJ_FAIL_REQUIRE("Can not read raw data as target type");
+			}
 		}
 		
 		bool done() override {
@@ -827,7 +882,15 @@ namespace {
 			case DynamicValue::DATA:
 				v.acceptData(in.as<capnp::Data>());
 				break;
-			case DynamicValue::ANY_POINTER:
+			case DynamicValue::ANY_POINTER: {
+				capnp::MallocMessageBuilder tmpMessage;
+				tmpMessage.setRoot(in.as<capnp::AnyPointer>());
+				
+				kj::VectorOutputStream vos;
+				capnp::writePackedMessage(vos, tmpMessage);
+				v.acceptData(vos.getArray());
+				break;
+			}
 			case DynamicValue::UNKNOWN:
 				v.acceptString("<unknown>");
 				break;

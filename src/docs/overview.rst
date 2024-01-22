@@ -67,7 +67,7 @@ Data storage and distribution
 
 FusionSC uses a statically typed cross-version-compatible high-speed binary
 message format for data storage and handling to reduce the overhead of the non-
-physics portions of the code. It provide two persistence mechanisms for these
+physics portions of the code. It provide three persistence mechanisms for these
 data objects:
 
 - *Archive files*: Archive files store an entire tree of a root message and
@@ -81,6 +81,11 @@ data objects:
   contained data and allowing the OS to easily reclaim memory pages when
   facing memory pressure.
 
+- *Structured IO*: For import & export to other programs, as well as human IO,
+  objects may be read and written in a variety of self-describing nested formats.
+  The structured IO subsystem currently supports JSON and YAML for textual I/O
+  as well as CBOR and BSON for binary input & output.
+
 - *Warehouses*: Warehouses are mutable object stores backed by a local
   database (sqlite). While archives can only be written once, warehouses
   expose mutable folder- and file-type classes that can be used to store and
@@ -91,13 +96,13 @@ data objects:
   
   - *Multi-user access*: Warehouses can be safely read and modified
     simultaneously by multiple threads and/or processes. Additionally, they
-	can be served for remote access.
+    can be served for remote access.
   - *Compact storage*: Objects containing identical data will always share
     their underlying storage, eliminating data duplication (archive files do
-	this as well). In addition, all stored data are compressed using deflate.
+    this as well). In addition, all stored data are compressed using deflate.
   - *Protection against corruption*: Being based on SQLite, warehouses inherit
     its strong protection against system crashes, allowing recovery to a
-	consistent state.
+    consistent state.
   - *Backup facilities*: The underlying database can be backed up during
     during operation to guard against fatal storage loss.
 
