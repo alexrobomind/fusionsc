@@ -33,7 +33,7 @@ from . import data
 from . import resolve
 from . import wrappers
 from . import warehouse
-from . import formats
+from . import structio
 
 # Load core services
 from . import magnetics
@@ -57,6 +57,6 @@ __all__ = [
 	'native',
 	'kj', 'capnp', 'schema', 'service', 'efit',
 	'asnc', 'backends', 'data', 'ipython_integration', 'resolve',
-	'magnetics', 'flt', 'hfcam', 'devices', 'export', 'format'
+	'magnetics', 'flt', 'hfcam', 'devices', 'export', 'structio'
 ]
 	
