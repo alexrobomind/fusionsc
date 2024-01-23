@@ -378,7 +378,7 @@ struct FLTImpl : public FLT::Server {
 			
 			auto adaptive = request.getStepSizeControl().getAdaptive();
 			KJ_REQUIRE(adaptive.getMax() >= adaptive.getMin());
-			KJ_REQUIRE(adaptive.getTargetError() < adaptive.getMaxError());
+			KJ_REQUIRE(adaptive.getRelativeTolerance() >= 0);
 		}
 		
 		if(request.hasMapping()) {

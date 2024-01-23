@@ -10,6 +10,7 @@
 #include "local.h"
 #include "magnetics.h"
 #include "geometry.h"
+#include "textio.h"
 
 #include <iostream>
 
@@ -76,7 +77,26 @@ TEST_CASE("flt") {
 		// traceReq.setStepLimit(10000);
 		traceReq.setStepSize(0.001);
 		
+		SECTION("simple") {}
+		SECTION("adaptive") {
+			auto adaptive = traceReq.getStepSizeControl().initAdaptive();
+			adaptive.getErrorUnit().setIntegratedOver(10 * 2 * 3.141592);
+			adaptive.setTargetError(0.001);
+		}
+		
 		auto response = traceReq.send().wait(ws);
+		
+		// kj::VectorOutputStream os;
+		// textio::save((capnp::DynamicStruct::Reader) response, os, textio::Dialect { textio::Dialect::YAML });
+		
+		// KJ_DBG(kj::heapString(os.getArray().asChars()));
+		
+		double x = response.getEndPoints().getData()[0];
+		double y = response.getEndPoints().getData()[1];
+		double z = response.getEndPoints().getData()[2];
+		
+		double r = sqrt(x*x + y*y);
+		KJ_DBG(r, z);
 		//KJ_DBG(response); // This currently can't be printed due to a Capnp bug
 	}
 }

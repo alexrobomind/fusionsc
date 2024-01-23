@@ -175,7 +175,8 @@ async def trace(
 	resultFormat = 'dict',
 	
 	# Adaptive step size control
-	maxStepError = None, targetStepError = None, minStepSize = 1e-5, maxStepSize = 0.1
+	targetError = None, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2,
+	errorEstimationDistance = None
 ):
 	"""
 	Performs a tracing request.
@@ -211,10 +212,14 @@ async def trace(
 		
 		- recordEvery: When set to > 0, instructs the tracer to record the fieldline every "recordEvery"-th step.
 		
-		- maxStepError: Maximum error up to which a step is accepted (if this is exceeded, the step is repeated with adjusted step size)
-		- targetStepError: Step size to adjust steps towards (adjustments are also made with the error is below maxStepError, but they are then use for the next step). Defaults to maxStepError / 2
-		- minStepSize: Minimum step size for adaptive reduction
+		- targetError: Step size to adjust steps towards.
+		- relativeErrorTolerance: If the error estimator indicates that the error is more than targetError * (1 + relativeErrorTolerance), the step will be repeated
+		  with adjusted step size. Otherwise, the adjusted step size will be used for the next step.
+		- minStepSize: Minimum step size for adaptive controller
 		- maxStepSize: Maximum step size for adaptive controller
+		
+		- errorEstimationDistance: If specified, the adaptive step size is not determined as the error per step, but the estimated total error along
+		  the specified distance (which is perStepError * errorEstimationDistance / stepSize)
 	
 	Returns:
 		The format of the result depends on the `resultFormat` parameter.
@@ -329,12 +334,15 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	if mapping is not None:
 		request.mapping = mapping.ref
 	
-	if maxStepError is not None:
+	if targetError is not None:
 		adaptive = request.stepSizeControl.initAdaptive()
-		adaptive.maxError = maxStepError
-		adaptive.targetError = targetStepError if targetStepError is not None else maxStepError / 2
+		adaptive.targetError = targetError
+		adaptive.relativeTolerance = relativeErrorTolerance
 		adaptive.min = minStepSize
 		adaptive.max = maxStepSize
+		
+		if errorEstimationDistance is not None:
+			adaptive.errorUnit.integratedOver = errorEstimationDistance
 	
 	# Perform the tracing
 	response = await _tracer().trace(request)

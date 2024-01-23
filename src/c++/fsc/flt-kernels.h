@@ -99,7 +99,7 @@ namespace kmath {
 		directions[4] = f(
 			x + 439./216 * h * directions[0]
 			  - 8        * h * directions[1]
-			  + 3860./513 * h * directions[2]
+			  + 3680./513 * h * directions[2]
 			  - 845./4104 * h * directions[3],
 			t + h
 		);
@@ -343,6 +343,8 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		Num r = std::sqrt(x[0] * x[0] + x[1] * x[1]);
 		Num z = x[2];
 		
+		// KJ_DBG(r, z);
+		
 		// Unwrapping of phase
 		if(unwrapEvery != 0 && (step % unwrapEvery == 0)) {
 			double phi = atan2(x[1], x[0]);
@@ -455,7 +457,6 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 					// Regular tracing step
 					kmath::runge_kutta_4_step(x2, .0, stepSize, rungeKuttaInput);
 				}
-				break;
 			} else {
 				auto adaptiveInfo = controlInfo.getAdaptive();
 				double maxVal = adaptiveInfo.getMax();
@@ -474,10 +475,18 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 					
 					// Try to adapt step size (assuming 4th order convergence)
 					double prevStepSize = stepSize;
-					stepSize = stepSize * std::pow(adaptiveInfo.getTargetError() / errorEstimate, 0.2);
+					
+					if(adaptiveInfo.getErrorUnit().hasStep()) {
+						stepSize *= std::pow(adaptiveInfo.getTargetError() / errorEstimate, 0.2);
+					} else {
+						errorEstimate *= adaptiveInfo.getErrorUnit().getIntegratedOver() / stepSize;
+						stepSize *= std::pow(adaptiveInfo.getTargetError() / errorEstimate, 0.25);
+					}
+					
+					// KJ_DBG(prevStepSize, errorEstimate, stepSize);
 					
 					// Check whether we need to re-run the step
-					if(errorEstimate > adaptiveInfo.getMaxError() && prevStepSize > minVal) {
+					if(errorEstimate > adaptiveInfo.getTargetError() * (1 + adaptiveInfo.getRelativeTolerance()) && prevStepSize > minVal) {
 						// Reset step
 						x2 = x;
 						continue;
