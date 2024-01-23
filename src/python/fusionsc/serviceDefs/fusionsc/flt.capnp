@@ -69,6 +69,15 @@ struct FLTRequest {
 	collisionLimit @7 : UInt32;
 	
 	stepSize @8 : Float64 = 0.001;
+	stepSizeControl : union {
+		fixed @31 : Void;
+		adaptive : group {
+			min @32 : Float64 = 1e-5;
+			max @33 : Float64 = 0.1;
+			targetError @34 : Float64 = 5e-7;
+			maxError @35 : Float64 = 1e-6;
+		}
+	}
 	
 	parallelModel : group {
 		meanFreePath @9 : Float64;
@@ -245,6 +254,8 @@ struct FLTKernelState {
 	
 	theta @11 : Float64;
 	iota @12 : Float64;
+	
+	stepSize @13 : Float64;
 }
 
 struct FLTKernelEvent {

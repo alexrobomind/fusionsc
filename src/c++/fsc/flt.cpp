@@ -172,6 +172,8 @@ struct TraceCalculation {
 			state.setForward(request.getServiceRequest().getForward());
 			
 			fsc::MT19937::seed((uint32_t) seedGenerator(), state.getRngState());
+			
+			state.setStepSize(request.getServiceRequest().getStepSize());
 		}
 		
 		round.kernelRequest -> getHost().getServiceRequest().setStepLimit(
@@ -371,6 +373,18 @@ struct FLTImpl : public FLT::Server {
 		auto request = ctx.getParams();
 		
 		// Request validation
+		if(request.getStepSizeControl().isAdaptive()) {
+			KJ_REQUIRE(!request.hasMapping(), "Adaptive step size control can only be used without a mapping");
+			
+			auto adaptive = request.getStepSizeControl().getAdaptive();
+			KJ_REQUIRE(adaptive.getMax() >= adaptive.getMin());
+			KJ_REQUIRE(adaptive.getTargetError() < adaptive.getMaxError());
+		}
+		
+		if(request.hasMapping()) {
+			KJ_REQUIRE(request.getStepSizeControl().isFixed(), "When using a mapping, a fixed step size is required");
+		}
+			
 		for(auto plane : request.getPlanes()) {
 			if(plane.hasCenter()) {
 				KJ_REQUIRE(plane.getCenter().size() == 3, "Centers must be 3-dimensional");

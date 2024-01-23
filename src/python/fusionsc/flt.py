@@ -172,7 +172,10 @@ async def trace(
 	recordEvery = 0,
 	
 	# Return format
-	resultFormat = 'dict'
+	resultFormat = 'dict',
+	
+	# Adaptive step size control
+	maxStepError = None, targetStepError = None, minStepSize = 1e-5, maxStepSize = 0.1
 ):
 	"""
 	Performs a tracing request.
@@ -207,6 +210,11 @@ async def trace(
 		- direction: Indicates the tracing direction. One of "forward" (field direction), "backward" (against field), "cw" (clockwise), or "ccw" (counter-clockwise)
 		
 		- recordEvery: When set to > 0, instructs the tracer to record the fieldline every "recordEvery"-th step.
+		
+		- maxStepError: Maximum error up to which a step is accepted (if this is exceeded, the step is repeated with adjusted step size)
+		- targetStepError: Step size to adjust steps towards (adjustments are also made with the error is below maxStepError, but they are then use for the next step). Defaults to maxStepError / 2
+		- minStepSize: Minimum step size for adaptive reduction
+		- maxStepSize: Maximum step size for adaptive controller
 	
 	Returns:
 		The format of the result depends on the `resultFormat` parameter.
@@ -320,6 +328,13 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	
 	if mapping is not None:
 		request.mapping = mapping.ref
+	
+	if maxStepError is not None:
+		adaptive = request.stepSizeControl.initAdaptive()
+		adaptive.maxError = maxStepError
+		adaptive.targetError = targetStepError if targetStepError is not None else maxStepError / 2
+		adaptive.min = minStepSize
+		adaptive.max = maxStepSize
 	
 	# Perform the tracing
 	response = await _tracer().trace(request)
