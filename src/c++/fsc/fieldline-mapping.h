@@ -141,7 +141,7 @@ EIGEN_DEVICE_FUNC double RFLM::getFieldlinePosition(double phi) {
 	
 	double phiCoord = unwrap(phi - phi1 + 2 * SECTION_TOL) - 2 * SECTION_TOL;
 	
-	Vec3d interpCoords(phiCoord, uv(0), uv(1));
+	Vec3d interpCoords(phiCoord, uv(1), uv(0));
 	return interpolator(lenField, interpCoords) + lenOffset;
 }
 
@@ -163,7 +163,7 @@ EIGEN_DEVICE_FUNC Vec3d RFLM::unmap(double phi) {
 	
 	double phiCoord = unwrap(phi - phi1 + 2 * SECTION_TOL) - 2 * SECTION_TOL;
 	
-	Vec3d interpCoords(phiCoord, uv(0), uv(1));
+	Vec3d interpCoords(phiCoord, uv(1), uv(0));
 	double rVal = interpolator(rField, interpCoords);
 	double zVal = interpolator(zField, interpCoords);
 	
@@ -261,9 +261,9 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 		uv(0) = interpolator(uInterp, phizr);
 		uv(1) = interpolator(vInterp, phizr);
 		
-		KJ_DBG(uv(0), uv(1));
+		// KJ_DBG(uv(0), uv(1));
 	} else {
-		KJ_DBG("Starting with default values");
+		// KJ_DBG("Starting with default values");
 	}
 	
 	// --- Perform Newton-style inversion in active section ---
@@ -281,7 +281,7 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 	
 	for(size_t i = 0; i < 50; ++i) {
 		// Calculate values and derivatives for r and z
-		Vec3<ADS> interpCoords(phiCoord, ADS(uv(0), 2, 0), ADS(uv(1), 2, 1));
+		Vec3<ADS> interpCoords(phiCoord, ADS(uv(1), 2, 1), ADS(uv(0), 2, 0));
 		ADS rVal = interpolator(rField, interpCoords);
 		ADS zVal = interpolator(zField, interpCoords);
 		
@@ -304,7 +304,7 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 		uv(0) += scale * du;
 		uv(1) += scale * dv;
 		
-		KJ_DBG(du, dv, dx(0), dx(1), rVal.value(), zVal.value());
+		// KJ_DBG(du, dv, dx(0), dx(1), rVal.value(), zVal.value());
 		
 		if(du != du || dv != dv)
 			break;
@@ -313,7 +313,7 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 			break;
 	}
 	
-	KJ_DBG("Map completed", rRef, zRef, uv(0), uv(1), phi);
+	// KJ_DBG("Map completed", rRef, zRef, uv(0), uv(1), phi);
 }
 
 EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi) {
