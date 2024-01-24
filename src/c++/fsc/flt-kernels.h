@@ -72,6 +72,62 @@ namespace kmath {
 			1.0 / 3.0 * (directions[1] + directions[2])
 		);
 	}
+	
+	template<typename Num, int dim, typename F>
+	EIGEN_DEVICE_FUNC double runge_kutta_fehlberg_step(Eigen::Vector<Num, dim>& x, Num t, Num h, const F& f) {
+		using XType = Eigen::Vector<Num, dim>;
+
+		std::array<XType, 6> directions;
+		
+		directions[0] = f(x, t);
+		directions[1] = f(
+			x + 0.25 * h * directions[0],
+			t + 0.25 * h
+		);
+		
+		directions[2] = f(
+			x + 3./32 * h * directions[0]
+			  + 9./32 * h * directions[1],
+			t + 3./8 * h
+		);
+		directions[3] = f(
+			x + 1932./2197 * h * directions[0]
+			  - 7200./2197 * h * directions[1]
+			  + 7296./2197 * h * directions[2],
+			t + 12./13 * h
+		);
+		directions[4] = f(
+			x + 439./216 * h * directions[0]
+			  - 8        * h * directions[1]
+			  + 3680./513 * h * directions[2]
+			  - 845./4104 * h * directions[3],
+			t + h
+		);
+		directions[5] = f(
+			x - 8./27 * h * directions[0]
+			  + 2 * h * directions[1]
+			  - 3544./2565 * h * directions[2]
+			  + 1859./4104 * h * directions[3]
+			  - 11./40 * h * directions[4],
+			 t + 0.5 * h
+		);
+		
+		XType fifthOrder =
+			  16./135 * h * directions[0]
+			+ 6656./12825 * h * directions[2]
+			+ 28561./56430 * h * directions[3]
+			- 9./50 * h * directions[4]
+			+ 2./55 * h * directions[5];
+		
+		XType fourthOrder =
+			  25./216 * h * directions[0]
+			+ 1408./2565 * h * directions[2]
+			+ 2197./4104 * h * directions[3]
+			- 1./5 * h * directions[4];
+		
+		x += fifthOrder;
+		return (fifthOrder - fourthOrder).norm();
+	}
 }
 
 
@@ -178,7 +234,6 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			zAxis = fla.getCalculateFourierModes().getZAxis();
 		}
 	}
-	
 	
 	bool processDisplacements = perpModel.hasIsotropicDiffusionCoefficient() || perpModel.hasRzDiffusionCoefficient();
 	
@@ -288,6 +343,8 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		Num r = std::sqrt(x[0] * x[0] + x[1] * x[1]);
 		Num z = x[2];
 		
+		// KJ_DBG(r, z);
+		
 		// Unwrapping of phase
 		if(unwrapEvery != 0 && (step % unwrapEvery == 0)) {
 			double phi = atan2(x[1], x[0]);
@@ -322,7 +379,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		}
 		
 		// KJ_DBG(displacementStep);
-		double stepSize = request.getStepSize();
+		double stepSize = state.getStepSize();
 		
 		if(displacementStep) {
 			double prevFreePath = parModel.getMeanFreePath() + displacementCount * parModel.getMeanFreePathGrowth();
@@ -385,18 +442,58 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			if(useFLM) {
 				flm.map(x2, tracingDirection * forwardDirection > 0);
 			}				
-		} else {
-			if(processDisplacements) {
-				stepSize = std::min(stepSize, nextDisplacementStep - distance + 0.001);
-			}
-			
-			if(useFLM) {
-				flm.setFieldlinePosition(0);
-				double newPhi = flm.phi + forwardDirection * tracingDirection * stepSize / r;
-				x2 = flm.advance(newPhi);
+		} else {			
+			auto controlInfo = request.getStepSizeControl();
+			if(controlInfo.hasFixed()) {
+				if(processDisplacements) {
+					stepSize = std::min(stepSize, nextDisplacementStep - distance + 0.001);
+				}
+				
+				if(useFLM) {
+					flm.setFieldlinePosition(0);
+					double newPhi = flm.phi + forwardDirection * tracingDirection * stepSize / r;
+					x2 = flm.advance(newPhi);
+				} else {
+					// Regular tracing step
+					kmath::runge_kutta_4_step(x2, .0, stepSize, rungeKuttaInput);
+				}
 			} else {
-				// Regular tracing step
-				kmath::runge_kutta_4_step(x2, .0, stepSize, rungeKuttaInput);
+				auto adaptiveInfo = controlInfo.getAdaptive();
+				double maxVal = adaptiveInfo.getMax();
+				double minVal = adaptiveInfo.getMin();
+				double targetError = adaptiveInfo.getTargetError();
+				
+				if(processDisplacements) {
+					maxVal = std::min(maxVal, nextDisplacementStep - distance + 0.001);
+				}
+				
+				while(true) {
+					stepSize = std::min(std::max(stepSize, minVal), maxVal);
+					
+					// Perform Runge-Kutta-Fehlmann step
+					double errorEstimate = kmath::runge_kutta_fehlberg_step(x2, .0, stepSize, rungeKuttaInput);
+					
+					// Try to adapt step size (assuming 4th order convergence)
+					double prevStepSize = stepSize;
+					
+					if(adaptiveInfo.getErrorUnit().hasStep()) {
+						stepSize *= std::pow(adaptiveInfo.getTargetError() / errorEstimate, 0.2);
+					} else {
+						errorEstimate *= adaptiveInfo.getErrorUnit().getIntegratedOver() / stepSize;
+						stepSize *= std::pow(adaptiveInfo.getTargetError() / errorEstimate, 0.25);
+					}
+					
+					// KJ_DBG(prevStepSize, errorEstimate, stepSize);
+					
+					// Check whether we need to re-run the step
+					if(errorEstimate > adaptiveInfo.getTargetError() * (1 + adaptiveInfo.getRelativeTolerance()) && prevStepSize > minVal) {
+						// Reset step
+						x2 = x;
+						continue;
+					} else {
+						break;
+					}
+				}
 			}
 		}
 		
@@ -614,6 +711,8 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			rng.save(state.mutateRngState());
 			// KJ_DBG("Displacement step done", idx);
 		}
+		
+		state.setStepSize(stepSize);
 		
 		++step;
 	}

@@ -838,6 +838,16 @@ namespace {
 				saveStruct(in.as<DynamicStruct>(), v, opts, ws);
 				break;
 			case DynamicValue::LIST:
+				try {
+					auto asList = in.as<DynamicList>();
+					if(asList.size() > 0)
+						auto e = asList[0];					
+				} catch(kj::Exception& e) {
+					KJ_LOG(WARNING, "Failed to obtain list, emitting null instead.");
+					v.acceptNull();
+					break;
+				}
+				
 				saveList(in.as<DynamicList>(), v, opts, ws);
 				break;
 			case DynamicValue::CAPABILITY: {
@@ -852,7 +862,7 @@ namespace {
 				break;
 			}
 			case DynamicValue::ENUM:
-				if(opts.integerKeys) {
+				if(!opts.integerKeys) {
 					KJ_IF_MAYBE(pEnumerant, in.as<DynamicEnum>().getEnumerant()) {
 						v.acceptString(pEnumerant -> getProto().getName());
 						break;

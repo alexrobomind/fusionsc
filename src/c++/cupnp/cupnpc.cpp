@@ -10,6 +10,7 @@
 #include <kj/main.h>
 
 #include <stdexcept>
+#include <cmath>
 
 using capnp::schema::Node;
 using capnp::schema::Field;
@@ -102,6 +103,22 @@ kj::String enumCase(kj::StringPtr in) {
 }
 
 kj::String cppDefaultValue(Value::Reader val) {
+	auto emitFloat = [](kj::StringPtr typeName, double x) {
+		if(x != x) {
+			KJ_UNIMPLEMENTED("Code generation for NaN values is not yet implemented due to ambiguity");
+			return str("std::numeric_limits<", typeName, ">::quiet_NaN()");
+		}
+		
+		if(std::isinf(x)) {
+			if(x > 0)
+				return str("std::numeric_limits<", typeName, ">::infinity()");
+			
+			return str("-std::numeric_limits<", typeName, ">::infinity()");
+		}
+		
+		return str(x);
+	};
+	
 	switch(val.which()) {
 		case Value::VOID: return str("nullptr");
 		case Value::BOOL: return str(val.getBool());
@@ -113,8 +130,8 @@ kj::String cppDefaultValue(Value::Reader val) {
 		case Value::UINT16: return str(val.getUint16());
 		case Value::UINT32: return str(val.getUint32());
 		case Value::UINT64: return str(val.getUint64());
-		case Value::FLOAT32: return str(val.getFloat32());
-		case Value::FLOAT64: return str(val.getFloat64());
+		case Value::FLOAT32: return emitFloat("float", val.getFloat32());
+		case Value::FLOAT64: return emitFloat("double", val.getFloat64());
 		case Value::ENUM: return str(val.getEnum());
 		default: KJ_FAIL_REQUIRE("Unsupported default value type");
 	}	
@@ -764,7 +781,7 @@ StringTree generateStructSection(uint64_t nodeId, ClassType classType) {
 		switch(field.which()) {
 			case Field::GROUP: {
 				auto typeId = field.getGroup().getTypeId();
-				auto readerName = cppNodeTypeName(typeId, capnp::defaultValue<Brand>(), nodeId, capnp::defaultValue<Brand>(), ClassType::BUILDER, NameUsage::RAW);
+				auto readerName = cppNodeTypeName(typeId, capnp::defaultValue<Brand>(), nodeId, capnp::defaultValue<Brand>(), ClassType::READER, NameUsage::RAW);
 				auto builderName = cppNodeTypeName(typeId, capnp::defaultValue<Brand>(), nodeId, capnp::defaultValue<Brand>(), ClassType::BUILDER, NameUsage::RAW);
 				
 				if(field.getDiscriminantValue() != 0xffff) {
@@ -1267,6 +1284,8 @@ void generateRequested() {
 		
 		StringTree result = strTree(
 			"#pragma once \n",
+			"\n",
+			"#include <limits>\n",
 			"\n",
 			"#include <cupnp/cupnp.h>\n",
 			"#include \"", inputFilename, ".h\"\n",

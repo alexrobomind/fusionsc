@@ -172,7 +172,11 @@ async def trace(
 	recordEvery = 0,
 	
 	# Return format
-	resultFormat = 'dict'
+	resultFormat = 'dict',
+	
+	# Adaptive step size control
+	targetError = None, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2,
+	errorEstimationDistance = None
 ):
 	"""
 	Performs a tracing request.
@@ -207,6 +211,15 @@ async def trace(
 		- direction: Indicates the tracing direction. One of "forward" (field direction), "backward" (against field), "cw" (clockwise), or "ccw" (counter-clockwise)
 		
 		- recordEvery: When set to > 0, instructs the tracer to record the fieldline every "recordEvery"-th step.
+		
+		- targetError: Step size to adjust steps towards.
+		- relativeErrorTolerance: If the error estimator indicates that the error is more than targetError * (1 + relativeErrorTolerance), the step will be repeated
+		  with adjusted step size. Otherwise, the adjusted step size will be used for the next step.
+		- minStepSize: Minimum step size for adaptive controller
+		- maxStepSize: Maximum step size for adaptive controller
+		
+		- errorEstimationDistance: If specified, the adaptive step size is not determined as the error per step, but the estimated total error along
+		  the specified distance (which is perStepError * errorEstimationDistance / stepSize)
 	
 	Returns:
 		The format of the result depends on the `resultFormat` parameter.
@@ -320,6 +333,16 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	
 	if mapping is not None:
 		request.mapping = mapping.ref
+	
+	if targetError is not None:
+		adaptive = request.stepSizeControl.initAdaptive()
+		adaptive.targetError = targetError
+		adaptive.relativeTolerance = relativeErrorTolerance
+		adaptive.min = minStepSize
+		adaptive.max = maxStepSize
+		
+		if errorEstimationDistance is not None:
+			adaptive.errorUnit.integratedOver = errorEstimationDistance
 	
 	# Perform the tracing
 	response = await _tracer().trace(request)
