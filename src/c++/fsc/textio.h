@@ -64,7 +64,7 @@ namespace fsc { namespace textio {
 	
 	struct Dialect {
 		enum Language {
-			JSON, CBOR, BSON, YAML
+			JSON, CBOR, BSON, YAML, MSGPACK, UBJSON
 		};
 		
 		Language language = JSON;

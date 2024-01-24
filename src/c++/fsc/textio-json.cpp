@@ -9,6 +9,12 @@
 #include <jsoncons_ext/bson/bson_encoder.hpp>
 #include <jsoncons_ext/bson/bson_cursor.hpp>
 
+#include <jsoncons_ext/msgpack/msgpack_encoder.hpp>
+#include <jsoncons_ext/msgpack/msgpack_cursor.hpp>
+
+#include <jsoncons_ext/ubjson/ubjson_encoder.hpp>
+#include <jsoncons_ext/ubjson/ubjson_cursor.hpp>
+
 #include <kj/function.h>
 
 using capnp::DynamicList;
@@ -192,6 +198,13 @@ namespace {
 	
 	using Encoder = jsoncons::basic_json_visitor<char>;
 	
+	template<typename CursorType, typename SourceType, typename... Options>
+	Own<Cursor> createCursor(kj::BufferedInputStream& stream, Options&&... options) {
+		auto src = kj::heap<SourceType>(stream);
+		auto cur = kj::heap<CursorType>(*src, fwd<Options>(options)...);
+		return cur.attach(mv(src));
+	}
+	
 	Own<Cursor> makeCursor(kj::BufferedInputStream& stream, const Dialect& options) {
 		switch(options.language) {
 			case Dialect::JSON: {
@@ -211,10 +224,7 @@ namespace {
 				if(options.jsonNegInf != nullptr)
 					opts.neginf_to_str(options.jsonNegInf);
 				
-				auto src = kj::heap<JsonSource>(stream);
-				auto cur = kj::heap<JsonCursor>(*src, opts);
-				
-				return cur.attach(mv(src));
+				return createCursor<JsonCursor, JsonSource>(stream, opts);
 			}
 			case Dialect::CBOR: {
 				using CborCursor = jsoncons::cbor::basic_cbor_cursor<CborSource>;
@@ -222,18 +232,19 @@ namespace {
 				jsoncons::cbor::cbor_options opts;
 				opts.pack_strings(true);
 				
-				auto src = kj::heap<CborSource>(stream);
-				auto cur = kj::heap<CborCursor>(*src, opts);
-				
-				return cur.attach(mv(src));
+				return createCursor<CborCursor, CborSource>(stream, opts);
 			}
 			case Dialect::BSON: {
 				using BsonCursor = jsoncons::bson::basic_bson_cursor<CborSource>;
-				
-				auto src = kj::heap<CborSource>(stream);
-				auto cur = kj::heap<BsonCursor>(*src);
-				
-				return cur.attach(mv(src));
+				return createCursor<BsonCursor, CborSource>(stream);
+			}
+			case Dialect::MSGPACK: {
+				using MPCursor = jsoncons::msgpack::basic_msgpack_cursor<CborSource>;
+				return createCursor<MPCursor, CborSource>(stream);
+			}
+			case Dialect::UBJSON: {
+				using UBJCursor = jsoncons::ubjson::basic_ubjson_cursor<CborSource>;
+				return createCursor<UBJCursor, CborSource>(stream);
 			}
 			default:
 				KJ_FAIL_REQUIRE("Invalid language");
@@ -282,6 +293,14 @@ namespace {
 				auto encoder = kj::heap<BsonEncoder>(CborSink(stream));
 				
 				return encoder;
+			}
+			case Dialect::MSGPACK: {
+				using MPEncoder = jsoncons::msgpack::basic_msgpack_encoder<CborSink>;
+				return kj::heap<MPEncoder>(CborSink(stream));
+			}
+			case Dialect::UBJSON: {
+				using UBJEncoder = jsoncons::ubjson::basic_ubjson_encoder<CborSink>;
+				return kj::heap<UBJEncoder>(CborSink(stream));
 			}
 			default:
 				KJ_FAIL_REQUIRE("Invalid language");

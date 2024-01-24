@@ -500,6 +500,8 @@ void initFormats(py::module_& m) {
 		.value("JSON", formats::Language::JSON)
 		.value("CBOR", formats::Language::CBOR)
 		.value("BSON", formats::Language::BSON)
+		.value("MSGPACK", formats::Language::MSGPACK)
+		.value("UBJSON", formats::Language::UBJSON)
 	;
 }
 
