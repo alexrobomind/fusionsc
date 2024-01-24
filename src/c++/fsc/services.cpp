@@ -191,7 +191,7 @@ struct RootServer : public RootService::Server {
 		auto flt = thisCap().newTracerRequest().sendForPipeline().getService();
 		auto idx = thisCap().newKDTreeServiceRequest().sendForPipeline().getService();
 		
-		ctx.initResults().setService(fsc::newMapper(mv(flt), mv(idx)));
+		ctx.initResults().setService(fsc::newMapper(mv(flt), mv(idx), *device));
 		return READY_NOW;
 	}
 	

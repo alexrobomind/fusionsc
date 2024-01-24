@@ -218,8 +218,8 @@ async def trace(
 		- minStepSize: Minimum step size for adaptive controller
 		- maxStepSize: Maximum step size for adaptive controller
 		
-		- errorEstimationDistance: If specified, the adaptive step size is not determined as the error per step, but the estimated total error along
-		  the specified distance (which is perStepError * errorEstimationDistance / stepSize)
+		- errorEstimationDistance: Maximum trace length to be assumed for the purpose of error estimation. If this is not set, the service will try to estimate it
+		  from the limits. Can be set to "step" to indicate per-step error targets.
 	
 	Returns:
 		The format of the result depends on the `resultFormat` parameter.
@@ -334,14 +334,31 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	if mapping is not None:
 		request.mapping = mapping.ref
 	
-	if targetError is not None:
+	if targetError is not None:		
+		# Try to estimate error estimation distance
+		if errorEstimationDistance is None and distanceLimit > 0:
+			errorEstimationDistance = distanceLimit
+		
+		if errorEstimationDistance is None and turnLimit > 0:
+			# Add a leniency factor of 2 for the turn-based distance estimation
+			errorEstimationDistance = 2 * 2 * np.pi * computedField.grid.rMax
+		
+		if errorEstimationDistance is None and stepLimit > 0:
+			errorEstimationDistance = "step"
+			targetError /= stepLimit
+		
+		assert errorEstimationDistance is not None, "Adaptive error was specified" \
+			" but no effective distance limit could be inferred. Please specify" \
+			" the errorEstimationDistance parameter. If you want to target per-" \
+			"step errors, please set errorEstimationDistance to 'step'"
+					
 		adaptive = request.stepSizeControl.initAdaptive()
 		adaptive.targetError = targetError
 		adaptive.relativeTolerance = relativeErrorTolerance
 		adaptive.min = minStepSize
 		adaptive.max = maxStepSize
 		
-		if errorEstimationDistance is not None:
+		if errorEstimationDistance != "step":
 			adaptive.errorUnit.integratedOver = errorEstimationDistance
 	
 	# Perform the tracing
@@ -369,6 +386,7 @@ def decodeTraceResponse(response, resultFormat = 'dict'):
 		"fieldLines" : np.asarray(response.fieldLines),
 		"fieldStrengths" : np.asarray(response.fieldStrengths),
 		"endTags" : endTags,
+		"numSteps" : np.asarray(response.numSteps),
 		"responseSize" : response.totalBytes_()
 	}
 	return result

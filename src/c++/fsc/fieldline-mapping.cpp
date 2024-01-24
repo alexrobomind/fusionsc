@@ -5,6 +5,12 @@
 
 #include "flt-kernels.h" // for kmath::wrap
 
+#include "kernels/tensor.h"
+#include "kernels/karg.h"
+#include "kernels/launch.h"
+
+#include "fieldline-mapping-kernels.h"
+
 #include <fsc/flt.capnp.h>
 #include <fsc/services.capnp.h>
 #include <fsc/index.capnp.h>
@@ -27,7 +33,9 @@ namespace {
 		RFLMRequest::Reader input;
 		ReversibleFieldlineMapping::Section::Builder output;
 		
-		RFLMSectionTrace(FLT::Client nFlt, RFLMRequest::Reader input, ReversibleFieldlineMapping::Section::Builder output) : flt(mv(nFlt)), input(mv(input)), output(mv(output)) {
+		Own<DeviceBase> device;
+		
+		RFLMSectionTrace(FLT::Client nFlt, RFLMRequest::Reader input, ReversibleFieldlineMapping::Section::Builder output, DeviceBase& dev) : flt(mv(nFlt)), input(mv(input)), output(mv(output)), device(dev.addRef()) {
 		}
 		
 		static double halfPhi(double phi1, double phi2) {
@@ -98,10 +106,16 @@ namespace {
 			return req.send().dropPipeline();
 		}
 		
-		void processTraces(Float64Tensor::Reader fwdTensorR, Float64Tensor::Reader bwdTensorR) {
+		Promise<void> processTraces(Float64Tensor::Reader fwdTensorR, Float64Tensor::Reader bwdTensorR) {
 			int64_t nPhiTot = numPlanesTot();
-			Tensor<double, 3> rOut(rVals.size(), zVals.size(), nPhiTot);
-			Tensor<double, 3> zOut(rVals.size(), zVals.size(), nPhiTot);
+			// Tensor<double, 3> rOut(rVals.size(), zVals.size(), nPhiTot);
+			// Tensor<double, 3> zOut(rVals.size(), zVals.size(), nPhiTot);
+			auto rOut = mapToDevice(Tensor<double, 3>(rVals.size(), zVals.size(), nPhiTot), *device, true);
+			auto zOut = mapToDevice(Tensor<double, 3>(rVals.size(), zVals.size(), nPhiTot), *device, true);
+			
+			auto rOutRef = rOut -> getHost();
+			auto zOutRef = zOut -> getHost();
+			
 			Tensor<double, 3> lenOut(rVals.size(), zVals.size(), nPhiTot);
 			
 			int64_t halfPoint = numTracingPlanes + numPaddingPlanes;
@@ -130,28 +144,83 @@ namespace {
 						double rFwd = sqrt(xFwd * xFwd + yFwd * yFwd);
 						double rBwd = sqrt(xBwd * xBwd + yBwd * yBwd);
 						
-						rOut(iR, iZ, halfPoint - iPhi - 1) = rBwd;
-						zOut(iR, iZ, halfPoint - iPhi - 1) = zBwd;
+						rOutRef(iR, iZ, halfPoint - iPhi - 1) = rBwd;
+						zOutRef(iR, iZ, halfPoint - iPhi - 1) = zBwd;
 						lenOut(iR, iZ, halfPoint - iPhi - 1) = -lBwd;
 						
-						rOut(iR, iZ, halfPoint + iPhi + 1) = rFwd;
-						zOut(iR, iZ, halfPoint + iPhi + 1) = zFwd;
+						rOutRef(iR, iZ, halfPoint + iPhi + 1) = rFwd;
+						zOutRef(iR, iZ, halfPoint + iPhi + 1) = zFwd;
 						lenOut(iR, iZ, halfPoint + iPhi + 1) = lFwd;
 					}
 				}
 			}
 			
+			rOut -> updateDevice();
+			zOut -> updateDevice();
+			
 			for(auto iR : kj::indices(rVals)) {
 				for(auto iZ : kj::indices(zVals)) {
-					rOut(iR, iZ, halfPoint) = rVals[iR];
-					zOut(iR, iZ, halfPoint) = zVals[iZ];
+					rOutRef(iR, iZ, halfPoint) = rVals[iR];
+					zOutRef(iR, iZ, halfPoint) = zVals[iZ];
 					lenOut(iR, iZ, halfPoint) = 0;
 				}
 			}
 			
-			writeTensor(rOut, output.getR());
-			writeTensor(zOut, output.getZ());
+			writeTensor(rOutRef, output.getR());
+			writeTensor(zOutRef, output.getZ());
 			writeTensor(lenOut, output.getTraceLen());
+			
+			// Now we want to compute the inverse mapping
+			
+			// Compute grid bounds
+			double rMax = -std::numeric_limits<double>::infinity();
+			double rMin = -rMax;
+			double zMax = rMax;
+			double zMin = rMin;
+			
+			for(double r : output.getR().getData()) {
+				if(r != r) continue;
+				
+				rMax = std::max(r, rMax);
+				rMin = std::min(r, rMin);
+			}
+			
+			for(double z : output.getZ().getData()) {
+				if(z != z) continue;
+				
+				zMax = std::max(zMax, z);
+				zMin = std::min(zMin, z);
+			}
+			
+			// Prepare inverse mapping tensor
+			
+			// Note: These values are chosen arbitrarily at the moment
+			const size_t nR = rVals.size();
+			const size_t nZ = zVals.size();
+			
+			auto uVals = mapToDevice(Tensor<double, 3>(nR, nZ, nPhiTot), *device, true);
+			auto vVals = mapToDevice(Tensor<double, 3>(nR, nZ, nPhiTot), *device, true);
+			
+			auto invOut = output.initInverse();
+			invOut.setRMin(rMin);
+			invOut.setRMax(rMax);
+			invOut.setZMin(zMin);
+			invOut.setZMax(zMax);
+			
+			Promise<void> kernelOp = FSC_LAUNCH_KERNEL(
+				invertRflmKernel, *device,
+				nR * nZ * nPhiTot,
+				
+				FSC_KARG(rOut, ALIAS_IN), FSC_KARG(zOut, ALIAS_IN),
+				FSC_KARG(uVals, ALIAS_OUT), FSC_KARG(vVals, ALIAS_OUT),
+				
+				rMin, rMax, zMin, zMax
+			);
+			
+			return kernelOp.then([this, uVals = mv(uVals), vVals = mv(vVals), invOut]() mutable {
+				writeTensor(uVals -> getHost(), invOut.initU());
+				writeTensor(vVals -> getHost(), invOut.initV());
+			});
 		}
 		
 		Promise<void> run() {
@@ -159,7 +228,7 @@ namespace {
 			.then([this](auto cwResponse) {
 				return traceDirection(true)
 				.then([this, cwResponse = mv(cwResponse)](auto ccwResponse) {
-					processTraces(ccwResponse.getPoincareHits(), cwResponse.getPoincareHits());
+					return processTraces(ccwResponse.getPoincareHits(), cwResponse.getPoincareHits());
 				});
 			});
 		}
@@ -170,7 +239,9 @@ struct MapperImpl : public Mapper::Server {
 	FLT::Client flt;
 	KDTreeService::Client indexer;
 	
-	MapperImpl(FLT::Client flt, KDTreeService::Client indexer) : flt(mv(flt)), indexer(mv(indexer)) {}
+	Own<DeviceBase> device;
+	
+	MapperImpl(FLT::Client flt, KDTreeService::Client indexer, DeviceBase& dev) : flt(mv(flt)), indexer(mv(indexer)), device(dev.addRef()) {}
 	
 	Promise<void> computeRFLM(ComputeRFLMContext ctx) {
 		auto params = ctx.getParams();
@@ -205,7 +276,7 @@ struct MapperImpl : public Mapper::Server {
 			
 			size_t i2 = (i1 + 1) % planes.size();
 			
-			auto trace = heapHeld<RFLMSectionTrace>(flt, params, section);
+			auto trace = heapHeld<RFLMSectionTrace>(flt, params, section, *device);
 			
 			trace -> phi1 = planes[i1];
 			trace -> phi2 = planes[i2];
@@ -231,8 +302,8 @@ struct MapperImpl : public Mapper::Server {
 	}
 };
 
-Mapper::Client newMapper(FLT::Client flt, KDTreeService::Client indexer) {
-	return kj::heap<MapperImpl>(mv(flt), mv(indexer));
+Mapper::Client newMapper(FLT::Client flt, KDTreeService::Client indexer, DeviceBase& device) {
+	return kj::heap<MapperImpl>(mv(flt), mv(indexer), device);
 }
 
 }

@@ -41,6 +41,19 @@ struct ReversibleFieldlineMapping {
 		
 		u0 @5 : Float64;
 		v0 @6 : Float64;
+		
+		struct Inverse {
+			rMin @0 : Float64;
+			rMax @1 : Float64;
+			zMin @2 : Float64;
+			zMax @3 : Float64;
+			
+			# Tensors of shape [nPhi, nZ, nR] containing U and V values on
+			# a slab grid with phi planes matching the section.
+			u @4 : Data.Float64Tensor;
+			v @5 : Data.Float64Tensor;
+		}
+		inverse @7 : Inverse;
 	}
 	
 	# List of phi angles (in radians) corresponding to mapping surfaces
@@ -162,6 +175,9 @@ struct FLTResponse {
 	
 	# Tensor of shape startPoints.shape[1:]
 	iotas @9 : Data.Float64Tensor;
+	
+	# Number of steps
+	numSteps @10 : Data.UInt64Tensor;
 	
 	rngSeed @6 : UInt64;
 }

@@ -20,7 +20,7 @@ def _checkLang(lang):
 	assert lang in _langs, f"Language must be one of {list(_langs)}"
 	return _langs[lang]
 
-def dumps(data, lang='json', compact=False, binary=False):
+def dumps(data, lang='json', compact=False, binary=None):
 	"""
 	Write the object into a bytes or str representation according to 'lang'.
 	
@@ -28,12 +28,16 @@ def dumps(data, lang='json', compact=False, binary=False):
 		- data: Target object to serialize
 		- lang: Name of the output language (must be json, yaml, cbor, msgpack, ubjson, or bson)
 		- compact: Whether to write outputs in a short-handed notation where possible.
-		- binary; Whether to return the result as bytes instead of str
+		- binary; Whether to return the result as bytes instead of str (default is False for string
+		  languages and True for binary languages)
 	
 	Returns:
 		A bytes or str object holding the stored data according to the requested format.
 	"""
 	asBytes = native.formats.dumpToBytes(data, _checkLang(lang), compact)
+	
+	if binary is None:
+		binary = (lang not in ["json", "yaml"])
 	
 	if binary:
 		return asBytes
@@ -56,11 +60,14 @@ def dump(data, file, lang='json', compact=False):
 	native.formats.dumpToFd(data, fd, _checkLang(lang), compact)
 
 @asyncFunction
-async def recursiveDumps(data, lang='json', compact=False, binary=False):
+async def recursiveDumps(data, lang='json', compact=False, binary=None):
 	"""
 	Like dumps(...), but also serializes nested DataRefs.
 	"""
 	asBytes = await native.formats.dumpAllToBytes(data, _checkLang(lang), compact)
+	
+	if binary is None:
+		binary = (lang not in ["json", "yaml"])
 	
 	if binary:
 		return asBytes

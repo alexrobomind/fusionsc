@@ -4,12 +4,13 @@
 
 #include "interpolation.h"
 #include "index.h"
+#include "kernels/device.h"
 
 #include <iostream>
 
 namespace fsc {
 	
-Mapper::Client newMapper(FLT::Client flt, KDTreeService::Client indexer);
+Mapper::Client newMapper(FLT::Client flt, KDTreeService::Client indexer, DeviceBase& device);
 
 struct RFLM {
 	//! Computes the real-space coordinates of the last-mapped position projected to the given phi plane
@@ -183,6 +184,9 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 		return;
 	}
 	
+	const double rRef = sqrt(x[0] * x[0] + x[1] * x[1]);
+	const double zRef = x[2];
+	
 	auto phiPlanes = mapping.getSurfaces();
 	
 	// KJ_DBG("Selecting section");
@@ -209,9 +213,58 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 	// KJ_DBG(iSection);
 	activateSection(iSection);
 	
+	double phiCoord = unwrap(phi - phi1 + 2 * SECTION_TOL) - 2 * SECTION_TOL;
 	
 	uv(0) = activeSection().getU0();
 	uv(1) = activeSection().getV0();
+	
+	// --- Check if we can use the initial interpolated inversion scheme ---
+	if(activeSection().nonDefaultInverse()) {
+		auto inverse = activeSection().getInverse();
+		auto uVals = inverse.getU();
+		auto vVals = inverse.getV();
+		
+		size_t nZInv = uVals.getShape()[1];
+		size_t nRInv = uVals.getShape()[2];
+		
+		auto uData = uVals.getData();
+		auto vData = vVals.getData();
+		
+		auto iLinear = [&, this](int iPhi, int iZ, int iR) {
+			iPhi += nPad;
+			
+			if(iPhi < 0) iPhi = 0;
+			if(iPhi >= nPhi) iPhi = nPhi - 1;
+			if(iZ < 0) iZ = 0;
+			if(iZ >= nZInv) iZ = nZInv - 1;
+			if(iR < 0) iR = 0;
+			if(iR >= nRInv) iR = nRInv - 1;
+			
+			return iPhi * nRInv * nZInv + iZ * nRInv + iR;
+		};
+		auto uInterp = [&, this](int iPhi, int iZ, int iR) {
+			return uData[iLinear(iPhi, iZ, iR)];
+		};
+		auto vInterp = [&, this](int iPhi, int iZ, int iR) {
+			return vData[iLinear(iPhi, iZ, iR)];
+		};
+		
+		using Strategy = LinearInterpolation<double>;
+		using Interpolator = NDInterpolator<3, Strategy>;
+		
+		Interpolator interpolator(
+			Strategy(),
+			{ Interpolator::Axis(0, phi2 - phi1, nPhi - 2 * nPad - 1), Interpolator::Axis(inverse.getZMin(), inverse.getZMax(), nZInv - 1), Interpolator::Axis(inverse.getRMin(), inverse.getRMax(), nRInv - 1) }
+		);
+		
+		Vec3d phizr(phiCoord, zRef, rRef);
+		uv(0) = interpolator(uInterp, phizr);
+		uv(1) = interpolator(vInterp, phizr);
+		
+		KJ_DBG(uv(0), uv(1));
+	} else {
+		KJ_DBG("Starting with default values");
+	}
 	
 	// --- Perform Newton-style inversion in active section ---
 	using ADS = Eigen::AutoDiffScalar<Vec2d>;
@@ -225,11 +278,6 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 		Strategy(),
 		{ Interpolator::Axis(0, phi2 - phi1, nPhi - 2 * nPad - 1), Interpolator::Axis(0, 1, nZ - 1), Interpolator::Axis(0, 1, nR - 1) }
 	);
-	
-	double rRef = sqrt(x[0] * x[0] + x[1] * x[1]);
-	double zRef = x[2];
-	
-	double phiCoord = unwrap(phi - phi1 + 2 * SECTION_TOL) - 2 * SECTION_TOL;
 	
 	for(size_t i = 0; i < 50; ++i) {
 		// Calculate values and derivatives for r and z
@@ -253,16 +301,19 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 		if(scale > 1)
 			scale = 1;
 		
-		
 		uv(0) += scale * du;
 		uv(1) += scale * dv;
 		
+		KJ_DBG(du, dv, dx(0), dx(1), rVal.value(), zVal.value());
+		
+		if(du != du || dv != dv)
+			break;
+		
 		if(dx.norm() < 1e-12)
 			break;
-		// KJ_DBG(du, dv, dx(0), dx(1), rVal.value(), zVal.value());
 	}
 	
-	// KJ_DBG("Map completed", rRef, zRef, uv(0), uv(1), phi);
+	KJ_DBG("Map completed", rRef, zRef, uv(0), uv(1), phi);
 }
 
 EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi) {

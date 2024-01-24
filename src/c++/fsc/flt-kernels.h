@@ -380,6 +380,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		
 		// KJ_DBG(displacementStep);
 		double stepSize = state.getStepSize();
+		double nextStepSize = stepSize;
 		
 		if(displacementStep) {
 			double prevFreePath = parModel.getMeanFreePath() + displacementCount * parModel.getMeanFreePathGrowth();
@@ -474,21 +475,23 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 					double errorEstimate = kmath::runge_kutta_fehlberg_step(x2, .0, stepSize, rungeKuttaInput);
 					
 					// Try to adapt step size (assuming 4th order convergence)
-					double prevStepSize = stepSize;
+					// double prevStepSize = stepSize;
+					nextStepSize = stepSize;
 					
 					if(adaptiveInfo.getErrorUnit().hasStep()) {
-						stepSize *= std::pow(adaptiveInfo.getTargetError() / errorEstimate, 0.2);
+						nextStepSize *= std::pow(adaptiveInfo.getTargetError() / errorEstimate, 0.2);
 					} else {
 						errorEstimate *= adaptiveInfo.getErrorUnit().getIntegratedOver() / stepSize;
-						stepSize *= std::pow(adaptiveInfo.getTargetError() / errorEstimate, 0.25);
+						nextStepSize *= std::pow(adaptiveInfo.getTargetError() / errorEstimate, 0.25);
 					}
 					
 					// KJ_DBG(prevStepSize, errorEstimate, stepSize);
 					
 					// Check whether we need to re-run the step
-					if(errorEstimate > adaptiveInfo.getTargetError() * (1 + adaptiveInfo.getRelativeTolerance()) && prevStepSize > minVal) {
+					if(errorEstimate > adaptiveInfo.getTargetError() * (1 + adaptiveInfo.getRelativeTolerance()) && stepSize > minVal) {
 						// Reset step
 						x2 = x;
+						stepSize = nextStepSize;
 						continue;
 					} else {
 						break;
@@ -712,7 +715,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			// KJ_DBG("Displacement step done", idx);
 		}
 		
-		state.setStepSize(stepSize);
+		state.setStepSize(nextStepSize);
 		
 		++step;
 	}

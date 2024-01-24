@@ -499,6 +499,8 @@ struct FLTImpl : public FLT::Server {
 						shape.set(i, startPointShape[i+1]);
 				}
 				
+				results.initNumSteps().setShape(results.getStopReasons().getShape());
+				
 				KJ_IF_MAYBE(pGeometryData, geometryData) {
 					auto geometry = pGeometryData -> get();
 					
@@ -527,6 +529,7 @@ struct FLTImpl : public FLT::Server {
 				
 				auto stopReasonData = results.getStopReasons().initData(nStartPoints);
 				auto endTagData = results.getEndTags().getData();
+				auto stepCountData = results.getNumSteps().initData(nStartPoints);
 				
 				size_t nRecorded = 0;
 				
@@ -635,6 +638,8 @@ struct FLTImpl : public FLT::Server {
 							KJ_FAIL_REQUIRE("Internal error: Stop reason was COLLISION_LIMIT but no collision recorded in event buffer", iStartPoint);
 						}
 					}
+					
+					stepCountData.set(iStartPoint, state.getNumSteps());
 				}
 				writeTensor(pcCuts, results.getPoincareHits());
 				writeTensor(endPoints, results.getEndPoints());
