@@ -128,6 +128,31 @@ struct NDInterpEvaluator {
 		
 		return result;
 	}
+	
+	template<typename F, typename... Indices>
+	static EIGEN_DEVICE_FUNC Scalar evaluateCheckNan(Strategy& strategy, const F& f, const Vec<int, nDims>& base, const std::array<typename Strategy::Coeffs, nDims>& coeffs, Indices... indices) {
+		static_assert(sizeof...(indices) == iDim);
+		
+		Scalar result = 0;
+		
+		// auto coefficients = strategy.coefficients(lx[iDim]);
+		auto& coefficients = coeffs[iDim];
+		auto offsets      = strategy.offsets();
+		
+		Scalar totalWeight = 0;
+					
+		for(int idx = 0; idx < strategy.nPoints(); ++idx) {
+			Scalar subEval = NDInterpEvaluator<nDims, Strategy, iDim + 1>::evaluateCheckNan(strategy, f, base, /*lx,*/coeffs, indices..., base[iDim] + offsets[idx]);
+			
+			if(subEval == subEval) {
+				Scalar weight = coefficients[idx];
+				result += weight * subEval;
+				totalWeight += weight;
+			}
+		}
+		
+		return result / totalWeight;
+	}
 };
 
 template<int nDims, typename Strategy>
@@ -136,6 +161,13 @@ struct NDInterpEvaluator<nDims, Strategy, nDims> {
 	
 	template<typename F, typename... Indices>
 	static EIGEN_DEVICE_FUNC Scalar evaluate(Strategy& strategy, const F& f, const Vec<int, nDims>& base, /*const Vec<Scalar, nDims>& lx*/const std::array<typename Strategy::Coeffs, nDims>& coeffs, Indices... indices) {
+		static_assert(sizeof...(indices) == nDims);
+		
+		return f(indices...);
+	}
+	
+	template<typename F, typename... Indices>
+	static EIGEN_DEVICE_FUNC Scalar evaluateCheckNan(Strategy& strategy, const F& f, const Vec<int, nDims>& base, /*const Vec<Scalar, nDims>& lx*/const std::array<typename Strategy::Coeffs, nDims>& coeffs, Indices... indices) {
 		static_assert(sizeof...(indices) == nDims);
 		
 		return f(indices...);
@@ -210,7 +242,11 @@ struct NDInterpolator {
 		std::array<typename Strategy::Coeffs, nDims> coeffs =
 			calculateCoeffsND(strategy, lx, std::make_index_sequence<nDims>());
 		
-		return NDInterpEvaluator<nDims, Strategy, 0>::evaluate(strategy, f, base, coeffs);
+		Scalar result = NDInterpEvaluator<nDims, Strategy, 0>::evaluate(strategy, f, base, coeffs);
+		if(result == result)
+			return result;
+		
+		return NDInterpEvaluator<nDims, Strategy, 0>::evaluateCheckNan(strategy, f, base, coeffs);
 	}
 };
 

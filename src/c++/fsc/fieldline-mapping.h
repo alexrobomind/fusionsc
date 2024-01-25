@@ -249,7 +249,7 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 			return vData[iLinear(iPhi, iZ, iR)];
 		};
 		
-		using Strategy = LinearInterpolation<double>;
+		using Strategy = C1CubicInterpolation<double>;
 		using Interpolator = NDInterpolator<3, Strategy>;
 		
 		Interpolator interpolator(
