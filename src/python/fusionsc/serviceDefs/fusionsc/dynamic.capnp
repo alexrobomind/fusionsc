@@ -67,7 +67,7 @@ struct DynamicObject {
 		mapping  @4 : List(MappingEntry);
 		
 		ref : group {
-			target @5 : DataRef(AnyPointer);
+			target @5 : DataRef;
 			wrapped @6 : Bool;
 		}
 		

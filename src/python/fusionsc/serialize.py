@@ -223,11 +223,11 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 			builder.bigData = data.publish(obj)
 	
 	elif isinstance(obj, wrappers.RefWrapper):
-		builder.initRef().target = obj.ref
+		builder.initRef().target = service.DataRef.castAs(obj.ref)
 		builder.ref.wrapped = True
 	
 	elif isinstance(obj, service.DataRef):
-		builder.initRef().target = obj
+		builder.initRef().target = service.DataRef.castAs(obj)
 	
 	elif isinstance(obj, capnp.Struct):
 		ds = builder.initDynamicStruct()
@@ -338,7 +338,7 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 			_dump(v, out[i].value, memoSet)
 	
 	elif hasattr(obj, "_fusionsc_wraps"):
-		_dump(obj._fusionsc_wraps, out, memoSet)
+		_dump(obj._fusionsc_wraps, builder, memoSet)
 	
 	else:
 		assert pickleEnabled(), """
@@ -407,6 +407,7 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 		}
 	
 	if which == "ref":
+		print(str(reader))
 		if reader.ref.wrapped:
 			return wrappers.RefWrapper(reader.ref.target)
 		else:
