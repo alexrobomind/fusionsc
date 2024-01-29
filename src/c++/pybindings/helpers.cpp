@@ -34,6 +34,7 @@ void initHelpers(py::module_& m) {
 	
 	offlineModule.def("fieldResolver", &newOfflineFieldResolver);
 	offlineModule.def("geometryResolver", &newOfflineGeometryResolver);
+	offlineModule.def("updateOfflineData", &updateOfflineData);
 }
 
 }

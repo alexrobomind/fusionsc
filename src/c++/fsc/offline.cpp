@@ -144,6 +144,49 @@ struct OfflineGeometryResolver : public GeometryResolverBase {
 	}
 };
 
+template<typename T>
+capnp::Orphan<capnp::List<OfflineData::Mapping<T>>> updateOfflineMapping(typename capnp::List<OfflineData::Mapping<T>>::Reader mapping, typename capnp::List<OfflineData::Mapping<T>>::Reader updates, capnp::Orphanage orphanage) {
+	kj::TreeMap<ID, size_t> indices;
+	
+	for(auto i : kj::indices(mapping)) {
+		auto entry = mapping[i];
+		indices.insert(ID::fromReader(entry.getKey()), i);
+	}
+	
+	kj::TreeMap<ID, typename OfflineData::Mapping<T>::Reader> toAdd;
+	kj::TreeSet<size_t> toRemove;
+	for(auto u : updates) {
+		ID id = ID::fromReader(u.getKey());
+		KJ_IF_MAYBE(pIdx, indices.find(id)) {
+			toRemove.insert(*pIdx);
+		}
+		
+		if(u.hasVal())
+			toAdd.upsert(id, u);
+		else
+			toAdd.erase(id);
+	}
+	
+	const size_t newSize = mapping.size() + toAdd.size() - toRemove.size();
+	
+	auto orphan = orphanage.newOrphan<capnp::List<OfflineData::Mapping<T>>>(newSize);
+	auto newList = orphan.get();
+	
+	size_t offset = 0;
+	for(auto i : kj::indices(mapping)) {
+		if(toRemove.find(i) != nullptr)
+			continue;
+		
+		newList.setWithCaveats(offset++, mapping[i]);
+	}
+	
+	for(auto u : toAdd) {
+		newList.setWithCaveats(offset++, u.value);
+	}
+	
+	return orphan;
+}
+
 }
 
 FieldResolver::Client newOfflineFieldResolver(DataRef<OfflineData>::Client in) {
@@ -158,6 +201,13 @@ GeometryResolver::Client newOfflineGeometryResolver(DataRef<OfflineData>::Client
 	.then([](auto in) mutable -> GeometryResolver::Client {
 		return kj::heap<OfflineGeometryResolver>(mv(in));
 	});
+}
+
+void updateOfflineData(OfflineData::Builder dst, OfflineData::Reader updates) {
+	auto o = capnp::Orphanage::getForMessageContaining(dst);
+	dst.adoptCoils(updateOfflineMapping<Filament>(dst.getCoils(), updates.getCoils(), o));
+	dst.adoptFields(updateOfflineMapping<MagneticField>(dst.getFields(), updates.getFields(), o));
+	dst.adoptGeometries(updateOfflineMapping<Geometry>(dst.getGeometries(), updates.getGeometries(), o));
 }
 
 }

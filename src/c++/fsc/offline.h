@@ -9,4 +9,6 @@ namespace fsc {
 FieldResolver::Client newOfflineFieldResolver(DataRef<OfflineData>::Client data);
 GeometryResolver::Client newOfflineGeometryResolver(DataRef<OfflineData>::Client data);
 
+void updateOfflineData(OfflineData::Builder, OfflineData::Reader);
+
 }

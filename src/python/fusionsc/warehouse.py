@@ -45,7 +45,12 @@ async def open(url: str):
 	Supported url schemes are:
 		'sqlite': SQLite database on current file system
 		'ws' or 'http': Remote warehouse server that can be connected to via network.
+		'remote': Looks up a named warehouse exposed by the active backend (remote:myrepo)
 	"""
+	if url.startswith('remote:'):
+		name = url[7:].split('?')[0]
+		return await openRemote.asnc(name)
+	
 	response = await backends.localResources().openWarehouse(url)
 	return Folder(response.root)
 

@@ -1,6 +1,6 @@
 """Resolution helpers to obtain computable fields and geometries from high-level descriptions"""
 
-from . import native, data
+from . import native, data, service, wrappers, warehouse
 from .asnc import asyncFunction, startEventLoop
 
 from .native.devices import w7x as cppw7x
@@ -19,6 +19,94 @@ geometryResolvers = [
 	cppw7x.geometryResolver(),
 	cppjtext.geometryResolver()
 ]
+
+@asyncFunction
+async def connectWarehouse(db):
+	"""
+	Connects to a warehouse to use for resolution
+	"""
+	# Optionally open database
+	if isinstance(db, str):
+		db = await warehouse.open.asnc(db)
+		
+	# Open root entry
+	rootEntry = await db.get.asnc("resolveIndex")
+	ref = rootEntry.ref
+	
+	# Install offline resolvers
+	fieldResolvers.append(native.offline.fieldResolver(ref))
+	geometryResolvers.append(native.offline.geometryResolver(ref))
+
+def createOfflineData(data: dict):
+	"""
+	Creates an offline data structure from a key-value mapping of geometries,
+	fields, and coils.
+	"""
+	geoUpdates = []
+	fieldUpdates = []
+	coilUpdates = []
+	
+	for key, value in updates.items():
+		if isinstance(key, wrappers.StructWrapper):
+			key = key.data
+		
+		if isinstance(value, wrappers.StructWrapper):
+			value = value.data
+		
+		mapEntry = {"key" : key, "val" : value}
+		
+		if isinstance(key, service.MagneticField):
+			assert isinstance(value, service.MagneticField), "Mismatch in key/value types"
+			fieldUpdates.append(mapEntry)
+		elif isinstance(key, service.Filament):
+			assert isinstance(value, service.Filament), "Mismatch in key/value types"
+			coilUpdates.append(mapEntry)
+		elif isinstance(key, service.Geometry):
+			assert isinstance(value, service.Geometry), "Mismatch in key/value types"
+			geoUpdates.append(mapEntry)
+		else:
+			assert False, "Can only use fields, filaments, or geometries in mappings"
+	
+	return service.OfflineData.newMessage({
+		"coils" : coilUpdates,
+		"fields" : fieldUpdates,
+		"geometries" : geoUpdates
+	})	
+
+def updateOfflineData(offlineData, updates):
+	"""
+	Updates an offline data structure with the data contained in another.
+	"""
+	assert isinstance(updates, (dict, service.OfflineData)), "Updates must be dict or fsc.service.OfflineData"
+	
+	if isinstance(updates, dict):
+		updates = createOfflineData(updates)
+	
+	native.offline.updateOfflineData(offlineData, updates)
+
+@asyncFunction
+async def updateWarehouse(db, updates):
+	"""
+	Updates the contents of a warehouse to be used for data resolution
+	"""
+	# Optionally open database
+	if isinstance(db, str):
+		db = await warehouse.open.asnc(db)
+	
+	# Open root entry
+	rootEntry = await db.get.asnc("resolveIndex")
+	ref = rootEntry.ref
+	
+	# Download root entry
+	root = await fsc.data.download.asnc(ref)
+	root = root.clone_()
+	
+	# Update structure
+	updateOfflineData(root, updates)
+	
+	# Store updated data (only uploads index and missing data)
+	await db.put.asnc("resolveIndex", root)
+	
 
 def importOfflineData(filename: str):
 	"""
