@@ -215,7 +215,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		return result
 	
 	@staticmethod
-	def from2D(r, z, nPhi = 100, phi1 = None, phi2 = None, close = True):
+	def from2D(r, z, nPhi = 100, phi1 = None, phi2 = None, close = True, tags = {}):
 		"""Creates a geometry out of a 2D RZ array by wrapping it toroidally"""
 		result = Geometry()
 		
