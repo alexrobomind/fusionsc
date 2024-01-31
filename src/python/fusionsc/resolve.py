@@ -47,10 +47,10 @@ def createOfflineData(data: dict):
 	coilUpdates = []
 	
 	for key, value in data.items():
-		if isinstance(key, wrappers.StructWrapper):
+		if isinstance(key, wrappers.StructWrapperBase):
 			key = key.data
 		
-		if isinstance(value, wrappers.StructWrapper):
+		if isinstance(value, wrappers.StructWrapperBase):
 			value = value.data
 		
 		mapEntry = {"key" : key, "val" : value}
