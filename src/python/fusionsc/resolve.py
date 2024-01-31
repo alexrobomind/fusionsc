@@ -46,7 +46,7 @@ def createOfflineData(data: dict):
 	fieldUpdates = []
 	coilUpdates = []
 	
-	for key, value in updates.items():
+	for key, value in data.items():
 		if isinstance(key, wrappers.StructWrapper):
 			key = key.data
 		
