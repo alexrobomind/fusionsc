@@ -55,13 +55,13 @@ def createOfflineData(data: dict):
 		
 		mapEntry = {"key" : key, "val" : value}
 		
-		if isinstance(key, service.MagneticField):
+		if isinstance(key, [service.MagneticField.Builder, service.MagneticField.Reader]):
 			assert isinstance(value, service.MagneticField), "Mismatch in key/value types"
 			fieldUpdates.append(mapEntry)
-		elif isinstance(key, service.Filament):
+		elif isinstance(key, [service.Filament.Builder, service.Filament.Reader]):
 			assert isinstance(value, service.Filament), "Mismatch in key/value types"
 			coilUpdates.append(mapEntry)
-		elif isinstance(key, service.Geometry):
+		elif isinstance(key, [service.Geometry.Builder, service.Geometry.Reader]):
 			assert isinstance(value, service.Geometry), "Mismatch in key/value types"
 			geoUpdates.append(mapEntry)
 		else:
