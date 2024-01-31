@@ -94,12 +94,15 @@ async def updateWarehouse(db, updates):
 		db = await warehouse.open.asnc(db)
 	
 	# Open root entry
-	rootEntry = await db.get.asnc("resolveIndex")
-	ref = rootEntry.ref
+	if "resolveIndex" in await db.ls.asnc():
+		rootEntry = await db.get.asnc("resolveIndex")
+		ref = rootEntry.ref
 	
-	# Download root entry
-	root = await fsc.data.download.asnc(ref)
-	root = root.clone_()
+		# Download root entry
+		root = await fsc.data.download.asnc(ref)
+		root = root.clone_()
+	else:
+		root = service.OfflineData.newMessage()
 	
 	# Update structure
 	updateOfflineData(root, updates)
