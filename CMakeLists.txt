@@ -345,6 +345,18 @@ if(FSC_WITH_PYTHON)
 	)
 endif()
 
+option(FSC_SANITIZE_ADDRESS "Whether to enable address sanitizer")
+
+if(FSC_SANITIZE_ADDRESS)
+	target_compile_options(deps INTERFACE "-fsanitize=address")
+	target_link_options(deps INTERFACE "-fsanitize=address")
+	
+	if(CapnProto_VENDORED)
+		target_compile_options(kj PUBLIC "-fsanitize=address")
+		target_link_options(kj PUBLIC "-fsanitize=address")
+	endif()
+endif()
+
 # Set up the scikit build
 if(SKBUILD)
 	add_custom_target(fsc-skbuild-target)

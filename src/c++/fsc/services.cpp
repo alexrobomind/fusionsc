@@ -368,7 +368,7 @@ struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::Bootstra
 	{
 		auto locked = ready.lockExclusive();
 		locked.wait([](bool ready) { return ready; });
-		thread.detach();
+		// thread.detach();
 	}
 	
 	~InProcessServerImpl() {

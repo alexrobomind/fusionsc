@@ -85,9 +85,7 @@ py::object convertToAsyncioFuture(Promise<py::object> promise);
 py::object convertCallPromise(Promise<py::object> promise, DynamicStructPipeline pipeline);
 py::type futureType();
 
-struct PythonContext {
-	static Library library();
-	
+struct PythonContext {	
 	static void start();
 	static void stop();
 	static bool active();
@@ -104,9 +102,17 @@ private:
 		PythonWaitScope rootScope;
 	};
 	
+	struct Shared {
+		unsigned int refCount = 0;
+		Maybe<Library> library = nullptr;
+	};
+	
+	static Library incSharedRef();
+	static void decSharedRef();
+	
 	static Instance& getInstance();
 	
-	static inline kj::MutexGuarded<Library> _library = kj::MutexGuarded<Library>();
+	static inline kj::MutexGuarded<Shared> shared = kj::MutexGuarded<Shared>();
 	static thread_local inline Maybe<Instance> instance = nullptr;
 	
 	static inline py::object atExitCallback;

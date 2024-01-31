@@ -214,7 +214,6 @@ void AsyncioEventPort::waitForEvents() {
 }
 
 void AsyncioEventPort::setRunnable(bool newVal) {	
-	//KJ_DBG("EvtPort::setRunnable", newVal);
 	runnable = newVal;
 	
 	if(newVal) {
@@ -261,12 +260,13 @@ void AsyncioEventPort::adjustEventLoop(py::object newLoop) {
 
 PythonContext::Instance::Instance() :
 	eventPort(),
-	thread(library() -> newThread(eventPort)),
+	thread(incSharedRef() -> newThread(eventPort)),
 	rootScope(thread -> waitScope())
 {
 }
 
 PythonContext::Instance::~Instance() {
+	decSharedRef();
 	if(!Py_IsInitialized()) {
 		KJ_LOG(FATAL, "Calling thread-local cleanup after python interpreter has shutdown");
 	}
@@ -315,10 +315,25 @@ PythonContext::Instance& PythonContext::getInstance() {
 	return instance.emplace();
 }
 	
-Library PythonContext::library() {
-	StartupParameters ctx;
-	static kj::MutexGuarded<Library> lib = kj::MutexGuarded<Library>(newLibrary(ctx));
-	return (**lib.lockExclusive()).addRef();
+Library PythonContext::incSharedRef() {
+	auto myShared = shared.lockExclusive();
+	++myShared -> refCount;
+	
+	KJ_IF_MAYBE(pLib, myShared -> library) {
+		return (**pLib).addRef();
+	} else {
+		auto lib = newLibrary();
+		myShared -> library = lib -> addRef();
+		return lib;
+	}
+}
+
+void PythonContext::decSharedRef() {
+	auto myShared = shared.lockExclusive();
+	
+	if(--myShared -> refCount == 0) {
+		myShared -> library = nullptr;
+	}
 }
 
 void PythonContext::start() {
