@@ -55,14 +55,14 @@ def createOfflineData(data: dict):
 		
 		mapEntry = {"key" : key, "val" : value}
 		
-		if isinstance(key, [service.MagneticField.Builder, service.MagneticField.Reader]):
-			assert isinstance(value, service.MagneticField), "Mismatch in key/value types"
+		if isinstance(key, (service.MagneticField.Builder, service.MagneticField.Reader)):
+			assert isinstance(value, (service.MagneticField.Builder, service.MagneticField.Reader)), "Mismatch in key/value types"
 			fieldUpdates.append(mapEntry)
-		elif isinstance(key, [service.Filament.Builder, service.Filament.Reader]):
-			assert isinstance(value, service.Filament), "Mismatch in key/value types"
+		elif isinstance(key, (service.Filament.Builder, service.Filament.Reader)):
+			assert isinstance(value, (service.Filament.Builder, service.Filament.Reader)), "Mismatch in key/value types"
 			coilUpdates.append(mapEntry)
-		elif isinstance(key, [service.Geometry.Builder, service.Geometry.Reader]):
-			assert isinstance(value, service.Geometry), "Mismatch in key/value types"
+		elif isinstance(key, (service.Geometry.Builder, service.Geometry.Reader)):
+			assert isinstance(value, (service.Geometry.Builder, service.Geometry.Reader)), "Mismatch in key/value types"
 			geoUpdates.append(mapEntry)
 		else:
 			assert False, "Can only use fields, filaments, or geometries in mappings"
