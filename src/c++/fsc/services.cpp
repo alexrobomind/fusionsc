@@ -64,7 +64,11 @@ Own<DeviceBase> selectDevice(LocalConfig::Reader config) {
 }
 
 Promise<Warehouse::Folder::Client> connectWarehouse(kj::StringPtr urlString, NetworkInterface::Client networkInterface) {
-	auto url = kj::Url::parse(urlString);
+	kj::UrlOptions opts;
+	opts.allowEmpty = false;
+	
+	auto baseUrl = kj::Url::parse("sqlite://.");
+	auto url = baseUrl.parseRelative(urlString);
 	
 	KJ_REQUIRE(
 		url.scheme == "sqlite" || url.scheme == "http" || url.scheme == "ws",
@@ -87,7 +91,10 @@ Promise<Warehouse::Folder::Client> connectWarehouse(kj::StringPtr urlString, Net
 				tablePrefix = param.value;
 		}
 		
-		auto conn = connectSqlite(kj::str(kj::delimited(url.path, "/")), readOnly);
+		kj::Path path(url.path.releaseAsArray());
+		bool isAbsolute = url.host != ".";
+				
+		auto conn = connectSqlite(path.toNativeString(isAbsolute), readOnly);
 		auto db = ::fsc::openWarehouse(*conn, readOnly, tablePrefix);
 		
 		auto req = db.getRootRequest();
@@ -95,6 +102,8 @@ Promise<Warehouse::Folder::Client> connectWarehouse(kj::StringPtr urlString, Net
 		
 		return req.sendForPipeline().getRoot();
 	}
+	
+	KJ_REQUIRE(url.host != ".", "Must specify authority (hostname) in remote URLs");
 	
 	// Treat URL as server connection
 	
