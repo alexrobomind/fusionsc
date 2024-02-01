@@ -99,7 +99,7 @@ async def updateWarehouse(db, updates):
 		ref = rootEntry.ref
 	
 		# Download root entry
-		root = await fsc.data.download.asnc(ref)
+		root = await data.download.asnc(ref)
 		root = root.clone_()
 	else:
 		root = service.OfflineData.newMessage()
