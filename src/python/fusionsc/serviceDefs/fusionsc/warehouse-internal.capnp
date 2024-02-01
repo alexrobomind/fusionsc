@@ -10,7 +10,10 @@ using Data = import "data.capnp";
 # This class is used for internal storage inside the warehouse. Do not use.
 struct ObjectInfo {	
 	union {
-		unresolved @0 : Void;
+		unresolved : group {
+			tag @0 : Void;
+			previousValue @10 : Capability; # Temporary housing for previous values of replacements to preserve linked objects
+		}
 		nullValue @1 : Void;
 		exception @2 : Rpc.Exception;
 		link @3 : Capability;

@@ -1724,7 +1724,7 @@ Promise<void> FolderInterface::get(GetContext ctx) {
 
 Promise<void> FolderInterface::put(PutContext ctx) {
 	return object -> getDb().runWriteTask([this, ctx]() mutable {
-		ImportTask it;
+		ImportTask importTask;
 		auto& db = object -> getDb();
 		
 		kj::Path path = kj::Path::parse(ctx.getParams().getPath());
@@ -1742,15 +1742,21 @@ Promise<void> FolderInterface::put(PutContext ctx) {
 				oldId = oldIdQuery[0].asInt64();
 			}
 			
-			it = ic.import(ctx.getParams().getValue());
+			importTask = ic.import(ctx.getParams().getValue());
 			
-			KJ_IF_MAYBE(pEntry, it.entry) {
+			KJ_IF_MAYBE(pEntry, importTask.entry) {
+				// Update object
 				int64_t id = (**pEntry).id;
 				
 				db.incRefcount(id);
 				db.updateFolderEntry(parentFolder -> id, filename.asPtr(), id);
 				
-				auto wrapped = db.wrap(mv(*pEntry));
+				auto wrapped = db.wrap((**pEntry).addRef());
+				
+				// If we have a previous object, register it in the unitialized object
+				(**pEntry).open() -> getUnresolved().setPreviousValue(wrapped);
+				
+				// Export saved object to result
 				db.exportStoredObject(wrapped, ctx.initResults());
 			} else {
 				db.deleteFolderEntry(parentFolder -> id, filename.asPtr());
@@ -1763,7 +1769,7 @@ Promise<void> FolderInterface::put(PutContext ctx) {
 			}
 		}
 		
-		return mv(it.task);
+		return mv(importTask.task);
 	});
 }
 
