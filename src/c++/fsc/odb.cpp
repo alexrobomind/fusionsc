@@ -1448,7 +1448,6 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
 			
 			return mv(dst);
 		} else {
-			// KJ_DBG("Hash not found", id, metadata.getDataHash());
 		}
 		
 		// Transfer data
@@ -1620,7 +1619,10 @@ Promise<void> FileInterface::setImpl(Capability::Client clt) {
 			it = ic.import(clt);
 			
 			KJ_IF_MAYBE(pImported, it.entry) {
-				(**pImported).open() -> getUnresolved().setPreviousValue(acc -> getFile());
+				auto accNew = (**pImported).open();
+				if(accNew -> isUnresolved()) {
+					accNew -> getUnresolved().setPreviousValue(acc -> getFile());
+				}
 				acc -> setFile(object -> getDb().wrap(mv(*pImported)));
 			} else {
 				acc -> setFile(nullptr);
@@ -1745,20 +1747,25 @@ Promise<void> FolderInterface::put(PutContext ctx) {
 			
 			importTask = ic.import(ctx.getParams().getValue());
 			
-			KJ_IF_MAYBE(pEntry, importTask.entry) {
+			KJ_IF_MAYBE(pEntry, importTask.entry) {				
+				// If we have a previous object, register it in the unitialized object
+				KJ_IF_MAYBE(pOldId, oldId) {
+					auto oldEntry = db.wrap(db.open(*pOldId));
+					
+					auto accNew = (**pEntry).open();
+					if(accNew -> isUnresolved()) {
+						accNew -> getUnresolved().setPreviousValue(oldEntry);
+					}
+				}
+				
 				// Update object
 				int64_t id = (**pEntry).id;
 				
 				db.incRefcount(id);
 				db.updateFolderEntry(parentFolder -> id, filename.asPtr(), id);
 				
-				auto wrapped = db.wrap((**pEntry).addRef());
-				
-				// If we have a previous object, register it in the unitialized object
-				(**pEntry).open() -> getUnresolved().setPreviousValue(wrapped);
-				
 				// Export saved object to result
-				db.exportStoredObject(wrapped, ctx.initResults());
+				db.exportStoredObject(db.wrap((**pEntry).addRef()), ctx.initResults());
 			} else {
 				db.deleteFolderEntry(parentFolder -> id, filename.asPtr());
 				ctx.initResults().setNullValue();
