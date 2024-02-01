@@ -1620,6 +1620,7 @@ Promise<void> FileInterface::setImpl(Capability::Client clt) {
 			it = ic.import(clt);
 			
 			KJ_IF_MAYBE(pImported, it.entry) {
+				(**pImported).open() -> getUnresolved().setPreviousValue(acc -> getFile());
 				acc -> setFile(object -> getDb().wrap(mv(*pImported)));
 			} else {
 				acc -> setFile(nullptr);
