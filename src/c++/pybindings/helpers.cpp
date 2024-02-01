@@ -21,6 +21,9 @@ namespace {
 		return result;
 	}
 
+	void updateDataHelper(WithMessage<OfflineData::Builder> b, WithMessage<OfflineData::Reader> r) {
+		updateOfflineData(b, r);
+	}
 }
 
 void initHelpers(py::module_& m) {
@@ -34,7 +37,7 @@ void initHelpers(py::module_& m) {
 	
 	offlineModule.def("fieldResolver", &newOfflineFieldResolver);
 	offlineModule.def("geometryResolver", &newOfflineGeometryResolver);
-	offlineModule.def("updateOfflineData", &updateOfflineData);
+	offlineModule.def("updateOfflineData", &updateDataHelper);
 }
 
 }
