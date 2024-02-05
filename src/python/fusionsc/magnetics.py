@@ -59,7 +59,7 @@ class CoilFilament(wrappers.structWrapper(service.Filament)):
 		"""Creates a magnetic field by applying the BiotSavart law to the contained coil filaments"""
 		result = MagneticConfig()
 		
-		bs = result.field.initFilamentField()
+		bs = result.data.initFilamentField()
 		bs.current = current
 		bs.biotSavartSettings.stepSize = stepSize
 		bs.biotSavartSettings.width = width
