@@ -1620,6 +1620,13 @@ Promise<void> FileInterface::setImpl(Capability::Client clt) {
 			it = ic.import(clt);
 			
 			KJ_IF_MAYBE(pImported, it.entry) {
+				{
+					auto acc2 = (**pImported).open();
+					
+					if(acc2 -> isUnresolved()) {
+						acc2 -> getUnresolved().setPreviousValue(acc -> getFile());
+					}
+				}
 				(**pImported).open() -> getUnresolved().setPreviousValue(acc -> getFile());
 				acc -> setFile(object -> getDb().wrap(mv(*pImported)));
 			} else {
@@ -1755,7 +1762,12 @@ Promise<void> FolderInterface::put(PutContext ctx) {
 				auto wrapped = db.wrap((**pEntry).addRef());
 				
 				// If we have a previous object, register it in the unitialized object
-				(**pEntry).open() -> getUnresolved().setPreviousValue(wrapped);
+				{
+					auto acc2 = (**pEntry).open();
+					if(acc2 -> isUnresolved()) {
+						acc2 -> getUnresolved().setPreviousValue(wrapped);
+					}
+				}
 				
 				// Export saved object to result
 				db.exportStoredObject(wrapped, ctx.initResults());

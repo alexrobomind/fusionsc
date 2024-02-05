@@ -297,7 +297,9 @@ async def visualizeCoils(field):
 			return
 		
 		if field.which_() == 'scaleBy':
-			await process(field.scaleBy.field)
+			if field.scaleBy.factor != 0:
+				await process(field.scaleBy.field)
+				
 			return
 		
 		if field.which_() == 'invert':
@@ -313,7 +315,8 @@ async def visualizeCoils(field):
 			return
 		
 		if field.which_() == 'filamentField':
-			await processCoil(field.filamentField.filament)
+			if field.filamentField.current * field.filamentField.windingNo != 0:
+				await processCoil(field.filamentField.filament)
 			return
 		
 		print("Warning: Unresolved nodes can not be visualized")
