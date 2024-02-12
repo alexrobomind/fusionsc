@@ -258,13 +258,9 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			'data' : data.publish(tensorData)
 		}})
 
-
 @asyncFunction
-async def visualizeCoils(field):
-	"""Convert the given geometry into a PyVista / VTK mesh"""
+async def extractCoils(field):
 	import numpy as np
-	import pyvista as pv
-	
 	coils = []
 	
 	async def processCoil(coil):
@@ -281,7 +277,7 @@ async def visualizeCoils(field):
 			await processCoil(coil.nested)
 			return
 		
-		print("Warning: Unresolved node can not be visualized")
+		print("Warning: Unresolved node can not be extracted")
 		print(coil)
 			
 	
@@ -323,6 +319,15 @@ async def visualizeCoils(field):
 	
 	resolved = await field.resolve.asnc()
 	await process(resolved.data)
+	
+	return coils
+
+@asyncFunction
+async def visualizeCoils(field):
+	"""Convert the given geometry into a PyVista / VTK mesh"""
+	import pyvista as pv
+	
+	coils = await getCoils.asnc(field)
 		
 	def makeCoil(coil):
 		result = pv.lines_from_points(coil)

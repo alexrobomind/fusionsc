@@ -368,10 +368,16 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		return pv.MultiBlock(dataSets)
 	
 	@asyncFunction
-	async def exportTo(self, filename: str, binary: bool = True):
+	async def exportTo(self, filename: str):
 		"""Saves the geometry to the given filename. Supports '.ply', '.stl', and '.vtk' files."""
 		asPv = await self.asPyvista.asnc()
-		asPv.save(filename, binary = binary)
+		
+		import pyvista as pv
+		
+		if isinstance(asPv, pv.MultiBlock):
+			asPv = asPv.combine()
+		
+		pv.save_meshio(filename, asPv)
 
 def asTagValue(x):
 	"""Convert a possible tag value into an instance of fsc.service.TagValue"""
