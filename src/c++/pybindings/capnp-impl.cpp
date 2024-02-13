@@ -795,10 +795,6 @@ capnp::Type DynamicCapabilityClient::getType() {
 
 // DynamicCapabilityServer
 
-DynamicCapabilityServer::DynamicCapabilityServer() :
-	DynamicCapability::Server(extractSchema(*this))
-{}
-
 Promise<void> DynamicCapabilityServer::call(capnp::InterfaceSchema::Method method, DynamicCallContext::WrappedContext ctx) {
 	// Check if we have the method implemented
 	py::object pySelf = py::cast(this, py::return_value_policy::reference);
@@ -812,11 +808,6 @@ Promise<void> DynamicCapabilityServer::call(capnp::InterfaceSchema::Method metho
 	py::object coro = dispatchMethod(new DynamicCallContext(ctx));
 	
 	return py::cast<Promise<void>>(mv(coro));
-}
-
-capnp::InterfaceSchema DynamicCapabilityServer::extractSchema(DynamicCapabilityServer& s) {
-	py::object pySelf = py::cast(s, py::return_value_policy::reference);
-	return py::cast<capnp::InterfaceSchema>(pySelf.attr("schema"));
 }
 
 // DynamicCallContext

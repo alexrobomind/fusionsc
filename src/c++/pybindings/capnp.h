@@ -637,13 +637,11 @@ struct DynamicCallContext {
 };
 
 struct DynamicCapabilityServer : public capnp::DynamicCapability::Server {
-	DynamicCapabilityServer();
+	using Server::Server;
+	
 	Promise<void> call(capnp::InterfaceSchema::Method, DynamicCallContext::WrappedContext) override;
 	
 	inline DynamicCapabilityClient asClient() { return thisCap(); }
-	
-private:
-	static capnp::InterfaceSchema extractSchema(DynamicCapabilityServer&);
 };
 
 struct DynamicOrphan : public WithMessage<capnp::Orphan<capnp::DynamicValue>> {

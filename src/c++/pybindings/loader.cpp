@@ -832,6 +832,7 @@ py::object interpretInterfaceSchema(fscpy::Loader& loader, capnp::InterfaceSchem
 	
 	py::dict outerAttrs;
 	py::dict clientAttrs;
+	py::dict serverAttrs;
 	
 	for(auto i : kj::indices(methods)) {
 		auto method = methods[i];
