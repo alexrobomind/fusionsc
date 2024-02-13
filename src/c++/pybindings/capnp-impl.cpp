@@ -793,6 +793,70 @@ capnp::Type DynamicCapabilityClient::getType() {
 	return this -> getSchema();
 }
 
+// DynamicCapabilityServer
+
+DynamicCapabilityServer::DynamicCapabilityServer() :
+	DynamicCapability::Server(extractSchema(*this))
+{}
+
+Promise<void> DynamicCapabilityServer::call(capnp::InterfaceSchema::Method method, DynamicCallContext::WrappedContext ctx) {
+	// Check if we have the method implemented
+	py::object pySelf = py::cast(this, py::return_value_policy::reference);
+	
+	kj::StringPtr methodName = method.getProto().getName();
+	if(!py::hasattr(pySelf, methodName.cStr())) {
+		KJ_UNIMPLEMENTED("Method not implemented", methodName);
+	}
+	
+	auto dispatchMethod = pySelf.attr(methodName.cStr());
+	py::object coro = dispatchMethod(new DynamicCallContext(ctx));
+	
+	return py::cast<Promise<void>>(mv(coro));
+}
+
+capnp::InterfaceSchema DynamicCapabilityServer::extractSchema(DynamicCapabilityServer& s) {
+	py::object pySelf = py::cast(s, py::return_value_policy::reference);
+	return py::cast<capnp::InterfaceSchema>(pySelf.attr("schema"));
+}
+
+// DynamicCallContext
+
+DynamicCallContext::DynamicCallContext(WrappedContext ctx) :
+	backend(ctx)
+{}
+
+DynamicStructReader DynamicCallContext::getParams() {
+	return DynamicStructReader(kj::heap(backend), backend.getParams());
+}
+
+DynamicStructBuilder DynamicCallContext::initResults() {
+	return DynamicStructBuilder(kj::heap(backend), backend.initResults());
+}
+
+DynamicStructBuilder DynamicCallContext::getResults() {
+	return DynamicStructBuilder(kj::heap(backend), backend.getResults());
+}
+
+void DynamicCallContext::setResults(DynamicStructReader r) {
+	backend.setResults(r);
+}
+
+Promise<void> DynamicCallContext::tailCall(DynamicCapabilityClient clt, kj::StringPtr methodName, DynamicStructReader params) {
+	auto request = clt.newRequest(methodName);
+	capnp::DynamicStruct::Reader paramsBase = params;
+	
+	auto schema = paramsBase.getSchema();
+	for(auto field : schema.getNonUnionFields()) {
+		request.set(field, paramsBase.get(field));
+	}
+	
+	KJ_IF_MAYBE(unionField, paramsBase.which()) {
+		request.set(*unionField, paramsBase.get(*unionField));
+	}
+	
+	return backend.tailCall(mv(request));
+}
+
 // ----------------------------------------------- Orphans ----------------------------------------
 
 // DynamicOrphan

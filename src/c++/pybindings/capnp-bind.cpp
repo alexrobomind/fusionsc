@@ -229,6 +229,11 @@ void bindCapClasses() {
 			return convertToAsyncioFuture(mv(whenReady)).attr("__await__")();
 		})
 	;
+	
+	server
+		.def(py::init<>())
+		.def_property_readonly("client", &S::asClient)
+	;
 }
 
 void bindFieldDescriptors() {
@@ -304,6 +309,14 @@ void bindType() {
 			return t.wrapInList(depth);
 		}, py::arg("depth") = 1)
 	;
+	
+	ClassBinding<capnp::StructSchema>("StructSchema");
+	ClassBinding<capnp::ListSchema>("ListSchema");
+	ClassBinding<capnp::InterfaceSchema>("InterfaceSchema");
+	
+	py::implicitly_convertible<capnp::StructSchema, capnp::Type>();
+	py::implicitly_convertible<capnp::ListSchema, capnp::Type>();
+	py::implicitly_convertible<capnp::InterfaceSchema, capnp::Type>();
 }
 
 /*void bindAssignable() {
