@@ -805,7 +805,14 @@ namespace {
 			
 			kj::StringPtr methodName = method.getProto().getName();
 			if(!py::hasattr(pySelf, methodName.cStr())) {
-				KJ_UNIMPLEMENTED("Method not implemented", methodName);
+				auto errorMessage = kj::str(
+					"The method '", methodName, "' was not implemented by the python class.\n",
+					"Please provide a definition in the server class of the form\n"
+					"\n"
+					"async def ", methodName, "(self, context):\n"
+					"\t...\n"
+				);
+				throw kj::Exception(kj::Exception::Type::UNIMPLEMENTED, __FILE__, __LINE__, mv(errorMessage));
 			}
 			
 			auto dispatchMethod = pySelf.attr(methodName.cStr());
