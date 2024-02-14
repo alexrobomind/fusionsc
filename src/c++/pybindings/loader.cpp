@@ -832,7 +832,8 @@ py::object interpretInterfaceSchema(fscpy::Loader& loader, capnp::InterfaceSchem
 	
 	py::dict outerAttrs;
 	py::dict clientAttrs;
-	py::dict serverAttrs;
+	
+	outerAttrs["schema"] = py::cast(schema);
 	
 	for(auto i : kj::indices(methods)) {
 		auto method = methods[i];
@@ -909,6 +910,21 @@ py::object interpretInterfaceSchema(fscpy::Loader& loader, capnp::InterfaceSchem
 	
 	py::object clientCls = (*baseMetaType)("Client", py::eval("tuple")(bases), clientAttrs);
 	outerCls.attr("Client") = clientCls;
+	
+	// Define server class
+	py::dict serverAttrs;
+	py::object serverBaseClass = py::type::of<DynamicCapabilityServer>();
+	
+	serverAttrs["__init__"] = methodDescriptor(py::cpp_function(
+		[baseInit = serverBaseClass.attr("__init__"), schema](py::object pySelf) {
+			baseInit(pySelf, py::cast(schema));
+		}
+	));
+	serverAttrs["__qualname__"] = qualName(outerCls, "Server");
+	serverAttrs["__module__"] = moduleName;
+	
+	py::object serverCls = (*baseMetaType)("Server", py::make_tuple(serverBaseClass), serverAttrs);
+	outerCls.attr("Server") = serverCls;
 	
 	// Remember the class before interpreting children to make sure we don't recurse
 	(*globalClasses)[py::cast(schema.getProto().getId())] = outerCls;

@@ -618,6 +618,8 @@ struct DynamicCapabilityClient : public capnp::DynamicCapability::Client, CapnpO
 	inline DynamicCapabilityClient(Client& c) : Client(c) {}
 	inline DynamicCapabilityClient(Client&& c) : Client(mv(c)) {}
 	
+	DynamicCapabilityClient(DynamicCapabilityServer*);
+	
 	capnp::Type getType() override;
 };
 
@@ -639,9 +641,15 @@ struct DynamicCallContext {
 struct DynamicCapabilityServer : public capnp::DynamicCapability::Server {
 	using Server::Server;
 	
+	enum State { DANGLING, ACTIVE };
+	
 	Promise<void> call(capnp::InterfaceSchema::Method, DynamicCallContext::WrappedContext) override;
 	
-	inline DynamicCapabilityClient asClient() { return thisCap(); }
+	inline DynamicCapabilityClient asClient() { KJ_REQUIRE(state != DANGLING, "Can only access the client view of this server while one is active (other clients already exist)"); return thisCap(); }
+	
+private:
+	State state = DANGLING;
+	friend class DynamicCapabilityClient;
 };
 
 struct DynamicOrphan : public WithMessage<capnp::Orphan<capnp::DynamicValue>> {

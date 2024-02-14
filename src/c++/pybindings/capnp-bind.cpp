@@ -232,7 +232,7 @@ void bindCapClasses() {
 	
 	server
 		.def(py::init<capnp::InterfaceSchema>())
-		.def_property_readonly("client", &S::asClient)
+		.def_property_readonly("_client", &S::asClient)
 	;
 }
 
