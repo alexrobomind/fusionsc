@@ -549,6 +549,16 @@ Promise<void> ObjectDB::writer() {
 	return kj::evalLast([this]() {
 		return withODBBackoff([this]() {
 			{
+				// Note: This implementation depends on sqlite's global locking
+				// behavior. Having a global lock implies that after the first
+				// write task succeeds, the transaction will no longer fail (due to contention)
+				// since it has acquired its global lock.
+				//
+				// This means that a successful write task will never need to be re-run, and
+				// all tasks can be immediately deleted from their queue. We need to eagerly
+				// delete successful tasks to ensure that task failure will not re-run previous
+				// possibly read-only tasks.
+				
 				db::Transaction t(*conn);
 				
 				for(auto it = writeTasks.begin(); it != writeTasks.end(); ) {
