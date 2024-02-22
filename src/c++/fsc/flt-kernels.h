@@ -219,10 +219,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	const double iota = state.getIota();
 	double theta = state.getTheta();
 	uint32_t unwrapEvery = 0;
-	
-	using AxisInterpolator = NDInterpolator<1, C1CubicInterpolation<double>>;
-	AxisInterpolator axisInterpolator(C1CubicInterpolation<double>(), { AxisInterpolator::Axis(0, 2 * pi, rAxis.size()) });
-	
+		
 	{
 		auto fla = request.getFieldLineAnalysis();
 		if(fla.isCalculateIota()) {
@@ -234,6 +231,9 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			zAxis = fla.getCalculateFourierModes().getZAxis();
 		}
 	}
+	
+	using AxisInterpolator = NDInterpolator<1, C1CubicInterpolation<double>>;
+	AxisInterpolator axisInterpolator(C1CubicInterpolation<double>(), { AxisInterpolator::Axis(0, 2 * pi, rAxis.size()) });
 	
 	bool processDisplacements = perpModel.hasIsotropicDiffusionCoefficient() || perpModel.hasRzDiffusionCoefficient();
 	
@@ -359,6 +359,8 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			dTheta = fmod(dTheta + pi, 2 * pi) - pi;
 			
 			theta += dTheta;
+			
+			KJ_DBG(idx, r, rAxisVal, z, zAxisVal, dr, dz, theta);
 		}
 		
 		// KJ_DBG("In grid?", r, z, grid.getRMin(), grid.getRMax(), grid.getZMin(), grid.getZMax());

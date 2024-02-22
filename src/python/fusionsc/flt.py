@@ -582,3 +582,48 @@ async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit 
 	request.v0 = [v0] if isinstance(v0, numbers.Number) else v0
 	
 	return FieldlineMapping(mapper.computeRFLM(request).pipeline.mapping)
+
+@asyncFunction
+async def calculateIota(
+	field, startPoints, grid = None, 
+	axis = None, unwrapEvery = 1,
+	distanceLimit = 1e4,
+	targetError = 1e-4, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2
+):
+	# Make sure we have a computed field reference
+	field = await field.compute.asnc(grid)
+	
+	startPoints = np.asarray(startPoints)
+	
+	# Determine axis shape (required for phase unwrapping)
+	if axis is None:
+		startPoint = startPoints.reshape([3, -1]).mean(axis = 1)
+		_, axis = await findAxis.asnc(field, startPoint = startPoint)
+	
+	xAx, yAx, zAx = axis
+	rAx = np.sqrt(xAx**2 + yAx**2)
+	
+	# Initialize trace request
+	request = service.FLTRequest.newMessage()
+	request.stepSize = 0.001
+	request.startPoints = startPoints
+	request.field = field.data.computedField
+	request.distanceLimit = distanceLimit
+	
+	calcIota = request.fieldLineAnalysis.initCalculateIota()
+	calcIota.unwrapEvery = unwrapEvery
+	calcIota.rAxis = rAx
+	calcIota.zAxis = zAx
+	
+	adaptive = request.stepSizeControl.initAdaptive()
+	adaptive.targetError = targetError
+	adaptive.relativeTolerance = relativeErrorTolerance
+	adaptive.min = minStepSize
+	adaptive.max = maxStepSize
+		
+	#errorEstimationDistance = 2 * 2 * np.pi * field.data.computedField.grid.rMax
+	adaptive.errorUnit.integratedOver = distanceLimit
+	
+	# Perform trace command
+	response = await _tracer().trace(request)
+	return np.asarray(response.iotas)
