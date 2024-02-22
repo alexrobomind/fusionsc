@@ -215,6 +215,7 @@ void bindStructClasses() {
 void bindCapClasses() {
 	using C = DynamicCapabilityClient;
 	using S = DynamicCapabilityServer;
+	using CC = DynamicCallContext;
 	
 	ClassBinding<C, O> client("CapabilityClient", py::multiple_inheritance(), py::metaclass(*baseMetaType));
 	ClassBinding<S> server("CapabilityServer", py::multiple_inheritance(), py::metaclass(*baseMetaType));
@@ -232,7 +233,14 @@ void bindCapClasses() {
 	
 	server
 		.def(py::init<capnp::InterfaceSchema>())
-		.def_property_readonly("client", &S::asClient)
+		.def("asClient", &S::thisCap)
+	;
+	
+	ClassBinding<CC>("CallContext")
+		.def_property_readonly("params", &CC::getParams)
+		.def_property("results", &CC::getResults, &CC::setResults)
+		.def("initResults", &CC::initResults)
+		.def("tailCall", &CC::tailCall)
 	;
 }
 

@@ -327,7 +327,7 @@ async def visualizeCoils(field):
 	"""Convert the given geometry into a PyVista / VTK mesh"""
 	import pyvista as pv
 	
-	coils = await getCoils.asnc(field)
+	coils = await extractCoils.asnc(field)
 		
 	def makeCoil(coil):
 		result = pv.lines_from_points(coil)

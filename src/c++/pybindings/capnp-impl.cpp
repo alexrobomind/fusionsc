@@ -3,6 +3,7 @@
 #include "assign.h"
 #include "tensor.h"
 #include "loader.h"
+#include "async.h"
 
 #include <kj/encoding.h>
 #include <fsc/typing.h>
@@ -787,6 +788,49 @@ DynamicValueBuilder AnyBuilder::assignAs(DynamicValueReader reader) {
 
 // -------------------------------------------- Capabilities --------------------------------------
 
+namespace {
+	struct CapServerImpl : capnp::DynamicCapability::Server {
+		CapServerImpl(DynamicCapabilityServer* target) :
+			capnp::DynamicCapability::Server(target -> schema()),
+			backend(captureServer(target))
+		{}
+		
+		~CapServerImpl() {
+			backend -> activeClient = nullptr;
+		}
+
+		Promise<void> call(capnp::InterfaceSchema::Method method, DynamicCallContext::WrappedContext ctx) override {
+			// Check if we have the method implemented
+			py::object pySelf = py::cast(backend.get(), py::return_value_policy::reference);
+			
+			kj::StringPtr methodName = method.getProto().getName();
+			if(!py::hasattr(pySelf, methodName.cStr())) {
+				auto errorMessage = kj::str(
+					"The method '", methodName, "' was not implemented by the python class.\n",
+					"Please provide a definition in the server class of the form\n"
+					"\n"
+					"async def ", methodName, "(self, context):\n"
+					"\t...\n"
+				);
+				throw kj::Exception(kj::Exception::Type::UNIMPLEMENTED, __FILE__, __LINE__, mv(errorMessage));
+			}
+			
+			auto dispatchMethod = pySelf.attr(methodName.cStr());
+			py::object coro = dispatchMethod(new DynamicCallContext(ctx));
+			
+			return py::cast<Promise<void>>(mv(coro));
+		}
+		
+		//! Creates an owning pointer that uses a pybind11-managed python object
+		static Own<DynamicCapabilityServer> captureServer(DynamicCapabilityServer* x) {
+			return kj::attachRef(*x, py::cast(x));
+		}
+		
+	private:
+		Own<DynamicCapabilityServer> backend;
+	};
+}
+
 // DynamicCapabilityClient
 
 capnp::Type DynamicCapabilityClient::getType() {
@@ -795,19 +839,15 @@ capnp::Type DynamicCapabilityClient::getType() {
 
 // DynamicCapabilityServer
 
-Promise<void> DynamicCapabilityServer::call(capnp::InterfaceSchema::Method method, DynamicCallContext::WrappedContext ctx) {
-	// Check if we have the method implemented
-	py::object pySelf = py::cast(this, py::return_value_policy::reference);
-	
-	kj::StringPtr methodName = method.getProto().getName();
-	if(!py::hasattr(pySelf, methodName.cStr())) {
-		KJ_UNIMPLEMENTED("Method not implemented", methodName);
+DynamicCapabilityClient DynamicCapabilityServer::thisCap() {
+	if(activeClient != nullptr) {
+		capnp::Capability::Client untyped(activeClient -> addRef());
+		return untyped.castAs<capnp::DynamicCapability>(schema());
 	}
 	
-	auto dispatchMethod = pySelf.attr(methodName.cStr());
-	py::object coro = dispatchMethod(new DynamicCallContext(ctx));
-	
-	return py::cast<Promise<void>>(mv(coro));
+	DynamicCapabilityClient result(kj::heap<CapServerImpl>(this));
+	activeClient = capnp::ClientHook::from(cp(result)).get();
+	return result;
 }
 
 // DynamicCallContext
