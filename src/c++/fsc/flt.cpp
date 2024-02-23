@@ -681,8 +681,10 @@ struct FLTImpl : public FLT::Server {
 					for(auto iStartPoint : kj::indices(iotas)) {
 						auto state = kData[iStartPoint].getState();
 						
-						double myIota = state.getTheta() / state.getTurnCount();
+						double myIota = state.getTheta() / (state.getTurnCount() * 2 * pi);
 						iotas.set(iStartPoint, myIota);
+						
+						KJ_DBG(iStartPoint, state.getTheta(), state.getTurnCount(), myIota);
 					}
 					
 					auto iotasShape = results.getIotas().initShape(startPointShape.size() - 1);

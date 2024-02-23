@@ -192,6 +192,8 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	uint32_t displacementCount = state.getDisplacementCount();
 	MT19937 rng(state.getRngState());
 	
+	KJ_DBG(idx, distance);
+	
 	// Set up the magnetic field
 	//using InterpolationStrategy = LinearInterpolation<Num>;
 	using InterpolationStrategy = C1CubicInterpolation<Num>;
@@ -345,6 +347,12 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		
 		// KJ_DBG(r, z);
 		
+		// KJ_DBG("In grid?", r, z, grid.getRMin(), grid.getRMax(), grid.getZMin(), grid.getZMax());
+		
+		if(r <= grid.getRMin() || r >= grid.getRMax() || z <= grid.getZMin() || z >= grid.getZMax()) {
+			FSC_FLT_RETURN(OUT_OF_GRID);
+		}
+		
 		// Unwrapping of phase
 		if(unwrapEvery != 0 && (step % unwrapEvery == 0)) {
 			double phi = atan2(x[1], x[0]);
@@ -356,17 +364,17 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			
 			double newTheta = atan2(dz, dr);
 			double dTheta = newTheta - theta;
-			dTheta = fmod(dTheta + pi, 2 * pi) - pi;
+			dTheta += pi;
+			dTheta = fmod(dTheta, 2 * pi);
+			dTheta += 2 * pi;
+			dTheta = fmod(dTheta, 2 * pi);
+			dTheta -= pi;
 			
 			theta += dTheta;
 			
-			KJ_DBG(idx, r, rAxisVal, z, zAxisVal, dr, dz, theta);
-		}
-		
-		// KJ_DBG("In grid?", r, z, grid.getRMin(), grid.getRMax(), grid.getZMin(), grid.getZMax());
-		
-		if(r <= grid.getRMin() || r >= grid.getRMax() || z <= grid.getZMin() || z >= grid.getZMax()) {
-			FSC_FLT_RETURN(OUT_OF_GRID);
+			/*if(idx == 0) {
+				KJ_DBG(idx, r, rAxisVal, z, zAxisVal, dr, dz, newTheta, theta, dTheta);
+			}*/
 		}
 		
 		// KJ_DBG("Limits passed");
