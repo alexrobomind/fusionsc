@@ -192,7 +192,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	uint32_t displacementCount = state.getDisplacementCount();
 	MT19937 rng(state.getRngState());
 	
-	KJ_DBG(idx, distance);
+	// KJ_DBG(idx, distance);
 	
 	// Set up the magnetic field
 	//using InterpolationStrategy = LinearInterpolation<Num>;
@@ -205,15 +205,23 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	cupnp::List<double>::Reader rAxis(0, nullptr);
 	cupnp::List<double>::Reader zAxis(0, nullptr);
 	auto rAxisAt = [&](int i) {
-		i %= rAxis.size();
-		i += rAxis.size();
-		i %= rAxis.size();
+		// WARNING: This is neccessary, since the size_t type takes precedence over
+		// int in integer conversion, causing i to be converted to size_t (which
+		// is unsigned) before the modulo operation.
+		const int s = rAxis.size();
+		i %= s;
+		i += s;
+		i %= s;
 		return rAxis[i];
 	};
 	auto zAxisAt = [&](int i) {
-		i %= zAxis.size();
-		i += zAxis.size();
-		i %= zAxis.size();
+		// WARNING: This is neccessary, since the size_t type takes precedence over
+		// int in integer conversion, causing i to be converted to size_t (which
+		// is unsigned) before the modulo operation.
+		const int s = zAxis.size();
+		i %= s;
+		i += s;
+		i %= s;
 		return zAxis[i];
 	};
 	
@@ -375,6 +383,11 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			/*if(idx == 0) {
 				KJ_DBG(idx, r, rAxisVal, z, zAxisVal, dr, dz, newTheta, theta, dTheta);
 			}*/
+			
+			/*if(kmath::crossedPhi(theta - dTheta, theta, 0.0)) {
+				KJ_DBG("Theta jump", theta, phi, turn, newTheta);
+			}
+			KJ_DBG(phi, rAxisVal, zAxisVal, r, z, dr, dz);*/
 		}
 		
 		// KJ_DBG("Limits passed");
