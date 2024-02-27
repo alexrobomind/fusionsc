@@ -129,6 +129,92 @@ TEST_CASE("axis") {
 	REQUIRE_THAT(pos[2], WithinAbs(0.0, 0.01));
 }
 
+TEST_CASE("calc-iota") {
+	auto l = newLibrary();
+	auto lt = l->newThread();
+	
+	auto& ws = lt->waitScope();
+	
+	Temporary<LocalConfig> config;
+	config.setPreferredDeviceType(ComputationDeviceType::CPU);
+	
+	RootService::Client root = createRoot(config);
+	auto req = root.newTracerRequest();
+	auto flt = req.send().getService();
+	
+	// Compute field
+	auto calculator = root.newFieldCalculatorRequest().send().getService();
+	auto calcFieldReq = calculator.computeRequest();
+	{
+		auto grid = calcFieldReq.getGrid();
+		grid.setRMin(4.0);
+		grid.setRMax(6.0);
+		grid.setZMin(-1.5);
+		grid.setZMax(1.5);
+		grid.setNPhi(1);
+		grid.setNZ(60);
+		grid.setNR(60);
+		
+		simpleTokamak(calcFieldReq.getField(), 5.5, 1.5, 25, -0.015);
+	}
+	
+	auto calcFieldResponse = calcFieldReq.send().wait(ws);
+	auto field = calcFieldResponse.getComputedField();
+	
+	// Find axis
+	auto axReq = flt.findAxisRequest();
+	{
+		axReq.setField(field);
+		axReq.setStartPoint({5.6, 0.0, 0.0});
+		axReq.setStepSize(0.01);
+		axReq.setNIterations(20);
+		axReq.setNTurns(10);
+	}
+	
+	auto response = axReq.send().wait(ws);
+	KJ_DBG(response);
+	
+	auto iotaReq = flt.traceRequest();
+	{
+		iotaReq.setField(field);
+		iotaReq.setTurnLimit(200);
+		
+		auto axis = response.getAxis().getData();
+		auto nAxis = response.getAxis().getShape()[1];
+		
+		auto ci = iotaReq.getFieldLineAnalysis().initCalculateIota();
+		ci.setUnwrapEvery(1);
+		
+		auto rAx = ci.initRAxis(nAxis);
+		auto zAx = ci.initZAxis(nAxis);
+		
+		for(auto i : kj::range(0, nAxis)) {
+			double x = axis[i];
+			double y = axis[nAxis + i];
+			double z = axis[2 * nAxis + i];
+			double r = std::sqrt(x*x+y*y);
+			
+			KJ_DBG(r, z);
+			
+			zAx.set(i, z);
+			rAx.set(i, r);
+		}
+		
+		auto sp = iotaReq.getStartPoints();
+		sp.setShape({3, 3});
+		sp.setData({5.6, 5.7, 5.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+		
+		iotaReq.getStepSizeControl().initAdaptive().setTargetError(1e-5);
+	}
+	
+	auto iotaResponse = iotaReq.send().wait(ws);
+	KJ_DBG(iotaResponse.getIotas());
+	/*auto iotas = iotaResponse.getIotas().getData();
+	
+	using Catch::Matchers::WithinAbs;
+	REQUIRE_THAT(iotas[0], WithinAbs(0.0, 0.001));*/
+}
+
 #ifdef FSC_WITH_CUDA
 
 TEST_CASE("flt-gpu") {

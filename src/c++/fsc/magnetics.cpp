@@ -654,7 +654,7 @@ namespace {
 	}
 	
 	void buildAxis(double rMaj, Filament::Builder out) {
-		const size_t nPhi = 4;
+		const size_t nPhi = 200;
 		
 		Tensor<double, 2> result(3, nPhi);
 		for(auto i : kj::range(0, nPhi)) {

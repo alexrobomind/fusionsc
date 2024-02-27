@@ -226,9 +226,10 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	};
 	
 	// Set up unwrapping configuration
-	const double iota = state.getIota();
 	double theta = state.getTheta();
+	double unwrappedPhi = state.getPhi();
 	uint32_t unwrapEvery = 0;
+	uint32_t recFourierEvery = 0;
 		
 	{
 		auto fla = request.getFieldLineAnalysis();
@@ -237,8 +238,9 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			zAxis = fla.getCalculateIota().getZAxis();
 			unwrapEvery = fla.getCalculateIota().getUnwrapEvery();
 		} else if(fla.isCalculateFourierModes()) {
-			rAxis = fla.getCalculateFourierModes().getRAxis();
-			zAxis = fla.getCalculateFourierModes().getZAxis();
+			//rAxis = fla.getCalculateFourierModes().getRAxis();
+			//zAxis = fla.getCalculateFourierModes().getZAxis();
+			recFourierEvery = fla.getCalculateFourierModes().getRecordEvery();
 		}
 	}
 	
@@ -361,7 +363,25 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			FSC_FLT_RETURN(OUT_OF_GRID);
 		}
 		
-		// Unwrapping of phase
+		// Unwrapping of toroidal phase
+		{
+			double phi = atan2(x[1], x[0]);
+			double dPhi = phi - unwrappedPhi;
+			dPhi += pi;
+			dPhi = fmod(dPhi, 2 * pi);
+			dPhi += 2 * pi;
+			dPhi = fmod(dPhi, 2 * pi);
+			dPhi -= pi;
+			unwrappedPhi += dPhi;
+		}
+		
+		// Recording of Fourier modes
+		if(recFourierEvery != 0 && (step % recFourierEvery == 0)) {
+			currentEvent().mutateFourierPoint().setPhi(unwrappedPhi);
+			FSC_FLT_LOG_EVENT(x, distance);
+		}
+		
+		// Unwrapping of poloidal phase
 		if(unwrapEvery != 0 && (step % unwrapEvery == 0)) {
 			double phi = atan2(x[1], x[0]);
 			double rAxisVal = axisInterpolator(rAxisAt, V1(phi));
@@ -760,6 +780,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	state.setNumSteps(step);
 	state.setDistance(distance);
 	state.setTheta(theta);
+	state.setPhi(unwrappedPhi);
 	
 	// Note: The event count is not updated here but at the end of the loop
 	// This ensures that events from unfinished steps do not get added

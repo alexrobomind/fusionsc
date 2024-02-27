@@ -127,9 +127,9 @@ struct FLTRequest {
 			rAxis @21 : List(Float64);
 			zAxis @22 : List(Float64);
 		}
-		calculateFourierModes : group {
-			rAxis @23 : List(Float64);
-			zAxis @24 : List(Float64);
+		calculateFourierModes : group {			
+			unusedRAxis @23 : List(Float64);
+			unusedZAxis @24 : List(Float64);
 			
 			# Tensor of shape startPointShape[1:]
 			iota @25 : Data.Float64Tensor;
@@ -139,6 +139,9 @@ struct FLTRequest {
 			
 			# Maximum m number to calculate
 			mMax @27 : UInt32 = 0;
+			
+			# How often to record Fourier points
+			recordEvery @38 : UInt32 = 1;
 		}
 	}
 	
@@ -273,8 +276,8 @@ struct FLTKernelState {
 	displacementCount @9 : UInt32;
 	rngState @10 : Random.MT19937State;
 	
-	theta @11 : Float64;
-	iota @12 : Float64;
+	phi @11 : Float64;
+	theta @12 : Float64;
 	
 	stepSize @13 : Float64;
 }
@@ -299,6 +302,9 @@ struct FLTKernelEvent {
 		}
 		record : group {
 			fieldStrength @10 : Float64;
+		}
+		fourierPoint : group {
+			phi @11 : Float64;
 		}
 	}
 }

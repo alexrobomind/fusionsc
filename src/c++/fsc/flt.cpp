@@ -8,6 +8,7 @@
 #include "flt.h"
 #include "tensor.h"
 #include "random-kernels.h"
+#include "nudft.h"
 
 #include <algorithm>
 
@@ -640,6 +641,66 @@ struct FLTImpl : public FLT::Server {
 					}
 					
 					stepCountData.set(iStartPoint, state.getNumSteps());
+					
+					if(request.getFieldLineAnalysis().isCalculateFourierModes()) {
+						using FP = nudft::FourierPoint<2, 2>;
+						using FM = nudft::FourierMode<2, 2>;
+						
+						auto calcFM = request.getFieldLineAnalysis().getCalculateFourierModes();
+						
+						KJ_REQUIRE(calcFM.getIota().getData().size() == nStartPoints, "Incorrect iota count specified");
+						double iota = calcFM.getIota().getData()[iStartPoint];
+						
+						kj::Vector<FP> fourierPoints;
+						for(auto evt : events) {
+							if(!evt.isFourierPoint())
+								continue;
+							
+							auto evtPoint = evt.getFourierPoint();
+							double x = evt.getX();
+							double y = evt.getY();
+							double z = evt.getZ();
+							double r = std::sqrt(x*x + y*y);
+							
+							FP point;
+							point.angles[0] = evtPoint.getPhi();
+							point.angles[1] = evtPoint.getPhi() * iota;
+							point.y[0] = r;
+							point.y[1] = z;
+							fourierPoints.add(point);
+						}
+						
+						// Estimate theta0 by checking the n = 0, m = 1 mode
+						// and taking atan of the cos and sin component for that.
+						kj::FixedArray<FM, 1> singleMode;
+						singleMode[0].coeffs[0] = 0;
+						singleMode[0].coeffs[1] = 1;
+						
+						nudft::calculateModes<2, 2>(fourierPoints.asPtr(), singleMode);
+						double theta0 = std::atan2(singleMode[0].cosCoeffs[0], singleMode[0].sinCoeffs[0]);
+						
+						// Subtract theta0 from poloidal angle
+						for(auto p : fourierPoints) {
+							p.angles[1] -= theta0;
+						}
+						
+						// Now do the full Fourier calculation
+						kj::Vector<FM> modes;
+						int maxM = calcFM.getMMax();
+						int maxN = calcFM.getNMax();
+						for(auto n : kj::range(-maxN, maxN + 1)) {
+							for(auto m : kj::range(0, maxM + 1)) {
+								FM mode;
+								mode.coeffs[0] = n;
+								mode.coeffs[1] = m;
+								modes.add(mode);
+							}
+						}
+						
+						nudft::calculateModes<2, 2>(fourierPoints.asPtr(), modes);
+						
+						KJ_DBG(iStartPoint, theta0);
+					}
 				}
 				writeTensor(pcCuts, results.getPoincareHits());
 				writeTensor(endPoints, results.getEndPoints());
