@@ -129,7 +129,7 @@ TEST_CASE("axis") {
 	REQUIRE_THAT(pos[2], WithinAbs(0.0, 0.01));
 }
 
-TEST_CASE("calc-iota") {
+TEST_CASE("calc-surf") {
 	auto l = newLibrary();
 	auto lt = l->newThread();
 	
@@ -208,11 +208,32 @@ TEST_CASE("calc-iota") {
 	}
 	
 	auto iotaResponse = iotaReq.send().wait(ws);
-	KJ_DBG(iotaResponse.getIotas());
-	/*auto iotas = iotaResponse.getIotas().getData();
+	auto iotas = iotaResponse.getFieldLineAnalysis().getIotas();
+	KJ_DBG(iotas);
 	
-	using Catch::Matchers::WithinAbs;
-	REQUIRE_THAT(iotas[0], WithinAbs(0.0, 0.001));*/
+	auto surfReq = flt.traceRequest();
+	{
+		surfReq.setField(field);
+		surfReq.setTurnLimit(200);
+		
+		auto axis = response.getAxis().getData();
+		auto nAxis = response.getAxis().getShape()[1];
+		
+		auto calSurf = surfReq.getFieldLineAnalysis().initCalculateFourierModes();
+		calSurf.setIota(iotas);
+		calSurf.setMMax(1);
+		calSurf.setNMax(1);
+		
+		auto sp = surfReq.getStartPoints();
+		sp.setShape({3, 3});
+		sp.setData({5.6, 5.7, 5.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+		
+		surfReq.getStepSizeControl().initAdaptive().setTargetError(1e-5);
+	}
+	
+	auto surfResponse = surfReq.send().wait(ws);
+	auto modes = surfResponse.getFieldLineAnalysis().getFourierModes();
+	KJ_DBG(modes);
 }
 
 #ifdef FSC_WITH_CUDA

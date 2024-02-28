@@ -626,4 +626,4 @@ async def calculateIota(
 	
 	# Perform trace command
 	response = await _tracer().trace(request)
-	return np.asarray(response.iotas)
+	return np.asarray(response.fieldLineAnalysis.iotas)

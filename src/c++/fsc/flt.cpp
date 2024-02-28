@@ -468,6 +468,33 @@ struct FLTImpl : public FLT::Server {
 			
 			return calc->run()
 			.then([ctx, calc, request, startPointShape, nStartPoints, geometryData = mv(geometryData)]() mutable {
+				auto applyPointShape = [&](auto builder, kj::ArrayPtr<const int64_t> preShape, kj::ArrayPtr<const int64_t> postShape) {
+					const size_t shapeSize = startPointShape.size() - 1 + preShape.size() + postShape.size();
+					size_t shapeProd = nStartPoints;
+					
+					auto shape = builder.initShape(shapeSize);
+					for(auto i : kj::indices(preShape)) {
+						shape.set(i, preShape[i]);
+						shapeProd *= preShape[i];
+					}
+					
+					for(auto i : kj::range(1, startPointShape.size())) {
+						shape.set(preShape.size() + i - 1, startPointShape[i]);
+						// startPointShape is in shapeProd via nStartPoints
+					}
+					
+					for(auto i : kj::indices(postShape)) {
+						shape.set(preShape.size() + startPointShape.size() - 1 + i, postShape[i]);
+						shapeProd *= postShape[i];
+					}
+					
+					if(builder.hasData()) {
+						KJ_REQUIRE(shapeProd == builder.getData().size(), "Internal error, mismatch between shape product and output tensor size", preShape, nStartPoints, postShape);
+					} else if(shapeProd > 0) {
+						builder.initData(shapeProd);
+					}
+				};
+				
 				int64_t nTurns = 0;
 				
 				auto resultBuilder = kj::heapArrayBuilder<Temporary<FLTKernelData::Entry>>(nStartPoints);
@@ -492,15 +519,8 @@ struct FLTImpl : public FLT::Server {
 				pcCuts.setConstant(std::numeric_limits<double>::quiet_NaN());
 				
 				Tensor<double, 2> endPoints(nStartPoints, 4);
-					
-				{
-					auto stopReasons = results.initStopReasons();
-					auto shape = stopReasons.initShape(startPointShape.size() - 1);
-					for(auto i : kj::indices(shape))
-						shape.set(i, startPointShape[i+1]);
-				}
-				
-				results.initNumSteps().setShape(results.getStopReasons().getShape());
+				applyPointShape(results.getStopReasons(), {}, {});
+				applyPointShape(results.getNumSteps(), {}, {});
 				
 				KJ_IF_MAYBE(pGeometryData, geometryData) {
 					auto geometry = pGeometryData -> get();
@@ -510,27 +530,14 @@ struct FLTImpl : public FLT::Server {
 					for(auto i : kj::indices(outTagNames))
 						outTagNames.set(i, tagNames[i]);
 					
-					{
-						auto endTags = results.initEndTags();
-						auto shape = endTags.initShape(startPointShape.size());
-						
-						shape.set(0, tagNames.size());
-						for(auto i : kj::range(1, startPointShape.size()))
-							shape.set(i, startPointShape[i]);
-					}
-					results.getEndTags().initData(geometry.getTagNames().size() * nStartPoints);
+					applyPointShape(results.getEndTags(), {tagNames.size()}, {});
 				} else {
-					auto endTags = results.initEndTags();
-					auto shape = endTags.initShape(startPointShape.size());
-						
-					shape.set(0, 0);
-					for(auto i : kj::range(1, startPointShape.size()))
-						shape.set(i, startPointShape[i]);
+					applyPointShape(results.getEndTags(), {0}, {});
 				}
 				
-				auto stopReasonData = results.getStopReasons().initData(nStartPoints);
+				auto stopReasonData = results.getStopReasons().getData();
 				auto endTagData = results.getEndTags().getData();
-				auto stepCountData = results.getNumSteps().initData(nStartPoints);
+				auto stepCountData = results.getNumSteps().getData();
 				
 				size_t nRecorded = 0;
 				
@@ -641,69 +648,12 @@ struct FLTImpl : public FLT::Server {
 					}
 					
 					stepCountData.set(iStartPoint, state.getNumSteps());
-					
-					if(request.getFieldLineAnalysis().isCalculateFourierModes()) {
-						using FP = nudft::FourierPoint<2, 2>;
-						using FM = nudft::FourierMode<2, 2>;
-						
-						auto calcFM = request.getFieldLineAnalysis().getCalculateFourierModes();
-						
-						KJ_REQUIRE(calcFM.getIota().getData().size() == nStartPoints, "Incorrect iota count specified");
-						double iota = calcFM.getIota().getData()[iStartPoint];
-						
-						kj::Vector<FP> fourierPoints;
-						for(auto evt : events) {
-							if(!evt.isFourierPoint())
-								continue;
-							
-							auto evtPoint = evt.getFourierPoint();
-							double x = evt.getX();
-							double y = evt.getY();
-							double z = evt.getZ();
-							double r = std::sqrt(x*x + y*y);
-							
-							FP point;
-							point.angles[0] = evtPoint.getPhi();
-							point.angles[1] = evtPoint.getPhi() * iota;
-							point.y[0] = r;
-							point.y[1] = z;
-							fourierPoints.add(point);
-						}
-						
-						// Estimate theta0 by checking the n = 0, m = 1 mode
-						// and taking atan of the cos and sin component for that.
-						kj::FixedArray<FM, 1> singleMode;
-						singleMode[0].coeffs[0] = 0;
-						singleMode[0].coeffs[1] = 1;
-						
-						nudft::calculateModes<2, 2>(fourierPoints.asPtr(), singleMode);
-						double theta0 = std::atan2(singleMode[0].cosCoeffs[0], singleMode[0].sinCoeffs[0]);
-						
-						// Subtract theta0 from poloidal angle
-						for(auto p : fourierPoints) {
-							p.angles[1] -= theta0;
-						}
-						
-						// Now do the full Fourier calculation
-						kj::Vector<FM> modes;
-						int maxM = calcFM.getMMax();
-						int maxN = calcFM.getNMax();
-						for(auto n : kj::range(-maxN, maxN + 1)) {
-							for(auto m : kj::range(0, maxM + 1)) {
-								FM mode;
-								mode.coeffs[0] = n;
-								mode.coeffs[1] = m;
-								modes.add(mode);
-							}
-						}
-						
-						nudft::calculateModes<2, 2>(fourierPoints.asPtr(), modes);
-						
-						KJ_DBG(iStartPoint, theta0);
-					}
 				}
 				writeTensor(pcCuts, results.getPoincareHits());
+				applyPointShape(results.getPoincareHits(), {5, nSurfs}, {nTurns});
+				
 				writeTensor(endPoints, results.getEndPoints());
+				applyPointShape(results.getEndPoints(), {4}, {});
 				
 				if(nRecorded > 0) {
 					Tensor<double, 3> fieldLines(nRecorded, nStartPoints, 3);
@@ -736,44 +686,142 @@ struct FLTImpl : public FLT::Server {
 					writeTensor(fieldStrengths, results.getFieldStrengths());
 				}
 				
+				applyPointShape(results.getFieldLines(), {3}, {(int64_t) nRecorded});
+				applyPointShape(results.getFieldStrengths(), {}, {(int64_t) nRecorded});
+				
 				if(request.getFieldLineAnalysis().isCalculateIota()) {
-					auto iotas = results.getIotas().initData(nStartPoints);
+					auto iotas = results.getFieldLineAnalysis().initIotas();
+					applyPointShape(iotas, {}, {});
+					auto iotaData = iotas.getData();
 					
-					for(auto iStartPoint : kj::indices(iotas)) {
+					for(auto iStartPoint : kj::indices(iotaData)) {
 						auto state = kData[iStartPoint].getState();
 						
 						double myIota = state.getTheta() / (state.getTurnCount() * 2 * pi);
-						iotas.set(iStartPoint, myIota);
+						iotaData.set(iStartPoint, myIota);
+					}
+				}
+				
+				if(request.getFieldLineAnalysis().isCalculateFourierModes()) {
+					using FP = nudft::FourierPoint<2, 2>;
+					using FM = nudft::FourierMode<2, 2>;
+					auto calcFM = request.getFieldLineAnalysis().getCalculateFourierModes();
+					KJ_REQUIRE(calcFM.getIota().getData().size() == nStartPoints, "Incorrect iota count specified");
+					
+					const double phiMultiplier = calcFM.getToroidalSymmetry();
+					
+					// Prepare the modes we want to analyze
+					kj::Vector<FM> modes;
+					const int maxM = calcFM.getMMax();
+					const int maxN = calcFM.getNMax();
+					for(auto n : kj::range(-maxN, maxN + 1)) {
+						for(auto m : kj::range(0, maxM + 1)) {
+							FM mode;
+							mode.coeffs[0] = n;
+							mode.coeffs[1] = m;
+							modes.add(mode);
+						}
 					}
 					
-					auto iotasShape = results.getIotas().initShape(startPointShape.size() - 1);
-					for(auto i : kj::range(1, startPointShape.size())) {
-						iotasShape.set(i - 1, startPointShape[1]);
+					const int64_t nToroidalCoeffs = 2 * maxN + 1;
+					const int64_t nPoloicalCoeffs = maxM + 1;
+					
+					auto toroidalIndex = [&](int n) -> int64_t {
+						if(n >= 0) return n;
+						return nToroidalCoeffs + n;
+					};
+					
+					Tensor<double, 3> rCos(nPoloicalCoeffs, nToroidalCoeffs, nStartPoints);
+					Tensor<double, 3> rSin(nPoloicalCoeffs, nToroidalCoeffs, nStartPoints);
+					Tensor<double, 3> zCos(nPoloicalCoeffs, nToroidalCoeffs, nStartPoints);
+					Tensor<double, 3> zSin(nPoloicalCoeffs, nToroidalCoeffs, nStartPoints);
+					
+					Tensor<double, 2> nTor(nPoloicalCoeffs, nToroidalCoeffs);
+					Tensor<double, 2> mPol(nPoloicalCoeffs, nToroidalCoeffs);
+					
+					Tensor<double, 1> t0(nStartPoints);
+					
+					for(auto mode : modes) {
+						nTor(mode.coeffs[1], toroidalIndex(mode.coeffs[0])) = mode.coeffs[0] * phiMultiplier;
+						mPol(mode.coeffs[1], toroidalIndex(mode.coeffs[0])) = mode.coeffs[1];
 					}
-				} else {
-					results.getIotas().setShape({0});
+					
+					for(int64_t iStartPoint = 0; iStartPoint < nStartPoints; ++iStartPoint) {
+						auto entry = kData[iStartPoint].asReader();
+						auto state = entry.getState();
+						auto events = entry.getEvents();
+						
+						const double iota = calcFM.getIota().getData()[iStartPoint];
+						
+						kj::Vector<FP> fourierPoints;
+						for(auto evt : events) {
+							if(!evt.isFourierPoint())
+								continue;
+							
+							auto evtPoint = evt.getFourierPoint();
+							double x = evt.getX();
+							double y = evt.getY();
+							double z = evt.getZ();
+							double r = std::sqrt(x*x + y*y);
+							
+							FP point;
+							point.angles[0] = evtPoint.getPhi() * phiMultiplier;
+							point.angles[1] = evtPoint.getPhi() * iota;
+							point.y[0] = r;
+							point.y[1] = z;
+							fourierPoints.add(point);
+						}
+						
+						// Estimate theta0 by checking the n = 0, m = 1 mode
+						// and taking atan of the cos and sin component for that.
+						kj::FixedArray<FM, 3> baseModes;
+						baseModes[0].coeffs[0] = 0;
+						baseModes[0].coeffs[1] = 1;
+						baseModes[1].coeffs[0] = 0;
+						baseModes[1].coeffs[1] = 0;
+						baseModes[2].coeffs[0] = 1;
+						baseModes[2].coeffs[1] = 0;
+						
+						nudft::calculateModes<2, 2>(fourierPoints.asPtr(), baseModes);
+						double theta0 = std::atan2(baseModes[0].sinCoeffs[0], baseModes[0].cosCoeffs[0]);
+						t0(iStartPoint) = theta0;
+						
+						// Subtract theta0 from poloidal angle
+						for(auto p : fourierPoints) {
+							p.angles[1] -= theta0;
+						}
+						
+						// Now do the full Fourier calculation						
+						nudft::calculateModes<2, 2>(fourierPoints.asPtr(), modes);
+						
+						for(auto mode : modes) {
+							rCos(mode.coeffs[1], toroidalIndex(mode.coeffs[0]), iStartPoint) = mode.cosCoeffs[0];
+							zCos(mode.coeffs[1], toroidalIndex(mode.coeffs[0]), iStartPoint) = mode.cosCoeffs[1];
+							rSin(mode.coeffs[1], toroidalIndex(mode.coeffs[0]), iStartPoint) = mode.sinCoeffs[0];
+							zSin(mode.coeffs[1], toroidalIndex(mode.coeffs[0]), iStartPoint) = mode.sinCoeffs[1];
+						}
+						
+						KJ_DBG(iStartPoint, theta0);
+					}
+					
+					auto out = results.getFieldLineAnalysis().initFourierModes();
+					writeTensor(rCos, out.getRCos());
+					writeTensor(rSin, out.getRSin());
+					writeTensor(zCos, out.getZCos());
+					writeTensor(zSin, out.getZSin());
+					writeTensor(nTor, out.getNTor());
+					writeTensor(mPol, out.getMPol());
+					writeTensor(t0, out.getTheta0());
+					
+					applyPointShape(out.getRCos(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
+					applyPointShape(out.getRSin(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
+					applyPointShape(out.getZCos(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
+					applyPointShape(out.getZSin(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
+					applyPointShape(out.getTheta0(), {}, {});
+					
+					out.getNTor().setShape({(size_t) nToroidalCoeffs, (size_t) nPoloicalCoeffs});
+					out.getMPol().setShape({(size_t) nToroidalCoeffs, (size_t) nPoloicalCoeffs});
 				}
-				
-				auto pcHitsShape = results.getPoincareHits().initShape(startPointShape.size() + 2);
-				pcHitsShape.set(0, 5);
-				pcHitsShape.set(1, nSurfs);
-				for(int i = 0; i < startPointShape.size() - 1; ++i)
-					pcHitsShape.set(i + 2, startPointShape[i + 1]);
-				pcHitsShape.set(startPointShape.size() + 1, nTurns);
-				
-				auto fieldLinesShape = results.getFieldLines().initShape(startPointShape.size() + 1);
-				for(auto i : kj::indices(startPointShape))
-					fieldLinesShape.set(i, startPointShape[i]);
-				fieldLinesShape.set(startPointShape.size(), nRecorded);
-				
-				auto fieldStrengthsShape = results.getFieldStrengths().initShape(startPointShape.size());
-				for(auto i : kj::range(0, startPointShape.size() - 1)) {
-					fieldStrengthsShape.set(i, startPointShape[i + 1]);
-				}
-				fieldStrengthsShape.set(startPointShape.size() - 1, nRecorded);
-
-				results.getEndPoints().setShape(startPointShape);
-				results.getEndPoints().getShape().set(0, 4);
 			}).attach(calc.x());
 		});
 		});
