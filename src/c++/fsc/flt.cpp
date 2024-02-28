@@ -697,7 +697,7 @@ struct FLTImpl : public FLT::Server {
 					for(auto iStartPoint : kj::indices(iotaData)) {
 						auto state = kData[iStartPoint].getState();
 						
-						double myIota = state.getTheta() / (state.getTurnCount() * 2 * pi);
+						double myIota = state.getTheta() / state.getPhi();
 						iotaData.set(iStartPoint, myIota);
 					}
 				}
@@ -710,18 +710,8 @@ struct FLTImpl : public FLT::Server {
 					
 					const double phiMultiplier = calcFM.getToroidalSymmetry();
 					
-					// Prepare the modes we want to analyze
-					kj::Vector<FM> modes;
 					const int maxM = calcFM.getMMax();
 					const int maxN = calcFM.getNMax();
-					for(auto n : kj::range(-maxN, maxN + 1)) {
-						for(auto m : kj::range(0, maxM + 1)) {
-							FM mode;
-							mode.coeffs[0] = n;
-							mode.coeffs[1] = m;
-							modes.add(mode);
-						}
-					}
 					
 					const int64_t nToroidalCoeffs = 2 * maxN + 1;
 					const int64_t nPoloicalCoeffs = maxM + 1;
@@ -739,12 +729,35 @@ struct FLTImpl : public FLT::Server {
 					Tensor<double, 2> nTor(nPoloicalCoeffs, nToroidalCoeffs);
 					Tensor<double, 2> mPol(nPoloicalCoeffs, nToroidalCoeffs);
 					
+					rCos.setConstant(0);
+					rSin.setConstant(0);
+					zCos.setConstant(0);
+					zSin.setConstant(0);
+					nTor.setConstant(0);
+					mPol.setConstant(0);
+					
 					Tensor<double, 1> t0(nStartPoints);
 					
-					for(auto mode : modes) {
-						nTor(mode.coeffs[1], toroidalIndex(mode.coeffs[0])) = mode.coeffs[0] * phiMultiplier;
-						mPol(mode.coeffs[1], toroidalIndex(mode.coeffs[0])) = mode.coeffs[1];
+					// Prepare the modes we want to analyze
+					kj::Vector<FM> modes;
+					for(auto n : kj::range(-maxN, maxN + 1)) {
+						for(auto m : kj::range(0, maxM + 1)) {
+							nTor(m, toroidalIndex(n)) = n * phiMultiplier;
+							mPol(m, toroidalIndex(n)) = m;
+							
+							if(m == 0 && n < 0) {
+								continue;
+							}
+							
+							FM mode;
+							mode.coeffs[0] = n;
+							mode.coeffs[1] = m;
+							modes.add(mode);
+						}
 					}
+					// Index of n=0, m=1 mode in above expansion
+					const size_t n0m1Index = maxN * maxM + 1;
+					KJ_DBG(n0m1Index);
 					
 					for(int64_t iStartPoint = 0; iStartPoint < nStartPoints; ++iStartPoint) {
 						auto entry = kData[iStartPoint].asReader();
@@ -772,22 +785,12 @@ struct FLTImpl : public FLT::Server {
 							fourierPoints.add(point);
 						}
 						
-						// Estimate theta0 by checking the n = 0, m = 1 mode
-						// and taking atan of the cos and sin component for that.
-						kj::FixedArray<FM, 3> baseModes;
-						baseModes[0].coeffs[0] = 0;
-						baseModes[0].coeffs[1] = 1;
-						baseModes[1].coeffs[0] = 0;
-						baseModes[1].coeffs[1] = 0;
-						baseModes[2].coeffs[0] = 1;
-						baseModes[2].coeffs[1] = 0;
-						
-						nudft::calculateModes<2, 2>(fourierPoints.asPtr(), baseModes);
-						double theta0 = std::atan2(baseModes[0].sinCoeffs[0], baseModes[0].cosCoeffs[0]);
+						nudft::calculateModes<2, 2>(fourierPoints.asPtr(), modes);
+						double theta0 = std::atan2(modes[n0m1Index].sinCoeffs[0], modes[n0m1Index].cosCoeffs[0]);
 						t0(iStartPoint) = theta0;
 						
 						// Subtract theta0 from poloidal angle
-						for(auto p : fourierPoints) {
+						for(auto& p : fourierPoints) {
 							p.angles[1] -= theta0;
 						}
 						

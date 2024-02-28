@@ -177,7 +177,7 @@ TEST_CASE("calc-surf") {
 	auto iotaReq = flt.traceRequest();
 	{
 		iotaReq.setField(field);
-		iotaReq.setTurnLimit(200);
+		iotaReq.setTurnLimit(2000);
 		
 		auto axis = response.getAxis().getData();
 		auto nAxis = response.getAxis().getShape()[1];
@@ -204,7 +204,8 @@ TEST_CASE("calc-surf") {
 		sp.setShape({3, 3});
 		sp.setData({5.6, 5.7, 5.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
 		
-		iotaReq.getStepSizeControl().initAdaptive().setTargetError(1e-5);
+		iotaReq.getStepSizeControl().initAdaptive().setTargetError(1e-3);
+		iotaReq.getStepSizeControl().getAdaptive().getErrorUnit().setIntegratedOver(2000 * 2 * pi * 5.5);
 	}
 	
 	auto iotaResponse = iotaReq.send().wait(ws);
@@ -214,21 +215,20 @@ TEST_CASE("calc-surf") {
 	auto surfReq = flt.traceRequest();
 	{
 		surfReq.setField(field);
-		surfReq.setTurnLimit(200);
-		
-		auto axis = response.getAxis().getData();
-		auto nAxis = response.getAxis().getShape()[1];
+		surfReq.setTurnLimit(150);
 		
 		auto calSurf = surfReq.getFieldLineAnalysis().initCalculateFourierModes();
 		calSurf.setIota(iotas);
 		calSurf.setMMax(1);
 		calSurf.setNMax(1);
+		calSurf.setRecordEvery(10);
 		
 		auto sp = surfReq.getStartPoints();
 		sp.setShape({3, 3});
 		sp.setData({5.6, 5.7, 5.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
 		
-		surfReq.getStepSizeControl().initAdaptive().setTargetError(1e-5);
+		iotaReq.getStepSizeControl().initAdaptive().setTargetError(1e-3);
+		iotaReq.getStepSizeControl().getAdaptive().getErrorUnit().setIntegratedOver(2000 * 2 * pi * 5.5);
 	}
 	
 	auto surfResponse = surfReq.send().wait(ws);
