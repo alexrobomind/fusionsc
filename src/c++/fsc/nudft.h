@@ -31,10 +31,10 @@ void calculateModes(kj::ArrayPtr<const FourierPoint<xdim, ydim>> points, kj::Arr
 	
 	//REMOVE THIS AFTER DBG
 	//KJ_DBG
-	kj::FixedArray<Vec, 2> holder;
+	// kj::FixedArray<Vec, 2> holder;
 	
 	for(unsigned int iDim : kj::range(0, ydim)) {
-		KJ_DBG(iDim);
+		// KJ_DBG(iDim);
 		// We minimize (y - modeBasis * coeffs)**2
 		
 		// With A = modeBasis and x = coeffs
@@ -75,20 +75,20 @@ void calculateModes(kj::ArrayPtr<const FourierPoint<xdim, ydim>> points, kj::Arr
 		}*/
 		Vec AtyOpt = A.transpose() * yOpt;
 		
-		for(auto i : kj::range(0, modes.size())) {
+		/*for(auto i : kj::range(0, modes.size())) {
 			auto& mode = modes[i];
 			auto n = mode.coeffs[0];
 			auto m = mode.coeffs[1];
 			KJ_DBG("Sin", i, n, m, AtyOpt[2 * i + 0], Aty[2 * i + 0], x[2 * i + 0]);
 			KJ_DBG("Cos", i, n, m, AtyOpt[2 * i + 1], Aty[2 * i + 1], x[2 * i + 1]);
-		}
+		}*/
 		
 		for(auto iMode : kj::indices(modes)) {
 			modes[iMode].sinCoeffs[iDim] = x[2 * iMode];
 			modes[iMode].cosCoeffs[iDim] = x[2 * iMode + 1];
 		}
 		
-		holder[iDim] = yOpt;
+		// holder[iDim] = yOpt;
 	}
 	
 	/*for(auto i : kj::indices(points)) {

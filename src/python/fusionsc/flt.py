@@ -585,9 +585,9 @@ async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit 
 
 @asyncFunction
 async def calculateIota(
-	field, startPoints, grid = None, 
+	field, startPoints, turnCount, grid = None, 
 	axis = None, unwrapEvery = 1,
-	distanceLimit = 1e4,
+	distanceLimit = 1e4, 
 	targetError = 1e-4, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2
 ):
 	# Make sure we have a computed field reference
@@ -609,6 +609,7 @@ async def calculateIota(
 	request.startPoints = startPoints
 	request.field = field.data.computedField
 	request.distanceLimit = distanceLimit
+	request.turnLimit = turnCount
 	
 	calcIota = request.fieldLineAnalysis.initCalculateIota()
 	calcIota.unwrapEvery = unwrapEvery
@@ -621,9 +622,70 @@ async def calculateIota(
 	adaptive.min = minStepSize
 	adaptive.max = maxStepSize
 		
-	#errorEstimationDistance = 2 * 2 * np.pi * field.data.computedField.grid.rMax
-	adaptive.errorUnit.integratedOver = distanceLimit
+	errorEstimationDistance = min(turnCount * 2 * np.pi * field.data.computedField.grid.rMax, distanceLimit)
+	adaptive.errorUnit.integratedOver = errorEstimationDistance
 	
 	# Perform trace command
 	response = await _tracer().trace(request)
 	return np.asarray(response.fieldLineAnalysis.iotas)
+
+@asyncFunction
+async def calculateFourierModes(
+	field, startPoints, turnCount,
+	nMax = 1, mMax = 1, toroidalSymmetry = 1,
+	grid = None,
+	unwrapEvery = 1, recordEvery = 10, distanceLimit = 1e4,
+	targetError = 1e-4, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2
+):
+	field = await field.compute.asnc(grid)
+	
+	startPoints = np.asarray(startPoints)
+	
+	# Calculate iota
+	iotas = await calculateIota.asnc(
+		field, startPoints, turnCount * 20,
+		grid = None, axis = None, unwrapEvery = unwrapEvery,
+		distanceLimit = distanceLimit,
+		targetError = targetError, relativeErrorTolerance = relativeErrorTolerance, minStepSize = minStepSize, maxStepSize = maxStepSize
+	)
+	
+	# Initialize Fourier trace request
+	request = service.FLTRequest.newMessage()
+	request.stepSize = 0.001
+	request.startPoints = startPoints
+	request.field = field.data.computedField
+	request.distanceLimit = distanceLimit
+	request.turnLimit = turnCount
+	
+	calcSurf = request.fieldLineAnalysis.initCalculateFourierModes()
+	calcSurf.iota = iotas
+	calcSurf.nMax = nMax
+	calcSurf.mMax = mMax
+	calcSurf.recordEvery = recordEvery
+	calcSurf.toroidalSymmetry = toroidalSymmetry
+	
+	adaptive = request.stepSizeControl.initAdaptive()
+	adaptive.targetError = targetError
+	adaptive.relativeTolerance = relativeErrorTolerance
+	adaptive.min = minStepSize
+	adaptive.max = maxStepSize
+		
+	errorEstimationDistance = min(turnCount * 2 * np.pi * field.data.computedField.grid.rMax, distanceLimit)
+	adaptive.errorUnit.integratedOver = errorEstimationDistance
+	
+	# Perform trace command
+	response = await _tracer().trace(request)
+	modes = response.fieldLineAnalysis.fourierModes
+	
+	return {
+		"iota" : iotas,
+		"theta" : np.asarray(modes.theta0),
+		"rCos" : np.asarray(modes.rCos),
+		"rSin" : np.asarray(modes.rSin),
+		"zCos" : np.asarray(modes.zCos),
+		"zSin" : np.asarray(modes.zSin),
+		"mPol" : np.asarray(modes.mPol),
+		"nTor" : np.asarray(modes.nTor)
+	}
+	
+	
