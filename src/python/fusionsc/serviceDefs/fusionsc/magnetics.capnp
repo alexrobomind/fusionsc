@@ -14,6 +14,48 @@ using Float64Tensor = Data.Float64Tensor;
 
 # BEGIN [magnetics]
 
+struct FourierSurfaces {
+	# Surface Fourier coefficients coefficients for input and output
+	# All tensors must have identical shapes
+	# - nToroidalCoeffs must be 2 * nTor + 1
+	# - nPoloidalCoeffs must be mPol + 1
+	#
+	# The order of storage for toroidal modes is [0, ..., nTor, -nTor, ..., -1]
+	# so that slicing with negative indices can be interpreted
+	# as slicing from the end (as is done in NumPy).
+	#
+	# The order of storage for polidal modes is [0, ..., mPol]
+	
+	rCos @0 : Float64Tensor;
+	# Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
+	
+	zSin @1 : Float64Tensor;
+	# Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
+	
+	toroidalSymmetry @2 : UInt32 = 1;
+	# Multiplier for parallel mode number (e.g. 5 for W7-X)
+	
+	nTurns @3 : UInt32 = 1;
+	# Divisor for parallel mode number. Usually 1, but can equal a
+	# different number if the surface has an nTurns * 2pi periodic
+	# structure, such as a magnetic island (in this case this would
+	# be the island's m number
+	
+	nTor @4 : UInt32;
+	mPol @5 : UInt32;
+	
+	union {
+		symmetric @6 : Void;
+		nonSymmetric : group {
+			rSin @7 : Float64Tensor;
+			# Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
+			
+			zCos @8 : Float64Tensor;
+			# Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
+		}
+	}
+}
+
 struct ToroidalGrid {
 	rMin @0 : Float64;
 	rMax @1 : Float64;
@@ -48,6 +90,8 @@ interface FieldCalculator $Cxx.allowCancellation {
 	
 	# Evaluate field at position. Points must be of shape [3, ...].
 	evaluateXyz @1 (field : ComputedField, points : Float64Tensor) -> (values : Float64Tensor);
+	
+	calculateFourierComponents @2 (field : ComputedField, surfaces : FourierSurfaces) -> (components : Float64Tensor, mPol : Float64Tensor, nTor : Float64Tensor);
 }
 
 struct BiotSavartSettings {
@@ -99,48 +143,6 @@ struct AxisymmetricEquilibrium {
 	
 	# Normalized toroidal field F (F = rMaj * Bt) as a profile of flux
 	normalizedToroidalField @7 : List(Float64);
-}
-
-struct FourierSurfaces {
-	# Surface Fourier coefficients coefficients for input and output
-	# All tensors must have identical shapes
-	# - nToroidalCoeffs must be 2 * nTor + 1
-	# - nPoloidalCoeffs must be mPol + 1
-	#
-	# The order of storage for toroidal modes is [0, ..., nTor, -nTor, ..., -1]
-	# so that slicing with negative indices can be interpreted
-	# as slicing from the end (as is done in NumPy).
-	#
-	# The order of storage for polidal modes is [0, ..., mPol]
-	
-	rCos @0 : Float64Tensor;
-	# Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
-	
-	zSin @1 : Float64Tensor;
-	# Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
-	
-	toroidalSymmetry @2 : UInt32 = 1;
-	# Multiplier for parallel mode number (e.g. 5 for W7-X)
-	
-	nTurns @3 : UInt32 = 1;
-	# Divisor for parallel mode number. Usually 1, but can equal a
-	# different number if the surface has an nTurns * 2pi periodic
-	# structure, such as a magnetic island (in this case this would
-	# be the island's m number
-	
-	nTor @4 : UInt32;
-	mPol @5 : UInt32;
-	
-	union {
-		symmetric @6 : Void;
-		nonSymmetric : group {
-			rSin @7 : Float64Tensor;
-			# Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
-			
-			zCos @8 : Float64Tensor;
-			# Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
-		}
-	}
 }
 
 # =========================== Device-specifics =============================
@@ -285,3 +287,15 @@ struct MagneticField {
 const w7xEIMplus252 : MagneticField = (
 	w7x = (),
 );
+
+# THE FOLLOWING STRUCTURED ARE INTERNAL USE ONLY
+
+struct FourierKernelData {
+	field @0 : ComputedField;
+	surfaces @1 : FourierSurfaces;
+	
+	# Data of shape [nSurfaces, 2 * nTor + 1, mPol, 3]
+	# holding point samples in phi (dim 1) and theta (dim 2) dimension
+	# for Br, Bphi, and Btheta
+	pointData @2 : List(Float64);
+}

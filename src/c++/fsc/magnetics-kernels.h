@@ -218,7 +218,7 @@ EIGEN_DEVICE_FUNC inline void eqFieldKernel(unsigned int idx, ToroidalGridStruct
 /**
  \ingroup kernels
  */
-/*EIGEN_DEVICE_FUNC inline void surfaceFourier(unsigned int idx, fsc::cu::SurfaceFourierKernelData::Builder data) {
-}*/
+EIGEN_DEVICE_FUNC inline void surfaceFourier(unsigned int idx, fsc::cu::FourierKernelData::Builder data, FieldRef fieldData) {
+}
 
 }}
