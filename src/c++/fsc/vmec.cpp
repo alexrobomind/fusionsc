@@ -174,12 +174,17 @@ kj::StringTree makeCurrentOrDensityProfile(VmecRequest::Iota::FromCurrent::Reade
 	KJ_FAIL_REQUIRE("Unknown current interpretation, only current or current density supported", in);
 }
 
-void validateSurfaces(VmecSurfaces::Reader in) {
+void validateSurfaces(FourierSurfaces::Reader in) {
+	KJ_REQUIRE(hasMaximumOrdinal(in, 8), "Unsupported fields set in surface specification");
+	
+	KJ_REQUIRE(in.getNTurns() == 1, "Multi-turn surfaces not supported in VMEC input");
+	
 	auto nTor = in.getNTor();
 	auto mPol = in.getMPol();
 	
 	auto nSurf = in.getRCos().getShape()[0];
 	KJ_REQUIRE(nSurf >= 1);
+	
 	
 	validateTensor(in.getRCos(), {nSurf, 2 * nTor + 1, mPol + 1});
 	validateTensor(in.getZSin(), {nSurf, 2 * nTor + 1, mPol + 1});
@@ -190,7 +195,7 @@ void validateSurfaces(VmecSurfaces::Reader in) {
 	}
 }
 
-kj::StringTree makeAxisData(VmecSurfaces::Reader in) {
+kj::StringTree makeAxisData(FourierSurfaces::Reader in) {
 	validateSurfaces(in);
 	
 	auto nTor = in.getNTor();
@@ -241,7 +246,7 @@ kj::StringTree makeAxisData(VmecSurfaces::Reader in) {
 	return result;
 }
 
-kj::StringTree makeBoundaryData(VmecSurfaces::Reader in) {
+kj::StringTree makeBoundaryData(FourierSurfaces::Reader in) {
 	validateSurfaces(in);
 	
 	auto nTor = in.getNTor();
@@ -567,7 +572,7 @@ kj::String generateVmecInput(VmecRequest::Reader request, kj::PathPtr mgridFile)
 		"DELT = ", runParams.getTimeStep(), " ! Blend factor between runs\n"
 		"NTOR = ", request.getNTor(), "\n"
 		"MPOL = ", request.getMPol() + 1, "\n"
-		"NFP = ", sp.getPeriod(), "\n"
+		"NFP = ", sp.getToroidalSymmetry(), "\n"
 		"NTHETA = ", nGridPol, "\n"
 		"NZETA = ", nGridTor, "\n"
 		"NS_ARRAY = ", fArray(runParams.getNGridRadial()), "\n"
@@ -605,7 +610,7 @@ kj::String generateVmecInput(VmecRequest::Reader request, kj::PathPtr mgridFile)
 	}
 	
 	if(request.isFreeBoundary()) {
-		KJ_REQUIRE(request.getFreeBoundary().getVacuumField().getGrid().getNSym() == sp.getPeriod(), "Vacuum field symmetry must match field period of start surfaces");
+		KJ_REQUIRE(request.getFreeBoundary().getVacuumField().getGrid().getNSym() == sp.getToroidalSymmetry(), "Vacuum field symmetry must match field period of start surfaces");
 		KJ_REQUIRE(nGridTor == request.getFreeBoundary().getVacuumField().getGrid().getNPhi(), "Toroidal grid dimension of VMEC and vacuum file must match");
 		
 		result = kj::strTree(
@@ -634,7 +639,7 @@ void interpretOutputFile(kj::PathPtr path, VmecResult::Builder out) {
 	
 	surf.setNTor(nTor);
 	surf.setMPol(mPol - 1);
-	surf.setPeriod(nFP);
+	surf.setToroidalSymmetry(nFP);
 	
 	auto arrayDims = getDimensions(file.openDataSet("rmnc"));
 	int64_t nSurf = arrayDims[0].length;

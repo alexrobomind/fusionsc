@@ -803,24 +803,27 @@ struct FLTImpl : public FLT::Server {
 							rSin(mode.coeffs[1], toroidalIndex(mode.coeffs[0]), iStartPoint) = mode.sinCoeffs[0];
 							zSin(mode.coeffs[1], toroidalIndex(mode.coeffs[0]), iStartPoint) = mode.sinCoeffs[1];
 						}
-						
-						KJ_DBG(iStartPoint, theta0);
 					}
 					
 					auto out = results.getFieldLineAnalysis().initFourierModes();
-					writeTensor(rCos, out.getRCos());
-					writeTensor(rSin, out.getRSin());
-					writeTensor(zCos, out.getZCos());
-					writeTensor(zSin, out.getZSin());
+					
+					auto surf = out.initSurfaces();
+					surf.setToroidalSymmetry(calcFM.getToroidalSymmetry());
+					writeTensor(rCos, surf.getRCos());
+					writeTensor(zSin, surf.getZSin());
 					writeTensor(nTor, out.getNTor());
 					writeTensor(mPol, out.getMPol());
 					writeTensor(t0, out.getTheta0());
 					
-					applyPointShape(out.getRCos(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
-					applyPointShape(out.getRSin(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
-					applyPointShape(out.getZCos(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
-					applyPointShape(out.getZSin(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
+					applyPointShape(surf.getRCos(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
+					applyPointShape(surf.getZSin(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
 					applyPointShape(out.getTheta0(), {}, {});
+					
+					auto ns = surf.initNonSymmetric();
+					writeTensor(rSin, ns.getRSin());
+					writeTensor(zCos, ns.getZCos());
+					applyPointShape(ns.getRSin(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
+					applyPointShape(ns.getZCos(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
 					
 					out.getNTor().setShape({(size_t) nToroidalCoeffs, (size_t) nPoloicalCoeffs});
 					out.getMPol().setShape({(size_t) nToroidalCoeffs, (size_t) nPoloicalCoeffs});

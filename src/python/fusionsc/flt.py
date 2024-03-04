@@ -677,15 +677,21 @@ async def calculateFourierModes(
 	response = await _tracer().trace(request)
 	modes = response.fieldLineAnalysis.fourierModes
 	
-	return {
+	result = {
+		"surfaces" : modes.surfaces,
+		
 		"iota" : iotas,
 		"theta" : np.asarray(modes.theta0),
-		"rCos" : np.asarray(modes.rCos),
-		"rSin" : np.asarray(modes.rSin),
-		"zCos" : np.asarray(modes.zCos),
-		"zSin" : np.asarray(modes.zSin),
+		"rCos" : np.asarray(modes.surfaces.rCos),
+		"zSin" : np.asarray(modes.surfaces.zSin),
 		"mPol" : np.asarray(modes.mPol),
 		"nTor" : np.asarray(modes.nTor)
 	}
+	
+	if modes.surfaces.which_() == "nonSymmetric":
+		result["rSin"] = np.asarray(modes.surfaces.nonSymmetric.rSin)
+		result["zCos"] = np.asarray(modes.surfaces.nonSymmetric.zCos)
+	
+	return result
 	
 	

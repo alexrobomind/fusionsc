@@ -23,14 +23,14 @@ FSC_DECLARE_KERNEL(
 namespace internal { namespace {
 
 EIGEN_DEVICE_FUNC inline void computeRZ(
-	cu::VmecSurfaces::Reader surfaces,
+	cu::FourierSurfaces::Reader surfaces,
 	
 	double s, double phi, double theta,
 	double& rOut, double& zOut
 ) {
 	int32_t nTor = (int32_t) surfaces.getNTor();
 	uint32_t mPol = surfaces.getMPol();
-	uint32_t nfp = surfaces.getPeriod();
+	uint32_t nfp = surfaces.getToroidalSymmetry();
 	uint32_t nSurf = surfaces.getRCos().getShape()[0];
 	
 	uint32_t numTorCoeffs = 2 * nTor + 1;
@@ -110,7 +110,7 @@ EIGEN_DEVICE_FUNC inline void computeRZ(
 }
 
 EIGEN_DEVICE_FUNC inline void computeRZFromVxVy(
-	cu::VmecSurfaces::Reader surfaces,
+	cu::FourierSurfaces::Reader surfaces,
 	
 	double phi, double vx, double vy,
 	double& rOut, double& zOut

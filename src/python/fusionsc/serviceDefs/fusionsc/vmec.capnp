@@ -13,40 +13,6 @@ using DataPkg = import "data.capnp";
 using FTensor = DataPkg.Float64Tensor;
 using DataRef = DataPkg.DataRef;
 
-struct VmecSurfaces {
-	# Surface Fourier coefficients coefficients for input and output
-	# All tensors must have identical shapes
-	# - nToroidalCoeffs must be 2 * nTor + 1
-	# - nPoloidalCoeffs must be mPol + 1
-	#
-	# The order of storage for toroidal modes is [0, ..., nTor, -nTor, ..., -1]
-	# so that slicing with negative indices can be interpreted
-	# as slicing from the end (as is done in NumPy).
-	#
-	# The order of storage for polidal modes is [0, ..., mPol]
-	
-	# Tensor of shape [nSurfaces, nToroidalCoeffs, nPoloidalCoeffs]
-	rCos @0 : FTensor;
-	
-	# Tensor of shape [nSurfaces, nToroidalCoeffs, nPoloidalCoeffs]
-	zSin @1 : FTensor;
-	
-	period @2 : UInt32 = 1;
-	nTor @3 : UInt32;
-	mPol @4 : UInt32;
-	
-	union {
-		symmetric @5 : Void;
-		nonSymmetric : group {
-			# Tensor of shape [nSurfaces, nToroidalCoeffs, nPoloidalCoeffs]
-			rSin @6 : FTensor;
-			
-			# Tensor of shape [nSurfaces, nToroidalCoeffs, nPoloidalCoeffs]
-			zCos @7 : FTensor;
-		}
-	}
-}
-
 struct VmecProfile {
 	enum SplineType {
 		akima @0;
@@ -83,7 +49,7 @@ struct VmecRequest {
 		}
 	}
 	
-	startingPoint @3 : VmecSurfaces;
+	startingPoint @3 : Magnetics.FourierSurfaces;
 	
 	gamma @4 : Float64 = 0;
 	massProfile @5 : VmecProfile;
@@ -126,7 +92,7 @@ struct VmecRequest {
 struct VmecResult {
 	woutNc @0 : DataRef(Data);
 	
-	surfaces @1 : VmecSurfaces;
+	surfaces @1 : Magnetics.FourierSurfaces;
 	volume @2 : Float64;
 	energy @3 : Float64;
 }
@@ -148,14 +114,14 @@ struct VmecResponse {
 
 interface VmecDriver {	
 	run @0 VmecRequest -> VmecResponse;
-	computePhiEdge @1 (field : Magnetics.ComputedField, surface : VmecSurfaces) -> (phiEdge : Float64);
+	computePhiEdge @1 (field : Magnetics.ComputedField, surface : Magnetics.FourierSurfaces) -> (phiEdge : Float64);
 	
-	computePositions @2 (surfaces : VmecSurfaces, sPhiTheta : FTensor) -> (phiZR : FTensor);
-	invertPositions @3 (surfaces : VmecSurfaces, phiZR : FTensor) -> (sPhiTheta : FTensor);
+	computePositions @2 (surfaces : Magnetics.FourierSurfaces, sPhiTheta : FTensor) -> (phiZR : FTensor);
+	invertPositions @3 (surfaces : Magnetics.FourierSurfaces, phiZR : FTensor) -> (sPhiTheta : FTensor);
 }
 
 struct VmecKernelComm {
-	surfaces @0 : VmecSurfaces;
+	surfaces @0 : Magnetics.FourierSurfaces;
 	pzr @1 : List(Float64);
 	spt @2 : List(Float64);
 }

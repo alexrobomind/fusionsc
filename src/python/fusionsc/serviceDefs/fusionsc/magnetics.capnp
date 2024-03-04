@@ -101,6 +101,48 @@ struct AxisymmetricEquilibrium {
 	normalizedToroidalField @7 : List(Float64);
 }
 
+struct FourierSurfaces {
+	# Surface Fourier coefficients coefficients for input and output
+	# All tensors must have identical shapes
+	# - nToroidalCoeffs must be 2 * nTor + 1
+	# - nPoloidalCoeffs must be mPol + 1
+	#
+	# The order of storage for toroidal modes is [0, ..., nTor, -nTor, ..., -1]
+	# so that slicing with negative indices can be interpreted
+	# as slicing from the end (as is done in NumPy).
+	#
+	# The order of storage for polidal modes is [0, ..., mPol]
+	
+	rCos @0 : Float64Tensor;
+	# Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
+	
+	zSin @1 : Float64Tensor;
+	# Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
+	
+	toroidalSymmetry @2 : UInt32 = 1;
+	# Multiplier for parallel mode number (e.g. 5 for W7-X)
+	
+	nTurns @3 : UInt32 = 1;
+	# Divisor for parallel mode number. Usually 1, but can equal a
+	# different number if the surface has an nTurns * 2pi periodic
+	# structure, such as a magnetic island (in this case this would
+	# be the island's m number
+	
+	nTor @4 : UInt32;
+	mPol @5 : UInt32;
+	
+	union {
+		symmetric @6 : Void;
+		nonSymmetric : group {
+			rSin @7 : Float64Tensor;
+			# Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
+			
+			zCos @8 : Float64Tensor;
+			# Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
+		}
+	}
+}
+
 # =========================== Device-specifics =============================
 
 # --------------------------------- W7-X -----------------------------------

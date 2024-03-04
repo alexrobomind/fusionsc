@@ -32,7 +32,7 @@ freeBoundary:
 startingPoint:
   nTor: 1
   mPol: 1
-  period: 5
+  toroidalSymmetry: 5
   
   rCos:
     shape: [2, 3, 2]

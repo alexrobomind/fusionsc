@@ -197,20 +197,17 @@ struct FLTResponse {
 			#
 			# The order of storage for poloidal modes is [0, ..., mPol]
 			
-			# Tensors of shape startPointShape[1:] + [nToroidalCoeffs, nPoloidalCoeffs]
-			rCos @12 : Data.Float64Tensor;
-			rSin @13 : Data.Float64Tensor;
-			zCos @14 : Data.Float64Tensor;
-			zSin @15 : Data.Float64Tensor;
+			# Surfaces
+			surfaces @12 : Magnetics.FourierSurfaces;
 			
-			# Theta values of starting points
-			theta0 @16 : Data.Float64Tensor;
+			# Theta values (poloidal angle) of starting points
+			theta0 @13 : Data.Float64Tensor;
 			
 			# Mode number tensors of shape [nToroidalCoeffs, nPoloidalCoeffs]
 			# These are float tensors because we want to support fractional mode numbers
 			# for magnetic island support (phi ranging from 0 to e.g. 12 pi)
-			mPol @17 : Data.Float64Tensor;
-			nTor @18 : Data.Float64Tensor;
+			mPol @14 : Data.Float64Tensor;
+			nTor @15 : Data.Float64Tensor;
 		}
 	}
 	
