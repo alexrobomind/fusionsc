@@ -218,6 +218,7 @@ EIGEN_DEVICE_FUNC inline void eqFieldKernel(unsigned int idx, ToroidalGridStruct
 /**
  \ingroup kernels
  */
-EIGEN_DEVICE_FUNC inline void surfaceFourier(unsigned int idx, ToroidalGridStruct grid, TensorMap<Tensor<double, 4>> fieldData,
+/*EIGEN_DEVICE_FUNC inline void surfaceFourier(unsigned int idx, fsc::cu::SurfaceFourierKernelData::Builder data) {
+}*/
 
 }}
