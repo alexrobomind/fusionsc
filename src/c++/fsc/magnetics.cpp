@@ -16,57 +16,36 @@ namespace fsc {
 namespace {
 	
 struct FieldCalculation {
+	using FieldValues = ::fsc::kernels::FieldValues;
 	using Field = ::fsc::kernels::Field;
+	
 	using MFilament = ::fsc::kernels::MFilament;
 	
 	constexpr static unsigned int GRID_VERSION = 7;
 	
 	Own<DeviceBase> _device;
-	ToroidalGridStruct grid;
-	ToroidalGrid::Reader gridReader;
-	DeviceMappingType<Field> field;
+	
+	DeviceMappingType<FieldValues> field;
+	DeviceMappingType<FieldValues> points;
 	
 	// This promise makes sure we only schedule a
 	// calculation once the previous is finished
 	Promise<void> calculation = READY_NOW;
 	
-	FieldCalculation(/*ToroidalGridStruct*/ToroidalGrid::Reader in, DeviceBase& device) :
+	FieldCalculation(FieldValues&& pointsIn, DeviceBase& device) :
 		_device(device.addRef()),
-		grid(readGrid(in, GRID_VERSION)),
-		gridReader(in),
-		field(mapToDevice(Field(3, grid.nR, grid.nZ, grid.nPhi), device, true))
+		field(mapToDevice(FieldValues(pointsIn.dimension(0), 3), device, true)),
+		points(mapToDevice(mv(pointsIn), device, true))
 	{
 		field -> getHost().setZero();
+		
 		field -> updateDevice();
+		points -> updateDevice();
 	}
 	
 	~FieldCalculation() {}
 	
-	void add(double scale, Float64Tensor::Reader input) {
-		auto shape = input.getShape();
-		
-		KJ_REQUIRE(shape.size() == 4);
-		KJ_REQUIRE(shape[3] == 3);
-		
-		auto data = input.getData();
-		
-		// Write field into native format
-		Field newField(3, grid.nR, grid.nZ, grid.nPhi);
-		for(int i = 0; i < newField.size(); ++i) {
-			newField.data()[i] = data[i];
-		}
-		
-		calculation = calculation.then([this, newField = mv(newField), scale]() mutable {
-			return FSC_LAUNCH_KERNEL(
-				kernels::addFieldKernel,
-				*_device, 
-				field -> getHost().size(),
-				FSC_KARG(field, NOCOPY), FSC_KARG(newField, ALIAS_IN), scale
-			);
-		});
-	}
-	
-	void addDifferent(double scale, Float64Tensor::Reader otherFieldIn, ToroidalGridStruct otherGrid) {
+	void addComputed(double scale, Float64Tensor::Reader otherFieldIn, ToroidalGridStruct otherGrid) {
 		auto shape = otherFieldIn.getShape();
 		
 		KJ_REQUIRE(shape.size() == 4);
@@ -75,6 +54,10 @@ struct FieldCalculation {
 		auto data = otherFieldIn.getData();
 		
 		// Write field into native format
+		// for(auto i : otherFieldIn.getShape())
+		// 	KJ_DBG("Shape", i);
+	
+		// KJ_DBG(3, otherGrid.nR, otherGrid.nZ, otherGrid.nPhi);
 		Field otherField(3, otherGrid.nR, otherGrid.nZ, otherGrid.nPhi);
 		KJ_REQUIRE(otherField.size() == data.size());
 		
@@ -86,8 +69,8 @@ struct FieldCalculation {
 			return FSC_LAUNCH_KERNEL(
 				kernels::addFieldInterpKernel,
 				*_device, 
-				field -> getHost().size() / 3,
-				FSC_KARG(field, NOCOPY), grid,
+				field -> getHost().dimension(0),
+				FSC_KARG(field, NOCOPY), FSC_KARG(points, NOCOPY),
 				FSC_KARG(otherField, ALIAS_IN), otherGrid,
 				scale
 			);
@@ -125,8 +108,8 @@ struct FieldCalculation {
 			return FSC_LAUNCH_KERNEL(
 				kernels::biotSavartKernel,
 				*_device,
-				field -> getHost().size() / 3,
-				grid, FSC_KARG(filament, ALIAS_IN), current, coilWidth, stepSize, FSC_KARG(field, NOCOPY)
+				field -> getHost().dimension(0), FSC_KARG(points, NOCOPY),
+				FSC_KARG(filament, ALIAS_IN), current, coilWidth, stepSize, FSC_KARG(field, NOCOPY)
 			);
 		});
 	}
@@ -138,8 +121,9 @@ struct FieldCalculation {
 			return FSC_LAUNCH_KERNEL(
 				kernels::eqFieldKernel,
 				*_device,
-				field -> getHost().size() / 3,
-				grid, FSC_KARG(mapped, ALIAS_IN), scale, FSC_KARG(field, NOCOPY)
+				field -> getHost().dimension(0),
+				FSC_KARG(points, NOCOPY),
+				FSC_KARG(mapped, ALIAS_IN), scale, FSC_KARG(field, NOCOPY)
 			);
 		});
 	}
@@ -163,103 +147,163 @@ struct CalculationSession : public FieldCalculator::Server {
 	// Device device;
 	Own<DeviceBase> device;
 	
-	// ToroidalGridStruct grid;
-	// Cache<ID, LocalDataRef<Float64Tensor>> cache;
-	
-	CalculationSession(Own<DeviceBase> device/*, ToroidalGrid::Reader newGrid*/) :
-		device(mv(device))/*,
-		grid(readGrid(newGrid, GRID_VERSION))*/
+	CalculationSession(Own<DeviceBase> device) :
+		device(mv(device))
 	{}
 	
-	//! Handles compute request
-	Promise<void> compute(ComputeContext context) {
-		// context.allowCancellation(); // NOTE: In capnproto 0.11, this has gone away
-		KJ_LOG(INFO, "Initiating magnetic field computation");
+	Promise<void> evaluateXyz(EvaluateXyzContext context) {
+		KJ_LOG(INFO, "Initiating magnetic field evaluation");
 		
-		// Copy input field (so that call context can be released)
-		auto field = heapHeld<Temporary<MagneticField>>(context.getParams().getField());
-		auto grid  = heapHeld<Temporary<ToroidalGrid>>(context.getParams().getGrid());
-		context.releaseParams();
+		auto field = context.getParams().getField();
+		auto pointsIn = context.getParams().getPoints();
 		
-		// Fill in computed grid struct
-		auto compField = context.initResults().initComputedField();
-		// writeGrid(grid, compField.initGrid());
-		compField.setGrid(*grid);
+		// Validate shape of input tensor
+		validateTensor(pointsIn);
+		auto pointsShape = pointsIn.getShape();
+		KJ_REQUIRE(pointsIn.getShape().size() >= 1);
+		KJ_REQUIRE(pointsIn.getShape()[0] == 3);
 		
-		// Start calculation lazily
-		auto data = processRoot(*field, *grid)
-		/*.then([this, field, context, grid](LocalDataRef<Float64Tensor> tensorRef) mutable {
-			// Cache field if not present, use existing if present
-			return ID::fromReaderWithRefs(field->asBuilder())
-			.then([this, tensorRef = mv(tensorRef)](ID id) mutable -> DataRef<Float64Tensor>::Client {
-				auto insertResult = cache.insert(id, mv(tensorRef));
-				return attach(mv(insertResult.element), mv(insertResult.ref));
-			});
-		})*/
-		.attach(thisCap(), field.x(), grid.x()).eagerlyEvaluate(nullptr);
+		size_t nPoints = 1;
+		for(auto i : kj::range(1, pointsShape.size()))
+			nPoints *= pointsShape[i];
 		
-		compField.setData(mv(data));
-		return READY_NOW;
+		auto pointData = pointsIn.getData();
+		
+		Eigen::Tensor<double, 2> points(nPoints, 3);
+		for(auto i : kj::range(0, nPoints)) {
+			points(i, 0) = pointData[0 * nPoints + i];
+			points(i, 1) = pointData[1 * nPoints + i];
+			points(i, 2) = pointData[2 * nPoints + i];
+		}
+		
+		return processRoot(field, mv(points), context.getResults().initValues())
+		.then([context, pointsShape]() mutable {
+			// Adjust field shape to match points shape
+			context.getResults().getValues().setShape(pointsShape);
+		});
 	}
 	
-	Promise<void> evaluateXyz(EvaluateXyzContext ctx) {
-		auto params = ctx.getParams();
+	Promise<void> evaluatePhizr(EvaluatePhizrContext context) {
+		auto xyzReq = thisCap().evaluateXyzRequest();
+		auto params = context.getParams();
 		
-		auto field = params.getField();
-		auto points = params.getPoints();
+		xyzReq.setField(params.getField());
+		xyzReq.setPoints(params.getPoints());
 		
-		auto shape = points.getShape();
-		KJ_REQUIRE(shape.size() >= 1);
-		KJ_REQUIRE(shape[0] == 3);
+		auto points = xyzReq.getPoints().getData();
+		auto nPoints = points.size() / 3;
 		
-		return getActiveThread().dataService().download(field.getData())
-		.then([ctx, points, field](auto localRef) mutable {			
-			auto result = ctx.initResults();
-			result.getValues().setShape(points.getShape());
+		for(auto i : kj::range(0, nPoints)) {
+			double phi = points[0 * nPoints + i];
+			double z = points[1 * nPoints + i];
+			double r = points[2 * nPoints + i];
 			
-			auto dataIn = points.getData();
-			auto dataOut = result.getValues().initData(dataIn.size());
+			double x = std::cos(phi) * r;
+			double y = std::sin(phi) * r;
 			
-			KJ_REQUIRE(dataIn.size() % 3 == 0, "Data size not divisible by 3");
+			points.set(0 * nPoints + i, x);
+			points.set(1 * nPoints + i, y);
+			points.set(2 * nPoints + i, z);
+		}
+		
+		return xyzReq.send().then([params, nPoints, context](auto response) mutable {
+			auto results = context.initResults();
+			results.setValues(response.getValues());
 			
-			// Prepare interpolator
-			using InterpolationStrategy = C1CubicInterpolation<double>;
-			auto grid = field.getGrid();
-			SlabFieldInterpolator<InterpolationStrategy> interpolator(InterpolationStrategy(), field.getGrid());
+			auto points = params.getPoints().getData();
+			auto values = results.getValues().getData();
 			
-			Own<TensorMap<const Tensor<double, 4>>> fieldTensor = mapTensor<Tensor<double, 4>>(localRef.get());
+			KJ_REQUIRE(values.size() == 3 * nPoints);
 			
-			uint64_t offset = dataIn.size() / 3;
-			for(auto i : kj::range(0, offset)) {
-				Vec3d fieldValue = interpolator(
-					*fieldTensor,
-					Vec3d(dataIn[i], dataIn[i + offset], dataIn[i + 2 * offset])
-				);
+			for(auto i : kj::range(0, nPoints)) {
+				double bX = values[0 * nPoints + i];
+				double bY = values[1 * nPoints + i];
+				double bZ = values[2 * nPoints + i];
 				
-				dataOut.set(i, fieldValue(0));
-				dataOut.set(i + offset, fieldValue(1));
-				dataOut.set(i + 2 * offset, fieldValue(2));
+				double phi = points[0 * nPoints + i];
+				
+				double bR = bX * std::cos(phi) + bY * std::sin(phi);
+				double bPhi = bY * std::cos(phi) - bX * std::sin(phi);
+				
+				values.set(0 * nPoints + i, bPhi);
+				values.set(1 * nPoints + i, bZ);
+				values.set(2 * nPoints + i, bR);
 			}
 		});
 	}
 	
+	//! Handles compute request
+	Promise<void> compute(ComputeContext context) {
+		KJ_LOG(INFO, "Initiating magnetic field computation");
+		
+		constexpr unsigned int GRID_VERSION = 7;
+		auto grid = readGrid(context.getParams().getGrid(), GRID_VERSION);
+		
+		// Calculate all grid points
+		Tensor<double, 4> points(grid.nPhi, grid.nZ, grid.nR, 3);
+		for(auto iR : kj::range(0, grid.nR)) {
+			for(auto iPhi : kj::range(0, grid.nPhi)) {
+				for(auto iZ : kj::range(0, grid.nZ)) {
+					points(iPhi, iZ, iR, 0) = grid.phi(iPhi);
+					points(iPhi, iZ, iR, 1) = grid.z(iZ);
+					points(iPhi, iZ, iR, 2) = grid.r(iR);
+				}
+			}
+		}
+		
+		// Submit evaluation request request
+		auto calcReq = thisCap().evaluatePhizrRequest();
+		calcReq.setField(context.getParams().getField());
+		writeTensor(points, calcReq.getPoints());
+		
+		// Parameters no longer required
+		context.releaseParams();
+		
+		auto refPromise = calcReq.send().then([grid](auto response) -> DataRef<Float64Tensor>::Client {
+			Tensor<double, 4> values;
+			readTensor(response.getValues(), values);
+			
+			Temporary<Float64Tensor> holder;
+			
+			// The computation request uses the format (phi, z, r, 3) (column major)
+			// We need to transpose to (3, r, z, phi)
+			{
+				using A = Eigen::array<Eigen::Index, 4>;
+				Tensor<double, 4> tmp = values.shuffle<A>({3, 2, 1, 0});
+				values = tmp;
+			}
+			
+			writeTensor(values, holder.asBuilder());
+			
+			return getActiveThread().dataService().publish(holder.asReader());
+		});
+			
+		auto cf = context.initResults().getComputedField();
+		writeGrid(grid, cf.initGrid());
+		cf.setData(mv(refPromise));
+		
+		return READY_NOW;
+	}
+	
+	Promise<void> interpolateXyz(InterpolateXyzContext ctx) {
+		auto params = ctx.getParams();
+		
+		auto req = thisCap().evaluateXyzRequest();
+		
+		req.getField().setComputedField(params.getField());
+		req.setPoints(params.getPoints());
+		
+		return ctx.tailCall(mv(req));
+	}
+	
 	//! Processes a root node of a magnetic field (creates calculator)
-	Promise<LocalDataRef<Float64Tensor>> processRoot(MagneticField::Reader node, ToroidalGrid::Reader grid) {		
-		auto newCalculator = heapHeld<FieldCalculation>(grid, *device);
+	Promise<void> processRoot(MagneticField::Reader node, Eigen::Tensor<double, 2>&& points, Float64Tensor::Builder out) {		
+		auto newCalculator = heapHeld<FieldCalculation>(mv(points), *device);
 		
 		auto calcDone = processField(*newCalculator, node, 1);
 		
-		return calcDone.then([newCalculator, this]() mutable {	
-			auto result = heapHeld<Temporary<Float64Tensor>>();	
-			
-			auto publish = newCalculator->finish(*result).then([result, this]() mutable {
-				KJ_LOG(INFO, "Field calculation finished");
-				return getActiveThread().dataService().publish(result->asReader());
-			})
-			.eagerlyEvaluate(nullptr)
-			.attach(result.x());
-			
-			return publish;
+		return calcDone.then([newCalculator, out, this]() mutable {				
+			return newCalculator -> finish(out).eagerlyEvaluate(nullptr);
 		})
 		.attach(newCalculator.x());
 	}
@@ -326,29 +370,15 @@ struct CalculationSession : public FieldCalculator::Server {
 				});
 			}
 			case MagneticField::COMPUTED_FIELD: {
-				// First check grid compatibility
-				auto cField = node.getComputedField();				
-				Temporary<ToroidalGrid> grid = cField.getGrid();
+				auto cField = node.getComputedField();
 				
-				/*KJ_REQUIRE(
-					ID::fromReader(grid) == ID::fromReader(calculator.gridReader),
-					"The field you are using as input and the field you are trying to calculate "
-					"have differing grids. Currently, interpolation between different magnetic "
-					"grids is not yet implemented. If you really need this, please contact the "
-					"authors and request implementation of cross-grid interpolation. Following "
-					"are the two grids as interpreted by this code.",
-					grid, calculator.gridReader
-				);*/
+				constexpr unsigned int GRID_VERSION = 7;
+				ToroidalGridStruct grid = readGrid(cField.getGrid(), GRID_VERSION);
 				
 				// Then download data				
 				return getActiveThread().dataService().download(cField.getData())
-				.then([&calculator, scale, grid = mv(grid)](LocalDataRef<Float64Tensor> field) {
-					if(ID::fromReader(grid.asReader()) == ID::fromReader(calculator.gridReader)) {
-						return calculator.add(scale, field.get());
-					} else {
-						constexpr unsigned int GRID_VERSION = 7;
-						return calculator.addDifferent(scale, field.get(), readGrid(grid, GRID_VERSION));
-					}
+				.then([&calculator, scale, grid](LocalDataRef<Float64Tensor> field) {					
+					calculator.addComputed(scale, field.get(), grid);
 				});
 			}
 			case MagneticField::FILAMENT_FIELD: {
@@ -370,17 +400,6 @@ struct CalculationSession : public FieldCalculator::Server {
 			}
 			case MagneticField::CACHED: {
 				auto cached = node.getCached();
-				
-				auto myGrid = ID::fromReader(calculator.gridReader);
-				auto cachedGrid = ID::fromReader(cached.getComputed().getGrid());
-				
-				if(myGrid == cachedGrid) {
-					return getActiveThread().dataService().download(cached.getComputed().getData())
-					.then([&calculator, scale](LocalDataRef<Float64Tensor> field) {
-						return calculator.add(scale, field.get());
-					});
-				}
-				
 				return processField(calculator, cached.getNested(), scale);
 			}
 			case MagneticField::AXISYMMETRIC_EQUILIBRIUM: {

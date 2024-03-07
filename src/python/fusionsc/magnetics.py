@@ -133,8 +133,8 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 	@asyncFunction
 	async def interpolateXyz(self, points, grid = None):
 		"""
-		Evaluates the magnetic field in the given coordinates. Outside the grid, the field will use the constant
-		values (in slab coordinates) at the grid boundary.
+		Evaluates the magnetic field at target positions by first computing the magnetic field
+		at the target points (if not yet done), and then 
 	
 		Parameters:
 			- points: A numpy-array of shape [3, ...] (at least 1D) with the points in x, y, z coordinates.
@@ -145,7 +145,39 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		"""
 		compField = (await self.compute.asnc(grid)).data.computedField
 		
-		response = await _calculator().evaluateXyz(compField, points)
+		response = await _calculator().interpolateXyz(compField, points)
+		return np.asarray(response.values)
+	
+	@asyncFunction
+	async def evaluateXyz(self, points):
+		"""
+		Evaluates the magnetic field in the given coordinates. Unlike interpolateXyz, this function
+		does NOT compute the field on a grid and then interpolate, but instead evaluates the field
+		directly at the given point.
+	
+		Parameters:
+			- points: A numpy-array of shape [3, ...] (at least 1D) with the points in x, y, z coordinates.
+		
+		Returns:
+			A numpy array of shape points.shape with the field as x, y, z field (cartesian).
+		"""
+		resolved = await self.resolve.asnc()
+		response = await _calculator().evaluateXyz(resolved.data, points)
+		return np.asarray(response.values)
+	
+	@asyncFunction
+	async def evaluateRzphi(self, points):
+		"""
+		Evaluates the magnetic field in the given coordinates. 
+		
+		Parameters:
+			- points: A numpy-array of shape [3, ...] (at least 1D) with the points in r, z, phi coordinates.
+		
+		Returns:
+			A numpy array of shape points.shape with the field as x, y, z field (cartesian).
+		"""
+		resolved = await self.resolve.asnc()
+		response = await _calculator().evaluateRzphi(resolved.data, points)
 		return np.asarray(response.values)
 	
 	@asyncFunction

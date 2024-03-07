@@ -86,12 +86,18 @@ interface FieldResolver {
 # Interface for the computation of magnetic fields
 
 interface FieldCalculator $Cxx.allowCancellation {
+	struct EvalResult { values @0 : Float64Tensor; }
 	compute @0 (field : MagneticField, grid : ToroidalGrid) -> (computedField : ComputedField);
 	
-	# Evaluate field at position. Points must be of shape [3, ...].
-	evaluateXyz @1 (field : ComputedField, points : Float64Tensor) -> (values : Float64Tensor);
+	# Interpolate computed field at position. Points must be of shape [3, ...].
+	interpolateXyz @1 (field : ComputedField, points : Float64Tensor) -> EvalResult;
 	
-	calculateFourierComponents @2 (field : ComputedField, surfaces : FourierSurfaces) -> (components : Float64Tensor, mPol : Float64Tensor, nTor : Float64Tensor);
+	# Point-wise field evaluation
+	evaluateXyz @2 (field : MagneticField, points : Float64Tensor) -> EvalResult;
+	evaluatePhizr @3 (field : MagneticField, points : Float64Tensor) -> EvalResult;
+	
+	# Fourier-mode evaluation
+	calculateFourierComponents @4 (field : MagneticField, surfaces : FourierSurfaces) -> (components : Float64Tensor, mPol : Float64Tensor, nTor : Float64Tensor);
 }
 
 struct BiotSavartSettings {

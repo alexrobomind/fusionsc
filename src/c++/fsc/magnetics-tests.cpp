@@ -46,15 +46,18 @@ TEST_CASE("build-field") {
 		double reference = 2e-7 / r * sin(atan2(1, r));
 		TVec3d upscaled = zPlane.chip(iPhi, 2).chip(iR, 1) / reference;
 		TensorFixedSize<double, Eigen::Sizes<>> dist = (upscaled - ref).square().sum().sqrt();
-		// KJ_DBG(dist());
 		
+		// KJ_DBG(dist());
 		KJ_REQUIRE(dist() < 0.01);
 	}}
 	
 	// Check field evaluation
 	
 	auto evalRequest = session.evaluateXyzRequest();
-	evalRequest.setField(computed);
+	evalRequest.getField().setComputedField(computed);
+	//evalRequest.setField(WIRE_FIELD.get());
+	
+	// KJ_DBG(data.get());
 	
 	uint32_t nPhi = 20;
 	uint32_t nR = 100;
@@ -87,6 +90,12 @@ TEST_CASE("build-field") {
 			double ref = 2e-7 / r * sin(atan2(1, r));
 			double refX = -std::sin(phi) * ref;
 			double refY =  std::cos(phi) * ref;
+			
+			double bR = bx * std::cos(phi) + by * std::sin(phi);
+			double bTor = by * std::cos(phi) - bx * std::sin(phi);
+			
+			// KJ_DBG(bx, refX, by, refY, bz);
+			// KJ_DBG(r, phi, bR, bTor, ref);
 			
 			KJ_REQUIRE(std::abs(bx / ref - refX / ref) < 0.05);
 			KJ_REQUIRE(std::abs(by / ref - refY / ref) < 0.05);
