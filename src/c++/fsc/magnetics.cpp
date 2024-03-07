@@ -114,6 +114,36 @@ struct FieldCalculation {
 		});
 	}
 	
+	void dipoles(double scale, DipoleCloud::Reader cloud) {
+		Tensor<double, 2> positions;
+		Tensor<double, 2> moments;
+		
+		readTensor(cloud.getPositions(), positions);
+		readTensor(cloud.getMagneticMoments(), moments);
+		
+		size_t nPoints = positions.dimension(0);
+		KJ_REQUIRE(moments.dimension(0) == nPoints);
+		KJ_REQUIRE(moments.dimension(1) == 3);
+		KJ_REQUIRE(positions.dimension(1) == 3);
+		
+		auto radii = cloud.getRadii();
+		KJ_REQUIRE(radii.size() == nPoints);
+		
+		auto radiiNative = kj::heapArray<double>(nPoints);
+		for(auto i : kj::indices(radii))
+			radiiNative[i] = radii[i];
+		
+		calculation = calculation.then([this, nPoints, scale, positions = mv(positions), moments = mv(moments), radiiNative = mv(radiiNative)]() mutable {
+			return FSC_LAUNCH_KERNEL(
+				kernels::dipoleFieldKernel,
+				*_device,
+				field -> getHost().dimension(0), FSC_KARG(points, NOCOPY),
+				FSC_KARG(mv(positions), ALIAS_IN), FSC_KARG(mv(moments), ALIAS_IN), FSC_KARG(mv(radiiNative), ALIAS_IN),
+				scale, FSC_KARG(field, NOCOPY)
+			);
+		});
+	}
+	
 	void equilibrium(double scale, AxisymmetricEquilibrium::Reader equilibrium) {		
 		calculation = calculation.then([this, equilibrium = Temporary<AxisymmetricEquilibrium>(equilibrium), scale]() mutable {
 			auto mapped = FSC_MAP_BUILDER(fsc, AxisymmetricEquilibrium, mv(equilibrium), *_device, true);
@@ -296,6 +326,40 @@ struct CalculationSession : public FieldCalculator::Server {
 		return ctx.tailCall(mv(req));
 	}
 	
+	Promise<void> calculateFourierMoments(calculateFourierComponents ctx) {
+		auto params = ctx.getParams();
+		KJ_REQUIRE(params.getNTor() >= 2 * params.getNMax() + 1);
+		KJ_REQUIRE(params.getMPol() >= 2 * params.getMPol() + 1);
+		
+		using FP = nudft::FourierPoint<2, 2>;
+		using FM = nudft::FourierMode<2, 2>;
+		
+		kj::Vector<FM> modes;
+		kj::Vector<FP> points;
+		
+		Tensor(nPoints, 3) inputPoints;
+		Tensor(nPoints, 3) radialComponents;
+		
+		radialComponents.setZero();
+		
+		for(auto iPhi : kj::range(0, nPhi)) {
+			for(auto iTheta : kj::range(0, nTheta)) {
+				double phi = 2 * np.pi / nSym * iPhi;
+				double theta = 2 * np.pi / nTheta * iTheta;
+				
+				size_t iPoint = points.size();
+				
+				FP point;
+				point.angles[0] = phi;
+				point.angles[1] = theta;
+				inputPoints.append(point);
+				
+				for(auto iM : kj::range(
+				inputPoints(0)
+			}
+		}
+	}
+	
 	//! Processes a root node of a magnetic field (creates calculator)
 	Promise<void> processRoot(MagneticField::Reader node, Eigen::Tensor<double, 2>&& points, Float64Tensor::Builder out) {		
 		auto newCalculator = heapHeld<FieldCalculation>(mv(points), *device);
@@ -404,6 +468,10 @@ struct CalculationSession : public FieldCalculator::Server {
 			}
 			case MagneticField::AXISYMMETRIC_EQUILIBRIUM: {
 				calculator.equilibrium(scale, node.getAxisymmetricEquilibrium());
+				return READY_NOW;
+			}
+			case MagneticField::DIPOLE_CLOUD: {
+				calculator.dipoles(scale, node.getDipoleCloud());
 				return READY_NOW;
 			}
 			default:

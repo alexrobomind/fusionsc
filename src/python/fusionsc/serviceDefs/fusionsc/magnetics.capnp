@@ -97,7 +97,11 @@ interface FieldCalculator $Cxx.allowCancellation {
 	evaluatePhizr @3 (field : MagneticField, points : Float64Tensor) -> EvalResult;
 	
 	# Fourier-mode evaluation
-	calculateFourierComponents @4 (field : MagneticField, surfaces : FourierSurfaces) -> (components : Float64Tensor, mPol : Float64Tensor, nTor : Float64Tensor);
+	calculatePerturbation @4 (
+		field : MagneticField, surfaces : FourierSurfaces,
+		nMax : UInt32, mMax : UInt32, toroidalSymmetry : UInt32,
+		nTor : UInt32, mPol : UInt32
+	) -> (components : Float64Tensor, mPol : Float64Tensor, nTor : Float64Tensor);
 }
 
 struct BiotSavartSettings {
@@ -130,6 +134,17 @@ struct Filament {
 			islandCoil @4 : UInt8;
 		}
 	}
+}
+
+struct DipoleCloud {
+	# Tensor of shape [3, nPoints]
+	positions @0 : Float64Tensor;
+	
+	# Tensor of shape [3, nPoints]
+	magneticMoments @1 : Float64Tensor;
+	
+	# List of length nPoints
+	radii @2 : List(Float64);
 }
 
 struct AxisymmetricEquilibrium {
@@ -249,6 +264,7 @@ struct MagneticField {
 		}
 		
 		axisymmetricEquilibrium @20 : AxisymmetricEquilibrium;
+		dipoleCloud @21 : DipoleCloud;
 		
 		# ========================= Device-specific ==========================
 		

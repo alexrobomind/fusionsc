@@ -137,7 +137,7 @@ add_library(
 )
 
 target_link_libraries(fsc PUBLIC deps cupnp fsc-service-genapi)
-target_link_libraries(fsc PRIVATE fusionsc_jsonscons)
+target_link_libraries(fsc PRIVATE fusionsc_jsonscons fusionsc_poissongen)
 
 target_include_directories(
 	fsc

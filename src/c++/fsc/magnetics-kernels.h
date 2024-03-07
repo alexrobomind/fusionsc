@@ -24,6 +24,7 @@ using FilamentRef = Eigen::TensorMap<MFilament>;
 
 FSC_DECLARE_KERNEL(addFieldInterpKernel, FieldValuesRef, FieldValuesRef, FieldRef, ToroidalGridStruct, double);
 FSC_DECLARE_KERNEL(biotSavartKernel, FieldValuesRef, FilamentRef, double, double, double, FieldValuesRef);
+FSC_DECLARE_KERNEL(dipoleFieldKernel, FieldValuesRef, FieldValuesRef, FieldValuesRef, kj::ArrayPtr<double>, double, FieldValuesRef);
 FSC_DECLARE_KERNEL(eqFieldKernel, FieldValuesRef, cu::AxisymmetricEquilibrium::Reader, double, FieldValuesRef);
 
 /**
@@ -94,14 +95,14 @@ EIGEN_DEVICE_FUNC inline void biotSavartKernel(unsigned int idx, FieldValuesRef 
 	out(idx, 2) += current * field_cartesian(2);
 }
 
-EIGEN_DEVICE_FUNC inline void dipoleFieldKernel(unsigned int idx, FieldValuesRef PointsOut, FieldValuesRef dipolePoints, FieldValues dipoleMoments, double dipoleRadius, double scale, FieldValuesRef out) {
+EIGEN_DEVICE_FUNC inline void dipoleFieldKernel(unsigned int idx, FieldValuesRef pointsOut, FieldValuesRef dipolePoints, FieldValuesRef dipoleMoments, kj::ArrayPtr<double> radii, double scale, FieldValuesRef out) {
 	// Based on field of magnetized sphere
 	// https://farside.ph.utexas.edu/teaching/jk1/Electromagnetism/node61.html
 	
 	Vec3d field(0, 0, 0);
-	Vec3D x(pointsOut(idx, 0), pointsOut(idx, 1), pointsOut(idx, 2));
+	Vec3d x(pointsOut(idx, 0), pointsOut(idx, 1), pointsOut(idx, 2));
 	
-	auto nPoints = dipoleData.dimension(0);
+	auto nPoints = dipolePoints.dimension(0);
 	for(int64_t iPoint = 0; iPoint < nPoints; ++iPoint) {
 		Vec3d p(dipolePoints(iPoint, 0), dipolePoints(iPoint, 1), dipolePoints(iPoint, 2));
 		Vec3d m(dipoleMoments(iPoint, 0), dipoleMoments(iPoint, 1), dipoleMoments(iPoint, 2));
@@ -111,6 +112,8 @@ EIGEN_DEVICE_FUNC inline void dipoleFieldKernel(unsigned int idx, FieldValuesRef
 		
 		constexpr double mu0over4pi = 1e-7;
 		constexpr double mu0 = mu0over4pi * 4 * fsc::pi;
+		
+		const double dipoleRadius = radii[iPoint];
 		
 		if(rAbs < dipoleRadius) {
 			double volume = 4.0 / 3.0 * fsc::pi * dipoleRadius * dipoleRadius * dipoleRadius;
