@@ -23,6 +23,8 @@ interface GeometryLib $Cxx.allowCancellation {
 	planarCut @2 (geometry : Geometry, plane : Plane) -> (edges : Float64Tensor); # edges has shape [3, :, 2]
 	
 	reduce @3 (geometry : Geometry, maxVertices : UInt32 = 1000000, maxIndices : UInt32 = 1000000) -> (ref : DataRef(MergedGeometry));
+	
+	weightedSample @4 (geometry : Geometry, scale : Float64 = 0.01) -> (centers : Float64Tensor, areas : List(Float64));
 }
 
 struct TagValue {

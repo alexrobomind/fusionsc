@@ -96,12 +96,24 @@ interface FieldCalculator $Cxx.allowCancellation {
 	evaluateXyz @2 (field : MagneticField, points : Float64Tensor) -> EvalResult;
 	evaluatePhizr @3 (field : MagneticField, points : Float64Tensor) -> EvalResult;
 	
+	# Evaluate points on Fourier surfaces
+	evalFourierSurface @4 (
+		surfaces : FourierSurfaces,
+		phi : List(Float64),
+		theta : List(Float64)
+	) -> (
+		points : Float64Tensor,
+		phiDerivatives : Float64Tensor,
+		thetaDerivaties : Float64Tensor
+	);
+		
+	
 	# Fourier-mode evaluation
-	calculatePerturbation @4 (
-		field : MagneticField, surfaces : FourierSurfaces,
-		nMax : UInt32, mMax : UInt32, toroidalSymmetry : UInt32,
-		nTor : UInt32, mPol : UInt32
-	) -> (components : Float64Tensor, mPol : Float64Tensor, nTor : Float64Tensor);
+	#calculatePerturbation @4 (
+	#	field : MagneticField, surfaces : FourierSurfaces,
+	#	nMax : UInt32, mMax : UInt32, toroidalSymmetry : UInt32,
+	#	nTor : UInt32, mPol : UInt32
+	#) -> (components : Float64Tensor, mPol : Float64Tensor, nTor : Float64Tensor);
 }
 
 struct BiotSavartSettings {

@@ -45,6 +45,48 @@ void readTensor(T2 reader, Tensor<T, rank, options, Index>& out) {
 		dataOut[i] = (T) data[i];
 }
 
+template<typename T, int rank, int options, typename Index, typename T2>
+void readVardimTensor(T2 reader, size_t variableDim, Tensor<T, rank, options, Index>& out) {
+	using TensorType = Tensor<T, rank, options, Index>;
+	
+	{
+		auto shape = reader.getShape();
+		KJ_REQUIRE(rank <= shape.size());
+		KJ_REQUIRE(variableDim < rank);
+		
+		size_t variableDimSize = 1;
+		for(auto iDim : kj::range(variableDim, variableDim + 1 + shape.size() - rank)
+			variableDimSize *= shape[iDim];
+	
+		typename TensorType::Dimensions dims;
+		for(size_t i = 0; i < rank; ++i) {
+			size_t entry;
+			if(i < variableDim)
+				entry = shape[i];
+			else if(i == variableDim)
+				entry = variableDimSize;
+			else
+				entry = shape[i + 1 + shape.size() - rank];
+			
+			if(options & Eigen::RowMajor) {
+				dims[i] = entry;
+			} else {
+				dims[rank - i - 1] = entry;
+			}
+		}
+	
+		out.resize(dims);
+	}
+	
+	auto data = reader.getData();
+	
+	KJ_REQUIRE(out.size() == data.size());
+	
+	auto dataOut = out.data();
+	for(size_t i = 0; i < out.size(); ++i)
+		dataOut[i] = (T) data[i];
+}
+
 template<typename T, typename T2>
 T readTensor(T2 reader) {
 	T result;

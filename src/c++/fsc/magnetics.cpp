@@ -326,7 +326,7 @@ struct CalculationSession : public FieldCalculator::Server {
 		return ctx.tailCall(mv(req));
 	}
 	
-	Promise<void> calculateFourierMoments(calculateFourierComponents ctx) {
+	Promise<void> evalFourierSurface(EvalFourierSurfaceContext ctx) {
 		auto params = ctx.getParams();
 		KJ_REQUIRE(params.getNTor() >= 2 * params.getNMax() + 1);
 		KJ_REQUIRE(params.getMPol() >= 2 * params.getMPol() + 1);
@@ -334,30 +334,121 @@ struct CalculationSession : public FieldCalculator::Server {
 		using FP = nudft::FourierPoint<2, 2>;
 		using FM = nudft::FourierMode<2, 2>;
 		
-		kj::Vector<FM> modes;
+		auto surfaces = params.getSurfaces();
+		auto surfNMax = surfaces.getMaxN();
+		auto surfMMax = surfaces.getMaxM();
+		
+		auto surfNumN = 2 * surfNMax + 1;
+		auto surfNumM = surfM + 1;
+		
+		uint32_t surfSym = getToroidalSymmetry();
+		uint32_t surfNTurns = surfaces.getNTurns();
+		
+		// Compute toroidal mode numbers & evaluation angles
+		auto modeN = kj::heapArray<double>(surfNumN);
+		for(auto iN : kj::indices(nodeN)) {
+			double baseN = iN;
+			if(iN > surfNMax)
+				baseN = ((int) iN) - (int) surfNMax;
+			
+			baseN *= surfSym;
+			baseN /= surfNTurns;
+			modeN[iN] = baseN;
+		}
+		
+		auto phiVals = kj::heapArray<double>(params.getNPhi());
+		for(auto iPhi : kj::indices(phiVals)) {
+			phiVals[iPhi] = 2 * fsc::pi * surfNTurns / phiVals.size() * iPhi;
+		}
+		
+		auto thetaVals = kj::heapArray<double>(params.getNTheta());
+		for(auto iTheta : kj::indices(phiVals)) {
+			thetaVals[iTheta] = 2 * fsc::pi / thetaVals.size() * iTheta;
+		}
+		
+		// Read symmetric surface basis
+		
+		Eigen::Tensor<double, 3> rCos;
+		Eigen::Tensor<double, 3> zSin;
+		readVardimTensor(surfaces.getRCos(), 0, rCos);
+		readVardimTensor(surfaces.getZSin(), 0, zSin);
+		
+		const size_t nSurfs = rCos.dimension(0);
+		
+		KJ_REQUIRE(rCos.dimension(1) == surfNumM);
+		KJ_REQUIRE(rCos.dimension(2) == surfNumN);
+		
+		KJ_REQUIRE(zSin.dimension(0) == nSurfs);
+		KJ_REQUIRE(zSin.dimension(1) == surfNumM);
+		KJ_REQUIRE(zSin.dimension(2) == surfNumN);
+		
+		Eigen::Tensor<double, 3> rSin(nSurfs, surfNumM, surfNumN);
+		Eigen::Tensor<double, 3> zCos(nSurfs, surfNumM, surfNumN);
+		
+		// Read non-symmetric surface basis
+		if(surfaces.isNonSymmetric()) {
+			readVardimTensor(surfaces.getNonSymmetric().getZCos(), 0, zCos);
+			readVardimTensor(surfaces.getNonSymmetric().getRSin(), 0, rSin);
+		
+			KJ_REQUIRE(zCos.dimension(0) == nSurfs);
+			KJ_REQUIRE(zCos.dimension(1) == surfNumM);
+			KJ_REQUIRE(zCos.dimension(2) == surfNumN);
+		
+			KJ_REQUIRE(rSin.dimension(0) == nSurfs);
+			KJ_REQUIRE(rSin.dimension(1) == surfNumM);
+			KJ_REQUIRE(rSin.dimension(2) == surfNumN);
+		}
+				
 		kj::Vector<FP> points;
 		
-		Tensor(nPoints, 3) inputPoints;
-		Tensor(nPoints, 3) radialComponents;
+		// Calculate points and derivatives on all surfaces
 		
-		radialComponents.setZero();
+		using ADS = Eigen::AutoDiffScalar<Vec2d>;
+		Eigen::Tensor<ADS, 4> points(nSurfs, nTheta, nPhi, 3);
+		points.setZero();
 		
+		for(auto iSurf : kj::range(0, nSurfs)) {
 		for(auto iPhi : kj::range(0, nPhi)) {
-			for(auto iTheta : kj::range(0, nTheta)) {
-				double phi = 2 * np.pi / nSym * iPhi;
-				double theta = 2 * np.pi / nTheta * iTheta;
-				
-				size_t iPoint = points.size();
-				
-				FP point;
-				point.angles[0] = phi;
-				point.angles[1] = theta;
-				inputPoints.append(point);
-				
-				for(auto iM : kj::range(
-				inputPoints(0)
-			}
+		for(auto iTheta : kj::range(0, nTheta)) {
+		for(auto m : kj::range(0, surfNumM)) {
+		for(auto iN : kj::range(0, surfNumN)) {
+			ADS phi(phiVals[iPhi], 2, 0);
+			ADS theta(thetaVals[iTheta], 2, 1);
+			double n = modeN[iN];
+			
+			ADS cosVal = std::cos(n * phi + m * theta);
+			ADS sinVal = std::sin(n * phi + m * theta);
+			
+			ADS rContrib = rCos(iSurf, m, iN) * cosVal + rSin(iSurf, m, iN) * sinVal;
+			ADS zContrib = rCos(iSurf, m, iN) * cosVal + rSin(iSurf, m, iN) * sinVal;
+			
+			ADS xContrib = std::cos(phi) * rContrib;
+			ADS yContrib = std::sin(phi) * rContrib;
+			
+			points(iSurf, iTheta, iPhi, 0) += xContrib;
+			points(iSurf, iTheta, iPhi, 1) += yContrib;
+			points(iSurf, iTheta, iPhi, 2) += zContrib;
 		}
+		}
+		}
+		}
+		}
+		
+		// Take apart autodiff scalar into elements
+		
+		Eigen::Tensor<double, 3> val(nSurfs, nTheta, nPhi, 3);
+		Eigen::Tensor<double, 3> ddphi(nSurfs, nTheta, nPhi, 3);
+		Eigen::Tensor<double, 3> ddTheta(nSurfs, nTheta, nPhi, 3);
+		for(auto i : kj::indices(values)) {
+			values.data[i] = points.data[i].value();
+			ddphi.data[i] = points.data[i].derivatives()[0];
+			ddTheta.data[i] = poitns.data[i].derivatives()[1];
+		}
+		
+	}
+	
+	Promise<void> calculateFourierMoments(CalculateFourierComponentsContext ctx) {
+		KJ_UNIMPLEMENTED();
 	}
 	
 	//! Processes a root node of a magnetic field (creates calculator)
