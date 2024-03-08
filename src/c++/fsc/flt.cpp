@@ -811,8 +811,6 @@ struct FLTImpl : public FLT::Server {
 					surf.setToroidalSymmetry(calcFM.getToroidalSymmetry());
 					writeTensor(rCos, surf.getRCos());
 					writeTensor(zSin, surf.getZSin());
-					writeTensor(nTor, out.getNTor());
-					writeTensor(mPol, out.getMPol());
 					writeTensor(t0, out.getTheta0());
 					
 					applyPointShape(surf.getRCos(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
@@ -825,8 +823,13 @@ struct FLTImpl : public FLT::Server {
 					applyPointShape(ns.getRSin(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
 					applyPointShape(ns.getZCos(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
 					
-					out.getNTor().setShape({(size_t) nToroidalCoeffs, (size_t) nPoloicalCoeffs});
-					out.getMPol().setShape({(size_t) nToroidalCoeffs, (size_t) nPoloicalCoeffs});
+					auto oNTor = out.initNTor(2 * maxN + 1);
+					for(int i : kj::indices(oNTor))
+						oNTor.set(i, i <= maxN ? i : i - (int) maxN);
+					
+					auto oMPol = out.initMPol(maxM + 1);
+					for(int i : kj::indices(oMPol))
+						oMPol.set(i, i);
 				}
 			}).attach(calc.x());
 		});

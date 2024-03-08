@@ -3,6 +3,7 @@
 #include "magnetics.h"
 #include "data.h"
 #include "interpolation.h"
+#include "nudft.h"
 
 #include "kernels/launch.h"
 #include "kernels/tensor.h"
@@ -471,27 +472,201 @@ struct CalculationSession : public FieldCalculator::Server {
 		return READY_NOW;
 	}
 	
-	/*Promise<void> calculateFourierMoments(CalculateFourierComponentsContext ctx) {
-		KJ_UNIMPLEMENTED();
-		KJ_REQUIRE(params.getNTor() >= 2 * params.getNMax() + 1);
-		KJ_REQUIRE(params.getMPol() >= 2 * params.getMPol() + 1);
-		
-		using FP = nudft::FourierPoint<2, 2>;
-		using FM = nudft::FourierMode<2, 2>;
+	Promise<void> calculateRadialModes(CalculateRadialModesContext ctx) {
+		return kj::startFiber(65536 * 8, [this, ctx](kj::WaitScope& ws) mutable {			
+			auto params = ctx.getParams();
+			auto surfaces = params.getSurfaces();
+			
+			auto gcd = [&](unsigned int a, unsigned int b) {
+				while(true) {
+					if(b == 0) return a;
+					a %= b;
+					std::swap(b, a);
+				}
+			};
+			
+			const size_t nSym = params.getNSym();
+			const double phiMultiplier = static_cast<double>(surfaces.getNTurns()) / nSym;
+			
+			auto phiVals = kj::heapArray<double>(params.getNPhi());
+			for(auto iPhi : kj::indices(phiVals)) {
+				phiVals[iPhi] = 2 * fsc::pi * phiMultiplier / phiVals.size() * iPhi;
+			}
+			
+			auto thetaVals = kj::heapArray<double>(params.getNTheta());
+			for(auto iTheta : kj::indices(phiVals)) {
+				thetaVals[iTheta] = 2 * fsc::pi / thetaVals.size() * iTheta;
+			}
+			
+			const int nPhi = params.getNPhi();
+			const int nTheta = params.getNTheta();
+			
+			Tensor<double, 4> surfPoints;
+			Tensor<double, 4> surfPhiDeriv;
+			Tensor<double, 4> surfThetaDeriv;
+			
+			// Calculate evaluation points for surfaces
+			{
+				auto req = thisCap().evalFourierSurfaceRequest();
+				req.setSurfaces(surfaces);
+				req.setPhi(phiVals);
+				req.setTheta(thetaVals);
 				
-		kj::Vector<FP> points;
+				auto resp = req.send().wait(ws);
+				readVardimTensor(resp.getPoints(), 1, surfPoints);
+				readVardimTensor(resp.getPhiDerivatives(), 1, surfPhiDeriv);
+				readVardimTensor(resp.getThetaDerivatives(), 1, surfThetaDeriv);
+			}
+			
+			const int nSurfs = surfPoints.dimension(2);
+			
+			// Calculate radial basis at evaluation points
+			Tensor<double, 4> radialBasis(nTheta, nPhi, nSurfs, 3);
+			
+			for(int iTheta : kj::range(0, nTheta)) {
+			for(int iPhi : kj::range(0, nPhi)) {
+			for(int iSurf : kj::range(0, nSurfs)) {
+				Vec3d ePhi(
+					surfPhiDeriv(iTheta, iPhi, iSurf, 0),
+					surfPhiDeriv(iTheta, iPhi, iSurf, 1),
+					surfPhiDeriv(iTheta, iPhi, iSurf, 2)
+				);
+				Vec3d eTheta(
+					surfThetaDeriv(iTheta, iPhi, iSurf, 0),
+					surfThetaDeriv(iTheta, iPhi, iSurf, 1),
+					surfThetaDeriv(iTheta, iPhi, iSurf, 2)
+				);
+				Vec3d eRad = ePhi.cross(eTheta);
+				eRad /= eRad.norm();
+				
+				radialBasis(iTheta, iPhi, iSurf, 0) = eRad(0);
+				radialBasis(iTheta, iPhi, iSurf, 1) = eRad(1);
+				radialBasis(iTheta, iPhi, iSurf, 2) = eRad(2);
+			}}}
+			
+			// Calculate field values at evaluation points
+			Tensor<double, 3> radialValues;
+			{
+				auto req = thisCap().evaluateXyzRequest();
+				req.setField(params.getField());
+				writeTensor(surfPoints, req.initPoints());
+				
+				auto resp = req.send().wait(ws);
+				
+				Tensor<double, 4> fieldValues;
+				readTensor(resp.getValues(), fieldValues);
+				
+				radialValues = (fieldValues * radialBasis).sum(Eigen::array<int, 1>({3}));
+			}
+			
+			// Normalize against background field
+			if(params.hasBackground()) {
+				auto req = thisCap().evaluateXyzRequest();
+				req.setField(params.getBackground());
+				writeTensor(surfPoints, req.initPoints());
+				
+				auto resp = req.send().wait(ws);
+				
+				Tensor<double, 4> fieldValues;
+				readTensor(resp.getValues(), fieldValues);
+			
+				for(int iTheta : kj::range(0, nTheta)) {
+				for(int iPhi : kj::range(0, nPhi)) {
+				for(int iSurf : kj::range(0, nSurfs)) {
+					Vec3d backgroundField(
+						fieldValues(iTheta, iPhi, iSurf, 0),
+						fieldValues(iTheta, iPhi, iSurf, 1),
+						fieldValues(iTheta, iPhi, iSurf, 2)
+					);
+					double norm = backgroundField.norm();
+					radialValues(iTheta, iPhi, iSurf) /= norm;
+				}}}
+			}
+			
+			// Prepare modes to calculate
+			const int nMax = params.getNMax();
+			const int mMax = params.getMMax();
+			
+			const int numN = 2 * nMax + 1;
+			const int numM = mMax + 1;
+			
+			using FP = nudft::FourierPoint<2, 1>;
+			using FM = nudft::FourierMode<2, 1>;
+						
+			kj::Vector<FM> modes;
+			modes.reserve(mMax * (2 * nMax + 1));
+			
+			for(auto iM : kj::range(0, numM)) {
+			for(auto iN : kj::range(0, numN)) {
+				int m = iM;
+				int n = iN <= nMax ? iN : iN - nMax;
+				
+				if(m == 0 && n < 0)
+					continue;
+				
+				FM mode;
+				mode.coeffs[0] = n;
+				mode.coeffs[1] = m;
+				modes.add(mode);
+			}}
+			
+			// Run NUDFT (Non-uniform DFT)
+			Tensor<double, 3> cosCoeffs(numM, numN, nSurfs);
+			Tensor<double, 3> sinCoeffs(numM, numN, nSurfs);
+			
+			for(int iSurf : kj::range(0, nSurfs)) {				
+				kj::Vector<FP> points;
+				points.reserve(nPhi * nTheta);
+				
+				for(int iPhi : kj::range(0, nPhi)) {
+				for(int iTheta : kj::range(0, nTheta)) {
+					FP newPoint;
+					
+					newPoint.angles[0] = phiVals[iPhi] / phiMultiplier;
+					newPoint.angles[1] = thetaVals[iTheta];
+					newPoint.y[0] = radialValues(iTheta, iPhi, iSurf);
+					
+					points.add(newPoint);
+				}}
+				
+				nudft::calculateModes<2, 1>(points, modes);
+				
+				for(auto& mode : modes) {
+					int im = mode.coeffs[0];
+					int in = mode.coeffs[1];
+					if(in < 0) in += numN;
+					
+					cosCoeffs(im, in, iSurf) = mode.cosCoeffs[0];
+					sinCoeffs(im, in, iSurf) = mode.sinCoeffs[0];
+				}
+			}
+			
+			// Write results
+			auto results = ctx.initResults();
+			writeTensor(cosCoeffs, results.initCosCoeffs());
+			writeTensor(sinCoeffs, results.initSinCoeffs());
+			
+			auto adjustShape = [&](Float64Tensor::Builder out) {
+				auto surfShape = surfaces.getRCos().getShape();
+				auto shape = out.initShape(surfShape.size());
+				for(auto i : kj::range(0, surfShape.size() - 1))
+					shape.set(i, surfShape[i]);
+				shape.set(shape.size() - 2, numN);
+				shape.set(shape.size() - 1, numM);
+			};
+			adjustShape(results.getCosCoeffs());
+			adjustShape(results.getSinCoeffs());
+			
+			auto mOut = results.initMPol(numM);
+			for(auto i : kj::indices(mOut))
+				mOut.set(i, i);
+			
+			auto nOut = results.initNTor(numN);
+			for(int i : kj::indices(nOut))
+				nOut.set(i, i <= mMax ? i : i - numN);
+		});
+	}
 		
-		auto phiVals = kj::heapArray<double>(params.getNPhi());
-		for(auto iPhi : kj::indices(phiVals)) {
-			phiVals[iPhi] = 2 * fsc::pi * surfNTurns / phiVals.size() * iPhi;
-		}
-		
-		auto thetaVals = kj::heapArray<double>(params.getNTheta());
-		for(auto iTheta : kj::indices(phiVals)) {
-			thetaVals[iTheta] = 2 * fsc::pi / thetaVals.size() * iTheta;
-		}
-	}*/
-	
 	//! Processes a root node of a magnetic field (creates calculator)
 	Promise<void> processRoot(MagneticField::Reader node, Eigen::Tensor<double, 2>&& points, Float64Tensor::Builder out) {		
 		auto newCalculator = heapHeld<FieldCalculation>(mv(points), *device);

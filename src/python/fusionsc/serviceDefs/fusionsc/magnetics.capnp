@@ -122,7 +122,6 @@ interface FieldCalculator $Cxx.allowCancellation {
 	evaluateXyz @2 (field : MagneticField, points : Float64Tensor) -> EvalResult;
 	evaluatePhizr @3 (field : MagneticField, points : Float64Tensor) -> EvalResult;
 	
-	# Evaluate points on Fourier surfaces
 	evalFourierSurface @4 (
 		surfaces : FourierSurfaces,
 		phi : List(Float64),
@@ -132,6 +131,31 @@ interface FieldCalculator $Cxx.allowCancellation {
 		phiDerivatives : Float64Tensor,
 		thetaDerivatives : Float64Tensor
 	);
+	# Evaluate points on Fourier surfaces
+	# Returns tensors of shape [3, ..., nPhi, nTheta]
+	# with the remainder being the surfaces shape.
+	
+	calculateRadialModes @5 (
+		field : MagneticField, background : MagneticField,
+		surfaces : FourierSurfaces,
+		nMax : UInt32, mMax : UInt32,
+		nPhi : UInt32, nTheta : UInt32,
+		nSym : UInt32 = 1
+	) -> (
+		cosCoeffs : Float64Tensor, sinCoeffs : Float64Tensor,
+		mPol : List(Float64), nTor : List(Float64)
+	);
+	# Evaluate points on Fourier surfaces
+	#
+	# Returns tensors of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
+	# - nToroidalCoeffs must be 2 * nTor + 1
+	# - nPoloidalCoeffs must be mPol + 1
+	#
+	# The order of storage for toroidal modes is [0, ..., nTor, -nTor, ..., -1]
+	# so that slicing with negative indices can be interpreted
+	# as slicing from the end (as is done in NumPy).
+	#
+	# The order of storage for polidal modes is [0, ..., mPol]
 		
 	
 	# Fourier-mode evaluation

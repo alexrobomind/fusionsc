@@ -683,9 +683,9 @@ async def calculateFourierModes(
 		"iota" : iotas,
 		"theta" : np.asarray(modes.theta0),
 		"rCos" : np.asarray(modes.surfaces.rCos),
-		"zSin" : np.asarray(modes.surfaces.zSin),
-		"mPol" : np.asarray(modes.mPol),
-		"nTor" : np.asarray(modes.nTor)
+		"zSin" : np.asarray(modes.surfaces.zSin)
+		"mPol" : np.asarray(modes.mPol)[:,None],
+		"nTor" : np.asarray(modes.nTor)[None,:]
 	}
 	
 	if modes.surfaces.which_() == "nonSymmetric":

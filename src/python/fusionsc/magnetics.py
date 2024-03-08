@@ -196,6 +196,54 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		cf = computed.data.computedField
 		
 		return copy.copy(cf.grid), np.asarray(await data.download.asnc(cf.data))
+		
+	@asyncFunction
+	async def calculateRadialModes(
+		self, surfaces: service.MagneticSurfaces.Instance,
+		normalizeAgainst : Optional[MagneticConfig] = None,
+		nMax = 5, mMax = 5, nPhi = 30, nTheta = 30, nSym = 1
+	):
+		"""
+		Calculates the radial Fourier modes of this field (or the ratio to the given
+		background field) on the given surfaces
+		
+		Parameters:
+			- surfaces: Description of the magnetic surfaces to evaluate on.
+			- normalizeAgainst: Optional field to normalize again
+			- nMax: Maximum absolute toroidal mode number to calculate
+			- mMax: Maximum poloidal mode number to calcualte
+			- nPhi: Number of toroidal points on grid
+			- nTheta: Number of poloidal points on grid
+			- nSym: Toroidal symmetry
+		
+		Returns:
+			A dict with the following entries:
+			- cosCoeffs: [..., 2 * nMax + 1, mMax + 1] array of cosine coefficients of Fourier mode expansion
+			- sinCoeffs: [..., 2 * nMax + 1, mMax + 1] array of sine coefficients of Fourier mode expansion
+			- nTor: [2 * nMax + 1, 1] array of toroidal mode numbers
+			- mPol: [1, mMax + 1] array of poloidal mode numbers
+			
+		"""
+		resolved = await self.resolve.asnc()
+		
+		background = None
+		if normalizeAgainst is not None:
+			background = (await normalizeAgainst.resolve.asnc()).data
+		
+		response = await _calculator().calculateRadialModes(
+			resolve.data, background,
+			surfaces,
+			nMax, mMax,
+			nPhi, nTheta,
+			nSym
+		)
+		
+		return {
+			"cosCoeffs" : np.asarray(response.cosCoeffs),
+			"sinCoeffs" : np.asarray(response.sinCoeffs),
+			"nTor" : np.asarray(response.nTor)[:,None],
+			"mPol" : np.asarray(response.mPol)[None,:]
+		}
 	
 	def __neg__(self):
 		result = MagneticConfig()
@@ -392,7 +440,7 @@ async def visualizeCoils(field):
 		
 	return pv.MultiBlock(dataSets)
 
-def makeFourierSurfaces(rCos, zSin, rsin = None, zCos = None, nSym = 1, nTurns = 1) -> service.FourierSurfaces.Builder:
+def fourierSurfaces(rCos, zSin, rsin = None, zCos = None, nSym = 1, nTurns = 1) -> service.FourierSurfaces.Builder:
 	"""Builds a Fourier surface object from keyword arguments"""
 	result = service.FourierSurfaces.newMessage()
 	

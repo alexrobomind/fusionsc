@@ -206,8 +206,8 @@ struct FLTResponse {
 			# Mode number tensors of shape [nToroidalCoeffs, nPoloidalCoeffs]
 			# These are float tensors because we want to support fractional mode numbers
 			# for magnetic island support (phi ranging from 0 to e.g. 12 pi)
-			mPol @14 : Data.Float64Tensor;
-			nTor @15 : Data.Float64Tensor;
+			mPol @14 : List(Float64);
+			nTor @15 : List(Float64);
 		}
 	}
 	
