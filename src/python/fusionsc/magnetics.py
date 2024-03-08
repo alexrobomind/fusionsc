@@ -15,6 +15,8 @@ import copy
 
 from typing import Optional
 
+from collections.abc import Sequence
+
 def _calculator():
 	return backends.activeBackend().newFieldCalculator().pipeline.service
 
@@ -181,7 +183,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		return np.asarray(response.values)
 	
 	@asyncFunction
-	async def getComputed(self):
+	async def getComputed(self, grid = None):
 		"""
 		For a field of type "computed", returns the grid and the downloaded field tensor on the grid.
 		
@@ -190,10 +192,10 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			- A tensor of shape [nPhi, nZ, nR, 3] holding the magnetic field. The last axis describes
 			  the magnetic field component. The components are (indices 0 to 2) bPhi, bZ, bR.
 		"""
-		assert self.data.which_() == 'computedField', 'Can only download fields for which the compute operation was initialized (returned by .compute)'
-		computed = self.data.computedField
+		computed = await self.compute.asnc(grid)
+		cf = computed.data.computedField
 		
-		return copy.copy(computed.grid), np.asarray(await data.download.asnc(computed.data))
+		return copy.copy(cf.grid), np.asarray(await data.download.asnc(cf.data))
 	
 	def __neg__(self):
 		result = MagneticConfig()
@@ -289,6 +291,24 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			'grid' : grid,
 			'data' : data.publish(tensorData)
 		}})
+	
+	@staticmethod
+	def fromDipoles(positions, moments, radii):
+		positions = np.asarray(positions)
+		moments = np.asarray(moments)
+		
+		assert len(positions.shape) == 2
+		assert len(moments.shape) == 2
+		assert positions.shape[0] == 3
+		assert moments.shape[0] == 3
+		assert positions.shape[1] == moments.shape[1]
+		assert len(radii) == positions.shape[1]
+		
+		return MagneticConfig({'dipoleCloud' : {
+			'positions' : positions,
+			'magneticMoments' : moments,
+			'radii' : radii
+		}})
 
 @asyncFunction
 async def extractCoils(field):
@@ -371,3 +391,50 @@ async def visualizeCoils(field):
 	]
 		
 	return pv.MultiBlock(dataSets)
+
+def makeFourierSurfaces(rCos, zSin, rsin = None, zCos = None, nSym = 1, nTurns = 1) -> service.FourierSurfaces.Builder:
+	"""Builds a Fourier surface object from keyword arguments"""
+	result = service.FourierSurfaces.newMessage()
+	
+	assert rCos is not None
+	assert zSin is not None
+	
+	assert zSin.shape == rCos.shape
+	
+	nToroidalModes = rCos.shape[-2]
+	nPoloidalModes = rCos.shape[-1]
+	
+	assert nPoloidalModes >= 1
+	assert nToroidalModes >= 1
+	assert nToroidalModes % 2 == 1
+	
+	result.toroidalSymmetry = nSym
+	result.nTurns = nTurns
+	
+	result.mPol = nPoloidalModes - 1
+	result.nTor = nToroidalModes // 2
+		
+	result.rCos = rCos
+	result.zSin = zSin
+	
+	if rSin is not None or zCos is not None:
+		assert rSin is not None and zCos is not None
+		
+		assert rSin.shape == rCos.shape
+		assert zCos.shape == rCos.shape
+		
+		nonSym = result.initNonSymmetric()
+		nonSym.rSin = rSin
+		nonSym.zCos = zCos
+	
+	return result
+	
+@asyncFunction
+async def evaluateFourierSurface(surfaces: service.FourierSurfaces.Instance, phi: Sequence[float], theta: Sequence[float]):
+	response = await _calculator().evalFourierSurface(surfaces, phi, ehta)
+	
+	return {
+		'points' : np.asarray(response.points),
+		'phiDerivatives' : np.asarray(response.phiDerivatives),
+		'thetaDerivatives' : np.asarray(response.thetaDerivatives)
+	}

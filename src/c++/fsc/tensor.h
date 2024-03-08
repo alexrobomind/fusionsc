@@ -55,7 +55,7 @@ void readVardimTensor(T2 reader, size_t variableDim, Tensor<T, rank, options, In
 		KJ_REQUIRE(variableDim < rank);
 		
 		size_t variableDimSize = 1;
-		for(auto iDim : kj::range(variableDim, variableDim + 1 + shape.size() - rank)
+		for(auto iDim : kj::range(variableDim, variableDim + 1 + shape.size() - rank))
 			variableDimSize *= shape[iDim];
 	
 		typename TensorType::Dimensions dims;

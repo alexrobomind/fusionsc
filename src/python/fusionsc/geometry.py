@@ -368,6 +368,17 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		return pv.MultiBlock(dataSets)
 	
 	@asyncFunction
+	async def weightedSample(self, scale: float):
+		"""Converts the geometry into a point cloud"""
+		resolved = await self.resolve.asnc()
+		response = await geometryLib().weightedSample(resolved.data, scale)
+		
+		return {
+			'centers' : np.asarray(response.centers),
+			'areas' : response.areas
+		}
+	
+	@asyncFunction
 	async def exportTo(self, filename: str):
 		"""Saves the geometry to the given filename. Supports '.ply', '.stl', and '.vtk' files."""
 		asPv = await self.asPyvista.asnc()

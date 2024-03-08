@@ -29,6 +29,9 @@ include(GNUInstallDirs)
 #set(CMAKE_FIND_DEBUG_MODE On)
 find_package(Python COMPONENTS Interpreter Development.Module NumPy)
 
+# Try loading OpenMP
+find_package(OpenMP)
+
 message(STATUS "Python sitearch dir: ${Python_SITEARCH}")
 #set(CMAKE_FIND_DEBUG_MODE Off)
 
@@ -297,6 +300,9 @@ set(BUILD_EXAMPLES ${BUILD_EXAMPLES_TMP} CACHE BOOL "" FORCE)
 
 add_subdirectory(vendor/capfuzz)
 
+add_library(fusionsc_poissongen INTERFACE)
+target_include_directories(fusionsc_poissongen INTERFACE vendor/pdg)
+
 add_library(deps INTERFACE)
 target_link_libraries(
 	deps
@@ -357,6 +363,22 @@ if(FSC_SANITIZE_ADDRESS)
 	endif()
 endif()
 
+option(FSC_ARCH_NATIVE "Whether to build for host architecture")
+
+if(FSC_ARCH_NATIVE)
+	include(CheckCXXCompilerFlag)
+	CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
+	
+	if(COMPILER_SUPPORTS_MARCH_NATIVE)
+		target_compile_options(deps INTERFACE "-march=native")
+		set(FSC_ARCH_NATIVE_RESULT "Enabled")
+	else()
+		set(FSC_ARCH_NATIVE_RESULT "Unsupported by compiler")
+	endif()
+else()
+	set(FSC_ARCH_NATIVE_RESULT "Disabled")
+endif()
+
 # Set up the scikit build
 if(SKBUILD)
 	add_custom_target(fsc-skbuild-target)
@@ -406,3 +428,11 @@ endif()
 
 install(EXPORT FSCTargets DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake NAMESPACE FSC::)
 export(EXPORT FSCTargets NAMESPACE fsc FILE FSCExports.cmake)
+
+# Print information about build
+message(STATUS "")
+message(STATUS "--- Configuration options ---")
+message(STATUS "Python support: ${FSC_WITH_PYTHON}")
+message(STATUS "CUDA support: ${FSC_WITH_CUDA}")
+message(STATUS "OpenMP support: ${OPENMP_CXX_FOUND}")
+message(STATUS "Native Arch support: ${FSC_ARCH_NATIVE_RESULT}")

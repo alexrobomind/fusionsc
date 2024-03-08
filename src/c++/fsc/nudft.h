@@ -33,7 +33,8 @@ void calculateModes(kj::ArrayPtr<const FourierPoint<xdim, ydim>> points, kj::Arr
 	//KJ_DBG
 	// kj::FixedArray<Vec, 2> holder;
 	
-	for(unsigned int iDim : kj::range(0, ydim)) {
+	#pragma omp parallel for
+	for(int iDim = 0; iDim < ydim; ++iDim) {
 		// KJ_DBG(iDim);
 		// We minimize (y - modeBasis * coeffs)**2
 		

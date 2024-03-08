@@ -11,6 +11,7 @@
 #include <fsc/common.h>
 
 #include <pybind11/operators.h>
+#include <pybind11/options.h>
 
 using capnp::AnyPointer;
 using capnp::DynamicValue;
@@ -349,6 +350,9 @@ void initCapnp(py::module_& m) {
 	
 	// Static global defined above
 	capnpModule = m.def_submodule("capnp", "Python bindings for Cap'n'proto classes (excluding KJ library)");
+	
+	py::options options;
+	options.disable_function_signatures();
 	
 	#define CHECK() if(PyErr_Occurred()) throw py::error_already_set();
 	

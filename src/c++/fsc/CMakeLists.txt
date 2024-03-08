@@ -205,6 +205,14 @@ if(FSC_WITH_CUDA)
 	set_target_properties(tests PROPERTIES LINKER_LANGUAGE CUDA)
 endif()
 
+if(OPENMP_CXX_FOUND)
+	target_link_libraries(fsc PRIVATE OpenMP::OpenMP_CXX)
+endif()
+
+if(MSVC)
+	target_compile_options(fsc PRIVATE /bigobj)
+endif()
+
 # Built in src/c++/fsc
 INSTALL(TARGETS deps EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 

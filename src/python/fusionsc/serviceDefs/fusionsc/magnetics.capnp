@@ -33,20 +33,27 @@ struct FourierSurfaces {
 	# Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
 	
 	toroidalSymmetry @2 : UInt32 = 1;
-	# Multiplier for parallel mode number (e.g. 5 for W7-X)
+	# Multiplier for toroidal mode number (e.g. 5 for W7-X)
 	
 	nTurns @3 : UInt32 = 1;
-	# Divisor for parallel mode number. Usually 1, but can equal a
+	# Divisor for toroidal mode number. Usually 1, but can equal a
 	# different number if the surface has an nTurns * 2pi periodic
 	# structure, such as a magnetic island (in this case this would
 	# be the island's m number
 	
 	nTor @4 : UInt32;
+	# Maximum toroidal mode number.
+
 	mPol @5 : UInt32;
+	# Maximum poloidal mode number
 	
 	union {
 		symmetric @6 : Void;
+		# Indicator that the surfaces are Stellarator-symmetric
+		
 		nonSymmetric : group {
+			# Optional Fourier components for surfaces non-symmetric surfaces
+			
 			rSin @7 : Float64Tensor;
 			# Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
 			
@@ -57,23 +64,42 @@ struct FourierSurfaces {
 }
 
 struct ToroidalGrid {
+	# Slab-coordinate grid
+	# Grid points are:
+	#  r = linspace(rMin, rMax, nR)
+	#  z = linspace(zMin, zMax, nZ)
+	#  phi = linspace(0, 2*pi / nSym, nPhi, endpoint = False)
+	
 	rMin @0 : Float64;
 	rMax @1 : Float64;
 	zMin @2 : Float64;
 	zMax @3 : Float64;
+	
 	nSym @4 : UInt32 = 1;
+	# Toroidal symmetry of the field (e.g. 5 for W7-X)
 	
 	nR @5 : UInt64;
 	nZ @6 : UInt64;
 	nPhi @7 : UInt64;
 }
 
-# Data shape is [phi, z, r, 3], C (row-major) ordering with last index stride 1
-# When interpreting column-major, data shape is [3, r, z, phi]
-# The field components are ordered Phi, Z, R
 struct ComputedField {
+	# Pre-computed (possibly remotely-stored or not yet computed) field
+	
 	grid @0 : ToroidalGrid;
+	# Grid on which the field is (or is being) computed.
+	
 	data @1 : DataRef(Float64Tensor);
+	# Reference to tensor holding the field data.
+	#
+	# Data shape is [phi, z, r, 3], C (row-major) ordering with last index stride 1
+	# When interpreting column-major, data shape is [3, r, z, phi]
+	# The field components are ordered Phi, Z, R
+	#
+	# The data are stored as a reference to avoid repeated upload and download
+	# of computed field data between client and server computers. Most use cases
+	# pass the data directly from the calculation service to the field line tracer
+	# which are on the same machine.
 }
 
 # Interface for the resolution of device-specific information
@@ -104,7 +130,7 @@ interface FieldCalculator $Cxx.allowCancellation {
 	) -> (
 		points : Float64Tensor,
 		phiDerivatives : Float64Tensor,
-		thetaDerivaties : Float64Tensor
+		thetaDerivatives : Float64Tensor
 	);
 		
 	

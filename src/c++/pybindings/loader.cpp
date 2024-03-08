@@ -508,13 +508,14 @@ py::object interpretStructSchema(fscpy::Loader& loader, capnp::StructSchema sche
 	attrs["__module__"] = moduleName;
 	
 	attrs["__init__"] = py::cpp_function([]() {
-		KJ_UNIMPLEMENTED("Do not create instances of this class. Use StructType.newMessage() instead");
+		KJ_UNIMPLEMENTED("Do not directly create instances of this class. Use StructType.newMessage() instead to create Builder subclasses");
 	});
 		
 	KJ_IF_MAYBE(pSrc, maybeSource) {
 		auto comment = pSrc -> getDocComment();
 		if(comment.size() > 0) {
-			attrs["__doc__"] = py::str(comment.cStr());
+			auto docString = kj::str("For more information about this class, see the help documentation of ", structName, ".Reader or ", structName, ".Builder");
+			attrs["__doc__"] = py::str(docString.cStr());
 		}
 	} else {
 		// KJ_DBG("Class has no doc info", structName);
@@ -525,6 +526,13 @@ py::object interpretStructSchema(fscpy::Loader& loader, capnp::StructSchema sche
 	// Prevent recursion
 	(*globalClasses)[py::cast(schema.getProto().getId())] = output;
 	
+	py::dict instanceAttrs;
+	instanceAttrs["__qualname__"] = qualName(output, "Instance");
+	instanceAttrs["__module__"] = moduleName;
+	py::object instanceCls = (*baseMetaType)("Instance", py::make_tuple(), instanceAttrs);
+	
+	output.attr("Instance") = instanceCls;
+		
 	// Create Builder, Reader, and Pipeline classes
 	for(int i = 0; i < 3; ++i) {
 		FSCPyClassType classType = (FSCPyClassType) i;
@@ -629,14 +637,14 @@ py::object interpretStructSchema(fscpy::Loader& loader, capnp::StructSchema sche
 			if(comment.size() > 0) {
 				docString = kj::strTree(
 					mv(docString),
-					"\n\n --- Documentation for class ", qualName(scope, structName), " ---\n",
+					"\n\n --- Documentation for class ", qualName(scope, structName), " ---\n\n",
 					comment
 				);
 			}
 		}
 		
 		attributes["__init__"] = fscpy::methodDescriptor(py::cpp_function(
-			[baseClass](py::object self, py::args args, py::kwargs kwargs) {
+			[baseClass, classType](py::object self, py::args args, py::kwargs kwargs) {
 				baseClass.attr("__init__")(self, *args, **kwargs);
 			}
 		));
@@ -653,8 +661,16 @@ py::object interpretStructSchema(fscpy::Loader& loader, capnp::StructSchema sche
 		
 		attributes["__slots__"] = py::make_tuple();
 		attributes["__doc__"] = py::str(docString.flatten().cStr());
+		
+		py::tuple baseClassTuple =
+			classType == FSCPyClassType::PIPELINE ?
+				py::make_tuple(baseClass)
+			:
+				py::make_tuple(instanceCls, baseClass)
+			;
+				
 			
-		py::object newCls = (*baseMetaType)(kj::str(structName, ".", suffix).cStr(), py::make_tuple(baseClass /*, mappingAbstractBaseClass*/), attributes);
+		py::object newCls = (*baseMetaType)(kj::str(suffix).cStr(), baseClassTuple, attributes);
 				
 		output.attr(suffix.cStr()) = newCls;
 	}
