@@ -57,6 +57,8 @@ void readVardimTensor(T2 reader, size_t variableDim, Tensor<T, rank, options, In
 		size_t variableDimSize = 1;
 		for(auto iDim : kj::range(variableDim, variableDim + 1 + shape.size() - rank))
 			variableDimSize *= shape[iDim];
+		
+		KJ_DBG(variableDimSize);
 	
 		typename TensorType::Dimensions dims;
 		for(size_t i = 0; i < rank; ++i) {
@@ -66,7 +68,9 @@ void readVardimTensor(T2 reader, size_t variableDim, Tensor<T, rank, options, In
 			else if(i == variableDim)
 				entry = variableDimSize;
 			else
-				entry = shape[i + 1 + shape.size() - rank];
+				entry = shape[i + shape.size() - rank];
+			
+			KJ_DBG(i, entry);
 			
 			if(options & Eigen::RowMajor) {
 				dims[i] = entry;

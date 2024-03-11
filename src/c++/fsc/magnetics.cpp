@@ -345,7 +345,7 @@ struct CalculationSession : public FieldCalculator::Server {
 		for(auto iN : kj::indices(modeN)) {
 			double baseN = iN;
 			if(iN > surfNMax)
-				baseN = ((int) iN) - (int) surfNMax;
+				baseN = ((int) iN) - (int) surfNumN;
 			
 			baseN *= surfSym;
 			baseN /= surfNTurns;
@@ -357,6 +357,8 @@ struct CalculationSession : public FieldCalculator::Server {
 		
 		const size_t nPhi = phiVals.size();
 		const size_t nTheta = thetaVals.size();
+		
+		KJ_DBG(nPhi, nTheta);
 		
 		// Read symmetric surface basis
 		
@@ -396,6 +398,8 @@ struct CalculationSession : public FieldCalculator::Server {
 			zCos.setZero();
 		}
 		
+		KJ_DBG(nSurfs);
+		
 		// Calculate points and derivatives on all surfaces
 		
 		using ADS = Eigen::AutoDiffScalar<Vec2d>;
@@ -425,17 +429,19 @@ struct CalculationSession : public FieldCalculator::Server {
 				ADS sinVal = sin(n * phi + m * theta);
 				
 				ADS rContrib = rCos(m, iN, iSurf) * cosVal + rSin(m, iN, iSurf) * sinVal;
-				ADS zContrib = rCos(m, iN, iSurf) * cosVal + rSin(m, iN, iSurf) * sinVal;
+				ADS zContrib = zCos(m, iN, iSurf) * cosVal + zSin(m, iN, iSurf) * sinVal;
 				
 				ADS xContrib = cos(phi) * rContrib;
 				ADS yContrib = sin(phi) * rContrib;
 				
-				points(iPhi, iTheta, iSurf, 0) += xContrib;
-				points(iPhi, iTheta, iSurf, 1) += yContrib;
-				points(iPhi, iTheta, iSurf, 2) += zContrib;
+				points(iTheta, iPhi, iSurf, 0) += xContrib;
+				points(iTheta, iPhi, iSurf, 1) += yContrib;
+				points(iTheta, iPhi, iSurf, 2) += zContrib;
 			}
 			}
 		}
+		
+		KJ_DBG("Computed");
 		
 		// Take apart autodiff scalar into elements
 		
@@ -455,8 +461,8 @@ struct CalculationSession : public FieldCalculator::Server {
 			os.set(0, 3);
 			for(auto i : kj::range(1, os.size() - 2))
 				os.set(i, is[i - 1]);
-			os.set(is.size() - 2, nPhi);
-			os.set(is.size() - 1, nTheta);
+			os.set(os.size() - 2, nPhi);
+			os.set(os.size() - 1, nTheta);
 		};
 		
 		auto writeAdjusted = [&](Eigen::Tensor<double, 4>& in, Float64Tensor::Builder out) {
@@ -468,6 +474,8 @@ struct CalculationSession : public FieldCalculator::Server {
 		writeAdjusted(val, results.initPoints());
 		writeAdjusted(ddPhi, results.initPhiDerivatives());
 		writeAdjusted(ddTheta, results.initThetaDerivatives());
+		
+		KJ_DBG("Saved");
 		
 		return READY_NOW;
 	}

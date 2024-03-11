@@ -199,8 +199,8 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		
 	@asyncFunction
 	async def calculateRadialModes(
-		self, surfaces: service.MagneticSurfaces.Instance,
-		normalizeAgainst : Optional[MagneticConfig] = None,
+		self, surfaces: service.FourierSurfaces.Instance,
+		normalizeAgainst : "Optional[MagneticConfig]" = None,
 		nMax = 5, mMax = 5, nPhi = 30, nTheta = 30, nSym = 1
 	):
 		"""
@@ -478,8 +478,8 @@ def fourierSurfaces(rCos, zSin, rsin = None, zCos = None, nSym = 1, nTurns = 1) 
 	return result
 	
 @asyncFunction
-async def evaluateFourierSurface(surfaces: service.FourierSurfaces.Instance, phi: Sequence[float], theta: Sequence[float]):
-	response = await _calculator().evalFourierSurface(surfaces, phi, ehta)
+async def evaluateFourierSurfaces(surfaces: service.FourierSurfaces.Instance, phi: Sequence[float], theta: Sequence[float]):
+	response = await _calculator().evalFourierSurface(surfaces, phi, theta)
 	
 	return {
 		'points' : np.asarray(response.points),

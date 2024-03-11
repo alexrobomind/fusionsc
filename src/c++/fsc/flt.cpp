@@ -716,6 +716,8 @@ struct FLTImpl : public FLT::Server {
 					const int64_t nToroidalCoeffs = 2 * maxN + 1;
 					const int64_t nPoloicalCoeffs = maxM + 1;
 					
+					const double aliasThreshold = calcFM.getModeAliasingThreshold();
+					
 					auto toroidalIndex = [&](int n) -> int64_t {
 						if(n >= 0) return n;
 						return nToroidalCoeffs + n;
@@ -738,34 +740,67 @@ struct FLTImpl : public FLT::Server {
 					
 					Tensor<double, 1> t0(nStartPoints);
 					
-					// Prepare the modes we want to analyze
-					kj::Vector<FM> modes;
-					for(auto n : kj::range(-maxN, maxN + 1)) {
-						for(auto m : kj::range(0, maxM + 1)) {
-							nTor(m, toroidalIndex(n)) = n * phiMultiplier;
-							mPol(m, toroidalIndex(n)) = m;
-							
-							if(m == 0 && n < 0) {
-								continue;
-							}
-							
-							FM mode;
-							mode.coeffs[0] = n;
-							mode.coeffs[1] = m;
-							modes.add(mode);
-						}
-					}
-					// Index of n=0, m=1 mode in above expansion
-					const size_t n0m1Index = maxN * maxM + 1;
-					KJ_DBG(n0m1Index);
+					// Index of n = 0, m = 1 mode
+					const size_t n0m1Index = 1;
 					
+					#pragma omp parallel for
 					for(int64_t iStartPoint = 0; iStartPoint < nStartPoints; ++iStartPoint) {
 						auto entry = kData[iStartPoint].asReader();
 						auto state = entry.getState();
 						auto events = entry.getEvents();
 						
 						const double iota = calcFM.getIota().getData()[iStartPoint];
+					
+						// Prepare the modes we want to analyze
+						kj::Vector<FM> modes;
 						
+						//for(auto n : kj::range(-maxN, maxN + 1)) {
+						for(auto in : kj::range(0, nToroidalCoeffs)) {
+							auto n = in <= maxN ? in : in - nToroidalCoeffs;
+							
+							for(auto m : kj::range(0, maxM + 1)) {
+								nTor(m, toroidalIndex(n)) = n * phiMultiplier;
+								mPol(m, toroidalIndex(n)) = m;
+								
+								double parallelAngle = n * phiMultiplier * iota + m;
+								
+								// bool isResonant = std::abs(n * phiMultiplier * iota - m) < aliasThreshold;
+								
+								kj::Maybe<FM&> modeAliases = nullptr;
+								for(auto& prevMode : modes) {
+									double prevParAngle = prevMode.coeffs[0] * phiMultiplier * iota + prevMode.coeffs[1];
+									
+									if(std::abs(parallelAngle - prevParAngle) < aliasThreshold) {
+										modeAliases = prevMode;
+									}
+								}
+								
+								if(m == 0 && n < 0) {
+									continue;
+								}
+								
+								if(m == 0 && n == 0) {}
+								else if(m == 1 && n == 0) {}
+								else {
+									KJ_IF_MAYBE(pOther, modeAliases) {
+										double myResonance = std::abs(n * phiMultiplier * iota - m);
+										double otherResonance = std::abs(pOther -> coeffs[0] * phiMultiplier * iota - pOther -> coeffs[1]);
+										
+										if(otherResonance < myResonance) {
+											pOther -> coeffs[0] = n;
+											pOther -> coeffs[1] = m;
+										}
+										continue;
+									}
+								}
+								
+								FM mode;
+								mode.coeffs[0] = n;
+								mode.coeffs[1] = m;
+								modes.add(mode);
+							}
+						}
+							
 						kj::Vector<FP> fourierPoints;
 						for(auto evt : events) {
 							if(!evt.isFourierPoint())
@@ -808,6 +843,8 @@ struct FLTImpl : public FLT::Server {
 					auto out = results.getFieldLineAnalysis().initFourierModes();
 					
 					auto surf = out.initSurfaces();
+					surf.setNTor(maxN);
+					surf.setMPol(maxM);
 					surf.setToroidalSymmetry(calcFM.getToroidalSymmetry());
 					writeTensor(rCos, surf.getRCos());
 					writeTensor(zSin, surf.getZSin());

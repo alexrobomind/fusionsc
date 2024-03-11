@@ -145,6 +145,11 @@ struct FLTRequest {
 			
 			# Multiplier for toroidal mode numbers
 			toroidalSymmetry @ 39 : UInt32 = 1;
+			
+			# If n * iota + m of a mode is within this value
+			# of a lower-n mode, the mode will be discarded
+			# from reconstruction
+			modeAliasingThreshold @40 : Float64 = 0.001;
 		}
 	}
 	
