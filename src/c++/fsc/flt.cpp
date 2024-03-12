@@ -854,11 +854,13 @@ struct FLTImpl : public FLT::Server {
 					applyPointShape(surf.getZSin(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
 					applyPointShape(out.getTheta0(), {}, {});
 					
-					auto ns = surf.initNonSymmetric();
-					writeTensor(rSin, ns.getRSin());
-					writeTensor(zCos, ns.getZCos());
-					applyPointShape(ns.getRSin(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
-					applyPointShape(ns.getZCos(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
+					if(!calcFM.getStellaratorSymmetric()) {
+						auto ns = surf.initNonSymmetric();
+						writeTensor(rSin, ns.getRSin());
+						writeTensor(zCos, ns.getZCos());
+						applyPointShape(ns.getRSin(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
+						applyPointShape(ns.getZCos(), {}, {nToroidalCoeffs, nPoloicalCoeffs});
+					}
 					
 					auto oNTor = out.initNTor(2 * maxN + 1);
 					for(int i : kj::indices(oNTor))

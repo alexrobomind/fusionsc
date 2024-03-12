@@ -150,6 +150,8 @@ struct FLTRequest {
 			# of a lower-n mode, the mode will be discarded
 			# from reconstruction
 			modeAliasingThreshold @40 : Float64 = 0.001;
+			
+			stellaratorSymmetric @41 : Bool = false;
 		}
 	}
 	

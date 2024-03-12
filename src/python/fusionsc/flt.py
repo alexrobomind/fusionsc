@@ -633,7 +633,7 @@ async def calculateIota(
 async def calculateFourierModes(
 	field, startPoints, turnCount,
 	nMax = 1, mMax = 1, toroidalSymmetry = 1, aliasThreshold = 0.001,
-	grid = None,
+	grid = None, stellaratorSymmetric = False,
 	unwrapEvery = 1, recordEvery = 10, distanceLimit = 1e4,
 	targetError = 1e-4, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2
 ):
@@ -664,6 +664,7 @@ async def calculateFourierModes(
 	calcSurf.recordEvery = recordEvery
 	calcSurf.toroidalSymmetry = toroidalSymmetry
 	calcSurf.modeAliasingThreshold = aliasThreshold 
+	calcSurf.stellaratorSymmetric = stellaratorSymmetric
 	
 	adaptive = request.stepSizeControl.initAdaptive()
 	adaptive.targetError = targetError

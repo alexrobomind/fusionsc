@@ -604,10 +604,10 @@ struct CalculationSession : public FieldCalculator::Server {
 			kj::Vector<FM> modes;
 			modes.reserve(mMax * (2 * nMax + 1));
 			
-			for(auto iM : kj::range(0, numM)) {
-			for(auto iN : kj::range(0, numN)) {
+			for(int iM : kj::range(0, numM)) {
+			for(int iN : kj::range(0, numN)) {
 				int m = iM;
-				int n = iN <= nMax ? iN : iN - nMax;
+				int n = iN <= nMax ? iN : iN - numN;
 				
 				if(m == 0 && n < 0)
 					continue;
@@ -621,6 +621,9 @@ struct CalculationSession : public FieldCalculator::Server {
 			// Run NUDFT (Non-uniform DFT)
 			Tensor<double, 3> cosCoeffs(numM, numN, nSurfs);
 			Tensor<double, 3> sinCoeffs(numM, numN, nSurfs);
+			
+			sinCoeffs.setZero();
+			cosCoeffs.setZero();
 			
 			for(int iSurf : kj::range(0, nSurfs)) {				
 				kj::Vector<FP> points;
@@ -640,8 +643,8 @@ struct CalculationSession : public FieldCalculator::Server {
 				nudft::calculateModes<2, 1>(points, modes);
 				
 				for(auto& mode : modes) {
-					int im = mode.coeffs[0];
-					int in = mode.coeffs[1];
+					int in = mode.coeffs[0];
+					int im = mode.coeffs[1];
 					if(in < 0) in += numN;
 					
 					cosCoeffs(im, in, iSurf) = mode.cosCoeffs[0];
@@ -671,7 +674,7 @@ struct CalculationSession : public FieldCalculator::Server {
 			
 			auto nOut = results.initNTor(numN);
 			for(int i : kj::indices(nOut))
-				nOut.set(i, i <= mMax ? i : i - numN);
+				nOut.set(i, (i <= mMax ? i : i - numN) / phiMultiplier);
 		});
 	}
 		

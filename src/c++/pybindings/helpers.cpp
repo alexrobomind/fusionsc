@@ -2,6 +2,11 @@
 
 #include <fsc/efit.h>
 #include <fsc/offline.h>
+#include <fsc/vmec.h>
+
+#include <fsc/data.h>
+
+#include <fsc/vmec.capnp.h>
 
 
 namespace fscpy {
@@ -25,9 +30,9 @@ namespace {
 		updateOfflineData(b, r);
 	}
 	
-	Temporary<VmecResults> loadVmecOutput(kj::StringPtr pathName) {
-		Temporary<VmecResults> result;
-		interpretOutputFile(kj::Path::evalNative(pathName), result.asBuilder());
+	Temporary<VmecResult> loadVmecOutput(kj::StringPtr pathName) {
+		Temporary<VmecResult> result;
+		interpretOutputFile(getActiveThread().filesystem().getCurrentPath().evalNative(pathName), result.asBuilder());
 		return result;
 	}
 }
@@ -42,7 +47,7 @@ void initHelpers(py::module_& m) {
 	py::module_ offlineModule = m.def_submodule("offline", "Offline data processing");
 	
 	py::module_ vmecModule = m.def_submodule("vmec");
-	vmecModule.def("loadOutput", pathName);
+	vmecModule.def("loadOutput", &loadVmecOutput);
 	
 	offlineModule.def("fieldResolver", &newOfflineFieldResolver);
 	offlineModule.def("geometryResolver", &newOfflineGeometryResolver);

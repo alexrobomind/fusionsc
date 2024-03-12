@@ -20,6 +20,91 @@ from collections.abc import Sequence
 def _calculator():
 	return backends.activeBackend().newFieldCalculator().pipeline.service
 
+class SurfaceArray(wrappers.structWrapper(service.FourierSurfaces)):
+	"""A wrapper around service.FourierSurfaces.Builder that exposes array-like behavior"""
+	
+	@property
+	def shape(self):
+		return self.data.shape[:-2]
+	
+	def apply(self, op, *extraArgs):
+		args = [self] + list(extraArgs)
+		
+		d = self.data
+		result = service.FourierSurfaces.newMessage(d)
+		
+		result.rCos = op(*[np.asarray(arg.data.rCos) for arg in args])
+		result.zSin = op(*[np.asarray(arg.data.zSin) for arg in args])
+		
+		if d.which_() == 'nonSymmetric':
+			result.nonSymmetric.rSin = op(*[np.asarray(arg.data.nonSymmetric.rSin) for arg in args])
+			result.nonSymmetric.zCos = op(*[np.asarray(arg.data.nonSymmetric.zCos) for arg in args])
+		
+		return SurfaceArray(result)
+	
+	def __getitem__(self, sl):
+		if isinstance(sl, tuple):
+			slEx = sl + (slice(None), slice(None))
+		else:
+			slEx = (sl, slice(None), slice(None))
+		
+		def op(x):
+			return x.__getitem__(slEx)
+		
+		return self.apply(op)
+	
+	def __add__(self, other):
+		if not isinstance(other, SurfaceArray):
+			return NotImplemented
+		
+		def op(a, b):
+			return a + b
+		
+		return self.apply(op, other)
+	
+	def __sub__(self, other):
+		if not isinstance(other, SurfaceArray):
+			return NotImplemented
+			
+		def op(a, b):
+			return a - b
+		
+		return self.apply(op, other)
+	
+	def __mul__(self, l):
+		# Broadcast to right shape
+		bc = np.asarray(l)[..., None, None]
+		
+		def op(x):
+			return bc * x
+		
+		return self.apply(op)
+	
+	def __rmul__(self, l):
+		return self.__mul__(l)
+	
+	def __truediv__(self, l):
+		# Broadcast to right shape
+		bc = np.asarray(l)[..., None, None]
+		
+		def op(x):
+			return x / bc
+		
+		return self.apply(op)
+	
+	def __rtruediv__(self, l):
+		return self.__truediv__(l)
+	
+	@asyncFunction
+	async def evaluate(self, phi: Sequence[float], theta: Sequence[float]):
+		response = await _calculator().evalFourierSurface(self.data, phi, theta)
+		
+		return {
+			'points' : np.asarray(response.points),
+			'phiDerivatives' : np.asarray(response.phiDerivatives),
+			'thetaDerivatives' : np.asarray(response.thetaDerivatives)
+		}
+
 class CoilFilament(wrappers.structWrapper(service.Filament)):
 	"""
 	Set of coils that can be associated with a current to compute magnetic fields.
@@ -231,7 +316,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			background = (await normalizeAgainst.resolve.asnc()).data
 		
 		response = await _calculator().calculateRadialModes(
-			resolve.data, background,
+			resolved.data, background,
 			surfaces.data,
 			nMax, mMax,
 			nPhi, nTheta,
@@ -358,58 +443,6 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			'radii' : radii
 		}})
 
-class SurfaceArray(wrappers.structWrapper(service.FourierSurfaces)):
-	"""A wrapper around service.FourierSurfaces.Builder that exposes array-like behavior"""
-	
-	@property
-	def shape(self):
-		return self.data.shape[:-2]
-	
-	def apply(self, op, *extraArgs):
-		args = [self] + list(extraArgs)
-		
-		d = self.data
-		result = service.FourierSurfaces.newMessage(d)
-		
-		result.rCos = op(*[np.asarray(arg.rCos) for arg in args])
-		result.zSin = op(*[np.asarray(arg.zSin) for arg in args])
-		
-		if d.which_() == 'nonSymmetric':
-			result.nonSymmetric.rSin = op(*[np.asarray(arg.nonSymmetric.rSin) for arg in args])
-			result.nonSymmetric.zCos = op(*[np.asarray(arg.nonSymmetric.zCos) for arg in args])
-		
-		return result
-	
-	def __getitem__(self, *slice):
-		def op(x):
-			return x[*slice, :, :]
-		
-		return self.apply(op)
-	
-	def __add__(self, other):
-		def op(a, b):
-			return a + b
-		
-		return self.apply(op, other)
-	
-	def __sub__(self, other):
-		def op(a, b):
-			return a - b
-		
-		return self.apply(op, other)
-	
-	def __mul__(self, l):
-		# Broadcast to right shape
-		bc = np.asarray(l)[None, None]
-		
-		def op(x):
-			return bc * x
-		
-		return self.apply(op, other)
-	
-	def __rmul__(self, l):
-		return self.__mul__(l)
-
 @asyncFunction
 async def extractCoils(field):
 	import numpy as np
@@ -528,13 +561,3 @@ def _fourierSurfaces(rCos, zSin, rsin = None, zCos = None, nSym = 1, nTurns = 1)
 		nonSym.zCos = zCos
 	
 	return result
-	
-@asyncFunction
-async def evaluateFourierSurfaces(surfaces: service.FourierSurfaces.Instance, phi: Sequence[float], theta: Sequence[float]):
-	response = await _calculator().evalFourierSurface(surfaces, phi, theta)
-	
-	return {
-		'points' : np.asarray(response.points),
-		'phiDerivatives' : np.asarray(response.phiDerivatives),
-		'thetaDerivatives' : np.asarray(response.thetaDerivatives)
-	}
