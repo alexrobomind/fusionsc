@@ -358,6 +358,25 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			'radii' : radii
 		}})
 
+class FourierSurfaceArray(wrappers.structWrapper(service.FourierSurfaces)):
+	def __init__(self, surfaces: Optional[service.FourierSurfaces.Instance] = None, rCos = None, zSin= None, rSin = None, zCos = None, nSym = 1, nTurns = 1):
+		if surfaces is None:
+			surfaces = _fourierSurfaces(rCos, zSin, rSin, zCos, nSym, nTurns)
+		
+		super().__init__(surfaces)
+		
+	def __getitem__(self, *slice):
+		result = service.FourierSurfaces.newMessage(input)
+		
+		result.rCos = np.asarray(input.rCos)[*slice, :, :]
+		result.zSin = np.asarray(input.zSin)[*slice, :, :]
+		
+		if input.which_() == 'nonSymmetric':
+			result.nonSymmetric.rSin = input.nonSymmetric.rCos[*slice, :, :]
+			result.nonSymmetric.zCos = input.nonSymmetric.zCos[*slice, :, :]
+		
+		return SurfaceArray(result)
+
 @asyncFunction
 async def extractCoils(field):
 	import numpy as np
@@ -440,7 +459,7 @@ async def visualizeCoils(field):
 		
 	return pv.MultiBlock(dataSets)
 
-def fourierSurfaces(rCos, zSin, rsin = None, zCos = None, nSym = 1, nTurns = 1) -> service.FourierSurfaces.Builder:
+def _fourierSurfaces(rCos, zSin, rsin = None, zCos = None, nSym = 1, nTurns = 1) -> service.FourierSurfaces.Builder:
 	"""Builds a Fourier surface object from keyword arguments"""
 	result = service.FourierSurfaces.newMessage()
 	

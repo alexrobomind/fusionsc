@@ -1,6 +1,7 @@
 from . import backends
 from . import service
 from . import wrappers
+from . import native
 
 import numpy as np
 
@@ -12,7 +13,7 @@ def newRequest():
 	return service.VmecRequest.newMessage()
 
 @asyncFunction
-async def run(request):	
+async def run(request: service.VmecRequest.Instance) -> service.VmecResponse.Reader:	
 	return await _driver().run(request)
 
 @asyncFunction
@@ -37,3 +38,6 @@ async def phizrToSphitheta(surfaces, phi, z, r):
 	
 	s, phi, theta = np.asarray(response.sPhiTheta)
 	return s, phi, theta
+
+def loadOutput(filename: str) -> service.VmecResult.Reader:
+	return native.vmec.loadOutput(filename)
