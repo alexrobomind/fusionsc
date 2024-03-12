@@ -679,7 +679,7 @@ async def calculateFourierModes(
 	modes = response.fieldLineAnalysis.fourierModes
 	
 	result = {
-		"surfaces" : modes.surfaces,
+		"surfaces" : magnetics.SurfaceArray(modes.surfaces),
 		
 		"iota" : iotas,
 		"theta" : np.asarray(modes.theta0),

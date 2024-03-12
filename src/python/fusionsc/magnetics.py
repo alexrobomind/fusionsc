@@ -199,7 +199,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		
 	@asyncFunction
 	async def calculateRadialModes(
-		self, surfaces: service.FourierSurfaces.Instance,
+		self, surfaces: SurfaceArray,
 		normalizeAgainst : "Optional[MagneticConfig]" = None,
 		nMax = 5, mMax = 5, nPhi = 30, nTheta = 30, nSym = 1
 	):
@@ -232,7 +232,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		
 		response = await _calculator().calculateRadialModes(
 			resolve.data, background,
-			surfaces,
+			surfaces.data,
 			nMax, mMax,
 			nPhi, nTheta,
 			nSym
@@ -358,24 +358,57 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			'radii' : radii
 		}})
 
-class FourierSurfaceArray(wrappers.structWrapper(service.FourierSurfaces)):
-	def __init__(self, surfaces: Optional[service.FourierSurfaces.Instance] = None, rCos = None, zSin= None, rSin = None, zCos = None, nSym = 1, nTurns = 1):
-		if surfaces is None:
-			surfaces = _fourierSurfaces(rCos, zSin, rSin, zCos, nSym, nTurns)
+class SurfaceArray(wrappers.structWrapper(service.FourierSurfaces)):
+	"""A wrapper around service.FourierSurfaces.Builder that exposes array-like behavior"""
+	
+	@property
+	def shape(self):
+		return self.data.shape[:-2]
+	
+	def apply(self, op, *extraArgs):
+		args = [self] + list(extraArgs)
 		
-		super().__init__(surfaces)
+		d = self.data
+		result = service.FourierSurfaces.newMessage(d)
 		
+		result.rCos = op(*[np.asarray(arg.rCos) for arg in args])
+		result.zSin = op(*[np.asarray(arg.zSin) for arg in args])
+		
+		if d.which_() == 'nonSymmetric':
+			result.nonSymmetric.rSin = op(*[np.asarray(arg.nonSymmetric.rSin) for arg in args])
+			result.nonSymmetric.zCos = op(*[np.asarray(arg.nonSymmetric.zCos) for arg in args])
+		
+		return result
+	
 	def __getitem__(self, *slice):
-		result = service.FourierSurfaces.newMessage(input)
+		def op(x):
+			return x[*slice, :, :]
 		
-		result.rCos = np.asarray(input.rCos)[*slice, :, :]
-		result.zSin = np.asarray(input.zSin)[*slice, :, :]
+		return self.apply(op)
+	
+	def __add__(self, other):
+		def op(a, b):
+			return a + b
 		
-		if input.which_() == 'nonSymmetric':
-			result.nonSymmetric.rSin = input.nonSymmetric.rCos[*slice, :, :]
-			result.nonSymmetric.zCos = input.nonSymmetric.zCos[*slice, :, :]
+		return self.apply(op, other)
+	
+	def __sub__(self, other):
+		def op(a, b):
+			return a - b
 		
-		return SurfaceArray(result)
+		return self.apply(op, other)
+	
+	def __mul__(self, l):
+		# Broadcast to right shape
+		bc = np.asarray(l)[None, None]
+		
+		def op(x):
+			return bc * x
+		
+		return self.apply(op, other)
+	
+	def __rmul__(self, l):
+		return self.__mul__(l)
 
 @asyncFunction
 async def extractCoils(field):
