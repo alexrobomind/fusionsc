@@ -17,6 +17,7 @@ struct BuilderSlot {
 	virtual capnp::DynamicValue::Builder get() const = 0;
 	virtual capnp::DynamicValue::Builder init() const = 0;
 	virtual capnp::DynamicValue::Builder init(unsigned int size) const = 0;
+	virtual void clear() const = 0;
 	
 	virtual ~BuilderSlot() {};
 };

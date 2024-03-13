@@ -524,6 +524,23 @@ struct CalculationSession : public FieldCalculator::Server {
 				readVardimTensor(resp.getPoints(), 1, surfPoints);
 				readVardimTensor(resp.getPhiDerivatives(), 1, surfPhiDeriv);
 				readVardimTensor(resp.getThetaDerivatives(), 1, surfThetaDeriv);
+				
+				const int nSurfs = surfPoints.dimension(2);
+				
+				KJ_REQUIRE(surfPoints.dimension(0) == nTheta);
+				KJ_REQUIRE(surfPoints.dimension(1) == nPhi);
+				KJ_REQUIRE(surfPoints.dimension(2) == nSurfs);
+				KJ_REQUIRE(surfPoints.dimension(3) == 3);
+				
+				KJ_REQUIRE(surfPhiDeriv.dimension(0) == nTheta);
+				KJ_REQUIRE(surfPhiDeriv.dimension(1) == nPhi);
+				KJ_REQUIRE(surfPhiDeriv.dimension(2) == nSurfs);
+				KJ_REQUIRE(surfPhiDeriv.dimension(3) == 3);
+				
+				KJ_REQUIRE(surfThetaDeriv.dimension(0) == nTheta);
+				KJ_REQUIRE(surfThetaDeriv.dimension(1) == nPhi);
+				KJ_REQUIRE(surfThetaDeriv.dimension(2) == nSurfs);
+				KJ_REQUIRE(surfThetaDeriv.dimension(3) == 3);
 			}
 			
 			const int nSurfs = surfPoints.dimension(2);
@@ -660,13 +677,25 @@ struct CalculationSession : public FieldCalculator::Server {
 			auto adjustShape = [&](Float64Tensor::Builder out) {
 				auto surfShape = surfaces.getRCos().getShape();
 				auto shape = out.initShape(surfShape.size());
-				for(auto i : kj::range(0, surfShape.size() - 1))
+				for(auto i : kj::range(0, surfShape.size() - 2))
 					shape.set(i, surfShape[i]);
 				shape.set(shape.size() - 2, numN);
 				shape.set(shape.size() - 1, numM);
 			};
 			adjustShape(results.getCosCoeffs());
 			adjustShape(results.getSinCoeffs());
+
+			// Write radial values tensor
+			{
+				writeTensor(radialValues, results.getRadialValues());
+				auto surfShape = surfaces.getRCos().getShape();
+				auto shape = results.getRadialValues().initShape(surfShape.size());
+				for(auto i : kj::range(0, surfShape.size() - 2))
+					shape.set(i, surfShape[i]);
+				shape.set(shape.size() - 2, nPhi);
+				shape.set(shape.size() - 1, nTheta);
+			}
+			
 			
 			auto mOut = results.initMPol(numM);
 			for(auto i : kj::indices(mOut))
@@ -674,7 +703,10 @@ struct CalculationSession : public FieldCalculator::Server {
 			
 			auto nOut = results.initNTor(numN);
 			for(int i : kj::indices(nOut))
-				nOut.set(i, (i <= mMax ? i : i - numN) / phiMultiplier);
+				nOut.set(i, (i <= nMax ? i : i - numN) / phiMultiplier);
+			
+			results.setPhi(phiVals);
+			results.setTheta(thetaVals);
 		});
 	}
 		

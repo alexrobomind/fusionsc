@@ -783,10 +783,18 @@ struct FLTImpl : public FLT::Server {
 								else if(m == 1 && n == 0) {}
 								else {
 									KJ_IF_MAYBE(pOther, modeAliases) {
-										double myResonance = std::abs(n * phiMultiplier * iota - m);
-										double otherResonance = std::abs(pOther -> coeffs[0] * phiMultiplier * iota - pOther -> coeffs[1]);
+										// double myResonance = std::abs(n * phiMultiplier * iota - m);
+										// double otherResonance = std::abs(pOther -> coeffs[0] * phiMultiplier * iota - pOther -> coeffs[1]);
 										
-										if(otherResonance < myResonance) {
+										// We give priority to the lowest-m mode (axis variations tend to be the biggest source of non-stationary
+										// variations, unless the other mode is the 0/1 mode, which is expected to be huge
+										
+										const int on = pOther -> coeffs[0];
+										const int om = pOther -> coeffs[1];
+										
+										if(on == 0 && om == 0) {}
+										else if(on == 0 && om == 1) {}
+										else if(m < om) {
 											pOther -> coeffs[0] = n;
 											pOther -> coeffs[1] = m;
 										}

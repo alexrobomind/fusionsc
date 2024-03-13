@@ -326,8 +326,11 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		return {
 			"cosCoeffs" : np.asarray(response.cosCoeffs),
 			"sinCoeffs" : np.asarray(response.sinCoeffs),
-			"nTor" : np.asarray(response.nTor)[:,None],
-			"mPol" : np.asarray(response.mPol)[None,:]
+			"radialValues" : np.asarray(response.radialValues),
+			"nTor" : np.asarray(response.nTor),
+			"mPol" : np.asarray(response.mPol),
+			"phi" : np.asarray(response.phi),
+			"theta" : np.asarray(response.theta)
 		}
 	
 	def __neg__(self):
