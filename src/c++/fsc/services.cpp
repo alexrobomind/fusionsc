@@ -216,16 +216,29 @@ struct RootServer : public RootService::Server {
 	}
 	
 	Promise<void> getInfo(GetInfoContext ctx) override {
+		auto results = ctx.getResults();
 		if(device -> brand == &CPUDevice::BRAND) {
-			ctx.getResults().setDeviceType(ComputationDeviceType::CPU);
+			results.setDeviceType(ComputationDeviceType::CPU);
 		#ifdef FSC_WITH_CUDA
 		} else if(device -> brand == &GPUDevice::BRAND) {
-			ctx.getResults().setDeviceType(ComputationDeviceType::GPU);
+			results.setDeviceType(ComputationDeviceType::GPU);
 		#endif
 		} else {
 			KJ_FAIL_REQUIRE("Unknown device type");
 		}
 		
+		results.setComputeEnabled(config.getEnableCompute());
+		
+		{
+			auto wh = results.initWarehouses(warehouses.size());
+			size_t i = 0;
+			for(auto& e : warehouses) {
+				wh.set(i++, e.key);
+			}
+		}
+		
+		results.setName(config.getName());
+			
 		return READY_NOW;
 	}
 	

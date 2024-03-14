@@ -350,7 +350,6 @@ struct HttpListener : public kj::HttpService {
 			
 			return request.send().then([&response, responseHeaders = mv(responseHeaders)](auto simpleResponse) mutable {
 				responseHeaders.set(HttpHeaderId::CONTENT_TYPE, "text/html; charset=utf-8");
-				KJ_DBG(simpleResponse);
 								
 				auto outputStream = response.send(simpleResponse.getStatus(), simpleResponse.getStatusText(), responseHeaders, simpleResponse.getBody().size());
 				auto sendPromise = outputStream -> write(simpleResponse.getBody().begin(), simpleResponse.getBody().size());

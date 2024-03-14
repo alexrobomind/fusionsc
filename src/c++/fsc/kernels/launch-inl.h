@@ -94,7 +94,7 @@ struct KernelLauncher<CPUDevice> {
 				fulfiller -> fulfill();
 			}
 		};
-		device.eigenDevice -> parallelForAsync(n, cost, func, whenDone);
+		device.eigenDevice().parallelForAsync(n, cost, func, whenDone);
 		
 		return mv(paf.promise);
 	}

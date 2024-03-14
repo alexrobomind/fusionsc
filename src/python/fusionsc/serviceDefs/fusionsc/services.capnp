@@ -33,6 +33,8 @@ struct WarehouseConfig {
 }
 
 struct LocalConfig {
+	name @14 : Text = "FusionSC Server";
+	
 	preferredDeviceType @0 : ComputationDeviceType;
 	enableCompute @1 : Bool = true;
 	enableStorage @2 : Bool = true;
@@ -72,9 +74,21 @@ struct LocalConfig {
 struct LoadBalancerConfig {
 	struct Backend {
 		url @0 : Text;
+		name @1 : Text;
 	}
 	
-	backends @0 : List(Backend);
+	struct Rule {
+		matches : union {
+			all @0 : Void;
+			anyOf @1 : List(UInt16);
+			allExcept @2 : List(UInt16);
+		}
+		
+		pool @3 : List(Backend);
+	}
+	
+	# backends @0 : List(Backend);
+	rules @0 : List(Rule);
 	
 	heartbeatIntervalSeconds @1 : UInt64 = 60;
 	reconnectIntervalSeconds @2 : UInt64 = 60;
@@ -82,6 +96,9 @@ struct LoadBalancerConfig {
 
 struct NodeInfo {
 	deviceType @0 : ComputationDeviceType;
+	computeEnabled @1 : Bool;
+	warehouses @2 : List(Text);
+	name @3 : Text;
 }
 
 # Main service interface that can be connected to by clients.
