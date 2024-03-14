@@ -286,9 +286,12 @@ struct LoadBalancerImpl : public capnp::Capability::Server, public kj::Refcounte
 		uint64_t interfaceId, uint16_t methodId,
         capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> context
 	) override {
-		// TODO: Message size?
+		auto params = context.getParams();
+		capnp::MessageSize size = params.targetSize();
+		
 		auto tailRequest = selectCallTarget(methodId)
-			.typelessRequest(interfaceId, methodId, nullptr, capnp::Capability::Client::CallHints());
+			.typelessRequest(interfaceId, methodId, size, capnp::Capability::Client::CallHints());
+		tailRequest.setAs(params);
 		
 		return DispatchCallResult {
 			context.tailCall(mv(tailRequest)),
