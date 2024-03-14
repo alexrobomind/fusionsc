@@ -291,7 +291,7 @@ struct LoadBalancerImpl : public capnp::Capability::Server, public kj::Refcounte
 		
 		auto tailRequest = selectCallTarget(methodId)
 			.typelessRequest(interfaceId, methodId, size, capnp::Capability::Client::CallHints());
-		tailRequest.setAs(params);
+		tailRequest.set(params);
 		
 		return DispatchCallResult {
 			context.tailCall(mv(tailRequest)),
