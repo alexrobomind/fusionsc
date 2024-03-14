@@ -193,7 +193,7 @@ struct Rule : public Backend {
 				break;
 			
 			case LoadBalancerConfig::Rule::Matches::ANY_OF: {
-				bool found = true;
+				bool false = true;
 				for(auto candidate : matches.getAnyOf()) {
 					if(methodId == candidate)
 						found = true;
