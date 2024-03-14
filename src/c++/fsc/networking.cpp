@@ -394,7 +394,7 @@ struct DefaultEntropySource : public kj::EntropySource  {
 
 DefaultEntropySource DefaultEntropySource::INSTANCE;
 
-NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, kj::StringPtr url) {
+NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, kj::StringPtr host, kj::StringPtr url) {
 	HttpClientSettings settings;
 	settings.entropySource = DefaultEntropySource::INSTANCE;
 	settings.webSocketCompressionMode = HttpClientSettings::AUTOMATIC_COMPRESSION;
@@ -402,11 +402,8 @@ NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, k
 	auto client = ownHeld(kj::newHttpClient(DEFAULT_HEADERS, *stream, settings));
 	client.attach(mv(stream));
 	
-	using kj::Url;
-	Url asUrl = Url::parse(url);
-	
 	kj::HttpHeaders headers(DEFAULT_HEADERS);
-	headers.add("Host", asUrl.host);
+	headers.add("Host", host);
 	
 	return client -> openWebSocket(url, headers)
 	.then([client = client.x()](HttpClient::WebSocketResponse response) mutable -> fsc::NetworkInterface::Connection::Client {
@@ -526,9 +523,9 @@ Promise<void> NetworkInterfaceBase::connect(ConnectContext ctx) {
 	}
 	
 	return makeConnection(host, port)
-	.then([ctx, url = mv(url)](Own<kj::AsyncIoStream> stream) mutable {
+	.then([ctx, url = mv(url), host = kj::heapString(host)](Own<kj::AsyncIoStream> stream) mutable {
 		kj::String httpUrl = url.toString(Url::HTTP_REQUEST);
-		ctx.getResults().setConnection(connectViaHttp(mv(stream), httpUrl));
+		ctx.getResults().setConnection(connectViaHttp(mv(stream), host, httpUrl));
 	});	
 }
 
