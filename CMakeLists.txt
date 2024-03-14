@@ -379,9 +379,12 @@ else()
 	set(FSC_ARCH_NATIVE_RESULT "Disabled")
 endif()
 
+option(FSC_WITH_OPENMP "Whether to enable OpenMP support" On)
+
 # Set up the scikit build
 if(SKBUILD)
 	add_custom_target(fsc-skbuild-target)
+	set(FSC_WITH_OPENMP Off CACHE BOOL "OpenMP disabled in scikit build")
 endif()
 
 # Set up testing subsystem
@@ -435,4 +438,5 @@ message(STATUS "--- Configuration options ---")
 message(STATUS "Python support: ${FSC_WITH_PYTHON}")
 message(STATUS "CUDA support: ${FSC_WITH_CUDA}")
 message(STATUS "OpenMP support: ${OPENMP_CXX_FOUND}")
+message(STATUS "OpenMP usage: ${FSC_WITH_OPENMP}")
 message(STATUS "Native Arch support: ${FSC_ARCH_NATIVE_RESULT}")
