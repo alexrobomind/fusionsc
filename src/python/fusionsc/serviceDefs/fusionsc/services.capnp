@@ -29,7 +29,7 @@ enum ComputationDeviceType {
 struct WarehouseConfig {
 	name @0 : Text;
 	url  @1 : Text;
-	path @2 : Text = "/";
+	path @2 : Text = "";
 }
 
 struct LocalConfig {
