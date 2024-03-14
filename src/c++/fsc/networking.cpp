@@ -402,7 +402,13 @@ NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, k
 	auto client = ownHeld(kj::newHttpClient(DEFAULT_HEADERS, *stream, settings));
 	client.attach(mv(stream));
 	
-	return client -> openWebSocket(url, kj::HttpHeaders(DEFAULT_HEADERS))
+	using kj::Url;
+	Url asUrl = Url::parse(url);
+	
+	kj::HttpHeaders headers(DEFAULT_HEADERS);
+	headers.add("Host", asUrl.host);
+	
+	return client -> openWebSocket(url, headers)
 	.then([client = client.x()](HttpClient::WebSocketResponse response) mutable -> fsc::NetworkInterface::Connection::Client {
 		KJ_REQUIRE(
 			response.webSocketOrBody.is<Own<kj::WebSocket>>(),
