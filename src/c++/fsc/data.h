@@ -138,7 +138,7 @@ public:
 	 * with direct access to the stored data.
 	 */
 	template<typename Reference, typename T = References<Reference>>
-	Promise<LocalDataRef<T>> download(Reference src, bool recursive = true);
+	Promise<LocalDataRef<T>> download(Reference src, bool recursive = false);
 	
 	//! Downloads remote DataRef::Client into LocalDataRef if it is not null
 	/**
@@ -156,7 +156,7 @@ public:
 	 * if the given DataRef is unset.
 	 */
 	template<typename Reference, typename T = References<Reference>>
-	Promise<Maybe<LocalDataRef<T>>> downloadIfNotNull(Reference src, bool recursive = true);
+	Promise<Maybe<LocalDataRef<T>>> downloadIfNotNull(Reference src, bool recursive = false);
 	
 	///@}
 	

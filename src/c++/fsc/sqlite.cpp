@@ -254,6 +254,7 @@ Own<db::Connection> connectSqlite(kj::StringPtr url, bool readOnly) {
 	result -> exec("PRAGMA synchronous = NORMAL");
 	result -> exec("PRAGMA foreign_keys = ON");
 	result -> exec("PRAGMA busy_timeout = 50");
+	result -> exec("PRAGMA main.journal_size_limit = 30000000");
 	
 	return result;
 }

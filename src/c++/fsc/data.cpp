@@ -404,6 +404,7 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 	}
 	
 	Promise<void> receiveData(kj::ArrayPtr<const kj::byte> data) override {
+		// KJ_DBG(data.slice(0, 12));
 		KJ_REQUIRE(downloadOffset + data.size() <= downloadBuffer.size());
 		memcpy(downloadBuffer.begin() + downloadOffset, data.begin(), data.size());
 		
@@ -414,6 +415,17 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 	Promise<void> finishDownload() override {
 		KJ_REQUIRE(downloadOffset == downloadBuffer.size());
 		KJ_REQUIRE(downloadBuffer != nullptr);
+		
+		/*uint32_t* prefix = reinterpret_cast<uint32_t*>(downloadBuffer.begin());
+		uint32_t nSegments = prefix[0] + 1;
+		
+		kj::ArrayPtr<uint32_t> segmentSizes(prefix + 1, nSegments);
+		
+		size_t expected = nSegments / 2 + 1;
+		for(auto s : segmentSizes)
+			expected += s;
+		
+		KJ_DBG("Finalizing downloaded ref", nSegments, segmentSizes, expected, downloadOffset / 8);*/
 		
 		// Note: The hash is computed in the parent class.
 		dataEntry = getActiveThread().library() -> store().publish(metadata.getDataHash(), mv(downloadBuffer));
