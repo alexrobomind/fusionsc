@@ -192,6 +192,8 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	uint32_t displacementCount = state.getDisplacementCount();
 	MT19937 rng(state.getRngState());
 	
+	// KJ_DBG(idx, distance);
+	
 	// Set up the magnetic field
 	//using InterpolationStrategy = LinearInterpolation<Num>;
 	using InterpolationStrategy = C1CubicInterpolation<Num>;
@@ -203,26 +205,32 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	cupnp::List<double>::Reader rAxis(0, nullptr);
 	cupnp::List<double>::Reader zAxis(0, nullptr);
 	auto rAxisAt = [&](int i) {
-		i %= rAxis.size();
-		i += rAxis.size();
-		i %= rAxis.size();
+		// WARNING: This is neccessary, since the size_t type takes precedence over
+		// int in integer conversion, causing i to be converted to size_t (which
+		// is unsigned) before the modulo operation.
+		const int s = rAxis.size();
+		i %= s;
+		i += s;
+		i %= s;
 		return rAxis[i];
 	};
 	auto zAxisAt = [&](int i) {
-		i %= zAxis.size();
-		i += zAxis.size();
-		i %= zAxis.size();
+		// WARNING: This is neccessary, since the size_t type takes precedence over
+		// int in integer conversion, causing i to be converted to size_t (which
+		// is unsigned) before the modulo operation.
+		const int s = zAxis.size();
+		i %= s;
+		i += s;
+		i %= s;
 		return zAxis[i];
 	};
 	
 	// Set up unwrapping configuration
-	const double iota = state.getIota();
 	double theta = state.getTheta();
+	double unwrappedPhi = state.getPhi();
 	uint32_t unwrapEvery = 0;
-	
-	using AxisInterpolator = NDInterpolator<1, C1CubicInterpolation<double>>;
-	AxisInterpolator axisInterpolator(C1CubicInterpolation<double>(), { AxisInterpolator::Axis(0, 2 * pi, rAxis.size()) });
-	
+	uint32_t recFourierEvery = 0;
+		
 	{
 		auto fla = request.getFieldLineAnalysis();
 		if(fla.isCalculateIota()) {
@@ -230,10 +238,14 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			zAxis = fla.getCalculateIota().getZAxis();
 			unwrapEvery = fla.getCalculateIota().getUnwrapEvery();
 		} else if(fla.isCalculateFourierModes()) {
-			rAxis = fla.getCalculateFourierModes().getRAxis();
-			zAxis = fla.getCalculateFourierModes().getZAxis();
+			//rAxis = fla.getCalculateFourierModes().getRAxis();
+			//zAxis = fla.getCalculateFourierModes().getZAxis();
+			recFourierEvery = fla.getCalculateFourierModes().getRecordEvery();
 		}
 	}
+	
+	using AxisInterpolator = NDInterpolator<1, C1CubicInterpolation<double>>;
+	AxisInterpolator axisInterpolator(C1CubicInterpolation<double>(), { AxisInterpolator::Axis(0, 2 * pi, rAxis.size()) });
 	
 	bool processDisplacements = perpModel.hasIsotropicDiffusionCoefficient() || perpModel.hasRzDiffusionCoefficient();
 	
@@ -345,7 +357,31 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		
 		// KJ_DBG(r, z);
 		
-		// Unwrapping of phase
+		// KJ_DBG("In grid?", r, z, grid.getRMin(), grid.getRMax(), grid.getZMin(), grid.getZMax());
+		
+		if(r <= grid.getRMin() || r >= grid.getRMax() || z <= grid.getZMin() || z >= grid.getZMax()) {
+			FSC_FLT_RETURN(OUT_OF_GRID);
+		}
+		
+		// Unwrapping of toroidal phase
+		{
+			double phi = atan2(x[1], x[0]);
+			double dPhi = phi - unwrappedPhi;
+			dPhi += pi;
+			dPhi = fmod(dPhi, 2 * pi);
+			dPhi += 2 * pi;
+			dPhi = fmod(dPhi, 2 * pi);
+			dPhi -= pi;
+			unwrappedPhi += dPhi;
+		}
+		
+		// Recording of Fourier modes
+		if(recFourierEvery != 0 && (step % recFourierEvery == 0)) {
+			currentEvent().mutateFourierPoint().setPhi(unwrappedPhi);
+			FSC_FLT_LOG_EVENT(x, distance);
+		}
+		
+		// Unwrapping of poloidal phase
 		if(unwrapEvery != 0 && (step % unwrapEvery == 0)) {
 			double phi = atan2(x[1], x[0]);
 			double rAxisVal = axisInterpolator(rAxisAt, V1(phi));
@@ -356,15 +392,22 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			
 			double newTheta = atan2(dz, dr);
 			double dTheta = newTheta - theta;
-			dTheta = fmod(dTheta + pi, 2 * pi) - pi;
+			dTheta += pi;
+			dTheta = fmod(dTheta, 2 * pi);
+			dTheta += 2 * pi;
+			dTheta = fmod(dTheta, 2 * pi);
+			dTheta -= pi;
 			
 			theta += dTheta;
-		}
-		
-		// KJ_DBG("In grid?", r, z, grid.getRMin(), grid.getRMax(), grid.getZMin(), grid.getZMax());
-		
-		if(r <= grid.getRMin() || r >= grid.getRMax() || z <= grid.getZMin() || z >= grid.getZMax()) {
-			FSC_FLT_RETURN(OUT_OF_GRID);
+			
+			/*if(idx == 0) {
+				KJ_DBG(idx, r, rAxisVal, z, zAxisVal, dr, dz, newTheta, theta, dTheta);
+			}*/
+			
+			/*if(kmath::crossedPhi(theta - dTheta, theta, 0.0)) {
+				KJ_DBG("Theta jump", theta, phi, turn, newTheta);
+			}
+			KJ_DBG(phi, rAxisVal, zAxisVal, r, z, dr, dz);*/
 		}
 		
 		// KJ_DBG("Limits passed");
@@ -737,6 +780,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	state.setNumSteps(step);
 	state.setDistance(distance);
 	state.setTheta(theta);
+	state.setPhi(unwrappedPhi);
 	
 	// Note: The event count is not updated here but at the end of the loop
 	// This ensures that events from unfinished steps do not get added

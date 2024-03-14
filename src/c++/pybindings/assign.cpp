@@ -46,6 +46,9 @@ struct FieldSlot : public BuilderSlot {
 		return builder.get(field);
 	}
 	DynamicValue::Builder init(unsigned int size) const override { return builder.init(field, size); }
+	void clear() const override {
+		builder.clear(field);
+	}
 };
 
 struct ListItemSlot : public BuilderSlot {
@@ -77,6 +80,7 @@ struct ListItemSlot : public BuilderSlot {
 	}
 	
 	DynamicValue::Builder init(unsigned int size) const override { return list.init(index, size); }
+	void clear() const override { init(); }
 	
 };
 
@@ -113,6 +117,9 @@ struct MessageSlot : public BuilderSlot {
 	
 	DynamicValue::Builder init(unsigned int size) const override {
 		KJ_FAIL_REQUIRE("Messages may not be initialized with list content");
+	}
+	void clear() const override {
+		init();
 	}
 };
 
@@ -152,6 +159,8 @@ struct CapSlot : public BuilderSlot {
 	DynamicValue::Builder init(unsigned int size) const override {
 		KJ_FAIL_REQUIRE("Capabilities may not be initialized with list content");
 	}
+	
+	void clear() const override { init(); }
 };
 
 }
@@ -224,7 +233,8 @@ void assign(const BuilderSlot& dst, py::object object) {
 			
 			// Assigning from void in our case means clearing the field / resetting to default
 			if(val.getType() == capnp::DynamicValue::VOID) {
-				dst.init();
+				// dst.init();
+				dst.clear();
 			} else {
 				dst.set(val);
 			}

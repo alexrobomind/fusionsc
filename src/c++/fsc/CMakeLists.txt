@@ -137,7 +137,7 @@ add_library(
 )
 
 target_link_libraries(fsc PUBLIC deps cupnp fsc-service-genapi)
-target_link_libraries(fsc PRIVATE fusionsc_jsonscons)
+target_link_libraries(fsc PRIVATE fusionsc_jsonscons fusionsc_poissongen)
 
 target_include_directories(
 	fsc
@@ -203,6 +203,14 @@ if(FSC_WITH_CUDA)
 	)
 	
 	set_target_properties(tests PROPERTIES LINKER_LANGUAGE CUDA)
+endif()
+
+if(OPENMP_CXX_FOUND)
+	target_link_libraries(fsc PRIVATE OpenMP::OpenMP_CXX)
+endif()
+
+if(MSVC)
+	target_compile_options(fsc PRIVATE /bigobj)
 endif()
 
 # Built in src/c++/fsc

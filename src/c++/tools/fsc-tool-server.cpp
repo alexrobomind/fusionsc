@@ -34,6 +34,38 @@ struct RootServiceProvider : public NetworkInterface::Listener::Server {
 	}
 };
 
+struct NodeInfoProvider : public SimpleHttpServer::Server {
+	Temporary<NodeInfo> nodeInfo;
+	
+	NodeInfoProvider(NodeInfo::Reader info) :
+		nodeInfo(info)
+	{}
+	
+	Promise<void> serve(ServeContext ctx) override {		
+		YAML::Emitter emitter;
+		emitter << nodeInfo.asReader();
+		
+		auto result = kj::str(
+			"<html>",
+			"	<head><title>FusionSC Server</title></head>",
+			"	<body style='font-size: large'>",
+			"		<h1>FusionSC Server</h1>",
+			"		This is a server for the FusionSC library."
+			"		To use it, you need to use the <a href='https://alexrobomind.github.io/fusionsc'>FusionSC library</a>."
+			"		<h2>Node information:</h2>",
+			"		<code style='white-space: pre-wrap'>", emitter.c_str() ,"</code>"
+			"	</body>",
+			"</html>"
+		);
+		
+		auto r = ctx.initResults();
+		r.setStatus(200);
+		r.setBody(result);
+		
+		return READY_NOW;
+	}
+};
+
 struct ServerTool {
 	kj::ProcessContext& context;
 	Maybe<uint64_t> port = nullptr;
@@ -138,8 +170,15 @@ struct ServerTool {
 			listenRequest.setPortHint(*pPort);
 		}
 		listenRequest.setHost(address);
-		// listenRequest.setListener(kj::heap<RootServiceProvider>(loadedConfig));
-		listenRequest.setServer(createRoot(loadedConfig.asReader()));
+		
+		RootService::Client root = createRoot(loadedConfig.asReader());
+		listenRequest.setServer(root);
+		
+		{
+			auto info = root.getInfoRequest().send().wait(ws);
+			listenRequest.setFallback(kj::heap<NodeInfoProvider>(info));
+		}
+		
 		
 		auto openPort = listenRequest.sendForPipeline().getOpenPort();
 		auto info = openPort.getInfoRequest().send().wait(ws);

@@ -270,7 +270,7 @@ struct SlabFieldInterpolator {
 		interpolator(strategy, {
 			Axis(0, 2 * fsc::pi / grid.nSym, grid.nPhi),
 			Axis(grid.zMin, grid.zMax, grid.nZ - 1),
-			Axis(grid.rMin, grid.rMax, grid.nZ - 1),
+			Axis(grid.rMin, grid.rMax, grid.nR - 1),
 		})
 	{
 	}

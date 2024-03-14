@@ -38,7 +38,6 @@ This class represents a struct type. The accessor types are .Reader and .Builder
 {% if methods %}
 .. rubric:: Methods
 
-.. autosummary::
 {% for item in methods %}
 .. automethod:: {{ name }}.{{ item }}
 {%- endfor %}
@@ -51,16 +50,18 @@ This class represents a struct type. The accessor types are .Reader and .Builder
 	:members:
 {% endif %}
 
-{% if "Reader" in members %}
-.. rubric:: Builder class
-.. autoclass:: {{ module }}::{{ objname }}.Builder
-	:members:
-	
-.. rubric:: Reader class
-.. autoclass:: {{ module }}::{{ objname }}.Reader
-	:members:
-	
-.. rubric:: Pipeline class
-.. autoclass:: {{ module }}::{{ objname }}.Pipeline
-	:members:
+{% if "newMessage" in methods %}
+.. autosummary::
+  :recursive:
+  :template: summary-accessor.rst
+  :toctree:
+  
+  {{ objname }}.Builder
+  {{ objname }}.Reader
+  {{ objname }}.Pipeline
+ 
+.. toctree::
+   {{ fullname }}.Builder
+   {{ fullname }}.Reader
+   {{ fullname }}.Pipeline
 {% endif %}

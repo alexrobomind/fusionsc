@@ -11,6 +11,7 @@
 #include <fsc/common.h>
 
 #include <pybind11/operators.h>
+#include <pybind11/options.h>
 
 using capnp::AnyPointer;
 using capnp::DynamicValue;
@@ -215,6 +216,7 @@ void bindStructClasses() {
 void bindCapClasses() {
 	using C = DynamicCapabilityClient;
 	using S = DynamicCapabilityServer;
+	using CC = DynamicCallContext;
 	
 	ClassBinding<C, O> client("CapabilityClient", py::multiple_inheritance(), py::metaclass(*baseMetaType));
 	ClassBinding<S> server("CapabilityServer", py::multiple_inheritance(), py::metaclass(*baseMetaType));
@@ -228,6 +230,18 @@ void bindCapClasses() {
 			
 			return convertToAsyncioFuture(mv(whenReady)).attr("__await__")();
 		})
+	;
+	
+	server
+		.def(py::init<capnp::InterfaceSchema>())
+		.def("asClient", &S::thisCap)
+	;
+	
+	ClassBinding<CC>("CallContext")
+		.def_property_readonly("params", &CC::getParams)
+		.def_property("results", &CC::getResults, &CC::setResults)
+		.def("initResults", &CC::initResults)
+		.def("tailCall", &CC::tailCall)
 	;
 }
 
@@ -304,6 +318,14 @@ void bindType() {
 			return t.wrapInList(depth);
 		}, py::arg("depth") = 1)
 	;
+	
+	ClassBinding<capnp::StructSchema>("StructSchema");
+	ClassBinding<capnp::ListSchema>("ListSchema");
+	ClassBinding<capnp::InterfaceSchema>("InterfaceSchema");
+	
+	py::implicitly_convertible<capnp::StructSchema, capnp::Type>();
+	py::implicitly_convertible<capnp::ListSchema, capnp::Type>();
+	py::implicitly_convertible<capnp::InterfaceSchema, capnp::Type>();
 }
 
 /*void bindAssignable() {
@@ -328,6 +350,9 @@ void initCapnp(py::module_& m) {
 	
 	// Static global defined above
 	capnpModule = m.def_submodule("capnp", "Python bindings for Cap'n'proto classes (excluding KJ library)");
+	
+	py::options options;
+	options.disable_function_signatures();
 	
 	#define CHECK() if(PyErr_Occurred()) throw py::error_already_set();
 	

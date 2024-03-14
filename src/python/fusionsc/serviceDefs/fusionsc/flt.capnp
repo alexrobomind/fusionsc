@@ -127,9 +127,9 @@ struct FLTRequest {
 			rAxis @21 : List(Float64);
 			zAxis @22 : List(Float64);
 		}
-		calculateFourierModes : group {
-			rAxis @23 : List(Float64);
-			zAxis @24 : List(Float64);
+		calculateFourierModes : group {			
+			unusedRAxis @23 : List(Float64);
+			unusedZAxis @24 : List(Float64);
 			
 			# Tensor of shape startPointShape[1:]
 			iota @25 : Data.Float64Tensor;
@@ -139,6 +139,19 @@ struct FLTRequest {
 			
 			# Maximum m number to calculate
 			mMax @27 : UInt32 = 0;
+			
+			# How often to record Fourier points
+			recordEvery @38 : UInt32 = 1;
+			
+			# Multiplier for toroidal mode numbers
+			toroidalSymmetry @ 39 : UInt32 = 1;
+			
+			# If n * iota + m of a mode is within this value
+			# of a lower-n mode, the mode will be discarded
+			# from reconstruction
+			modeAliasingThreshold @40 : Float64 = 0.001;
+			
+			stellaratorSymmetric @41 : Bool = false;
 		}
 	}
 	
@@ -173,11 +186,40 @@ struct FLTResponse {
 	# Tensor of shape startPoints.shape[1:] + [max. field line length]
 	fieldStrengths @8 : Data.Float64Tensor;
 	
-	# Tensor of shape startPoints.shape[1:]
-	iotas @9 : Data.Float64Tensor;
+	fieldLineAnalysis : union {
+		noTask @10 : Void;
+		
+		# Tensor of shape startPoints.shape[1:]
+		iotas @11 : Data.Float64Tensor;
+		
+		fourierModes : group {			
+			# Surface Fourier coefficients coefficients for input and output
+			# All tensors must have identical shapes
+			# - nToroidalCoeffs must be 2 * nMax + 1
+			# - nPoloidalCoeffs must be mMax + 1
+			#
+			# The order of storage for toroidal modes is [0, ..., nTor, -nTor, ..., -1]
+			# so that slicing with negative indices can be interpreted
+			# as slicing from the end (as is done in NumPy).
+			#
+			# The order of storage for poloidal modes is [0, ..., mPol]
+			
+			# Surfaces
+			surfaces @12 : Magnetics.FourierSurfaces;
+			
+			# Theta values (poloidal angle) of starting points
+			theta0 @13 : Data.Float64Tensor;
+			
+			# Mode number tensors of shape [nToroidalCoeffs, nPoloidalCoeffs]
+			# These are float tensors because we want to support fractional mode numbers
+			# for magnetic island support (phi ranging from 0 to e.g. 12 pi)
+			mPol @14 : List(Float64);
+			nTor @15 : List(Float64);
+		}
+	}
 	
 	# Number of steps
-	numSteps @10 : Data.UInt64Tensor;
+	numSteps @9 : Data.UInt64Tensor;
 	
 	rngSeed @6 : UInt64;
 }
@@ -273,8 +315,8 @@ struct FLTKernelState {
 	displacementCount @9 : UInt32;
 	rngState @10 : Random.MT19937State;
 	
-	theta @11 : Float64;
-	iota @12 : Float64;
+	phi @11 : Float64;
+	theta @12 : Float64;
 	
 	stepSize @13 : Float64;
 }
@@ -299,6 +341,9 @@ struct FLTKernelEvent {
 		}
 		record : group {
 			fieldStrength @10 : Float64;
+		}
+		fourierPoint : group {
+			phi @11 : Float64;
 		}
 	}
 }

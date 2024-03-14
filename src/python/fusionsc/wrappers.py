@@ -76,6 +76,12 @@ class StructWrapperBase:
 def structWrapper(serviceType):
 	class Wrapper(StructWrapperBase):
 		type = serviceType
+		
+		def __copy__(self):
+			return Wrapper(self.data)
+		
+		def __deepcopy__(self, memo):
+			return Wrapper(self.data)
 	
 	return Wrapper
 

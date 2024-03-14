@@ -3,6 +3,7 @@
 #include "magnetics.h"
 #include "data.h"
 #include "interpolation.h"
+#include "nudft.h"
 
 #include "kernels/launch.h"
 #include "kernels/tensor.h"
@@ -16,57 +17,36 @@ namespace fsc {
 namespace {
 	
 struct FieldCalculation {
+	using FieldValues = ::fsc::kernels::FieldValues;
 	using Field = ::fsc::kernels::Field;
+	
 	using MFilament = ::fsc::kernels::MFilament;
 	
 	constexpr static unsigned int GRID_VERSION = 7;
 	
 	Own<DeviceBase> _device;
-	ToroidalGridStruct grid;
-	ToroidalGrid::Reader gridReader;
-	DeviceMappingType<Field> field;
+	
+	DeviceMappingType<FieldValues> field;
+	DeviceMappingType<FieldValues> points;
 	
 	// This promise makes sure we only schedule a
 	// calculation once the previous is finished
 	Promise<void> calculation = READY_NOW;
 	
-	FieldCalculation(/*ToroidalGridStruct*/ToroidalGrid::Reader in, DeviceBase& device) :
+	FieldCalculation(FieldValues&& pointsIn, DeviceBase& device) :
 		_device(device.addRef()),
-		grid(readGrid(in, GRID_VERSION)),
-		gridReader(in),
-		field(mapToDevice(Field(3, grid.nR, grid.nZ, grid.nPhi), device, true))
+		field(mapToDevice(FieldValues(pointsIn.dimension(0), 3), device, true)),
+		points(mapToDevice(mv(pointsIn), device, true))
 	{
 		field -> getHost().setZero();
+		
 		field -> updateDevice();
+		points -> updateDevice();
 	}
 	
 	~FieldCalculation() {}
 	
-	void add(double scale, Float64Tensor::Reader input) {
-		auto shape = input.getShape();
-		
-		KJ_REQUIRE(shape.size() == 4);
-		KJ_REQUIRE(shape[3] == 3);
-		
-		auto data = input.getData();
-		
-		// Write field into native format
-		Field newField(3, grid.nR, grid.nZ, grid.nPhi);
-		for(int i = 0; i < newField.size(); ++i) {
-			newField.data()[i] = data[i];
-		}
-		
-		calculation = calculation.then([this, newField = mv(newField), scale]() mutable {
-			return FSC_LAUNCH_KERNEL(
-				kernels::addFieldKernel,
-				*_device, 
-				field -> getHost().size(),
-				FSC_KARG(field, NOCOPY), FSC_KARG(newField, ALIAS_IN), scale
-			);
-		});
-	}
-	
-	void addDifferent(double scale, Float64Tensor::Reader otherFieldIn, ToroidalGridStruct otherGrid) {
+	void addComputed(double scale, Float64Tensor::Reader otherFieldIn, ToroidalGridStruct otherGrid) {
 		auto shape = otherFieldIn.getShape();
 		
 		KJ_REQUIRE(shape.size() == 4);
@@ -75,6 +55,10 @@ struct FieldCalculation {
 		auto data = otherFieldIn.getData();
 		
 		// Write field into native format
+		// for(auto i : otherFieldIn.getShape())
+		// 	KJ_DBG("Shape", i);
+	
+		// KJ_DBG(3, otherGrid.nR, otherGrid.nZ, otherGrid.nPhi);
 		Field otherField(3, otherGrid.nR, otherGrid.nZ, otherGrid.nPhi);
 		KJ_REQUIRE(otherField.size() == data.size());
 		
@@ -86,8 +70,8 @@ struct FieldCalculation {
 			return FSC_LAUNCH_KERNEL(
 				kernels::addFieldInterpKernel,
 				*_device, 
-				field -> getHost().size() / 3,
-				FSC_KARG(field, NOCOPY), grid,
+				field -> getHost().dimension(0),
+				FSC_KARG(field, NOCOPY), FSC_KARG(points, NOCOPY),
 				FSC_KARG(otherField, ALIAS_IN), otherGrid,
 				scale
 			);
@@ -125,8 +109,38 @@ struct FieldCalculation {
 			return FSC_LAUNCH_KERNEL(
 				kernels::biotSavartKernel,
 				*_device,
-				field -> getHost().size() / 3,
-				grid, FSC_KARG(filament, ALIAS_IN), current, coilWidth, stepSize, FSC_KARG(field, NOCOPY)
+				field -> getHost().dimension(0), FSC_KARG(points, NOCOPY),
+				FSC_KARG(filament, ALIAS_IN), current, coilWidth, stepSize, FSC_KARG(field, NOCOPY)
+			);
+		});
+	}
+	
+	void dipoles(double scale, DipoleCloud::Reader cloud) {
+		Tensor<double, 2> positions;
+		Tensor<double, 2> moments;
+		
+		readTensor(cloud.getPositions(), positions);
+		readTensor(cloud.getMagneticMoments(), moments);
+		
+		size_t nPoints = positions.dimension(0);
+		KJ_REQUIRE(moments.dimension(0) == nPoints);
+		KJ_REQUIRE(moments.dimension(1) == 3);
+		KJ_REQUIRE(positions.dimension(1) == 3);
+		
+		auto radii = cloud.getRadii();
+		KJ_REQUIRE(radii.size() == nPoints);
+		
+		auto radiiNative = kj::heapArray<double>(nPoints);
+		for(auto i : kj::indices(radii))
+			radiiNative[i] = radii[i];
+		
+		calculation = calculation.then([this, nPoints, scale, positions = mv(positions), moments = mv(moments), radiiNative = mv(radiiNative)]() mutable {
+			return FSC_LAUNCH_KERNEL(
+				kernels::dipoleFieldKernel,
+				*_device,
+				field -> getHost().dimension(0), FSC_KARG(points, NOCOPY),
+				FSC_KARG(mv(positions), ALIAS_IN), FSC_KARG(mv(moments), ALIAS_IN), FSC_KARG(mv(radiiNative), ALIAS_IN),
+				scale, FSC_KARG(field, NOCOPY)
 			);
 		});
 	}
@@ -138,8 +152,9 @@ struct FieldCalculation {
 			return FSC_LAUNCH_KERNEL(
 				kernels::eqFieldKernel,
 				*_device,
-				field -> getHost().size() / 3,
-				grid, FSC_KARG(mapped, ALIAS_IN), scale, FSC_KARG(field, NOCOPY)
+				field -> getHost().dimension(0),
+				FSC_KARG(points, NOCOPY),
+				FSC_KARG(mapped, ALIAS_IN), scale, FSC_KARG(field, NOCOPY)
 			);
 		});
 	}
@@ -163,103 +178,546 @@ struct CalculationSession : public FieldCalculator::Server {
 	// Device device;
 	Own<DeviceBase> device;
 	
-	// ToroidalGridStruct grid;
-	// Cache<ID, LocalDataRef<Float64Tensor>> cache;
-	
-	CalculationSession(Own<DeviceBase> device/*, ToroidalGrid::Reader newGrid*/) :
-		device(mv(device))/*,
-		grid(readGrid(newGrid, GRID_VERSION))*/
+	CalculationSession(Own<DeviceBase> device) :
+		device(mv(device))
 	{}
 	
-	//! Handles compute request
-	Promise<void> compute(ComputeContext context) {
-		// context.allowCancellation(); // NOTE: In capnproto 0.11, this has gone away
-		KJ_LOG(INFO, "Initiating magnetic field computation");
+	Promise<void> evaluateXyz(EvaluateXyzContext context) {
+		KJ_LOG(INFO, "Initiating magnetic field evaluation");
 		
-		// Copy input field (so that call context can be released)
-		auto field = heapHeld<Temporary<MagneticField>>(context.getParams().getField());
-		auto grid  = heapHeld<Temporary<ToroidalGrid>>(context.getParams().getGrid());
-		context.releaseParams();
+		auto field = context.getParams().getField();
+		auto pointsIn = context.getParams().getPoints();
 		
-		// Fill in computed grid struct
-		auto compField = context.initResults().initComputedField();
-		// writeGrid(grid, compField.initGrid());
-		compField.setGrid(*grid);
+		// Validate shape of input tensor
+		validateTensor(pointsIn);
+		auto pointsShape = pointsIn.getShape();
+		KJ_REQUIRE(pointsIn.getShape().size() >= 1);
+		KJ_REQUIRE(pointsIn.getShape()[0] == 3);
 		
-		// Start calculation lazily
-		auto data = processRoot(*field, *grid)
-		/*.then([this, field, context, grid](LocalDataRef<Float64Tensor> tensorRef) mutable {
-			// Cache field if not present, use existing if present
-			return ID::fromReaderWithRefs(field->asBuilder())
-			.then([this, tensorRef = mv(tensorRef)](ID id) mutable -> DataRef<Float64Tensor>::Client {
-				auto insertResult = cache.insert(id, mv(tensorRef));
-				return attach(mv(insertResult.element), mv(insertResult.ref));
-			});
-		})*/
-		.attach(thisCap(), field.x(), grid.x()).eagerlyEvaluate(nullptr);
+		size_t nPoints = 1;
+		for(auto i : kj::range(1, pointsShape.size()))
+			nPoints *= pointsShape[i];
 		
-		compField.setData(mv(data));
-		return READY_NOW;
+		auto pointData = pointsIn.getData();
+		
+		Eigen::Tensor<double, 2> points(nPoints, 3);
+		for(auto i : kj::range(0, nPoints)) {
+			points(i, 0) = pointData[0 * nPoints + i];
+			points(i, 1) = pointData[1 * nPoints + i];
+			points(i, 2) = pointData[2 * nPoints + i];
+		}
+		
+		return processRoot(field, mv(points), context.getResults().initValues())
+		.then([context, pointsShape]() mutable {
+			// Adjust field shape to match points shape
+			context.getResults().getValues().setShape(pointsShape);
+		});
 	}
 	
-	Promise<void> evaluateXyz(EvaluateXyzContext ctx) {
-		auto params = ctx.getParams();
+	Promise<void> evaluatePhizr(EvaluatePhizrContext context) {
+		auto xyzReq = thisCap().evaluateXyzRequest();
+		auto params = context.getParams();
 		
-		auto field = params.getField();
-		auto points = params.getPoints();
+		xyzReq.setField(params.getField());
+		xyzReq.setPoints(params.getPoints());
 		
-		auto shape = points.getShape();
-		KJ_REQUIRE(shape.size() >= 1);
-		KJ_REQUIRE(shape[0] == 3);
+		auto points = xyzReq.getPoints().getData();
+		auto nPoints = points.size() / 3;
 		
-		return getActiveThread().dataService().download(field.getData())
-		.then([ctx, points, field](auto localRef) mutable {			
-			auto result = ctx.initResults();
-			result.getValues().setShape(points.getShape());
+		for(auto i : kj::range(0, nPoints)) {
+			double phi = points[0 * nPoints + i];
+			double z = points[1 * nPoints + i];
+			double r = points[2 * nPoints + i];
 			
-			auto dataIn = points.getData();
-			auto dataOut = result.getValues().initData(dataIn.size());
+			double x = std::cos(phi) * r;
+			double y = std::sin(phi) * r;
 			
-			KJ_REQUIRE(dataIn.size() % 3 == 0, "Data size not divisible by 3");
+			points.set(0 * nPoints + i, x);
+			points.set(1 * nPoints + i, y);
+			points.set(2 * nPoints + i, z);
+		}
+		
+		return xyzReq.send().then([params, nPoints, context](auto response) mutable {
+			auto results = context.initResults();
+			results.setValues(response.getValues());
 			
-			// Prepare interpolator
-			using InterpolationStrategy = C1CubicInterpolation<double>;
-			auto grid = field.getGrid();
-			SlabFieldInterpolator<InterpolationStrategy> interpolator(InterpolationStrategy(), field.getGrid());
+			auto points = params.getPoints().getData();
+			auto values = results.getValues().getData();
 			
-			Own<TensorMap<const Tensor<double, 4>>> fieldTensor = mapTensor<Tensor<double, 4>>(localRef.get());
+			KJ_REQUIRE(values.size() == 3 * nPoints);
 			
-			uint64_t offset = dataIn.size() / 3;
-			for(auto i : kj::range(0, offset)) {
-				Vec3d fieldValue = interpolator(
-					*fieldTensor,
-					Vec3d(dataIn[i], dataIn[i + offset], dataIn[i + 2 * offset])
-				);
+			for(auto i : kj::range(0, nPoints)) {
+				double bX = values[0 * nPoints + i];
+				double bY = values[1 * nPoints + i];
+				double bZ = values[2 * nPoints + i];
 				
-				dataOut.set(i, fieldValue(0));
-				dataOut.set(i + offset, fieldValue(1));
-				dataOut.set(i + 2 * offset, fieldValue(2));
+				double phi = points[0 * nPoints + i];
+				
+				double bR = bX * std::cos(phi) + bY * std::sin(phi);
+				double bPhi = bY * std::cos(phi) - bX * std::sin(phi);
+				
+				values.set(0 * nPoints + i, bPhi);
+				values.set(1 * nPoints + i, bZ);
+				values.set(2 * nPoints + i, bR);
 			}
 		});
 	}
 	
+	//! Handles compute request
+	Promise<void> compute(ComputeContext context) {
+		KJ_LOG(INFO, "Initiating magnetic field computation");
+		
+		constexpr unsigned int GRID_VERSION = 7;
+		auto grid = readGrid(context.getParams().getGrid(), GRID_VERSION);
+		
+		// Calculate all grid points
+		Tensor<double, 4> points(grid.nPhi, grid.nZ, grid.nR, 3);
+		for(auto iR : kj::range(0, grid.nR)) {
+			for(auto iPhi : kj::range(0, grid.nPhi)) {
+				for(auto iZ : kj::range(0, grid.nZ)) {
+					points(iPhi, iZ, iR, 0) = grid.phi(iPhi);
+					points(iPhi, iZ, iR, 1) = grid.z(iZ);
+					points(iPhi, iZ, iR, 2) = grid.r(iR);
+				}
+			}
+		}
+		
+		// Submit evaluation request request
+		auto calcReq = thisCap().evaluatePhizrRequest();
+		calcReq.setField(context.getParams().getField());
+		writeTensor(points, calcReq.getPoints());
+		
+		// Parameters no longer required
+		context.releaseParams();
+		
+		auto refPromise = calcReq.send().then([grid](auto response) -> DataRef<Float64Tensor>::Client {
+			Tensor<double, 4> values;
+			readTensor(response.getValues(), values);
+			
+			Temporary<Float64Tensor> holder;
+			
+			// The computation request uses the format (phi, z, r, 3) (column major)
+			// We need to transpose to (3, r, z, phi)
+			{
+				using A = Eigen::array<Eigen::Index, 4>;
+				Tensor<double, 4> tmp = values.shuffle<A>({3, 2, 1, 0});
+				values = tmp;
+			}
+			
+			writeTensor(values, holder.asBuilder());
+			
+			return getActiveThread().dataService().publish(holder.asReader());
+		});
+			
+		auto cf = context.initResults().getComputedField();
+		writeGrid(grid, cf.initGrid());
+		cf.setData(mv(refPromise));
+		
+		return READY_NOW;
+	}
+	
+	Promise<void> interpolateXyz(InterpolateXyzContext ctx) {
+		auto params = ctx.getParams();
+		
+		auto req = thisCap().evaluateXyzRequest();
+		
+		req.getField().setComputedField(params.getField());
+		req.setPoints(params.getPoints());
+		
+		return ctx.tailCall(mv(req));
+	}
+	
+	Promise<void> evalFourierSurface(EvalFourierSurfaceContext ctx) {
+		auto params = ctx.getParams();
+		
+		auto surfaces = params.getSurfaces();
+		auto surfNMax = surfaces.getNTor();
+		auto surfMMax = surfaces.getMPol();
+		
+		auto surfNumN = 2 * surfNMax + 1;
+		auto surfNumM = surfMMax + 1;
+		
+		uint32_t surfSym = surfaces.getToroidalSymmetry();
+		uint32_t surfNTurns = surfaces.getNTurns();
+		
+		// Compute toroidal mode numbers & evaluation angles
+		auto modeN = kj::heapArray<double>(surfNumN);
+		for(auto iN : kj::indices(modeN)) {
+			double baseN = iN;
+			if(iN > surfNMax)
+				baseN = ((int) iN) - (int) surfNumN;
+			
+			baseN *= surfSym;
+			baseN /= surfNTurns;
+			modeN[iN] = baseN;
+		}
+		
+		auto phiVals = params.getPhi();
+		auto thetaVals = params.getTheta();
+		
+		const size_t nPhi = phiVals.size();
+		const size_t nTheta = thetaVals.size();
+		
+		KJ_DBG(nPhi, nTheta);
+		
+		// Read symmetric surface basis
+		
+		Eigen::Tensor<double, 3> rCos;
+		Eigen::Tensor<double, 3> zSin;
+		readVardimTensor(surfaces.getRCos(), 0, rCos);
+		readVardimTensor(surfaces.getZSin(), 0, zSin);
+		
+		KJ_REQUIRE(rCos.dimension(0) == surfNumM);
+		KJ_REQUIRE(rCos.dimension(1) == surfNumN);
+		const int64_t nSurfs = rCos.dimension(2);
+		
+		KJ_REQUIRE(zSin.dimension(0) == surfNumM);
+		KJ_REQUIRE(zSin.dimension(1) == surfNumN);
+		KJ_REQUIRE(zSin.dimension(2) == nSurfs);
+		
+		Eigen::Tensor<double, 3> rSin;
+		Eigen::Tensor<double, 3> zCos;
+		
+		// Read non-symmetric surface basis
+		if(surfaces.isNonSymmetric()) {
+			readVardimTensor(surfaces.getNonSymmetric().getZCos(), 0, zCos);
+			readVardimTensor(surfaces.getNonSymmetric().getRSin(), 0, rSin);
+		
+			KJ_REQUIRE(zCos.dimension(0) == surfNumM);
+			KJ_REQUIRE(zCos.dimension(1) == surfNumN);
+			KJ_REQUIRE(zCos.dimension(2) == nSurfs);
+			
+			KJ_REQUIRE(rSin.dimension(0) == surfNumM);
+			KJ_REQUIRE(rSin.dimension(1) == surfNumN);
+			KJ_REQUIRE(rSin.dimension(2) == nSurfs);
+		} else {
+			rSin.resize(surfNumM, surfNumN, nSurfs);
+			zCos.resize(surfNumM, surfNumN, nSurfs);
+			
+			rSin.setZero();
+			zCos.setZero();
+		}
+		
+		KJ_DBG(nSurfs);
+		
+		// Calculate points and derivatives on all surfaces
+		
+		using ADS = Eigen::AutoDiffScalar<Vec2d>;
+		Eigen::Tensor<ADS, 4> points(nTheta, nPhi, nSurfs, 3);
+		points.setZero();
+		
+		#pragma omp parallel for
+		for(long int multiIndex = 0; multiIndex < nPhi * nTheta * nSurfs; ++multiIndex) {
+			unsigned long tmp = multiIndex;
+			
+			const unsigned int iPhi = tmp % nPhi;
+			tmp /= nPhi;
+			
+			const unsigned int iTheta = tmp % nTheta;
+			tmp /= nTheta;
+			
+			const unsigned int iSurf = tmp;
+			
+			ADS phi(phiVals[iPhi], 2, 0);
+			ADS theta(thetaVals[iTheta], 2, 1);
+			
+			for(auto m : kj::range(0, surfNumM)) {
+			for(auto iN : kj::range(0, surfNumN)) {
+				double n = modeN[iN];
+				
+				ADS cosVal = cos(n * phi + m * theta);
+				ADS sinVal = sin(n * phi + m * theta);
+				
+				ADS rContrib = rCos(m, iN, iSurf) * cosVal + rSin(m, iN, iSurf) * sinVal;
+				ADS zContrib = zCos(m, iN, iSurf) * cosVal + zSin(m, iN, iSurf) * sinVal;
+				
+				ADS xContrib = cos(phi) * rContrib;
+				ADS yContrib = sin(phi) * rContrib;
+				
+				points(iTheta, iPhi, iSurf, 0) += xContrib;
+				points(iTheta, iPhi, iSurf, 1) += yContrib;
+				points(iTheta, iPhi, iSurf, 2) += zContrib;
+			}
+			}
+		}
+		
+		KJ_DBG("Computed");
+		
+		// Take apart autodiff scalar into elements
+		
+		Eigen::Tensor<double, 4> val(nTheta, nPhi, nSurfs, 3);
+		Eigen::Tensor<double, 4> ddPhi(nTheta, nPhi, nSurfs, 3);
+		Eigen::Tensor<double, 4> ddTheta(nTheta, nPhi, nSurfs, 3);
+		for(auto i : kj::indices(val)) {
+			val.data()[i] = points.data()[i].value();
+			ddPhi.data()[i] = points.data()[i].derivatives()[0];
+			ddTheta.data()[i] = points.data()[i].derivatives()[1];
+		}
+		
+		auto adjustShape = [&](Float64Tensor::Builder b) {
+			auto is = surfaces.getRCos().getShape();
+			auto os = b.initShape(is.size() + 1);
+			
+			os.set(0, 3);
+			for(auto i : kj::range(1, os.size() - 2))
+				os.set(i, is[i - 1]);
+			os.set(os.size() - 2, nPhi);
+			os.set(os.size() - 1, nTheta);
+		};
+		
+		auto writeAdjusted = [&](Eigen::Tensor<double, 4>& in, Float64Tensor::Builder out) {
+			writeTensor(in, out);
+			adjustShape(out);
+		};
+		
+		auto results = ctx.initResults();
+		writeAdjusted(val, results.initPoints());
+		writeAdjusted(ddPhi, results.initPhiDerivatives());
+		writeAdjusted(ddTheta, results.initThetaDerivatives());
+		
+		KJ_DBG("Saved");
+		
+		return READY_NOW;
+	}
+	
+	Promise<void> calculateRadialModes(CalculateRadialModesContext ctx) {
+		return kj::startFiber(65536 * 8, [this, ctx](kj::WaitScope& ws) mutable {			
+			auto params = ctx.getParams();
+			auto surfaces = params.getSurfaces();
+			
+			auto gcd = [&](unsigned int a, unsigned int b) {
+				while(true) {
+					if(b == 0) return a;
+					a %= b;
+					std::swap(b, a);
+				}
+			};
+			
+			const size_t nSym = params.getNSym();
+			const double phiMultiplier = static_cast<double>(surfaces.getNTurns()) / nSym;
+			
+			auto phiVals = kj::heapArray<double>(params.getNPhi());
+			for(auto iPhi : kj::indices(phiVals)) {
+				phiVals[iPhi] = 2 * fsc::pi * phiMultiplier / phiVals.size() * iPhi;
+			}
+			
+			auto thetaVals = kj::heapArray<double>(params.getNTheta());
+			for(auto iTheta : kj::indices(phiVals)) {
+				thetaVals[iTheta] = 2 * fsc::pi / thetaVals.size() * iTheta;
+			}
+			
+			const int nPhi = params.getNPhi();
+			const int nTheta = params.getNTheta();
+			
+			Tensor<double, 4> surfPoints;
+			Tensor<double, 4> surfPhiDeriv;
+			Tensor<double, 4> surfThetaDeriv;
+			
+			// Calculate evaluation points for surfaces
+			{
+				auto req = thisCap().evalFourierSurfaceRequest();
+				req.setSurfaces(surfaces);
+				req.setPhi(phiVals);
+				req.setTheta(thetaVals);
+				
+				auto resp = req.send().wait(ws);
+				readVardimTensor(resp.getPoints(), 1, surfPoints);
+				readVardimTensor(resp.getPhiDerivatives(), 1, surfPhiDeriv);
+				readVardimTensor(resp.getThetaDerivatives(), 1, surfThetaDeriv);
+				
+				const int nSurfs = surfPoints.dimension(2);
+				
+				KJ_REQUIRE(surfPoints.dimension(0) == nTheta);
+				KJ_REQUIRE(surfPoints.dimension(1) == nPhi);
+				KJ_REQUIRE(surfPoints.dimension(2) == nSurfs);
+				KJ_REQUIRE(surfPoints.dimension(3) == 3);
+				
+				KJ_REQUIRE(surfPhiDeriv.dimension(0) == nTheta);
+				KJ_REQUIRE(surfPhiDeriv.dimension(1) == nPhi);
+				KJ_REQUIRE(surfPhiDeriv.dimension(2) == nSurfs);
+				KJ_REQUIRE(surfPhiDeriv.dimension(3) == 3);
+				
+				KJ_REQUIRE(surfThetaDeriv.dimension(0) == nTheta);
+				KJ_REQUIRE(surfThetaDeriv.dimension(1) == nPhi);
+				KJ_REQUIRE(surfThetaDeriv.dimension(2) == nSurfs);
+				KJ_REQUIRE(surfThetaDeriv.dimension(3) == 3);
+			}
+			
+			const int nSurfs = surfPoints.dimension(2);
+			
+			// Calculate radial basis at evaluation points
+			Tensor<double, 4> radialBasis(nTheta, nPhi, nSurfs, 3);
+			
+			for(int iTheta : kj::range(0, nTheta)) {
+			for(int iPhi : kj::range(0, nPhi)) {
+			for(int iSurf : kj::range(0, nSurfs)) {
+				Vec3d ePhi(
+					surfPhiDeriv(iTheta, iPhi, iSurf, 0),
+					surfPhiDeriv(iTheta, iPhi, iSurf, 1),
+					surfPhiDeriv(iTheta, iPhi, iSurf, 2)
+				);
+				Vec3d eTheta(
+					surfThetaDeriv(iTheta, iPhi, iSurf, 0),
+					surfThetaDeriv(iTheta, iPhi, iSurf, 1),
+					surfThetaDeriv(iTheta, iPhi, iSurf, 2)
+				);
+				Vec3d eRad = ePhi.cross(eTheta);
+				eRad /= eRad.norm();
+				
+				radialBasis(iTheta, iPhi, iSurf, 0) = eRad(0);
+				radialBasis(iTheta, iPhi, iSurf, 1) = eRad(1);
+				radialBasis(iTheta, iPhi, iSurf, 2) = eRad(2);
+			}}}
+			
+			// Calculate field values at evaluation points
+			Tensor<double, 3> radialValues;
+			{
+				auto req = thisCap().evaluateXyzRequest();
+				req.setField(params.getField());
+				writeTensor(surfPoints, req.initPoints());
+				
+				auto resp = req.send().wait(ws);
+				
+				Tensor<double, 4> fieldValues;
+				readTensor(resp.getValues(), fieldValues);
+				
+				radialValues = (fieldValues * radialBasis).sum(Eigen::array<int, 1>({3}));
+			}
+			
+			// Normalize against background field
+			if(params.hasBackground()) {
+				auto req = thisCap().evaluateXyzRequest();
+				req.setField(params.getBackground());
+				writeTensor(surfPoints, req.initPoints());
+				
+				auto resp = req.send().wait(ws);
+				
+				Tensor<double, 4> fieldValues;
+				readTensor(resp.getValues(), fieldValues);
+			
+				for(int iTheta : kj::range(0, nTheta)) {
+				for(int iPhi : kj::range(0, nPhi)) {
+				for(int iSurf : kj::range(0, nSurfs)) {
+					Vec3d backgroundField(
+						fieldValues(iTheta, iPhi, iSurf, 0),
+						fieldValues(iTheta, iPhi, iSurf, 1),
+						fieldValues(iTheta, iPhi, iSurf, 2)
+					);
+					double norm = backgroundField.norm();
+					radialValues(iTheta, iPhi, iSurf) /= norm;
+				}}}
+			}
+			
+			// Prepare modes to calculate
+			const int nMax = params.getNMax();
+			const int mMax = params.getMMax();
+			
+			const int numN = 2 * nMax + 1;
+			const int numM = mMax + 1;
+			
+			using FP = nudft::FourierPoint<2, 1>;
+			using FM = nudft::FourierMode<2, 1>;
+						
+			kj::Vector<FM> modes;
+			modes.reserve(mMax * (2 * nMax + 1));
+			
+			for(int iM : kj::range(0, numM)) {
+			for(int iN : kj::range(0, numN)) {
+				int m = iM;
+				int n = iN <= nMax ? iN : iN - numN;
+				
+				if(m == 0 && n < 0)
+					continue;
+				
+				FM mode;
+				mode.coeffs[0] = n;
+				mode.coeffs[1] = m;
+				modes.add(mode);
+			}}
+			
+			// Run NUDFT (Non-uniform DFT)
+			Tensor<double, 3> cosCoeffs(numM, numN, nSurfs);
+			Tensor<double, 3> sinCoeffs(numM, numN, nSurfs);
+			
+			sinCoeffs.setZero();
+			cosCoeffs.setZero();
+			
+			for(int iSurf : kj::range(0, nSurfs)) {				
+				kj::Vector<FP> points;
+				points.reserve(nPhi * nTheta);
+				
+				for(int iPhi : kj::range(0, nPhi)) {
+				for(int iTheta : kj::range(0, nTheta)) {
+					FP newPoint;
+					
+					newPoint.angles[0] = phiVals[iPhi] / phiMultiplier;
+					newPoint.angles[1] = thetaVals[iTheta];
+					newPoint.y[0] = radialValues(iTheta, iPhi, iSurf);
+					
+					points.add(newPoint);
+				}}
+				
+				nudft::calculateModes<2, 1>(points, modes);
+				
+				for(auto& mode : modes) {
+					int in = mode.coeffs[0];
+					int im = mode.coeffs[1];
+					if(in < 0) in += numN;
+					
+					cosCoeffs(im, in, iSurf) = mode.cosCoeffs[0];
+					sinCoeffs(im, in, iSurf) = mode.sinCoeffs[0];
+				}
+			}
+			
+			// Write results
+			auto results = ctx.initResults();
+			writeTensor(cosCoeffs, results.initCosCoeffs());
+			writeTensor(sinCoeffs, results.initSinCoeffs());
+			
+			auto adjustShape = [&](Float64Tensor::Builder out) {
+				auto surfShape = surfaces.getRCos().getShape();
+				auto shape = out.initShape(surfShape.size());
+				for(auto i : kj::range(0, surfShape.size() - 2))
+					shape.set(i, surfShape[i]);
+				shape.set(shape.size() - 2, numN);
+				shape.set(shape.size() - 1, numM);
+			};
+			adjustShape(results.getCosCoeffs());
+			adjustShape(results.getSinCoeffs());
+
+			// Write radial values tensor
+			{
+				writeTensor(radialValues, results.getRadialValues());
+				auto surfShape = surfaces.getRCos().getShape();
+				auto shape = results.getRadialValues().initShape(surfShape.size());
+				for(auto i : kj::range(0, surfShape.size() - 2))
+					shape.set(i, surfShape[i]);
+				shape.set(shape.size() - 2, nPhi);
+				shape.set(shape.size() - 1, nTheta);
+			}
+			
+			
+			auto mOut = results.initMPol(numM);
+			for(auto i : kj::indices(mOut))
+				mOut.set(i, i);
+			
+			auto nOut = results.initNTor(numN);
+			for(int i : kj::indices(nOut))
+				nOut.set(i, (i <= nMax ? i : i - numN) / phiMultiplier);
+			
+			results.setPhi(phiVals);
+			results.setTheta(thetaVals);
+		});
+	}
+		
 	//! Processes a root node of a magnetic field (creates calculator)
-	Promise<LocalDataRef<Float64Tensor>> processRoot(MagneticField::Reader node, ToroidalGrid::Reader grid) {		
-		auto newCalculator = heapHeld<FieldCalculation>(grid, *device);
+	Promise<void> processRoot(MagneticField::Reader node, Eigen::Tensor<double, 2>&& points, Float64Tensor::Builder out) {		
+		auto newCalculator = heapHeld<FieldCalculation>(mv(points), *device);
 		
 		auto calcDone = processField(*newCalculator, node, 1);
 		
-		return calcDone.then([newCalculator, this]() mutable {	
-			auto result = heapHeld<Temporary<Float64Tensor>>();	
-			
-			auto publish = newCalculator->finish(*result).then([result, this]() mutable {
-				KJ_LOG(INFO, "Field calculation finished");
-				return getActiveThread().dataService().publish(result->asReader());
-			})
-			.eagerlyEvaluate(nullptr)
-			.attach(result.x());
-			
-			return publish;
+		return calcDone.then([newCalculator, out, this]() mutable {				
+			return newCalculator -> finish(out).eagerlyEvaluate(nullptr);
 		})
 		.attach(newCalculator.x());
 	}
@@ -326,29 +784,15 @@ struct CalculationSession : public FieldCalculator::Server {
 				});
 			}
 			case MagneticField::COMPUTED_FIELD: {
-				// First check grid compatibility
-				auto cField = node.getComputedField();				
-				Temporary<ToroidalGrid> grid = cField.getGrid();
+				auto cField = node.getComputedField();
 				
-				/*KJ_REQUIRE(
-					ID::fromReader(grid) == ID::fromReader(calculator.gridReader),
-					"The field you are using as input and the field you are trying to calculate "
-					"have differing grids. Currently, interpolation between different magnetic "
-					"grids is not yet implemented. If you really need this, please contact the "
-					"authors and request implementation of cross-grid interpolation. Following "
-					"are the two grids as interpreted by this code.",
-					grid, calculator.gridReader
-				);*/
+				constexpr unsigned int GRID_VERSION = 7;
+				ToroidalGridStruct grid = readGrid(cField.getGrid(), GRID_VERSION);
 				
 				// Then download data				
 				return getActiveThread().dataService().download(cField.getData())
-				.then([&calculator, scale, grid = mv(grid)](LocalDataRef<Float64Tensor> field) {
-					if(ID::fromReader(grid.asReader()) == ID::fromReader(calculator.gridReader)) {
-						return calculator.add(scale, field.get());
-					} else {
-						constexpr unsigned int GRID_VERSION = 7;
-						return calculator.addDifferent(scale, field.get(), readGrid(grid, GRID_VERSION));
-					}
+				.then([&calculator, scale, grid](LocalDataRef<Float64Tensor> field) {					
+					calculator.addComputed(scale, field.get(), grid);
 				});
 			}
 			case MagneticField::FILAMENT_FIELD: {
@@ -370,21 +814,14 @@ struct CalculationSession : public FieldCalculator::Server {
 			}
 			case MagneticField::CACHED: {
 				auto cached = node.getCached();
-				
-				auto myGrid = ID::fromReader(calculator.gridReader);
-				auto cachedGrid = ID::fromReader(cached.getComputed().getGrid());
-				
-				if(myGrid == cachedGrid) {
-					return getActiveThread().dataService().download(cached.getComputed().getData())
-					.then([&calculator, scale](LocalDataRef<Float64Tensor> field) {
-						return calculator.add(scale, field.get());
-					});
-				}
-				
 				return processField(calculator, cached.getNested(), scale);
 			}
 			case MagneticField::AXISYMMETRIC_EQUILIBRIUM: {
 				calculator.equilibrium(scale, node.getAxisymmetricEquilibrium());
+				return READY_NOW;
+			}
+			case MagneticField::DIPOLE_CLOUD: {
+				calculator.dipoles(scale, node.getDipoleCloud());
 				return READY_NOW;
 			}
 			default:
@@ -654,7 +1091,7 @@ namespace {
 	}
 	
 	void buildAxis(double rMaj, Filament::Builder out) {
-		const size_t nPhi = 4;
+		const size_t nPhi = 200;
 		
 		Tensor<double, 2> result(3, nPhi);
 		for(auto i : kj::range(0, nPhi)) {

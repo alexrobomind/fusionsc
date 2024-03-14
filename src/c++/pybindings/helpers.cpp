@@ -2,6 +2,11 @@
 
 #include <fsc/efit.h>
 #include <fsc/offline.h>
+#include <fsc/vmec.h>
+
+#include <fsc/data.h>
+
+#include <fsc/vmec.capnp.h>
 
 
 namespace fscpy {
@@ -24,6 +29,12 @@ namespace {
 	void updateDataHelper(WithMessage<OfflineData::Builder> b, WithMessage<OfflineData::Reader> r) {
 		updateOfflineData(b, r);
 	}
+	
+	Temporary<VmecResult> loadVmecOutput(kj::StringPtr pathName) {
+		Temporary<VmecResult> result;
+		interpretOutputFile(getActiveThread().filesystem().getCurrentPath().evalNative(pathName), result.asBuilder());
+		return result;
+	}
 }
 
 void initHelpers(py::module_& m) {
@@ -34,6 +45,9 @@ void initHelpers(py::module_& m) {
 	efitModule.def("eqFromGFile", &parseGFile, "Creates an axisymmetric equilibrium from an EFIT GFile");
 	
 	py::module_ offlineModule = m.def_submodule("offline", "Offline data processing");
+	
+	py::module_ vmecModule = m.def_submodule("vmec");
+	vmecModule.def("loadOutput", &loadVmecOutput);
 	
 	offlineModule.def("fieldResolver", &newOfflineFieldResolver);
 	offlineModule.def("geometryResolver", &newOfflineGeometryResolver);

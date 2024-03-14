@@ -553,6 +553,16 @@ Promise<void> ObjectDB::writer() {
 	return kj::evalLast([this]() {
 		return withODBBackoff([this]() {
 			{
+				// Note: This implementation depends on sqlite's global locking
+				// behavior. Having a global lock implies that after the first
+				// write task succeeds, the transaction will no longer fail (due to contention)
+				// since it has acquired its global lock.
+				//
+				// This means that a successful write task will never need to be re-run, and
+				// all tasks can be immediately deleted from their queue. We need to eagerly
+				// delete successful tasks to ensure that task failure will not re-run previous
+				// possibly read-only tasks.
+				
 				db::Transaction t(*conn);
 				
 				for(auto it = writeTasks.begin(); it != writeTasks.end(); ) {
@@ -1636,9 +1646,12 @@ Promise<void> FileInterface::setImpl(Capability::Client clt) {
 			it = ic.import(clt);
 			
 			KJ_IF_MAYBE(pImported, it.entry) {
-				auto accNew = (**pImported).open();
-				if(accNew -> isUnresolved()) {
-					accNew -> getUnresolved().setPreviousValue(acc -> getFile());
+				{
+					auto acc2 = (**pImported).open();
+					
+					if(acc2 -> isUnresolved()) {
+						acc2 -> getUnresolved().setPreviousValue(acc -> getFile());
+					}
 				}
 				acc -> setFile(object -> getDb().wrap(mv(*pImported)));
 			} else {
@@ -1780,6 +1793,16 @@ Promise<void> FolderInterface::put(PutContext ctx) {
 				
 				db.incRefcount(id);
 				db.updateFolderEntry(parentFolder -> id, filename.asPtr(), id);
+				
+				auto wrapped = db.wrap((**pEntry).addRef());
+				
+				// If we have a previous object, register it in the unitialized object
+				{
+					auto acc2 = (**pEntry).open();
+					if(acc2 -> isUnresolved()) {
+						acc2 -> getUnresolved().setPreviousValue(wrapped);
+					}
+				}
 				
 				// Export saved object to result
 				db.exportStoredObject(db.wrap((**pEntry).addRef()), ctx.initResults());

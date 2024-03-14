@@ -103,9 +103,9 @@ namespace {
 
 int CPUDevice::BRAND = 0;
 
-CPUDevice::CPUDevice(kj::Badge<CPUDevice>, unsigned int numThreads) :
-	CPUDeviceBase(&BRAND),
-	eigenDevice(createEigenDevice(numThreads))
+CPUDevice::CPUDevice(kj::Badge<CPUDevice>, unsigned int numThreadsSet) :
+	CPUDeviceBase(&BRAND), numThreads(numThreadsSet), ownDevice(nullptr)
+	// eigenDevice(createEigenDevice(numThreads))
 {}
 
 CPUDevice::~CPUDevice() {}
@@ -120,6 +120,14 @@ unsigned int CPUDevice::estimateNumThreads() {
 
 Own<CPUDevice> CPUDevice::create(unsigned int numThreads) {
 	return kj::refcounted<CPUDevice>(kj::Badge<CPUDevice>(), numThreads);
+}
+
+Eigen::ThreadPoolDevice& CPUDevice::eigenDevice() {
+	KJ_IF_MAYBE(pDevice, ownDevice) {
+		return **pDevice;
+	}
+	
+	return *(ownDevice.emplace(createEigenDevice(numThreads)));
 }
 
 // === LoopDevice ===

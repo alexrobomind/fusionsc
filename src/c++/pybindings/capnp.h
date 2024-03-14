@@ -39,6 +39,8 @@ struct AnyBuilder;
 struct DynamicCapabilityClient;
 struct DynamicCapabilityServer;
 
+struct DynamicCallContext;
+
 // using DynamicCapabilityClient = capnp::DynamicCapability::Client;
 // using DynamicCapabilityServer = capnp::DynamicCapability::Server;
 
@@ -619,10 +621,31 @@ struct DynamicCapabilityClient : public capnp::DynamicCapability::Client, CapnpO
 	capnp::Type getType() override;
 };
 
-struct DynamicCapabilityServer : public capnp::DynamicCapability::Server, CapnpObject {
-	using Server::Server;
+struct DynamicCallContext {
+	using WrappedContext = capnp::CallContext<capnp::DynamicStruct, capnp::DynamicStruct>;
+	WrappedContext backend;
 	
-	inline capnp::Type getType() override { KJ_UNIMPLEMENTED(); }
+	DynamicCallContext(WrappedContext wc);
+	
+	DynamicStructReader getParams();
+	
+	DynamicStructBuilder initResults();
+	DynamicStructBuilder getResults();
+	void setResults(DynamicStructReader result);
+	
+	Promise<void> tailCall(DynamicCapabilityClient, kj::StringPtr, DynamicStructReader);
+};
+
+struct DynamicCapabilityServer {
+	inline DynamicCapabilityServer(capnp::InterfaceSchema schema ) : mySchema(schema) {}
+	inline capnp::InterfaceSchema& schema() { return mySchema; }
+	
+	DynamicCapabilityClient thisCap();
+	
+	// This is public because other classes need to manipulate it
+	capnp::ClientHook* activeClient = nullptr;
+private:
+	capnp::InterfaceSchema mySchema;
 };
 
 struct DynamicOrphan : public WithMessage<capnp::Orphan<capnp::DynamicValue>> {

@@ -3,6 +3,8 @@
 #include "data.h"
 #include "tensor.h"
 
+#include <random>
+
 #include <kj/map.h>
 
 namespace fsc {
@@ -141,6 +143,7 @@ struct GeometryLibImpl : public GeometryLib::Server {
 	Promise<void> index(IndexContext context) override;
 	Promise<void> planarCut(PlanarCutContext context) override;
 	Promise<void> reduce(ReduceContext context) override;
+	Promise<void> weightedSample(WeightedSampleContext context) override;
 	
 private:
 	struct GeometryAccumulator {
@@ -951,6 +954,172 @@ Promise<void> GeometryLibImpl::reduce(ReduceContext context) {
 		
 		context.initResults().setRef(getActiveThread().dataService().publish(mv(merged)));
 		KJ_LOG(INFO, "Reduction published");
+	});
+}
+
+Promise<void> GeometryLibImpl::weightedSample(WeightedSampleContext context) {
+	auto mergeRequest = thisCap().mergeRequest();
+	mergeRequest.setNested(context.getParams().getGeometry());
+	
+	auto geoRef = mergeRequest.send().getRef();
+	return getActiveThread().dataService().download(geoRef)
+	.then([context](LocalDataRef<MergedGeometry> geoRef) mutable {
+		auto geo = geoRef.get();
+		
+		struct IndexKey {
+			int ix; int iy; int iz;
+			
+			IndexKey(Vec3d x, double scale) :
+				ix(x(0) / scale), iy(x(1) / scale), iz(x(2) / scale)
+			{}
+			
+			bool operator==(const IndexKey& o) {
+				if(ix != o.ix) return false;
+				if(iy != o.iy) return false;
+				if(iz != o.iz) return false;
+				return true;
+			}
+			
+			bool operator<(const IndexKey& other) {
+				if(ix < other.ix) return true;
+				if(iy < other.iy) return true;
+				return iz < other.iz;
+			}
+			
+			unsigned int hashCode() {
+				return kj::hashCode(ix, iy, iz);
+			}
+		};
+		
+		struct CellData {
+			double totalArea;
+			Vec3d weightedCenter;
+						
+			CellData(double area, Vec3d center) :
+				totalArea(area), weightedCenter(center)
+			{}
+			
+			CellData& operator+=(const CellData& o) {
+				totalArea += o.totalArea;
+				weightedCenter += o.weightedCenter;
+				return *this;
+			}
+		};
+		
+		using MapType = kj::TreeMap<IndexKey, CellData>;
+		MapType data;
+		
+		double scale = context.getParams().getScale();
+		
+		uint_fast32_t rngSeed;
+		getActiveThread().rng().randomize(kj::ArrayPtr<byte>(reinterpret_cast<byte*>(&rngSeed), sizeof(uint_fast32_t)));
+		
+		std::mt19937 rng(rngSeed);
+		std::uniform_real_distribution<double> pDist(0, 1);
+		
+		auto processTriangle = [&](Vec3d x1, Vec3d x2, Vec3d x3) {
+			double d12 = (x2 - x1).norm();
+			double d13 = (x3 - x1).norm();
+			double d23 = (x3 - x2).norm();
+			
+			double length = std::max({d12, d23, d13});
+			double area = (x2 - x1).cross(x3 - x1).norm();
+			
+			size_t nPoints = std::max(length / scale, area / (scale * scale));
+			nPoints = std::max(nPoints, (size_t) 1);
+			
+			for(auto i : kj::range(0, nPoints)) {
+				double tx = pDist(rng);
+				double ty = pDist(rng);
+				
+				if(ty > tx)
+					std::swap(tx, ty);
+				
+				Vec3d x = x1 + (x2 - x1) * tx + (x3 - x2) * ty;
+				
+				IndexKey key(x, scale);
+				CellData value(area / nPoints, area / nPoints * x);
+				
+				data.upsert(
+					key, value,
+					[](CellData& existing, CellData&& update) {
+						existing += update;
+					}
+				);
+			}
+		};
+		
+		for(auto e : geo.getEntries()) {
+			auto mesh = e.getMesh();
+			
+			auto vertexData = mesh.getVertices().getData();
+			auto indices = mesh.getIndices();
+			
+			size_t nPoints = vertexData.size() / 3;
+		
+			auto loadPoint = [&](size_t offset) {
+				size_t i = indices[offset];
+				
+				double x = vertexData[3 * i + 0];
+				double y = vertexData[3 * i + 1];
+				double z = vertexData[3 * i + 2];
+				
+				return Vec3d(x, y, z);
+			};
+			
+			if(mesh.isTriMesh()) {
+				for(auto i : kj::range(0, indices.size() / 3)) {
+					processTriangle(
+						loadPoint(3 * i + 0),
+						loadPoint(3 * i + 1),
+						loadPoint(3 * i + 2)
+					);
+				}
+			} else if(mesh.isPolyMesh()) {
+				auto polys = mesh.getPolyMesh();
+				KJ_REQUIRE(polys.size() > 0);
+				
+				for(auto iPoly : kj::range(0, polys.size() - 1)) {
+					size_t polyStart = polys[iPoly];
+					size_t polyEnd = polys[iPoly + 1];
+					
+					if(polyEnd - polyStart < 3)
+						continue;
+					
+					Vec3d x1 = loadPoint(polyStart);
+					Vec3d x2 = loadPoint(polyEnd);
+					
+					for(auto i3 : kj::range(polyStart + 2, polyEnd)) {
+						Vec3d x3 = loadPoint(i3);
+						processTriangle(x1, x2, x3);
+					}
+				}
+			} else {
+				KJ_FAIL_REQUIRE("Unknown mesh type");
+			}
+		}
+		
+		auto result = context.initResults();
+		
+		Eigen::Tensor<double, 2> centers(data.size(), 3);
+		auto areas = result.initAreas(data.size());
+		
+		{
+			size_t i = 0;
+			for(auto& row : data) {
+				CellData& resultData = row.value;
+				
+				double area = resultData.totalArea;
+				areas.set(i, area);
+				centers(i, 0) = resultData.weightedCenter[0] / area;
+				centers(i, 1) = resultData.weightedCenter[1] / area;
+				centers(i, 2) = resultData.weightedCenter[2] / area;
+				
+				++i;
+			}
+		}
+		
+		writeTensor(centers, result.initCenters());
 	});
 }
 

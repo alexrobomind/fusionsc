@@ -14,7 +14,7 @@ const testGrid : ToroidalGrid = (
 	nSym = 1,
 	nR = 16,
 	nZ = 10,
-	nPhi = 16
+	nPhi = 32
 );
 
 const testGrid2 : ToroidalGrid = (

@@ -1,19 +1,14 @@
 from . import backends
 from . import service
 from . import wrappers
+from . import native
+from . import magnetics
+from . import data
 
 import numpy as np
 
 def _driver():
 	return backends.activeBackend().vmecDriver().service
-
-def newRequest():
-	"""Returns a new builder for the request message type"""
-	return service.VmecRequest.newMessage()
-
-@asyncFunction
-async def run(request):	
-	return await _driver().run(request)
 
 @asyncFunction
 async def sphithetaToPhizr(surfaces, s, phi, theta):
@@ -37,3 +32,41 @@ async def phizrToSphitheta(surfaces, phi, z, r):
 	
 	s, phi, theta = np.asarray(response.sPhiTheta)
 	return s, phi, theta
+
+class VmecEquilibrium(wrappers.structWrapper(service.VmecResult)):
+	@property
+	def surfaces(self):
+		return magnetics.SurfaceArray(self.data.surfaces, byReference = True)
+	
+	@property
+	def volume(self):
+		return self.data.volume
+	
+	@property
+	def energy(self):
+		return self.data.energy		
+	
+	@surfaces.setter
+	def surfaces(self, arr):
+		self.data.surfaces = arr.data
+	
+	@staticmethod
+	def fromWoutNc(filename: str):
+		return VmecEquilibrium(native.vmec.loadOutput(filename))
+
+class Request(wrappers.structWrapper(service.VmecRequest)):
+	@asyncFunction
+	async def submit(self):
+		return Response(await _driver().run(self.data))
+
+class Response(wrappers.structWrapper(service.VmecResponse)):
+	@property
+	def ok(self):
+		return self.data.which_() == "ok"
+	
+	@asyncFunction
+	async def getResult(self):
+		if self.data.which_() == "failed":
+			raise ValueError("Run failed " + self.data.failed)
+		
+		return VmecEquilibrium(await data.download(self.data.ok))

@@ -16,73 +16,49 @@ namespace fsc { namespace kernels {
 using Field = Eigen::Tensor<double, 4>;
 using FieldRef = Eigen::TensorMap<Field>;
 
+using FieldValues = Eigen::Tensor<double, 2>;
+using FieldValuesRef = Eigen::TensorMap<FieldValues>;
+
 using MFilament = Eigen::Tensor<double, 2>;
 using FilamentRef = Eigen::TensorMap<MFilament>;
 
-FSC_DECLARE_KERNEL(addFieldKernel, FieldRef, FieldRef, double);
-FSC_DECLARE_KERNEL(addFieldInterpKernel, FieldRef, ToroidalGridStruct, FieldRef, ToroidalGridStruct, double);
-FSC_DECLARE_KERNEL(biotSavartKernel, ToroidalGridStruct, FilamentRef, double, double, double, FieldRef);
-FSC_DECLARE_KERNEL(eqFieldKernel, ToroidalGridStruct, cu::AxisymmetricEquilibrium::Reader, double, FieldRef);
+FSC_DECLARE_KERNEL(addFieldInterpKernel, FieldValuesRef, FieldValuesRef, FieldRef, ToroidalGridStruct, double);
+FSC_DECLARE_KERNEL(biotSavartKernel, FieldValuesRef, FilamentRef, double, double, double, FieldValuesRef);
+FSC_DECLARE_KERNEL(dipoleFieldKernel, FieldValuesRef, FieldValuesRef, FieldValuesRef, kj::ArrayPtr<double>, double, FieldValuesRef);
+FSC_DECLARE_KERNEL(eqFieldKernel, FieldValuesRef, cu::AxisymmetricEquilibrium::Reader, double, FieldValuesRef);
 
 /**
  \ingroup kernels
  */
-EIGEN_DEVICE_FUNC inline void addFieldKernel(unsigned int idx, FieldRef out, FieldRef in, double scale) {
+/*EIGEN_DEVICE_FUNC inline void addFieldKernel(unsigned int idx, FieldRef out, FieldRef in, double scale) {
 	out.data()[idx] += in.data()[idx] * scale;
-}
+}*/
 
-EIGEN_DEVICE_FUNC inline void addFieldInterpKernel(unsigned int idx, FieldRef out, ToroidalGridStruct gridOut, FieldRef in, ToroidalGridStruct gridIn, double scale) {
-	// Copied from biotSavartKernel
-	int midx[3];
+EIGEN_DEVICE_FUNC inline void addFieldInterpKernel(unsigned int idx, FieldValuesRef out, FieldValuesRef pointsOut, FieldRef in, ToroidalGridStruct gridIn, double scale) {	
+	double x = pointsOut(idx, 0);
+	double y = pointsOut(idx, 1);
+	double z = pointsOut(idx, 2);
 	
-	{
-		// Decode index using column major layout
-		// in which the first index has stride 1
-		unsigned int tmp = idx;
-		for(int i = 0; i < 3; ++i) {
-			midx[i] = tmp % out.dimension(i+1);
-			tmp /= out.dimension(i+1);
-		}
-	}
-	
-	int i_r   = midx[0];
-	int i_z   = midx[1];
-	int i_phi = midx[2];
-
-	Vec3d x_grid = gridIn.xyz(i_phi, i_z, i_r);
+	double r = std::sqrt(x*x + y*y);
+	double phi = std::atan2(y, x);
 	
 	// Custom addition here
 	using InterpolationStrategy = C1CubicInterpolation<double>;
 	SlabFieldInterpolator<InterpolationStrategy> interpolator(InterpolationStrategy(), gridIn);
-	Vec3d field = interpolator.inSlabOrientation(in, x_grid);
+	Vec3d field = interpolator(in, Vec3d(x, y, z));
 	
-	double* outData = out.data();	
-	outData[3 * idx + 0] += scale * field[0];
-	outData[3 * idx + 1] += scale * field[1];
-	outData[3 * idx + 2] += scale * field[2];
+	double bTor = std::cos(phi) * field[1] - std::sin(phi) * field[0];
+	
+	out(idx, 0) += scale * field[0];
+	out(idx, 1) += scale * field[1];
+	out(idx, 2) += scale * field[2];
 }
 	
 /**
  \ingroup kernels
  */
-EIGEN_DEVICE_FUNC inline void biotSavartKernel(unsigned int idx, ToroidalGridStruct grid, FilamentRef filament, double current, double coilWidth, double stepSize, FieldRef out) {
-	int midx[3];
-	
-	{
-		// Decode index using column major layout
-		// in which the first index has stride 1
-		unsigned int tmp = idx;
-		for(int i = 0; i < 3; ++i) {
-			midx[i] = tmp % out.dimension(i+1);
-			tmp /= out.dimension(i+1);
-		}
-	}
-	
-	int i_r = midx[0];
-	int i_z   = midx[1];
-	int i_phi   = midx[2];
-
-	Vec3d x_grid = grid.xyz(i_phi, i_z, i_r);
+EIGEN_DEVICE_FUNC inline void biotSavartKernel(unsigned int idx, FieldValuesRef pointsOut, FilamentRef filament, double current, double coilWidth, double stepSize, FieldValuesRef out) {	
+	Vec3d x_grid(pointsOut(idx, 0), pointsOut(idx, 1), pointsOut(idx, 2));
 	Vec3d field_cartesian { 0, 0, 0 };
 		
 	auto n_points = filament.dimension(1);
@@ -114,42 +90,60 @@ EIGEN_DEVICE_FUNC inline void biotSavartKernel(unsigned int idx, ToroidalGridStr
 		}
 	}
 	
-	double r = grid.r(i_r);
-	double reference = 2e-7 / r * sin(atan2(1, r));
+	out(idx, 0) += current * field_cartesian(0);
+	out(idx, 1) += current * field_cartesian(1);
+	out(idx, 2) += current * field_cartesian(2);
+}
+
+EIGEN_DEVICE_FUNC inline void dipoleFieldKernel(unsigned int idx, FieldValuesRef pointsOut, FieldValuesRef dipolePoints, FieldValuesRef dipoleMoments, kj::ArrayPtr<double> radii, double scale, FieldValuesRef out) {
+	// Based on field of magnetized sphere
+	// https://farside.ph.utexas.edu/teaching/jk1/Electromagnetism/node61.html
 	
-	double phi = grid.phi(i_phi);
-	double fieldR   = field_cartesian(0) * cos(phi) + field_cartesian(1) * sin(phi);
-	double fieldZ   = field_cartesian(2);
-	double fieldPhi = field_cartesian(1) * cos(phi) - field_cartesian(0) * sin(phi);
+	Vec3d field(0, 0, 0);
+	Vec3d x(pointsOut(idx, 0), pointsOut(idx, 1), pointsOut(idx, 2));
 	
-	double* outData = out.data();	
-	outData[3 * idx + 0] += current * fieldPhi;
-	outData[3 * idx + 1] += current * fieldZ;
-	outData[3 * idx + 2] += current * fieldR;
+	auto nPoints = dipolePoints.dimension(0);
+	for(int64_t iPoint = 0; iPoint < nPoints; ++iPoint) {
+		Vec3d p(dipolePoints(iPoint, 0), dipolePoints(iPoint, 1), dipolePoints(iPoint, 2));
+		Vec3d m(dipoleMoments(iPoint, 0), dipoleMoments(iPoint, 1), dipoleMoments(iPoint, 2));
+		
+		Vec3d r = x - p;
+		double rAbs = r.norm();
+		
+		constexpr double mu0over4pi = 1e-7;
+		constexpr double mu0 = mu0over4pi * 4 * fsc::pi;
+		
+		const double dipoleRadius = radii[iPoint];
+		
+		if(rAbs < dipoleRadius) {
+			double volume = 4.0 / 3.0 * fsc::pi * dipoleRadius * dipoleRadius * dipoleRadius;
+			Vec3d magnetization = m / volume;
+			
+			field += 2.0 / 3.0 * mu0 * magnetization;
+			continue;
+		}
+		
+		Vec3d rNorm = r / rAbs;
+		
+		Vec3d unscaled = 3 * rNorm * (rNorm.dot(m)) - m;
+		field += scale * mu0over4pi / (rAbs * rAbs * rAbs) * unscaled;
+	}
+	
+	out(idx, 0) += field(0);
+	out(idx, 1) += field(1);
+	out(idx, 2) += field(2);
 }
 
 /**
  \ingroup kernels
  */
-EIGEN_DEVICE_FUNC inline void eqFieldKernel(unsigned int idx, ToroidalGridStruct grid, fsc::cu::AxisymmetricEquilibrium::Reader equilibrium, double scale, FieldRef out) {
-	int midx[3];
+EIGEN_DEVICE_FUNC inline void eqFieldKernel(unsigned int idx, FieldValuesRef pointsOut, fsc::cu::AxisymmetricEquilibrium::Reader equilibrium, double scale, FieldValuesRef out) {	
+	double x = pointsOut(idx, 0);
+	double y = pointsOut(idx, 1);
+	double z = pointsOut(idx, 2);
 	
-	{
-		// Decode index using column major layout
-		// in which the first index has stride 1
-		unsigned int tmp = idx;
-		for(int i = 0; i < 3; ++i) {
-			midx[i] = tmp % out.dimension(i+1);
-			tmp /= out.dimension(i+1);
-		}
-	}
+	double r = std::sqrt(x*x + y*y);
 	
-	int i_r = midx[0];
-	int i_z   = midx[1];
-	int i_phi   = midx[2];
-	
-	double z = grid.z(i_z);
-	double r = grid.r(i_r);
 	Vec2d zr(z, r);
 		
 	using ADS = Eigen::AutoDiffScalar<Vec2d>;
@@ -209,10 +203,18 @@ EIGEN_DEVICE_FUNC inline void eqFieldKernel(unsigned int idx, ToroidalGridStruct
 	double bR = -dPsi_dZ / r;
 	double bZ =  dPsi_dR / r;
 	
-	double* outData = out.data();	
-	outData[3 * idx + 0] += scale * bTor;
-	outData[3 * idx + 1] += scale * bZ;
-	outData[3 * idx + 2] += scale * bR;
+	double bX = (bR * x - bTor * y) / r;
+	double bY = (bR * y + bTor * x) / r;
+	
+	out(idx, 0) += scale * bX;
+	out(idx, 1) += scale * bY;
+	out(idx, 2) += scale * bZ;
+}
+
+/**
+ \ingroup kernels
+ */
+EIGEN_DEVICE_FUNC inline void surfaceFourier(unsigned int idx, fsc::cu::FourierKernelData::Builder data, FieldRef fieldData) {
 }
 
 }}

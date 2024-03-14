@@ -1,6 +1,6 @@
 """W7-X parts and IPP site helpers"""
 
-from ... import service, resolve, wrappers, flt
+from ... import service, resolve, wrappers, flt, backends, remote, warehouse
 
 from ...magnetics import MagneticConfig, CoilFilament
 from ...geometry import Geometry
@@ -42,10 +42,20 @@ def connectComponentsDB(address: str):
 	
 	return componentsDB
 
-def connectIPPSite():
+def connectLagacyIPPSite():
 	"""Connects the resolve module to standard IPP coils DB and components DB"""
 	connectCoilsDB("http://esb.ipp-hgw.mpg.de:8280/services/CoilsDBRest")
 	connectComponentsDB("http://esb.ipp-hgw.mpg.de:8280/services/ComponentsDbRest")
+
+def connectIPPSite():
+	"""Connects the resolve module to the newer fsc-driven Coils- and ComponentsDb proxies"""
+	# Set up the W7-X load balancer as main backend
+	newBackend = remote.connect("http://sv-coda-wsvc-31/load-balancer")
+	backends.alwaysUseBackend(newBackend)
+	
+	# Load w7xdb (uses remote backend) and connect its data index
+	database = warehouse.openRemote("w7xdb")
+	resolve.connectWarehouse(database)
 
 class CoilPack(wrappers.structWrapper(service.W7XCoilSet)):
 	"""Set of coils that can be used to obtain W7-X specific configurations"""

@@ -3,6 +3,7 @@
 #include "assign.h"
 #include "tensor.h"
 #include "loader.h"
+#include "async.h"
 
 #include <kj/encoding.h>
 #include <fsc/typing.h>
@@ -787,10 +788,104 @@ DynamicValueBuilder AnyBuilder::assignAs(DynamicValueReader reader) {
 
 // -------------------------------------------- Capabilities --------------------------------------
 
+namespace {
+	struct CapServerImpl : capnp::DynamicCapability::Server {
+		CapServerImpl(DynamicCapabilityServer* target) :
+			capnp::DynamicCapability::Server(target -> schema()),
+			backend(captureServer(target))
+		{}
+		
+		~CapServerImpl() {
+			backend -> activeClient = nullptr;
+		}
+
+		Promise<void> call(capnp::InterfaceSchema::Method method, DynamicCallContext::WrappedContext ctx) override {
+			// Check if we have the method implemented
+			py::object pySelf = py::cast(backend.get(), py::return_value_policy::reference);
+			
+			kj::StringPtr methodName = method.getProto().getName();
+			if(!py::hasattr(pySelf, methodName.cStr())) {
+				auto errorMessage = kj::str(
+					"The method '", methodName, "' was not implemented by the python class.\n",
+					"Please provide a definition in the server class of the form\n"
+					"\n"
+					"async def ", methodName, "(self, context):\n"
+					"\t...\n"
+				);
+				throw kj::Exception(kj::Exception::Type::UNIMPLEMENTED, __FILE__, __LINE__, mv(errorMessage));
+			}
+			
+			auto dispatchMethod = pySelf.attr(methodName.cStr());
+			py::object coro = dispatchMethod(new DynamicCallContext(ctx));
+			
+			return py::cast<Promise<void>>(mv(coro));
+		}
+		
+		//! Creates an owning pointer that uses a pybind11-managed python object
+		static Own<DynamicCapabilityServer> captureServer(DynamicCapabilityServer* x) {
+			return kj::attachRef(*x, py::cast(x));
+		}
+		
+	private:
+		Own<DynamicCapabilityServer> backend;
+	};
+}
+
 // DynamicCapabilityClient
 
 capnp::Type DynamicCapabilityClient::getType() {
 	return this -> getSchema();
+}
+
+// DynamicCapabilityServer
+
+DynamicCapabilityClient DynamicCapabilityServer::thisCap() {
+	if(activeClient != nullptr) {
+		capnp::Capability::Client untyped(activeClient -> addRef());
+		return untyped.castAs<capnp::DynamicCapability>(schema());
+	}
+	
+	DynamicCapabilityClient result(kj::heap<CapServerImpl>(this));
+	activeClient = capnp::ClientHook::from(cp(result)).get();
+	return result;
+}
+
+// DynamicCallContext
+
+DynamicCallContext::DynamicCallContext(WrappedContext ctx) :
+	backend(ctx)
+{}
+
+DynamicStructReader DynamicCallContext::getParams() {
+	return DynamicStructReader(kj::heap(backend), backend.getParams());
+}
+
+DynamicStructBuilder DynamicCallContext::initResults() {
+	return DynamicStructBuilder(kj::heap(backend), backend.initResults());
+}
+
+DynamicStructBuilder DynamicCallContext::getResults() {
+	return DynamicStructBuilder(kj::heap(backend), backend.getResults());
+}
+
+void DynamicCallContext::setResults(DynamicStructReader r) {
+	backend.setResults(r);
+}
+
+Promise<void> DynamicCallContext::tailCall(DynamicCapabilityClient clt, kj::StringPtr methodName, DynamicStructReader params) {
+	auto request = clt.newRequest(methodName);
+	capnp::DynamicStruct::Reader paramsBase = params;
+	
+	auto schema = paramsBase.getSchema();
+	for(auto field : schema.getNonUnionFields()) {
+		request.set(field, paramsBase.get(field));
+	}
+	
+	KJ_IF_MAYBE(unionField, paramsBase.which()) {
+		request.set(*unionField, paramsBase.get(*unionField));
+	}
+	
+	return backend.tailCall(mv(request));
 }
 
 // ----------------------------------------------- Orphans ----------------------------------------

@@ -121,7 +121,11 @@ struct CPUDevice : public CPUDeviceBase, public kj::Refcounted {
 	
 	static unsigned int estimateNumThreads();
 	
-	Own<Eigen::ThreadPoolDevice> eigenDevice;
+	// Own<Eigen::ThreadPoolDevice> eigenDevice;
+	Eigen::ThreadPoolDevice& eigenDevice();
+private:
+	unsigned int numThreads;
+	Maybe<Own<Eigen::ThreadPoolDevice>> ownDevice;// Own<Eigen::ThreadPoolDevice> eigenDevice;
 };
 
 struct LoopDevice : public CPUDeviceBase, public kj::Refcounted {

@@ -32,7 +32,7 @@
   :toctree:
   :template: summary-class.rst
 {% for item in classes %}
-	{{ item }}
+    {{ item }}
 {%- endfor %}
 {% endif %}
 {% endblock %}

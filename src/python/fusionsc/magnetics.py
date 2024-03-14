@@ -15,8 +15,95 @@ import copy
 
 from typing import Optional
 
+from collections.abc import Sequence
+
 def _calculator():
 	return backends.activeBackend().newFieldCalculator().pipeline.service
+
+class SurfaceArray(wrappers.structWrapper(service.FourierSurfaces)):
+	"""A wrapper around service.FourierSurfaces.Builder that exposes array-like behavior"""
+	
+	@property
+	def shape(self):
+		return self.data.shape[:-2]
+	
+	def apply(self, op, *extraArgs):
+		args = [self] + list(extraArgs)
+		
+		d = self.data
+		result = service.FourierSurfaces.newMessage(d)
+		
+		result.rCos = op(*[np.asarray(arg.data.rCos) for arg in args])
+		result.zSin = op(*[np.asarray(arg.data.zSin) for arg in args])
+		
+		if d.which_() == 'nonSymmetric':
+			result.nonSymmetric.rSin = op(*[np.asarray(arg.data.nonSymmetric.rSin) for arg in args])
+			result.nonSymmetric.zCos = op(*[np.asarray(arg.data.nonSymmetric.zCos) for arg in args])
+		
+		return SurfaceArray(result)
+	
+	def __getitem__(self, sl):
+		if isinstance(sl, tuple):
+			slEx = sl + (slice(None), slice(None))
+		else:
+			slEx = (sl, slice(None), slice(None))
+		
+		def op(x):
+			return x.__getitem__(slEx)
+		
+		return self.apply(op)
+	
+	def __add__(self, other):
+		if not isinstance(other, SurfaceArray):
+			return NotImplemented
+		
+		def op(a, b):
+			return a + b
+		
+		return self.apply(op, other)
+	
+	def __sub__(self, other):
+		if not isinstance(other, SurfaceArray):
+			return NotImplemented
+			
+		def op(a, b):
+			return a - b
+		
+		return self.apply(op, other)
+	
+	def __mul__(self, l):
+		# Broadcast to right shape
+		bc = np.asarray(l)[..., None, None]
+		
+		def op(x):
+			return bc * x
+		
+		return self.apply(op)
+	
+	def __rmul__(self, l):
+		return self.__mul__(l)
+	
+	def __truediv__(self, l):
+		# Broadcast to right shape
+		bc = np.asarray(l)[..., None, None]
+		
+		def op(x):
+			return x / bc
+		
+		return self.apply(op)
+	
+	def __rtruediv__(self, l):
+		return self.__truediv__(l)
+	
+	@asyncFunction
+	async def evaluate(self, phi: Sequence[float], theta: Sequence[float]):
+		response = await _calculator().evalFourierSurface(self.data, phi, theta)
+		
+		return {
+			'points' : np.asarray(response.points),
+			'phiDerivatives' : np.asarray(response.phiDerivatives),
+			'thetaDerivatives' : np.asarray(response.thetaDerivatives)
+		}
 
 class CoilFilament(wrappers.structWrapper(service.Filament)):
 	"""
@@ -59,7 +146,7 @@ class CoilFilament(wrappers.structWrapper(service.Filament)):
 		"""Creates a magnetic field by applying the BiotSavart law to the contained coil filaments"""
 		result = MagneticConfig()
 		
-		bs = result.field.initFilamentField()
+		bs = result.data.initFilamentField()
 		bs.current = current
 		bs.biotSavartSettings.stepSize = stepSize
 		bs.biotSavartSettings.width = width
@@ -133,8 +220,8 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 	@asyncFunction
 	async def interpolateXyz(self, points, grid = None):
 		"""
-		Evaluates the magnetic field in the given coordinates. Outside the grid, the field will use the constant
-		values (in slab coordinates) at the grid boundary.
+		Evaluates the magnetic field at target positions by first computing the magnetic field
+		at the target points (if not yet done), and then 
 	
 		Parameters:
 			- points: A numpy-array of shape [3, ...] (at least 1D) with the points in x, y, z coordinates.
@@ -145,11 +232,43 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		"""
 		compField = (await self.compute.asnc(grid)).data.computedField
 		
-		response = await _calculator().evaluateXyz(compField, points)
+		response = await _calculator().interpolateXyz(compField, points)
 		return np.asarray(response.values)
 	
 	@asyncFunction
-	async def getComputed(self):
+	async def evaluateXyz(self, points):
+		"""
+		Evaluates the magnetic field in the given coordinates. Unlike interpolateXyz, this function
+		does NOT compute the field on a grid and then interpolate, but instead evaluates the field
+		directly at the given point.
+	
+		Parameters:
+			- points: A numpy-array of shape [3, ...] (at least 1D) with the points in x, y, z coordinates.
+		
+		Returns:
+			A numpy array of shape points.shape with the field as x, y, z field (cartesian).
+		"""
+		resolved = await self.resolve.asnc()
+		response = await _calculator().evaluateXyz(resolved.data, points)
+		return np.asarray(response.values)
+	
+	@asyncFunction
+	async def evaluateRzphi(self, points):
+		"""
+		Evaluates the magnetic field in the given coordinates. 
+		
+		Parameters:
+			- points: A numpy-array of shape [3, ...] (at least 1D) with the points in r, z, phi coordinates.
+		
+		Returns:
+			A numpy array of shape points.shape with the field as x, y, z field (cartesian).
+		"""
+		resolved = await self.resolve.asnc()
+		response = await _calculator().evaluateRzphi(resolved.data, points)
+		return np.asarray(response.values)
+	
+	@asyncFunction
+	async def getComputed(self, grid = None):
 		"""
 		For a field of type "computed", returns the grid and the downloaded field tensor on the grid.
 		
@@ -158,10 +277,61 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			- A tensor of shape [nPhi, nZ, nR, 3] holding the magnetic field. The last axis describes
 			  the magnetic field component. The components are (indices 0 to 2) bPhi, bZ, bR.
 		"""
-		assert self.data.which_() == 'computedField', 'Can only download fields for which the compute operation was initialized (returned by .compute)'
-		computed = self.data.computedField
+		computed = await self.compute.asnc(grid)
+		cf = computed.data.computedField
 		
-		return copy.copy(computed.grid), np.asarray(await data.download.asnc(computed.data))
+		return copy.copy(cf.grid), np.asarray(await data.download.asnc(cf.data))
+		
+	@asyncFunction
+	async def calculateRadialModes(
+		self, surfaces: SurfaceArray,
+		normalizeAgainst : "Optional[MagneticConfig]" = None,
+		nMax = 5, mMax = 5, nPhi = 30, nTheta = 30, nSym = 1
+	):
+		"""
+		Calculates the radial Fourier modes of this field (or the ratio to the given
+		background field) on the given surfaces
+		
+		Parameters:
+			- surfaces: Description of the magnetic surfaces to evaluate on.
+			- normalizeAgainst: Optional field to normalize again
+			- nMax: Maximum absolute toroidal mode number to calculate
+			- mMax: Maximum poloidal mode number to calcualte
+			- nPhi: Number of toroidal points on grid
+			- nTheta: Number of poloidal points on grid
+			- nSym: Toroidal symmetry
+		
+		Returns:
+			A dict with the following entries:
+			- cosCoeffs: [..., 2 * nMax + 1, mMax + 1] array of cosine coefficients of Fourier mode expansion
+			- sinCoeffs: [..., 2 * nMax + 1, mMax + 1] array of sine coefficients of Fourier mode expansion
+			- nTor: [2 * nMax + 1, 1] array of toroidal mode numbers
+			- mPol: [1, mMax + 1] array of poloidal mode numbers
+			
+		"""
+		resolved = await self.resolve.asnc()
+		
+		background = None
+		if normalizeAgainst is not None:
+			background = (await normalizeAgainst.resolve.asnc()).data
+		
+		response = await _calculator().calculateRadialModes(
+			resolved.data, background,
+			surfaces.data,
+			nMax, mMax,
+			nPhi, nTheta,
+			nSym
+		)
+		
+		return {
+			"cosCoeffs" : np.asarray(response.cosCoeffs),
+			"sinCoeffs" : np.asarray(response.sinCoeffs),
+			"radialValues" : np.asarray(response.radialValues),
+			"nTor" : np.asarray(response.nTor),
+			"mPol" : np.asarray(response.mPol),
+			"phi" : np.asarray(response.phi),
+			"theta" : np.asarray(response.theta)
+		}
 	
 	def __neg__(self):
 		result = MagneticConfig()
@@ -257,14 +427,28 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			'grid' : grid,
 			'data' : data.publish(tensorData)
 		}})
-
+	
+	@staticmethod
+	def fromDipoles(positions, moments, radii):
+		positions = np.asarray(positions)
+		moments = np.asarray(moments)
+		
+		assert len(positions.shape) == 2
+		assert len(moments.shape) == 2
+		assert positions.shape[0] == 3
+		assert moments.shape[0] == 3
+		assert positions.shape[1] == moments.shape[1]
+		assert len(radii) == positions.shape[1]
+		
+		return MagneticConfig({'dipoleCloud' : {
+			'positions' : positions,
+			'magneticMoments' : moments,
+			'radii' : radii
+		}})
 
 @asyncFunction
-async def visualizeCoils(field):
-	"""Convert the given geometry into a PyVista / VTK mesh"""
+async def extractCoils(field):
 	import numpy as np
-	import pyvista as pv
-	
 	coils = []
 	
 	async def processCoil(coil):
@@ -281,7 +465,7 @@ async def visualizeCoils(field):
 			await processCoil(coil.nested)
 			return
 		
-		print("Warning: Unresolved node can not be visualized")
+		print("Warning: Unresolved node can not be extracted")
 		print(coil)
 			
 	
@@ -297,7 +481,9 @@ async def visualizeCoils(field):
 			return
 		
 		if field.which_() == 'scaleBy':
-			await process(field.scaleBy.field)
+			if field.scaleBy.factor != 0:
+				await process(field.scaleBy.field)
+				
 			return
 		
 		if field.which_() == 'invert':
@@ -313,13 +499,23 @@ async def visualizeCoils(field):
 			return
 		
 		if field.which_() == 'filamentField':
-			await processCoil(field.filamentField.filament)
+			if field.filamentField.current * field.filamentField.windingNo != 0:
+				await processCoil(field.filamentField.filament)
 			return
 		
 		print("Warning: Unresolved nodes can not be visualized")
 	
 	resolved = await field.resolve.asnc()
 	await process(resolved.data)
+	
+	return coils
+
+@asyncFunction
+async def visualizeCoils(field):
+	"""Convert the given geometry into a PyVista / VTK mesh"""
+	import pyvista as pv
+	
+	coils = await extractCoils.asnc(field)
 		
 	def makeCoil(coil):
 		result = pv.lines_from_points(coil)
@@ -331,3 +527,40 @@ async def visualizeCoils(field):
 	]
 		
 	return pv.MultiBlock(dataSets)
+
+def _fourierSurfaces(rCos, zSin, rsin = None, zCos = None, nSym = 1, nTurns = 1) -> service.FourierSurfaces.Builder:
+	"""Builds a Fourier surface object from keyword arguments"""
+	result = service.FourierSurfaces.newMessage()
+	
+	assert rCos is not None
+	assert zSin is not None
+	
+	assert zSin.shape == rCos.shape
+	
+	nToroidalModes = rCos.shape[-2]
+	nPoloidalModes = rCos.shape[-1]
+	
+	assert nPoloidalModes >= 1
+	assert nToroidalModes >= 1
+	assert nToroidalModes % 2 == 1
+	
+	result.toroidalSymmetry = nSym
+	result.nTurns = nTurns
+	
+	result.mPol = nPoloidalModes - 1
+	result.nTor = nToroidalModes // 2
+		
+	result.rCos = rCos
+	result.zSin = zSin
+	
+	if rSin is not None or zCos is not None:
+		assert rSin is not None and zCos is not None
+		
+		assert rSin.shape == rCos.shape
+		assert zCos.shape == rCos.shape
+		
+		nonSym = result.initNonSymmetric()
+		nonSym.rSin = rSin
+		nonSym.zCos = zCos
+	
+	return result
