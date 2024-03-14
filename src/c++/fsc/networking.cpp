@@ -404,17 +404,11 @@ NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, k
 	
 	return client -> openWebSocket(url, kj::HttpHeaders(DEFAULT_HEADERS))
 	.then([client = client.x()](HttpClient::WebSocketResponse response) mutable -> fsc::NetworkInterface::Connection::Client {
-		using Body = kj::Own<kj::AsyncInputStream>;
-		if(response.webSocketOrBody.is<Body>()) {
-			auto readResponse = response.webSocketOrBody.get<Body>()->readAllText();
-			return readResponse.then([response = mv(response)](kj::String msg) -> NetworkInterface::Connection::Client {
-				KJ_FAIL_REQUIRE(
-					"Connection did not provide a proper websocket",
-					response.statusCode, response.statusText,
-					msg
-				);
-			});
-		}
+		KJ_REQUIRE(
+			response.webSocketOrBody.is<Own<kj::WebSocket>>(),
+			"Connection did not provide a proper websocket",
+			response.statusCode, response.statusText
+		);
 		
 		Own<kj::WebSocket> webSocket = mv(response.webSocketOrBody.get<Own<kj::WebSocket>>());
 		auto msgStream = kj::heap<capnp::WebSocketMessageStream>(*webSocket);
