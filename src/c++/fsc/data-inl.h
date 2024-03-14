@@ -641,6 +641,16 @@ Array<const byte> internal::buildData(typename T::Reader reader, capnp::BuilderC
 	
 	kj::Array<const capnp::word> flatArray = capnp::messageToFlatArray(builder);
 	
+	/*kj::ArrayPtr<const uint32_t> asInts(reinterpret_cast<const uint32_t*>(flatArray.begin()), flatArray.size());
+	uint32_t nSegments = asInts[0] + 1;
+	auto segmentSizes = asInts.slice(1, nSegments + 1);
+	
+	size_t expected = nSegments / 2 + 1;
+	for(auto s : segmentSizes)
+		expected += s;
+		
+	KJ_DBG("Published", flatArray.size(), expected, nSegments, segmentSizes, sizeof(capnp::word) * flatArray.size());*/
+	
 	// Since releaseAsBytes doesn't work, we need to force the conversion
 	kj::ArrayPtr<const byte> byteView(
 		reinterpret_cast<const byte*>(flatArray.begin()),

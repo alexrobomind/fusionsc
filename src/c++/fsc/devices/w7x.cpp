@@ -391,7 +391,7 @@ struct CoilsDBWebservice : public CoilsDB::Server {
 		).response;
 		
 		auto read = response.then([](auto response) { KJ_REQUIRE(response.statusCode == 200); return response.body->readAllText().attach(mv(response.body)); });
-		return read.then([context](kj::String rawJson) mutable {			
+		auto result = read.then([context](kj::String rawJson) mutable {			
 			Temporary<CoilsDBCoil> tmp;
 			// JsonCodec().decode(rawJson, tmp);
 			JsonCodec codec;
@@ -415,7 +415,9 @@ struct CoilsDBWebservice : public CoilsDB::Server {
 				data.set(3 * i + 1, x2[i]);
 				data.set(3 * i + 2, x3[i]);
 			}
-		}).attach(mv(response), mv(client), thisCap());	
+		}).attach(mv(response), mv(client), thisCap());
+		
+		return getActiveThread().timer().timeoutAfter(1 * kj::MINUTES, mv(result));	
 	}
 	
 	Promise<void> getConfig(GetConfigContext context) override {
@@ -436,10 +438,12 @@ struct CoilsDBWebservice : public CoilsDB::Server {
 		).response;
 		
 		auto read = response.then([](auto response) { KJ_REQUIRE(response.statusCode == 200); return response.body->readAllText().attach(mv(response.body)); });
-		return read.then([context](kj::String rawJson) mutable {			
+		auto result = read.then([context](kj::String rawJson) mutable {			
 			Temporary<CoilsDBConfig> tmp;
 			JsonCodec().decode(rawJson, context.initResults());
-		}).attach(mv(response), mv(client), thisCap());	
+		}).attach(mv(response), mv(client), thisCap());
+		
+		return getActiveThread().timer().timeoutAfter(1 * kj::MINUTES, mv(result));
 	}
 };
 
@@ -470,7 +474,7 @@ struct ComponentsDBWebservice : public ComponentsDB::Server {
 		).response;
 		
 		auto read = response.then([](auto response) { KJ_REQUIRE(response.statusCode == 200); return response.body->readAllText().attach(mv(response.body)); });
-		return read.then([context](kj::String rawJson) mutable {				
+		auto result = read.then([context](kj::String rawJson) mutable {				
 			Temporary<ComponentsDBMesh> tmp;
 			JsonCodec().decode(rawJson, tmp);
 			// YAML::Node asYaml = YAML::Load(rawJson.cStr());
@@ -498,12 +502,19 @@ struct ComponentsDBWebservice : public ComponentsDB::Server {
 			// Step 2: Translate indices
 			// TODO: I think components db uses 1 based indices? not sure
 			
+			uint32_t minPolyIdx = kj::maxValue;
+			
 			auto inPoly = inMesh.getPolygons();
+			for(uint32_t e : inPoly)
+				minPolyIdx = std::min(minPolyIdx, e);
+			
+			if(minPolyIdx > 1 && inPoly.size() > 0) {
+				KJ_DBG(minPolyIdx <= 1, "Assumption violated that ComponentsDB uses either 0- or 1-based indices in mesh", context.getParams().getId(), minPolyIdx, inPoly.size());
+			}
+			
 			auto outPoly = mesh.initIndices(inPoly.size());
-			for(unsigned int i = 0; i < inPoly.size(); ++i) {
-				KJ_REQUIRE(inPoly[i] > 0, "Assumption violated that ComponentsDB uses 1-based indices", context.getParams().getId(), i);
-				
-				outPoly.set(i, inPoly[i] - 1);
+			for(auto i : kj::indices(inPoly)) {				
+				outPoly.set(i, inPoly[i] - minPolyIdx);
 			}
 			
 			// Step 3: Translate polygon sizes
@@ -541,7 +552,9 @@ struct ComponentsDBWebservice : public ComponentsDB::Server {
 			}
 			
 			context.setResults(mesh.asReader());
-		}).attach(mv(response), mv(client), thisCap());	
+		}).attach(mv(response), mv(client), thisCap());
+		
+		return getActiveThread().timer().timeoutAfter(1 * kj::MINUTES, mv(result));
 	}
 	
 	Promise<void> getAssembly(GetAssemblyContext context) override {
@@ -562,12 +575,13 @@ struct ComponentsDBWebservice : public ComponentsDB::Server {
 		).response;
 		
 		auto read = response.then([](auto response) { KJ_REQUIRE(response.statusCode == 200); return response.body->readAllText().attach(mv(response.body)); });
-		return read.then([context](kj::String rawJson) mutable {			
+		auto result = read.then([context](kj::String rawJson) mutable {			
 			Temporary<ComponentsDBAssembly> tmp;
 			JsonCodec().decode(rawJson, tmp);
 			
 			context.initResults().setComponents(tmp.getComponents());
-		}).attach(mv(response), mv(client), thisCap());	
+		}).attach(mv(response), mv(client), thisCap());
+		return getActiveThread().timer().timeoutAfter(1 * kj::MINUTES, mv(result));
 	}
 };
 

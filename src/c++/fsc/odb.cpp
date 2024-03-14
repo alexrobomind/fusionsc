@@ -5,6 +5,8 @@
 #include <capnp/rpc.capnp.h>
 #include <fsc/warehouse-internal.capnp.h>
 
+#include <capnp/serialize-packed.h>
+
 #include <list>
 #include <set>
 
@@ -126,10 +128,12 @@ ObjectDBBase::ObjectDBBase(db::Connection& paramConn, kj::StringPtr paramTablePr
 	auto rootsTable = str(tablePrefix, "_roots");
 	
 	if(!readOnly) {
+		// The default message is 0x'00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00' (1 segment with only a null root)
+		// In packed encoding, this is 0x'10 01 00 00'
 		conn -> exec(str(
 			"CREATE TABLE IF NOT EXISTS ", objectsTable, " ("
 			  "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-			  "info BLOB DEFAULT x'00000000010000000000000000000000'," // x'00 00 00 00  01 00 00 00  00 00 00 00  00 00 00 00'
+			  "info BLOB DEFAULT x'10010000',"
 			  "refcount INTEGER DEFAULT 0,"
 			  "blobId INTEGER DEFAULT NULL REFERENCES ", blobsTable, "(id) ON DELETE SET NULL ON UPDATE CASCADE"
 			")"
@@ -932,7 +936,8 @@ Own<ObjectInfo::Reader> ObjectDBEntry::doLoad(Maybe<ObjectDBSnapshot&> snapshotT
 	KJ_REQUIRE(q.step(), "Object not present in database");
 	
 	auto flatInfo = kj::heapArray<const byte>(q[0].asBlob());
-	auto heapBuffer = bytesToWords(mv(flatInfo));
+	auto inputStream = kj::heap<kj::ArrayInputStream>(flatInfo);
+	auto messageReader = kj::heap<capnp::PackedMessageReader>(*inputStream);
 	
 	kj::Vector<Maybe<Own<ClientHook>>> rawCapTable;
 	
@@ -948,11 +953,9 @@ Own<ObjectInfo::Reader> ObjectDBEntry::doLoad(Maybe<ObjectDBSnapshot&> snapshotT
 	}
 	
 	auto capTable = kj::heap<ReaderCapabilityTable>(rawCapTable.releaseAsArray());
-	
-	auto messageReader = kj::heap<FlatArrayMessageReader>(heapBuffer).attach(mv(heapBuffer));
 	auto root = capTable -> imbue(messageReader -> getRoot<ObjectInfo>());
 	
-	return kj::heap<ObjectInfo::Reader>(root).attach(mv(messageReader), mv(capTable));
+	return kj::heap<ObjectInfo::Reader>(root).attach(mv(messageReader), mv(inputStream), mv(flatInfo), mv(capTable));
 }
 
 Own<ObjectInfo::Reader> ObjectDBEntry::loadPreserved() {
@@ -1014,8 +1017,10 @@ void ObjectDBEntry::Accessor::save() {
 	target -> parent -> clearOutgoingRefs(target -> id);
 	
 	// Serialize the message into the database
-	kj::Array<byte> flatInfo = wordsToBytes(messageToFlatArray(messageBuilder));
-	target -> parent -> setInfo(target -> id, flatInfo.asPtr());
+	kj::VectorOutputStream os;
+	capnp::writePackedMessage(os, messageBuilder);
+	auto packed = os.getArray();
+	target -> parent -> setInfo(target -> id, packed);
 	
 	// Iterate through the captured capabilities and store the links in the appropriate DB table
 	kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> capTableData = capTable.getTable();
@@ -1247,6 +1252,8 @@ struct DatarefDownloadProcess : public internal::DownloadTask<Own<ObjectDBEntry>
 	Own<BlobBuilder> builder;
 	
 	kj::Vector<Promise<void>> childImports;
+	
+	// bool firstData = true;
 };
 
 // class ImportContext
@@ -1416,8 +1423,7 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::unwrap() {
 			acc -> setNullValue();
 			
 			return mv(dst);
-		}	
-		
+		}
 		return nullptr;
 	});
 }
@@ -1431,6 +1437,8 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
 		// Initialize target to DataRef
 		auto ref = acc -> initDataRef();
 		ref.setMetadata(metadata);
+		
+		// KJ_DBG(metadata);
 		
 		auto capTableOut = ref.initCapTable(capTable.size());
 		for(auto i : kj::indices(capTable)) {
@@ -1454,7 +1462,7 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
 		ref.getMetadata().setDataHash(nullptr);
 		
 		// Allocate blob builder
-		constexpr size_t CHUNK_SIZE = 128 * 1024;
+		constexpr size_t CHUNK_SIZE = 1024 * 1024;
 		builder = db.blobStore -> create(CHUNK_SIZE);
 		
 		// Set blob id under construction so that the blob gets deleted with
@@ -1475,6 +1483,15 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
 	
 Promise<void> DatarefDownloadProcess::receiveData(kj::ArrayPtr<const kj::byte> data) {
 	return db.runWriteTask([this, data]() mutable -> Promise<void> {
+		/*if(firstData) {
+			firstData = false;
+			
+			const uint32_t* prefix = reinterpret_cast<const uint32_t*>(data.begin());
+			uint32_t nSegments = prefix[0] + 1;
+			
+			kj::ArrayPtr<const uint32_t> segmentSizes(prefix + 1, nSegments);
+			KJ_DBG("Storing in ODB", data.size(), nSegments, segmentSizes);
+		}*/
 		KJ_REQUIRE(builder.get() != nullptr);
 		
 		// BlobBuilder::write() does not go inside a transaction
@@ -1598,7 +1615,7 @@ struct TransmissionProcess {
 	size_t start;
 	size_t end;
 	
-	Array<byte> buffer;
+	// Array<byte> buffer;
 	
 	TransmissionProcess(Own<kj::InputStream>&& reader, DataRef<capnp::AnyPointer>::Receiver::Client receiver, size_t start, size_t end);
 	
@@ -2002,8 +2019,11 @@ Promise<void> DataRefInterface::metaAndCapTable(MetaAndCapTableContext ctx) {
 		
 		auto results = ctx.initResults();
 		auto ref = data -> getDataRef();
+		
 		results.setMetadata(ref.getMetadata());
 		results.setTable(ref.getCapTable());
+		
+		// KJ_DBG(ref.getMetadata());
 	});
 }
 
@@ -2053,7 +2073,7 @@ Promise<void> DataRefInterface::transmit(TransmitContext ctx) {
 TransmissionProcess::TransmissionProcess(Own<kj::InputStream>&& reader, DataRef<capnp::AnyPointer>::Receiver::Client receiver, size_t start, size_t end) :
 	reader(mv(reader)),
 	receiver(mv(receiver)),
-	buffer(kj::heapArray<byte>(CHUNK_SIZE)),
+	// buffer(kj::heapArray<byte>(CHUNK_SIZE)),
 	start(start), end(end)
 {
 	KJ_REQUIRE(end >= start);
@@ -2072,23 +2092,25 @@ Promise<void> TransmissionProcess::transmit(size_t chunkStart) {
 	if(chunkStart >= end)
 		return receiver.doneRequest().send().ignoreResult();
 	
-	auto slice = chunkStart + CHUNK_SIZE <= end ? buffer.asPtr() : buffer.slice(0, end - chunkStart);
-	reader -> read(slice.begin(), slice.size());
-	
 	// Do a transmission
 	auto request = receiver.receiveRequest();
+	auto buffer = request.initData(kj::min(CHUNK_SIZE, end - chunkStart));
+	reader -> read(buffer.begin(), buffer.size());
 	
-	if(slice.size() % 8 == 0) {
-		// Note: This is safe because we keep this object alive until the transmission
-		// succeeds or fails
-		auto orphanage = capnp::Orphanage::getForMessageContaining((DataRef<capnp::AnyPointer>::Receiver::ReceiveParams::Builder) request);
-		auto externalData = orphanage.referenceExternalData(slice);
-		request.adoptData(mv(externalData));
-	} else {
-		request.setData(slice);
-	}
+	/*if(chunkStart == 0) {
+		uint32_t* prefix = reinterpret_cast<uint32_t*>(buffer.begin());
+		uint32_t nSegments = prefix[0] + 1;
+		
+		kj::ArrayPtr<uint32_t> segmentSizes(prefix + 1, nSegments);
+		
+		size_t expected = nSegments / 2 + 1;
+		for(auto s : segmentSizes)
+			expected += s;
+		
+		KJ_DBG("Transmitting from ODB", end, nSegments, segmentSizes, expected, end / 8);
+	}*/
 	
-	return request.send().then([this, chunkEnd = chunkStart + slice.size()]() { return transmit(chunkEnd); });
+	return request.send().then([this, chunkEnd = chunkStart + buffer.size()]() { return transmit(chunkEnd); });
 }
 
 OneOf<decltype(nullptr), Capability::Client, kj::Exception> createInterface(ObjectDBEntry& entry, kj::Badge<ObjectDBHook> badge) {
