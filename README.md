@@ -2,6 +2,7 @@
 
 This library contains computation mechanisms to support scientific computation.
 
+For more information see the documentation at <https://alexrobomind.github.io/fusionsc>.
 ## Setup (python)
 
 FusionSC can be directly installed from pypi. This will also install a binary redistributable for the fusionsc executable.
@@ -53,7 +54,3 @@ The following targets are available:
 | `fusionsc` tool  |  fsc-tool           | {build}/src/c++/tools  |
 | python bindings  |  copy-pybindings    | {src}/python/fusionsc  |
 | tests            |  tests              | {build}/src/c++        |
-
-### Building the correct targets
-
-If you want to run / build tests, you need to build the `tests` target.
