@@ -1,7 +1,7 @@
 """Resolution helpers to obtain computable fields and geometries from high-level descriptions"""
 
 from . import native, data, service, wrappers, warehouse
-from .asnc import asyncFunction, startEventLoop
+from .asnc import asyncFunction, startEventLoop, wait
 
 from .native.devices import w7x as cppw7x
 from .native.devices import jtext as cppjtext
@@ -13,10 +13,6 @@ startEventLoop()
 
 _fieldResolvers = contextvars.ContextVar("fusionsc.resolve._fieldResolvers", default = None)
 _geometryResolvers = contextvars.ContextVar("fusionsc.resolve._geometryResolvers", default = None)
-
-def _append(var, resolvers):
-	newValue = var.get() + tuple(resolvers)
-	return var.set(newValue)
 
 def _addOfflineResolvers(ref):
 	addFieldResolvers([native.offline.fieldResolver(ref)])
@@ -35,7 +31,7 @@ def fieldResolvers():
 	return (cppw7x.fieldResolver(), cppjtext.fieldResolver())
 
 def geometryResolvers():
-	result = _fieldResolvers.get()
+	result = _geometryResolvers.get()
 	
 	if result is not None:
 		return result
@@ -43,22 +39,21 @@ def geometryResolvers():
 	return (cppw7x.geometryResolver(), cppjtext.geometryResolver())
 
 def addFieldResolvers(resolvers):
-	return _append(_fieldResolvers, resolvers)
+	return _fieldResolvers.set(fieldResolvers() + tuple(resolvers))
 
 def addGeometryResolvers(resolvers):
-	return _append(_geometryResolvers, resolvers)
+	return _geometryResolvers.set(geometryResolvers() + tuple(resolvers))
 
-@asyncFunction
-async def connectWarehouse(db):
+def connectWarehouse(db):
 	"""
 	Connects to a warehouse to use for resolution
 	"""
 	# Optionally open database
 	if isinstance(db, str):
-		db = await warehouse.open.asnc(db)
+		db = warehouse.open(db)
 		
 	# Open root entry
-	rootEntry = await db.get.asnc("resolveIndex")
+	rootEntry = db.get("resolveIndex")
 	ref = rootEntry.ref
 	
 	# Install offline resolvers
