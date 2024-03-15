@@ -138,10 +138,10 @@ def untested(f):
 	
 	return wrapper
 
-def unstableAPI(f):
+def unstableApi(f):
 	@functools.wraps(f)
 	def wrapper(*args, **kwargs):
-		warnings.warn("This function is part of the unstable API. It might change or get removed in the near future.")
+		warnings.warn(f"The function {f.__module__}.{f.__qualname__} is part of the unstable API. It might change or get removed in the near future. While unlikely, it might also not be compatible across client/server versions.")
 		return f(*args, **kwargs)
 	
 	return wrapper

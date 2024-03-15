@@ -9,6 +9,7 @@ from . import efit
 from . import wrappers
 
 from .asnc import asyncFunction
+from .wrappers import unstableApi
 
 import numpy as np
 import copy
@@ -283,6 +284,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		return copy.copy(cf.grid), np.asarray(await data.download.asnc(cf.data))
 		
 	@asyncFunction
+	@unstableApi
 	async def calculateRadialModes(
 		self, surfaces: SurfaceArray,
 		normalizeAgainst : "Optional[MagneticConfig]" = None,

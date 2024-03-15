@@ -6,19 +6,47 @@ from .asnc import asyncFunction, startEventLoop
 from .native.devices import w7x as cppw7x
 from .native.devices import jtext as cppjtext
 import contextlib
+import contextvars
 
 # Ensure event loop is running
 startEventLoop()
 
-fieldResolvers = [
-	cppw7x.fieldResolver(),
-	cppjtext.fieldResolver()
-]
+_fieldResolvers = contextvars.ContextVar("fusionsc.resolve._fieldResolvers", default = None)
+_geometryResolvers = contextvars.ContextVar("fusionsc.resolve._geometryResolvers", default = None)
 
-geometryResolvers = [
-	cppw7x.geometryResolver(),
-	cppjtext.geometryResolver()
-]
+def _append(var, resolvers):
+	newValue = var.get() + tuple(resolvers)
+	return var.set(newValue)
+
+def _addOfflineResolvers(ref):
+	addFieldResolvers([native.offline.fieldResolver(ref)])
+	addGeometryResolvers([native.offline.geometryResolver(ref)])
+
+def reset():
+	_fieldResolvers.set(None)
+	_geometryResolvers.set(None)
+
+def fieldResolvers():
+	result = _fieldResolvers.get()
+	
+	if result is not None:
+		return result
+		
+	return (cppw7x.fieldResolver(), cppjtext.fieldResolver())
+
+def geometryResolvers():
+	result = _fieldResolvers.get()
+	
+	if result is not None:
+		return result
+		
+	return (cppw7x.geometryResolver(), cppjtext.geometryResolver())
+
+def addFieldResolvers(resolvers):
+	return _append(_fieldResolvers, resolvers)
+
+def addGeometryResolvers(resolvers):
+	return _append(_geometryResolvers, resolvers)
 
 @asyncFunction
 async def connectWarehouse(db):
@@ -34,8 +62,7 @@ async def connectWarehouse(db):
 	ref = rootEntry.ref
 	
 	# Install offline resolvers
-	fieldResolvers.append(native.offline.fieldResolver(ref))
-	geometryResolvers.append(native.offline.geometryResolver(ref))
+	_addOfflineResolvers(ref)
 
 def createOfflineData(data: dict):
 	"""
@@ -119,41 +146,25 @@ def importOfflineData(filename: str):
 	offlineData = data.openArchive(filename)
 	
 	# Install offline resolvers
-	fieldResolvers.append(native.offline.fieldResolver(offlineData))
-	geometryResolvers.append(native.offline.geometryResolver(offlineData))
+	_addOfflineResolvers(offlineData)
 
 @asyncFunction
 async def resolveField(field, followRefs: bool = False):		
-	for r in fieldResolvers:
+	for r in fieldResolvers():
 		field = await r.resolveField(field, followRefs)
 		
 	return field
 
 @asyncFunction
 async def resolveFilament(filament, followRefs: bool = False):		
-	for r in fieldResolvers:
+	for r in fieldResolvers():
 		filament = await r.resolveFilament(filament, followRefs)
 		
 	return filament
 	
 @asyncFunction
 async def resolveGeometry(geometry, followRefs: bool = False):		
-	for r in geometryResolvers:
+	for r in geometryResolvers():
 		geometry = await r.resolveGeometry(geometry, followRefs)
 		
 	return geometry
-
-@contextlib.contextmanager
-def backupResolvers():
-	"""A context manager that, upon exiting, restores the resolver lists to their state when entered"""
-	global fieldResolvers
-	global geometryResolvers
-	
-	backupFR = fieldResolvers.copy()
-	backupGR = geometryResolvers.copy()
-	
-	try:
-		yield None
-	finally:
-		fieldResolvers = backupFR
-		geometryResolvers = backupGR

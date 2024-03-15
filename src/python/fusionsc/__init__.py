@@ -42,6 +42,7 @@ from . import geometry
 from . import hfcam
 
 from . import hint
+from . import vmec
 
 # Load device-specifics
 from . import devices

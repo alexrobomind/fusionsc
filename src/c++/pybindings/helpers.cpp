@@ -35,6 +35,14 @@ namespace {
 		interpretOutputFile(getActiveThread().filesystem().getCurrentPath().evalNative(pathName), result.asBuilder());
 		return result;
 	}
+	
+	FieldResolver::Client fieldResolver(DynamicCapabilityClient ref) {
+		return newOfflineFieldResolver(ref.castAs<DataRef<OfflineData>>());
+	}
+	
+	GeometryResolver::Client geometryResolver(DynamicCapabilityClient ref) {
+		return newOfflineGeometryResolver(ref.castAs<DataRef<OfflineData>>());
+	}
 }
 
 void initHelpers(py::module_& m) {
@@ -49,8 +57,8 @@ void initHelpers(py::module_& m) {
 	py::module_ vmecModule = m.def_submodule("vmec");
 	vmecModule.def("loadOutput", &loadVmecOutput);
 	
-	offlineModule.def("fieldResolver", &newOfflineFieldResolver);
-	offlineModule.def("geometryResolver", &newOfflineGeometryResolver);
+	offlineModule.def("fieldResolver", &fieldResolver);
+	offlineModule.def("geometryResolver", &geometryResolver);
 	offlineModule.def("updateOfflineData", &updateDataHelper);
 }
 

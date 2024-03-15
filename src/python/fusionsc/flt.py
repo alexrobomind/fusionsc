@@ -11,7 +11,7 @@ from . import magnetics
 from . import wrappers
 
 from .asnc import asyncFunction
-from .wrappers import unstableAPI
+from .wrappers import unstableApi
 
 import numpy as np
 import functools

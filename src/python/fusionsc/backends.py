@@ -5,6 +5,7 @@ from . import service
 
 import contextlib
 import contextvars
+import threading
 
 # Initialize event loop for main thread
 asnc.startEventLoop()
@@ -12,19 +13,27 @@ asnc.startEventLoop()
 # Create a new in-process worker living in a separate thread
 inProcessWorker = native.LocalRootServer()
 
-import threading
-_threadLocal = threading.local()
+_localResources = contextvars.ContextVar("fusionsc.backends._localResources", default = (None, None))
+_currentBackend = contextvars.ContextVar("fusionsc.backends._currentBackend", default = (None, None))
 
-_currentBackend = contextvars.ContextVar("fusionsc.backends._currentBackend", default = None)
+def _threadId():
+	return threading.get_ident()
 
 def connectLocal():
 	"""Connects a thread to the in-process worker. Automatically called for main thread."""
 	asnc.startEventLoop()
-	_threadLocal.localResources = inProcessWorker.connect()
+	_localResources.set((_threadId(), inProcessWorker.connect()))
 	
 def disconnectLocal():
 	"""Disconnects a thread from the in-process worker"""
-	del _threadLocal.localResources
+	_localResources.set((None, None))
+
+def isLocalConnected():
+	"""
+	Checks whether the thread is connected to the in-process worker
+	"""
+	threadId, _ = _localResources.get()
+	return threadId is not None and threadId == _threadId()
 
 def localResources():
 	"""
@@ -36,7 +45,7 @@ def localResources():
 	if not isLocalConnected():
 		connectLocal()
 	
-	return _threadLocal.localResources
+	return _localResources.get()[1]
 
 def localBackend():
 	"""
@@ -52,22 +61,18 @@ async def reconfigureLocalBackend(config):
 	"""
 	await localResources().configureRoot(config)
 
-def isLocalConnected():
-	"""
-	Checks whether the thread is connected to the in-process worker
-	"""
-	return hasattr(_threadLocal, "localResources")
-
 def activeBackend():
 	"""
 	Returns the current thread's active backend for calculations. This is the inner-most
 	active useBackend call, falling back to the in-process worker if no other backend
 	is in use
 	"""
-	cb = _currentBackend.get()
+	threadId, cb = _currentBackend.get()
 	
 	if cb is None:
-		cb = localBackend()
+		return localBackend()
+	
+	assert threadId == _threadId(), "The current backend was passed from a different thread. This is not supported"
 	
 	return cb
 
@@ -83,7 +88,7 @@ def useBackend(newBackend):
 		with fsc.backends.useBackend(newBackend):
 			... Calculation code ...
 	"""
-	token = _currentBackend.set(newBackend)
+	token = _currentBackend.set((_threadId(), newBackend))
 	yield newBackend
 	_currentBackend.reset(token)
 
@@ -94,4 +99,4 @@ def alwaysUseBackend(newBackend):
 	Note that exiting newBackend(...) scopes also removes the backend installed by this function if
 	it was installed inside.
 	"""
-	_currentBackend.set(newBackend)
+	_currentBackend.set((_threadId(), newBackend))

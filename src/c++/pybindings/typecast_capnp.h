@@ -45,7 +45,28 @@ namespace fscpy {
 	FSCPY_DEF_DISPATCH(DynamicCapabilityClient, "Client");
 	FSCPY_DEF_DISPATCH(DynamicStructBuilder, "Builder");
 	FSCPY_DEF_DISPATCH(DynamicStructReader, "Reader");
-	FSCPY_DEF_DISPATCH(DynamicStructPipeline, "Pipeline");		
+	FSCPY_DEF_DISPATCH(DynamicStructPipeline, "Pipeline");
+	
+	inline void checkSame(capnp::Schema expected, capnp::Schema provided) {
+		if(provided == expected)
+			return;
+		
+		KJ_REQUIRE(provided.getProto().getId() == expected.getProto().getId(), "Schema type mismatch", expected, provided);
+		
+		Temporary<capnp::schema::Brand> providedBrand;
+		Temporary<capnp::schema::Brand> expectedBrand;
+		
+		fsc::extractBrand(provided, providedBrand);
+		fsc::extractBrand(expected, expectedBrand);
+		
+		{
+			auto schema = expected;
+			auto provided = providedBrand.asReader();
+			auto expected = expectedBrand.asReader();
+			
+			KJ_FAIL_REQUIRE("Schema brand mismatch for schema", schema, expected, provided);
+		}
+	}
 };
 
 namespace pybind11 { namespace detail {
@@ -126,7 +147,8 @@ namespace pybind11 { namespace detail {
 				DSB dynamic = static_cast<DSB&>(subCaster);
 				capnp::StructSchema staticSchema = fscpy::defaultLoader.importBuiltin<Builds>().asStruct();
 				
-				KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
+				//KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
+				::fscpy::checkSame(staticSchema, dynamic.getSchema());
 				ASB any = dynamic.wrapped();
 			
 				value = fscpy::WithMessage<Builder>(fscpy::shareMessage(dynamic), any.as<Builds>());
@@ -181,7 +203,8 @@ namespace pybind11 { namespace detail {
 				DSR dynamic = static_cast<DSR&>(subCaster);
 				capnp::StructSchema staticSchema = fscpy::defaultLoader.importBuiltin<Reads>().asStruct();
 				
-				KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
+				// KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
+				::fscpy::checkSame(staticSchema, dynamic.getSchema());
 				ASR any = dynamic.wrapped();
 			
 				value = fscpy::WithMessage<Reader>(fscpy::shareMessage(dynamic), any.as<Reads>());
@@ -248,7 +271,7 @@ namespace pybind11 { namespace detail {
 		
 		bool load(handle src, bool convert) {
 			// Try to load as dynamic struct
-			type_caster<capnp::DynamicCapability::Client> subCaster;
+			type_caster<fscpy::DynamicCapabilityClient> subCaster;
 			if(!subCaster.load(src, convert)) {
 				return false;
 			}
@@ -257,7 +280,8 @@ namespace pybind11 { namespace detail {
 				capnp::DynamicCapability::Client dynamic = (capnp::DynamicCapability::Client&) subCaster;
 				capnp::InterfaceSchema staticSchema = fscpy::defaultLoader.importBuiltin<ClientFor>().asInterface();
 				
-				KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
+				// KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
+				::fscpy::checkSame(staticSchema, dynamic.getSchema());
 				capnp::Capability::Client any = dynamic;
 			
 				value = dynamic.castAs<ClientFor>();

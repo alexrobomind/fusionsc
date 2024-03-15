@@ -7,7 +7,8 @@ from ...geometry import Geometry
 
 from ...native.devices import w7x as w7xnative
 
-from ...data import asyncFunction
+from ...asnc import asyncFunction
+from ...wrappers import unstableApi
 
 from ...backends import localResources
 
@@ -42,15 +43,19 @@ def connectComponentsDB(address: str):
 	
 	return componentsDB
 
-def connectLagacyIPPSite():
+@unstableApi
+def connectLegacyIPPSite():
 	"""Connects the resolve module to standard IPP coils DB and components DB"""
 	connectCoilsDB("http://esb.ipp-hgw.mpg.de:8280/services/CoilsDBRest")
 	connectComponentsDB("http://esb.ipp-hgw.mpg.de:8280/services/ComponentsDbRest")
 
-def connectIPPSite():
+def connectIppSite():
 	"""Connects the resolve module to the newer fsc-driven Coils- and ComponentsDb proxies"""
+	import warnings
+	warnings.warn("IPP site backend is experimental, URL might change")
+	
 	# Set up the W7-X load balancer as main backend
-	newBackend = remote.connect("http://sv-coda-wsvc-31/load-balancer")
+	newBackend = remote.connect("http://sv-coda-wsvc-31:8888/load-balancer")
 	backends.alwaysUseBackend(newBackend)
 	
 	# Load w7xdb (uses remote backend) and connect its data index
@@ -275,9 +280,11 @@ def op21Geometry():
 # The W7XCoilSet type defaults to the W7-X coils 160 ... 230
 defaultCoils = cadCoils('archive')
 
+@unstableApi
 def defaultGrid():
 	return service.devices.w7x.defaultGrid.value.clone_()
 
+@unstableApi
 def defaultGeometryGrid():
 	return service.devices.w7x.defaultGeoGrid.value.clone_()
 

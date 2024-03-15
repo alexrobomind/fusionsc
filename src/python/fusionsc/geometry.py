@@ -225,6 +225,8 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		wt.z = z
 		
 		if phi1 is not None:
+			assert phit2 is not None, "Must either specify ph1 and phi2 or neither"
+			
 			range = wt.initPhiRange()
 			range.phiStart.rad = phi1
 			range.phiEnd.rad = phi2
@@ -439,23 +441,20 @@ def cuboid(x1, x2, tags = {}):
 	# Put data into mesh struct
 	mesh = service.Mesh.newMessage()
 	mesh.vertices = cubeVertices
-	mesh.indices = indices,
+	mesh.indices = indices
 	mesh.polyMesh = [0, 4, 8, 12, 16, 20, 24]
 	
 	# Publish mesh in distributed data system
 	meshRef = data.publish(mesh)
 	
 	# Put mesh reference & tags into geometry
-	import fsc
-	result = fsc.Geometry()
-	result.data.mesh = meshRef
-	
-	outTags = result.data.initTags(len(tags))
-	for i, name in enumerate(tags):
-		outTags[i].name = name
-		outTags[i].value = asTagValue(tags[name])
-	
-	return result
+	return Geometry({
+		"mesh" : meshRef,
+		"tags" : [
+			{"name" : name, "value" : asTagValues(value)}
+			for name, value in tags.items()
+		]
+	})
 
 def geometryLib():
 	"""Creates an in-thread GeometryLib instance"""
