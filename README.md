@@ -2,7 +2,7 @@
 
 This library contains computation mechanisms to support scientific computation.
 
-For more information see the documentation at <https://alexrobomind.github.io/fusionsc>.
+For more information see the documentation at <https://alexrobomind.github.io/fusionsc>
 
 ## Setup (python)
 
