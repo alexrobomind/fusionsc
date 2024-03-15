@@ -3,6 +3,7 @@
 This library contains computation mechanisms to support scientific computation.
 
 For more information see the documentation at <https://alexrobomind.github.io/fusionsc>.
+
 ## Setup (python)
 
 FusionSC can be directly installed from pypi. This will also install a binary redistributable for the fusionsc executable.
