@@ -840,8 +840,9 @@ py::object interpretInterfaceSchema(fscpy::Loader& loader, capnp::InterfaceSchem
 	
 	// We need dynamic resolution to get our base capability client
 	// Static resolution fails as we have overridden the type caster
-	py::object baseObject = py::cast(DynamicCapability::Client());
-	py::object baseClass = py::type::of(baseObject);
+	/*py::object baseObject = py::cast(DynamicCapability::Client());
+	py::object baseClass = py::type::of(baseObject);*/
+	py::object baseClass = py::type::of<DynamicCapabilityClient>();
 	
 	py::type metaClass = py::reinterpret_borrow<py::type>(reinterpret_cast<PyObject*>(&PyType_Type));
 	//py::type metaClass = py::type::of(baseClass);

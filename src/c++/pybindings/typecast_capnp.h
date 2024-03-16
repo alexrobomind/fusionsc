@@ -77,7 +77,15 @@ namespace pybind11 { namespace detail {
 	
 	template<>
 	struct type_caster<fscpy::DynamicCapabilityClient> : public PolymorphicDispatchCaster<fscpy::DynamicCapabilityClient>
-	{};
+	{
+		using Base = PolymorphicDispatchCaster<fscpy::DynamicCapabilityClient>;
+		
+		inline operator fscpy::DynamicCapabilityClient&() {
+			auto& baseResult = Base::operator fscpy::DynamicCapabilityClient&();
+			KJ_REQUIRE(baseResult.locallyOwned());
+			return baseResult;
+		}
+	};
 	
 	template<>
 	struct type_caster<fscpy::DynamicStructBuilder> : public PolymorphicDispatchCaster<fscpy::DynamicStructBuilder>

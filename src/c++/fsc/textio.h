@@ -78,6 +78,8 @@ namespace fsc { namespace textio {
 			switch(language) {
 				case CBOR:
 				case BSON:
+				case MSGPACK:
+				case UBJSON:
 					return true;
 				
 				case JSON:
