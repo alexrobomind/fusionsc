@@ -131,6 +131,74 @@ namespace pybind11 { namespace detail {
 		}*/
 	};
 	
+	// classes for capnp::Type objects
+	
+	template<>
+	struct type_caster<capnp::Type> : public type_caster_base<capnp::Type> {		
+		static handle cast(capnp::Type type, return_value_policy policy, handle parent) {
+			if(type.isStruct()) {
+				return type_caster<capnp::StructSchema>::cast(type.asStruct(), policy, parent);
+			}
+			
+			if(type.isInterface()) {
+				return type_caster<capnp::InterfaceSchema>::cast(type.asInterface(), policy, parent);
+			}
+			
+			if(type.isEnum()) {
+				return type_caster<capnp::EnumSchema>::cast(type.asEnum(), policy, parent);
+			}
+			
+			if(type.isList()) {
+				return type_caster<capnp::ListSchema>::cast(type.asList(), policy, parent);
+			}
+			
+			return type_caster_base<capnp::Type>::cast(type, policy, parent);
+		}
+	};
+	
+	template<>
+	struct type_caster<capnp::Schema> : public type_caster_base<capnp::Schema> {		
+		static handle cast(capnp::Schema schema, return_value_policy policy, handle parent) {
+			using Node = capnp::schema::Node;
+			
+			auto proto = schema.getProto();
+			switch(proto.which()) {
+				case Node::STRUCT:
+					return type_caster<capnp::StructSchema>::cast(schema.asStruct(), policy, parent);
+				case Node::ENUM:
+					return type_caster<capnp::EnumSchema>::cast(schema.asEnum(), policy, parent);
+				case Node::INTERFACE:
+					return type_caster<capnp::InterfaceSchema>::cast(schema.asInterface(), policy, parent);
+				case Node::CONST:
+					return type_caster<capnp::ConstSchema>::cast(schema.asConst(), policy, parent);
+				default:
+					break;
+			}
+			
+			return type_caster_base<capnp::Schema>::cast(schema, policy, parent);
+		}
+	};
+	
+	template<>
+	struct type_caster<capnp::Schema>  {		
+		PYBIND11_TYPE_CASTER(fscpy::WithMessage<Builder>, const_name<Builds>() + const_name(".Builder"));
+		static handle cast(capnp::Type type, return_value_policy policy, handle parent) {
+			if(type.isStruct()) {
+				return type_caster<capnp::StructSchema>::cast(type.asStruct(), policy, parent);
+			}
+			
+			if(type.isInterface()) {
+				return type_caster<capnp::InterfaceSchema>::cast(type.asInterface(), policy, parent);
+			}
+			
+			if(type.isEnum()) {
+				return type_caster<capnp::EnumSchema>::cast(type.asEnum(), policy, parent);
+			}
+			
+			return type_caster_base<capnp::Type>::cast(type, policy, parent);
+		}
+	};
+	
 	// Dynamic <-> Static casters for static classes w/ messages
 			
 	template<typename Builder>

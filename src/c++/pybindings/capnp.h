@@ -715,4 +715,18 @@ struct ConstantValue {
 	}
 };
 
-}
+struct MethodInfo {
+	capnp::InterfaceSchema::Method method;
+	
+	inline MethodInfo(capnp::InterfaceSchema::Method m) :
+		method(m)
+	{}
+
+	inline capnp::StructSchema paramType() {
+		return method.getParamType();
+	}
+	
+	inline capnp::StructSchema resultType() {
+		return method.getResultType();
+	}
+};

@@ -62,4 +62,8 @@ namespace fscpy {
 	}
 	
 	void parseSchema(py::object anchor, kj::StringPtr path, py::object target, py::dict roots);
+	
+	Maybe<kj::Tuple<py::module_, kj::String>> locateSchema(capnp::Schema&);
+	void registerMethod(capnp::InterfaceSchema::Method m);
+	void register
 }

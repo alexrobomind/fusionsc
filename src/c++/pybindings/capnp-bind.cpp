@@ -25,8 +25,10 @@ using R = fscpy::CapnpReader;
 using B = fscpy::CapnpBuilder;
 
 namespace fscpy {
+	
+namespace {
 
-static py::module_ capnpModule;
+py::module_ capnpModule;
 
 template<typename T, typename... Params>
 struct ClassBinding : public py::class_<T, Params...> {
@@ -297,8 +299,17 @@ void bindUnpicklers() {
 	capnpModule.def("_unpickleEnum", &unpickleEnum);
 }
 
+struct MethodDict {
+	capnp::InterfaceSchema schema;
+	MethodDict(capnp::InterfaceSchema s) : schema(s) {}
+	
+	MethodInfo getItem(kj::StringPtr key) {
+		return MethodInfo(s.getMethodByName(key));
+	}
+};
+
 void bindType() {
-	ClassBinding<capnp::Type>("Type")
+	ClassBinding<capnp::Type, py::dynamic_attrs>("Type")
 		.def("toProto", [](capnp::Type& t) {
 			auto mb = fsc::heapHeld<capnp::MallocMessageBuilder>(1024);
 			
@@ -318,15 +329,159 @@ void bindType() {
 		.def("listOf", [](capnp::Type t, unsigned int depth) {
 			return t.wrapInList(depth);
 		}, py::arg("depth") = 1)
+		.def("interpret", [](capnp::Type& t) -> capnp::Type {
+			return t;
+		})
 	;
 	
-	ClassBinding<capnp::StructSchema>("StructSchema");
-	ClassBinding<capnp::ListSchema>("ListSchema");
-	ClassBinding<capnp::InterfaceSchema>("InterfaceSchema");
+	ClassBinding<capnp::Schema, py::dynamic_attrs> schema("Schema");
+	schema.def("__getattr__", [](capnp::Schema& self, kj::StringPtr name) -> capnp::Type {
+		using Brand = capnp::schema::Brand;
+		auto proto = self.getProto();
+		
+		// Struct nodes can have groups, that also appears as nested nodes
+		if(proto.isStruct()) {
+			auto asStruct = self.asStruct();
+	
+			for(StructSchema::Field field : asStruct.getFields()) {
+				if(!field.getProto().isGroup())
+					continue;
+				
+				if(field.getProto().getName() != name)
+					continue;
+				
+				return field.getType();
+			}
+		}
+		
+		// Look up child ID
+		for(auto nestedNode : proto.getNestedNodes()) {
+			if(nestedNode.getName() != name)
+				continue;
+			
+			// Load type from default loader
+			defaultLoader.capnpLoader.get(nestedNode.getId(), Brand::Reader, self);
+		}
+		
+		throw py::AttributeError();
+	});
+	schema.def("__dir__", [](capnp::Schema& self) {
+		py::list result;
+		result.append("__getitem__");
+		
+		auto proto = self.getProto();
+		
+		if(proto.isStruct()) {
+			auto asStruct = self.asStruct();
+			result.append("Builder");
+			result.append("Reader");
+			result.append("Pipeline");
+			result.append("newMessage");
+	
+			for(StructSchema::Field field : asStruct.getFields()) {
+				if(!field.getProto().isGroup())
+					continue;
+				
+				result.append(field.getProto().getName().cStr());
+			}
+		}
+		
+		if(proto.isInterface()) {
+			auto asInterface = self.asInterface();
+			result.append("Client");
+			result.append("Server");
+			result.append("methods");
+		}
+		
+		// Look up child ID
+		for(auto nestedNode : proto.getNestedNodes()) {
+			result.append(nestedNode.getName().cStr());
+		}
+		
+		return result;
+	});
+	schema.def("__getitem__", [](capnp::Schema& self, py::object key) {		
+		kj::Vector<Maybe<capnp::Type>> bindings;
+		
+		if(py::isinstance<py::sequence>(key)) {
+			auto seq = py::reinterpret_borrow<py::sequence>(key);
+			for(auto binding : seq) {
+				if(binding.is_none()) {
+					bindings.add(nullptr);
+				} else {
+					bindings.add(py::cast<capnp::Type>(binding));
+				}
+			}
+		} else {
+			if(key.is_none()) {
+				bindings.add(nullptr);
+			} else {
+				py::detail::type_caster<capnp::Type> asType;
+				KJ_REQUIRE(asType.load(key), "Specialization parameters must be a type or tuple of types");
+				bindings.add((capnp::Type) asType);
+			}
+		}
+		
+		using Brand = capnp::schema::Brand;
+		Temporary<Brand> brand;
+		fsc::extractBrand(self, brand);
+		
+		for(auto scope : brand.getScopes()) {
+			if(scope.getScopeId() != self.getProto().getId())
+				continue;
+			
+			auto bindingsOut = scope.initBindings(bindings.size());
+			for(auto i : kj::indices(bindingsOut)) {
+				auto out = bindingsOut[i];
+				KJ_IF_MAYBE(pBinding, bindings[i]) {
+					fsc::extractType(*pBinding, out.initType());
+				} else {
+					out.setUnbound();
+				}
+			}
+				
+			goto done;
+		}
+		KJ_FAIL_REQUIRE("The requested type can not be specialized");
+		
+		done:
+		
+		return defaultLoader.capnpLoader.get(self.getProto().getId(), brand);
+	});
+	
+	ClassBinding<capnp::StructSchema, capnp::Schema>("StructSchema")
+		.def("newMessage", [](capnp::StructSchema& self, py::object copyFrom, size_t initialSize) {
+			auto msg = kj::heap<capnp::MallocMessageBuilder>(initialSize);
+			
+			capnp::DynamicStruct::Builder builder;
+			if(copyFrom.is_none()) {
+				builder = msg->initRoot<capnp::DynamicStruct>(self);
+			} else {
+				// Let's try using our assignment logic
+				assign(*msg, self, copyFrom);
+				builder = msg->getRoot<capnp::DynamicStruct>(self);
+			}
+			
+			return DynamicStructBuilder(mv(msg), builder);
+		});
+	;
+	ClassBinding<capnp::InterfaceSchema, capnp::Schema>("InterfaceSchema")
+		.def_property_readonly("methods", [](capnp::InterfaceSchema& self) {
+			return MethodDict(self);
+		})
+	;
+	
+	ClassBinding<capnp::ListSchema>("ListSchema")
+		.def_property_readonly("elementType", [](capnp::ListSchema& self) {
+			return self.getElementType();
+		})
+	;
 	
 	py::implicitly_convertible<capnp::StructSchema, capnp::Type>();
 	py::implicitly_convertible<capnp::ListSchema, capnp::Type>();
 	py::implicitly_convertible<capnp::InterfaceSchema, capnp::Type>();
+}
+
 }
 
 /*void bindAssignable() {
