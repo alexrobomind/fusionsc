@@ -4,6 +4,7 @@ Asynchronous processing (promises, coroutines)
 
 from .native.asnc import (
 	Future, # This class is untyped in the C++ library, when referring to it in type hints, use Strings
+	Executor,
 	
 	startEventLoop,
 	stopEventLoop,

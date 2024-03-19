@@ -40,6 +40,18 @@ namespace {
 		
 		return fiberPool.startFiber(mv(func));
 	}
+	
+	py::object runInExecutor(const kj::Executor& e, py::object callable) {
+		if(&e == &(kj::getCurrentThreadExecutor())) {
+			return PythonWaitScope::wait(adaptAsyncioFuture(callable()));
+		}
+		
+		py::gil_scoped_release withoutGil;
+		return e.executeSync([&]() {
+			py::gil_scoped_acquire withGil;
+			return callable();
+		});
+	}
 }
 
 namespace fscpy {
@@ -816,6 +828,11 @@ void initAsync(py::module_& m) {
 	py::class_<RemotePromise, AsyncioFutureLike>(asyncModule, "PromiseForResult")
 		.def_property_readonly("pipeline", &RemotePromise::getPipeline)
 		.def_property_readonly("p", &RemotePromise::getPipeline)
+	;
+	
+	py::class_<kj::Executor>(asyncModule, "Executor")
+		.def("run", &runInExecutor)
+		.def("isCurrent", [](const kj::Executor& e) { return &e == &(kj::getCurrentThreadExecutor()); })
 	;
 	
 	asyncModule.def("startEventLoop", &PythonContext::start, "If the active thread has no active event loop, starts a new one");

@@ -618,7 +618,19 @@ struct DynamicCapabilityClient : public capnp::DynamicCapability::Client, CapnpO
 	inline DynamicCapabilityClient(Client& c) : Client(c) {}
 	inline DynamicCapabilityClient(Client&& c) : Client(mv(c)) {}
 	
+	inline DynamicCapabilityClient(DynamicCapabilityClient& o) :
+		Client::Client(o), myExecutor(o.executor().addRef())
+	{}
+	
+	DynamicCapabilityClient(DynamicCapabilityClient&&) = default;
+	
 	capnp::Type getType() override;
+	
+	inline bool locallyOwned() { return &(executor()) == &(kj::getCurrentThreadExecutor()); }
+	const kj::Executor& executor() { return *(myExecutor.get()); }
+	
+private:
+	Own<const kj::Executor> myExecutor = kj::getCurrentThreadExecutor().addRef();
 };
 
 struct DynamicCallContext {

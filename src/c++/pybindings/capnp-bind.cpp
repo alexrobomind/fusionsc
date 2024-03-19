@@ -230,6 +230,7 @@ void bindCapClasses() {
 			
 			return convertToAsyncioFuture(mv(whenReady)).attr("__await__")();
 		})
+		.def_property_readonly("executor_", &C::executor)
 	;
 	
 	server
