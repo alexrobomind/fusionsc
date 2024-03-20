@@ -19,6 +19,8 @@
 
 #include "kernels/device.h"
 
+#include "commit-hash.h"
+
 #include <capnp/rpc-twoparty.h>
 #include <capnp/membrane.h>
 
@@ -238,6 +240,8 @@ struct RootServer : public RootService::Server {
 		}
 		
 		results.setName(config.getName());
+		
+		results.setCommitHash(::fsc::commitHash);
 			
 		return READY_NOW;
 	}

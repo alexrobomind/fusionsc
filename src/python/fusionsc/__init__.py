@@ -54,10 +54,21 @@ from . import export
 
 import threading
 
+@asyncFunction
+async def getCommitHashes():
+	# Retrieve commit hash of local backend
+	localHash = backends.localBackend().getInfo().commitHash
+	
+	# Retrieve commit hash of remote backend
+	remoteHash = backends.activeBackend().getInfo().commitHash
+	
+	return (localHash, remoteHash)
+
 __all__ = [
 	'native',
 	'kj', 'capnp', 'schema', 'service', 'efit',
 	'asnc', 'backends', 'data', 'ipython_integration', 'resolve',
-	'magnetics', 'flt', 'hfcam', 'devices', 'export', 'structio'
+	'magnetics', 'flt', 'hfcam', 'devices', 'export', 'structio',
+	'getCommitHashes'
 ]
 	

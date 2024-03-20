@@ -99,6 +99,7 @@ struct NodeInfo {
 	computeEnabled @1 : Bool;
 	warehouses @2 : List(Text);
 	name @3 : Text;
+	commitHash @4 : Text;
 }
 
 # Main service interface that can be connected to by clients.

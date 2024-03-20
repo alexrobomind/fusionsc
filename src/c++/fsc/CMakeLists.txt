@@ -1,5 +1,16 @@
+# Extract commit hash
+
+add_custom_target(
+	fsc-git-hash
+	COMMAND write-git-hash --verbose raw-hash ${CMAKE_CURRENT_BINARY_DIR}/commit-hash.cpp fsc::commitHash fsc/commit-hash.h
+	BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/commit-hash.cpp
+)
+
 add_library(
 	fsc
+	
+	commit-hash.h
+	${CMAKE_CURRENT_BINARY_DIR}/commit-hash.cpp
 	
 	common.h
 	common.cpp
@@ -135,6 +146,7 @@ add_library(
 	kernels/device-dummy.cpp
 	kernels/message.cpp
 )
+add_dependencies(fsc fsc-git-hash)
 
 target_link_libraries(fsc PUBLIC deps cupnp fsc-service-genapi)
 target_link_libraries(fsc PRIVATE fusionsc_jsonscons fusionsc_poissongen)

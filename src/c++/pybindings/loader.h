@@ -28,6 +28,10 @@ namespace fscpy {
 		
 		kj::HashMap<capnp::Schema, capnp::Schema> imported;
 		kj::HashMap<uint64_t, fsc::Temporary<capnp::schema::Node::SourceInfo>> sourceInfo;
+		kj::HashMap<uint64_t, kj::String> rootModules;
+		
+		kj::Tuple<kj::StringPtr, kj::String> qualName(capnp::Schema);
+		kj::Tuple<kj::StringPtr, kj::String> qualName(capnp::InterfaceSchema::Method);
 	};
 	
 	extern Loader defaultLoader;
@@ -62,8 +66,4 @@ namespace fscpy {
 	}
 	
 	void parseSchema(py::object anchor, kj::StringPtr path, py::object target, py::dict roots);
-	
-	Maybe<kj::Tuple<py::module_, kj::String>> locateSchema(capnp::Schema&);
-	void registerMethod(capnp::InterfaceSchema::Method m);
-	void register
 }
