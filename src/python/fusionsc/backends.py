@@ -100,3 +100,7 @@ def alwaysUseBackend(newBackend):
 	it was installed inside.
 	"""
 	_currentBackend.set((_threadId(), newBackend))
+
+@asyncFunction
+async def backendInfo():
+	return await activeBackend().getInfo()
