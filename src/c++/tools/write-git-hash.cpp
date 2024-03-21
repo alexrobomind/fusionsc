@@ -9,7 +9,7 @@
 struct MainCls {
 	kj::ProcessContext& context;
 	
-	kj::StringPtr hashFile = "hashTmpFile";
+	kj::String hashFile = kj::heapString("hashTmpFile");
 	kj::String outputFile = nullptr;
 	kj::String varName = nullptr;
 	kj::String includeFile = nullptr;
@@ -32,6 +32,11 @@ struct MainCls {
 
 	bool setIncludeFile(kj::StringPtr val) {
 		includeFile = kj::heapString(val);
+		return true;
+	}
+	
+	bool setTmp(kj::StringPtr val) {
+		hashFile = kj::heapString(val);
 		return true;
 	}
 	
@@ -120,6 +125,7 @@ struct MainCls {
 			.expectArg("output", KJ_BIND_METHOD(*this, setOutput))
 			.expectArg("varName", KJ_BIND_METHOD(*this, setVarName))
 			.expectArg("include", KJ_BIND_METHOD(*this, setIncludeFile))
+			.addOptionWithArg({'t', "tempFile"}, KJ_BIND_METHOD(*this, setTmp), "<tempfile>", "Temporary file used to buffer git outputs")
 			.callAfterParsing(KJ_BIND_METHOD(*this, main))
 			.build()
 		;
