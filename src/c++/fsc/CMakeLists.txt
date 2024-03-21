@@ -4,6 +4,7 @@ add_custom_target(
 	fsc-git-hash
 	COMMAND write-git-hash --verbose ${CMAKE_CURRENT_BINARY_DIR}/commit-hash.cpp fsc::commitHash fsc/commit-hash.h
 	BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/commit-hash.cpp
+	WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 add_library(
