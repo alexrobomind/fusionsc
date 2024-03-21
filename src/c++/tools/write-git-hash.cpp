@@ -46,7 +46,6 @@ struct MainCls {
 		
 		kj::String gitHash = kj::heapString("<unknown>");
 		
-		
 		// Important: We abort with OK if command failed
 		if(retCode == 0) {
 			{
@@ -82,7 +81,7 @@ struct MainCls {
 				}
 			}
 		} else {
-			KJ_LOG(WARNING, "git rev-parse HEAD failed, won't update commit hash");
+			KJ_LOG(WARNING, "git rev-parse HEAD failed, commit hash unknown");
 		}
 		
 		
