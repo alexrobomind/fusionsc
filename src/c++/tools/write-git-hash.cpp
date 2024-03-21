@@ -77,7 +77,9 @@ struct MainCls {
 				}
 				KJ_LOG(INFO, modifiedFiles);
 				
-				gitHash = kj::str(mv(gitHash), "+");
+				if(modifiedFiles != 0) {
+					gitHash = kj::str(mv(gitHash), "+");
+				}
 			}
 		} else {
 			KJ_LOG(WARNING, "git rev-parse HEAD failed, won't update commit hash");
