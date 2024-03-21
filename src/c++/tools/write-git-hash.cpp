@@ -9,7 +9,7 @@
 struct MainCls {
 	kj::ProcessContext& context;
 	
-	kj::String hashFile = nullptr;
+	kj::StringPtr hashFile = "hashTmpFile";
 	kj::String outputFile = nullptr;
 	kj::String varName = nullptr;
 	kj::String includeFile = nullptr;
@@ -19,11 +19,6 @@ struct MainCls {
 	{}
 	
 	// Parameter parsers
-	
-	bool setHashFile(kj::StringPtr input) {
-		hashFile = kj::heapString(input);
-		return true;
-	}
 	
 	bool setOutput(kj::StringPtr output) {
 		outputFile = kj::heapString(output);
@@ -43,35 +38,54 @@ struct MainCls {
 	// Main code
 	
 	bool main() {
+		auto fs = kj::newDiskFilesystem();
+		auto inPath = fs -> getCurrentPath().evalNative(hashFile);
+		
 		// Run git rev-parse and redirect output into the hash file
 		auto retCode = std::system(kj::str("git rev-parse HEAD > ", hashFile).cStr());
 		
+		kj::String gitHash = kj::heapString("<unknown>");
+		
+		
 		// Important: We abort with OK if command failed
-		if(retCode != 0)
-			return true;
-		
-		auto fs = kj::newDiskFilesystem();
-		
-		auto inPath = fs -> getCurrentPath().evalNative(hashFile);
-		auto outPath = fs -> getCurrentPath().evalNative(outputFile);
-		
-		kj::String gitHash = kj::heapString("<Unknown>");
-		
-		KJ_IF_MAYBE(pInFile, fs -> getRoot().tryOpenFile(inPath)) {
-			auto& inFile = *pInFile;
-			gitHash = inFile -> readAllText();
-		}
-		
-		{
-			kj::Vector<char> charBuf;
-			for(auto c : gitHash) {
-				if(c == '\n' ||c == '\r')
-					continue;
-				charBuf.add(c);
+		if(retCode == 0) {
+			{
+				auto inFile = fs -> getRoot().openFile(inPath);
+				gitHash = inFile -> readAllText();
+				
+				// Remove newlines & other stuff
+				kj::Vector<char> charBuf;
+				for(auto c : gitHash) {
+					if(c == '\n' ||c == '\r')
+						continue;
+					charBuf.add(c);
+				}
+				
+				gitHash = kj::heapString(charBuf.releaseAsArray());
 			}
 			
-			gitHash = kj::heapString(charBuf.releaseAsArray());
+			auto retCode = std::system(kj::str("git status -s -uno > ", hashFile).cStr());
+			KJ_REQUIRE(retCode == 0, "git rev-parse HEAD succeeded, but git status failed");
+			
+			{
+				auto inFile = fs -> getRoot().openFile(inPath);
+				auto statusData = inFile -> readAllText();
+				
+				size_t modifiedFiles = 0;
+				for(char c : statusData) {
+					if(c == '\n') ++modifiedFiles;
+				}
+				KJ_LOG(INFO, modifiedFiles);
+				
+				gitHash = kj::str(mv(gitHash), "+");
+			}
+		} else {
+			KJ_LOG(WARNING, "git rev-parse HEAD failed, won't update commit hash");
 		}
+		
+		
+		auto outPath = fs -> getCurrentPath().evalNative(outputFile);
+		
 		
 		KJ_LOG(INFO, gitHash);
 			
@@ -102,7 +116,6 @@ struct MainCls {
 	
 	kj::MainFunc getMain() {		
 		return kj::MainBuilder(context, "Embeds files into C++ files", "Extractor for git hashes")
-			.expectArg("hashFile", KJ_BIND_METHOD(*this, setHashFile))
 			.expectArg("output", KJ_BIND_METHOD(*this, setOutput))
 			.expectArg("varName", KJ_BIND_METHOD(*this, setVarName))
 			.expectArg("include", KJ_BIND_METHOD(*this, setIncludeFile))

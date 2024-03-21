@@ -1134,6 +1134,108 @@ kj::StringTree fscpy::typeName(capnp::Type type) {
 
 // ================== Implementation of fscpy::Loader =====================
 
+kj::Tuple<kj::StringPtr, kj::StringTree> fscpy::Loader::qualName(capnp::Type type) {
+	using Which = capnp::schema::Type::Which;
+	
+	switch(type.which()) {
+		#define HANDLE_TYPE(W, T) \
+			case Which::W: return kj::tuple("fusionsc.capnp", kj::strTree(#T));
+		
+		HANDLE_TYPE(FLOAT32, Float32)
+		HANDLE_TYPE(FLOAT64, Float64)
+		HANDLE_TYPE(INT8, Int8)
+		HANDLE_TYPE(INT16, Int16)
+		HANDLE_TYPE(INT32, Int32)
+		HANDLE_TYPE(INT64, Int64)
+		HANDLE_TYPE(UINT8, UInt8)
+		HANDLE_TYPE(UINT16, UInt16)
+		HANDLE_TYPE(UINT32, UInt32)
+		HANDLE_TYPE(UINT64, UInt64)
+		HANDLE_TYPE(BOOL, Bool)
+		HANDLE_TYPE(VOID, Void)
+		HANDLE_TYPE(TEXT, Text)
+		HANDLE_TYPE(DATA, Data)
+		
+		#undef HANDLE_TYPE
+		
+		#define HANDLE_TYPE(W, f) \
+			case Which::W: return qualName(type.f());
+		
+		HANDLE_TYPE(INTERFACE, asInterface)
+		HANDLE_TYPE(STRUCT, asStruct)
+		HANDLE_TYPE(ENUM, asEnum)
+		
+		#undef HANDLE_TYPE
+		
+		case Which::LIST: {
+			capnp::ListSchema ls = type.asList();
+			
+			auto addElementType = [&](kj::StringPtr moduleName, kj::StringTree typeName) {
+				return kj::tuple("fusionsc.capnp",kj::strTree("List[", moduleName, ".", mv(typeName), "]"));
+			};
+			
+			return kj::apply(addElementType, qualName(ls.getElementType()));
+		}
+		
+		case Which::ANY_POINTER: {
+			using Which = capnp::schema::Type::AnyPointer::Unconstrained::Which;
+			switch(type.whichAnyPointerKind()) {
+				#define HANDLE_TYPE(W, T) \
+					case Which::W: return kj::tuple("fusionsc.capnp", kj::strTree(#T));
+				
+				HANDLE_TYPE(ANY_KIND, AnyPointer)
+				HANDLE_TYPE(LIST, AnyList)
+				HANDLE_TYPE(STRUCT, AnyStruct)
+				HANDLE_TYPE(CAPABILITY, Capability)
+				
+				#undef HANDLE_TYPE
+			}
+		}
+	}
+	
+	KJ_FAIL_REQUIRE("Unknown type kind");
+}
+
+kj::Tuple<kj::StringPtr, kj::StringTree> fscpy::Loader::qualName(capnp::Schema schema) {
+	auto result = kj::strTree(sanitizedStructName(schema.getUnqualifiedName()));
+	
+	auto bindings = schema.getBrandArgumentsAtScope(schema.getProto().getId());
+	if(bindings.size() != 0) {
+		auto bindingNames = kj::heapArrayBuilder<kj::StringTree>(bindings.size());
+		
+		auto addBindingName = [&](kj::StringPtr moduleName, kj::StringTree name) {
+			bindingNames.add(kj::strTree(moduleName, ".", mv(name)));
+		};
+		
+		for(capnp::Type binding : bindings) {
+			kj::apply(addBindingName, qualName(binding));
+		}
+		
+		result = kj::strTree(mv(result), "[", kj::StringTree(bindingNames.finish(), ","), "]");
+	}
+	
+	// Check if root schema
+	KJ_IF_MAYBE(pModuleName, rootModules.find(schema.getProto().getId())) {
+		return kj::tuple(pModuleName -> asPtr(), mv(result));
+	}
+	
+	// Check parent schema
+	KJ_IF_MAYBE(pParent, capnpLoader.tryGet(schema.getProto().getScopeId())) {
+		auto parentResult = qualName(*pParent);
+		result = kj::strTree(mv(kj::get<1>(parentResult)), ".", mv(result));
+		
+		return kj::tuple(kj::get<0>(parentResult), mv(result));
+	}
+	
+	KJ_FAIL_REQUIRE("No root schema could be found");
+}
+
+kj::Tuple<kj::StringPtr, kj::StringTree> fscpy::Loader::qualName(capnp::InterfaceSchema::Method method) {
+	kj::Tuple<kj::StringPtr, kj::StringTree> interfaceName = qualName(method.getContainingInterface());
+	
+	return kj::tuple(kj::get<0>(interfaceName), kj::strTree(mv(kj::get<1>(interfaceName)), ".", method.getProto().getName()));
+}
+
 bool fscpy::Loader::importNode(uint64_t nodeID, py::module scope) {
 	auto obj = interpretSchema(*this, nodeID, scope);
 	auto schema = capnpLoader.get(nodeID);
@@ -1141,6 +1243,13 @@ bool fscpy::Loader::importNode(uint64_t nodeID, py::module scope) {
 	if(!obj.is_none()) {
 		if(py::hasattr(scope, schema.getUnqualifiedName().cStr()))
 			return false;
+		
+		if(rootModules.find(nodeID) == nullptr) {
+			rootModules.insert(
+				nodeID,
+				kj::heapString(py::cast<kj::StringPtr>(scope.attr("__name__")))
+			);
+		}
 		
 		scope.add_object(schema.getUnqualifiedName().cStr(), obj);
 		return true;

@@ -2,7 +2,7 @@
 
 add_custom_target(
 	fsc-git-hash
-	COMMAND write-git-hash --verbose raw-hash ${CMAKE_CURRENT_BINARY_DIR}/commit-hash.cpp fsc::commitHash fsc/commit-hash.h
+	COMMAND write-git-hash --verbose ${CMAKE_CURRENT_BINARY_DIR}/commit-hash.cpp fsc::commitHash fsc/commit-hash.h
 	BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/commit-hash.cpp
 )
 

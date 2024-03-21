@@ -30,8 +30,20 @@ namespace fscpy {
 		kj::HashMap<uint64_t, fsc::Temporary<capnp::schema::Node::SourceInfo>> sourceInfo;
 		kj::HashMap<uint64_t, kj::String> rootModules;
 		
-		kj::Tuple<kj::StringPtr, kj::String> qualName(capnp::Schema);
-		kj::Tuple<kj::StringPtr, kj::String> qualName(capnp::InterfaceSchema::Method);
+		kj::Tuple<kj::StringPtr, kj::StringTree> qualName(capnp::Type);
+		kj::Tuple<kj::StringPtr, kj::StringTree> qualName(capnp::Schema);
+		kj::Tuple<kj::StringPtr, kj::StringTree> qualName(capnp::InterfaceSchema::Method);
+		
+		py::type builderType(uint64_t);
+		py::type readerType(uint64_t);
+		py::type pipelineType(uint64_t);
+		py::type clientType(uint64_t);
+	
+	private:
+		kj::HashMap<uint64_t, py::type> builderTypes;
+		kj::HashMap<uint64_t, py::type> readerTypes;
+		kj::HashMap<uint64_t, py::type> pipelineTypes;
+		kj::HashMap<uint64_t, py::type> clientTypes;
 	};
 	
 	extern Loader defaultLoader;

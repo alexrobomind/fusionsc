@@ -730,3 +730,5 @@ struct MethodInfo {
 		return method.getResultType();
 	}
 };
+
+}

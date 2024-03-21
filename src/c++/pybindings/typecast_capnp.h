@@ -179,26 +179,6 @@ namespace pybind11 { namespace detail {
 		}
 	};
 	
-	template<>
-	struct type_caster<capnp::Schema>  {		
-		PYBIND11_TYPE_CASTER(fscpy::WithMessage<Builder>, const_name<Builds>() + const_name(".Builder"));
-		static handle cast(capnp::Type type, return_value_policy policy, handle parent) {
-			if(type.isStruct()) {
-				return type_caster<capnp::StructSchema>::cast(type.asStruct(), policy, parent);
-			}
-			
-			if(type.isInterface()) {
-				return type_caster<capnp::InterfaceSchema>::cast(type.asInterface(), policy, parent);
-			}
-			
-			if(type.isEnum()) {
-				return type_caster<capnp::EnumSchema>::cast(type.asEnum(), policy, parent);
-			}
-			
-			return type_caster_base<capnp::Type>::cast(type, policy, parent);
-		}
-	};
-	
 	// Dynamic <-> Static casters for static classes w/ messages
 			
 	template<typename Builder>

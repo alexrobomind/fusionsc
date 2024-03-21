@@ -304,12 +304,12 @@ struct MethodDict {
 	MethodDict(capnp::InterfaceSchema s) : schema(s) {}
 	
 	MethodInfo getItem(kj::StringPtr key) {
-		return MethodInfo(s.getMethodByName(key));
+		return MethodInfo(schema.getMethodByName(key));
 	}
 };
 
 void bindType() {
-	ClassBinding<capnp::Type, py::dynamic_attrs>("Type")
+	ClassBinding<capnp::Type>("Type")
 		.def("toProto", [](capnp::Type& t) {
 			auto mb = fsc::heapHeld<capnp::MallocMessageBuilder>(1024);
 			
@@ -334,7 +334,7 @@ void bindType() {
 		})
 	;
 	
-	ClassBinding<capnp::Schema, py::dynamic_attrs> schema("Schema");
+	ClassBinding<capnp::Schema> schema("Schema");
 	schema.def("__getattr__", [](capnp::Schema& self, kj::StringPtr name) -> capnp::Type {
 		using Brand = capnp::schema::Brand;
 		auto proto = self.getProto();
@@ -343,7 +343,7 @@ void bindType() {
 		if(proto.isStruct()) {
 			auto asStruct = self.asStruct();
 	
-			for(StructSchema::Field field : asStruct.getFields()) {
+			for(capnp::StructSchema::Field field : asStruct.getFields()) {
 				if(!field.getProto().isGroup())
 					continue;
 				
@@ -360,10 +360,10 @@ void bindType() {
 				continue;
 			
 			// Load type from default loader
-			defaultLoader.capnpLoader.get(nestedNode.getId(), Brand::Reader, self);
+			defaultLoader.capnpLoader.get(nestedNode.getId(), Brand::Reader(), self);
 		}
 		
-		throw py::AttributeError();
+		throw py::attribute_error();
 	});
 	schema.def("__dir__", [](capnp::Schema& self) {
 		py::list result;
@@ -378,7 +378,7 @@ void bindType() {
 			result.append("Pipeline");
 			result.append("newMessage");
 	
-			for(StructSchema::Field field : asStruct.getFields()) {
+			for(capnp::StructSchema::Field field : asStruct.getFields()) {
 				if(!field.getProto().isGroup())
 					continue;
 				
@@ -417,7 +417,7 @@ void bindType() {
 				bindings.add(nullptr);
 			} else {
 				py::detail::type_caster<capnp::Type> asType;
-				KJ_REQUIRE(asType.load(key), "Specialization parameters must be a type or tuple of types");
+				KJ_REQUIRE(asType.load(key, false), "Specialization parameters must be a type or tuple of types");
 				bindings.add((capnp::Type) asType);
 			}
 		}
@@ -430,7 +430,7 @@ void bindType() {
 			if(scope.getScopeId() != self.getProto().getId())
 				continue;
 			
-			auto bindingsOut = scope.initBindings(bindings.size());
+			auto bindingsOut = scope.initBind(bindings.size());
 			for(auto i : kj::indices(bindingsOut)) {
 				auto out = bindingsOut[i];
 				KJ_IF_MAYBE(pBinding, bindings[i]) {
