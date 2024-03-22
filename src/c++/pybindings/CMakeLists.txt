@@ -17,6 +17,7 @@ if(FSC_WITH_PYTHON)
 		async.cpp
 		loader.cpp
 		loader-parse.cpp
+		loader-make-types.cpp
 		data.cpp
 		devices.cpp
 		

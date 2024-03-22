@@ -34,16 +34,23 @@ namespace fscpy {
 		kj::Tuple<kj::StringPtr, kj::StringTree> qualName(capnp::Schema);
 		kj::Tuple<kj::StringPtr, kj::StringTree> qualName(capnp::InterfaceSchema::Method);
 		
-		py::type builderType(uint64_t);
-		py::type readerType(uint64_t);
-		py::type pipelineType(uint64_t);
-		py::type clientType(uint64_t);
+		py::type builderType(capnp::Type);
+		py::type readerType(capnp::Type);
+		py::type pipelineType(capnp::StructSchema);
+		py::type clientType(capnp::InterfaceSchema);
 	
 	private:
-		kj::HashMap<uint64_t, py::type> builderTypes;
-		kj::HashMap<uint64_t, py::type> readerTypes;
-		kj::HashMap<uint64_t, py::type> pipelineTypes;
-		kj::HashMap<uint64_t, py::type> clientTypes;
+		kj::HashMap<capnp::Type, py::type> builderTypes;
+		kj::HashMap<capnp::Type, py::type> readerTypes;
+		kj::HashMap<capnp::StructSchema, py::type> pipelineTypes;
+		kj::HashMap<capnp::InterfaceSchema, py::type> clientTypes;
+		
+		py::type makeBuilderType(capnp::Type);
+		py::type makeBuilderType(capnp::StructSchema);
+		py::type makeReaderType(capnp::Type);
+		py::type makeReaderType(capnp::StructSchema);
+		py::type makePipelineType(capnp::StructSchema);
+		py::type makeClientType(capnp::InterfaceSchema);
 	};
 	
 	extern Loader defaultLoader;

@@ -308,6 +308,18 @@ struct MethodDict {
 	}
 };
 
+kj::String asRepr(kj::StringPtr moduleName, kj::StringTree qualName) {
+	return kj::str(moduleName, ".", mv(qualName));
+}
+
+py::type builderFor(capnp::Type type) {
+	return defaultLoader.builderType(type);
+}
+
+py::type readerFor(capnp::Type type) {
+	return defaultLoader.readerType(type);
+}
+
 void bindType() {
 	ClassBinding<capnp::Type>("Type")
 		.def("toProto", [](capnp::Type& t) {
@@ -332,9 +344,17 @@ void bindType() {
 		.def("interpret", [](capnp::Type& t) -> capnp::Type {
 			return t;
 		})
+		.def("__repr__", [](capnp::Type& t) -> kj::String {
+			return kj::apply(asRepr, defaultLoader.qualName(t));
+		})
+		.def_property_readonly("Builder", &builderFor)
+		.def_property_readonly("Reader", &readerFor)
 	;
 	
 	ClassBinding<capnp::Schema> schema("Schema");
+	schema.def("__repr__", [](capnp::Schema& s) -> kj::String {
+		return kj::apply(asRepr, defaultLoader.qualName(s));
+	});
 	schema.def("__getattr__", [](capnp::Schema& self, kj::StringPtr name) -> capnp::Type {
 		using Brand = capnp::schema::Brand;
 		auto proto = self.getProto();
@@ -463,11 +483,20 @@ void bindType() {
 			}
 			
 			return DynamicStructBuilder(mv(msg), builder);
-		});
+		})
+		.def_property_readonly("Builder", &builderFor)
+		.def_property_readonly("Reader", &readerFor)
+		.def_property_readonly("Pipeline", [](capnp::StructSchema& schema) {
+			return defaultLoader.pipelineType(schema);
+		})
 	;
+	
 	ClassBinding<capnp::InterfaceSchema, capnp::Schema>("InterfaceSchema")
 		.def_property_readonly("methods", [](capnp::InterfaceSchema& self) {
 			return MethodDict(self);
+		})
+		.def_property_readonly("Client", [](capnp::InterfaceSchema& schema) {
+			return defaultLoader.clientType(schema);
 		})
 	;
 	

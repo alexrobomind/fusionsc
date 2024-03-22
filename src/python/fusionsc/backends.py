@@ -101,6 +101,6 @@ def alwaysUseBackend(newBackend):
 	"""
 	_currentBackend.set((_threadId(), newBackend))
 
-@asyncFunction
+@asnc.asyncFunction
 async def backendInfo():
 	return await activeBackend().getInfo()
