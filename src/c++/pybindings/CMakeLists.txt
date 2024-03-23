@@ -18,6 +18,7 @@ if(FSC_WITH_PYTHON)
 		loader.cpp
 		loader-parse.cpp
 		loader-make-types.cpp
+		loader-interface-method.cpp
 		data.cpp
 		devices.cpp
 		

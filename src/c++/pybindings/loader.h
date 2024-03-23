@@ -38,10 +38,14 @@ namespace fscpy {
 		py::type readerType(capnp::Type);
 		py::type pipelineType(capnp::StructSchema);
 		py::type clientType(capnp::InterfaceSchema);
+		py::type commonType(capnp::Type);
+		
+		py::object makeInterfaceMethod(capnp::InterfaceSchema::Method);
 	
 	private:
 		kj::HashMap<capnp::Type, py::type> builderTypes;
 		kj::HashMap<capnp::Type, py::type> readerTypes;
+		kj::HashMap<capnp::Type, py::type> commonTypes;
 		kj::HashMap<capnp::StructSchema, py::type> pipelineTypes;
 		kj::HashMap<capnp::InterfaceSchema, py::type> clientTypes;
 		
@@ -85,4 +89,7 @@ namespace fscpy {
 	}
 	
 	void parseSchema(py::object anchor, kj::StringPtr path, py::object target, py::dict roots);
+	
+	//! Returns a python-safe name equivalent for the input name
+	kj::String memberName(kj::StringPtr);
 }
