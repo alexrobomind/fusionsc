@@ -793,35 +793,56 @@ kj::Tuple<kj::StringPtr, kj::StringTree> fscpy::Loader::qualName(capnp::Type typ
 kj::Tuple<kj::StringPtr, kj::StringTree> fscpy::Loader::qualName(capnp::Schema schema) {
 	auto result = kj::strTree(sanitizedStructName(schema.getUnqualifiedName()));
 	
-	auto bindings = schema.getBrandArgumentsAtScope(schema.getProto().getId());
-	if(bindings.size() != 0) {
-		auto bindingNames = kj::heapArrayBuilder<kj::StringTree>(bindings.size());
-		
-		auto addBindingName = [&](kj::StringPtr moduleName, kj::StringTree name) {
-			bindingNames.add(kj::strTree(moduleName, ".", mv(name)));
-		};
-		
-		for(capnp::Type binding : bindings) {
-			kj::apply(addBindingName, qualName(binding));
+	if(schema.isBranded()) {
+		auto bindings = schema.getBrandArgumentsAtScope(schema.getProto().getId());
+		if(bindings.size() != 0) {
+			auto bindingNames = kj::heapArrayBuilder<kj::StringTree>(bindings.size());
+			
+			auto addBindingName = [&](kj::StringPtr moduleName, kj::StringTree name) {
+				bindingNames.add(kj::strTree(moduleName, ".", mv(name)));
+			};
+			
+			for(capnp::Type binding : bindings) {
+				kj::apply(addBindingName, qualName(binding));
+			}
+			
+			result = kj::strTree(mv(result), "[", kj::StringTree(bindingNames.finish(), ","), "]");
 		}
-		
-		result = kj::strTree(mv(result), "[", kj::StringTree(bindingNames.finish(), ","), "]");
-	}
+	} 
 	
 	// Check if root schema
 	KJ_IF_MAYBE(pModuleName, rootModules.find(schema.getProto().getId())) {
 		return kj::tuple(pModuleName -> asPtr(), mv(result));
 	}
 	
-	// Check parent schema
-	KJ_IF_MAYBE(pParent, capnpLoader.tryGet(schema.getProto().getScopeId())) {
-		auto parentResult = qualName(*pParent);
+	auto scopeId = schema.getProto().getScopeId();
+	if(scopeId != 0) {
+		auto parent = capnpLoader.get(scopeId, capnp::schema::Brand::Reader(), schema);
+		auto parentResult = qualName(parent);
 		result = kj::strTree(mv(kj::get<1>(parentResult)), ".", mv(result));
 		
 		return kj::tuple(kj::get<0>(parentResult), mv(result));
+	} else {
+		// Check if result type
+		KJ_IF_MAYBE(pEntry, resultOfMethod.find(schema.getProto().getId())) {
+			auto parentInterface = capnpLoader.get(kj::get<0>(*pEntry), capnp::schema::Brand::Reader(), schema).asInterface();
+			auto method = parentInterface.getMethods()[kj::get<1>(*pEntry)];
+			auto parentResult = qualName(parentInterface);
+			
+			return kj::tuple(kj::get<0>(parentResult), kj::strTree(mv(kj::get<1>(parentResult)), ".methods['", method.getProto().getName(), "'].Results"));
+		}
+		
+		// Check if param type
+		KJ_IF_MAYBE(pEntry, paramOfMethod.find(schema.getProto().getId())) {
+			auto parentInterface = capnpLoader.get(kj::get<0>(*pEntry), capnp::schema::Brand::Reader(), schema).asInterface();
+			auto method = parentInterface.getMethods()[kj::get<1>(*pEntry)];
+			auto parentResult = qualName(parentInterface);
+			
+			return kj::tuple(kj::get<0>(parentResult), kj::strTree(mv(kj::get<1>(parentResult)), ".methods['", method.getProto().getName(), "'].Params"));
+		}
 	}
 	
-	KJ_FAIL_REQUIRE("No root schema could be found");
+	KJ_FAIL_REQUIRE("No root schema could be found, but node has no parent", schema, schema.getProto().getScopeId());
 }
 
 kj::Tuple<kj::StringPtr, kj::StringTree> fscpy::Loader::qualName(capnp::InterfaceSchema::Method method) {
@@ -830,26 +851,84 @@ kj::Tuple<kj::StringPtr, kj::StringTree> fscpy::Loader::qualName(capnp::Interfac
 	return kj::tuple(kj::get<0>(interfaceName), kj::strTree(mv(kj::get<1>(interfaceName)), ".", method.getProto().getName()));
 }
 
+kj::String fscpy::Loader::fullName(capnp::Type t) {
+	auto qn = qualName(t);
+	return kj::str(kj::get<0>(qn), ".", kj::get<1>(qn));
+}
+
 bool fscpy::Loader::importNode(uint64_t nodeID, py::module scope) {		
-	if(rootModules.find(nodeID) == nullptr) {
-		rootModules.insert(
-			nodeID,
-			kj::heapString(py::cast<kj::StringPtr>(scope.attr("__name__")))
-		);
-	}
-	
-	auto obj = interpretSchema(*this, nodeID, scope);
-	auto schema = capnpLoader.get(nodeID);
-	
-	if(!obj.is_none()) {
-		if(py::hasattr(scope, schema.getUnqualifiedName().cStr()))
-			return false;
+	kj::Function<void(capnp::Schema)> handleSchema = [&](capnp::Schema schema) {
+		const uint64_t nodeID = schema.getProto().getId();
 		
-		scope.add_object(schema.getUnqualifiedName().cStr(), obj);
-		return true;
-	}
+		if(rootModules.find(nodeID) == nullptr) {
+			rootModules.insert(
+				nodeID,
+				kj::heapString(py::cast<kj::StringPtr>(scope.attr("__name__")))
+			);
+		}
+		
+		auto name = memberName(schema.getUnqualifiedName());
+		
+		switch(schema.getProto().which()) {
+			case capnp::schema::Node::STRUCT:
+			case capnp::schema::Node::INTERFACE:
+			case capnp::schema::Node::ENUM: {
+				auto obj = py::cast(schema);
+				
+				if(py::hasattr(scope, name.cStr()))
+					return;
+				
+				scope.add_object(name.cStr(), obj);
+				break;
+			}
+			case capnp::schema::Node::FILE: {
+				// Interpret child objects
+				for(auto nestedNode : schema.getProto().getNestedNodes()) {
+					auto childSchema = capnpLoader.get(nestedNode.getId());
+					handleSchema(childSchema);
+				}
+				break;
+			}
+			case capnp::schema::Node::CONST:
+				scope.add_object(name.cStr(), py::cast(new ConstantValue(schema.asConst())));
+				break;
+			default: break;
+		}
+	};
 	
-	return false;
+	handleSchema(capnpLoader.get(nodeID));
+	
+	// Recursively register all methods
+	
+	kj::Function<void(capnp::Schema)> registerMethods = [&](capnp::Schema schema) {
+		switch(schema.getProto().which()) {
+			case capnp::schema::Node::INTERFACE: {
+				auto methods = schema.getProto().getInterface().getMethods();
+				
+				for(auto i : kj::indices(methods)) {
+					auto paramType = capnpLoader.get(methods[i].getParamStructType());
+					if(paramType.getProto().getScopeId() == 0)
+						paramOfMethod.insert(methods[i].getParamStructType(), kj::tuple(schema.getProto().getId(), i));
+					
+					auto resultType = capnpLoader.get(methods[i].getResultStructType());
+					if(resultType.getProto().getScopeId() == 0)
+						resultOfMethod.insert(methods[i].getResultStructType(), kj::tuple(schema.getProto().getId(), i));
+				}
+				break;
+			}
+			
+			default: break;
+		}
+		
+		for(auto nestedNode : schema.getProto().getNestedNodes()) {
+			auto childSchema = capnpLoader.get(nestedNode.getId());
+			registerMethods(childSchema);
+		}
+	};
+	
+	registerMethods(capnpLoader.get(nodeID));
+	
+	return true;
 }
 
 bool fscpy::Loader::importNodeIfRoot(uint64_t nodeID, py::module scope) {

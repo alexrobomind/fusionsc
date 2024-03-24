@@ -61,7 +61,7 @@ struct ClassBinding : public py::class_<T, Params...> {
 	
 	template<typename T2 = T>
 	ClassBinding& withSetitem() {
-		this -> def("__setitem__", &T2::get);
+		this -> def("__setitem__", &T2::set);
 		this -> def("__delitem__", &T2::init);
 		return *this;
 	}
@@ -86,6 +86,12 @@ struct ClassBinding : public py::class_<T, Params...> {
 	}
 };
 
+struct ListPrototype {
+	capnp::Type getitem(capnp::Type argument) {
+		return argument.wrapInList();
+	}
+};
+
 void bindRootClasses() {
 	ClassBinding<O>("Object")
 		.def_property_readonly("type_", &O::getType)
@@ -96,7 +102,7 @@ void bindRootClasses() {
 }
 
 void bindBlobClasses() {
-	ClassBinding<DataCommon, O>("Data");
+	ClassBinding<DataCommon, O>("DataReaderOrBuilder");
 	ClassBinding<DataReader, DataCommon, R>("DataReader", py::buffer_protocol())
 		.withCommon()
 		.withBuffer()
@@ -106,7 +112,7 @@ void bindBlobClasses() {
 		.withBuffer()
 	;
 	
-	ClassBinding<TextCommon, O>("Text");
+	ClassBinding<TextCommon, O>("TextReaderOrBuilder");
 	ClassBinding<TextReader, TextCommon, R>("TextReader")
 		.withCommon()
 	;
@@ -147,7 +153,7 @@ void bindListClasses() {
 	using LB = DynamicListBuilder;
 	using LR = DynamicListReader;
 	
-	ClassBinding<L, O>("List");
+	ClassBinding<L, O>("ListCommon");
 	ClassBinding<LB, L, B>("ListBuilder", py::buffer_protocol())
 		.withListInterface()
 		.def("init", &LB::initList)
@@ -158,6 +164,11 @@ void bindListClasses() {
 	;
 	
 	py::implicitly_convertible<LB, LR>();
+	
+	ClassBinding<ListPrototype>("_ListPrototype")
+		.def("__getitem__", &ListPrototype::getitem)
+	;
+	capnpModule.add_object("List", py::cast(new ListPrototype()));
 }
 
 template<typename T, typename... Params>
@@ -355,7 +366,7 @@ void bindType() {
 	schema.def("__repr__", [](capnp::Schema& s) -> kj::String {
 		return kj::apply(asRepr, defaultLoader.qualName(s));
 	});
-	schema.def("__getattr__", [](capnp::Schema& self, kj::StringPtr name) -> capnp::Type {
+	schema.def("__getattr__", [](capnp::Schema& self, kj::StringPtr name) -> capnp::Schema {
 		using Brand = capnp::schema::Brand;
 		auto proto = self.getProto();
 		
@@ -370,7 +381,7 @@ void bindType() {
 				if(field.getProto().getName() != name)
 					continue;
 				
-				return field.getType();
+				return field.getType().asStruct();
 			}
 		}
 		
@@ -380,7 +391,7 @@ void bindType() {
 				continue;
 			
 			// Load type from default loader
-			defaultLoader.capnpLoader.get(nestedNode.getId(), Brand::Reader(), self);
+			return defaultLoader.capnpLoader.get(nestedNode.getId(), Brand::Reader(), self);
 		}
 		
 		throw py::attribute_error();
@@ -411,6 +422,8 @@ void bindType() {
 			result.append("Client");
 			result.append("Server");
 			result.append("methods");
+			result.append("newDeferred");
+			result.append("newDisconnected");
 		}
 		
 		// Look up child ID
@@ -423,7 +436,7 @@ void bindType() {
 	schema.def("__getitem__", [](capnp::Schema& self, py::object key) {		
 		kj::Vector<Maybe<capnp::Type>> bindings;
 		
-		if(py::isinstance<py::sequence>(key)) {
+		if(py::isinstance<py::tuple>(key) || py::isinstance<py::list>(key)) {
 			auto seq = py::reinterpret_borrow<py::sequence>(key);
 			for(auto binding : seq) {
 				if(binding.is_none()) {
@@ -432,7 +445,7 @@ void bindType() {
 					bindings.add(py::cast<capnp::Type>(binding));
 				}
 			}
-		} else {
+		} else {		
 			if(key.is_none()) {
 				bindings.add(nullptr);
 			} else {
@@ -460,32 +473,54 @@ void bindType() {
 				}
 			}
 				
-			goto done;
+			return defaultLoader.capnpLoader.get(self.getProto().getId(), brand);
 		}
-		KJ_FAIL_REQUIRE("The requested type can not be specialized");
 		
-		done:
+		Temporary<Brand> brandEx;
+		auto scopes = brandEx.initScopes(brand.getScopes().size() + 1);
+		for(auto i : kj::indices(brand.getScopes()))
+			scopes.setWithCaveats(i, brand.getScopes()[i]);
 		
-		return defaultLoader.capnpLoader.get(self.getProto().getId(), brand);
+		auto scope = scopes[scopes.size() - 1];
+		scope.setScopeId(self.getProto().getId());
+		auto bindingsOut = scope.initBind(bindings.size());
+		for(auto i : kj::indices(bindingsOut)) {
+			auto out = bindingsOut[i];
+			KJ_IF_MAYBE(pBinding, bindings[i]) {
+				fsc::extractType(*pBinding, out.initType());
+			} else {
+				out.setUnbound();
+			}
+		}
+				
+		return defaultLoader.capnpLoader.get(self.getProto().getId(), brandEx);
 	});
 	
 	ClassBinding<capnp::StructSchema, capnp::Schema>("StructSchema")
-		.def("newMessage", [](capnp::StructSchema& self, py::object copyFrom, size_t initialSize) {
-			auto msg = kj::heap<capnp::MallocMessageBuilder>(initialSize);
-			
-			capnp::DynamicStruct::Builder builder;
-			if(copyFrom.is_none()) {
-				builder = msg->initRoot<capnp::DynamicStruct>(self);
-			} else {
-				// Let's try using our assignment logic
-				assign(*msg, self, copyFrom);
-				builder = msg->getRoot<capnp::DynamicStruct>(self);
-			}
-			
-			return DynamicStructBuilder(mv(msg), builder);
+		.def("newMessage",
+			[](capnp::StructSchema& self, py::object copyFrom, size_t initialSize) {
+				auto msg = kj::heap<capnp::MallocMessageBuilder>(initialSize);
+				
+				capnp::DynamicStruct::Builder builder;
+				if(copyFrom.is_none()) {
+					builder = msg->initRoot<capnp::DynamicStruct>(self);
+				} else {
+					// Let's try using our assignment logic
+					assign(*msg, self, copyFrom);
+					builder = msg->getRoot<capnp::DynamicStruct>(self);
+				}
+				
+				return DynamicStructBuilder(mv(msg), builder);
+			},
+			py::arg("copyFrom") = py::none(),
+			py::arg("initialSize") = 1024
+		)
+		.def_property_readonly("Builder", [](capnp::StructSchema& self) {
+			return builderFor(self);
 		})
-		.def_property_readonly("Builder", &builderFor)
-		.def_property_readonly("Reader", &readerFor)
+		.def_property_readonly("Reader", [](capnp::StructSchema& self) {
+			return readerFor(self);
+		})
 		.def_property_readonly("Pipeline", [](capnp::StructSchema& schema) {
 			return defaultLoader.pipelineType(schema);
 		})
@@ -504,11 +539,45 @@ void bindType() {
 		.def_property_readonly("elementType", [](capnp::ListSchema& self) {
 			return self.getElementType();
 		})
+		.def_property_readonly("Builder", [](capnp::ListSchema& self) {
+			return builderFor(self);
+		})
+		.def_property_readonly("Reader", [](capnp::ListSchema& self) {
+			return readerFor(self);
+		})
 	;
 	
-	py::implicitly_convertible<capnp::StructSchema, capnp::Type>();
+	ClassBinding<capnp::EnumSchema, capnp::Schema>("EnumSchema")
+		.def("get", [](capnp::EnumSchema& schema, DynamicValueReader from) {
+			if(from.getType() == capnp::DynamicValue::ENUM) {
+				auto enumInput = from.as<capnp::DynamicEnum>();
+				KJ_REQUIRE(enumInput.getSchema().getProto().getId() == schema.getProto().getId(), "Incorrect enum type");
+				return capnp::DynamicEnum(schema, enumInput.getRaw());
+			}
+			
+			if(from.getType() == capnp::DynamicValue::TEXT) {
+				return capnp::DynamicEnum(schema.getEnumerantByName(from.as<capnp::Text>()));
+			}
+			
+			if(from.getType() == capnp::DynamicValue::UINT || from.getType() == capnp::DynamicValue::INT) {
+				return capnp::DynamicEnum(schema, from.as<uint16_t>());
+			}
+			
+			// KJ_DBG(from, from.getType());
+			throw std::invalid_argument("Input must be an enum value, a string, or an integer");
+		})
+		.def_property_readonly("values", [](capnp::EnumSchema& schema) {
+			py::list vals;
+			for(auto enumerant : schema.getEnumerants()) {
+				vals.append(py::cast(EnumInterface(enumerant)));
+			}
+			return vals;
+		})
+	;
+	
+	/*py::implicitly_convertible<capnp::StructSchema, capnp::Type>();
 	py::implicitly_convertible<capnp::ListSchema, capnp::Type>();
-	py::implicitly_convertible<capnp::InterfaceSchema, capnp::Type>();
+	py::implicitly_convertible<capnp::InterfaceSchema, capnp::Type>();*/
 }
 
 }
@@ -552,6 +621,24 @@ void initCapnp(py::module_& m) {
 	bindType();
 	bindConstants();
 	bindUnpicklers();
+	
+	#define BIND_BUILTIN_TYPE(enumVal, name) \
+		capnpModule.add_object(#name, py::cast(capnp::Type(capnp::schema::Type::Which::enumVal)));
+	
+	BIND_BUILTIN_TYPE(VOID, Void)
+	BIND_BUILTIN_TYPE(BOOL, Bool)
+	BIND_BUILTIN_TYPE(TEXT, Text)
+	BIND_BUILTIN_TYPE(DATA, Data)
+	BIND_BUILTIN_TYPE(UINT8, UInt8)
+	BIND_BUILTIN_TYPE(UINT16, UInt16)
+	BIND_BUILTIN_TYPE(UINT32, UInt32)
+	BIND_BUILTIN_TYPE(UINT64, UInt64)
+	BIND_BUILTIN_TYPE(INT8, Int8)
+	BIND_BUILTIN_TYPE(INT16, Int16)
+	BIND_BUILTIN_TYPE(INT32, Int32)
+	BIND_BUILTIN_TYPE(INT64, Int64)
+	BIND_BUILTIN_TYPE(FLOAT32, Float32)
+	BIND_BUILTIN_TYPE(FLOAT64, Float64)
 	//bindAssignable();
 	
 	capnpModule = py::module();

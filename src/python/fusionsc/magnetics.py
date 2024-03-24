@@ -14,9 +14,7 @@ from .wrappers import unstableApi
 import numpy as np
 import copy
 
-from typing import Optional
-
-from collections.abc import Sequence
+from typing import Optional, Sequence
 
 def _calculator():
 	return backends.activeBackend().newFieldCalculator().pipeline.service

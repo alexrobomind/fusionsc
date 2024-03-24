@@ -18,7 +18,7 @@ class Object:
 
 # Types of objects that can be stored in a warehouse
 Storable = Union[
-	service.DataRef,
+	service.DataRef.Client,
 	wrappers.RefWrapper,
 	capnp.StructReader,
 	capnp.DataReader,

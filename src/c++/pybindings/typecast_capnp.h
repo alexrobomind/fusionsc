@@ -36,16 +36,16 @@ namespace fscpy {
 		static_assert(sizeof(T) == 0, "No polymorphic dispatch specified for this class");
 	};
 	
-	#define FSCPY_DEF_DISPATCH(T, attr) \
+	#define FSCPY_DEF_DISPATCH(T, func) \
 		template<> \
 		struct PolymorphicDispatchTraits<T> { \
-			static const inline kj::StringPtr attributeName = attr; \
+			static py::type get(T& val) { return defaultLoader.func(val.getSchema()); } \
 		};\
 	
-	FSCPY_DEF_DISPATCH(DynamicCapabilityClient, "Client");
-	FSCPY_DEF_DISPATCH(DynamicStructBuilder, "Builder");
-	FSCPY_DEF_DISPATCH(DynamicStructReader, "Reader");
-	FSCPY_DEF_DISPATCH(DynamicStructPipeline, "Pipeline");
+	FSCPY_DEF_DISPATCH(DynamicCapabilityClient, clientType);
+	FSCPY_DEF_DISPATCH(DynamicStructBuilder, builderType);
+	FSCPY_DEF_DISPATCH(DynamicStructReader, readerType);
+	FSCPY_DEF_DISPATCH(DynamicStructPipeline, pipelineType);
 	
 	inline void checkSame(capnp::Schema expected, capnp::Schema provided) {
 		if(provided == expected)
@@ -80,19 +80,9 @@ namespace pybind11 { namespace detail {
 		PolymorphicDispatchCaster(PolymorphicDispatchCaster&&) = default;
 		
 		static handle cast(T src, return_value_policy policy, handle parent) {
-			auto typeId = src.getSchema().getProto().getId();
-			
 			object baseInstance = reinterpret_steal<object>(type_caster_base<T>::cast(kj::mv(src), policy, parent));
-			
-			// Look for a derived class
-			if(globalClasses->contains(typeId)) {
-				auto derivedClass = (*globalClasses)[py::cast(typeId)].attr(py::cast(fscpy::PolymorphicDispatchTraits<T>::attributeName));
-				
-				object derivedInstance = derivedClass(baseInstance);
-				return derivedInstance.inc_ref();
-			}
-			
-			return baseInstance.inc_ref();
+			type derivedClass = ::fscpy::PolymorphicDispatchTraits<T>::get(src);
+			return derivedClass(baseInstance).inc_ref();
 		}
 	};
 	
@@ -134,7 +124,9 @@ namespace pybind11 { namespace detail {
 	// classes for capnp::Type objects
 	
 	template<>
-	struct type_caster<capnp::Type> : public type_caster_base<capnp::Type> {		
+	struct type_caster<capnp::Type> /*: public type_caster_base<capnp::Type>*/ {	
+		
+		PYBIND11_TYPE_CASTER(capnp::Type, const_name("fusionsc.capnp.Type"));	
 		static handle cast(capnp::Type type, return_value_policy policy, handle parent) {
 			if(type.isStruct()) {
 				return type_caster<capnp::StructSchema>::cast(type.asStruct(), policy, parent);
@@ -153,6 +145,30 @@ namespace pybind11 { namespace detail {
 			}
 			
 			return type_caster_base<capnp::Type>::cast(type, policy, parent);
+		}
+		
+		bool load(py::handle src, bool convert) {
+			#define FSCPY_TRY_CAST(T) {\
+				type_caster<T> caster; \
+				if(caster.load(src, convert)) { \
+					value = caster.operator T&(); \
+					return true; \
+				} \
+			}
+			FSCPY_TRY_CAST(capnp::StructSchema);
+			FSCPY_TRY_CAST(capnp::InterfaceSchema);
+			FSCPY_TRY_CAST(capnp::EnumSchema);
+			FSCPY_TRY_CAST(capnp::ListSchema);
+			
+			#undef FSCPY_TRY_CAST
+			
+			type_caster_base<capnp::Type> baseCaster;
+			if(baseCaster.load(src, convert)) {
+				value = baseCaster.operator capnp::Type&();
+				return true;
+			}
+			
+			return false;
 		}
 	};
 	
