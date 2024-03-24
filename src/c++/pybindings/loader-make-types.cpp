@@ -204,7 +204,6 @@ namespace {
 		py::dict attributes;
 		attributes["__get__"] = py::cpp_function(
 			[field, doc = kj::heapString(docString)](py::object descriptorSelf, py::object objSelf, py::object objType) -> py::object {
-				py::print(descriptorSelf, objSelf, objType);
 				if(objSelf.is_none())
 					return py::cast(doc.cStr());
 				
@@ -350,16 +349,29 @@ py::type Loader::makeBuilderType(capnp::StructSchema schema) {
 		py::options opts;
 		opts.disable_function_signatures();
 		
-		attributes[initializerName.cStr()] = methodDescriptor(py::cpp_function(
-			[field](DynamicStructBuilder& builder, size_t n) {
-				return builder.initList(field.getProto().getName(), n);
-			},
-			kj::str(
-				initializerName,
-				"(self: fusionsc.capnp.StructBuilder, size: n) -> ",
-				fullName(field.getType())
-			).cStr()
-		));
+		if(type.isList() || type.isData() || type.isText()) {
+			attributes[initializerName.cStr()] = methodDescriptor(py::cpp_function(
+				[field](DynamicStructBuilder& builder, size_t n) {
+					return builder.initList(field.getProto().getName(), n);
+				},
+				kj::str(
+					initializerName,
+					"(self: fusionsc.capnp.StructBuilder, size: n) -> ",
+					fullName(field.getType())
+				).cStr()
+			));
+		} else {
+			attributes[initializerName.cStr()] = methodDescriptor(py::cpp_function(
+				[field](DynamicStructBuilder& builder) {
+					return builder.init(field.getProto().getName());
+				},
+				kj::str(
+					initializerName,
+					"(self: fusionsc.capnp.StructBuilder) -> ",
+					fullName(field.getType())
+				).cStr()
+			));
+		}
 	};
 	
 	for(StructSchema::Field field : schema.getFields()) {

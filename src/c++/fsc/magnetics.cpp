@@ -358,8 +358,6 @@ struct CalculationSession : public FieldCalculator::Server {
 		const size_t nPhi = phiVals.size();
 		const size_t nTheta = thetaVals.size();
 		
-		KJ_DBG(nPhi, nTheta);
-		
 		// Read symmetric surface basis
 		
 		Eigen::Tensor<double, 3> rCos;
@@ -397,8 +395,6 @@ struct CalculationSession : public FieldCalculator::Server {
 			rSin.setZero();
 			zCos.setZero();
 		}
-		
-		KJ_DBG(nSurfs);
 		
 		// Calculate points and derivatives on all surfaces
 		
@@ -441,8 +437,6 @@ struct CalculationSession : public FieldCalculator::Server {
 			}
 		}
 		
-		KJ_DBG("Computed");
-		
 		// Take apart autodiff scalar into elements
 		
 		Eigen::Tensor<double, 4> val(nTheta, nPhi, nSurfs, 3);
@@ -474,8 +468,6 @@ struct CalculationSession : public FieldCalculator::Server {
 		writeAdjusted(val, results.initPoints());
 		writeAdjusted(ddPhi, results.initPhiDerivatives());
 		writeAdjusted(ddTheta, results.initThetaDerivatives());
-		
-		KJ_DBG("Saved");
 		
 		return READY_NOW;
 	}
