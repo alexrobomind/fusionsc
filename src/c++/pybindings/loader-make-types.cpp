@@ -57,7 +57,15 @@ py::type Loader::commonType(capnp::Type type) {
 		case Which::DATA: return py::type::of<DataCommon>();
 		case Which::STRUCT: break;
 		case Which::LIST: return py::type::of<DynamicListCommon>();
-		case Which::ANY_POINTER: return py::type::of<AnyCommon>();
+		case Which::ANY_POINTER: {
+			using Which = capnp::schema::Type::AnyPointer::Unconstrained::Which;
+			switch(type.whichAnyPointerKind()) {
+				case Which::ANY_KIND: return py::type::of<AnyCommon>();
+				case Which::CAPABILITY: return py::type::of<DynamicCapabilityClient>();
+				case Which::STRUCT: return py::type::of<DynamicStructCommon>();
+				case Which::LIST: return py::type::of<DynamicListCommon>();
+			}
+		}
 		
 		case Which::VOID: return py::type::of(py::none());
 		case Which::BOOL: return py::type::of(py::bool_(true));
@@ -88,10 +96,15 @@ py::type Loader::commonType(capnp::Type type) {
 	auto qn = qualName(type);
 	
 	py::dict attributes;
+	py::tuple bases = py::make_tuple();
+	if(type.asStruct().isBranded()) {
+		bases = py::make_tuple(commonType(type.asStruct().getGeneric().asStruct()));
+	}
+	
 	attributes["__qualname__"] = kj::get<1>(qn).flatten().cStr();
 	attributes["__module__"] = kj::get<0>(qn).cStr();
 	
-	py::type cls = (*baseMetaType)("ReaderOrBuilder", py::make_tuple(), attributes);
+	py::type cls = (*baseMetaType)("ReaderOrBuilder", bases, attributes);
 	return cls;
 }
 
@@ -103,7 +116,14 @@ py::type Loader::makeBuilderType(capnp::Type type) {
 		case Which::DATA: return py::type::of<DataBuilder>();
 		case Which::STRUCT: return makeBuilderType(type.asStruct());
 		case Which::LIST: return makeBuilderType(type.asList());
-		case Which::ANY_POINTER: return py::type::of<AnyBuilder>();
+		case Which::ANY_POINTER: 
+			using Which = capnp::schema::Type::AnyPointer::Unconstrained::Which;
+			switch(type.whichAnyPointerKind()) {
+				case Which::ANY_KIND: return py::type::of<AnyBuilder>();
+				case Which::CAPABILITY: return py::type::of<DynamicCapabilityClient>();
+				case Which::STRUCT: return py::type::of<DynamicStructBuilder>();
+				case Which::LIST: return py::type::of<DynamicListBuilder>();
+			}
 		
 		default: return commonType(type);
 	}
@@ -119,7 +139,14 @@ py::type Loader::makeReaderType(capnp::Type type) {
 		case Which::DATA: return py::type::of<DataReader>();
 		case Which::STRUCT: return makeReaderType(type.asStruct());
 		case Which::LIST: return makeReaderType(type.asList());
-		case Which::ANY_POINTER: return py::type::of<AnyReader>();
+		case Which::ANY_POINTER: 
+			using Which = capnp::schema::Type::AnyPointer::Unconstrained::Which;
+			switch(type.whichAnyPointerKind()) {
+				case Which::ANY_KIND: return py::type::of<AnyReader>();
+				case Which::CAPABILITY: return py::type::of<DynamicCapabilityClient>();
+				case Which::STRUCT: return py::type::of<DynamicStructReader>();
+				case Which::LIST: return py::type::of<DynamicListReader>();
+			}
 		
 		default: return commonType(type);
 	}
@@ -320,7 +347,7 @@ py::type Loader::makeReaderType(capnp::StructSchema schema) {
 		attributes[name.cStr()] = fieldDescriptor(*this, field, "Reader", docString);
 	}
 	
-	py::type baseClass = py::type::of<DynamicStructReader>();
+	py::type baseClass = schema.isBranded() ? readerType(schema.getGeneric().asStruct()) : py::type::of<DynamicStructReader>();
 	
 	return makeType(
 		*this,
@@ -405,7 +432,7 @@ py::type Loader::makeBuilderType(capnp::StructSchema schema) {
 		}
 	}
 	
-	py::type baseClass = py::type::of<DynamicStructBuilder>();
+	py::type baseClass = schema.isBranded() ? builderType(schema.getGeneric().asStruct()) : py::type::of<DynamicStructBuilder>();
 	
 	return makeType(
 		*this,
@@ -443,7 +470,7 @@ py::type Loader::makePipelineType(capnp::StructSchema schema) {
 		attributes[name.cStr()] = fieldDescriptor(*this, field, "Pipeline", docString);
 	}
 	
-	py::type baseClass = py::type::of<DynamicStructPipeline>();
+	py::type baseClass = schema.isBranded() ? pipelineType(schema.getGeneric().asStruct()) : py::type::of<DynamicStructPipeline>();
 	
 	return makeType(
 		*this,
@@ -468,6 +495,10 @@ py::type Loader::makeClientType(capnp::InterfaceSchema schema) {
 	for(auto baseType : schema.getSuperclasses()) {
 		auto id = baseType.getProto().getId();
 		basesList.append(clientType(baseType));
+	}
+	
+	if(schema.isBranded()) {
+		basesList.append(clientType(schema.getGeneric().asInterface()));
 	}
 	
 	if(basesList.size() == 0) {

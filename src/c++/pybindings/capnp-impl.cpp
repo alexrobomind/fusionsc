@@ -966,4 +966,86 @@ py::object FieldDescriptor::doc() {
 	return py::str(docString.cStr());
 }
 
+// ------------------------------------- Casts -----------------------------------------
+
+namespace {
+	template<typename T>
+	T castImpl(T builder, capnp::Type dstType) {
+		using Which = capnp::DynamicValue::Type;
+		using DV = capnp::DynamicValue;
+		
+		auto withMessage = [&](auto newVal) {
+			return T(shareMessage(builder), newVal);
+		};
+			
+		switch(builder.getType()) {
+			case DV::ANY_POINTER: {
+				auto asAny = builder.template as<capnp::AnyPointer>();
+				
+				if(dstType.isInterface()) {
+					return asAny.template getAs<capnp::DynamicCapability>(dstType.asInterface());
+				} else if(dstType.isStruct()) {
+					return withMessage(asAny.template getAs<capnp::DynamicStruct>(dstType.asStruct()));
+				} else if(dstType.isList()) {
+					return withMessage(asAny.template getAs<capnp::DynamicList>(dstType.asList()));
+				} else if(dstType.isText()) {
+					return withMessage(asAny.template getAs<capnp::Text>());
+				} else if(dstType.isData()) {
+					return withMessage(asAny.template getAs<capnp::Data>());
+				} else if(dstType.isAnyPointer()) {
+					return withMessage(asAny);
+				} else {
+					KJ_FAIL_REQUIRE("Can only cast AnyPointer types to interface, struct, list, or AnyPointer");
+				}
+			}
+			case DV::CAPABILITY: {
+				capnp::Capability::Client asCap = builder.template as<capnp::DynamicCapability>();
+				
+				if(dstType.isInterface()) {
+					return asCap.template castAs<capnp::DynamicCapability>(dstType.asInterface());
+				} else {
+					KJ_FAIL_REQUIRE("Can only cast capabilities to interface types");
+				}
+			}
+			case DV::STRUCT: {
+				auto asAny = builder.template as<capnp::DynamicStruct>().template as<capnp::AnyStruct>();
+				
+				if(dstType.isStruct()) {
+					return withMessage(asAny.template as<capnp::DynamicStruct>(dstType.asStruct()));
+				} else {
+					KJ_FAIL_REQUIRE("Can only cast structs to struct types");
+				}
+			}
+			case DV::LIST: {
+				KJ_FAIL_REQUIRE("Casting of list pointers not supported :(");
+			}
+			case DV::TEXT: {
+				auto asText = builder.template as<capnp::Text>();
+				
+				if(dstType.isText()) {
+					return withMessage(asText);
+				} else if(dstType.isData()) {
+					return withMessage(builder.template as<capnp::Data>());
+				} else {
+					KJ_FAIL_REQUIRE("Can only cast text to text or data");
+				}
+			}
+			case DV::DATA: {
+				KJ_REQUIRE(dstType.isData(), "Can only cast data to data");
+				return builder;
+			}
+			default: {
+				KJ_FAIL_REQUIRE("Can not cast specified type");
+			}
+		}
+	}
+}
+
+DynamicValueBuilder castBuilder(DynamicValueBuilder builder, capnp::Type dstType) {
+	return castImpl<DynamicValueBuilder>(builder, dstType);
+}
+
+DynamicValueReader castReader(DynamicValueReader reader, capnp::Type dstType) {
+	return castImpl<DynamicValueReader>(reader, dstType);
+}
 };

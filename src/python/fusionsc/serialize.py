@@ -223,11 +223,11 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 			builder.bigData = data.publish(obj)
 	
 	elif isinstance(obj, wrappers.RefWrapper):
-		builder.initRef().target = service.DataRef.castAs(obj.ref)
+		builder.initRef().target = obj.ref.castAs_(service.DataRef)
 		builder.ref.wrapped = True
 	
-	elif isinstance(obj, service.DataRef):
-		builder.initRef().target = service.DataRef.castAs(obj)
+	elif isinstance(obj, service.DataRef.Client):
+		builder.initRef().target = obj.ref.castAs_(service.DataRef)
 	
 	elif isinstance(obj, capnp.Struct):
 		ds = builder.initDynamicStruct()
@@ -407,7 +407,6 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 		}
 	
 	if which == "ref":
-		print(str(reader))
 		if reader.ref.wrapped:
 			return wrappers.RefWrapper(reader.ref.target)
 		else:
@@ -415,7 +414,7 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 	
 	if which == "dynamicStruct":
 		ds = reader.dynamicStruct
-		return ds.data.interpretAs(capnp.Type.fromProto(ds.schema))
+		return ds.data.castAs(capnp.Type.fromProto(ds.schema))
 	
 	if which == "uint64":
 		return reader.uint64

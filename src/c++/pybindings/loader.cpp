@@ -7,6 +7,7 @@
 #include <capnp/schema.h>
 #include <capnp/schema-loader.h>
 #include <capnp/any.h>
+#include <capnp/generated-header-support.h>
 
 #include <kj/string-tree.h>
 
@@ -791,6 +792,10 @@ kj::Tuple<kj::StringPtr, kj::StringTree> fscpy::Loader::qualName(capnp::Type typ
 }
 
 kj::Tuple<kj::StringPtr, kj::StringTree> fscpy::Loader::qualName(capnp::Schema schema) {
+	// Null capability schema
+	if(schema.getProto().getId() == capnp::typeId<capnp::Capability>()) {
+		return kj::tuple("fusionsc.capnp", kj::strTree("Capability"));
+	}
 	auto result = kj::strTree(sanitizedStructName(schema.getUnqualifiedName()));
 	
 	if(schema.isBranded()) {

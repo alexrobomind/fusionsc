@@ -50,7 +50,7 @@ async def connect(url : str, tunnel = None, ServiceType = service.RootService):
 	connection = (await networkInterface.connect(url)).connection
 	backend = await connection.getRemote()
 	
-	return ServiceType.castAs(backend.remote)
+	return backend.remote.castAs_(ServiceType)
 
 @asyncFunction
 async def serve(target, host = "0.0.0.0", port = None, tunnel = None):

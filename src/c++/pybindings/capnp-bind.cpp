@@ -106,18 +106,22 @@ void bindBlobClasses() {
 	ClassBinding<DataReader, DataCommon, R>("DataReader", py::buffer_protocol())
 		.withCommon()
 		.withBuffer()
+		.def("castAs", &castReader)
 	;
 	ClassBinding<DataBuilder, DataCommon, B>("DataBuilder", py::buffer_protocol())
 		.withCommon()
 		.withBuffer()
+		.def("castAs", &castBuilder)
 	;
 	
 	ClassBinding<TextCommon, O>("TextReaderOrBuilder");
 	ClassBinding<TextReader, TextCommon, R>("TextReader")
 		.withCommon()
+		.def("castAs", &castReader)
 	;
 	ClassBinding<TextBuilder, TextCommon, B>("TextBuilder")
 		.withCommon()
+		.def("castAs", &castBuilder)
 	;
 	
 	py::implicitly_convertible<DataBuilder, DataReader>();
@@ -128,10 +132,10 @@ void bindAnyClasses() {
 	using AR = AnyReader;
 	using AB = AnyBuilder;
 	
-	ClassBinding<AnyCommon>("AnyPointer");
+	ClassBinding<AnyCommon>("AnyCommon");
 	ClassBinding<AR, AnyCommon, R>("AnyReader")
 		.withCommon()
-		.def("interpretAs", &AR::interpretAs)
+		.def("castAs", &AR::interpretAs)
 	;
 	
 	ClassBinding<AB, AnyCommon, B>("AnyBuilder")
@@ -140,7 +144,7 @@ void bindAnyClasses() {
 		.def("set", &AB::setStruct)
 		.def("set", &AB::setCap)
 		.def("set", &AB::adopt)
-		.def("interpretAs", &AB::interpretAs)
+		.def("castAs", &AB::interpretAs)
 		.def("initAs", &AB::initBuilderAs, py::arg("type"), py::arg("size") = 0)
 		.def("setAs", &AB::assignAs)
 	;
@@ -206,6 +210,7 @@ void bindStructClasses() {
 	ClassBinding<SR, S, R> reader("StructReader", py::multiple_inheritance(), py::buffer_protocol());
 	reader
 		.def("__reduce_ex__", &pickleReduceReader)
+		.def("castAs_", &castReader)
 	;
 	ClassBinding<SB, S, B> builder("StructBuilder", py::multiple_inheritance(), py::buffer_protocol());
 	builder
@@ -216,6 +221,7 @@ void bindStructClasses() {
 		.def("disown_", &SB::disown)
 		
 		.def("__reduce_ex__", &pickleReduceBuilder)
+		.def("castAs_", &castBuilder)
 	;
 	ClassBinding<SP> pipeline("StructPipeline", py::multiple_inheritance());
 	
@@ -244,6 +250,7 @@ void bindCapClasses() {
 			return convertToAsyncioFuture(mv(whenReady)).attr("__await__")();
 		})
 		.def_property_readonly("executor_", &C::executor)
+		.def("castAs_", &castReader)
 	;
 	
 	server
@@ -331,36 +338,53 @@ py::type readerFor(capnp::Type type) {
 	return defaultLoader.readerType(type);
 }
 
+py::type commonFor(capnp::Type type) {
+	return defaultLoader.commonType(type);
+}
+
+WithMessage<capnp::schema::Type::Reader> toProto(capnp::Type& t) {
+	auto mb = fsc::heapHeld<capnp::MallocMessageBuilder>(1024);
+	
+	auto root = mb -> initRoot<capnp::schema::Type>();
+	fsc::extractType(t, root);
+	
+	//return fscpy::AnyReader(mb.x(), mb -> getRoot<capnp::AnyPointer>());
+	return bundleWithMessage(root.asReader(), mb.x());
+}
+
+capnp::Type listOf(capnp::Type& t, unsigned int depth) {
+	return t.wrapInList(depth);
+}
+
 void bindType() {
-	ClassBinding<capnp::Type>("Type")
-		.def("toProto", [](capnp::Type& t) {
-			auto mb = fsc::heapHeld<capnp::MallocMessageBuilder>(1024);
-			
-			auto root = mb -> initRoot<capnp::schema::Type>();
-			fsc::extractType(t, root);
-			
-			return fscpy::AnyReader(mb.x(), mb -> getRoot<capnp::AnyPointer>());
-		})
+	auto typeLike = [&](auto& binding) {
+		binding.def("toProto", &toProto);
+		binding.def("listOf", &listOf, py::arg("depth") = 1);
+		binding.def("__repr__", [](capnp::Type& t) -> kj::String {
+			return kj::apply(asRepr, defaultLoader.qualName(t));
+		});
+		
+		binding
+		.def_property_readonly("Builder", &builderFor)
+		.def_property_readonly("Reader", &readerFor)
+		.def_property_readonly("ReaderOrBuilder", &commonFor);
+	};
+	
+	ClassBinding<capnp::Type> type("Type");
+	type
 		.def_static("fromProto", [](fscpy::AnyReader r) {
 			return defaultLoader.capnpLoader.getType(r.getAs<capnp::schema::Type>());
 		})
-		.def_static("fromProto", [](fscpy::AnyBuilder r) {
-			return defaultLoader.capnpLoader.getType(r.getAs<capnp::schema::Type>());
+		.def_static("fromProto", [](WithMessage<capnp::schema::Type::Reader> r) {
+			return defaultLoader.capnpLoader.getType(r);
 		})
 		.def(py::self == py::self)
 		.def(py::self != py::self)
-		.def("listOf", [](capnp::Type t, unsigned int depth) {
-			return t.wrapInList(depth);
-		}, py::arg("depth") = 1)
 		.def("interpret", [](capnp::Type& t) -> capnp::Type {
 			return t;
 		})
-		.def("__repr__", [](capnp::Type& t) -> kj::String {
-			return kj::apply(asRepr, defaultLoader.qualName(t));
-		})
-		.def_property_readonly("Builder", &builderFor)
-		.def_property_readonly("Reader", &readerFor)
 	;
+	typeLike(type);
 	
 	ClassBinding<capnp::Schema> schema("Schema");
 	schema.def("__repr__", [](capnp::Schema& s) -> kj::String {
@@ -496,7 +520,8 @@ void bindType() {
 		return defaultLoader.capnpLoader.get(self.getProto().getId(), brandEx);
 	});
 	
-	ClassBinding<capnp::StructSchema, capnp::Schema>("StructSchema")
+	ClassBinding<capnp::StructSchema, capnp::Schema> structSchema("StructSchema");
+	structSchema
 		.def("newMessage",
 			[](capnp::StructSchema& self, py::object copyFrom, size_t initialSize) {
 				auto msg = kj::heap<capnp::MallocMessageBuilder>(initialSize);
@@ -515,39 +540,42 @@ void bindType() {
 			py::arg("copyFrom") = py::none(),
 			py::arg("initialSize") = 1024
 		)
+		.def("toProto", &toProto)
 		.def_property_readonly("Builder", [](capnp::StructSchema& self) {
 			return builderFor(self);
 		})
 		.def_property_readonly("Reader", [](capnp::StructSchema& self) {
 			return readerFor(self);
 		})
+		.def_property_readonly("ReaderOrBuilder", [](capnp::StructSchema& self) {
+			return commonFor(self);
+		})
 		.def_property_readonly("Pipeline", [](capnp::StructSchema& schema) {
 			return defaultLoader.pipelineType(schema);
 		})
 	;
 	
-	ClassBinding<capnp::InterfaceSchema, capnp::Schema>("InterfaceSchema")
+	ClassBinding<capnp::InterfaceSchema, capnp::Schema> interfaceSchema("InterfaceSchema");
+	interfaceSchema
 		.def_property_readonly("methods", [](capnp::InterfaceSchema& self) {
 			return MethodDict(self);
 		})
 		.def_property_readonly("Client", [](capnp::InterfaceSchema& schema) {
 			return defaultLoader.clientType(schema);
 		})
+		.def("toProto", &toProto)
+		.def("listOf", &listOf)
 	;
 	
-	ClassBinding<capnp::ListSchema>("ListSchema")
+	ClassBinding<capnp::ListSchema> listSchema("ListSchema");
+	listSchema
 		.def_property_readonly("elementType", [](capnp::ListSchema& self) {
 			return self.getElementType();
 		})
-		.def_property_readonly("Builder", [](capnp::ListSchema& self) {
-			return builderFor(self);
-		})
-		.def_property_readonly("Reader", [](capnp::ListSchema& self) {
-			return readerFor(self);
-		})
 	;
 	
-	ClassBinding<capnp::EnumSchema, capnp::Schema>("EnumSchema")
+	ClassBinding<capnp::EnumSchema, capnp::Schema> enumSchema("EnumSchema");
+	enumSchema
 		.def("get", [](capnp::EnumSchema& schema, DynamicValueReader from) {
 			if(from.getType() == capnp::DynamicValue::ENUM) {
 				auto enumInput = from.as<capnp::DynamicEnum>();
@@ -573,6 +601,22 @@ void bindType() {
 			}
 			return vals;
 		})
+		.def("toProto", &toProto)
+		.def("listOf", &listOf)
+	;
+	
+	typeLike(structSchema);
+	typeLike(interfaceSchema);
+	typeLike(listSchema);
+	
+	ClassBinding<MethodDict>("_MethodDict")
+		.def("__getitem__", &MethodDict::getItem)
+		.def("__getattr__", &MethodDict::getItem)
+	;
+	
+	ClassBinding<MethodInfo>("_MethodInfo")
+		.def_property_readonly("Params", &MethodInfo::paramType)
+		.def_property_readonly("Results", &MethodInfo::resultType)
 	;
 	
 	/*py::implicitly_convertible<capnp::StructSchema, capnp::Type>();
@@ -639,6 +683,13 @@ void initCapnp(py::module_& m) {
 	BIND_BUILTIN_TYPE(INT64, Int64)
 	BIND_BUILTIN_TYPE(FLOAT32, Float32)
 	BIND_BUILTIN_TYPE(FLOAT64, Float64)
+	
+	
+	using Which = capnp::schema::Type::AnyPointer::Unconstrained::Which;
+	capnpModule.add_object("Capability", py::cast(capnp::Type::from<capnp::Capability>()));
+	capnpModule.add_object("AnyPointer", py::cast(capnp::Type(Which::ANY_KIND)));
+	capnpModule.add_object("AnyStruct", py::cast(capnp::Type(Which::STRUCT)));
+	capnpModule.add_object("AnyList", py::cast(capnp::Type(Which::LIST)));
 	//bindAssignable();
 	
 	capnpModule = py::module();

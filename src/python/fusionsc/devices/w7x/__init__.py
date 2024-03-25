@@ -58,9 +58,15 @@ def connectIppSite():
 	newBackend = remote.connect("http://sv-coda-wsvc-31:8888/load-balancer")
 	backends.alwaysUseBackend(newBackend)
 	
-	# Load w7xdb (uses remote backend) and connect its data index
-	database = warehouse.openRemote("w7xdb")
-	resolve.connectWarehouse(database)
+	# Load w7xdb (exposed by remote backend) and connect its data index
+	resolve.connectWarehouse("remote:w7xdb")
+	
+	# Note: This is equivalent to
+	# database = warehouse.open("remote:w7xdb")
+	#  or
+	# database = warehouse.openRemote("w7xdb")
+	#  followed by
+	# resolve.connectWarehouse(database)
 
 class CoilPack(wrappers.structWrapper(service.W7XCoilSet)):
 	"""Set of coils that can be used to obtain W7-X specific configurations"""
