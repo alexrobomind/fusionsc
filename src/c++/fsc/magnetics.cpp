@@ -421,8 +421,8 @@ struct CalculationSession : public FieldCalculator::Server {
 			for(auto iN : kj::range(0, surfNumN)) {
 				double n = modeN[iN];
 				
-				ADS cosVal = cos(n * phi + m * theta);
-				ADS sinVal = sin(n * phi + m * theta);
+				ADS cosVal = cos(-n * phi + m * theta);
+				ADS sinVal = sin(-n * phi + m * theta);
 				
 				ADS rContrib = rCos(m, iN, iSurf) * cosVal + rSin(m, iN, iSurf) * sinVal;
 				ADS zContrib = zCos(m, iN, iSurf) * cosVal + zSin(m, iN, iSurf) * sinVal;

@@ -762,7 +762,7 @@ struct FLTImpl : public FLT::Server {
 								nTor(m, toroidalIndex(n)) = n * phiMultiplier;
 								mPol(m, toroidalIndex(n)) = m;
 								
-								double parallelAngle = n * phiMultiplier * iota + m;
+								double parallelAngle = -n * phiMultiplier * iota + m;
 								
 								// bool isResonant = std::abs(n * phiMultiplier * iota - m) < aliasThreshold;
 								
@@ -803,7 +803,7 @@ struct FLTImpl : public FLT::Server {
 								}
 								
 								FM mode;
-								mode.coeffs[0] = n;
+								mode.coeffs[0] = -n;
 								mode.coeffs[1] = m;
 								modes.add(mode);
 							}

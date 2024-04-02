@@ -31,9 +31,14 @@ EIGEN_DEVICE_FUNC inline void computeRZ(
 	int32_t nTor = (int32_t) surfaces.getNTor();
 	uint32_t mPol = surfaces.getMPol();
 	uint32_t nfp = surfaces.getToroidalSymmetry();
+	uint32_t nTurns = surfaces.getNTurns();
 	uint32_t nSurf = surfaces.getRCos().getShape()[0];
 	
-	uint32_t numTorCoeffs = 2 * nTor + 1;
+	// Adjust toroidal mode numbers by 
+	phi *= nfp;
+	phi /= nTurns;
+	
+	int32_t numTorCoeffs = 2 * nTor + 1;
 	uint32_t numPolCoeffs = mPol + 1;
 	
 	// Calculates the linear index of a mode in the mode array
