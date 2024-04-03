@@ -84,6 +84,13 @@ struct ClassBinding : public py::class_<T, Params...> {
 		
 		return *this;
 	}
+	
+	template<typename T2>
+	ClassBinding& convertibleFrom() {
+		this -> def(py::init<T2>());
+		py::implicitly_convertible<T2, T>();
+		return *this;
+	}
 };
 
 struct ListPrototype {
@@ -106,6 +113,7 @@ void bindBlobClasses() {
 	ClassBinding<DataReader, DataCommon, R>("DataReader", py::buffer_protocol())
 		.withCommon()
 		.withBuffer()
+		.convertibleFrom<DataBuilder>()
 		.def("castAs", &castReader)
 	;
 	ClassBinding<DataBuilder, DataCommon, B>("DataBuilder", py::buffer_protocol())
@@ -117,15 +125,13 @@ void bindBlobClasses() {
 	ClassBinding<TextCommon, O>("TextReaderOrBuilder");
 	ClassBinding<TextReader, TextCommon, R>("TextReader")
 		.withCommon()
+		.convertibleFrom<TextBuilder>()
 		.def("castAs", &castReader)
 	;
 	ClassBinding<TextBuilder, TextCommon, B>("TextBuilder")
 		.withCommon()
 		.def("castAs", &castBuilder)
 	;
-	
-	py::implicitly_convertible<DataBuilder, DataReader>();
-	py::implicitly_convertible<TextBuilder, TextReader>();
 }
 
 void bindAnyClasses() {
@@ -135,6 +141,7 @@ void bindAnyClasses() {
 	ClassBinding<AnyCommon>("AnyCommon");
 	ClassBinding<AR, AnyCommon, R>("AnyReader")
 		.withCommon()
+		.convertibleFrom<AnyBuilder>()
 		.def("castAs", &AR::interpretAs)
 	;
 	
@@ -165,6 +172,7 @@ void bindListClasses() {
 	
 	ClassBinding<LR, L, R>("ListReader", py::buffer_protocol())
 		.withListInterface()
+		.convertibleFrom<LB>()
 	;
 	
 	py::implicitly_convertible<LB, LR>();
@@ -209,6 +217,7 @@ void bindStructClasses() {
 	
 	ClassBinding<SR, S, R> reader("StructReader", py::multiple_inheritance(), py::buffer_protocol());
 	reader
+		.convertibleFrom<SB>()
 		.def("__reduce_ex__", &pickleReduceReader)
 		.def("castAs_", &castReader)
 	;
@@ -228,8 +237,6 @@ void bindStructClasses() {
 	bindStructInterface(reader);
 	bindStructInterface(builder);
 	bindPipelineCompatibleInterface(pipeline);
-	
-	py::implicitly_convertible<SB, SR>();
 }
 
 void bindCapClasses() {
@@ -383,10 +390,13 @@ void bindType() {
 		.def("interpret", [](capnp::Type& t) -> capnp::Type {
 			return t;
 		})
+		.def(py::self == py::self)
 	;
 	typeLike(type);
 	
 	ClassBinding<capnp::Schema> schema("Schema");
+	schema.def(py::self == py::self).def(py::self != py::self);
+	
 	schema.def("__repr__", [](capnp::Schema& s) -> kj::String {
 		return kj::apply(asRepr, defaultLoader.qualName(s));
 	});
@@ -576,7 +586,7 @@ void bindType() {
 	
 	ClassBinding<capnp::EnumSchema, capnp::Schema> enumSchema("EnumSchema");
 	enumSchema
-		.def("get", [](capnp::EnumSchema& schema, DynamicValueReader from) {
+		.def("get", [](capnp::EnumSchema& schema, DynamicValueReader from) -> EnumInterface {
 			if(from.getType() == capnp::DynamicValue::ENUM) {
 				auto enumInput = from.as<capnp::DynamicEnum>();
 				KJ_REQUIRE(enumInput.getSchema().getProto().getId() == schema.getProto().getId(), "Incorrect enum type");

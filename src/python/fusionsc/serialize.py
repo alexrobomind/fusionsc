@@ -414,6 +414,8 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 	
 	if which == "dynamicStruct":
 		ds = reader.dynamicStruct
+		print("Schema: ", ds.schema)
+		print("Schema type: ", type(ds.schema))
 		return ds.data.castAs(capnp.Type.fromProto(ds.schema))
 	
 	if which == "uint64":
@@ -441,14 +443,14 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 	if which == "enumArray":
 		ea = reader.enumArray
 		
-		type = capnp.Type.fromProto(ea.schema)
-		flat = [capnp.Enum.fromRaw(type, raw) for raw in ea.data]
+		tp = capnp.Type.fromProto(ea.schema)
+		flat = [capnp.Enum.fromRaw(tp, raw) for raw in ea.data]
 		return np.asarray(flat).reshape(ea.shape)
 	
 	if which == "dynamicEnum":
 		de = reader.dynamicEnum
-		type = capnp.Type.fromProto(de.schema)
-		return capnp.Enum.fromRaw(type, de.value)
+		tp = capnp.Type.fromProto(de.schema)
+		return capnp.Enum.fromRaw(tp, de.value)
 	
 	if which == "dynamicObjectArray":
 		doa = reader.dynamicObjectArray
@@ -460,11 +462,11 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 	
 	if which == "structArray":
 		sa = reader.structArray
-		type = capnp.Type.fromProto(sa.schema)
+		tp = capnp.Type.fromProto(sa.schema)
 		
 		result = np.empty([len(sa.data)], "O")
 		for i in range(len(sa.data)):
-			result[i] = sa.data[i].target.interpretAs(type)
+			result[i] = sa.data[i].target.castAs(tp)
 		
 		return result.reshape(sa.shape)
 	

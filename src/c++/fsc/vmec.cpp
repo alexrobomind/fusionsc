@@ -463,6 +463,13 @@ struct VmecDriverImpl : public VmecDriver::Server {
 		host.setSpt(spt.getData());
 		host.initPzr(spt.getData().size());
 		
+		if(params.hasSValues()) {
+			size_t nSurf = surf.getRCos().getShape()[0];
+			KJ_REQUIRE(params.getSValues().size() == nSurf);
+			
+			host.setSValues(params.getSValues());
+		}
+		
 		// Update segment structure
 		mapping -> updateStructureOnDevice();
 		
@@ -502,6 +509,13 @@ struct VmecDriverImpl : public VmecDriver::Server {
 		host.setSurfaces(surf);
 		host.setPzr(pzr.getData());
 		host.initSpt(pzr.getData().size());
+		
+		if(params.hasSValues()) {
+			size_t nSurf = surf.getRCos().getShape()[0];
+			KJ_REQUIRE(params.getSValues().size() == nSurf);
+			
+			host.setSValues(params.getSValues());
+		}
 		
 		// Update segment structure
 		mapping -> updateStructureOnDevice();

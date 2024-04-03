@@ -182,6 +182,13 @@ TEST_CASE("vmec-surf") {
 	spt.setShape({3, 4});
 	spt.setData({0.5, 0.5, 0.5, 0.5, 0, 0, 0, 0, 0, 0.5 * fsc::pi, fsc::pi, 1.5 * fsc::pi});
 	
+	SECTION("no s") {
+	}
+	
+	SECTION("custom s") {
+		req.setSValues({0, 10});
+	}
+	
 	auto result = req.send().wait(ws);
 	KJ_DBG(result.getPhiZR());
 }
@@ -225,6 +232,13 @@ TEST_CASE("vmec-surf-inv") {
 	auto pzr = req.getPhiZR();
 	pzr.setShape({3, 4});
 	pzr.setData({0, 0, 0, 0, 0, 0.05, 0, -0.05, 1.05, 1, 0.95, 1});
+	
+	SECTION("no s") {
+	}
+	
+	SECTION("custom s") {
+		req.setSValues({0, 10});
+	}
 	
 	auto result = req.send().wait(ws);
 	KJ_DBG(result.getSPhiTheta());

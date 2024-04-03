@@ -102,6 +102,13 @@ private:
 		PythonWaitScope rootScope;
 	};
 	
+	struct InstanceHolder {
+		InstanceHolder();
+		~InstanceHolder();
+		
+		Own<Instance> instance;
+	};
+	
 	struct Shared {
 		unsigned int refCount = 0;
 		Maybe<Library> library = nullptr;
@@ -113,7 +120,7 @@ private:
 	static Instance& getInstance();
 	
 	static inline kj::MutexGuarded<Shared> shared = kj::MutexGuarded<Shared>();
-	static thread_local inline Maybe<Instance> instance = nullptr;
+	static thread_local inline Maybe<InstanceHolder> instance = nullptr;
 	
 	static inline py::object atExitCallback;
 };

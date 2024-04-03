@@ -10,30 +10,44 @@ from .asnc import asyncFunction
 
 import numpy as np
 
+from typing import Optional
+
 def _driver():
 	return backends.activeBackend().vmecDriver().service
 
 @asyncFunction
 @unstableApi
-async def sphithetaToPhizr(surfaces, s, phi, theta):
+async def sphithetaToPhizr(surfaces : magnetics.SurfaceArray, s, phi, theta, sValues : Optional[list[float]] = None):
+	# This also gets caught by the backend but the error message can be confusing
+	assert len(surfaces.shape) == 1, "Surface array must be linear"
+	
+	if sValues is not None:
+		assert len(sValues) == surfaces.shape[0], "sValues size must match no. of surfaces"
+	
 	stacked = np.stack(
 		np.broadcast(s, phi, theta),
 		axis = 0
 	)
 	
-	response = await _driver().computePositions(surfaces, stacked)
+	response = await _driver().computePositions(surfaces.data, stacked, sValues = sValues)
 	phi, z, r = np.asarray(response.PhiZR)
 	return phi, z, r
 
 @asyncFunction
 @unstableApi
-async def phizrToSphitheta(surfaces, phi, z, r):
+async def phizrToSphitheta(surfaces : magnetics.SurfaceArray, phi, z, r, sValues : Optional[list[float]] = None):
+	# This also gets caught by the backend but the error message can be confusing
+	assert len(surfaces.shape) == 1, "Surface array must be linear"
+	
+	if sValues is not None:
+		assert len(sValues) == surfaces.shape[0], "sValues size must match no. of surfaces"
+	
 	stacked = np.stack(
 		np.broadcast(phi, z, r),
 		axis = 0
 	)
 	
-	response = await _driver().invertPositions(surfaces, stacked)
+	response = await _driver().invertPositions(surfaces.data, stacked, sValues = sValues)
 	
 	s, phi, theta = np.asarray(response.sPhiTheta)
 	return s, phi, theta

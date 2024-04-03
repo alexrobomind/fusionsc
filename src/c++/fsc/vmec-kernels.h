@@ -24,6 +24,7 @@ namespace internal { namespace {
 
 EIGEN_DEVICE_FUNC inline void computeRZ(
 	cu::FourierSurfaces::Reader surfaces,
+	cupnp::List<double>::Reader sValues,
 	
 	double s, double phi, double theta,
 	double& rOut, double& zOut
@@ -62,18 +63,47 @@ EIGEN_DEVICE_FUNC inline void computeRZ(
 	uint32_t n2;
 	double w;
 	
-	if(s < 1) {
-		double dr = 1.0 / (nSurf - 1);
-		size_t lower = (size_t)(s / dr);
-		double remainder = fmod(s / dr, 1.0);
-		
-		n1 = lower;
-		n2 = lower + 1;
-		w = remainder;
+	if(sValues.size() == 0) {
+		// Case for equidistant interpolation points between 0 and 1
+		if(s < 1 && s > 0) {
+			double dr = 1.0 / (nSurf - 1);
+			size_t lower = (size_t)(s / dr);
+			double remainder = fmod(s / dr, 1.0);
+			
+			n1 = lower;
+			n2 = lower + 1;
+			w = remainder;
+		} else {
+			n1 = 0;
+			n2 = nSurf - 1;
+			w = s;
+		}
 	} else {
-		n1 = 0;
-		n2 = nSurf - 1;
-		w = s;
+		if(s < sValues[nSurf - 1] && s > sValues[0]) {
+			// Figure out interval using bisection rule
+			n1 = 0;
+			n2 = nSurf - 1;
+			
+			while(n2 > n1 + 1) {
+				// We know n1 & n2 are at least 2 apart
+				// Therefore, n1 < midPoint < n2
+				uint32_t midPoint = (n1 + n2) / 2;
+				if(s > sValues[midPoint]) {
+					n1 = midPoint;
+				} else {
+					n2 = midPoint;
+				}
+			}
+			
+			double s1 = sValues[n1];
+			double s2 = sValues[n2];
+			
+			w = (s - s1) / (s2 - s1);
+		} else {
+			n1 = 0;
+			n2 = nSurf - 1;
+			w = s;
+		}
 	}
 		
 	auto rCos = surfaces.getRCos().getData();
@@ -116,6 +146,7 @@ EIGEN_DEVICE_FUNC inline void computeRZ(
 
 EIGEN_DEVICE_FUNC inline void computeRZFromVxVy(
 	cu::FourierSurfaces::Reader surfaces,
+	cupnp::List<double>::Reader sValues,
 	
 	double phi, double vx, double vy,
 	double& rOut, double& zOut
@@ -126,7 +157,7 @@ EIGEN_DEVICE_FUNC inline void computeRZFromVxVy(
 	if(s < 1e-5)
 		theta = 0;
 	
-	computeRZ(surfaces, s, phi, theta, rOut, zOut);
+	computeRZ(surfaces, sValues, s, phi, theta, rOut, zOut);
 }
 
 }}
@@ -144,7 +175,7 @@ EIGEN_DEVICE_FUNC inline void computeSurfaceKernel(
 	double theta = posIn[idx + 2 * blockSize];
 	
 	double r; double z;
-	internal::computeRZ(comm.getSurfaces(), s, phi, theta, r, z);
+	internal::computeRZ(comm.getSurfaces(), comm.getSValues(), s, phi, theta, r, z);
 	
 	auto posOut = comm.mutatePzr();
 	posOut.set(idx + 0 * blockSize, phi);
@@ -181,7 +212,7 @@ EIGEN_DEVICE_FUNC inline void invertSurfaceKernel(
 		double starZ[4];
 		double rAv = 0; double zAv = 0;
 		for(unsigned int i = 0; i < 4; ++i) {
-			internal::computeRZFromVxVy(comm.getSurfaces(), phi, starX[i], starY[i], starR[i], starZ[i]);
+			internal::computeRZFromVxVy(comm.getSurfaces(), comm.getSValues(), phi, starX[i], starY[i], starR[i], starZ[i]);
 			rAv += starR[i];
 			zAv += starZ[i];
 		}

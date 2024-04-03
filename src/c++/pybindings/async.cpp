@@ -52,6 +52,31 @@ namespace {
 			return callable();
 		});
 	}
+	
+	py::object asyncioLoop() {
+		auto asyncio = py::module_::import("asyncio");
+		
+		// Check for running loop
+		try {
+			return asyncio.attr("get_running_loop")();
+		} catch(py::error_already_set&) {
+		}
+		
+		auto policy = asyncio.attr("get_event_loop_policy")();
+		
+		try {
+			auto existingLoop = policy.attr("get_event_loop")();
+			return existingLoop;
+		} catch(py::error_already_set&) {
+		}
+		
+		py::module_::import("warnings").attr("warn")("No asyncio event loop was specified in this context. A new loop was auto-started");
+		
+		// No event loop exists. Make a new one
+		auto newLoop = policy.attr("new_event_loop")();
+		policy.attr("set_event_loop")(newLoop);
+		return newLoop;
+	}
 }
 
 namespace fscpy {
@@ -136,16 +161,23 @@ AsyncioEventPort::AsyncioEventPort() {
 		AsyncioEventPort::instance -> armRunner();
 	});
 	
-	auto asyncio = py::module_::import("asyncio");
-	auto newLoop = asyncio.attr("get_event_loop")();
-	
-	adjustEventLoop(newLoop);
+	auto loop = asyncioLoop();
+	adjustEventLoop(loop);
 }
 
 AsyncioEventPort::~AsyncioEventPort() {
 	py::gil_scoped_acquire withGil;
 		
 	instance = nullptr;
+	
+	auto asyncio = py::module_::import("asyncio");
+	
+	// Turn the asyncio loop
+	asyncioLoop().attr("stop")();
+	asyncioLoop().attr("run_forever")();
+	
+	// Cancel the listen task
+	listenTask.attr("cancel")();
 	
 	#if _WIN32
 		closesocket(writeSocket);
@@ -211,7 +243,7 @@ void AsyncioEventPort::waitForEvents() {
 	// Jump back into the python event loop until there
 	// is work for the C++ loop.
 	
-	auto loop = py::module_::import("asyncio").attr("get_event_loop")();
+	auto loop = asyncioLoop();
 	adjustEventLoop(mv(loop));
 	
 	if(py::bool_(instance -> eventLoop.attr("is_closed")()))
@@ -284,6 +316,16 @@ PythonContext::Instance::~Instance() {
 	}
 }
 
+PythonContext::InstanceHolder::InstanceHolder() {
+	py::gil_scoped_acquire withGil;
+	instance = kj::heap<Instance>();
+}
+
+PythonContext::InstanceHolder::~InstanceHolder() {
+	py::gil_scoped_acquire withGil;
+	instance = Own<Instance>();
+}
+
 static kj::MutexGuarded<bool> pythonInitialized(false);
 
 PythonContext::Instance& PythonContext::getInstance() {
@@ -320,11 +362,11 @@ PythonContext::Instance& PythonContext::getInstance() {
 		}
 	}
 	
-	KJ_IF_MAYBE(pInstance, instance) {
-		return *pInstance;
+	KJ_IF_MAYBE(pHolder, instance) {
+		return *(pHolder -> instance);
 	}
 	
-	return instance.emplace();
+	return *(instance.emplace().instance);
 }
 	
 Library PythonContext::incSharedRef() {
@@ -702,7 +744,7 @@ Promise<py::object> adaptAsyncioFuture(py::object future) {
 	// Python awaitables can be wrapped in tasks
 	if(!hasattr(future, "_asyncio_future_blocking")) {
 		auto aio = py::module_::import("asyncio");
-		auto loop = aio.attr("get_event_loop")();
+		auto loop = asyncioLoop();
 		future = aio.attr("ensure_future")(mv(future), py::arg("loop") = loop);
 		// future = loop.attr("create_task")(.attr("__await__")());
 	}
@@ -714,7 +756,7 @@ Promise<py::object> adaptAsyncioFuture(py::object future) {
 
 py::object convertToAsyncioFuture(Promise<py::object> promise) {
 	promise = getActiveThread().lifetimeScope().wrap(mv(promise));
-	auto loop = py::module_::import("asyncio").attr("get_event_loop")();
+	auto loop = asyncioLoop();
 	auto result = py::cast(
 		new AsyncioFutureLike(loop, mv(promise)),
 		py::return_value_policy::take_ownership
@@ -733,7 +775,7 @@ py::object convertToAsyncioFuture(Promise<py::object> promise) {
 
 py::object convertCallPromise(Promise<py::object> promise, DynamicStructPipeline pipeline) {
 	promise = getActiveThread().lifetimeScope().wrap(mv(promise));
-	auto loop = py::module_::import("asyncio").attr("get_event_loop")();
+	auto loop = asyncioLoop();
 	auto result = py::cast(
 		new RemotePromise(loop, mv(promise), mv(pipeline)),
 		py::return_value_policy::take_ownership

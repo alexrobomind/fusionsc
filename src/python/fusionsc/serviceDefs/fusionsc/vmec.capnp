@@ -116,13 +116,14 @@ interface VmecDriver {
 	run @0 VmecRequest -> VmecResponse;
 	computePhiEdge @1 (field : Magnetics.ComputedField, surface : Magnetics.FourierSurfaces) -> (phiEdge : Float64);
 	
-	computePositions @2 (surfaces : Magnetics.FourierSurfaces, sPhiTheta : FTensor) -> (phiZR : FTensor);
-	invertPositions @3 (surfaces : Magnetics.FourierSurfaces, phiZR : FTensor) -> (sPhiTheta : FTensor);
+	computePositions @2 (surfaces : Magnetics.FourierSurfaces, sPhiTheta : FTensor, sValues : List(Float64)) -> (phiZR : FTensor);
+	invertPositions @3 (surfaces : Magnetics.FourierSurfaces, phiZR : FTensor, sValues : List(Float64)) -> (sPhiTheta : FTensor);
 }
 
 struct VmecKernelComm {
 	surfaces @0 : Magnetics.FourierSurfaces;
 	pzr @1 : List(Float64);
 	spt @2 : List(Float64);
+	sValues @3 : List(Float64);
 }
 

@@ -12,7 +12,7 @@ from ...wrappers import unstableApi
 
 from ...backends import localResources
 
-from typing import Union
+from typing import Union, Optional
 import numpy as np
 
 # Databases
@@ -193,9 +193,11 @@ def processCoilConvention(convention):
 	
 	return convention
 
-def coilsDBConfig(id: int) -> MagneticConfig:
-	result = fusionsc.magnetics.MagneticConfig()
-	result.data.initW7x().configurationDb = id
+def coilsDBConfig(id: int, biotSavartSettings: Optional[service.BiotSavartSettings.ReaderOrBuilder] = None) -> MagneticConfig:
+	result = MagneticConfig()
+	cdb = result.data.initW7x().initConfigurationDb()
+	cdb.configId = id
+	cdb.biotSavartSettings = biotSavartSettings
 	
 	return result
 
@@ -278,7 +280,7 @@ def toroidalClosure():
 	return components(range(325, 330), 'Toroidal closure')
 
 def op12Geometry():
-	return divertor() + baffles() + heatShield() + pumpSlits() + steelPanels() + vessel() + toroidalClosure()
+	return divertor('OP12') + baffles('OP12') + heatShield('OP12') + pumpSlits() + steelPanels() + vessel() + toroidalClosure()
 
 def op21Geometry():
 	return divertor('OP21') + baffles('OP21') + heatShield('OP21') + pumpSlits() + steelPanels() + vessel() + toroidalClosure()
