@@ -83,10 +83,10 @@ def _dumpTraceJson(trace, filename, **jsonOptions):
 	endPoints = trace["endPoints"]
 	jsonDict["endPoints"] = {
 		"shape" : list(pointsShape),
-		"x" : list(endpoints[0].flatten()),
-		"y" : list(endpoints[1].flatten()),
-		"z" : list(endpoints[2].flatten()),
-		"len" : list(endpoints[3].flatten())
+		"x" : list(endPoints[0].flatten()),
+		"y" : list(endPoints[1].flatten()),
+		"z" : list(endPoints[2].flatten()),
+		"len" : list(endPoints[3].flatten())
 	}
 	
 	# Poincare hits

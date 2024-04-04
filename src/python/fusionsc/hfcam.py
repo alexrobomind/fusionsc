@@ -63,7 +63,7 @@ class HFCam:
 	
 	def clone(self):
 		"""Creates a new camera which is an exact copy of this one (including the heat flux buffer contents)"""
-		return HFCam(self.cam.clone().cam)
+		return HFCam(self.cam.clone().pipeline.cam)
 	
 	@asyncFunction
 	async def addPoints(self, points, r, depthTolerance = 0.001):

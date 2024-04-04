@@ -32,9 +32,11 @@ struct Held {
 		if(!ud.isUnwinding()) {
 			KJ_REQUIRE(owningPtr.get() == nullptr, "Destroyed Held<...> without ownership transfer");
 		} else {
-			if(owningPtr.get() != nullptr) {
-				KJ_LOG(WARNING, "Unwinding across a Held<...>. Application might segfault");
-			}
+			#ifndef NDEBUG
+				if(owningPtr.get() != nullptr) {
+					KJ_LOG(WARNING, "Unwinding across a Held<...>. Application might segfault");
+				}
+			#endif
 		}
 	}
 	

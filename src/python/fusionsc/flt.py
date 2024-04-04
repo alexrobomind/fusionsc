@@ -69,6 +69,11 @@ def _mapper():
 @asyncFunction
 async def fieldValues(config, grid):
 	"""
+	DEPRECATED & SLATED FOR REMOVAL IN 3.0
+	
+	Use fusionsc.magnetics.MagneticConfig.getComputed(...) instead, which uses the fusionsc field
+	convention of [grid.nPhi, grid.nZ, grid.nR, 3].
+	
 	Obtains the magnetic field of a configuration on a specific grid.
 	
 	Parameters:
@@ -79,6 +84,11 @@ async def fieldValues(config, grid):
 		An array of shape [3, grid.nPhi, grid.nZ, grid.nR] containing the magnetic field.
 		The directions along the first coordinate are phi, z, r.
 	"""
+	import warnings
+	warnings.warn(DeprecationWarning(
+		"fusionsc.flt.fieldValues(...) is deprecated and will be removed in version 3.0. Use fusionsc.magnetics.MagneticConfig.getComputed(...) instead."
+	))
+	
 	import numpy as np
 	
 	field = await config.compute.asnc(grid)
@@ -262,7 +272,7 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 		)
 		
 	assert parallelConvectionVelocity is None or parallelDiffusionCoefficient is None
-	if isotropicDiffusionCoefficient is not None: 
+	if isotropicDiffusionCoefficient is not None or rzDiffusionCoefficient is not None: 
 		assert parallelConvectionVelocity is not None or parallelDiffusionCoefficient is not None
 	
 	assert resultFormat in ['dict', 'raw'], "resultFormat parameter must be 'dict' or 'raw'"
@@ -392,7 +402,11 @@ def decodeTraceResponse(response, resultFormat = 'dict'):
 	return result
 
 @asyncFunction
-async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = "ccw", mapping = None):
+async def findAxis(
+	field, grid = None, startPoint = None,
+	stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = "ccw", mapping = None,
+	targetError = None, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2
+):
 	"""
 	Computes the magnetic axis by repeatedly tracing a Poincaré map and averaging the points.
 	
@@ -424,6 +438,14 @@ async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTur
 	if mapping is not None:
 		request.mapping = mapping.ref
 	
+	if targetError is not None:		
+		adaptive = request.stepSizeControl.initAdaptive()
+		adaptive.targetError = targetError
+		adaptive.relativeTolerance = relativeErrorTolerance
+		adaptive.min = minStepSize
+		adaptive.max = maxStepSize
+		adaptive.errorUnit.integratedOver = 2 * np.pi * np.sqrt(startPoint[0]**2 + startPoint[1]**2)
+	
 	response = await _tracer().findAxis(request)
 	
 	axis = np.asarray(response.axis)
@@ -449,7 +471,11 @@ async def findAxis(field, grid = None, startPoint = None, stepSize = 0.001, nTur
 	return np.asarray(response.pos), axis
 
 @asyncFunction
-async def findLCFS(field, geometry, p1, p2, grid = None, geometryGrid = None, stepSize = 0.01, tolerance = 0.001, nScan = 8, distanceLimit = 3e3, mapping = None):
+async def findLCFS(
+	field, geometry, p1, p2,
+	grid = None, geometryGrid = None, stepSize = 0.01, tolerance = 0.001, nScan = 8, distanceLimit = 3e3, mapping = None,
+	targetError = None, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2
+):
 	"""
 	Compute the position of the last closed flux surface
 	"""
@@ -469,6 +495,14 @@ async def findLCFS(field, geometry, p1, p2, grid = None, geometryGrid = None, st
 	request.nScan = nScan
 	request.distanceLimit = distanceLimit
 	
+	if targetError is not None:		
+		adaptive = request.stepSizeControl.initAdaptive()
+		adaptive.targetError = targetError
+		adaptive.relativeTolerance = relativeErrorTolerance
+		adaptive.min = minStepSize
+		adaptive.max = maxStepSize
+		adaptive.errorUnit.integratedOver = distanceLimit
+	
 	if mapping is not None:
 		request.mapping = mapping.ref
 	
@@ -477,7 +511,12 @@ async def findLCFS(field, geometry, p1, p2, grid = None, geometryGrid = None, st
 	return np.asarray(response.pos)
 
 @asyncFunction
-async def axisCurrent(field, current, grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = None, mapping = None):
+async def axisCurrent(
+	field, current,
+	grid = None, startPoint = None, stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = None,
+	mapping = None,
+	targetError = None, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2
+):
 	"""
 	Configuration that places a current on the axis of a given magnetic configuration.
 	
@@ -508,9 +547,7 @@ Please use the argument 'direction = "ccw"' or use the fusionsc.devices.w7x.axis
 care of the starting point)."""
 		)
 	
-	if startPoint is None:
-		direction = "ccw"
-		
+	if startPoint is None:		
 		import warnings
 		warnings.warn(
 """ !!! No starting point specified, default unsuitable for W7-X !!!
@@ -566,7 +603,6 @@ async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit 
 	computedField = field.data.computedField
 	
 	backend = backends.activeBackend()
-	mapper = backend.newMapper().pipeline.service
 	
 	request = service.RFLMRequest.newMessage()
 	request.gridR = r
@@ -581,7 +617,7 @@ async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit 
 	request.u0 = [u0] if isinstance(u0, numbers.Number) else u0
 	request.v0 = [v0] if isinstance(v0, numbers.Number) else v0
 	
-	return FieldlineMapping(mapper.computeRFLM(request).pipeline.mapping)
+	return FieldlineMapping(_mapper().computeRFLM(request).pipeline.mapping)
 
 @asyncFunction
 async def calculateIota(

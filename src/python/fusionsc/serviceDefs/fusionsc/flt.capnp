@@ -69,6 +69,18 @@ struct ReversibleFieldlineMapping {
 }
 
 struct FLTRequest {
+	struct AdaptiveStepControl {
+		min @0 : Float64 = 0;
+		max @1 : Float64 = inf;
+		targetError @2 : Float64 = 1e-6;
+		relativeTolerance @3 : Float64 = 1;
+		
+		errorUnit : union {
+			step  @4 : Void;
+			integratedOver @5 : Float64 = 1e4;
+		}
+	}
+	
 	# Tensor of shape [3, ...] indicating tracing start points
 	startPoints @0 : Data.Float64Tensor;
 	field @1 : Magnetics.ComputedField;
@@ -84,17 +96,7 @@ struct FLTRequest {
 	stepSize @8 : Float64 = 0.001;
 	stepSizeControl : union {
 		fixed @31 : Void;
-		adaptive : group {
-			min @32 : Float64 = 0;
-			max @33 : Float64 = inf;
-			targetError @34 : Float64 = 1e-6;
-			relativeTolerance @35 : Float64 = 1;
-			
-			errorUnit : union {
-				step  @36 : Void;
-				integratedOver @37 : Float64 = 1e4;
-			}
-		}
+		adaptive @32 : AdaptiveStepControl;
 	}
 	
 	parallelModel : group {
@@ -141,17 +143,17 @@ struct FLTRequest {
 			mMax @27 : UInt32 = 0;
 			
 			# How often to record Fourier points
-			recordEvery @38 : UInt32 = 1;
+			recordEvery @33 : UInt32 = 1;
 			
 			# Multiplier for toroidal mode numbers
-			toroidalSymmetry @ 39 : UInt32 = 1;
+			toroidalSymmetry @ 34 : UInt32 = 1;
 			
 			# If n * iota + m of a mode is within this value
 			# of a lower-n mode, the mode will be discarded
 			# from reconstruction
-			modeAliasingThreshold @40 : Float64 = 0.001;
+			modeAliasingThreshold @35 : Float64 = 0.001;
 			
-			stellaratorSymmetric @41 : Bool = false;
+			stellaratorSymmetric @36 : Bool = false;
 		}
 	}
 	
@@ -233,6 +235,11 @@ struct FindAxisRequest {
 	nPhi @5 : UInt64 = 20;
 	
 	mapping @6 : Data.DataRef(ReversibleFieldlineMapping);
+	
+	stepSizeControl : union {
+		fixed @7 : Void;
+		adaptive @8 : FLTRequest.AdaptiveStepControl;
+	}
 }
 
 struct FindLcfsRequest {
@@ -249,6 +256,11 @@ struct FindLcfsRequest {
 	geometry @7 : Geometry.IndexedGeometry;
 	
 	mapping @8 : Data.DataRef(ReversibleFieldlineMapping);
+	
+	stepSizeControl : union {
+		fixed @9 : Void;
+		adaptive @10 : FLTRequest.AdaptiveStepControl;
+	}
 }
 
 interface FLT $Cxx.allowCancellation {

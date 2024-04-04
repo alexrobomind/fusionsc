@@ -133,10 +133,10 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		"""Returns a new geometry rotated around the prescribed axis and center point"""
 		result = Geometry()
 		
-		transformed = result.geometry.initTransformed()
+		transformed = result.data.initTransformed()
 		turned = transformed.initTurned()
 		turned.axis = axis
-		turned.angle = angle
+		turned.angle.rad = angle
 		turned.center = center
 		turned.node.leaf = self.data
 		
@@ -180,6 +180,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		Creates a polygon mesh from a [N, 3] array-like of vertices and a list of polygins (which is each a list of vertex indices)
 		"""
 		vertices = np.asarray(vertices)
+		print(vertices.shape)
 		assert len(vertices.shape) == 2
 		assert vertices.shape[1] == 3
 		
@@ -225,7 +226,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		wt.z = z
 		
 		if phi1 is not None:
-			assert phit2 is not None, "Must either specify ph1 and phi2 or neither"
+			assert phi2 is not None, "Must either specify ph1 and phi2 or neither"
 			
 			range = wt.initPhiRange()
 			range.phiStart.rad = phi1
@@ -235,7 +236,8 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		return result.withTags(tags)
 	
 	@staticmethod
-	def fromPyista(polyData):
+	@wrappers.unstableApi
+	def fromPyvista(polyData):
 		"""Creates a geometry from a pyvista.PolyData object"""
 		vertices = polyData.verts
 		
@@ -253,6 +255,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		return Geometry.polyMesh(vertices, linesOut)
 	
 	@staticmethod
+	@wrappers.unstableApi
 	def importFrom(filename: str):
 		"""Creates a geometry from a file (loaded using pyvista)"""
 		import pyvista as pv
@@ -381,6 +384,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		}
 	
 	@asyncFunction
+	@wrappers.unstableApi
 	async def exportTo(self, filename: str):
 		"""Saves the geometry to the given filename. Supports '.ply', '.stl', and '.vtk' files."""
 		asPv = await self.asPyvista.asnc()
@@ -451,7 +455,7 @@ def cuboid(x1, x2, tags = {}):
 	return Geometry({
 		"mesh" : meshRef,
 		"tags" : [
-			{"name" : name, "value" : asTagValues(value)}
+			{"name" : name, "value" : asTagValue(value)}
 			for name, value in tags.items()
 		]
 	})
