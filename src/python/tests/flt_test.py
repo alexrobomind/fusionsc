@@ -112,7 +112,22 @@ def test_iota(field):
 	fsc.flt.calculateIota(field, [1.1, 0, 0], 200, targetError = 1e-3)
 	
 def test_surf(field):
-	fsc.flt.calculateFourierModes(field, [1.1, 0, 0], 200, targetError = 1e-3)
+	points = np.linspace([1.1, 0, 0], [1.2, 0, 0], 5, axis = 1)
+	surfs = fsc.flt.calculateFourierModes(field, points, 200, targetError = 1e-3)['surfaces']
+	
+	surfs + surfs
+	surfs - surfs
+	surfs * 2
+	2 * surfs
+	surfs / 2
+	surfs[0]
+	surfs[1:3]
+	surfs[:,None]
+	surfs.shape
+	
+	angles = [0, np.pi]
+	surfs.evaluate(phi = angles, theta = angles)
+	
 	
 def test_axcur(field):
 	fsc.flt.axisCurrent(field, 1000, startPoint = [1.05, 0, 0], targetError = 1e-3)

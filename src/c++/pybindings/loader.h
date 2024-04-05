@@ -69,6 +69,8 @@ namespace fscpy {
 		py::type makePipelineType(capnp::StructSchema);
 		py::type makeClientType(capnp::InterfaceSchema);
 		py::type makeServerType(capnp::InterfaceSchema);
+		
+		py::type makeCommonType(capnp::Type);
 	};
 	
 	extern Loader defaultLoader;

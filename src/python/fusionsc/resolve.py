@@ -77,17 +77,17 @@ def createOfflineData(data: dict):
 		
 		mapEntry = {"key" : key, "val" : value}
 		
-		if isinstance(key, (service.MagneticField.Builder, service.MagneticField.Reader)):
-			assert isinstance(value, (service.MagneticField.Builder, service.MagneticField.Reader)), "Mismatch in key/value types"
+		if isinstance(key, service.MagneticField.ReaderOrBuilder):
+			assert isinstance(value, service.MagneticField.ReaderOrBuilder), "Mismatch in key/value types"
 			fieldUpdates.append(mapEntry)
-		elif isinstance(key, (service.Filament.Builder, service.Filament.Reader)):
-			assert isinstance(value, (service.Filament.Builder, service.Filament.Reader)), "Mismatch in key/value types"
+		elif isinstance(key, service.Filament.ReaderOrBuilder):
+			assert isinstance(value, service.Filament.ReaderOrBuilder), "Mismatch in key/value types"
 			coilUpdates.append(mapEntry)
-		elif isinstance(key, (service.Geometry.Builder, service.Geometry.Reader)):
-			assert isinstance(value, (service.Geometry.Builder, service.Geometry.Reader)), "Mismatch in key/value types"
+		elif isinstance(key, service.Geometry.ReaderOrBuilder):
+			assert isinstance(value, service.Geometry.ReaderOrBuilder), "Mismatch in key/value types"
 			geoUpdates.append(mapEntry)
 		else:
-			assert False, "Can only use fields, filaments, or geometries in mappings"
+			assert False, f"Can only use fields, filaments, or geometries in mappings, type(key) = {type(key)}"
 	
 	return service.OfflineData.newMessage({
 		"coils" : coilUpdates,
@@ -99,7 +99,7 @@ def updateOfflineData(offlineData, updates):
 	"""
 	Updates an offline data structure with the data contained in another.
 	"""
-	assert isinstance(updates, (dict, service.OfflineData)), "Updates must be dict or fsc.service.OfflineData"
+	assert isinstance(updates, (dict, service.OfflineData.ReaderOrBuilder)), "Updates must be dict or fsc.service.OfflineData"
 	
 	if isinstance(updates, dict):
 		updates = createOfflineData(updates)

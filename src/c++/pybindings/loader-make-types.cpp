@@ -50,6 +50,15 @@ py::type Loader::serverType(capnp::InterfaceSchema type) {
 }
 
 py::type Loader::commonType(capnp::Type type) {
+	KJ_IF_MAYBE(pResult, commonTypes.find(type)) {
+		return *pResult;
+	}
+	auto result = makeCommonType(type);
+	commonTypes.insert(type, result);
+	return result;
+}
+
+py::type Loader::makeCommonType(capnp::Type type) {
 	using Which = capnp::schema::Type::Which;
 	
 	switch(type.which()) {
@@ -101,7 +110,7 @@ py::type Loader::commonType(capnp::Type type) {
 		bases = py::make_tuple(commonType(type.asStruct().getGeneric().asStruct()));
 	}
 	
-	attributes["__qualname__"] = kj::get<1>(qn).flatten().cStr();
+	attributes["__qualname__"] = kj::str(kj::get<1>(qn).flatten(), ".ReaderOrBuilder").cStr();
 	attributes["__module__"] = kj::get<0>(qn).cStr();
 	
 	py::type cls = (*baseMetaType)("ReaderOrBuilder", bases, attributes);
@@ -436,7 +445,7 @@ py::type Loader::makeBuilderType(capnp::StructSchema schema) {
 	
 	return makeType(
 		*this,
-		schema, "Reader",
+		schema, "Builder",
 		py::make_tuple(baseClass, this -> commonType(schema)),
 		attributes
 	);

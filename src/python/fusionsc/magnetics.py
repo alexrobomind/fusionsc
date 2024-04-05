@@ -24,7 +24,7 @@ class SurfaceArray(wrappers.structWrapper(service.FourierSurfaces)):
 	
 	@property
 	def shape(self):
-		return self.data.shape[:-2]
+		return list(self.data.rCos.shape)[:-2]
 	
 	def apply(self, op, *extraArgs):
 		args = [self] + list(extraArgs)
