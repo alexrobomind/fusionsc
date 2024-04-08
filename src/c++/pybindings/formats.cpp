@@ -81,6 +81,7 @@ namespace {
 				
 				if(py::isinstance<DynamicStructBuilder>(unwrapped)) {
 					states.add(Forward {textio::createVisitor(py::cast<DynamicStructBuilder>(unwrapped)), o});
+					state().get<Forward>().visitor -> beginObject(s);
 				} else {
 					KJ_REQUIRE(py::isinstance<py::dict>(o));
 					states.add(Dict {o});

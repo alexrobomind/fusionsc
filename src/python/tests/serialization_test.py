@@ -6,6 +6,38 @@ from pytest import approx, fixture
 from fusionsc.serialize import dump, load
 
 import time
+import pytest
+
+class PickleDummy:
+	data: str
+	msg: fsc.service.Float64Tensor.Builder
+
+def test_serialize_pickle():
+	testString = 'test string'
+	dummy = PickleDummy()
+	dummy.data = testString
+	dummy.msg = fsc.service.Float64Tensor.newMessage([1, 2, 3])
+	
+	assert not fsc.serialize.pickleEnabled()
+	
+	# By default, pickling should not work
+	with pytest.raises(AssertionError):
+		fsc.serialize.dump(dummy)
+	
+	# When enabling pickle, it should work
+	with fsc.serialize.allowPickle():
+		dumped = fsc.serialize.dump(dummy)
+	
+	# Unpickling should not work
+	with pytest.raises(RuntimeError):
+		fsc.serialize.load(dumped)
+	
+	# With enabling pickle it should
+	with fsc.serialize.allowPickle():
+		loaded = fsc.serialize.load(dumped)
+	
+	assert loaded.data == testString
+	
 
 def test_serialize_complex():
 	values = [

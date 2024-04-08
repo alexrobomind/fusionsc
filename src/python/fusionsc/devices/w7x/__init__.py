@@ -8,7 +8,7 @@ from ...geometry import Geometry
 from ...native.devices import w7x as w7xnative
 
 from ...asnc import asyncFunction
-from ...wrappers import unstableApi
+from ..._api_markers import unstableApi
 
 from ...backends import localResources
 

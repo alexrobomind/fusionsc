@@ -9,7 +9,7 @@ from . import efit
 from . import wrappers
 
 from .asnc import asyncFunction
-from .wrappers import unstableApi
+from ._api_markers import unstableApi
 
 import numpy as np
 import copy
@@ -155,20 +155,20 @@ class CoilFilament(wrappers.structWrapper(service.Filament)):
 		return result
 	
 	@staticmethod
-	def fromArray(data):
+	def fromArray(coilData):
 		"""Creates a coil from numpy array of shape [3, nPoints]"""
-		data = np.asarray(data)
+		coilData = np.asarray(coilData)
 		
 		# Validate shape
-		assert len(data.shape) == 2
-		assert data.shape[0] == 3
+		assert len(coilData.shape) == 2
+		assert coilData.shape[0] == 3
 		
 		# Transpose input (internal coils have shape [nPoints, 3])
-		data = data.T
+		coilData = coilData.T
 		
 		# Publish data as ref
 		filament = service.Filament.newMessage()
-		filament.inline = data
+		filament.inline = coilData
 		
 		ref = data.publish(filament)
 		
@@ -252,7 +252,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		return np.asarray(response.values)
 	
 	@asyncFunction
-	async def evaluateRzphi(self, points):
+	async def evaluatePhizr(self, points):
 		"""
 		Evaluates the magnetic field in the given coordinates. 
 		
@@ -263,7 +263,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			A numpy array of shape points.shape with the field as x, y, z field (cartesian).
 		"""
 		resolved = await self.resolve.asnc()
-		response = await _calculator().evaluateRzphi(resolved.data, points)
+		response = await _calculator().evaluatePhizr(resolved.data, points)
 		return np.asarray(response.values)
 	
 	@asyncFunction
@@ -432,6 +432,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 	def fromDipoles(positions, moments, radii):
 		positions = np.asarray(positions)
 		moments = np.asarray(moments)
+		radii = np.asarray(radii)
 		
 		assert len(positions.shape) == 2
 		assert len(moments.shape) == 2
@@ -528,8 +529,8 @@ async def visualizeCoils(field):
 		
 	return pv.MultiBlock(dataSets)
 
+"""
 def _fourierSurfaces(rCos, zSin, rsin = None, zCos = None, nSym = 1, nTurns = 1) -> service.FourierSurfaces.Builder:
-	"""Builds a Fourier surface object from keyword arguments"""
 	result = service.FourierSurfaces.newMessage()
 	
 	assert rCos is not None
@@ -564,3 +565,4 @@ def _fourierSurfaces(rCos, zSin, rsin = None, zCos = None, nSym = 1, nTurns = 1)
 		nonSym.zCos = zCos
 	
 	return result
+"""

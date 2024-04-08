@@ -5,7 +5,7 @@ from . import native
 from . import magnetics
 from . import data
 
-from .wrappers import unstableApi
+from ._api_markers import unstableApi
 from .asnc import asyncFunction
 
 import numpy as np

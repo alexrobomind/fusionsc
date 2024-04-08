@@ -7,6 +7,7 @@ from . import backends
 from . import wrappers
 
 from .asnc import asyncFunction
+from ._api_markers import unstableApi
 
 import numpy as np
 
@@ -236,7 +237,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		return result.withTags(tags)
 	
 	@staticmethod
-	@wrappers.unstableApi
+	@unstableApi
 	def fromPyvista(polyData):
 		"""Creates a geometry from a pyvista.PolyData object"""
 		vertices = polyData.verts
@@ -255,7 +256,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		return Geometry.polyMesh(vertices, linesOut)
 	
 	@staticmethod
-	@wrappers.unstableApi
+	@unstableApi
 	def importFrom(filename: str):
 		"""Creates a geometry from a file (loaded using pyvista)"""
 		import pyvista as pv
@@ -384,7 +385,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		}
 	
 	@asyncFunction
-	@wrappers.unstableApi
+	@unstableApi
 	async def exportTo(self, filename: str):
 		"""Saves the geometry to the given filename. Supports '.ply', '.stl', and '.vtk' files."""
 		asPv = await self.asPyvista.asnc()

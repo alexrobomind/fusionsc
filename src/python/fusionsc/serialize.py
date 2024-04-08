@@ -8,7 +8,8 @@ import contextlib
 import contextvars
 
 from typing import Any, Optional
-from .wrappers import asyncFunction, structWrapper
+from .asnc import asyncFunction
+from .wrappers import structWrapper
 
 from . import data
 from . import service

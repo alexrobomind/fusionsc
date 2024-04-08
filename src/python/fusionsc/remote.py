@@ -5,6 +5,7 @@ from . import backends
 from . import asnc
 
 from .asnc import asyncFunction
+from ._api_markers import unstableApi, untested
 
 class OpenPort:
 	_backend: service.NetworkInterface.OpenPort
@@ -31,6 +32,7 @@ class OpenPort:
 	
 
 @asyncFunction
+@unstableApi
 async def sshPublicKey(host, user, port = 21, pubKeyFile = None, privKeyFile = None, passPhrase = None):
 	"""Creates an SSH session using public key authentication."""
 	networkInterface = backends.localResources()
@@ -53,8 +55,13 @@ async def connect(url : str, tunnel = None, ServiceType = service.RootService):
 	return backend.remote.castAs_(ServiceType)
 
 @asyncFunction
+@untested
 async def serve(target, host = "0.0.0.0", port = None, tunnel = None):
 	"""Serves the given object (or the active backend) on the given host and port, optionally over the specified connection"""
+	
+	import warnings
+	warnings.warn("Currently, the fusionsc.remove.serve function caused spurious memory errors in tests. The implementation will need a review")
+	
 	networkInterface = tunnel
 	
 	if networkInterface is None:

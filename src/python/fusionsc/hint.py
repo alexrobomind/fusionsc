@@ -5,6 +5,8 @@ from . import service, magnetics, wrappers, data
 from .asnc import asyncFunction
 from .data import publish
 
+from ._api_markers import untested
+
 import netCDF4
 import numpy as np
 import warnings
@@ -74,7 +76,7 @@ def loadNetcdfFile(filename):
 			*(p_field.shape)
 		)
 
-@wrappers.untested
+@untested
 def loadFortranSnapfile(filename, big_endian = True, real_bytes = 8):
 	"""Creates a HINT equilibrium from the given HINT FORTRAN file."""
 	# Define types

@@ -474,6 +474,7 @@ namespace {
 			
 			if(ignoreDepth > 0) {
 				--ignoreDepth;
+				
 				return;
 			}
 			
@@ -715,6 +716,9 @@ namespace {
 		void acceptData(kj::ArrayPtr<const kj::byte> d) override {
 			ACCEPT_FWD(acceptData(d))
 			
+			if(ignoreDepth > 0)
+				return;
+			
 			auto type = backend.expectedType();
 			using ST = capnp::schema::Type;
 			
@@ -737,22 +741,37 @@ namespace {
 				}
 					
 				case ST::LIST:
-				case ST::TEXT:				
+					KJ_FAIL_REQUIRE("Can not read raw data as list");
+				case ST::TEXT:	
+					KJ_FAIL_REQUIRE("Can not read raw data as text");		
 				case ST::ENUM:
+					KJ_FAIL_REQUIRE("Can not read raw data as enum");
 				case ST::STRUCT:
+					KJ_FAIL_REQUIRE("Can not read raw data as struct");
 				case ST::FLOAT32:
-				case ST::FLOAT64:				
+					KJ_FAIL_REQUIRE("Can not read raw data as float32");
+				case ST::FLOAT64:
+					KJ_FAIL_REQUIRE("Can not read raw data as float64");				
 				case ST::UINT8:
+					KJ_FAIL_REQUIRE("Can not read raw data as uint8");
 				case ST::UINT16:
+					KJ_FAIL_REQUIRE("Can not read raw data as uint16");
 				case ST::UINT32:
-				case ST::UINT64:				
+					KJ_FAIL_REQUIRE("Can not read raw data as uint32");
+				case ST::UINT64:
+					KJ_FAIL_REQUIRE("Can not read raw data as uint64");				
 				case ST::INT8:
+					KJ_FAIL_REQUIRE("Can not read raw data as int8");
 				case ST::INT16:
+					KJ_FAIL_REQUIRE("Can not read raw data as int16");
 				case ST::INT32:
+					KJ_FAIL_REQUIRE("Can not read raw data as int32");
 				case ST::INT64:
+					KJ_FAIL_REQUIRE("Can not read raw data as int64");
 				case ST::BOOL:
+					KJ_FAIL_REQUIRE("Can not read raw data as bool");
 				case ST::INTERFACE:
-					KJ_FAIL_REQUIRE("Can not read raw data as target type");
+					KJ_FAIL_REQUIRE("Can not read raw data as capability");
 			}
 		}
 		
