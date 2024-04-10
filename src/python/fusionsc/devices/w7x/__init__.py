@@ -50,12 +50,9 @@ def connectLegacyIPPSite():
 	connectComponentsDB("http://esb.ipp-hgw.mpg.de:8280/services/ComponentsDbRest")
 
 def connectIppSite():
-	"""Connects the resolve module to the newer fsc-driven Coils- and ComponentsDb proxies"""
-	import warnings
-	warnings.warn("IPP site backend is experimental, URL might change")
-	
+	"""Connects the resolve module to the newer fsc-driven Coils- and ComponentsDb proxies"""	
 	# Set up the W7-X load balancer as main backend
-	newBackend = remote.connect("http://sv-coda-wsvc-31:8888/load-balancer")
+	newBackend = remote.connect("http://fusionsc-site:8888/load-balancer")
 	backends.alwaysUseBackend(newBackend)
 	
 	# Load w7xdb (exposed by remote backend) and connect its data index
