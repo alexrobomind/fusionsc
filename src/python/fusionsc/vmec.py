@@ -10,14 +10,14 @@ from .asnc import asyncFunction
 
 import numpy as np
 
-from typing import Optional
+from typing import Optional, List
 
 def _driver():
 	return backends.activeBackend().vmecDriver().service
 
 @asyncFunction
 @unstableApi
-async def sphithetaToPhizr(surfaces : magnetics.SurfaceArray, s, phi, theta, sValues : Optional[list[float]] = None):
+async def sphithetaToPhizr(surfaces : magnetics.SurfaceArray, s, phi, theta, sValues : Optional[List[float]] = None):
 	# This also gets caught by the backend but the error message can be confusing
 	assert len(surfaces.shape) == 1, "Surface array must be linear"
 	
@@ -35,7 +35,7 @@ async def sphithetaToPhizr(surfaces : magnetics.SurfaceArray, s, phi, theta, sVa
 
 @asyncFunction
 @unstableApi
-async def phizrToSphitheta(surfaces : magnetics.SurfaceArray, phi, z, r, sValues : Optional[list[float]] = None):
+async def phizrToSphitheta(surfaces : magnetics.SurfaceArray, phi, z, r, sValues : Optional[List[float]] = None):
 	# This also gets caught by the backend but the error message can be confusing
 	assert len(surfaces.shape) == 1, "Surface array must be linear"
 	

@@ -28,14 +28,14 @@ def disconnectLocal():
 	"""Disconnects a thread from the in-process worker"""
 	_localResources.set((None, None))
 
-def isLocalConnected():
+def isLocalConnected() -> bool:
 	"""
 	Checks whether the thread is connected to the in-process worker
 	"""
 	threadId, _ = _localResources.get()
 	return threadId is not None and threadId == _threadId()
 
-def localResources():
+def localResources() -> service.LocalResources.Client:
 	"""
 	Provides access to the in-process worker's "LocalResources" service interface.
 	
@@ -47,7 +47,7 @@ def localResources():
 	
 	return _localResources.get()[1]
 
-def localBackend():
+def localBackend() -> service.RootService.Client:
 	"""
 	Returns the backend corresponding to the in-process worker. Requires the active thread
 	to be connected to it.
@@ -55,13 +55,13 @@ def localBackend():
 	return localResources().root().pipeline.root
 
 @asnc.asyncFunction
-async def reconfigureLocalBackend(config):
+async def reconfigureLocalBackend(config: service.LocalConfig.ReaderOrBuilder):
 	"""
 	Reconfigues the local backend to the given configuration.
 	"""
 	await localResources().configureRoot(config)
 
-def activeBackend():
+def activeBackend() -> service.RootService.Client:
 	"""
 	Returns the current thread's active backend for calculations. This is the inner-most
 	active useBackend call, falling back to the in-process worker if no other backend
@@ -77,7 +77,7 @@ def activeBackend():
 	return cb
 
 @contextlib.contextmanager
-def useBackend(newBackend):
+def useBackend(newBackend: service.RootService.Client):
 	"""
 	Temporarily overrides the active backend to use for calculations.
 	
@@ -92,7 +92,7 @@ def useBackend(newBackend):
 	yield newBackend
 	_currentBackend.reset(token)
 
-def alwaysUseBackend(newBackend):
+def alwaysUseBackend(newBackend: service.RootService.Client):
 	"""
 	Permanently installs a backend as the default for this thread.
 	
@@ -102,5 +102,6 @@ def alwaysUseBackend(newBackend):
 	_currentBackend.set((_threadId(), newBackend))
 
 @asnc.asyncFunction
-async def backendInfo():
+async def backendInfo() -> service.NodeInfo.Reader:
+	"""Returns information about the currently active backend"""
 	return await activeBackend().getInfo()

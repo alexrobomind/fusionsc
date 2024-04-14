@@ -1,3 +1,5 @@
+"""This module parses the Cap'n'proto schema files and exposes them as python classes"""
+
 from . import capnp
 
 from .native import loader
