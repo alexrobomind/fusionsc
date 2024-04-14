@@ -56,7 +56,7 @@ import threading
 
 __all__ = [
 	'native',
-	'kj', 'capnp', 'service', 'efit',
+	'kj', 'capnp', 'service', 'efit', 'hint',
 	'asnc', 'backends', 'data', 'ipython_integration', 'resolve',
 	'magnetics', 'flt', 'hfcam', 'devices', 'export', 'structio'
 ]
