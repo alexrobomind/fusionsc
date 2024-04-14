@@ -204,7 +204,7 @@ TEST_CASE("calc-surf") {
 		sp.setShape({3, 4});
 		sp.setData({5.6, 5.7, 5.8, 5.9, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
 		
-		iotaReq.getStepSizeControl().initAdaptive().setTargetError(1e-4);
+		iotaReq.getStepSizeControl().initAdaptive().setTargetError(1e-3);
 		iotaReq.getStepSizeControl().getAdaptive().getErrorUnit().setIntegratedOver(2000 * 2 * pi * 5.5);
 	}
 	
@@ -227,8 +227,8 @@ TEST_CASE("calc-surf") {
 		sp.setShape({3, 4});
 		sp.setData({5.6, 5.7, 5.8, 5.9, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
 		
-		iotaReq.getStepSizeControl().initAdaptive().setTargetError(1e-3);
-		iotaReq.getStepSizeControl().getAdaptive().getErrorUnit().setIntegratedOver(150 * 2 * pi * 5.5);
+		surfReq.getStepSizeControl().initAdaptive().setTargetError(1e-3);
+		surfReq.getStepSizeControl().getAdaptive().getErrorUnit().setIntegratedOver(150 * 2 * pi * 5.5);
 	}
 	
 	auto surfResponse = surfReq.send().wait(ws);
