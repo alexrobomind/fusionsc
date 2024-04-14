@@ -14,6 +14,7 @@ endif()
 #file(COPY ${Botan_SOURCE_DIR}/ DESTINATION ${Botan_BINARY_DIR})
 
 set(AMALGAMATION_DIR "${Botan_BINARY_DIR}/amalgamation/$<CONFIG>")
+file(MAKE_DIRECTORY ${AMALGAMATION_DIR})
 
 add_custom_command(
 	OUTPUT "${AMALGAMATION_DIR}/botan_all.cpp"
