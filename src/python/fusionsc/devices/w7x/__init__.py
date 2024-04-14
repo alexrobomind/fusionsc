@@ -285,11 +285,9 @@ def op21Geometry():
 # The W7XCoilSet type defaults to the W7-X coils 160 ... 230
 defaultCoils = cadCoils('archive')
 
-@unstableApi
 def defaultGrid():
 	return service.devices.w7x.defaultGrid.value.clone_()
 
-@unstableApi
 def defaultGeometryGrid():
 	return service.devices.w7x.defaultGeoGrid.value.clone_()
 

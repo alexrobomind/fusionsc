@@ -70,7 +70,7 @@ namespace {
 		} catch(py::error_already_set&) {
 		}
 		
-		py::module_::import("warnings").attr("warn")("No asyncio event loop was specified in this context. A new loop was auto-started");
+		// py::module_::import("warnings").attr("warn")("No asyncio event loop was specified in this context. A new loop was auto-started");
 		
 		// No event loop exists. Make a new one
 		auto newLoop = policy.attr("new_event_loop")();
