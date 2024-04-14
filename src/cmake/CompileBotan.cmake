@@ -14,12 +14,16 @@ endif()
 #file(COPY ${Botan_SOURCE_DIR}/ DESTINATION ${Botan_BINARY_DIR})
 
 set(AMALGAMATION_DIR "${Botan_BINARY_DIR}/amalgamation/$<CONFIG>")
-file(MAKE_DIRECTORY ${AMALGAMATION_DIR})
+
+add_custom_command(
+	OUTPUT "${AMALGAMATION_DIR}/configure.py"
+	
+	COMMAND ${CMAKE_COMMAND} -E copy_directory ${Botan_SOURCE_DIR} ${AMALGAMATION_DIR}
+)
 
 add_custom_command(
 	OUTPUT "${AMALGAMATION_DIR}/botan_all.cpp"
-	
-	COMMAND ${CMAKE_COMMAND} -E copy_directory ${Botan_SOURCE_DIR} ${AMALGAMATION_DIR}
+	DEPENDS "${AMALGAMATION_DIR}/configure.py"
 	
 	COMMAND ${Python3_EXECUTABLE}
 	"${AMALGAMATION_DIR}/configure.py"
