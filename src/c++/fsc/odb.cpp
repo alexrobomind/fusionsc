@@ -1938,6 +1938,8 @@ Own<ObjectDBEntry> FolderInterface::locateWriteDir(kj::PathPtr path, bool create
 			
 			db.updateFolderEntry(current -> id, folderName.asPtr(), newFolder -> id);
 			db.incRefcount(newFolder -> id);
+			
+			current = mv(newFolder);
 		}
 	}
 	
