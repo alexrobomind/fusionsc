@@ -37,6 +37,15 @@ public:
 	virtual Promise<void> processFilament(Filament::Reader input, Filament::Builder output, ResolveFieldContext context);
 };
 
+struct FieldCache {
+	static kj::Array<const byte> hashPoints(Eigen::TensorMap<Eigen::Tensor<double, 2>>);
+	
+	virtual Maybe<Promise<LocalDataRef<Float64Tensor>>> check(kj::ArrayPtr<const byte> pointsHash, kj::ArrayPtr<const byte> fieldKey) = 0;
+	virtual void put(kj::ArrayPtr<const byte> pointsHash, kj::ArrayPtr<const byte> fieldKey, Promise<LocalDataRef<Float64Tensor>>) = 0;
+};
+
+Own<FieldCache> lruFieldCache(unsigned int size);
+
 /**
  * Creates a new field calculator.
  */
@@ -50,6 +59,13 @@ FieldResolver::Client newCache(MagneticField::Reader field, ComputedField::Reade
  * For testing
  */
 void simpleTokamak(MagneticField::Builder output, double rMajor = 5.5, double rMinor = 1.5, unsigned int nCoils = 25, double Ip = 0.3);
+
+/**
+ *  Sets the cache key to a copy of the canonicalized field
+ *
+ * Returns: true if the cache key could be calculated, false if not (e.g. because of nested DataRefs)
+ */
+bool setCacheKey(MagneticField::Builder field);
 
 // Inline Implementation
 

@@ -95,6 +95,7 @@ add_library(
 	magnetics.h
 	magnetics-kernels.h
 	magnetics.cpp
+	magnetics-cache-impl.cpp
 	
 	offline.h
 	offline.cpp

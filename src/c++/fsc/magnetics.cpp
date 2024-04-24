@@ -823,11 +823,11 @@ struct CalculationSession : public FieldCalculator::Server {
 	}
 };
 
-struct FieldCache : public FieldResolverBase {
+struct FieldCacheResolver : public FieldResolverBase {
 	ID target;
 	Temporary<ComputedField> compField;
 	
-	FieldCache(ID target, Temporary<ComputedField> compField) :
+	FieldCacheResolver(ID target, Temporary<ComputedField> compField) :
 		target(mv(target)),
 		compField(mv(compField))
 	{}
@@ -882,7 +882,7 @@ bool isBuiltin(Filament::Reader filament) {
 FieldResolver::Client newCache(MagneticField::Reader field, ComputedField::Reader computed) {
 	Temporary<ComputedField> cf(computed);
 	auto clientPromise = ID::fromReaderWithRefs(field).then([cf = mv(cf)](ID id) mutable -> FieldResolver::Client {
-		return kj::heap<FieldCache>(mv(id), mv(cf));
+		return kj::heap<FieldCacheResolver>(mv(id), mv(cf));
 	});
 	
 	return clientPromise;
@@ -942,6 +942,10 @@ Promise<void> FieldResolverBase::resolveFilament(ResolveFilamentContext ctx) {
 }
 
 Promise<void> FieldResolverBase::processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) {
+	if(input.hasCacheKey()) {
+		output.setCacheKey(input.getCacheKey());
+	}
+	
 	switch(input.which()) {
 		case MagneticField::SUM: {
 			auto inSum = input.getSum();
@@ -1122,6 +1126,20 @@ void simpleTokamak(MagneticField::Builder output, double rMajor, double rMinor, 
 		
 		buildAxis(rMajor, filamentField.getFilament());
 	}
+}
+
+bool setCacheKey(MagneticField::Builder field) {
+	if(field.hasCacheKey())
+		field.disownCacheKey();
+	
+	auto maybeException = kj::runCatchingExceptions([&]() {
+		field.setCacheKey(ID::fromReader(field.asReader()).data);
+	});
+	
+	if(maybeException == nullptr)
+		return true;
+	
+	return false;
 }
 
 }
