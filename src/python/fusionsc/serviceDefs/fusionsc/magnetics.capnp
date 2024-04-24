@@ -7,10 +7,10 @@ using Java = import "java.capnp";
 $Java.package("org.fsc");
 $Java.outerClassname("Magnetics");
 
-using Data = import "data.capnp";
+using D = import "data.capnp";
 
-using DataRef = Data.DataRef;
-using Float64Tensor = Data.Float64Tensor;
+using DataRef = D.DataRef;
+using Float64Tensor = D.Float64Tensor;
 
 # BEGIN [magnetics]
 
@@ -294,6 +294,12 @@ struct W7XCoilSet {
 #   individual facilities.
 
 struct MagneticField {
+	# If this is set, this indicates to the field calculator that caching this
+	# field is a good idea.
+	# This should always point to a canonicalized binary representation of
+	# the field struct itself (minus the cached data)
+	cacheKey @22 : Data;
+	
 	# Different ways to calculate the magnetic field
 	union {
 		# ============================= General =================================
