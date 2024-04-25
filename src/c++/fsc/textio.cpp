@@ -805,6 +805,58 @@ namespace {
 	void saveStruct(DynamicStruct::Reader, Visitor&, const SaveOptions&, Maybe<kj::WaitScope&> ws);
 	void saveList(DynamicList::Reader, Visitor&, const SaveOptions&, Maybe<kj::WaitScope&> ws);
 	
+	struct DefaultCapabilityStrategy : public SaveOptions::CapabilityStrategy {
+		void saveCapability(capnp::DynamicCapability::Client ref, Visitor& v, const SaveOptions& opts, Maybe<kj::WaitScope&> maybeWS) const override {
+			using GenericRef = DataRef<capnp::AnyPointer>;
+			
+			KJ_IF_MAYBE(pWS, maybeWS) {
+				kj::WaitScope& ws = *pWS;
+				
+				// Check whether we actually are a DataRef
+				auto schema = ref.getSchema();
+				
+				constexpr uint64_t DR_ID = capnp::typeId<GenericRef>();
+				if(schema.getProto().getId() != DR_ID)
+					goto writeDefault;
+				
+				auto asRef = capnp::Capability::Client(ref).castAs<DataRef<capnp::AnyPointer>>();
+				auto localRef = getActiveThread().dataService().download(asRef).wait(ws);
+				
+				v.beginObject(2);
+				
+				v.acceptString("metadata");
+				save(localRef.getMetadata(), v, opts, maybeWS);
+				
+				v.acceptString("data");
+				
+				auto payloadType = schema.getBrandArgumentsAtScope(DR_ID)[0];
+				if(payloadType.isData()) {
+					KJ_REQUIRE(localRef.getFormat().isRaw(), "Data-typed messages not supported");
+					
+					capnp::Data::Reader rawData = localRef.getRaw();
+					save(rawData, v, opts, ws);
+				} else {
+					KJ_REQUIRE(payloadType.isStruct(), "Only data and struct refs supported");
+					KJ_REQUIRE(localRef.getFormat().isSchema(), "Type mismatch between ref and expected data");
+					
+					capnp::AnyPointer::Reader untyped = localRef.get();
+					DynamicStruct::Reader typed = untyped.getAs<DynamicStruct>(payloadType.asStruct());
+					
+					save(typed, v, opts, ws);
+				}
+				
+				v.endObject();
+				
+				return;
+			}
+			
+			writeDefault:
+				v.acceptString("<capability>");
+		}
+	};
+	
+	static DefaultCapabilityStrategy DEFAULT_CAP_INSTANCE;
+	
 	bool trySaveRef(DynamicCapability::Client ref, Visitor& v, const SaveOptions& opts, Maybe<kj::WaitScope&> maybeWS) {
 		using GenericRef = DataRef<capnp::AnyPointer>;
 		
@@ -875,8 +927,7 @@ namespace {
 				if(hook -> isNull()) {
 					v.acceptNull();
 				} else {
-					if(!trySaveRef(asCap, v, opts, ws))
-						v.acceptString("<capability>");
+					opts.capabilityStrategy -> saveCapability(asCap, v, opts, ws);
 				}
 				break;
 			}
@@ -1071,6 +1122,8 @@ namespace {
 		bool supportsIntegerKeys = true;
 	};
 }
+
+SaveOptions::CapabilityStrategy* const SaveOptions::CapabilityStrategy::DEFAULT = &DEFAULT_CAP_INSTANCE;
 
 Own<Visitor> createVisitor(DynamicStruct::Builder b) {
 	return makeBuilderStack(kj::heap<ExternalStructSink>(b));

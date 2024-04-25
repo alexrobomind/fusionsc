@@ -1957,12 +1957,31 @@ Own<ObjectDBEntry> FolderInterface::locate(kj::PathPtr path) {
 	Own<ObjectDBEntry> current = object -> addRef();
 	for(const auto& entryName : path) {
 		current -> trySync();
-		ObjectDBSnapshot& snap = current -> getSnapshot();
 		
-		auto q = snap.getFolderEntry.bind(current -> id, entryName.asPtr());
-		KJ_REQUIRE(q.step(), "Entry not found", path, entryName);
+		auto acc = current -> loadPreserved();
 		
-		current = object -> getDb().open(q[0], snap);
+		if(acc -> isFolder()) {
+			ObjectDBSnapshot& snap = current -> getSnapshot();
+			auto q = snap.getFolderEntry.bind(current -> id, entryName.asPtr());
+			KJ_REQUIRE(q.step(), "Entry not found", path, entryName);
+		
+			current = object -> getDb().open(q[0], snap);
+		} else if(acc -> isFile()) {
+			KJ_REQUIRE(entryName == "contents");
+			current = object -> getDb().unwrapValid(acc -> getFile());
+		} else if(acc -> isDataRef()) {
+			auto ref = acc -> getDataRef();
+			
+			KJ_IF_MAYBE(pIndex, entryName.tryParseAs<uint64_t>()) {
+				current = object -> getDb().unwrapValid(ref.getCapTable()[*pIndex]);
+			} else {
+				KJ_FAIL_REQUIRE("Child objects of DataRefs must be accessed by unsigned int index", entryName);
+			}
+		} else if(acc -> isLink()) {
+			current = object -> getDb().unwrapValid(acc -> getLink());
+		} else {
+			KJ_FAIL_REQUIRE("The requested object can not provide child elements");
+		}
 	}
 	
 	current -> trySync();

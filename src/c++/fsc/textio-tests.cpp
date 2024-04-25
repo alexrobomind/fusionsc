@@ -46,13 +46,26 @@ TEST_CASE("textio-rw") {
 	KJ_DBG("TEXTIO PHASE");
 	KJ_DBG("");
 	
+	auto l = newLibrary();
+	auto lt = l -> newThread();
+	auto& ws = lt -> waitScope();
+	
+	Temporary<MagneticField> nestedField;
+	{
+		auto sum = nestedField.initSum(2);
+		sum[0].setRef(nullptr);
+		sum[1].initNested();
+	}
+	
 	Temporary<MagneticField> field;
-	auto sum = field.initSum(4);
-	sum.setWithCaveats(2, WIRE_FIELD.get());
-	sum[2].getFilamentField().getFilament().getInline().getData().set(
-		0, std::numeric_limits<double>::infinity()
-	);
-	sum[3].setRef(nullptr);
+	{
+		auto sum = field.initSum(4);
+		sum.setWithCaveats(2, WIRE_FIELD.get());
+		sum[2].getFilamentField().getFilament().getInline().getData().set(
+			0, std::numeric_limits<double>::infinity()
+		);
+		sum[3].setRef(lt -> dataService().publish(nestedField.asReader()));
+	}
 	
 	Dialect opts;
 	SaveOptions sOpts;
@@ -117,7 +130,7 @@ TEST_CASE("textio-rw") {
 	KJ_DBG(opts.language);
 	
 	kj::VectorOutputStream vos;
-	save(field.asReader(), vos, opts, sOpts);
+	save(field.asReader(), vos, opts, sOpts, ws);
 		
 	auto flat = vos.getArray();
 	KJ_DBG(flat.asChars());

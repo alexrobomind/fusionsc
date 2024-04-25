@@ -88,7 +88,7 @@ namespace fsc { namespace textio {
 			}
 		}
 	};
-	
+		
 	struct SaveOptions {
 		/** Enable compact representation
 		 *
@@ -109,6 +109,21 @@ namespace fsc { namespace textio {
 		 * structures, it is disabled by default.
 		 */
 		 bool integerKeys = false;
+		
+		
+		struct CapabilityStrategy {
+			virtual void saveCapability(capnp::DynamicCapability::Client, Visitor&, const SaveOptions&, Maybe<kj::WaitScope&>) const = 0;
+			
+			static CapabilityStrategy* const DEFAULT;
+		};
+	
+		/** Allows the override of capability storage
+		 *
+		 * Custom viewers / editors might want to override how a capability is shown,
+		 * e.g. by replacing them with a clickable link that opens the target in a
+		 * GUI.
+		 */
+		CapabilityStrategy* capabilityStrategy = CapabilityStrategy::DEFAULT;
 	};
 	
 	using ListInitializer = kj::Function<capnp::DynamicList::Builder(size_t)>;
