@@ -87,6 +87,8 @@ namespace fsc { namespace textio {
 					return false;
 			}
 		}
+		
+		Dialect(Language l) : language(l) {}
 	};
 		
 	struct SaveOptions {
@@ -142,6 +144,9 @@ namespace fsc { namespace textio {
 	
 	void save(capnp::DynamicValue::Reader, Visitor&, const SaveOptions& = SaveOptions(), Maybe<kj::WaitScope&> = nullptr);
 	void save(capnp::DynamicValue::Reader, kj::BufferedOutputStream&, const Dialect&, const SaveOptions& = SaveOptions(), Maybe<kj::WaitScope&> = nullptr);
+	
+	kj::Array<kj::byte> saveToArray(capnp::DynamicValue::Reader, const Dialect&, const SaveOptions& = SaveOptions(), Maybe<kj::WaitScope&> = nullptr);
+	kj::String saveToString(capnp::DynamicValue::Reader, const Dialect&, const SaveOptions& = SaveOptions(), Maybe<kj::WaitScope&> = nullptr);
 	
 	namespace internal {
 		void jsonconsLoad(kj::BufferedInputStream&, Visitor&, const Dialect&);

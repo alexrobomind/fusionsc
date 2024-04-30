@@ -3,8 +3,6 @@
 #include "async.h"
 #include "formats.h"
 
-#include <fsc/yaml.h>
-
 using capnp::DynamicValue;
 using capnp::DynamicList;
 using capnp::DynamicStruct;
@@ -209,13 +207,9 @@ void assign(const BuilderSlot& dst, py::object object) {
 			if(utf8 == nullptr)
 				throw py::error_already_set();
 			kj::ArrayPtr<const kj::byte> bufferPtr((const kj::byte*) utf8, size);
-			
-			// Set language
-			textio::Dialect dialect;
-			dialect.language = textio::Dialect::YAML;
-			
+						
 			// Perform load
-			textio::load(bufferPtr, *v, dialect);
+			textio::load(bufferPtr, *v, textio::Dialect::YAML);
 			return;
 		})) {
 			auto& error = *pException;

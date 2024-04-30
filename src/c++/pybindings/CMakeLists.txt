@@ -21,6 +21,7 @@ if(FSC_WITH_PYTHON)
 		loader-interface-method.cpp
 		data.cpp
 		devices.cpp
+		serialize.cpp
 		
 		service.cpp
 		

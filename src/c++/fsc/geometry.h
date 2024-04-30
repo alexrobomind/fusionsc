@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include "eigen.h"
+#include "data.h"
 
 #include <fsc/geometry.capnp.h>
 
@@ -38,5 +39,10 @@ inline EIGEN_DEVICE_FUNC Vec3u locationInGrid(Vec3d point, Vec3d min, Vec3d max,
 	
 	return result.cast<unsigned int>();
 }
+
+Temporary<Geometry> readPly(kj::StringPtr filename, size_t nMaxVerts = 0, size_t nMaxEntries = 0);
+
+Promise<void> writePly(Geometry::Reader, kj::StringPtr filename, bool binary = true);
+void writePly(kj::ArrayPtr<Mesh::Reader> meshes, kj::StringPtr filename, bool binary);
 
 }

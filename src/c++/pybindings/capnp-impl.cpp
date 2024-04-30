@@ -8,8 +8,7 @@
 #include <kj/encoding.h>
 #include <fsc/typing.h>
 #include <fsc/common.h>
-
-#include <fsc/yaml.h>
+#include <fsc/textio-yaml.h>
 
 using capnp::AnyPointer;
 using capnp::DynamicValue;
@@ -337,10 +336,12 @@ kj::String DynamicStructInterface<StructType>::toYaml(bool flow) {
 		emitter -> SetSeqFormat(YAML::Flow);
 	}
 	
-	(*emitter) << toReader(this -> wrapped());
+	textio::SaveOptions so;
+	so.compact = true;
+	
+	textio::save(toReader(this -> wrapped()), *textio::createVisitor(*emitter), so);
 	
 	kj::ArrayPtr<char> stringData(const_cast<char*>(emitter -> c_str()), emitter -> size() + 1);
-	
 	return kj::String(stringData.attach(mv(emitter)));
 }
 

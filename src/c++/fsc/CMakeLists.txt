@@ -36,11 +36,9 @@ add_library(
 	
 	data.h
 	data.cpp
-	
-	yaml.h
-	yaml.cpp
-	
+		
 	textio.h
+	textio-yaml.h
 	textio.cpp
 	textio-node.cpp
 	textio-json.cpp
@@ -91,6 +89,7 @@ add_library(
 	
 	geometry.h
 	geometry.cpp
+	geometry-ply.cpp
 	
 	magnetics.h
 	magnetics-kernels.h

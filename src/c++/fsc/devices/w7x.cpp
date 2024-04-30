@@ -2,7 +2,6 @@
 #include <capnp/compat/json.h>
 
 #include "w7x.h"
-#include "../yaml.h"
 
 namespace fsc {
 
