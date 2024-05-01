@@ -452,7 +452,9 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 		flat = [capnp.Enum.fromRaw(tp, raw) for raw in ea.data]
 		return np.asarray(flat).reshape(ea.shape)
 		"""
-		return native.serialize.loadEnumArray(reader.enumArray)
+		def lazyLoad():
+			return native.serialize.loadEnumArray(reader.enumArray)
+		return wrappers.LazyObject(lazyLoad)
 	
 	if which == "dynamicEnum":
 		de = reader.dynamicEnum
@@ -481,7 +483,9 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 		
 		return result.reshape(sa.shape)
 		"""
-		return native.serialize.loadStructArray(reader.structArray)
+		def lazyLoad():
+			return native.serialize.loadStructArray(reader.structArray)
+		return wrappers.LazyObject(lazyLoad)
 	
 	if which == "pythonBigInt":
 		return int.from_bytes(bytes = reader.pythonBigInt, byteorder="little", signed = True)
