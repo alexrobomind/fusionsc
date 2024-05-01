@@ -301,6 +301,8 @@ set(BUILD_EXAMPLES ${BUILD_EXAMPLES_TMP} CACHE BOOL "" FORCE)
 
 add_subdirectory(vendor/capfuzz)
 
+add_subdirectory(vendor/happly)
+
 add_library(fusionsc_poissongen INTERFACE)
 target_include_directories(fusionsc_poissongen INTERFACE vendor/pdg)
 
@@ -317,6 +319,7 @@ target_link_libraries(
 	CapnProto::kj-http
 	CapnProto::kj
 	Eigen3::Eigen
+	happly::happly
 	hdf5::hdf5_cpp
 	hdf5::hdf5_hl_cpp
 	Libssh2::libssh2
