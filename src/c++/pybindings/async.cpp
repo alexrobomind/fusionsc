@@ -91,9 +91,20 @@ PythonWaitScope::PythonWaitScope(kj::WaitScope& ws, bool fiber) : waitScope(ws),
 		" on an event loop promise without releasing the active python scope"
 	);
 	activeScope = this;
+	
+	if(isFiber) {
+		threadState = PyThreadState_New(PyThreadState_Get() -> interp);
+		mainThreadState = PyThreadState_Swap(threadState);
+	}
 }
 
 PythonWaitScope::~PythonWaitScope() {
+	if(isFiber) {
+		PyThreadState_Swap(mainThreadState);
+		PyThreadState_Clear(threadState);
+		PyThreadState_Delete(threadState);
+	}
+	
 	activeScope = nullptr;
 }
 

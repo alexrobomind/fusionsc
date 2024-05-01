@@ -29,6 +29,8 @@ struct PythonWaitScope {
 private:
 	kj::WaitScope& waitScope;
 	bool isFiber;
+	PyThreadState* threadState = nullptr;
+	PyThreadState* mainThreadState = nullptr;
 	
 	static inline thread_local PythonWaitScope* activeScope = nullptr;
 	
