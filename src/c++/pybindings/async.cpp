@@ -93,8 +93,13 @@ PythonWaitScope::PythonWaitScope(kj::WaitScope& ws, bool fiber) : waitScope(ws),
 	activeScope = this;
 	
 	if(isFiber) {
+		// Copy current context
+		py::object ctx = py::reinterpret_steal<py::object>(PyContext_CopyCurrent());
 		threadState = PyThreadState_New(PyThreadState_Get() -> interp);
 		mainThreadState = PyThreadState_Swap(threadState);
+		
+		if(PyContext_Enter(ctx.ptr()) != 0)
+			throw py::error_already_set();
 	}
 }
 
