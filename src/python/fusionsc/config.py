@@ -1,7 +1,8 @@
+"""
+This module contains the auto-configuration mechanism for fusionsc.
+"""
+
 from . import structio
-from . import service
-from . import remote
-from . import backends
 
 import pathlib
 import traceback
@@ -20,21 +21,22 @@ siteName = None
 _applied = contextvars.ContextVar("fusionsc.config._applied", default = False)
 
 def apply():
+	from . import resolve
+	from . import backends
+	from . import remote
+	
 	if _applied.get():
 		return
 		
 	if "backend" in config:
-		newBackend = remote.connect(str(config["backend"]))
-		backends.alwaysUseBackend(newBackend)
-		del newBackend
+		backends.alwaysUseBackend(remote.connect(str(config["backend"])))
 	
 	if "resolve" in config:
 		for entry in config["resolve"]:
-			for key, value in entry.items():
-				if key == "warehouse":
-					resolve.connectWarehouse(value)
-				elif key == "archive":
-					resolve.importOfflineData(value)
+			if "warehouse" in entry:
+				resolve.connectWarehouse(entry["warehouse"])
+			if "archive" in entry:
+				resolve.importOfflineData(entry["archive"])
 	
 	_applied.set(True)
 
@@ -74,7 +76,7 @@ def configCli():
 	subparsers = parser.add_subparsers(dest="command")
 	
 	defaultParser = subparsers.add_parser("default")
-	defaultParser.add_argument("name")
+	defaultParser.add_argument("name", choices = list(defaults))
 	
 	resetParser = subparsers.add_parser("reset")
 	showParser = subparsers.add_parser("show")
@@ -125,8 +127,20 @@ def configCli():
 			config["resolve"] = []
 			
 		if args.resolveCommand == "add":
-			print(f"Adding entry {args.type}: {args.url} ...")
-			config["resolve"].append({args.type : args.url})
+			if args.type == "archive":
+				path = pathlib.Path(args.url)
+				url = str(path.absolute())
+			else:
+				import urllib.parse
+				parsed = urllib.parse.urlparse(args.url, scheme = "sqlite")
+				
+				if parsed.scheme == "sqlite":
+					path = pathlib.Path(parsed.path)
+					parsed = parsed._replace(path = str(path.absolute()))
+				
+				url = urllib.parse.urlunparse(parsed)
+			print(f"Adding entry {args.type}: {url} ...")
+			config["resolve"].append({args.type : url})
 		
 		if args.resolveCommand == "remove":
 			print(f"Removing entries matching '{args.expression}' ...")

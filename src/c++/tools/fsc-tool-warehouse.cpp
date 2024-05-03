@@ -3,6 +3,7 @@
 #include <fsc/services.h>
 #include <fsc/sqlite.h>
 #include <fsc/odb.h>
+#include <fsc/textio.h>
 
 #include <capnp/rpc-twoparty.h>
 

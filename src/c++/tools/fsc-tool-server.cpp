@@ -2,7 +2,7 @@
 #include <fsc/services.h>
 #include <fsc/data.h>
 #include <fsc/networking.h>
-#include <fsc/yaml.h>
+#include <fsc/textio-yaml.h>
 
 #include <capnp/rpc-twoparty.h>
 
@@ -147,14 +147,12 @@ struct ServerTool {
 		if(config.is<kj::Path>()) {
 			auto configFile = lt -> filesystem().getCurrent().openFile(config.get<kj::Path>());
 			auto configString = configFile -> readAllText();
-			YAML::Node root = YAML::Load(configString.cStr());
-			load(loadedConfig, root);
+			textio::load(configFile -> readAllBytes(), *textio::createVisitor(loadedConfig), textio::Dialect::YAML);
 		} else if(config.is<LocalConfig::Reader>()) {
 			loadedConfig = config.get<LocalConfig::Reader>();
 		} else if(config.is<ReadFromStdin>()){
 			auto configString = readFromStdin();
-			YAML::Node root = YAML::Load(configString.cStr());
-			load(loadedConfig, root);
+			textio::load(configString.asBytes(), *textio::createVisitor(loadedConfig), textio::Dialect::YAML);
 		}
 		
 		// Dump configuration to console
