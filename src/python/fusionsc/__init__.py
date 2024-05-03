@@ -11,6 +11,9 @@ from .native import capnp
 from .native import loader
 from .native import efit
 
+# Load user configuration
+from . import config
+
 # Load service definitions
 from . import service
 

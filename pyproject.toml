@@ -13,6 +13,9 @@ dependencies = [
 	"scipy"
 ]
 
+[project.scripts]
+fusionsc-config = "fusionsc.config:configCli"
+
 [build-system]
 requires = [
   "scikit-build-core",

@@ -13,7 +13,8 @@ asnc.startEventLoop()
 # Create a new in-process worker living in a separate thread
 inProcessWorker = native.LocalRootServer()
 
-_localResources = contextvars.ContextVar("fusionsc.backends._localResources", default = (None, None))
+#_localResources = contextvars.ContextVar("fusionsc.backends._localResources", default = (None, None))
+_localResources = asnc.EventLoopLocal(default = None)
 _currentBackend = contextvars.ContextVar("fusionsc.backends._currentBackend", default = (None, None))
 
 def _threadId():
@@ -22,18 +23,17 @@ def _threadId():
 def connectLocal():
 	"""Connects a thread to the in-process worker. Automatically called for main thread."""
 	asnc.startEventLoop()
-	_localResources.set((_threadId(), inProcessWorker.connect()))
+	_localResources.value = inProcessWorker.connect()
 	
 def disconnectLocal():
 	"""Disconnects a thread from the in-process worker"""
-	_localResources.set((None, None))
+	del _localResources.value
 
 def isLocalConnected() -> bool:
 	"""
 	Checks whether the thread is connected to the in-process worker
 	"""
-	threadId, _ = _localResources.get()
-	return threadId is not None and threadId == _threadId()
+	return _localResources.value is not None
 
 def localResources() -> service.LocalResources.Client:
 	"""
@@ -45,7 +45,7 @@ def localResources() -> service.LocalResources.Client:
 	if not isLocalConnected():
 		connectLocal()
 	
-	return _localResources.get()[1]
+	return _localResources.value
 
 def localBackend() -> service.RootService.Client:
 	"""

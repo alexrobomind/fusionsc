@@ -318,6 +318,34 @@ struct SimpleMessageFallback : public SimpleHttpServer::Server {
 	}
 };
 
+struct DefaultFallback : public kj::HttpService {
+	SimpleHttpServer::Client fallback;
+	
+	DefaultFallback(SimpleHttpServer::Client clt) :
+		fallback(mv(clt))
+	{}
+	
+	Promise<void> request(
+		HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+		kj::AsyncInputStream& requestBody, Response& response
+	) {
+		
+		auto request = fallback.serveRequest();
+		request.setMethod(kj::str(method));
+		request.setUrl(url);
+		
+		return request.send().then([&response](auto simpleResponse) mutable {
+			HttpHeaders responseHeaders(DEFAULT_HEADERS);
+			responseHeaders.set(HttpHeaderId::UPGRADE, "websocket");
+			responseHeaders.set(HttpHeaderId::CONTENT_TYPE, "text/html; charset=utf-8");
+							
+			auto outputStream = response.send(simpleResponse.getStatus(), simpleResponse.getStatusText(), responseHeaders, simpleResponse.getBody().size());
+			auto sendPromise = outputStream -> write(simpleResponse.getBody().begin(), simpleResponse.getBody().size());
+			return sendPromise.attach(mv(outputStream), mv(simpleResponse));
+		});
+	}
+};
+
 struct HttpListener : public kj::HttpService {
 	using Side = capnp::rpc::twoparty::Side;
 	

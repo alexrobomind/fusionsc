@@ -422,6 +422,10 @@ LibraryThread& PythonContext::libraryThread() {
 	return getInstance().thread;
 }
 
+py::dict& PythonContext::dict() {
+	return getInstance().dict;
+}
+
 // class AsyncioFutureAdapter
 
 namespace {
@@ -896,6 +900,7 @@ void initAsync(py::module_& m) {
 	asyncModule.def("startEventLoop", &PythonContext::start, "If the active thread has no active event loop, starts a new one");
 	asyncModule.def("stopEventLoop", &PythonContext::stop, "Stops the event loop on this thread if it is active.");
 	asyncModule.def("hasEventLoop", &PythonContext::active, "Checks whether this thread has an active event loop");
+	asyncModule.def("eventLoopDict", &PythonContext::dict, "Returns a dict local to the event loop (will get destroyed before the loop)");
 	asyncModule.def("cycle", &PythonWaitScope::turnLoop, "Turns the C++ event loop until it becomes empty.");
 	
 	asyncModule.def("canWait", &PythonWaitScope::canWait);

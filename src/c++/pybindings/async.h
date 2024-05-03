@@ -94,6 +94,8 @@ struct PythonContext {
 	
 	static LibraryThread& libraryThread();
 	
+	static py::dict& dict();
+	
 private:
 	struct Instance {
 		Instance();
@@ -102,6 +104,8 @@ private:
 		AsyncioEventPort eventPort;
 		LibraryThread thread;
 		PythonWaitScope rootScope;
+		
+		py::dict dict;
 	};
 	
 	struct InstanceHolder {
