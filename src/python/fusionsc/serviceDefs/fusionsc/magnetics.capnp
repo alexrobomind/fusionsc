@@ -198,6 +198,16 @@ struct Filament {
 			# Note: Turn this into union if more variants arrive
 			islandCoil @4 : UInt8;
 		}
+		
+		hsx : union {
+			mainCoil @6: UInt8;
+			auxCoil @7 : UInt8;
+		}
+		
+		custom : group {
+			device @8 : Text;
+			name   @9 : Text;
+		}
 	}
 }
 
@@ -371,6 +381,11 @@ struct MagneticField {
 				# The coil set to use. Usually the default theory coils
 				coils @19 : W7XCoilSet;
 			}
+		}
+		
+		custom : group {
+			device @23 : Text;
+			name   @24 : Text;
 		}
 	}
 }

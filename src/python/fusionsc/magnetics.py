@@ -466,37 +466,42 @@ async def extractCoils(field):
 			await processCoil(coil.nested)
 			return
 		
+		if coil.which_() == 'sum':
+			for e in coil.sum:
+				await processCoil(e)
+			return
+		
 		print("Warning: Unresolved node can not be extracted")
 		print(coil)
 			
 	
-	async def process(field):
+	async def processField(field):
 		if field.which_() == 'sum':
 			for x in field.sum:
-				await process(x)
+				await processField(x)
 			return
 		
 		if field.which_() == 'ref':
 			local = await data.download(field.ref)
-			await process(local)
+			await processField(local)
 			return
 		
 		if field.which_() == 'scaleBy':
 			if field.scaleBy.factor != 0:
-				await process(field.scaleBy.field)
+				await processField(field.scaleBy.field)
 				
 			return
 		
 		if field.which_() == 'invert':
-			await process(field.invert)
+			await processField(field.invert)
 			return
 		
 		if field.which_() == 'nested':
-			await process(field.nested)
+			await processField(field.nested)
 			return
 		
 		if field.which_() == 'cached':
-			await process(field.cached.nested)
+			await processField(field.cached.nested)
 			return
 		
 		if field.which_() == 'filamentField':
@@ -506,8 +511,25 @@ async def extractCoils(field):
 		
 		print("Warning: Unresolved nodes can not be visualized")
 	
-	resolved = await field.resolve.asnc()
-	await process(resolved.data)
+	async def processAny(x):
+		if hasattr(x, "_fusionsc_wraps"):
+			await processAny(x._fusionsc_wraps)
+			
+		if isinstance(x, list):
+			for e in x:
+				await processAny(e)
+			
+		if isinstance(x, dict):
+			for e in x.values():
+				await processAny(e)
+		
+		if isinstance(x, service.MagneticField.ReaderOrBuilder):
+			await processField(await resolve.resolveField.asnc(x))
+		
+		if isinstance(x, service.Filament.ReaderOrBuilder):
+			await processCoil(await resolve.resolveFilament.asnc(x))
+	
+	await processAny(field)
 	
 	return coils
 

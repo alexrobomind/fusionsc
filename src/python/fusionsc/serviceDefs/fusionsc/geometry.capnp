@@ -196,6 +196,15 @@ struct Geometry {
 			topLimiter @20 : Float64;
 			bottomLimiter @21 : Float64;
 		}
+		
+		hsx : group {
+			firstWall @26 : Void;
+		}
+		
+		custom : group {
+			device @27 : Text;
+			name   @28 : Text;
+		}
 	}
 }
 

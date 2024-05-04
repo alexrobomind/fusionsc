@@ -32,12 +32,9 @@ TEST_CASE("textio-yaml-anchor") {
   - *e1
 - sum: []
 )";
-	
-	Dialect opts;
-	opts.language = Dialect::YAML;
-	
+		
 	Temporary<MagneticField> field;
-	load(input.asBytes(), *createVisitor(field), opts);
+	load(input.asBytes(), *createVisitor(field), Dialect::YAML);
 	KJ_DBG(field);
 }
 
@@ -67,7 +64,7 @@ TEST_CASE("textio-rw") {
 		sum[3].setRef(lt -> dataService().publish(nestedField.asReader()));
 	}
 	
-	Dialect opts;
+	Dialect opts(Dialect::JSON);
 	SaveOptions sOpts;
 	SECTION("json") {
 		opts.language = Dialect::JSON;

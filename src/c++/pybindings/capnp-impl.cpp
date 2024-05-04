@@ -9,6 +9,7 @@
 #include <fsc/typing.h>
 #include <fsc/common.h>
 #include <fsc/textio-yaml.h>
+#include <fsc/json-schema.h>
 
 using capnp::AnyPointer;
 using capnp::DynamicValue;
@@ -1049,4 +1050,12 @@ DynamicValueBuilder castBuilder(DynamicValueBuilder builder, capnp::Type dstType
 DynamicValueReader castReader(DynamicValueReader reader, capnp::Type dstType) {
 	return castImpl<DynamicValueReader>(reader, dstType);
 }
-};
+
+kj::String getJsonSchemaForType(capnp::Type t) {
+	kj::VectorOutputStream os;
+	writeJsonSchema(t, *textio::createVisitor(os, textio::Dialect::JSON));
+	
+	return kj::heapString(os.getArray().asChars());
+}
+
+}

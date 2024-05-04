@@ -136,7 +136,7 @@ def configCli():
 				
 				if parsed.scheme == "sqlite":
 					path = pathlib.Path(parsed.path)
-					parsed = parsed._replace(path = str(path.absolute()))
+					parsed = parsed._replace(path = str(path.absolute()).replace("\\", "/"), netloc="abs")
 				
 				url = urllib.parse.urlunparse(parsed)
 			print(f"Adding entry {args.type}: {url} ...")

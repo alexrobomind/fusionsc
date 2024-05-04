@@ -44,6 +44,9 @@ add_library(
 	textio-json.cpp
 	textio-yaml.cpp
 	
+	json-schema.h
+	json-schema.cpp
+	
 	hdf5.h
 	hdf5.cpp
 	
@@ -182,6 +185,7 @@ if(BUILD_TESTING)
 		db-cache-tests.cpp
 		textio-tests.cpp
 		streams-tests.cpp
+		json-schema-tests.cpp
 		
 		efit-tests.cpp
 		

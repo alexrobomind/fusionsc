@@ -1289,10 +1289,56 @@ ImportTask ImportContext::import(Capability::Client target) {
 		return ImportTask();
 	
 	if(unwrapped.is<Own<ObjectDBEntry>>()) {
-		ImportTask result;
-		result.entry = mv(unwrapped.get<Own<ObjectDBEntry>>());
+		auto& entry = unwrapped.get<Own<ObjectDBEntry>>();
 		
-		return result;
+		// Check if object is still alive in DB
+		auto& getRefcount = parent -> getRefcount;
+		auto q = getRefcount.bind(entry -> id);
+		if(q.step()) {
+			// Object is alive
+			ImportTask result;
+			result.entry = mv(entry);
+			
+			return result;
+		}
+		
+		// Uh-oh. Object is dead. This can happen when
+		// object is deleted by someone else while we
+		// still have it open.
+		
+		// TODO: Perhaps add a "restore" logic that can
+		// extract the object from the snapshot and
+		// reinsert it with its old id? This is rather
+		// complex as it would need to re-import nested
+		// objects, folder entries, and attached blobs.
+		// This would need to re-use the old ids in order
+		// to retain referential identity for mutable
+		// objects.
+		
+		// Check what it originally was
+		auto preserved = entry -> loadPreserved();
+		
+		switch(preserved -> which()) {
+			case ObjectInfo::UNRESOLVED:			
+			case ObjectInfo::NULL_VALUE:
+			case ObjectInfo::EXCEPTION:
+			case ObjectInfo::LINK:
+			case ObjectInfo::DATA_REF:
+				// The logic handles these correctly, restoring
+				// the content from the last seen value (and
+				// erroring out for unresolved objects as they
+				// will never resolve).
+				break;
+			
+			case ObjectInfo::FOLDER:
+			case ObjectInfo::FILE:
+				// For these the remaining import logic
+				// would create a confusing "unsupported type"
+				// error. Instead, provide a more meaningful
+				// error message instead.
+				target = KJ_EXCEPTION(FAILED, "Object stored after being deleted from the database.");
+				break;
+		}
 	}
 	
 	auto newEntry = parent -> create();
@@ -1793,16 +1839,6 @@ Promise<void> FolderInterface::put(PutContext ctx) {
 				
 				db.incRefcount(id);
 				db.updateFolderEntry(parentFolder -> id, filename.asPtr(), id);
-				
-				auto wrapped = db.wrap((**pEntry).addRef());
-				
-				// If we have a previous object, register it in the unitialized object
-				{
-					auto acc2 = (**pEntry).open();
-					if(acc2 -> isUnresolved()) {
-						acc2 -> getUnresolved().setPreviousValue(wrapped);
-					}
-				}
 				
 				// Export saved object to result
 				db.exportStoredObject(db.wrap((**pEntry).addRef()), ctx.initResults());

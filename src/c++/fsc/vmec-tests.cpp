@@ -3,7 +3,8 @@
 #include <fsc/devices/jtext.capnp.h>
 
 #include "vmec.h"
-#include "yaml.h"
+#include "textio.h"
+#include "textio-yaml.h"
 #include "efit.h"
 #include "magnetics.h"
 
@@ -69,8 +70,7 @@ iota:
 )"_kj;
 
 static void vmecRequest(VmecRequest::Builder req) {
-    auto node = YAML::Load(vmecRequestYaml.cStr());
-    load(req, node);
+	textio::load(vmecRequestYaml.asBytes(), *textio::createVisitor(req), textio::Dialect::YAML);
     
     auto field = req.getFreeBoundary().initVacuumFieldHl();
     parseGeqdsk(field.initAxisymmetricEquilibrium(), devices::jtext::EXAMPLE_GFILE.get());

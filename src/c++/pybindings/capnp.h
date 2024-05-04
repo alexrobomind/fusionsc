@@ -734,4 +734,6 @@ struct MethodInfo {
 DynamicValueBuilder castBuilder(DynamicValueBuilder, capnp::Type);
 DynamicValueReader castReader(DynamicValueReader, capnp::Type);
 
+kj::String getJsonSchemaForType(capnp::Type);
+
 }
