@@ -1695,7 +1695,7 @@ Promise<void> FileInterface::setImpl(Capability::Client clt) {
 				{
 					auto acc2 = (**pImported).open();
 					
-					if(acc2 -> isUnresolved()) {
+					if(acc2 -> isUnresolved() && !acc2 -> getUnresolved().hasPreviousValue()) {
 						acc2 -> getUnresolved().setPreviousValue(acc -> getFile());
 					}
 				}
@@ -1829,7 +1829,7 @@ Promise<void> FolderInterface::put(PutContext ctx) {
 					auto oldEntry = db.wrap(db.open(*pOldId));
 					
 					auto accNew = (**pEntry).open();
-					if(accNew -> isUnresolved()) {
+					if(accNew -> isUnresolved() && !accNew -> getUnresolved().hasPreviousValue()) {
 						accNew -> getUnresolved().setPreviousValue(oldEntry);
 					}
 				}
