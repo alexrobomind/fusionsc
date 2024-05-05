@@ -5,7 +5,7 @@
 namespace fsc {
 
 Temporary<Geometry> readPly(kj::StringPtr filename, size_t nMaxVerts, size_t nMaxEntries) {
-	constexpr uint32_t CAPNP_MAX_LIST_SIZE = 1 << 29 - 1;
+	constexpr uint32_t CAPNP_MAX_LIST_SIZE = (1 << 29) - 1;
 	
 	KJ_REQUIRE(nMaxEntries <= CAPNP_MAX_LIST_SIZE);
 	KJ_REQUIRE(nMaxVerts <= CAPNP_MAX_LIST_SIZE);

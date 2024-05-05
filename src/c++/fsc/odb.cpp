@@ -901,10 +901,10 @@ void ObjectDBEntry::trySync(bool force) {
 		}
 		
 		return;
-	} else {
-		if(!isLive())
-			parent -> liveEntries.add(*this);
 	}
+	
+	if(!isLive())
+		parent -> liveEntries.add(*this);
 	
 	// Update to new snapshot
 	snapshot = dbSnapshot.addRef();
