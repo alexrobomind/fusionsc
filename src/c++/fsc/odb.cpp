@@ -86,6 +86,7 @@ struct ObjectDBBase {
 	Statement incRefcount;
 	Statement decRefcount;
 	Statement deleteObject;
+	Statement restoreObject;
 	
 	Statement insertRef;
 	Statement clearOutgoingRefs;
@@ -189,6 +190,7 @@ ObjectDBBase::ObjectDBBase(db::Connection& paramConn, kj::StringPtr paramTablePr
 		incRefcount = conn -> prepare(str("UPDATE ", objectsTable, " SET refcount = refcount + 1 WHERE id = ?"));
 		decRefcount = conn -> prepare(str("UPDATE ", objectsTable, " SET refcount = refcount - 1 WHERE id = ?"));
 		deleteObject = conn -> prepare(str("DELETE FROM ", objectsTable, " WHERE id = ?"));
+		restoreObject = conn -> prepare(str("INSERT INTO ", objectsTable, " DEFAULT (id) VALUES (?)"));
 		
 		setBlob = conn -> prepare(str("UPDATE ", objectsTable, " SET blobId = ?2 WHERE id = ?1"));
 		
@@ -255,7 +257,7 @@ struct ObjectDBEntry : public kj::Refcounted {
 	Own<ObjectDBEntry> addRef() { return kj::addRef(*this); }
 	
 	//! Update the preserved snapshot to the most recent snapshot (if possible)
-	void trySync();
+	void trySync(bool force = false);
 	
 	/**
 	  * Register a promise that fires when the preserved view moves to a new snapshot
@@ -285,6 +287,12 @@ struct ObjectDBEntry : public kj::Refcounted {
 	Own<Accessor> open();
 	
 	ObjectDB& getDb() { return *parent; }
+	
+	//! Checks whether the object exists in the live DB
+	bool exists();
+	
+	//! Restores a non-existing object into the live DB
+	void restore();
 
 public:
 	const int64_t id;
@@ -724,7 +732,7 @@ OneOf<Own<ObjectDBEntry>, Capability::Client, decltype(nullptr)> ObjectDB::unwra
 
 void ObjectDB::exportStoredObject(Capability::Client c, Warehouse::StoredObject::Builder out) {
 	auto entry = unwrapValid(c);
-	entry -> trySync();
+	entry -> trySync(true);
 	
 	out.setAsGeneric(c.castAs<Warehouse::GenericObject>());
 	
@@ -862,8 +870,8 @@ ObjectDBEntry::~ObjectDBEntry() {
 	}
 }
 
-void ObjectDBEntry::trySync() {
-	if(!isLive())
+void ObjectDBEntry::trySync(bool force) {
+	if(!isLive() && !force)
 		return;
 	
 	ObjectDBSnapshot& dbSnapshot = parent -> getCurrentSnapshot();
@@ -874,7 +882,7 @@ void ObjectDBEntry::trySync() {
 			return;
 	}
 	
-	// Check if the object exists
+	// Check if the object exists IN THE SNAPSHOT
 	auto& getRefcount = dbSnapshot.getRefcount;
 	auto q = getRefcount.bind(id);
 	
@@ -887,11 +895,15 @@ void ObjectDBEntry::trySync() {
 					(**ppFulfiller).reject(KJ_EXCEPTION(DISCONNECTED, "Object was deleted from database"));
 				}
 				
-				parent -> liveEntries.remove(*this);
+				if(isLive())
+					parent -> liveEntries.remove(*this);
 			}
 		}
 		
 		return;
+	} else {
+		if(!isLive())
+			parent -> liveEntries.add(*this);
 	}
 	
 	// Update to new snapshot
@@ -969,12 +981,22 @@ Own<ObjectInfo::Reader> ObjectDBEntry::doLoad(Maybe<ObjectDBSnapshot&> snapshotT
 }
 
 Own<ObjectInfo::Reader> ObjectDBEntry::loadPreserved() {
-	trySync();
+	trySync(true);
 	
 	KJ_IF_MAYBE(pSnap, snapshot) {
 		return doLoad(**pSnap);
 	}
 	KJ_FAIL_REQUIRE("loadPreserved() has no snapshot to load from. Ensure that hasPreserved() is true, e.g. by waiting for whenUpdated()", id);
+}
+
+bool ObjectDBEntry::exists() {
+	auto& getRefcount = parent -> getRefcount;
+	auto q = getRefcount.bind(this -> id);
+	return q.step();
+}
+
+void ObjectDBEntry::restore() {
+	parent -> restoreObject(this -> id);
 }
 
 // class ObjectDB
@@ -1292,9 +1314,7 @@ ImportTask ImportContext::import(Capability::Client target) {
 		auto& entry = unwrapped.get<Own<ObjectDBEntry>>();
 		
 		// Check if object is still alive in DB
-		auto& getRefcount = parent -> getRefcount;
-		auto q = getRefcount.bind(entry -> id);
-		if(q.step()) {
+		if(entry -> exists()) {
 			// Object is alive
 			ImportTask result;
 			result.entry = mv(entry);
@@ -1306,15 +1326,6 @@ ImportTask ImportContext::import(Capability::Client target) {
 		// object is deleted by someone else while we
 		// still have it open.
 		
-		// TODO: Perhaps add a "restore" logic that can
-		// extract the object from the snapshot and
-		// reinsert it with its old id? This is rather
-		// complex as it would need to re-import nested
-		// objects, folder entries, and attached blobs.
-		// This would need to re-use the old ids in order
-		// to retain referential identity for mutable
-		// objects.
-		
 		// Check what it originally was
 		auto preserved = entry -> loadPreserved();
 		
@@ -1322,22 +1333,71 @@ ImportTask ImportContext::import(Capability::Client target) {
 			case ObjectInfo::UNRESOLVED:			
 			case ObjectInfo::NULL_VALUE:
 			case ObjectInfo::EXCEPTION:
-			case ObjectInfo::LINK:
 			case ObjectInfo::DATA_REF:
 				// The logic handles these correctly, restoring
 				// the content from the last seen value (and
 				// erroring out for unresolved objects as they
 				// will never resolve).
+				// The objects will be restored under a new ID,
+				// but for immutable objects this doesn't matter.
 				break;
 			
-			case ObjectInfo::FOLDER:
-			case ObjectInfo::FILE:
-				// For these the remaining import logic
-				// would create a confusing "unsupported type"
-				// error. Instead, provide a more meaningful
-				// error message instead.
-				target = KJ_EXCEPTION(FAILED, "Object stored after being deleted from the database.");
-				break;
+			case ObjectInfo::LINK: {
+				// Just import the links's target and apply
+				// path shortening.
+				return import(preserved -> getLink());
+			}
+			
+			case ObjectInfo::FOLDER: {
+				// Restore object under same ID
+				entry -> restore();
+				entry -> open() -> setFolder();
+				
+				// Iterate objects in folder
+				kj::Vector<Promise<void>> subImports;
+				
+				auto q = entry -> getSnapshot().listFolderEntries.bind(entry -> id);
+				while(q.step()) {
+					kj::StringPtr name = q[0].asText();
+					int64_t childId = q[1].asInt64();
+					
+					// Restore child
+					ImportTask childImport = import(parent -> wrap(parent -> open(childId, entry -> getSnapshot())));
+					
+					KJ_IF_MAYBE(pChild, childImport.entry) {
+						auto& childEntry = **pChild;
+					
+						parent -> incRefcount(childEntry.id);					
+						parent -> updateFolderEntry(entry -> id, name, childEntry.id);
+					}
+					
+					subImports.add(mv(childImport.task));
+				}
+				
+				ImportTask result;
+				result.entry = mv(entry);
+				result.task = kj::joinPromises(subImports.releaseAsArray());
+				
+				return result;
+			}
+			case ObjectInfo::FILE: {
+				// Restore object under same ID
+				entry -> restore();
+				
+				ImportTask childImport = import(preserved -> getFile());
+				
+				KJ_IF_MAYBE(pChild, childImport.entry) {
+					entry -> open() -> setFile(parent -> wrap(mv(*pChild)));
+				} else {
+					entry -> open() -> setFile(nullptr);
+				}
+				
+				ImportTask result;
+				result.entry = mv(entry);
+				result.task = mv(childImport.task);
+				
+				return result;
+			}
 		}
 	}
 	
@@ -1741,7 +1801,7 @@ Promise<void> FileInterface::setAny(SetAnyContext ctx) {
 Promise<void> FolderInterface::ls(LsContext ctx) {
 	return withODBBackoff([this, ctx]() mutable {
 		auto data = locate(kj::Path::parse(ctx.getParams().getPath()));
-		data -> trySync();
+		data -> trySync(true);
 		
 		auto& snap = data -> getSnapshot();
 		
@@ -1763,7 +1823,7 @@ Promise<void> FolderInterface::ls(LsContext ctx) {
 Promise<void> FolderInterface::getAll(GetAllContext ctx) {
 	return withODBBackoff([this, ctx]() mutable {
 		auto data = locate(kj::Path::parse(ctx.getParams().getPath()));
-		data -> trySync();
+		data -> trySync(true);
 		
 		auto& snap = data -> getSnapshot();
 		
@@ -1992,7 +2052,7 @@ Own<ObjectDBEntry> FolderInterface::locate(kj::PathPtr path) {
 	
 	Own<ObjectDBEntry> current = object -> addRef();
 	for(const auto& entryName : path) {
-		current -> trySync();
+		current -> trySync(true);
 		
 		auto acc = current -> loadPreserved();
 		
@@ -2020,7 +2080,7 @@ Own<ObjectDBEntry> FolderInterface::locate(kj::PathPtr path) {
 		}
 	}
 	
-	current -> trySync();
+	current -> trySync(true);
 	
 	return current;
 }
