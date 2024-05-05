@@ -164,3 +164,6 @@ def configCli():
 	print(f"Writing config to {userPath} ...")
 	with userPath.open("w") as f:
 		structio.dump(config, f, lang = "yaml")
+
+if __name__ == "__main__":
+	configCli()

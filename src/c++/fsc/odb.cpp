@@ -190,7 +190,7 @@ ObjectDBBase::ObjectDBBase(db::Connection& paramConn, kj::StringPtr paramTablePr
 		incRefcount = conn -> prepare(str("UPDATE ", objectsTable, " SET refcount = refcount + 1 WHERE id = ?"));
 		decRefcount = conn -> prepare(str("UPDATE ", objectsTable, " SET refcount = refcount - 1 WHERE id = ?"));
 		deleteObject = conn -> prepare(str("DELETE FROM ", objectsTable, " WHERE id = ?"));
-		restoreObject = conn -> prepare(str("INSERT INTO ", objectsTable, " DEFAULT (id) VALUES (?)"));
+		restoreObject = conn -> prepare(str("INSERT INTO ", objectsTable, " (id) VALUES (?)"));
 		
 		setBlob = conn -> prepare(str("UPDATE ", objectsTable, " SET blobId = ?2 WHERE id = ?1"));
 		
