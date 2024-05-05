@@ -11,9 +11,6 @@ from .native import capnp
 from .native import loader
 from .native import efit
 
-# Load user configuration
-from . import config
-
 # Load service definitions
 from . import service
 
@@ -23,6 +20,9 @@ from . import pickle_support
 # Load asynchronous subprocessing module
 # (this also imports relevant portions of native.asnc)
 from . import asnc
+
+# Load user configuration
+from . import config
 
 # Connect to local worker
 from . import backends

@@ -9,7 +9,7 @@ The list is maintained in a context variable. Any changes made will be restricte
 context (and dependent contexts).
 """
 
-from . import native, data, service, wrappers, warehouse
+from . import native, data, service, wrappers, warehouse, config
 from .asnc import asyncFunction, startEventLoop, wait
 
 from .native.devices import w7x as cppw7x
@@ -27,6 +27,10 @@ def _addOfflineResolvers(ref):
 	addFieldResolvers([native.offline.fieldResolver(ref)])
 	addGeometryResolvers([native.offline.geometryResolver(ref)])
 
+def _addDefaults():
+	addFieldResolvers([cppw7x.fieldResolver(), cppjtext.fieldResolver()])
+	addGeometryResolvers([cppw7x.geometryResolver(), cppjtext.geometryResolver()])
+
 def reset():
 	"""Resets the resolver state to default"""
 	_fieldResolvers.set(None)
@@ -38,8 +42,12 @@ def fieldResolvers():
 	
 	if result is not None:
 		return result
-		
-	return (cppw7x.fieldResolver(), cppjtext.fieldResolver())
+	
+	confCtx = config.context()
+	if _fieldResolvers in confCtx:
+		return confCtx[_fieldResolvers]
+	
+	return ()
 
 def geometryResolvers():
 	"""Returns the currently active geometry resolvers"""
@@ -47,8 +55,12 @@ def geometryResolvers():
 	
 	if result is not None:
 		return result
-		
-	return (cppw7x.geometryResolver(), cppjtext.geometryResolver())
+	
+	confCtx = config.context()
+	if _geometryResolvers in confCtx:
+		return confCtx[_geometryResolvers]
+	
+	return ()
 
 def addFieldResolvers(resolvers):
 	"""Adds a resolvers at the end of the currently active list"""

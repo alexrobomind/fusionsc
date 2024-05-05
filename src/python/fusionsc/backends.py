@@ -2,6 +2,7 @@
 from . import asnc
 from . import native
 from . import service
+from . import config
 
 import contextlib
 import contextvars
@@ -69,12 +70,17 @@ def activeBackend() -> service.RootService.Client:
 	"""
 	threadId, cb = _currentBackend.get()
 	
-	if cb is None:
-		return localBackend()
+	if cb is not None:
+		assert threadId == _threadId(), "The current backend was passed from a different thread. This is not supported"
+		return cb
 	
-	assert threadId == _threadId(), "The current backend was passed from a different thread. This is not supported"
+	# If backend not set, check if it is set in configuration
+	confCtx = config.context()
+	if _currentBackend in confCtx:
+		_, cb = confCtx[_currentBackend]
+		return cb
 	
-	return cb
+	return localBackend()
 
 @contextlib.contextmanager
 def useBackend(newBackend: service.RootService.Client):
