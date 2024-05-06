@@ -3,6 +3,7 @@
 #include "common.h"
 
 #include <kj/async-io.h>
+#include <kj/compat/http.h>
 
 #include <fsc/networking.capnp.h>
 
@@ -41,5 +42,8 @@ struct LocalNetworkInterface : public NetworkInterfaceBase {
 private:
 	Own<kj::Network> network;
 };
+
+NetworkInterface::OpenPort::Client listenViaHttp(Own<kj::ConnectionReceiver> receiver, NetworkInterface::Listener::Client target, Own<kj::HttpService> fallback);
+NetworkInterface::OpenPort::Client listenViaHttp(Own<kj::ConnectionReceiver> receiver, capnp::Capability::Client target, Own<kj::HttpService> fallback);
 
 }

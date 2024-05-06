@@ -318,10 +318,10 @@ struct SimpleMessageFallback : public SimpleHttpServer::Server {
 	}
 };
 
-struct DefaultFallback : public kj::HttpService {
+struct FallbackWrapper : public kj::HttpService {
 	SimpleHttpServer::Client fallback;
 	
-	DefaultFallback(SimpleHttpServer::Client clt) :
+	FallbackWrapper(SimpleHttpServer::Client clt) :
 		fallback(mv(clt))
 	{}
 	
@@ -350,13 +350,13 @@ struct HttpListener : public kj::HttpService {
 	using Side = capnp::rpc::twoparty::Side;
 	
 	OneOf<NetworkInterface::Listener::Client, capnp::Capability::Client> listener;
-	SimpleHttpServer::Client fallback;
+	Own<kj::HttpService> fallback;
 	
-	HttpListener(NetworkInterface::Listener::Client listener, SimpleHttpServer::Client fallback) :
+	HttpListener(NetworkInterface::Listener::Client listener, Own<kj::HttpService> fallback) :
 		listener(mv(listener)), fallback(mv(fallback))
 	{}
 	
-	HttpListener(capnp::Capability::Client client, SimpleHttpServer::Client fallback) :
+	HttpListener(capnp::Capability::Client client, Own<kj::HttpService> fallback) :
 		listener(mv(client)), fallback(mv(fallback))
 	{}
 	
@@ -372,17 +372,7 @@ struct HttpListener : public kj::HttpService {
 		
 		// Check if the request is a websocket request
 		if(!headers.isWebSocket()) {
-			auto request = fallback.serveRequest();
-			request.setMethod(kj::str(method));
-			request.setUrl(url);
-			
-			return request.send().then([&response, responseHeaders = mv(responseHeaders)](auto simpleResponse) mutable {
-				responseHeaders.set(HttpHeaderId::CONTENT_TYPE, "text/html; charset=utf-8");
-								
-				auto outputStream = response.send(simpleResponse.getStatus(), simpleResponse.getStatusText(), responseHeaders, simpleResponse.getBody().size());
-				auto sendPromise = outputStream -> write(simpleResponse.getBody().begin(), simpleResponse.getBody().size());
-				return sendPromise.attach(mv(outputStream), mv(simpleResponse));
-			});
+			return fallback -> request(method, url, headers, requestBody, response);
 		}
 		
 		// Transition to a WebSocket response
@@ -450,33 +440,6 @@ NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, k
 	});
 }
 
-NetworkInterface::OpenPort::Client listenViaHttp(Own<kj::ConnectionReceiver> receiver, NetworkInterface::Listener::Client target, SimpleHttpServer::Client fallback) {
-	// Wrap listener client into HTTP server
-	HttpServerSettings settings;
-	settings.webSocketCompressionMode = HttpServerSettings::AUTOMATIC_COMPRESSION;
-	
-	auto service = kj::heap<HttpListener>(mv(target), mv(fallback));
-	auto server = kj::heap<kj::HttpServer>(getActiveThread().timer(), DEFAULT_HEADERS, *service, settings);
-	server = server.attach(mv(service));
-	
-	// Create open port interface
-	return kj::heap<OpenPortImpl>(mv(server), mv(receiver));
-}
-
-NetworkInterface::OpenPort::Client listenViaHttp(Own<kj::ConnectionReceiver> receiver, capnp::Capability::Client target, SimpleHttpServer::Client fallback) {
-	// Wrap listener client into HTTP server
-	HttpServerSettings settings;
-	settings.webSocketCompressionMode = HttpServerSettings::AUTOMATIC_COMPRESSION;
-	
-	// Wrap listener client into HTTP server
-	auto service = kj::heap<HttpListener>(mv(target), mv(fallback));
-	auto server = kj::heap<kj::HttpServer>(getActiveThread().timer(), DEFAULT_HEADERS, *service, settings);
-	server = server.attach(mv(service));
-	
-	// Create open port interface
-	return kj::heap<OpenPortImpl>(mv(server), mv(receiver));
-}
-
 }
 
 // === class NetworkInterfaceBase ===
@@ -506,7 +469,7 @@ Promise<void> NetworkInterfaceBase::listen(ListenContext ctx) {
 	
 	return listen(ctx.getParams().getHost(), portHint)
 	.then([ctx, params, fallback](Own<ConnectionReceiver> recv) mutable {
-		ctx.getResults().setOpenPort(listenViaHttp(mv(recv), params.getListener(), fallback));
+		ctx.getResults().setOpenPort(listenViaHttp(mv(recv), params.getListener(), kj::heap<FallbackWrapper>(fallback)));
 	});
 }
 
@@ -524,7 +487,7 @@ Promise<void> NetworkInterfaceBase::serve(ServeContext ctx) {
 	
 	return listen(ctx.getParams().getHost(), portHint)
 	.then([ctx, params, fallback](Own<ConnectionReceiver> recv) mutable {
-		ctx.getResults().setOpenPort(listenViaHttp(mv(recv), params.getServer(), fallback));
+		ctx.getResults().setOpenPort(listenViaHttp(mv(recv), params.getServer(), kj::heap<FallbackWrapper>(fallback)));
 	});
 }
 
@@ -591,5 +554,32 @@ Promise<Own<kj::ConnectionReceiver>> LocalNetworkInterface::listen(kj::StringPtr
 }
 
 kj::Network& LocalNetworkInterface::getNetwork() { return *network; }
+
+NetworkInterface::OpenPort::Client listenViaHttp(Own<kj::ConnectionReceiver> receiver, NetworkInterface::Listener::Client target, Own<kj::HttpService> fallback) {
+	// Wrap listener client into HTTP server
+	HttpServerSettings settings;
+	settings.webSocketCompressionMode = HttpServerSettings::AUTOMATIC_COMPRESSION;
+	
+	auto service = kj::heap<HttpListener>(mv(target), mv(fallback));
+	auto server = kj::heap<kj::HttpServer>(getActiveThread().timer(), DEFAULT_HEADERS, *service, settings);
+	server = server.attach(mv(service));
+	
+	// Create open port interface
+	return kj::heap<OpenPortImpl>(mv(server), mv(receiver));
+}
+
+NetworkInterface::OpenPort::Client listenViaHttp(Own<kj::ConnectionReceiver> receiver, capnp::Capability::Client target, Own<kj::HttpService> fallback) {
+	// Wrap listener client into HTTP server
+	HttpServerSettings settings;
+	settings.webSocketCompressionMode = HttpServerSettings::AUTOMATIC_COMPRESSION;
+	
+	// Wrap listener client into HTTP server
+	auto service = kj::heap<HttpListener>(mv(target), mv(fallback));
+	auto server = kj::heap<kj::HttpServer>(getActiveThread().timer(), DEFAULT_HEADERS, *service, settings);
+	server = server.attach(mv(service));
+	
+	// Create open port interface
+	return kj::heap<OpenPortImpl>(mv(server), mv(receiver));
+}
 
 }

@@ -184,7 +184,7 @@ public:
 	 *          DataRef::Client.
 	 */
 	template<typename T = capnp::Data>
-	LocalDataRef<T> publish(typename DataRefMetadata::Reader metaData, Array<const byte> backingArray, ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable = kj::heapArrayBuilder<Maybe<Own<capnp::Capability::Client>>>(0).finish());
+	LocalDataRef<T> publish(typename DataRefMetadata::Reader metaData, Array<const byte> backingArray, ArrayPtr<Maybe<capnp::Capability::Client>> capTable = kj::heapArrayBuilder<Maybe<capnp::Capability::Client>>(0).finish());
 	
 	//! Publishes Cap'n'proto message
 	/**
