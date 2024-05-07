@@ -128,7 +128,7 @@ struct DataViewerImpl : public kj::HttpService {
 		static kj::HttpHeaderTable DEFAULT_HEADERS;
 		kj::HttpHeaders headers(DEFAULT_HEADERS);
 
-		kj::Path path(mv(url.path.releaseAsArray()));
+		kj::Path path(url.path.releaseAsArray());
 		if(path.size() == 0) {
 			path = kj::Path("show");
 		}
