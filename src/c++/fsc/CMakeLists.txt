@@ -136,6 +136,9 @@ add_library(
 	
 	load-balancer.h
 	load-balancer.cpp
+
+	data-viewer.h
+	data-viewer.cpp
 	
 	kernels/array.h
 	kernels/device.h
