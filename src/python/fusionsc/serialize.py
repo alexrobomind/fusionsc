@@ -15,6 +15,7 @@ from . import data
 from . import service
 from . import wrappers
 from . import capnp
+from . import native
 
 _endianMap = {
 	'>': 'big',
@@ -442,11 +443,18 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 		return np.frombuffer(data, typeDesc).reshape(reader.array.shape)
 	
 	if which == "enumArray":
+		# Note: The following code does the job just fine,
+		# but it turns out to be quite slow on large
+		# arrays
+		"""
 		ea = reader.enumArray
-		
 		tp = capnp.Type.fromProto(ea.schema)
 		flat = [capnp.Enum.fromRaw(tp, raw) for raw in ea.data]
 		return np.asarray(flat).reshape(ea.shape)
+		"""
+		def lazyLoad():
+			return native.serialize.loadEnumArray(reader.enumArray)
+		return wrappers.LazyObject(lazyLoad)
 	
 	if which == "dynamicEnum":
 		de = reader.dynamicEnum
@@ -462,6 +470,10 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 		return result.reshape(doa.shape)
 	
 	if which == "structArray":
+		# Note: The following code does the job just fine,
+		# but it turns out to be quite slow on large
+		# arrays
+		"""
 		sa = reader.structArray
 		tp = capnp.Type.fromProto(sa.schema)
 		
@@ -470,6 +482,10 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 			result[i] = sa.data[i].target.castAs(tp)
 		
 		return result.reshape(sa.shape)
+		"""
+		def lazyLoad():
+			return native.serialize.loadStructArray(reader.structArray)
+		return wrappers.LazyObject(lazyLoad)
 	
 	if which == "pythonBigInt":
 		return int.from_bytes(bytes = reader.pythonBigInt, byteorder="little", signed = True)

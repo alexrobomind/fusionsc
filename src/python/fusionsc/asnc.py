@@ -13,7 +13,9 @@ from .native.asnc import (
 	
 	canWait,
 	
-	FiberPool
+	FiberPool,
+	
+	eventLoopDict
 )
 
 from .native.asnc import wait as nativeWait
@@ -27,6 +29,7 @@ from typing_extensions import ParamSpec
 import functools
 import inspect
 import asyncio
+import threading
 
 T = TypeVar("T")
 P = ParamSpec("P")
@@ -109,3 +112,22 @@ def asyncFunction(f: Callable[P, Awaitable[T]]) -> Callable[P, T]:
 	  The asynchronous function can still be accessed using the *async* property.
 	"""
 	return functools.wraps(f)(AsyncMethodDescriptor(f))
+
+class EventLoopLocal:
+	def __init__(self, default = None):
+		self.default = default
+	
+	@property
+	def value(self):
+		return eventLoopDict().get(id(self), self.default)
+	
+	@value.setter
+	def value(self, val):
+		eventLoopDict()[id(self)] = val
+	
+	@value.deleter
+	def value(self):
+		del eventLoopDict()[id(self)]
+	
+	def isSet(self):
+		return id(self) in eventLoopDict()

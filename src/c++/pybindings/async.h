@@ -29,6 +29,8 @@ struct PythonWaitScope {
 private:
 	kj::WaitScope& waitScope;
 	bool isFiber;
+	PyThreadState* threadState = nullptr;
+	PyThreadState* mainThreadState = nullptr;
 	
 	static inline thread_local PythonWaitScope* activeScope = nullptr;
 	
@@ -92,6 +94,8 @@ struct PythonContext {
 	
 	static LibraryThread& libraryThread();
 	
+	static py::dict& dict();
+	
 private:
 	struct Instance {
 		Instance();
@@ -100,6 +104,8 @@ private:
 		AsyncioEventPort eventPort;
 		LibraryThread thread;
 		PythonWaitScope rootScope;
+		
+		py::dict dict;
 	};
 	
 	struct InstanceHolder {

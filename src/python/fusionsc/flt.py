@@ -377,7 +377,7 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	# Decode the response
 	return decodeTraceResponse(response, resultFormat)
 
-def decodeTraceResponse(response, resultFormat = 'dict'):
+def decodeTraceResponse(response: service.FLTResponse.ReaderOrBuilder, resultFormat: str = 'dict'):
 	"""
 	Decodes an FLT response according to the requested format.
 	"""
@@ -543,8 +543,8 @@ async def axisCurrent(
 
 You have specified no direction convention for the on-axis plasma current. By default, the fusionsc.flt.axisCurrent
 assumes a counter-clockwise current (mathematically positive). The W7-X convention specifies a clock-wise current.
-Please use the argument 'direction = "ccw"' or use the fusionsc.devices.w7x.axisCurrent function instead (which also takes
-care of the starting point)."""
+Please use the argument 'direction = "ccw"' (if you are sure you want a counter-clockwise current) or use the
+fusionsc.devices.w7x.axisCurrent function instead (which also takes care of the starting point)."""
 		)
 	
 	if startPoint is None:		

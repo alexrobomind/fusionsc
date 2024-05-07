@@ -374,7 +374,9 @@ void bindType() {
 		binding
 		.def_property_readonly("Builder", &builderFor)
 		.def_property_readonly("Reader", &readerFor)
-		.def_property_readonly("ReaderOrBuilder", &commonFor);
+		.def_property_readonly("ReaderOrBuilder", &commonFor)
+		.def_property_readonly("jsonSchema", &getJsonSchemaForType)
+		;
 	};
 	
 	ClassBinding<capnp::Type> type("Type");

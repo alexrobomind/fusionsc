@@ -36,15 +36,16 @@ add_library(
 	
 	data.h
 	data.cpp
-	
-	yaml.h
-	yaml.cpp
-	
+		
 	textio.h
+	textio-yaml.h
 	textio.cpp
 	textio-node.cpp
 	textio-json.cpp
 	textio-yaml.cpp
+	
+	json-schema.h
+	json-schema.cpp
 	
 	hdf5.h
 	hdf5.cpp
@@ -91,10 +92,12 @@ add_library(
 	
 	geometry.h
 	geometry.cpp
+	geometry-ply.cpp
 	
 	magnetics.h
 	magnetics-kernels.h
 	magnetics.cpp
+	magnetics-cache-impl.cpp
 	
 	offline.h
 	offline.cpp
@@ -133,6 +136,9 @@ add_library(
 	
 	load-balancer.h
 	load-balancer.cpp
+
+	data-viewer.h
+	data-viewer.cpp
 	
 	kernels/array.h
 	kernels/device.h
@@ -182,6 +188,7 @@ if(BUILD_TESTING)
 		db-cache-tests.cpp
 		textio-tests.cpp
 		streams-tests.cpp
+		json-schema-tests.cpp
 		
 		efit-tests.cpp
 		

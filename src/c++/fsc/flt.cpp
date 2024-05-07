@@ -708,7 +708,9 @@ struct FLTImpl : public FLT::Server {
 					auto calcFM = request.getFieldLineAnalysis().getCalculateFourierModes();
 					KJ_REQUIRE(calcFM.getIota().getData().size() == nStartPoints, "Incorrect iota count specified");
 					
-					const double phiMultiplier = calcFM.getToroidalSymmetry();
+					// We use expansions of the form sin(m * theta - n * phi)
+					// Therefore phiMultiplier must be negative
+					const double phiMultiplier = -static_cast<double>(calcFM.getToroidalSymmetry());					
 					
 					const int maxM = calcFM.getMMax();
 					const int maxN = calcFM.getNMax();
@@ -743,7 +745,7 @@ struct FLTImpl : public FLT::Server {
 					// Index of n = 0, m = 1 mode
 					const size_t n0m1Index = 1;
 					
-					#pragma omp parallel for
+					// #pragma omp parallel for
 					for(int64_t iStartPoint = 0; iStartPoint < nStartPoints; ++iStartPoint) {
 						auto entry = kData[iStartPoint].asReader();
 						auto state = entry.getState();
@@ -762,13 +764,13 @@ struct FLTImpl : public FLT::Server {
 								nTor(m, toroidalIndex(n)) = n * phiMultiplier;
 								mPol(m, toroidalIndex(n)) = m;
 								
-								double parallelAngle = -n * phiMultiplier * iota + m;
+								double parallelAngle = n * phiMultiplier + m * iota;
 								
 								// bool isResonant = std::abs(n * phiMultiplier * iota - m) < aliasThreshold;
 								
 								kj::Maybe<FM&> modeAliases = nullptr;
 								for(auto& prevMode : modes) {
-									double prevParAngle = prevMode.coeffs[0] * phiMultiplier * iota + prevMode.coeffs[1];
+									double prevParAngle = prevMode.coeffs[0] * phiMultiplier + prevMode.coeffs[1] * iota;
 									
 									if(std::abs(parallelAngle - prevParAngle) < aliasThreshold) {
 										modeAliases = prevMode;
@@ -779,31 +781,33 @@ struct FLTImpl : public FLT::Server {
 									continue;
 								}
 								
-								if(m == 0 && n == 0) {}
-								else if(m == 1 && n == 0) {}
-								else {
-									KJ_IF_MAYBE(pOther, modeAliases) {
-										// double myResonance = std::abs(n * phiMultiplier * iota - m);
-										// double otherResonance = std::abs(pOther -> coeffs[0] * phiMultiplier * iota - pOther -> coeffs[1]);
-										
-										// We give priority to the lowest-m mode (axis variations tend to be the biggest source of non-stationary
-										// variations, unless the other mode is the 0/1 mode, which is expected to be huge
-										
-										const int on = pOther -> coeffs[0];
-										const int om = pOther -> coeffs[1];
-										
-										if(on == 0 && om == 0) {}
-										else if(on == 0 && om == 1) {}
-										else if(m < om) {
-											pOther -> coeffs[0] = n;
-											pOther -> coeffs[1] = m;
-										}
+								KJ_IF_MAYBE(pOther, modeAliases) {
+									// double myResonance = std::abs(n * phiMultiplier * iota - m);
+									// double otherResonance = std::abs(pOther -> coeffs[0] * phiMultiplier * iota - pOther -> coeffs[1]);
+									
+									// We give priority to the lowest-m mode (axis variations tend to be the biggest source of non-stationary
+									// variations, unless the other mode is the 0/1 mode, which is expected to be huge
+																		
+									const int on = pOther -> coeffs[0];
+									const int om = pOther -> coeffs[1];
+									
+									bool keepMe = m < om;
+									bool keepOther = !keepMe;
+									
+									if((m == 0 && n == 0) || (m == 1 && n == 0)) keepMe = true;
+									if((om == 0 && on == 0) || (om == 1 && on == 0)) keepOther = true;
+									
+									if(keepMe && !keepOther) {
+										pOther -> coeffs[0] = n;
+										pOther -> coeffs[1] = m;
+										continue;
+									} else if(keepOther && !keepMe) {
 										continue;
 									}
 								}
 								
 								FM mode;
-								mode.coeffs[0] = -n;
+								mode.coeffs[0] = n;
 								mode.coeffs[1] = m;
 								modes.add(mode);
 							}

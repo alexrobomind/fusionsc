@@ -12,7 +12,7 @@ from ..._api_markers import unstableApi
 
 from ...backends import localResources
 
-from typing import Union, Optional
+from typing import Union, Optional, Literal
 import numpy as np
 
 # Databases
@@ -20,7 +20,7 @@ import numpy as np
 def _provider():
 	return localResources().w7xProvider().pipeline.service
 
-def connectCoilsDB(address: str):
+def connectCoilsDB(address: str) -> service.devices.w7x.CoilsDB.Client:
 	"""
 	Connect to the coilsDB webservice at given address and use it to resolve
 	W7-X coil specifications
@@ -32,7 +32,7 @@ def connectCoilsDB(address: str):
 	
 	return coilsDB
 
-def connectComponentsDB(address: str):
+def connectComponentsDB(address: str) -> service.devices.w7x.ComponentsDB.Client:
 	"""
 	Connect to the componentsDB webservice at given address and use it to resolve
 	W7-X geometry specifications
@@ -75,6 +75,8 @@ class CoilPack(wrappers.structWrapper(service.W7XCoilSet)):
 	
 	@asyncFunction
 	async def computeFields(self, grid) -> "CoilPack":
+		"""Returns a new coil pack consisting of precomputed fields"""
+		
 		async def resolveAndCompute(x):
 			config = MagneticConfig(x)
 			config = await config.resolve.asnc()
@@ -132,7 +134,7 @@ def cadCoils(convention = '1-AA-R0004.5') -> CoilPack:
 	
 	return CoilPack(coilPack)
 
-def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coils = None) -> MagneticConfig:
+def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coils: Optional[CoilPack] = None) -> MagneticConfig:
 	if coils is None:
 		coils = defaultCoils
 	
@@ -146,7 +148,7 @@ def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coil
 	
 	return config
 
-def trimCoils(i_trim = [0, 0, 0, 0, 0], coils = None) -> MagneticConfig:
+def trimCoils(i_trim = [0, 0, 0, 0, 0], coils: Optional[CoilPack] = None) -> MagneticConfig:
 	if coils is None:
 		coils = defaultCoils
 	
@@ -159,7 +161,7 @@ def trimCoils(i_trim = [0, 0, 0, 0, 0], coils = None) -> MagneticConfig:
 	
 	return config
 
-def controlCoils(i_cc = [0, 0], coils = None) -> MagneticConfig:
+def controlCoils(i_cc = [0, 0], coils: Optional[CoilPack] = None) -> MagneticConfig:
 	if coils is None:
 		coils = defaultCoils
 	
@@ -172,22 +174,22 @@ def controlCoils(i_cc = [0, 0], coils = None) -> MagneticConfig:
 	
 	return config
 
-def standard(bAx = 2.52, coils = None) -> MagneticConfig:
+def standard(bAx = 2.52, coils: Optional[CoilPack] = None) -> MagneticConfig:
 	return mainField([15000 * bAx / 2.52] * 5, [0] * 2, coils = coils)
 
-def highMirror(bAx = 2.72, coils = None) -> MagneticConfig:
+def highMirror(bAx = 2.72, coils: Optional[CoilPack] = None) -> MagneticConfig:
 	a = bAx / 2.3
 	return mainField([13000 * a, 13260 * a, 14040 * a, 12090 * a, 10959 * a], [0] * 2, coils = coils)
 
-def highIota(bAx = 2.72, coils = None) -> MagneticConfig:
+def highIota(bAx = 2.72, coils: Optional[CoilPack] = None) -> MagneticConfig:
 	return mainField([14814.81 * bAx / 2.43] * 5, [-10222.22 * bAx / 2.43] * 2, coils = coils)
 
-def lowIota(bAx = 2.72, coils = None) -> MagneticConfig:
+def lowIota(bAx = 2.72, coils: Optional[CoilPack] = None) -> MagneticConfig:
 	return mainField([12222.22 * bAx / 2.45] * 5, [9166.67 * bAx / 2.45] * 2, coils = coils)
 	
 
 coil_conventions = ['coilsdb', '1-AA-R0004.5', 'archive']
-def processCoilConvention(convention):
+def processCoilConvention(convention: str) -> str:
 	assert convention in coil_conventions,	'Invalid coil convention {}, must be one of {}'.format(convention, coil_conventions)
 	
 	if convention == 'archive':
@@ -209,7 +211,7 @@ def coilsDBCoil(id: int) -> CoilFilament:
 	
 	return result
 	
-def component(id) -> Geometry:
+def component(id: int) -> Geometry:
 	result = Geometry()
 	result.data.initW7x().componentsDbMesh = id
 	return result
@@ -222,7 +224,7 @@ def components(ids = [], name = None) -> Geometry:
 		
 	return result
 	
-def assembly(id) -> Geometry:
+def assembly(id: int) -> Geometry:
 	result = Geometry()
 	result.data.initW7x().componentsDbAssembly = id
 	
@@ -236,7 +238,7 @@ def assemblies(ids = [], name = None) -> Geometry:
 		
 	return result
 
-def divertor(campaign = 'OP21') -> Geometry:
+def divertor(campaign: Literal['OP21', 'OP12'] = 'OP21') -> Geometry:
 	if campaign == 'OP12':
 		return components(range(165, 170), 'Divertor TDU')
 	
@@ -247,7 +249,7 @@ def divertor(campaign = 'OP21') -> Geometry:
 	
 	raise "Unknown campaign " + campaign
 
-def baffles(campaign = 'OP21') -> Geometry:
+def baffles(campaign: Literal['OP21', 'OP12'] = 'OP21') -> Geometry:
 	if campaign == 'OP12':
 		return components(range(320, 325), 'OP1.2 Baffles') + components(range(325, 330), 'OP1.2 Baffle Covers')
 	
@@ -258,7 +260,7 @@ def baffles(campaign = 'OP21') -> Geometry:
 	
 	raise "Unknown campaign " + campaign
 
-def heatShield(campaign = 'OP21') -> Geometry:
+def heatShield(campaign: Literal['OP21', 'OP12'] = 'OP21') -> Geometry:
 	if campaign == 'OP12':
 		return components(range(330, 335), 'OP1.2 Heat Shield')
 	
@@ -269,37 +271,49 @@ def heatShield(campaign = 'OP21') -> Geometry:
 	
 	raise "Unknown campaign " + campaign
 
-def pumpSlits():
+def pumpSlits() -> Geometry:
 	return components(range(450, 455), 'Pump Slits')
 
-def steelPanels():
+def steelPanels() -> Geometry:
 	return assemblies([8], 'Steel Panels')
 	
-def vessel():
+def vessel() -> Geometry:
 	return assemblies([9], 'Plasma Vessel')
 
-def toroidalClosure():
+def toroidalClosure() -> Geometry:
 	return components(range(325, 330), 'Toroidal closure')
 
-def op12Geometry():
+def op12Geometry() -> Geometry:
 	return divertor('OP12') + baffles('OP12') + heatShield('OP12') + pumpSlits() + steelPanels() + vessel() + toroidalClosure()
 
-def op21Geometry():
+def op21Geometry() -> Geometry:
 	return divertor('OP21') + baffles('OP21') + heatShield('OP21') + pumpSlits() + steelPanels() + vessel() + toroidalClosure()
 	
 # The W7XCoilSet type defaults to the W7-X coils 160 ... 230
 defaultCoils = cadCoils('archive')
 
-@unstableApi
-def defaultGrid():
+def defaultGrid() -> service.ToroidalGrid.Builder:
+	"""
+	A 'current best-efford' estimate for a good calculation grid for W7-X calculations.
+	
+	.. note::
+	   The default grid might change in the future if a more reasonable tradeoff between
+	   accuracy and calculation speed is determined
+	"""
 	return service.devices.w7x.defaultGrid.value.clone_()
 
-@unstableApi
-def defaultGeometryGrid():
+def defaultGeometryGrid() -> service.CartesianGrid.Builder:
+	"""
+	A 'current best-efford' estimate for a good geometry indexing grid for W7-X calculations.
+	
+	.. note::
+	   The default grid might change in the future if a more reasonable tradeoff between
+	   accuracy and calculation speed is determined
+	"""
 	return service.devices.w7x.defaultGeoGrid.value.clone_()
 
 @asyncFunction
-def axisCurrent(field, current, grid = None, startPoint = [6.0, 0, 0], stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = "cw", mapping = None):
+def axisCurrent(field, current, grid = None, startPoint = [6.0, 0, 0], stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = "cw", mapping = None) -> MagneticConfig:
 	"""
 	Variant of fsc.flt.axisCurrent with more reasonable W7-X-tailored default values.
 	"""
@@ -318,7 +332,7 @@ def computeMapping(
 	padding = 2, numPlanes = 20,
 	stepSize = 0.01,
 	u0 = [0.5], v0 = [0.5]
-):
+) -> MagneticConfig:
 	"""
 	Variant of fsc.flt.computeMapping with more reasonable W7-X-tailored default values.
 	"""

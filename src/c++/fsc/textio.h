@@ -87,8 +87,10 @@ namespace fsc { namespace textio {
 					return false;
 			}
 		}
+		
+		Dialect(Language l) : language(l) {}
 	};
-	
+		
 	struct SaveOptions {
 		/** Enable compact representation
 		 *
@@ -109,6 +111,21 @@ namespace fsc { namespace textio {
 		 * structures, it is disabled by default.
 		 */
 		 bool integerKeys = false;
+		
+		
+		struct CapabilityStrategy {
+			virtual void saveCapability(capnp::DynamicCapability::Client, Visitor&, const SaveOptions&, Maybe<kj::WaitScope&>) const = 0;
+			
+			static CapabilityStrategy* const DEFAULT;
+		};
+	
+		/** Allows the override of capability storage
+		 *
+		 * Custom viewers / editors might want to override how a capability is shown,
+		 * e.g. by replacing them with a clickable link that opens the target in a
+		 * GUI.
+		 */
+		CapabilityStrategy* capabilityStrategy = CapabilityStrategy::DEFAULT;
 	};
 	
 	using ListInitializer = kj::Function<capnp::DynamicList::Builder(size_t)>;
@@ -127,6 +144,9 @@ namespace fsc { namespace textio {
 	
 	void save(capnp::DynamicValue::Reader, Visitor&, const SaveOptions& = SaveOptions(), Maybe<kj::WaitScope&> = nullptr);
 	void save(capnp::DynamicValue::Reader, kj::BufferedOutputStream&, const Dialect&, const SaveOptions& = SaveOptions(), Maybe<kj::WaitScope&> = nullptr);
+	
+	kj::Array<kj::byte> saveToArray(capnp::DynamicValue::Reader, const Dialect&, const SaveOptions& = SaveOptions(), Maybe<kj::WaitScope&> = nullptr);
+	kj::String saveToString(capnp::DynamicValue::Reader, const Dialect&, const SaveOptions& = SaveOptions(), Maybe<kj::WaitScope&> = nullptr);
 	
 	namespace internal {
 		void jsonconsLoad(kj::BufferedInputStream&, Visitor&, const Dialect&);

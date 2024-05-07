@@ -70,7 +70,7 @@ namespace {
 		} catch(py::error_already_set&) {
 		}
 		
-		py::module_::import("warnings").attr("warn")("No asyncio event loop was specified in this context. A new loop was auto-started");
+		// py::module_::import("warnings").attr("warn")("No asyncio event loop was specified in this context. A new loop was auto-started");
 		
 		// No event loop exists. Make a new one
 		auto newLoop = policy.attr("new_event_loop")();
@@ -91,9 +91,25 @@ PythonWaitScope::PythonWaitScope(kj::WaitScope& ws, bool fiber) : waitScope(ws),
 		" on an event loop promise without releasing the active python scope"
 	);
 	activeScope = this;
+	
+	if(isFiber) {
+		// Copy current context
+		py::object ctx = py::reinterpret_steal<py::object>(PyContext_CopyCurrent());
+		threadState = PyThreadState_New(PyThreadState_Get() -> interp);
+		mainThreadState = PyThreadState_Swap(threadState);
+		
+		if(PyContext_Enter(ctx.ptr()) != 0)
+			throw py::error_already_set();
+	}
 }
 
 PythonWaitScope::~PythonWaitScope() {
+	if(isFiber) {
+		PyThreadState_Swap(mainThreadState);
+		PyThreadState_Clear(threadState);
+		PyThreadState_Delete(threadState);
+	}
+	
 	activeScope = nullptr;
 }
 
@@ -404,6 +420,10 @@ bool PythonContext::active() {
 
 LibraryThread& PythonContext::libraryThread() {
 	return getInstance().thread;
+}
+
+py::dict& PythonContext::dict() {
+	return getInstance().dict;
 }
 
 // class AsyncioFutureAdapter
@@ -880,6 +900,7 @@ void initAsync(py::module_& m) {
 	asyncModule.def("startEventLoop", &PythonContext::start, "If the active thread has no active event loop, starts a new one");
 	asyncModule.def("stopEventLoop", &PythonContext::stop, "Stops the event loop on this thread if it is active.");
 	asyncModule.def("hasEventLoop", &PythonContext::active, "Checks whether this thread has an active event loop");
+	asyncModule.def("eventLoopDict", &PythonContext::dict, "Returns a dict local to the event loop (will get destroyed before the loop)");
 	asyncModule.def("cycle", &PythonWaitScope::turnLoop, "Turns the C++ event loop until it becomes empty.");
 	
 	asyncModule.def("canWait", &PythonWaitScope::canWait);

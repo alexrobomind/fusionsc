@@ -1,3 +1,5 @@
+"""Helpers for exporting calculation results (without requiring reimport)"""
+
 from . import service
 
 from typing import Literal

@@ -3,8 +3,16 @@
 #include <fsc/services.h>
 #include <fsc/sqlite.h>
 #include <fsc/odb.h>
+#include <fsc/textio.h>
+#include <fsc/data-viewer.h>
+
+#include <fsc/dynamic.capnp.h>
+#include <fsc/magnetics.capnp.h>
+#include <fsc/geometry.capnp.h>
+#include <fsc/offline.capnp.h>
 
 #include <capnp/rpc-twoparty.h>
+#include <capnp/schema-parser.h>
 
 #include <kj/main.h>
 #include <kj/async.h>
@@ -22,7 +30,7 @@ using namespace fsc;
 
 namespace {
 
-struct SimpleMessageFallback : public SimpleHttpServer::Server {
+/*struct SimpleMessageFallback : public SimpleHttpServer::Server {
 	Promise<void> serve(ServeContext ctx) {
 		unsigned int UPGRADE_REQUIRED = 426;
 		
@@ -36,7 +44,9 @@ struct SimpleMessageFallback : public SimpleHttpServer::Server {
 		);
 		return READY_NOW;
 	}
-};
+};*/
+
+static capnp::SchemaLoader schemaLoader = capnp::SchemaLoader();
 
 struct WarehouseTool {
 	kj::ProcessContext& context;
@@ -101,6 +111,14 @@ struct WarehouseTool {
 		auto l = newLibrary();
 		auto lt = l -> newThread();
 		auto& ws = lt->waitScope();
+
+		// Prepare schema loader
+		schemaLoader.loadCompiledTypeAndDependencies<MagneticField>();
+		schemaLoader.loadCompiledTypeAndDependencies<Geometry>();
+		schemaLoader.loadCompiledTypeAndDependencies<DynamicObject>();
+		schemaLoader.loadCompiledTypeAndDependencies<OfflineData>();
+		schemaLoader.loadCompiledTypeAndDependencies<Mesh>();
+		schemaLoader.loadCompiledTypeAndDependencies<MergedGeometry>();
 				
 		// Open database
 		
@@ -126,7 +144,7 @@ struct WarehouseTool {
 		}
 		
 		// Create network interface
-		NetworkInterface::Client networkInterface = kj::heap<LocalNetworkInterface>();
+		/*NetworkInterface::Client networkInterface = kj::heap<LocalNetworkInterface>();
 		
 		auto serveRequest = networkInterface.serveRequest();
 		KJ_IF_MAYBE(pPort, port) {
@@ -134,9 +152,18 @@ struct WarehouseTool {
 		}
 		serveRequest.setHost(address);
 		serveRequest.setServer(root);
-		serveRequest.setFallback(kj::heap<SimpleMessageFallback>());
+		serveRequest.setFallback(kj::heap<SimpleMessageFallback>());*/
+
+		auto& network = lt -> network();
+		unsigned int portHint = 0;
+		KJ_IF_MAYBE(pPort, port) {
+			portHint = *pPort;
+		}
+
+		auto parsedAddress = network.parseAddress(address, portHint).wait(ws);
+		auto openPort = listenViaHttp(parsedAddress -> listen(), root, createDataViewer(root, schemaLoader));
 		
-		auto openPort = serveRequest.sendForPipeline().getOpenPort();
+		//auto openPort = serveRequest.sendForPipeline().getOpenPort();
 		auto info = openPort.getInfoRequest().send().wait(ws);
 		
 		std::cout << "Serving protocol version " << FSC_PROTOCOL_VERSION << std::endl;

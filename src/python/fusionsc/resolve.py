@@ -1,6 +1,15 @@
-"""Resolution helpers to obtain computable fields and geometries from high-level descriptions"""
+"""
+Resolution helpers to obtain computable fields and geometries from high-level descriptions
 
-from . import native, data, service, wrappers, warehouse
+This module maintains a list of active resolvers, which inspect specifications of coils, fields,
+and geometries and replace them with concrete specifications that the geometry builder and field
+calculators can actively interpret.
+
+The list is maintained in a context variable. Any changes made will be restricted to the active
+context (and dependent contexts).
+"""
+
+from . import native, data, service, wrappers, warehouse, config
 from .asnc import asyncFunction, startEventLoop, wait
 
 from .native.devices import w7x as cppw7x
@@ -18,35 +27,57 @@ def _addOfflineResolvers(ref):
 	addFieldResolvers([native.offline.fieldResolver(ref)])
 	addGeometryResolvers([native.offline.geometryResolver(ref)])
 
+def _addDefaults():
+	addFieldResolvers([cppw7x.fieldResolver(), cppjtext.fieldResolver()])
+	addGeometryResolvers([cppw7x.geometryResolver(), cppjtext.geometryResolver()])
+
 def reset():
+	"""Resets the resolver state to default"""
 	_fieldResolvers.set(None)
 	_geometryResolvers.set(None)
 
 def fieldResolvers():
+	"""Returns the currently active field / coil resolvers"""
 	result = _fieldResolvers.get()
 	
 	if result is not None:
 		return result
-		
-	return (cppw7x.fieldResolver(), cppjtext.fieldResolver())
+	
+	confCtx = config.context()
+	if _fieldResolvers in confCtx:
+		return confCtx[_fieldResolvers]
+	
+	return ()
 
 def geometryResolvers():
+	"""Returns the currently active geometry resolvers"""
 	result = _geometryResolvers.get()
 	
 	if result is not None:
 		return result
-		
-	return (cppw7x.geometryResolver(), cppjtext.geometryResolver())
+	
+	confCtx = config.context()
+	if _geometryResolvers in confCtx:
+		return confCtx[_geometryResolvers]
+	
+	return ()
 
 def addFieldResolvers(resolvers):
+	"""Adds a resolvers at the end of the currently active list"""
 	return _fieldResolvers.set(fieldResolvers() + tuple(resolvers))
 
 def addGeometryResolvers(resolvers):
+	"""Adds geometry resolvers at the end of the currently active list"""
 	return _geometryResolvers.set(geometryResolvers() + tuple(resolvers))
 
 def connectWarehouse(db):
 	"""
-	Connects to a warehouse to use for resolution
+	Connects to a warehouse to use for resolution. This will perform the following steps:
+	
+	- If db is a string, opens the corresponding database (see :py:func:`fusionsc.warehouse.open`)
+	- Looks up the entry 'resolveIndex' under the database root and opens it as a DataRef
+	  to a service.OfflineData object.
+	- Connects resolvers looking up nodes in this object.
 	"""
 	# Optionally open database
 	if isinstance(db, str):
@@ -144,21 +175,24 @@ def importOfflineData(filename: str):
 	_addOfflineResolvers(offlineData)
 
 @asyncFunction
-async def resolveField(field, followRefs: bool = False):		
+async def resolveField(field: service.MagneticField.ReaderOrBuilder, followRefs: bool = False) -> service.MagneticField.Reader:	
+	"""Processes the field one by one by active resolvers"""
 	for r in fieldResolvers():
 		field = await r.resolveField(field, followRefs)
 		
 	return field
 
 @asyncFunction
-async def resolveFilament(filament, followRefs: bool = False):		
+async def resolveFilament(filament: service.Filament.ReaderOrBuilder, followRefs: bool = False) -> service.Filament.Reader:	
+	"""Processes the filament one by one by active resolvers"""	
 	for r in fieldResolvers():
 		filament = await r.resolveFilament(filament, followRefs)
 		
 	return filament
 	
 @asyncFunction
-async def resolveGeometry(geometry, followRefs: bool = False):		
+async def resolveGeometry(geometry: service.Geometry.ReaderOrBuilder, followRefs: bool = False) -> service.Geometry.Reader:	
+	"""Processes the field one by one by active resolvers"""	
 	for r in geometryResolvers():
 		geometry = await r.resolveGeometry(geometry, followRefs)
 		

@@ -322,13 +322,10 @@ namespace {
 
 	};
 	
-	py::object readStream(kj::BufferedInputStream& is, py::object dst, textio::Dialect::Language lang) {
-		textio::Dialect dialect;
-		dialect.language = lang;
-		
+	py::object readStream(kj::BufferedInputStream& is, py::object dst, textio::Dialect::Language lang) {		
 		PythonVisitor v(dst);
 		
-		textio::load(is, v, dialect);
+		textio::load(is, v, lang);
 		
 		KJ_REQUIRE(v.done(), "Target was filled incompletely");
 		return v.state().get<PythonVisitor::Done>().result;
@@ -435,10 +432,7 @@ namespace formats {
 			textio::SaveOptions opts;
 			opts.compact = compact;
 			
-			textio::Dialect dialect;
-			dialect.language = lang;
-			
-			auto v = textio::createVisitor(os, dialect);
+			auto v = textio::createVisitor(os, lang);
 			dumpToVisitor(src, *v, opts, ws);
 		}
 	}

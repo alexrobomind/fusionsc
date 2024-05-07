@@ -1,11 +1,13 @@
 """
 This module can be used to perform import and export operations between python objects
 (dicts, lists, data readers / builders, numpy arrays) and self-describing nested data
-formats (currently JSON, YAML, CBOR, and BSON).
+formats (currently JSON, YAML, CBOR, BSON, MSGPACK, and UBJSON).
 """
 
 from . import native
 from .asnc import asyncFunction
+
+from typing import Union
 
 _langs = {
 	'json' : native.formats.Language.JSON,
@@ -20,7 +22,7 @@ def _checkLang(lang):
 	assert lang in _langs, f"Language must be one of {list(_langs)}"
 	return _langs[lang]
 
-def dumps(data, lang='json', compact=False, binary=None):
+def dumps(data, lang='json', compact=False, binary=None) -> Union[str, bytes]:
 	"""
 	Write the object into a bytes or str representation according to 'lang'.
 	
@@ -60,7 +62,7 @@ def dump(data, file, lang='json', compact=False):
 	native.formats.dumpToFd(data, fd, _checkLang(lang), compact)
 
 @asyncFunction
-async def recursiveDumps(data, lang='json', compact=False, binary=None):
+async def recursiveDumps(data, lang='json', compact=False, binary=None) -> Union[str, bytes]:
 	"""
 	Like dumps(...), but also serializes nested DataRefs.
 	"""

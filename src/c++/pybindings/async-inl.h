@@ -100,8 +100,15 @@ T PythonWaitScope::wait(Promise<T>&& promise) {
 	activeScope = nullptr;
 	KJ_DEFER({activeScope = restoreTo;});
 	
-	if(restoreTo -> isFiber)
+	if(restoreTo -> isFiber) {
+		KJ_REQUIRE(PyThreadState_Get() == restoreTo -> threadState);
+		
+		// Swap back to main thread (and back upon leaving this block)
+		PyThreadState_Swap(restoreTo -> mainThreadState);
+		KJ_DEFER({ PyThreadState_Swap(restoreTo -> threadState); });
+		
 		return promise.wait(restoreTo -> waitScope);
+	}
 	
 	auto eventLoop = py::module_::import("asyncio").attr("get_event_loop")();
 	AsyncioEventPort::adjustEventLoop(eventLoop);

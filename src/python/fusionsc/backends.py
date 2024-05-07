@@ -2,6 +2,7 @@
 from . import asnc
 from . import native
 from . import service
+from . import config
 
 import contextlib
 import contextvars
@@ -13,7 +14,8 @@ asnc.startEventLoop()
 # Create a new in-process worker living in a separate thread
 inProcessWorker = native.LocalRootServer()
 
-_localResources = contextvars.ContextVar("fusionsc.backends._localResources", default = (None, None))
+#_localResources = contextvars.ContextVar("fusionsc.backends._localResources", default = (None, None))
+_localResources = asnc.EventLoopLocal(default = None)
 _currentBackend = contextvars.ContextVar("fusionsc.backends._currentBackend", default = (None, None))
 
 def _threadId():
@@ -22,20 +24,19 @@ def _threadId():
 def connectLocal():
 	"""Connects a thread to the in-process worker. Automatically called for main thread."""
 	asnc.startEventLoop()
-	_localResources.set((_threadId(), inProcessWorker.connect()))
+	_localResources.value = inProcessWorker.connect()
 	
 def disconnectLocal():
 	"""Disconnects a thread from the in-process worker"""
-	_localResources.set((None, None))
+	del _localResources.value
 
-def isLocalConnected():
+def isLocalConnected() -> bool:
 	"""
 	Checks whether the thread is connected to the in-process worker
 	"""
-	threadId, _ = _localResources.get()
-	return threadId is not None and threadId == _threadId()
+	return _localResources.value is not None
 
-def localResources():
+def localResources() -> service.LocalResources.Client:
 	"""
 	Provides access to the in-process worker's "LocalResources" service interface.
 	
@@ -45,9 +46,9 @@ def localResources():
 	if not isLocalConnected():
 		connectLocal()
 	
-	return _localResources.get()[1]
+	return _localResources.value
 
-def localBackend():
+def localBackend() -> service.RootService.Client:
 	"""
 	Returns the backend corresponding to the in-process worker. Requires the active thread
 	to be connected to it.
@@ -55,13 +56,13 @@ def localBackend():
 	return localResources().root().pipeline.root
 
 @asnc.asyncFunction
-async def reconfigureLocalBackend(config):
+async def reconfigureLocalBackend(config: service.LocalConfig.ReaderOrBuilder):
 	"""
 	Reconfigues the local backend to the given configuration.
 	"""
 	await localResources().configureRoot(config)
 
-def activeBackend():
+def activeBackend() -> service.RootService.Client:
 	"""
 	Returns the current thread's active backend for calculations. This is the inner-most
 	active useBackend call, falling back to the in-process worker if no other backend
@@ -69,15 +70,20 @@ def activeBackend():
 	"""
 	threadId, cb = _currentBackend.get()
 	
-	if cb is None:
-		return localBackend()
+	if cb is not None:
+		assert threadId == _threadId(), "The current backend was passed from a different thread. This is not supported"
+		return cb
 	
-	assert threadId == _threadId(), "The current backend was passed from a different thread. This is not supported"
+	# If backend not set, check if it is set in configuration
+	confCtx = config.context()
+	if _currentBackend in confCtx:
+		_, cb = confCtx[_currentBackend]
+		return cb
 	
-	return cb
+	return localBackend()
 
 @contextlib.contextmanager
-def useBackend(newBackend):
+def useBackend(newBackend: service.RootService.Client):
 	"""
 	Temporarily overrides the active backend to use for calculations.
 	
@@ -92,7 +98,7 @@ def useBackend(newBackend):
 	yield newBackend
 	_currentBackend.reset(token)
 
-def alwaysUseBackend(newBackend):
+def alwaysUseBackend(newBackend: service.RootService.Client):
 	"""
 	Permanently installs a backend as the default for this thread.
 	
@@ -102,5 +108,6 @@ def alwaysUseBackend(newBackend):
 	_currentBackend.set((_threadId(), newBackend))
 
 @asnc.asyncFunction
-async def backendInfo():
+async def backendInfo() -> service.NodeInfo.Reader:
+	"""Returns information about the currently active backend"""
 	return await activeBackend().getInfo()

@@ -436,6 +436,10 @@ namespace {
 	};
 }
 
+Own<Visitor> createVisitor(YAML::Emitter& e) {
+	return kj::heap<YAMLVisitor>(e);
+}
+
 namespace internal {
 	void yamlcppLoad(kj::BufferedInputStream& bis, Visitor& v, const Dialect&) {
 		auto inStream = asStdStream(bis);
@@ -453,5 +457,13 @@ namespace internal {
 	}
 }
 
-
 }}
+
+YAML::Emitter& operator<<(YAML::Emitter& e, capnp::DynamicValue::Reader r) {
+	fsc::textio::SaveOptions so;
+	so.compact = true;
+	
+	fsc::textio::save(r, *fsc::textio::createVisitor(e), so);
+	
+	return e;
+}

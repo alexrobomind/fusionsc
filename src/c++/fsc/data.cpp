@@ -601,7 +601,8 @@ struct ArchiveWriter {
 		uint64_t id;
 		capnp::WordCount offsetWords;
 		uint64_t sizeBytes;
-		Own<const kj::WritableFileMapping> mapping;
+		// Own<const kj::WritableFileMapping> mapping;
+		uint64_t globalOffset;
 		kj::ListLink<DataRecord> link;
 	};
 	
@@ -692,7 +693,8 @@ struct ArchiveWriter {
 		bl -> id = dataRecords.size();
 		bl -> offsetWords = dataSize;
 		bl -> sizeBytes = nBytes;
-		bl -> mapping = file.mmapWritable((TOTAL_PREFIX_SIZE + dataSize) / WORDS * sizeof(word), nWords / WORDS * sizeof(word));
+		// bl -> mapping = file.mmapWritable((TOTAL_PREFIX_SIZE + dataSize) / WORDS * sizeof(word), nWords / WORDS * sizeof(word));
+		bl -> globalOffset = (TOTAL_PREFIX_SIZE + dataSize) / WORDS * sizeof(word);
 		dataRecords.add(*bl);
 		
 		dataSize += nWords;
@@ -835,10 +837,11 @@ struct ArchiveWriter {
 					metadata.setDataSize(data.size());
 					
 					auto& dataRecord = parent.allocData(data.size());
-					kj::byte* target = dataRecord.mapping -> get().begin();
+					/*kj::byte* target = dataRecord.mapping -> get().begin();
 					
 					memcpy(target, data.begin(), data.size());
-					dataRecord.mapping -> sync(dataRecord.mapping -> get());
+					dataRecord.mapping -> sync(dataRecord.mapping -> get());*/
+					parent.file.write(dataRecord.globalOffset, data);
 					
 					// KJ_DBG("Stored local block", dataRecord.id, dataRecord.mapping -> get(), data);
 					
@@ -859,9 +862,10 @@ struct ArchiveWriter {
 		
 		Promise<void> receiveData(kj::ArrayPtr<const kj::byte> data) override {
 			KJ_IF_MAYBE(pBlock, block) {
-				kj::ArrayPtr<kj::byte> output = pBlock -> mapping -> get();
 				KJ_REQUIRE(writeOffset + data.size() <= pBlock -> sizeBytes, "Overflow in download");
-				memcpy(output.begin() + writeOffset, data.begin(), data.size());
+				/*kj::ArrayPtr<kj::byte> output = pBlock -> mapping -> get();
+				memcpy(output.begin() + writeOffset, data.begin(), data.size());*/
+				parent.file.write(pBlock -> globalOffset + writeOffset, data);
 				writeOffset += data.size();
 				
 				return READY_NOW;
@@ -874,12 +878,14 @@ struct ArchiveWriter {
 		
 		Promise<uint64_t> buildResult() override {
 			KJ_IF_MAYBE(pBlock, block) {
-				kj::ArrayPtr<kj::byte> output = pBlock -> mapping -> get();
-				if(writeOffset < output.size()) {
-					memset(output.begin() + writeOffset, 0, output.size() - writeOffset);
+				// kj::ArrayPtr<kj::byte> output = pBlock -> mapping -> get();
+				if(writeOffset < /*output.size()*/pBlock -> sizeBytes) {
+					// memset(output.begin() + writeOffset, 0, output.size() - writeOffset);
+					parent.file.zero(pBlock -> globalOffset + writeOffset, /*output.size()*/pBlock -> sizeBytes - writeOffset);
 				}
 				
-				pBlock -> mapping -> sync(output);
+				// pBlock -> mapping -> sync(output);
+				parent.file.sync();
 				
 				parent.dataRecordsByHash.insert(ID(metadata.getDataHash()), pBlock -> id);
 				

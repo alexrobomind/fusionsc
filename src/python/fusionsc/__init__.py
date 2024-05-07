@@ -21,6 +21,9 @@ from . import pickle_support
 # (this also imports relevant portions of native.asnc)
 from . import asnc
 
+# Load user configuration
+from . import config
+
 # Connect to local worker
 from . import backends
 backends.connectLocal()
@@ -56,8 +59,9 @@ import threading
 
 __all__ = [
 	'native',
-	'kj', 'capnp', 'schema', 'service', 'efit',
+	'kj', 'capnp', 'service', 'efit', 'hint', 'vmec',
 	'asnc', 'backends', 'data', 'ipython_integration', 'resolve',
-	'magnetics', 'flt', 'hfcam', 'devices', 'export', 'structio'
+	'magnetics', 'flt', 'hfcam', 'devices', 'export', 'structio',
+	'geometry'
 ]
 	

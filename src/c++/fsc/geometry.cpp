@@ -179,9 +179,9 @@ namespace {
 		
 		// http://en.wikipedia.org/wiki/Rotation_matrix#Rotation_matrix_from_axis_and_angle
 		Mat4d turn {
-			{ c + x * x * (1 - c)    ,    x * y * (1 - c) + z * s,    x * z * (1 - c) + y * s, 0},
-			{ x * y * (1 - c) + z * s,    c + y * y * (1 - c)    ,    y * z * (1 - c) + x * s, 0},
-			{ x * z * (1 - c) - y * s,    y * z * (1 - c) - x * s,    c + z * z * (1 - c)    , 0},
+			{ c + x * x * (1 - c)    ,    x * y * (1 - c) - z * s,    x * z * (1 - c) + y * s, 0},
+			{ x * y * (1 - c) + z * s,    c + y * y * (1 - c)    ,    y * z * (1 - c) - x * s, 0},
+			{ x * z * (1 - c) - y * s,    y * z * (1 - c) + x * s,    c + z * z * (1 - c)    , 0},
 			{            0           ,                0          ,                0          , 1}
 		};
 		

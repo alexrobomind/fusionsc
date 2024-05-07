@@ -7,10 +7,10 @@ using Java = import "java.capnp";
 $Java.package("org.fsc");
 $Java.outerClassname("Magnetics");
 
-using Data = import "data.capnp";
+using D = import "data.capnp";
 
-using DataRef = Data.DataRef;
-using Float64Tensor = Data.Float64Tensor;
+using DataRef = D.DataRef;
+using Float64Tensor = D.Float64Tensor;
 
 # BEGIN [magnetics]
 
@@ -198,6 +198,16 @@ struct Filament {
 			# Note: Turn this into union if more variants arrive
 			islandCoil @4 : UInt8;
 		}
+		
+		hsx : union {
+			mainCoil @6: UInt8;
+			auxCoil @7 : UInt8;
+		}
+		
+		custom : group {
+			device @8 : Text;
+			name   @9 : Text;
+		}
 	}
 }
 
@@ -294,6 +304,12 @@ struct W7XCoilSet {
 #   individual facilities.
 
 struct MagneticField {
+	# If this is set, this indicates to the field calculator that caching this
+	# field is a good idea.
+	# This should always point to a canonicalized binary representation of
+	# the field struct itself (minus the cached data)
+	cacheKey @22 : Data;
+	
 	# Different ways to calculate the magnetic field
 	union {
 		# ============================= General =================================
@@ -365,6 +381,11 @@ struct MagneticField {
 				# The coil set to use. Usually the default theory coils
 				coils @19 : W7XCoilSet;
 			}
+		}
+		
+		custom : group {
+			device @23 : Text;
+			name   @24 : Text;
 		}
 	}
 }

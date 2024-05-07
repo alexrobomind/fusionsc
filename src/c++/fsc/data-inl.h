@@ -405,12 +405,12 @@ template<typename T>
 LocalDataRef<T> LocalDataService::publish(
 	typename DataRefMetadata::Reader metaData,
 	Array<const byte> backingArray,
-	ArrayPtr<Maybe<Own<capnp::Capability::Client>>> capTable
+	ArrayPtr<Maybe<capnp::Capability::Client>> capTable
 ) {
 	auto hooks = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(capTable.size());
 	for(auto& maybeClient : capTable) {
 		KJ_IF_MAYBE(pClient, maybeClient) {
-			hooks.add(capnp::ClientHook::from(**pClient));
+			hooks.add(capnp::ClientHook::from(*pClient));
 		} else {
 			hooks.add(nullptr);
 		}
