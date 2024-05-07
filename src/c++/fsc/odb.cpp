@@ -48,7 +48,7 @@ kj::Exception fromProto(rpc::Exception::Reader proto) {
 	return result;
 }
 
-Temporary<rpc::Exception> toProto(kj::Exception& e) {
+Temporary<rpc::Exception> toProto(const kj::Exception& e) {
 	Temporary<rpc::Exception> result;
 	
 	switch(e.getType()) {
@@ -327,7 +327,7 @@ struct ObjectDBEntry::Accessor : public ObjectInfo::Builder {
 	 * Release the built-in transaction, optionally with (true) or without (false) writing the
 	 * object representation back to the database.
 	 */
-	void release(bool doSave) { KJ_REQUIRE(transaction.active()); if(doSave) { save(); } else { transaction.commit(); } }
+	void release(bool doSave) { KJ_REQUIRE(transaction -> active()); if(doSave) { save(); } else { transaction -> commit(); } }
 	
 private:
 	void load();
@@ -335,7 +335,7 @@ private:
 	
 	kj::UnwindDetector ud;
 	
-	db::Transaction transaction;
+	Own<db::Transaction> transaction;
 	Own<ObjectDBEntry> target;
 	
 	MallocMessageBuilder messageBuilder;
@@ -413,17 +413,22 @@ struct ObjectDB : public ObjectDBBase, kj::Refcounted, Warehouse::Server {
 	//! Creates the root entry if not present
 	Promise<void> getRoot(GetRootContext ctx) override;
 	
-	template<typename F>
-	kj::PromiseForResult<F, void> runWriteTask(F&& f);
+	void writeLock();
+	Promise<void> writeBarrier();
+	
+	Own<db::Transaction> writeTransaction();
+	
+	/*template<typename F>
+	kj::PromiseForResult<F, void> runWriteTask(F&& f);*/
 
 private:
-	std::list<kj::Function<void()>> writeTasks;
+	// std::list<kj::Function<void()>> writeTasks;
 	
 	//! Task that periodically cycles the read snapshots
 	kj::Promise<void> syncTask();
 	
 	//! Task that periodically runs write transactions
-	kj::Promise<void> writer();
+	// kj::Promise<void> writer();
 	
 	Maybe<Own<ObjectDBSnapshot>> currentSnapshot;
 	
@@ -434,7 +439,22 @@ private:
 	friend class ImportContext;
 	
 	kj::Promise<void> syncPromise;
-	kj::Promise<void> writePromise;
+	// kj::Promise<void> writePromise;
+	
+	struct WriteLock {
+		ObjectDB& parent;
+		
+		inline WriteLock(ObjectDB& db) : parent(db) {
+			parent.conn -> exec("BEGIN IMMEDIATE");
+		}
+		
+		inline ~WriteLock() {
+			parent.conn -> exec("COMMIT");
+		}
+	};
+	
+	Maybe<WriteLock> hasWriteLock = nullptr;
+	std::list<Own<kj::PromiseFulfiller<void>>> lockWaiters;
 	
 	uint32_t checkpointCounter = 0;
 };
@@ -540,8 +560,8 @@ OneOf<decltype(nullptr), Capability::Client, kj::Exception> createInterface(Obje
 ObjectDB::ObjectDB(db::Connection& conn, kj::StringPtr tablePrefix, bool readOnly) :
 	ObjectDBBase(conn, tablePrefix, readOnly),
 	importTasks(ImportErrorHandler::INSTANCE),
-	syncPromise(kj::evalLater([this]() { return syncTask(); }).eagerlyEvaluate(nullptr)),
-	writePromise(READY_NOW)
+	syncPromise(kj::evalLater([this]() { return syncTask(); }).eagerlyEvaluate(nullptr))
+	// writePromise(READY_NOW)
 {}
 
 ObjectDB::~ObjectDB() {
@@ -555,7 +575,7 @@ Promise<void> ObjectDB::syncTask() {
 	.then([this]() { return syncTask(); });
 }
 
-Promise<void> ObjectDB::writer() {
+/*Promise<void> ObjectDB::writer() {
 	// return getActiveThread().timer().afterDelay(50 * kj::MILLISECONDS)
 	//.then([this]() {
 	return kj::evalLast([this]() {
@@ -587,9 +607,9 @@ Promise<void> ObjectDB::writer() {
 			changed();
 		});
 	});
-}
+}*/
 	
-template<typename F>
+/*template<typename F>
 kj::PromiseForResult<F, void> ObjectDB::runWriteTask(F&& f) {
 	using ResultType = decltype(f());
 	auto paf = kj::newPromiseAndFulfiller<ResultType>();
@@ -610,11 +630,10 @@ kj::PromiseForResult<F, void> ObjectDB::runWriteTask(F&& f) {
 	});
 	
 	return paf.promise.attach(addRef());
-}
+}*/
 
 Promise<void> ObjectDB::getRoot(GetRootContext ctx) {
 	return withODBBackoff([this, ctx]() mutable {
-		db::Transaction t(*conn);
 		
 		// Look for root
 		auto q = findRoot.bind(ctx.getParams().getName());
@@ -624,6 +643,8 @@ Promise<void> ObjectDB::getRoot(GetRootContext ctx) {
 		}
 		
 		KJ_REQUIRE(!readOnly, "The requested root does not exist and the database is read-only");
+		
+		auto t = writeTransaction();
 		
 		auto newRoot = create();
 		auto acc = newRoot -> open();
@@ -653,9 +674,19 @@ void ObjectDB::changed() {
 	if(checkpointCounter++ >= 300) {
 		try {
 			syncAll();
+			
+			// Ideally, now all readers point to the "present state"
+			// of the database at the end of the WAL
+			
 			conn -> exec("PRAGMA wal_checkpoint(PASSIVE)");
 			
+			// Now, the database file is up do date
+			
 			syncAll();
+			
+			// Now, all readers point to the database file and the WAL
+			// is no longer in use.
+			// This allows us to restart the WAL
 			conn -> exec("PRAGMA wal_checkpoint(RESTART)");
 			
 			checkpointCounter = 0;
@@ -663,7 +694,6 @@ void ObjectDB::changed() {
 			KJ_DBG(e);
 		}
 	} else {
-		currentSnapshot = nullptr;
 		syncAll();
 	}
 }
@@ -786,9 +816,7 @@ void ObjectDB::exportStoredObject(Capability::Client c, Warehouse::StoredObject:
 }
 
 void ObjectDB::deleteIfOrphan(int64_t id) {
-	db::Transaction t(*conn);
-	
-	KJ_REQUIRE(!readOnly);
+	auto t = writeTransaction();
 	
 	// Make sure that the object is not in use
 	auto rc = getRefcount.bind(id);
@@ -834,6 +862,8 @@ void ObjectDB::deleteIfOrphan(int64_t id) {
 }
 
 Own<ObjectDBEntry> ObjectDB::create() {
+	KJ_REQUIRE(conn -> inTransaction(), "INTERNAL ERROR - ObjectDB::create() must be called inside a transaction");
+	
 	int64_t id = createObject.insert();
 	auto result = open(id, nullptr);
 	
@@ -842,6 +872,52 @@ Own<ObjectDBEntry> ObjectDB::create() {
 
 Own<ObjectDBEntry::Accessor> ObjectDBEntry::open() {
 	return kj::heap<Accessor>(*this);
+}
+
+void ObjectDB::writeLock() {
+	KJ_REQUIRE(!readOnly);
+	
+	// Increase checkpoint counter every time a task
+	// tries to acquire the write lock
+	++checkpointCounter;
+	
+	if(hasWriteLock != nullptr)
+		return;
+	
+	hasWriteLock.emplace(*this);
+	
+	importTasks.add(kj::evalLast([this]() {
+		KJ_IF_MAYBE(pErr, kj::runCatchingExceptions([this]() {
+			hasWriteLock = nullptr;
+		})) {
+			for(auto& e : lockWaiters)
+				e -> reject(kj::cp(*pErr));
+		} else {
+			for(auto& e : lockWaiters)
+				e -> fulfill();
+		}
+		
+		// Make sure we really are clear (double fail should not happen)
+		hasWriteLock = nullptr;
+		lockWaiters.clear();
+		
+		changed();
+	}));
+}
+
+Promise<void> ObjectDB::writeBarrier() {
+	KJ_IF_MAYBE(pWl, hasWriteLock) {
+		auto paf = kj::newPromiseAndFulfiller<void>();
+		lockWaiters.push_back(mv(paf.fulfiller));
+		return mv(paf.promise);
+	}
+	
+	return READY_NOW;
+}
+
+Own<db::Transaction> ObjectDB::writeTransaction() {
+	writeLock();
+	return kj::heap<db::Transaction>(*conn);
 }
 
 // class ObjectDBSnapshot
@@ -996,6 +1072,7 @@ bool ObjectDBEntry::exists() {
 }
 
 void ObjectDBEntry::restore() {
+	KJ_REQUIRE(parent -> conn -> inTransaction());
 	parent -> restoreObject(this -> id);
 }
 
@@ -1005,14 +1082,14 @@ void ObjectDBEntry::restore() {
 
 ObjectDBEntry::Accessor::Accessor(ObjectDBEntry& e) :
 	ObjectInfo::Builder(nullptr),
-	transaction(*e.parent -> conn),
+	transaction(e.parent -> writeTransaction()),
 	target(e.addRef())
 {
 	load();
 }
 
 ObjectDBEntry::Accessor::~Accessor() {
-	if(transaction.active() && !ud.isUnwinding())
+	if(transaction -> active() && !ud.isUnwinding())
 		save();
 }
 
@@ -1081,7 +1158,7 @@ void ObjectDBEntry::Accessor::save() {
 	}
 	
 	// Commit transaction
-	transaction.commit();
+	transaction -> commit();
 	
 	// Register change with database (and immediately resync same object)
 	// target -> parent -> changed();
@@ -1291,11 +1368,8 @@ struct DatarefDownloadProcess : public internal::DownloadTask<Own<ObjectDBEntry>
 // class ImportContext
 
 ImportContext::ImportContext(ObjectDB& parent) :
-	parent(parent.addRef())
-{
-	// KJ_REQUIRE(!parent.conn -> inTransaction(), "ImportContext must be created outside any transactions");
-	transaction = kj::heap<db::Transaction>(*parent.conn);
-}
+	parent(parent.addRef()), transaction(parent.writeTransaction())
+{}
 
 ImportContext::~ImportContext() {
 	if(!ud.isUnwinding()) {
@@ -1433,8 +1507,8 @@ Promise<void> ImportContext::importTask(int64_t id, Capability::Client src) {
 	.then([src, id, &myParent](Maybe<TempFile&> maybeTempFile) mutable {
 		// Step 1: If we have a temporary file, import that temp file into the
 		// database.
-		KJ_IF_MAYBE(pTempFile, maybeTempFile) {			
-			return myParent.runWriteTask([src, &storage = pTempFile -> storage, &myParent, id]() mutable {
+		KJ_IF_MAYBE(pTempFile, maybeTempFile) {
+			return withODBBackoff([src, id, &myParent, &tempFile = *pTempFile]() {
 				ImportTask result;
 				
 				auto handle = myParent.open(id);
@@ -1443,6 +1517,7 @@ Promise<void> ImportContext::importTask(int64_t id, Capability::Client src) {
 				using Detached = TempFile::Detached;
 				
 				// If the temp file is attached, we link to it.
+				auto& storage = tempFile.storage;
 				if(storage.is<Attached>()) {
 					auto target = storage.get<Attached>();
 					
@@ -1467,8 +1542,6 @@ Promise<void> ImportContext::importTask(int64_t id, Capability::Client src) {
 					storage.init<Attached>(myParent.wrap(myParent.open(id)).castAs<Warehouse::File<>>());
 				}
 				
-				myParent.changed();
-				
 				return mv(result.task);
 			});
 		}
@@ -1488,30 +1561,24 @@ Promise<void> ImportContext::importTask(int64_t id, Capability::Client src) {
 	
 	// If it fails, store failure in database
 	.catch_([&myParent, id](kj::Exception&& e) mutable {
-		return myParent.runWriteTask([&myParent, id, e]() mutable -> Promise<void> {
-			{
-				db::Transaction transaction(*myParent.conn);
+		return withODBBackoff([&myParent, id, e = mv(e)]() {
+			auto t = myParent.writeTransaction();
+			
+			myParent.open(id)
+			-> open()
+			-> setException(
+				toProto(e)
+			);
+			
+			// Delete partially written results
+			auto q = myParent.getBlob.bind(id);
+			KJ_REQUIRE(q.step(), "Internal error");
+			if(!q[0].isNull()) {
+				int64_t blobId = q[0];
 				
-				myParent.open(id)
-				-> open()
-				-> setException(
-					toProto(e)
-				);
-				
-				// Delete partially written results
-				auto q = myParent.getBlob.bind(id);
-				KJ_REQUIRE(q.step(), "Internal error");
-				if(!q[0].isNull()) {
-					int64_t blobId = q[0];
-					
-					myParent.setBlob(id, nullptr);
-					myParent.blobStore -> get(blobId) -> decRef();
-				}
+				myParent.setBlob(id, nullptr);
+				myParent.blobStore -> get(blobId) -> decRef();
 			}
-			
-			myParent.changed();
-			
-			return READY_NOW;
 		});
 	});
 }
@@ -1524,7 +1591,7 @@ DatarefDownloadProcess::DatarefDownloadProcess(ObjectDB& db, int64_t id, DataRef
 {}
 
 Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::unwrap() {
-	return db.runWriteTask([this]() mutable -> Maybe<Own<ObjectDBEntry>> {
+	return withODBBackoff([this]() mutable -> Maybe<Own<ObjectDBEntry>> {
 		auto unwrapResult = db.unwrap(src);
 		
 		if(unwrapResult.is<Own<ObjectDBEntry>>()) {
@@ -1545,7 +1612,7 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::unwrap() {
 }
 
 Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
-	return db.runWriteTask([this]() mutable -> Maybe<Own<ObjectDBEntry>> {		
+	return withODBBackoff([this]() mutable -> Maybe<Own<ObjectDBEntry>> {		
 		ImportContext ic(db);
 		auto dst = db.open(id);
 		auto acc = dst -> open();
@@ -1598,19 +1665,12 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
 }
 	
 Promise<void> DatarefDownloadProcess::receiveData(kj::ArrayPtr<const kj::byte> data) {
-	return db.runWriteTask([this, data]() mutable -> Promise<void> {
-		/*if(firstData) {
-			firstData = false;
-			
-			const uint32_t* prefix = reinterpret_cast<const uint32_t*>(data.begin());
-			uint32_t nSegments = prefix[0] + 1;
-			
-			kj::ArrayPtr<const uint32_t> segmentSizes(prefix + 1, nSegments);
-			KJ_DBG("Storing in ODB", data.size(), nSegments, segmentSizes);
-		}*/
+	return withODBBackoff([this, data]() mutable -> Promise<void> {
 		KJ_REQUIRE(builder.get() != nullptr);
 		
 		// BlobBuilder::write() does not go inside a transaction
+		// Still, enable the global batch transaction
+		db.writeLock();
 		builder -> write(data.begin(), data.size());
 		
 		return READY_NOW;
@@ -1618,10 +1678,10 @@ Promise<void> DatarefDownloadProcess::receiveData(kj::ArrayPtr<const kj::byte> d
 }
 
 Promise<void> DatarefDownloadProcess::finishDownload() {
-	return db.runWriteTask([this]() mutable -> Promise<void> {
+	return withODBBackoff([this]() mutable -> Promise<void> {
 		KJ_REQUIRE(builder.get() != nullptr);
 		
-		db::Transaction t(*db.conn);
+		auto t = db.writeTransaction();
 		auto finishedBlob = builder -> finish();
 		KJ_REQUIRE(finishedBlob -> isFinished(), "Blob unfinished after finish() call");
 		db.setBlob(id, finishedBlob -> getId());
@@ -1634,7 +1694,6 @@ Promise<void> DatarefDownloadProcess::finishDownload() {
 			ref.getDownloadStatus().setFinished();
 			ref.getMetadata().setDataHash(finishedBlob -> getHash());
 		}
-		t.commit();
 		
 		return READY_NOW;
 	});
@@ -1765,12 +1824,10 @@ Promise<void> FileInterface::setImpl(Capability::Client clt) {
 			}
 		}
 		
-		object -> getDb().changed();
-		
-		return it;
-	})
-	.then([](ImportTask&& it) {
 		return mv(it.task);
+	})
+	.then([this]() {
+		return object -> getDb().writeBarrier();
 	});
 }
 
@@ -1862,7 +1919,7 @@ Promise<void> FolderInterface::get(GetContext ctx) {
 }
 
 Promise<void> FolderInterface::put(PutContext ctx) {
-	return object -> getDb().runWriteTask([this, ctx]() mutable {
+	return withODBBackoff([this, ctx]() mutable {
 		ImportTask importTask;
 		auto& db = object -> getDb();
 		
@@ -1913,18 +1970,18 @@ Promise<void> FolderInterface::put(PutContext ctx) {
 			}
 		}
 		
-		return mv(importTask.task);
+		return importTask.task.then([&db]() { return db.writeBarrier(); });
 	});
 }
 
 Promise<void> FolderInterface::rm(RmContext ctx) {
-	return object -> getDb().runWriteTask([this, ctx]() mutable -> Promise<void> {
+	return withODBBackoff([this, ctx]() mutable {
 		auto& db = object -> getDb();
 		
 		kj::Path path = kj::Path::parse(ctx.getParams().getPath());
 		
 		{
-			fsc::db::Transaction t(*db.conn);
+			auto t = db.writeTransaction();
 			
 			auto parentFolder = locateWriteDir(path.parent(), false);
 			auto& filename = path.basename()[0];
@@ -1944,18 +2001,18 @@ Promise<void> FolderInterface::rm(RmContext ctx) {
 			}
 		}
 		
-		return READY_NOW;
+		return db.writeBarrier();
 	});
 }
 
 Promise<void> FolderInterface::mkdir(MkdirContext ctx) {
-	return object -> getDb().runWriteTask([this, ctx] () mutable -> Promise<void> {
+	return withODBBackoff([this, ctx] () mutable -> Promise<void> {
 		kj::Path path = kj::Path::parse(ctx.getParams().getPath());
 		
 		auto result = locateWriteDir(path, true);
 		ctx.initResults().setFolder(object -> getDb().wrap(mv(result)).castAs<Warehouse::Folder>());
 		
-		return READY_NOW;
+		return object -> getDb().writeBarrier();
 	});
 }
 
@@ -1966,11 +2023,12 @@ Promise<void> FolderInterface::createFile(CreateFileContext ctx) {
 		return READY_NOW;
 	}
 	
-	return object -> getDb().runWriteTask([this, ctx] () mutable -> Promise<void> {
+	return withODBBackoff([this, ctx] () mutable -> Promise<void> {
 		auto& db = object -> getDb();
 		
-		fsc::db::Transaction t(*db.conn);
 		{
+			auto t = db.writeTransaction();
+			
 			kj::Path path = kj::Path::parse(ctx.getParams().getPath());
 			
 			auto parentFolder = locateWriteDir(path.parent(), true);
@@ -1997,7 +2055,7 @@ Promise<void> FolderInterface::createFile(CreateFileContext ctx) {
 			}
 		}
 		
-		return READY_NOW;
+		return db.writeBarrier();
 	});
 }
 
@@ -2015,7 +2073,7 @@ Promise<void> FolderInterface::freeze(FreezeContext ctx) {
 
 Own<ObjectDBEntry> FolderInterface::locateWriteDir(kj::PathPtr path, bool create) {
 	auto& db = object -> getDb();
-	fsc::db::Transaction t(*db.conn);
+	KJ_REQUIRE(db.conn -> inTransaction(), "INTERNAL ERROR: locateWriteDir must be called inside transaction");
 	
 	Own<ObjectDBEntry> current = object -> addRef();
 	
