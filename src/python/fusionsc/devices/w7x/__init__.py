@@ -49,14 +49,19 @@ def connectLegacyIPPSite():
 	connectCoilsDB("http://esb.ipp-hgw.mpg.de:8280/services/CoilsDBRest")
 	connectComponentsDB("http://esb.ipp-hgw.mpg.de:8280/services/ComponentsDbRest")
 
-def connectIppSite():
+def connectIppSite(url = "http://fusionsc-site:8888/load-balancer", useBackend: bool = True):
 	"""Connects the resolve module to the newer fsc-driven Coils- and ComponentsDb proxies"""	
 	# Set up the W7-X load balancer as main backend
-	newBackend = remote.connect("http://fusionsc-site:8888/load-balancer")
-	backends.alwaysUseBackend(newBackend)
+	newBackend = remote.connect(url)
 	
-	# Load w7xdb (exposed by remote backend) and connect its data index
-	resolve.connectWarehouse("remote:w7xdb")
+	with backends.useBackend(newBackend):
+		# Load w7xdb (exposed by remote backend) and connect its data index
+		resolve.connectWarehouse("remote:w7xdb")
+	
+	if useBackend:
+		backends.alwaysUseBackend(newBackend)
+	
+	return newBackend
 	
 	# Note: This is equivalent to
 	# database = warehouse.open("remote:w7xdb")
