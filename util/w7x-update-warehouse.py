@@ -4,6 +4,9 @@ from tqdm import tqdm, trange
 import fusionsc as fsc
 
 from fusionsc.devices import w7x
+
+saveCounter = 0
+updates = {}
 	
 def download(args = None):
 	if args is None:
@@ -89,10 +92,20 @@ def download(args = None):
 	# Open database
 	wh = fsc.warehouse.open(args.output)
 	
+	def save():
+		global saveCounter
+		saveCounter = 0
+		
+		tqdm.write("Saving...")
+		fsc.resolve.updateWarehouse(wh, updates)
+		updates.clear()
+		tqdm.write("Done")
+	
 	# Perform downloads
 	def update(key):
 		keyData = key.data
 		
+		tqdm.write("Downloading...")
 		for i in range(1000):
 			try:
 				valData = key.resolve().data
@@ -106,8 +119,15 @@ def download(args = None):
 				if i == 3:
 					raise
 
-		fsc.resolve.updateWarehouse(wh, {keyData : valData})
-		fsc.asnc.cycle()
+		
+		# fsc.resolve.updateWarehouse(wh, {keyData : valData})
+		updates[keyData] = valData
+		
+		global saveCounter
+		saveCounter += 1
+		if saveCounter > 100:
+			save()
+			fsc.asnc.cycle()
 
 	for id in tqdm(assemblies, "Downloading assemblies"):
 		tqdm.write(str(id))
@@ -124,8 +144,10 @@ def download(args = None):
 		key = w7x.coilsDBCoil(id)
 		update(key)
 	
-	rootData = wh.get("resolveIndex").download()
+	#rootData = wh.get("resolveIndex").download()
 	#print(rootData)
+	
+	save()
 	
 	return 0
 

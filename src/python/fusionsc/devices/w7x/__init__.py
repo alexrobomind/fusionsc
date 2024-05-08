@@ -27,8 +27,7 @@ def connectCoilsDB(address: str) -> service.devices.w7x.CoilsDB.Client:
 	"""
 	coilsDB = _provider().connectCoilsDb(address).pipeline.service
 	
-	resolve.fieldResolvers.append(w7xnative.configDBResolver(coilsDB))
-	resolve.fieldResolvers.append(w7xnative.coilsDBResolver(coilsDB))
+	resolve.addFieldResolvers([w7xnative.configDBResolver(coilsDB),w7xnative.coilsDBResolver(coilsDB)])
 	
 	return coilsDB
 
@@ -39,7 +38,7 @@ def connectComponentsDB(address: str) -> service.devices.w7x.ComponentsDB.Client
 	"""
 	componentsDB = _provider().connectComponentsDb(address).pipeline.service
 	
-	resolve.geometryResolvers.append(w7xnative.componentsDBResolver(componentsDB))
+	resolve.addGeometryResolvers([w7xnative.componentsDBResolver(componentsDB)])
 	
 	return componentsDB
 

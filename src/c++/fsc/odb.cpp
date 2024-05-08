@@ -20,7 +20,9 @@ namespace fsc { namespace {
 	
 template<typename T>
 auto withODBBackoff(T func) {
-	return withBackoff(10 * kj::MILLISECONDS, 5 * kj::MINUTES, 2, mv(func));
+	return kj::evalLater([func = mv(func)]() mutable {
+		return withBackoff(10 * kj::MILLISECONDS, 5 * kj::MINUTES, 2, mv(func));
+	});
 }
 
 kj::Exception fromProto(rpc::Exception::Reader proto) { 
@@ -1213,17 +1215,17 @@ ObjectDBHook::ObjectDBHook(Own<ObjectDBEntry> paramEntry) :
 	auto cr = checkResolved();
 	//entry -> trySync();
 	
-	KJ_DBG(entry -> id);
+	//KJ_DBG(entry -> id);
 	if(cr.is<Capability::Client>()) {
-		KJ_DBG("Created resolved hook");
+		//KJ_DBG("Created resolved hook");
 		resolved = Resolved();
 		inner = ClientHook::from(mv(cr.get<Capability::Client>()));
 	} else if(cr.is<kj::Exception>()) {
-		KJ_DBG("Created broken hook");
+		//KJ_DBG("Created broken hook");
 		resolved = cr.get<kj::Exception>();
 		inner = capnp::newBrokenCap(mv(cr.get<kj::Exception>()));;
 	} else {
-		KJ_DBG("Created deferred hook");
+		//KJ_DBG("Created deferred hook");
 		inner = capnp::newLocalPromiseClient(resolveTask());
 	}
 	// inner = capnp::newLocalPromiseClient(resolveTask());
@@ -1667,6 +1669,7 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::unwrap() {
 }
 
 Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
+	// Give nested capabilities some time to progress their resolution
 	return withODBBackoff([this]() mutable -> Maybe<Own<ObjectDBEntry>> {		
 		ImportContext ic(db);
 		auto dst = db.open(id);
