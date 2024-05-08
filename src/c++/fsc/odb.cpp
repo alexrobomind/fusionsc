@@ -266,7 +266,7 @@ struct ObjectDBEntry : public kj::Refcounted {
 	Promise<void> whenUpdated();
 	
 	//! Load the last recently seen representation (read-only) of the object.
-	Own<ObjectInfo::Reader> loadPreserved();
+	Own<ObjectInfo::Reader> loadPreserved(bool shallow = false);
 	
 	//! Read the preserved snapshot
 	ObjectDBSnapshot& getSnapshot();
@@ -298,7 +298,7 @@ public:
 	const int64_t id;
 
 private:
-	Own<ObjectInfo::Reader> doLoad(Maybe<ObjectDBSnapshot&> snapshot);
+	Own<ObjectInfo::Reader> doLoad(Maybe<ObjectDBSnapshot&> snapshot, bool shallow);
 	
 	bool isLive() { return liveLink.isLinked(); }
 	
@@ -636,16 +636,27 @@ Promise<void> ObjectDB::getRoot(GetRootContext ctx) {
 	return withODBBackoff([this, ctx]() mutable {
 		
 		// Look for root
-		auto q = findRoot.bind(ctx.getParams().getName());
-		if(q.step()) {
-			ctx.initResults().setRoot(wrap(open(q[0].asInt64())).castAs<Warehouse::Folder>());
-			return;
+		{
+			db::Transaction(*conn);
+			auto q = findRoot.bind(ctx.getParams().getName());
+			if(q.step()) {
+				ctx.initResults().setRoot(wrap(open(q[0].asInt64())).castAs<Warehouse::Folder>());
+				return;
+			}
 		}
 		
 		KJ_REQUIRE(!readOnly, "The requested root does not exist and the database is read-only");
 		
 		auto t = writeTransaction();
 		
+		// Look again
+		auto q = findRoot.bind(ctx.getParams().getName());
+		if(q.step()) {
+			ctx.initResults().setRoot(wrap(open(q[0].asInt64())).castAs<Warehouse::Folder>());
+			return;
+		}
+		
+		// Still not found? Create new.
 		auto newRoot = create();
 		auto acc = newRoot -> open();
 		acc -> setFolder();
@@ -691,7 +702,7 @@ void ObjectDB::changed() {
 			
 			checkpointCounter = 0;
 		} catch(kj::Exception& e) {
-			KJ_DBG(e);
+			KJ_LOG(WARNING, "Error during checkpoint", e);
 		}
 	} else {
 		syncAll();
@@ -737,6 +748,8 @@ OneOf<Own<ObjectDBEntry>, Capability::Client, decltype(nullptr)> ObjectDB::unwra
 			
 			if(asObjectHook -> entry -> parent.get() == this) {
 				matchingHook = kj::addRef(*asObjectHook);
+			} else {
+				KJ_DBG("Object hook found, but wrong DB");
 			}
 		}
 		
@@ -749,6 +762,8 @@ OneOf<Own<ObjectDBEntry>, Capability::Client, decltype(nullptr)> ObjectDB::unwra
 	
 	if(matchingHook.get() != nullptr) {
 		return matchingHook -> entry -> addRef();
+	} else if (inner -> whenMoreResolved() != nullptr) {
+		KJ_DBG("unwrap() encountered unresolved promise outside DB");
 	}
 	
 	// ... otherwise check whether it is a null cap ... 
@@ -890,6 +905,8 @@ void ObjectDB::writeLock() {
 		KJ_IF_MAYBE(pErr, kj::runCatchingExceptions([this]() {
 			hasWriteLock = nullptr;
 		})) {
+			KJ_LOG(WARNING, "Write op failed", *pErr);
+			
 			for(auto& e : lockWaiters)
 				e -> reject(kj::cp(*pErr));
 		} else {
@@ -1017,7 +1034,7 @@ Promise<void> ObjectDBEntry::whenUpdated() {
 	return updatePromise.addBranch();
 }
 
-Own<ObjectInfo::Reader> ObjectDBEntry::doLoad(Maybe<ObjectDBSnapshot&> snapshotToUse) {
+Own<ObjectInfo::Reader> ObjectDBEntry::doLoad(Maybe<ObjectDBSnapshot&> snapshotToUse, bool shallow) {
 	auto getTargetBase = [&]() -> ObjectDBBase& {
 		KJ_IF_MAYBE(pSnap, snapshotToUse) {
 			return *pSnap;
@@ -1037,17 +1054,31 @@ Own<ObjectInfo::Reader> ObjectDBEntry::doLoad(Maybe<ObjectDBSnapshot&> snapshotT
 	auto inputStream = kj::heap<kj::ArrayInputStream>(flatInfo);
 	auto messageReader = kj::heap<capnp::PackedMessageReader>(*inputStream);
 	
-	kj::Vector<Maybe<Own<ClientHook>>> rawCapTable;
-	
-	auto refs = targetBase.listOutgoingRefs.bind(id);
-	while(refs.step()) {		
-		if(refs[0].isNull()) {
-			rawCapTable.add(nullptr);
-			continue;
+	kj::Vector<Maybe<Own<ObjectDBEntry>>> entries;
+	if(!shallow) {
+		auto refs = targetBase.listOutgoingRefs.bind(id);
+		while(refs.step()) {		
+			if(refs[0].isNull()) {
+				entries.add(nullptr);
+				continue;
+			}
+			
+			auto dbObject = parent -> open(refs[0], snapshotToUse);
+			entries.add(mv(dbObject));
 		}
-		
-		auto dbObject = parent -> open(refs[0], snapshotToUse);
-		rawCapTable.add(ClientHook::from(parent -> wrap(mv(dbObject))));
+	}
+	
+	// Defer wrapping behind enumeration so that
+	// recursive wrap calls can use listOutgoingRefs
+	// again.
+	
+	kj::Vector<Maybe<Own<ClientHook>>> rawCapTable;
+	for(auto& maybeEntry : entries) {
+		KJ_IF_MAYBE(ppEntry, maybeEntry) {
+			rawCapTable.add(ClientHook::from(parent -> wrap(mv(*ppEntry))));
+		} else {
+			rawCapTable.add(nullptr);
+		}
 	}
 	
 	auto capTable = kj::heap<ReaderCapabilityTable>(rawCapTable.releaseAsArray());
@@ -1056,11 +1087,11 @@ Own<ObjectInfo::Reader> ObjectDBEntry::doLoad(Maybe<ObjectDBSnapshot&> snapshotT
 	return kj::heap<ObjectInfo::Reader>(root).attach(mv(messageReader), mv(inputStream), mv(flatInfo), mv(capTable));
 }
 
-Own<ObjectInfo::Reader> ObjectDBEntry::loadPreserved() {
+Own<ObjectInfo::Reader> ObjectDBEntry::loadPreserved(bool shallow) {
 	trySync(true);
 	
 	KJ_IF_MAYBE(pSnap, snapshot) {
-		return doLoad(**pSnap);
+		return doLoad(**pSnap, shallow);
 	}
 	KJ_FAIL_REQUIRE("loadPreserved() has no snapshot to load from. Ensure that hasPreserved() is true, e.g. by waiting for whenUpdated()", id);
 }
@@ -1095,7 +1126,7 @@ ObjectDBEntry::Accessor::~Accessor() {
 
 void ObjectDBEntry::Accessor::load() {
 	KJ_REQUIRE(!target -> parent -> readOnly, "Can not perform write operations on target");
-	auto inputReader = target -> doLoad(nullptr);
+	auto inputReader = target -> doLoad(nullptr, false);
 	
 	auto outputPtr = capTable.imbue(messageBuilder.initRoot<AnyPointer>());
 	outputPtr.setAs<ObjectInfo>(*inputReader);
@@ -1141,9 +1172,14 @@ void ObjectDBEntry::Accessor::save() {
 			KJ_REQUIRE(!unwrapped.is<Capability::Client>(), "Only immediate DB references and null capabilities may be used inside DBObject.");
 			if(unwrapped.is<Own<ObjectDBEntry>>()) {
 				auto& refTarget = unwrapped.get<Own<ObjectDBEntry>>();
-				
-				auto rowid = target ->  parent -> insertRef.insert(target -> id, (int64_t) i, refTarget -> id);
-				target -> parent -> incRefcount(refTarget -> id);
+			
+				try {	
+					auto rowid = target ->  parent -> insertRef.insert(target -> id, (int64_t) i, refTarget -> id);
+					target -> parent -> incRefcount(refTarget -> id);
+				} catch(...) {
+					KJ_LOG(WARNING, "insertRef failed", target -> id, i, refTarget -> id, target -> exists(), refTarget -> exists(), asReader());
+					throw;
+				}
 				
 				continue;
 			}
@@ -1173,14 +1209,30 @@ void ObjectDBEntry::Accessor::save() {
 
 ObjectDBHook::ObjectDBHook(Own<ObjectDBEntry> paramEntry) :
 	entry(mv(paramEntry))
-{	
-	inner = capnp::newLocalPromiseClient(resolveTask());
+{
+	auto cr = checkResolved();
+	//entry -> trySync();
+	
+	KJ_DBG(entry -> id);
+	if(cr.is<Capability::Client>()) {
+		KJ_DBG("Created resolved hook");
+		resolved = Resolved();
+		inner = ClientHook::from(mv(cr.get<Capability::Client>()));
+	} else if(cr.is<kj::Exception>()) {
+		KJ_DBG("Created broken hook");
+		resolved = cr.get<kj::Exception>();
+		inner = capnp::newBrokenCap(mv(cr.get<kj::Exception>()));;
+	} else {
+		KJ_DBG("Created deferred hook");
+		inner = capnp::newLocalPromiseClient(resolveTask());
+	}
+	// inner = capnp::newLocalPromiseClient(resolveTask());
 	//KJ_DBG("Hook created", this);
 }
 
 ObjectDBHook::~ObjectDBHook()
 {	
-	inner = capnp::newLocalPromiseClient(resolveTask());
+	// inner = capnp::newLocalPromiseClient(resolveTask());
 	//KJ_DBG("Hook deleted", this);
 }
 
@@ -1596,10 +1648,13 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::unwrap() {
 		
 		if(unwrapResult.is<Own<ObjectDBEntry>>()) {
 			auto dst = db.open(id);
-			auto acc = dst -> open();
-			acc -> setLink(src);
 			
-			return mv(dst);
+			if(unwrapResult.get<Own<ObjectDBEntry>>() -> exists()) {
+				auto acc = dst -> open();
+				acc -> setLink(src);
+			
+				return mv(dst);
+			}
 		} else if(unwrapResult.is<decltype(nullptr)>()) {
 			auto dst = db.open(id);
 			auto acc = dst -> open();
@@ -1617,6 +1672,10 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
 		auto dst = db.open(id);
 		auto acc = dst -> open();
 		
+		Maybe<capnp::Capability::Client> replaces;
+		if(acc -> isUnresolved() && acc -> getUnresolved().hasPreviousValue())
+			replaces = acc -> getUnresolved().getPreviousValue();
+		
 		// Initialize target to DataRef
 		auto ref = acc -> initDataRef();
 		ref.setMetadata(metadata);
@@ -1626,6 +1685,16 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
 		auto capTableOut = ref.initCapTable(capTable.size());
 		for(auto i : kj::indices(capTable)) {
 			auto importTask = ic.import(capTable[i]);
+			
+			// Propagate unresolved to children
+			KJ_IF_MAYBE(ppEntry, importTask.entry) {
+				auto targetAcc = (**ppEntry).open();
+				if(targetAcc -> isUnresolved() && !targetAcc -> getUnresolved().hasPreviousValue()) {
+					KJ_IF_MAYBE(pReplaces, replaces) {
+						targetAcc -> getUnresolved().setPreviousValue(*pReplaces);
+					}
+				}
+			}
 			capTableOut.set(i, db.wrap(mv(importTask.entry)));
 			childImports.add(mv(importTask.task));
 		}
@@ -2317,7 +2386,7 @@ OneOf<decltype(nullptr), Capability::Client, kj::Exception> createInterface(Obje
 	if(!entry.hasPreserved())
 		return nullptr;
 	
-	auto reader = entry.loadPreserved();
+	auto reader = entry.loadPreserved(true); // Do a shallow load to check contents
 	switch(reader -> which()) {
 		case ObjectInfo::UNRESOLVED:
 			return nullptr;
@@ -2327,7 +2396,7 @@ OneOf<decltype(nullptr), Capability::Client, kj::Exception> createInterface(Obje
 			return fromProto(reader -> getException());
 		}	
 		case ObjectInfo::LINK: {
-			return reader -> getLink();
+			return entry.loadPreserved(false) -> getLink();
 		}
 		case ObjectInfo::DATA_REF: {
 			auto refInfo = reader -> getDataRef();
@@ -2336,10 +2405,10 @@ OneOf<decltype(nullptr), Capability::Client, kj::Exception> createInterface(Obje
 				return nullptr;
 			
 			// Load snapshot
-			auto& snapshot = entry.getSnapshot();
+			/*auto& snapshot = entry.getSnapshot();
 			auto blobId = snapshot.getBlob.bind(entry.id);
 			blobId.step();
-			auto blob = snapshot.blobStore -> get(blobId[0]);
+			auto blob = snapshot.blobStore -> get(blobId[0]);*/
 			
 			return Capability::Client(kj::heap<DataRefInterface>(entry.addRef(), badge));
 		}

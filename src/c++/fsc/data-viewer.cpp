@@ -251,16 +251,50 @@ struct DataViewerImpl : public kj::HttpService {
 
 	//! Writes a body for a database folder
 	void writeFolderBody(Warehouse::Folder::Client folder, kj::BufferedOutputStream& os, kj::WaitScope& ws) {
-		auto lsResponse = folder.lsRequest().send().wait(ws);
+		auto lsResponse = folder.getAllRequest().send().wait(ws);
 
-		kj::StringTree response;
-		for(auto name : lsResponse.getEntries()) {
-			response = strTree(mv(response), "Folder contents:<br /><br /><li><a href='", name, "/show'>", name, "</a>");
+		auto response = kj::strTree(
+			"Folder contents:<br /><br /><table><tr>"
+			"<td>Name</td>"
+			"<td>Content</td>"
+			"</tr>"
+		);
+		for(auto entry : lsResponse.getEntries()) {
+			auto val = entry.getValue();
+			
+			kj::String content;
+			if(val.isUnresolved())
+				content = kj::str("Unresolved");
+			else if(val.isNullValue())
+				content = kj::str("Null");
+			else if(val.isException())
+				content = kj::str("Error: ", kj::str(val.getException()));
+			else if(val.isFolder())
+				content = kj::str("Folder");
+			else if(val.isFile())
+				content = kj::str("Mutable File");
+			else if(val.isDead())
+				content = kj::str("Dead object");
+			else if(val.isDataRef()) {
+				if(val.getDataRef().getDownloadStatus().isFinished())
+					content = kj::str("Data");
+				else
+					content = kj::str("Data [download in progress]");
+			}
+			
+			kj::StringTree name = kj::strTree(entry.getName());
+			if(val.isFile()) {
+				name = kj::strTree("<a href='", name.flatten(), "/contents/show'>", name.flatten(), "</a>");
+			} else if(val.isFolder() || (val.isDataRef() && val.getDataRef().getDownloadStatus().isFinished())) {
+				name = kj::strTree("<a href='", name.flatten(), "/show'>", name.flatten(), "</a>");
+			}
+			
+			response = strTree(mv(response), "<td>", mv(name), "</td><td>", mv(content), "</td>");
 		}
-
-		response = strTree("<ul>", mv(response), "</ul>");
+		
+		response = strTree(mv(response), "</tr></table>");
+		
 		auto flat = response.flatten();
-
 		os.write(flat.begin(), flat.size());
 	}
 

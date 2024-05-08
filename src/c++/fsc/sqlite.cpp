@@ -56,7 +56,15 @@ struct SQLiteStatementHook : public PreparedStatementHook {
 	SQLiteStatementHook(SQLiteConnection& parent, kj::StringPtr sql);
 	~SQLiteStatementHook();
 	
-	int check(int result) { return parent -> check(result); }
+	int check(int result) {
+		try {
+			return parent -> check(result);
+		} catch(kj::Exception& e) {
+			kj::StringPtr sql = sqlite3_sql(handle);
+			KJ_LOG(WARNING, "SQLite failure", e, sql);
+			throw;
+		}
+	}
 	
 	// Members
 	Own<SQLiteConnection> parent;

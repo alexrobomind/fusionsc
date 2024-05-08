@@ -15,7 +15,7 @@ capnp::Type getRefPayload(capnp::InterfaceSchema refSchema) {
 	
 	KJ_REQUIRE(
 		refSchema.getProto().getId() == DR_ID,
-		"Type must be a DataRef instance"
+		"Type must be a DataRef instance", refSchema.getProto().getDisplayName()
 	);
 	
 	return refSchema.getBrandArgumentsAtScope(DR_ID)[0];
