@@ -3,12 +3,15 @@
 #include <fsc/data.h>
 #include <fsc/networking.h>
 #include <fsc/textio-yaml.h>
+#include <fsc/data-viewer.h>
 
 #include <capnp/rpc-twoparty.h>
 
 #include <kj/main.h>
 #include <kj/async.h>
 #include <kj/thread.h>
+#include <kj/compat/http.h>
+#include <kj/compat/url.h>
 
 #include <iostream>
 #include <functional>
@@ -63,6 +66,34 @@ struct NodeInfoProvider : public SimpleHttpServer::Server {
 		r.setBody(result);
 		
 		return READY_NOW;
+	}
+};
+
+struct WebFrontend : public kj::HttpService {
+	RootService::Client
+	
+	kj::Promise<void> request(
+		kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
+		kj::AsyncInputStream& requestBody, kj::HttpService::Response& response
+	) override {
+		auto rootUrl = kj::Url::parse(url, kj::Url::HTTP_REQUEST);
+		
+		if(rootUrl.path.size() == 0) {
+			kj::String
+			return response.send(200, "OK", kj::HttpHeaders(kj::HttpHeaderTable())) -> 
+		}
+	}
+	
+	Promise<void> sendText(kj::HttpService::Response&, kj::String p) {
+		kj::HttpHeaderTable tbl;
+		kj::HttpHeaders headers(tbl);
+		headers.set(kj::HttpHeaderId::CONTENT_TYPE, "text/html; charset=utf-8");
+		
+		auto ptr = p.asPtr();
+		auto os = response.send(200, "OK", headers);
+		auto result = os.write(ptr.begin(), ptr.size());
+	
+		return result.attach(os, mv(p));
 	}
 };
 

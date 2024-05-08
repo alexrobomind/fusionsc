@@ -113,12 +113,10 @@ struct DataViewerImpl : public kj::HttpService {
 	kj::Promise<void> request(
 		kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
 		kj::AsyncInputStream& requestBody, kj::HttpService::Response& response
-	) override {
-		auto rootUrl = kj::Url::parse("http://localhost/");
-		
+	) override {		
 		return kj::startFiber(
 			1024 * 1024,
-			[parsedUrl = rootUrl.parseRelative(url), &response, this](kj::WaitScope& ws) mutable {
+			[parsedUrl = kj::Url::parse(url, kj::Url::HTTP_REQUEST), &response, this](kj::WaitScope& ws) mutable {
 				process(mv(parsedUrl), response, ws);
 			}
 		);
