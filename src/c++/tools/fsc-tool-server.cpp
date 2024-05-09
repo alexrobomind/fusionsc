@@ -3,12 +3,21 @@
 #include <fsc/data.h>
 #include <fsc/networking.h>
 #include <fsc/textio-yaml.h>
+#include <fsc/data-viewer.h>
 
 #include <capnp/rpc-twoparty.h>
 
 #include <kj/main.h>
 #include <kj/async.h>
 #include <kj/thread.h>
+#include <kj/compat/http.h>
+#include <kj/compat/url.h>
+
+#include <fsc/dynamic.capnp.h>
+#include <fsc/magnetics.capnp.h>
+#include <fsc/geometry.capnp.h>
+#include <fsc/offline.capnp.h>
+
 
 #include <iostream>
 #include <functional>
@@ -20,6 +29,8 @@
 using namespace fsc;
 
 namespace {
+	
+static capnp::SchemaLoader schemaLoader = capnp::SchemaLoader();
 
 struct RootServiceProvider : public NetworkInterface::Listener::Server {
 	Temporary<LocalConfig> config;
@@ -63,6 +74,101 @@ struct NodeInfoProvider : public SimpleHttpServer::Server {
 		r.setBody(result);
 		
 		return READY_NOW;
+	}
+};
+
+struct WebFrontend : public kj::HttpService {
+	RootService::Client clt;
+	
+	WebFrontend(RootService::Client clt) : clt(mv(clt)) {}
+	
+	enum PathType { NO_PATH, DB_NAME, DB_INNER };
+	
+	kj::Promise<void> request(
+		kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
+		kj::AsyncInputStream& requestBody, kj::HttpService::Response& response
+	) override {
+		auto rootUrl = kj::Url::parse(url, kj::Url::HTTP_REQUEST);
+		
+		PathType pathType = NO_PATH;
+		
+		kj::String dbName = nullptr;
+		kj::Url dbUrl;
+		kj::Vector<kj::String> dbPath;
+		for(auto& s : rootUrl.path) {
+			if(pathType == NO_PATH && s == "warehouses") {
+				pathType = DB_NAME;
+				continue;
+			}
+			
+			if(pathType == DB_NAME) {
+				dbName = mv(s);
+				pathType = DB_INNER;
+				continue;
+			}
+			
+			if(pathType == DB_INNER) {
+				dbUrl.path.add(mv(s));
+			}
+		}
+		
+		if(pathType == NO_PATH) {
+			return root(response);
+		}
+		
+		// Open database
+		auto dbReq = clt.getWarehouseRequest();
+		dbReq.setName(dbName);
+		auto wh = dbReq.send().getWarehouse();
+		
+		// Create data viewer
+		auto viewer = createDataViewer(wh, schemaLoader);
+		auto result = viewer -> request(method, dbUrl.toString(kj::Url::HTTP_REQUEST), headers, requestBody, response);
+		return result.attach(mv(viewer));
+	}
+	
+	Promise<void> root(kj::HttpService::Response& r) {
+		return clt.getInfoRequest().send()
+		.then([this, &r](auto response) {
+			YAML::Emitter emitter;
+			emitter << response;
+			
+			auto result = kj::strTree(
+				"<html>",
+				"	<head><title>FusionSC Server</title></head>",
+				"	<body style='font-size: large'>",
+				"		<h1>FusionSC Server</h1>",
+				"		This is a server for the FusionSC library."
+				"		To use it, you need to use the <a href='https://alexrobomind.github.io/fusionsc'>FusionSC library</a>."
+				"		<h2>Node information:</h2>",
+				"		<code style='white-space: pre-wrap'>", emitter.c_str() ,"</code>"
+			);
+			
+			if(response.getWarehouses().size() > 0) {
+				result = kj::strTree(mv(result), "<br />This node exposes the following warehouses: <br /><ul>");
+				
+				for(auto wh : response.getWarehouses())
+					result = kj::strTree(mv(result), "<li><a href='warehouses/", wh, "/show'>", wh, "</a></li>");
+				
+				result = kj::strTree(mv(result), "</ul>");
+			}
+			
+			result = kj::strTree(mv(result), "</body></html>");
+			
+			return sendText(r, result.flatten());
+		});
+	}
+	
+	Promise<void> sendText(kj::HttpService::Response& response, kj::String p) {
+		kj::HttpHeaderTable tbl;
+		kj::HttpHeaders headers(tbl);
+		headers.set(kj::HttpHeaderId::CONTENT_TYPE, "text/html; charset=utf-8");
+		
+		auto ptr = p.asPtr();
+		auto os = response.send(200, "OK", headers);
+		auto result = os -> write(ptr.begin(), ptr.size());
+	
+		return result.attach(mv(os), mv(p));
 	}
 };
 
@@ -141,6 +247,14 @@ struct ServerTool {
 		auto l = newLibrary();
 		auto lt = l -> newThread();
 		auto& ws = lt->waitScope();
+
+		// Prepare schema loader
+		schemaLoader.loadCompiledTypeAndDependencies<MagneticField>();
+		schemaLoader.loadCompiledTypeAndDependencies<Geometry>();
+		schemaLoader.loadCompiledTypeAndDependencies<DynamicObject>();
+		schemaLoader.loadCompiledTypeAndDependencies<OfflineData>();
+		schemaLoader.loadCompiledTypeAndDependencies<Mesh>();
+		schemaLoader.loadCompiledTypeAndDependencies<MergedGeometry>();
 		
 		Temporary<LocalConfig> loadedConfig;
 		
@@ -170,15 +284,24 @@ struct ServerTool {
 		listenRequest.setHost(address);
 		
 		RootService::Client root = createRoot(loadedConfig.asReader());
-		listenRequest.setServer(root);
+		/* listenRequest.setServer(root);
 		
 		{
 			auto info = root.getInfoRequest().send().wait(ws);
 			listenRequest.setFallback(kj::heap<NodeInfoProvider>(info));
+		}*/
+
+		auto& network = lt -> network();
+		unsigned int portHint = 0;
+		KJ_IF_MAYBE(pPort, port) {
+			portHint = *pPort;
 		}
 		
-		
-		auto openPort = listenRequest.sendForPipeline().getOpenPort();
+		/*auto openPort = listenRequest.sendForPipeline().getOpenPort();
+		 */
+
+		auto parsedAddress = network.parseAddress(address, portHint).wait(ws);
+		auto openPort = listenViaHttp(parsedAddress -> listen(), root, kj::heap<WebFrontend>(root)); // createDataViewer(root, schemaLoader));
 		auto info = openPort.getInfoRequest().send().wait(ws);
 		
 		std::cout << "Serving protocol version " << FSC_PROTOCOL_VERSION << std::endl;
