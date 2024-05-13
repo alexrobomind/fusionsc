@@ -511,7 +511,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 		}
 			
 		default:
-			KJ_FAIL_REQUIRE("Unknown geometry node type encountered during merge operation. Likely an unresolved node", input.which());
+			KJ_FAIL_REQUIRE("Unresolved geometry node encountered during merge operation", input.which());
 	}
 }
 

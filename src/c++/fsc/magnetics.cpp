@@ -744,7 +744,7 @@ struct CalculationSession : public FieldCalculator::Server {
 				return kj::joinPromises(arrBuilder.finish());
 			}
 			default:
-				KJ_FAIL_REQUIRE("Unknown filament node encountered. This either indicates that a device-specific node was not resolved, or a generic node from a future library version was presented", node);
+				KJ_FAIL_REQUIRE("Unresolved filament node encountered during magnetic field calculation", node);
 		}
 	}
 	
@@ -817,7 +817,7 @@ struct CalculationSession : public FieldCalculator::Server {
 				return READY_NOW;
 			}
 			default:
-				KJ_FAIL_REQUIRE("Unknown magnetic field node encountered. This either indicates that a device-specific node was not resolved, or a generic node from a future library version was presented", node);
+				KJ_FAIL_REQUIRE("Unresolved magnetic field node encountered during field calculation.", node);
 		}
 	//});
 	}
