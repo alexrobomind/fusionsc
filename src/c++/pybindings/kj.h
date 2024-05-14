@@ -8,6 +8,22 @@ struct DynamicConstArray {
 	virtual size_t size() = 0;
 	virtual py::object get(size_t i) = 0;
 	virtual ~DynamicConstArray() = 0;
+	
+	struct Iterator {
+		DynamicConstArray& parent;
+		size_t idx;
+		
+		Iterator(DynamicConstArray& parent, size_t idx) : parent(parent), idx(idx) {}
+		
+		inline py::object operator*() { return parent.get(idx); }
+		inline bool operator==(const Iterator& other) { return idx == other.idx; }
+		inline bool operator!=(const Iterator& other) { return idx != other.idx; }
+		
+		inline Iterator& operator++() { ++idx; return *this; }
+	};
+	
+	inline Iterator end() { return Iterator(*this, size()); }
+	inline Iterator begin() { return Iterator(*this, 0); }
 };
 	
 struct DynamicArray : public DynamicConstArray {

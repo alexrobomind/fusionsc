@@ -103,6 +103,11 @@ namespace fscpy {
 		py::class_<DynamicConstArray>(mkj, "ConstArray", "Immutable array")
 			.def("__len__", &DynamicConstArray::size)
 			.def("__getitem__", &DynamicConstArray::get)
+			.def(
+				"__iter__",
+				[](DynamicConstArray& o) { return py::make_iterator(o.begin(), o.end()); },
+				py::keep_alive<0, 1>()
+			)
 		;
 		
 		py::class_<DynamicArray, DynamicConstArray>(mkj, "Array", "Mutable array")

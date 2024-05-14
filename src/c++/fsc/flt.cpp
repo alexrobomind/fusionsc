@@ -875,12 +875,13 @@ struct FLTImpl : public FLT::Server {
 					}
 					
 					auto oNTor = out.initNTor(2 * maxN + 1);
-					for(int i : kj::indices(oNTor))
-						oNTor.set(i, i <= maxN ? i : i - (int) maxN);
+					for(int i : kj::indices(oNTor)) {
+						oNTor.set(i, -nTor(0, i));
+					}
 					
 					auto oMPol = out.initMPol(maxM + 1);
 					for(int i : kj::indices(oMPol))
-						oMPol.set(i, i);
+						oMPol.set(i, mPol(i, 0));
 				}
 			}).attach(calc.x());
 		});

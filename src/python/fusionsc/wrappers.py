@@ -49,6 +49,18 @@ class StructWrapperBase:
 		newData = await data.readArchive.asnc(filename)
 		return cls(newData, byReference = True)
 	
+	@asyncFunction
+	async def cache(self, filename):
+		from pathlib import Path
+		p = Path(filename)
+		
+		# Write out representation to file
+		if not p.exists():
+			await self.save.asnc(str(filename))
+		
+		# Load again
+		return await self.load.asnc(str(filename))
+	
 	def ptree(self):
 		"""
 		Prints a tree version of this object. Requires the printree library.
