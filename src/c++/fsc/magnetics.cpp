@@ -494,7 +494,7 @@ struct CalculationSession : public FieldCalculator::Server {
 			}
 			
 			auto thetaVals = kj::heapArray<double>(params.getNTheta());
-			for(auto iTheta : kj::indices(phiVals)) {
+			for(auto iTheta : kj::indices(thetaVals)) {
 				thetaVals[iTheta] = 2 * fsc::pi / thetaVals.size() * iTheta;
 			}
 			

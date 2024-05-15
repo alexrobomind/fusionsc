@@ -129,5 +129,9 @@ struct DynamicObject {
 		memoized @29 : Void;
 		
 		nested @30 : DynamicObject;
+		
+		# Indicates that the object is a PARENT
+		# object under the given memo key
+		memoizedParent @34 : Void;
 	}
 }

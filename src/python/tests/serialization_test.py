@@ -40,8 +40,16 @@ def test_serialize_pickle():
 	
 
 def test_serialize_complex():
+	recursiveList = []
+	recursiveList.append(recursiveList)
+	
+	recursiveDict = {}
+	recursiveDict[0] = recursiveDict
+	
 	values = [
 		np.asarray([fsc.service.MagneticField.newMessage(), fsc.service.MagneticField.newMessage({"invert" : None})], dtype = object),
+		recursiveList,
+		recursiveDict
 	]
 	
 	for val in values:

@@ -81,7 +81,7 @@ def dump(obj: Any):
 	"""
 	Converts python objects into nested structures of service.DynamicObject
 	"""
-	return _dump(obj, service.DynamicObject.newMessage(), set())
+	return _dump(obj, service.DynamicObject.newMessage(), set(), set())
 
 def _dumpDType(dtype, odt: service.DynamicObject.DType.Builder):
 	assert dtype.kind != "O", "Can not export objects in primitive arrays (e.g. as struct fields)"
@@ -205,14 +205,21 @@ def _loadDType(dtype):
 	else:
 		assert False, "Unknown DType for array"
 
-def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: set):
+def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: set, recMemoSet: set):
 	key = id(obj)
 	builder.memoKey = key
 	
 	if key in memoSet:
 		builder.memoized = None
+		return builder
 	
-	elif isinstance(obj, UnknownObject):
+	if key in recMemoSet:
+		builder.memoizedParent = None
+		return builder
+	
+	recMemoSet.add(key)
+	
+	if isinstance(obj, UnknownObject):
 		builder.nested = obj.data
 	
 	elif isinstance(obj, str):
@@ -276,71 +283,74 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 			array.bigData = data.publish(obj.tobytes())
 	
 	elif isinstance(obj, np.ndarray) and obj.dtype.kind == "O":
-		flat = obj.flatten()
-		
-		first = flat[0]
-		if isinstance(first, capnp.Enum):
-			firstType = first.type
+		def handleObjectArray():
+			flat = obj.flatten()
 			
-			sameType = True
-			for el in flat:
-				if not isinstance(el, capnp.Enum) or el.type != firstType:
-					sameType = False
-					break
-			
-			if sameType:
-				# Qualified to be an enum array
-				enumArray = builder.initEnumArray()
-				enumArray.schema = firstType.toProto()
-				enumArray.shape = obj.shape
-				enumArray.data = [el.raw for el in flat]
+			first = flat[0]
+			if isinstance(first, capnp.Enum):
+				firstType = first.type
 				
-				return builder
-		
-		if isinstance(first, capnp.Struct):
-			firstType = first.type_
-			
-			sameType = True
-			for el in flat:
-				if not isinstance(el, capnp.Struct) or el.type_ != firstType:
-					sameType = False
-					break
-			
-			if sameType:
-				# Qualified to be a homogenous struct array
-				structArray = builder.initStructArray()
-				structArray.schema = firstType.toProto()
-				structArray.shape = obj.shape
+				sameType = True
+				for el in flat:
+					if not isinstance(el, capnp.Enum) or el.type != firstType:
+						sameType = False
+						break
 				
-				sData = structArray.initData(len(flat))
-				for i in range(len(flat)):
-					sData[i].target = flat[i]
+				if sameType:
+					# Qualified to be an enum array
+					enumArray = builder.initEnumArray()
+					enumArray.schema = firstType.toProto()
+					enumArray.shape = obj.shape
+					enumArray.data = [el.raw for el in flat]
+					
+					return
+			
+			if isinstance(first, capnp.Struct):
+				firstType = first.type_
 				
-				return builder
+				sameType = True
+				for el in flat:
+					if not isinstance(el, capnp.Struct) or el.type_ != firstType:
+						sameType = False
+						break
+				
+				if sameType:
+					# Qualified to be a homogenous struct array
+					structArray = builder.initStructArray()
+					structArray.schema = firstType.toProto()
+					structArray.shape = obj.shape
+					
+					sData = structArray.initData(len(flat))
+					for i in range(len(flat)):
+						sData[i].target = flat[i]
+					
+					return
+			
+			array = builder.initDynamicObjectArray()
+			array.shape = obj.shape
+			
+			out = array.initData(len(flat))
+			
+			for i, el in enumerate(flat):
+				_dump(el, out[i], memoSet, recMemoSet)
 		
-		array = builder.initDynamicObjectArray()
-		array.shape = obj.shape
-		
-		out = array.initData(len(flat))
-		
-		for i, el in enumerate(flat):
-			_dump(el, out[i], memoSet)
+		handleObjectArray()
 		
 	elif isinstance(obj, collections.abc.Sequence):
 		out = builder.initSequence(len(obj))
 		
 		for i, el in enumerate(obj):
-			_dump(el, out[i], memoSet)
+			_dump(el, out[i], memoSet, recMemoSet)
 	
 	elif isinstance(obj, collections.abc.Mapping):
 		out = builder.initMapping(len(obj))
 		
 		for i, (k, v) in enumerate(obj.items()):
-			_dump(k, out[i].key, memoSet)
-			_dump(v, out[i].value, memoSet)
+			_dump(k, out[i].key, memoSet, recMemoSet)
+			_dump(v, out[i].value, memoSet, recMemoSet)
 	
 	elif hasattr(obj, "_fusionsc_wraps"):
-		_dump(obj._fusionsc_wraps, builder, memoSet)
+		_dump(obj._fusionsc_wraps, builder, memoSet, recMemoSet)
 	
 	else:
 		assert pickleEnabled(), """
@@ -389,6 +399,12 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 		
 		assert key in memoDict, "Could not locate memoized object. This implies an incorrect store/load ordering"
 		return memoDict[key]
+	
+	if which == "memoizedParent":
+		key = reader.memoKey
+		
+		assert key in memoDict, "Could not locate memoized parent object. This implies an incorrect store/load ordering"
+		return memoDict[key]
 		
 	if which == "text":
 		return str(reader.text)
@@ -400,13 +416,31 @@ async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
 		return await data.download.asnc(reader.bigData)
 	
 	if which == "sequence":
-		return [await _load(x, memoDict) for x in reader.sequence]
+		result = [None] * len(reader.sequence)
+		
+		if reader.memoKey != 0:
+			assert reader.memoKey not in memoDict
+			memoDict[reader.memoKey] = result
+		
+		for i, x in enumerate(reader.sequence):
+			result[i] = await _load(x, memoDict)
+		
+		return result
 	
 	if which == "mapping":
-		return {
-			await _load(e.key, memoDict) : await _load(e.value, memoDict)
-			for e in reader.mapping
-		}
+		result = {}
+		
+		if reader.memoKey != 0:
+			assert reader.memoKey not in memoDict
+			memoDict[reader.memoKey] = result
+		
+		for e in reader.mapping:
+			key = await _load(e.key, memoDict)
+			val = await _load(e.value, memoDict)
+			
+			result[key] = val
+		
+		return result
 	
 	if which == "ref":
 		if reader.ref.wrapped:
