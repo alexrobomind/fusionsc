@@ -451,7 +451,7 @@ namespace {
 				\
 				if(pTape -> recorder -> done()) { \
 					replaying = true; \
-					save(pTape -> node, *this); \
+					save(mv(pTape -> node), *this); \
 					replaying = false; \
 					tape = nullptr; \
 				} \

@@ -206,4 +206,42 @@ void save(Node& n, Visitor& v) {
 	}
 }
 
+void save(Node&& n, Visitor& v) {
+	auto& p = n.payload;
+	
+	if(p.is<Node::ListPayload>()) {
+		auto& lpl = p.get<Node::ListPayload>();
+		
+		v.beginArray(lpl.size());
+		for(Node& el : lpl)
+			save(mv(el), v);
+		v.endArray();
+	} else if(p.is<Node::MapPayload>()) {
+		auto& mpl = p.get<Node::MapPayload>();
+		
+		v.beginObject(mpl.size());
+		for(auto& row : mpl) {
+			save(mv(kj::get<0>(row)), v);
+			save(mv(kj::get<1>(row)), v);
+		}
+		v.endObject();
+	} else {
+		save((Node&) n, v);
+	}
+	
+	// Clear pointer nodes after saving
+	// (don't clear non-pointer nodes, no point since
+	// that doesn't shrink the node size)
+	switch(n.payload.which()) {
+		case Node::Payload::tagFor<Node::ListPayload>():
+		case Node::Payload::tagFor<Node::MapPayload>():
+		case Node::Payload::tagFor<kj::String>():
+		case Node::Payload::tagFor<kj::Array<kj::byte>>():
+			n.payload.init<Node::NullValue>();
+			break;
+		default:
+			break;
+	}
+}
+
 }}

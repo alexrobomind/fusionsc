@@ -138,7 +138,11 @@ namespace fsc { namespace textio {
 	void load(kj::ArrayPtr<const kj::byte>, Visitor&, const Dialect&);
 	void load(kj::BufferedInputStream&, Visitor&, const Dialect&);
 	
+	//! Streams loaded data into the target visitor
 	void save(Node&, Visitor&);
+	
+	//! Streams loaded data into the target visitor, but deallocates no-longer-needed data
+	void save(Node&&, Visitor&);
 	
 	Own<Visitor> createVisitor(kj::BufferedOutputStream&, const Dialect&, const SaveOptions& = SaveOptions());
 	
