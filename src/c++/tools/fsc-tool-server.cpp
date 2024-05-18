@@ -145,7 +145,7 @@ struct WebFrontend : public kj::HttpService {
 			);
 			
 			if(response.getWarehouses().size() > 0) {
-				result = kj::strTree(mv(result), "<br />This node exposes the following warehouses: <br /><ul>");
+				result = kj::strTree(mv(result), "<h2>Warehouses</h2>This node exposes the following warehouses: <br /><ul>");
 				
 				for(auto wh : response.getWarehouses())
 					result = kj::strTree(mv(result), "<li><a href='warehouses/", wh, "/show'>", wh, "</a></li>");

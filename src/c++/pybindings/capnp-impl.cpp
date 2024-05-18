@@ -502,6 +502,25 @@ py::buffer_info DynamicListInterface<ListType>::buffer() {
 	size_t elementSize = kj::get<0>(format);
 	kj::StringPtr formatString = kj::get<1>(format);
 	
+	if(formatString == "O") {
+		// Allocate object arra
+		auto resultHolder = ContiguousCArray::alloc<PyObject*>(std::array<uint64_t, 1>({this -> size()}), "O");
+		auto outData = resultHolder.as<PyObject*>();
+		
+		// Fill with elements
+		for(auto i : kj::indices(*this)) {
+			py::object outObject = py::cast(this -> get(i));		
+			outData[i] = outObject.inc_ref().ptr();
+		}
+		
+		// Move info python object and request buffer
+		py::buffer asPyBuffer = py::cast(mv(resultHolder));
+		return asPyBuffer.request(true);
+	}
+	
+	/*if(formatString == "O")
+		throw py::buffer_error("Object-type lists have no python-accessible backing buffer");*/
+	
 	// Sanity checks
 	KJ_REQUIRE(elementSize * this -> size() == rawBytes.size());
 			
