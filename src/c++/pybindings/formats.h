@@ -48,6 +48,10 @@ namespace fscpy {
 			void read(textio::Visitor& dst, kj::BufferedInputStream&) override;
 		};*/
 		
+		struct ArrayHolder {
+			py::object value = py::none();
+		};
+		
 		py::object dumps(py::object, Language, bool compact, bool asBytes);
 		void dump(py::object, int, Language, bool compact);
 		

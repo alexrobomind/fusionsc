@@ -69,3 +69,26 @@ def test_recdump(siodata, lang, tmp_path):
 		
 	dumped = fsc.structio.dumps(siodata, lang)
 	loaded = fsc.structio.load(dumped, lang = lang)
+
+@pytest.mark.parametrize("lang", ['json', 'yaml', 'cbor', 'bson', 'ubjson', 'msgpack'])
+def test_loadarray(lang):
+	data = {
+		"uint" : [1, 2, 3],
+		"int" : [1, -1, 0],
+		"float" : [0, 1, 0.5],
+		"obj" : [0, 1, "Hello", None]
+	}
+	
+	dumped = fsc.structio.dumps(data, lang)
+	print("Dump:", dumped)
+	
+	dst = {
+		"uint" : fsc.structio.ArrayHolder(),
+		"int" : fsc.structio.ArrayHolder(),
+		"float" : fsc.structio.ArrayHolder(),
+		"obj" : fsc.structio.ArrayHolder()
+	}
+	fsc.structio.load(dumped, lang = lang, dst = dst)
+	
+	for k, v in dst.items():
+		print(k, v.value.dtype, v.value)

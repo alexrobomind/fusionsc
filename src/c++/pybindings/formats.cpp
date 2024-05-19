@@ -6,10 +6,89 @@
 
 #include "formats.h"
 
+#include <pybind11/numpy.h>
+
 
 namespace fscpy {
 
 namespace {
+	
+	//! State struct for python visitor that indicates we are trying to fill a numpy array holder
+	struct NewArray {
+		using Entry = kj::OneOf<uint64_t, int64_t, double, py::object>;
+		kj::Vector<Entry> entries;
+		
+		formats::ArrayHolder& holder;
+		
+		NewArray(formats::ArrayHolder& h) : holder(h) {}
+		
+		template<typename T>
+		void finishAs() {
+			py::array_t<T> result(std::array<size_t, 1>({entries.size()}));
+			auto uc = result.mutable_unchecked();
+			
+			for(auto i : kj::indices(entries)) {
+				T result;
+				auto& e = entries[i];
+				
+				if(e.is<uint64_t>()) {
+					result = (T) e.get<uint64_t>();
+				} else if(e.is<int64_t>()) {
+					result = (T) e.get<int64_t>();
+				} else if(e.is<double>()) {
+					result = (T) e.get<double>();
+				} else {
+					KJ_FAIL_REQUIRE("Internal error: Object in numeric array");
+				}
+				
+				uc(i) = result;
+			}
+			
+			holder.value = mv(result);
+		}
+		
+		void finishAsObject() {
+			// py::array_t<PyObject*> result(std::array<size_t, 1>({entries.size()}));
+			py::list list;
+						
+			for(auto i : kj::indices(entries)) {
+				PyObject* result;
+				auto& e = entries[i];
+				
+				if(e.is<uint64_t>()) {
+					result = py::cast(e.get<uint64_t>()).inc_ref().ptr();
+				} else if(e.is<int64_t>()) {
+					result = py::cast(e.get<int64_t>()).inc_ref().ptr();
+				} else if(e.is<double>()) {
+					result = py::cast(e.get<double>()).inc_ref().ptr();
+				} else {
+					result = e.get<py::object>().inc_ref().ptr();
+				}
+				
+				list.append(result);
+			}
+			
+			holder.value = py::array::ensure(list);
+		}
+		
+		void finish() {
+			// Determine datatype to use
+			Entry::Tag tag = Entry::tagFor<uint64_t>();
+			for(auto& e : entries)
+				tag = std::max(tag, e.which());
+			
+			// KJ_DBG((unsigned int) tag);
+			
+			switch(tag) {
+				case Entry::tagFor<uint64_t>(): finishAs<uint64_t>(); break;
+				case Entry::tagFor<int64_t>(): finishAs<int64_t>(); break;
+				case Entry::tagFor<double>(): finishAs<double>(); break;
+				case Entry::tagFor<py::object>(): finishAsObject(); break;
+				default: KJ_FAIL_REQUIRE("Internal error: Invalid tag for entry encountered");
+			}
+		}
+	};
+		
 	struct PythonVisitor : public textio::Visitor {
 		struct Preset { py::object object; };
 		
@@ -28,7 +107,7 @@ namespace {
 		};
 		struct Done { py::object result; };
 		
-		using State = kj::OneOf<Preset, PresetList, NewList, Dict, Forward, Done>;
+		using State = kj::OneOf<Preset, PresetList, NewList, Dict, Forward, NewArray, Done>;
 		kj::Vector<State> states;
 		
 		State& state() { return states.back(); }
@@ -38,6 +117,10 @@ namespace {
 		}
 		
 		void pop() {
+			if(state().is<NewArray>()) {
+				state().get<NewArray>().finish();
+			}
+			
 			if(states.size() > 1) {
 				states.removeLast();
 			} else {
@@ -55,6 +138,8 @@ namespace {
 					s = Done {s.get<Dict>().dict};
 				} else if(s.is<Forward>()) {
 					s = Done {s.get<Forward>().original};
+				} else if(s.is<NewArray>()) {
+					s = Done {py::cast(s.get<NewArray>().holder, py::return_value_policy::take_ownership)};
 				}
 			}
 		}
@@ -132,6 +217,10 @@ namespace {
 				} else {
 					KJ_FAIL_REQUIRE("Map key must be int, float, or str, not map");
 				}
+			} else if(state().is<NewArray>()) {
+				py::dict newDict;
+				state().get<NewArray>().entries.add((py::object&) newDict);
+				states.add(Dict { newDict });
 			}
 		}
 		
@@ -143,7 +232,19 @@ namespace {
 		void beginArray(Maybe<size_t> s) override {
 			ACCEPT_FWD(beginArray(s));
 			
-			auto checkList = [&](py::object o) {				
+			auto checkList = [&](py::object o) {
+				// Check whether it is an array holder
+				{
+					py::detail::make_caster<formats::ArrayHolder> caster;
+					if(caster.load(o, false)) {
+						states.add(NewArray(caster));
+						
+						KJ_IF_MAYBE(pSize, s) {
+							state().get<NewArray>().entries.reserve(*pSize);
+						}
+						return;
+					}
+				}
 				KJ_REQUIRE(py::isinstance<py::list>(o));
 				states.add(PresetList {o});
 			};
@@ -189,6 +290,10 @@ namespace {
 				} else {
 					KJ_FAIL_REQUIRE("Map key must be int, float, or str, not list");
 				}
+			} else if(state().is<NewArray>()) {
+				py::list newList;
+				state().get<NewArray>().entries.add((py::object&) newList);
+				states.add(newList);
 			}
 		}
 		
@@ -200,6 +305,16 @@ namespace {
 				KJ_REQUIRE(p.offset == p.list.size(), "Size of list loaded is smaller than template");
 			}
 			pop();
+		}
+		
+		template<typename T>
+		void acceptNumber(T t) {
+			if(state().is<NewArray>()) {
+				state().get<NewArray>().entries.add(t);
+				return;
+			}
+			
+			acceptPrimitive(py::cast(t));
 		}
 		
 		void acceptPrimitive(py::object asPy) {
@@ -229,27 +344,32 @@ namespace {
 				} else {
 					d.key = asPy;
 				}
+			} else if(state().is<NewArray>()) {
+				state().get<NewArray>().entries.add(asPy);
 			}
 		}
 				
 		void acceptInt(int64_t i) override {
 			ACCEPT_FWD(acceptInt(i));
-			acceptPrimitive(py::cast(i));
+			acceptNumber(i);
 		}
 		
 		void acceptUInt(uint64_t i) override {
 			ACCEPT_FWD(acceptUInt(i));
-			acceptPrimitive(py::cast(i));
+			acceptNumber(i);
 		}
 		
 		void acceptDouble(double d) override {
 			ACCEPT_FWD(acceptDouble(d));
-			acceptPrimitive(py::cast(d));
+			acceptNumber(d);
 		}
 		
 		void acceptString(kj::StringPtr s) override {
 			ACCEPT_FWD(acceptString(s));
-			
+		
+			// There are cases where strings can get converted into compound objects
+			// To handle these correctly, we need to check whether the target is a struct
+			// builder
 			auto checkStruct = [&](py::object o) {
 				while(py::hasattr(o, "_fusionsc_wraps"))
 					o = o.attr("_fusionsc_wraps");
@@ -263,9 +383,6 @@ namespace {
 				return false;
 			};
 			
-			// There are cases where strings can get converted into compound objects
-			// To handle these correctly, we need to check whether the target is a struct
-			// builder
 			if(state().is<Preset>()) {
 				auto& ps = state().get<Preset>();
 				if(checkStruct(ps.object))
@@ -480,6 +597,11 @@ namespace formats {
 
 void initFormats(py::module_& m) {
 	auto formatsMod = m.def_submodule("formats");
+	
+	py::class_<formats::ArrayHolder>(formatsMod, "ArrayHolder")
+		.def(py::init<>())
+		.def_readwrite("value", &formats::ArrayHolder::value)
+	;
 	
 	formatsMod.def("readFd", &formats::readFd);
 	formatsMod.def("readBuffer", &formats::readBuffer);
