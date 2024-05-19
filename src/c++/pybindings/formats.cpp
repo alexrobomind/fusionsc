@@ -15,15 +15,11 @@ namespace {
 	
 	//! State struct for python visitor that indicates we are trying to fill a numpy array holder
 	struct NewArray {
-		using Entry = kj::OneOf<uint64_t, int64_t, double, py::object>;
+		using Entry = kj::OneOf<int64_t, uint64_t, double, py::object>;
 		kj::Vector<Entry> entries;
 		
-		formats::ArrayHolder& holder;
-		
-		NewArray(formats::ArrayHolder& h) : holder(h) {}
-		
 		template<typename T>
-		void finishAs() {
+		py::object finishAs() {
 			py::array_t<T> result(std::array<size_t, 1>({entries.size()}));
 			auto uc = result.mutable_unchecked();
 			
@@ -44,10 +40,10 @@ namespace {
 				uc(i) = result;
 			}
 			
-			holder.value = mv(result);
+			return result;
 		}
 		
-		void finishAsObject() {
+		py::object finishAsObject() {
 			// py::array_t<PyObject*> result(std::array<size_t, 1>({entries.size()}));
 			py::list list;
 						
@@ -68,22 +64,36 @@ namespace {
 				list.append(result);
 			}
 			
-			holder.value = py::array::ensure(list);
+			// return py::array::ensure(mv(list));
+			return list;
 		}
 		
-		void finish() {
+		py::object finish() {
 			// Determine datatype to use
-			Entry::Tag tag = Entry::tagFor<uint64_t>();
-			for(auto& e : entries)
+			Entry::Tag tag = Entry::tagFor<int64_t>();
+			
+			bool belowZero = false;
+			for(auto& e : entries) {
 				tag = std::max(tag, e.which());
+				
+				if(e.is<int64_t>()) {
+					if(e.get<int64_t>() < 0) {
+						belowZero = true;
+					}
+				}
+			}
 			
-			// KJ_DBG((unsigned int) tag);
-			
+			// If we need uint for large integers and also have negative numbers,
+			// we need to encode individually and fall back to Python's bigint en-
+			// coding
+			if(tag == Entry::tagFor<uint64_t>() && belowZero)
+				tag = Entry::tagFor<py::object>();
+						
 			switch(tag) {
-				case Entry::tagFor<uint64_t>(): finishAs<uint64_t>(); break;
-				case Entry::tagFor<int64_t>(): finishAs<int64_t>(); break;
-				case Entry::tagFor<double>(): finishAs<double>(); break;
-				case Entry::tagFor<py::object>(): finishAsObject(); break;
+				case Entry::tagFor<uint64_t>(): return finishAs<uint64_t>();
+				case Entry::tagFor<int64_t>(): return finishAs<int64_t>();
+				case Entry::tagFor<double>(): return finishAs<double>();
+				case Entry::tagFor<py::object>(): return finishAsObject();
 				default: KJ_FAIL_REQUIRE("Internal error: Invalid tag for entry encountered");
 			}
 		}
@@ -92,7 +102,7 @@ namespace {
 	struct PythonVisitor : public textio::Visitor {
 		struct Preset { py::object object; };
 		
-		using NewList = py::list;
+		// using NewList = py::list;
 		struct PresetList {
 			py::list list;
 			size_t offset = 0;
@@ -107,7 +117,7 @@ namespace {
 		};
 		struct Done { py::object result; };
 		
-		using State = kj::OneOf<Preset, PresetList, NewList, Dict, Forward, NewArray, Done>;
+		using State = kj::OneOf<Preset, PresetList, Dict, Forward, NewArray, Done>;
 		kj::Vector<State> states;
 		
 		State& state() { return states.back(); }
@@ -116,31 +126,54 @@ namespace {
 			return state().is<Done>();
 		}
 		
-		void pop() {
-			if(state().is<NewArray>()) {
-				state().get<NewArray>().finish();
+		void pop() {			
+			py::object result;
+			
+			{
+				auto& s = state();
+				switch(s.which()) {
+					case State::tagFor<Preset>(): KJ_FAIL_REQUIRE("Error: pop() called on state Preset");
+					case State::tagFor<PresetList>(): result = mv(s.get<PresetList>().list); break;
+					case State::tagFor<Dict>(): result = mv(s.get<Dict>().dict); break;
+					case State::tagFor<Forward>(): result = mv(s.get<Forward>().original); break;
+					case State::tagFor<NewArray>(): result = s.get<NewArray>().finish(); break;
+					case State::tagFor<Done>(): KJ_FAIL_REQUIRE("Error: pop() called on state Done");
+				}
 			}
 			
-			if(states.size() > 1) {
-				states.removeLast();
-			} else {
+			states.removeLast();
+			
+			if(states.size() > 0) {
 				auto& s = state();
 				
-				KJ_REQUIRE(!s.is<Done>());
-				
-				if(s.is<Preset>()) {
-					s = Done { s.get<Preset>().object };
-				} else if(s.is<NewList>()) {
-					s = Done { s.get<NewList>() };
-				} else if(s.is<PresetList>()) {
-					s = Done {s.get<PresetList>().list};
-				} else if(s.is<Dict>()) {
-					s = Done {s.get<Dict>().dict};
-				} else if(s.is<Forward>()) {
-					s = Done {s.get<Forward>().original};
-				} else if(s.is<NewArray>()) {
-					s = Done {py::cast(s.get<NewArray>().holder, py::return_value_policy::take_ownership)};
+				switch(s.which()) {
+					case State::tagFor<Preset>(): KJ_FAIL_REQUIRE("Internal error: pop() called inside Preset state");
+					case State::tagFor<PresetList>(): {
+						auto& asPreset = state().get<PresetList>();
+						asPreset.list[asPreset.offset++] = mv(result);
+						break;
+					}
+					case State::tagFor<Dict>(): {
+						auto& dict = state().get<Dict>();
+						KJ_IF_MAYBE(pKey, dict.key) {
+							py::object key = mv(*pKey);
+							dict.dict[key] = mv(result);
+							dict.key = nullptr;
+						} else {
+							KJ_FAIL_REQUIRE("Internal error: pop() called in dict key without key set");
+						}
+						break;
+					}
+					case State::tagFor<Forward>(): KJ_FAIL_REQUIRE("Internal error: pop() called inside Forward state");
+					case State::tagFor<NewArray>(): {
+						auto& asNA = state().get<NewArray>();
+						asNA.entries.add(mv(result));
+						break;
+					}
+					case State::tagFor<Done>(): KJ_FAIL_REQUIRE("Error: pop() called on done visitor");
 				}
+			} else {
+				states.add(Done { mv(result) });
 			}
 		}
 				
@@ -160,6 +193,11 @@ namespace {
 			ACCEPT_FWD(beginObject(s));
 			
 			auto checkObject = [&](py::object o) {
+				if(o.is_none()) {
+					states.add(Dict {py::dict()});
+					return;
+				}
+				
 				py::object unwrapped = o;
 				while(py::hasattr(unwrapped, "_fusionsc_wraps"))
 					unwrapped = unwrapped.attr("_fusionsc_wraps");
@@ -167,13 +205,14 @@ namespace {
 				if(py::isinstance<DynamicStructBuilder>(unwrapped)) {
 					states.add(Forward {textio::createVisitor(py::cast<DynamicStructBuilder>(unwrapped)), o});
 					state().get<Forward>().visitor -> beginObject(s);
-				} else {
-					KJ_REQUIRE(py::isinstance<py::dict>(o));
+				} else if(py::isinstance<py::dict>(o)) {
 					states.add(Dict {o});
+				} else {
+					std::string typeName = py::str(py::type::of(o));
+					KJ_FAIL_REQUIRE("Target objects for mappings must be None, structs (incl. wrappers) or dicts", typeName);
 				}
 			};
 			
-
 			if(state().is<Preset>()) {
 				py::object o = state().get<Preset>().object;
 				
@@ -183,44 +222,31 @@ namespace {
 					states.removeLast();
 					checkObject(o);
 				}	
-			} else if(state().is<NewList>()) {
-				py::dict newDict;
-				state().get<NewList>().append(newDict);
-				states.add(Dict { newDict });
 			} else if(state().is<PresetList>()) {
 				auto& p = state().get<PresetList>();
 				KJ_REQUIRE(p.list.size() > p.offset, "List to small to add to");
 				
 				py::object entry = p.list[p.offset];
 				if(entry.is_none()) {
-					py::dict newDict;
-					states.add(Dict {newDict});
-					
-					p.list[p.offset++] = newDict;
+					states.add(Dict { py::dict() });
 				} else {
-					++p.offset;
 					checkObject(entry);
 				}
 			} else if(state().is<Dict>()) {
 				auto& dict = state().get<Dict>();
 				KJ_IF_MAYBE(pKey, dict.key) {
-					py::object key = mv(*pKey);
-					dict.key = nullptr;
-					
+					py::object& key = *pKey;
+										
 					if(dict.dict.contains(key)) {
 						checkObject(dict.dict[key]);
 					} else {
-						py::dict newDict;
-						dict.dict[key] = newDict;
-						states.add(Dict {newDict});
+						states.add(Dict {py::dict()});
 					}
 				} else {
 					KJ_FAIL_REQUIRE("Map key must be int, float, or str, not map");
 				}
 			} else if(state().is<NewArray>()) {
-				py::dict newDict;
-				state().get<NewArray>().entries.add((py::object&) newDict);
-				states.add(Dict { newDict });
+				states.add(Dict { py::dict() });
 			}
 		}
 		
@@ -233,67 +259,59 @@ namespace {
 			ACCEPT_FWD(beginArray(s));
 			
 			auto checkList = [&](py::object o) {
-				// Check whether it is an array holder
-				{
-					py::detail::make_caster<formats::ArrayHolder> caster;
-					if(caster.load(o, false)) {
-						states.add(NewArray(caster));
-						
-						KJ_IF_MAYBE(pSize, s) {
-							state().get<NewArray>().entries.reserve(*pSize);
-						}
-						return;
-					}
+				if(o.is_none()) {
+					states.add(NewArray());
+				} else if(py::isinstance<py::list>(o)) {
+					states.add(PresetList {o});
+				} else {
+					std::string typeName = py::str(py::type::of(o));
+					KJ_FAIL_REQUIRE("Targets for array objects must be None or list", typeName);
 				}
-				KJ_REQUIRE(py::isinstance<py::list>(o));
-				states.add(PresetList {o});
 			};
 			
 			if(state().is<Preset>()) {
 				py::object o = state().get<Preset>().object;
 				if(o.is_none()) {
-					state().init<NewList>();
+					state().init<NewArray>();
 				} else {
 					states.removeLast();
 					checkList(o);
 				}
-			} else if(state().is<NewList>()) {
-				py::list newList;
-				state().get<NewList>().append(newList);
-				states.add(newList);
 			} else if(state().is<PresetList>()) {
 				auto& p = state().get<PresetList>();
 				KJ_REQUIRE(p.list.size() > p.offset, "List to small to add to");
 				
 				py::object entry = p.list[p.offset];
 				if(entry.is_none()) {
-					py::list newList;
-					p.list[p.offset++] = newList;
-					states.add(newList);
+					states.add(NewArray());
 				} else {
-					++p.offset;
 					checkList(entry);
 				}
 			} else if(state().is<Dict>()) {
 				auto& dict = state().get<Dict>();
 				KJ_IF_MAYBE(pKey, dict.key) {
-					py::object key = mv(*pKey);
-					dict.key = nullptr;
-					
+					py::object& key = *pKey;
+										
 					if(dict.dict.contains(key)) {
 						checkList(dict.dict[key]);
 					} else {
-						py::list newList;
-						dict.dict[key] = newList;
-						states.add(newList);
+						states.add(NewArray());
 					}
 				} else {
 					KJ_FAIL_REQUIRE("Map key must be int, float, or str, not list");
 				}
 			} else if(state().is<NewArray>()) {
-				py::list newList;
-				state().get<NewArray>().entries.add((py::object&) newList);
-				states.add(newList);
+				states.add(NewArray());
+			}
+			
+			KJ_IF_MAYBE(pSize, s) {
+				if(state().is<NewArray>()) {
+					state().get<NewArray>().entries.reserve(*pSize);
+				} else if(state().is<PresetList>()) {
+					KJ_REQUIRE(*pSize == state().get<PresetList>().list.size(), "Mismatch between given list and input");
+				} else {
+					KJ_FAIL_REQUIRE("Internal error: state() must be PresetList or NewArray");
+				}
 			}
 		}
 		
@@ -332,8 +350,6 @@ namespace {
 				KJ_REQUIRE(p.offset < p.list.size(), "List too small");
 				KJ_REQUIRE(p.list[p.offset].is_none(), "Primitive value can only be unified with None");
 				p.list[p.offset++] = asPy;
-			} else if(state().is<NewList>()) {
-				state().get<NewList>().append(asPy);
 			} else if(state().is<Dict>()) {
 				auto& d = state().get<Dict>();
 				KJ_IF_MAYBE(pKey, d.key) {
@@ -356,7 +372,13 @@ namespace {
 		
 		void acceptUInt(uint64_t i) override {
 			ACCEPT_FWD(acceptUInt(i));
-			acceptNumber(i);
+			
+			// Note: The right operand gets implicitly
+			// converted to uint64_t for the comparison
+			if(i <= (int64_t) kj::maxValue)
+				acceptNumber((int64_t) i);
+			else
+				acceptNumber(i);
 		}
 		
 		void acceptDouble(double d) override {

@@ -76,19 +76,16 @@ def test_loadarray(lang):
 		"uint" : [1, 2, 3],
 		"int" : [1, -1, 0],
 		"float" : [0, 1, 0.5],
-		"obj" : [0, 1, "Hello", None]
+		"obj" : [0, 1, "Hello", None],
+		"nest" : [[0, -1], [2, 3]]
 	}
 	
 	dumped = fsc.structio.dumps(data, lang)
 	print("Dump:", dumped)
 	
-	dst = {
-		"uint" : fsc.structio.ArrayHolder(),
-		"int" : fsc.structio.ArrayHolder(),
-		"float" : fsc.structio.ArrayHolder(),
-		"obj" : fsc.structio.ArrayHolder()
-	}
-	fsc.structio.load(dumped, lang = lang, dst = dst)
+	dst = fsc.structio.load(dumped, lang = lang)
 	
 	for k, v in dst.items():
-		print(k, v.value.dtype, v.value)
+		print(k, "IsArray:", isinstance(v, np.ndarray))
+		v = np.asarray(v)
+		print(v.dtype, v)
