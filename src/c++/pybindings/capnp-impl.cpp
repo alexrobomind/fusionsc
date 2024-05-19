@@ -504,7 +504,8 @@ py::buffer_info DynamicListInterface<ListType>::buffer() {
 	
 	if(formatString == "O") {
 		// Allocate object arra
-		auto resultHolder = ContiguousCArray::alloc<PyObject*>(std::array<uint64_t, 1>({this -> size()}), "O");
+		std::array<uint64_t, 1> shape = {this -> size()};
+		auto resultHolder = ContiguousCArray::alloc<PyObject*>(shape, "O");
 		auto outData = resultHolder.as<PyObject*>();
 		
 		// Fill with elements
