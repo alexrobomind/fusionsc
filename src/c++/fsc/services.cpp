@@ -102,7 +102,15 @@ Promise<Warehouse::Folder::Client> connectWarehouse(kj::StringPtr urlString, Net
 		auto req = db.getRootRequest();
 		req.setName(rootName); // Not neccessary for main root
 		
-		return req.sendForPipeline().getRoot();
+		auto root = req.sendForPipeline().getRoot();
+		
+		KJ_IF_MAYBE(pFragment, url.fragment) {
+			auto getRequest = root.getRequest();
+			getRequest.setPath(*pFragment);
+			return getRequest.sendForPipeline().getAsGeneric();
+		}
+		
+		return root;
 	}
 	
 	KJ_REQUIRE(url.host != ".", "Must specify authority (hostname) in remote URLs");
@@ -118,8 +126,16 @@ Promise<Warehouse::Folder::Client> connectWarehouse(kj::StringPtr urlString, Net
 	.then([](auto response) {
 		return response.getConnection().getRemoteRequest().send();
 	})
-	.then([](auto response) {
-		return response.getRemote().template castAs<Warehouse::Folder>();
+	.then([maybeFragment = mv(url.fragment)](auto response) -> Warehouse::Folder::Client {
+		auto root = response.getRemote().template castAs<Warehouse::Folder>();
+		
+		KJ_IF_MAYBE(pFragment, maybeFragment) {
+			auto getRequest = root.getRequest();
+			getRequest.setPath(*pFragment);
+			return getRequest.sendForPipeline().getAsGeneric();
+		}
+		
+		return root;
 	});
 }
 

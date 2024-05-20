@@ -836,7 +836,8 @@ void initAsync(py::module_& m) {
 		perform other tasks while fiber is active (which eliminates the need for locking between fibers).
 	)")
 		.def(py::init<unsigned int>())
-		.def("startFiber", &startFiber, py::keep_alive<0, 1>())
+		//.def("startFiber", &startFiber, py::keep_alive<0, 1>())
+		.def("startFiber", [](kj::FiberPool&, py::object) { throw std::runtime_error("Fibers currently not available"); })
 	;
 	
 	py::class_<AsyncioFutureLike> futureCls(

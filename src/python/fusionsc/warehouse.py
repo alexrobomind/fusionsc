@@ -49,7 +49,19 @@ async def open(url: str):
 	"""
 	if url.startswith('remote:'):
 		name = url[7:].split('?')[0]
-		return await openRemote.asnc(name)
+		
+		# URL fragments indicate subfolders
+		# We still want to honor this correctly
+		fragment = None
+		if "#" in url:
+			fragment = url.split("#")[1]
+		
+		remote = await openRemote.asnc(name)
+		
+		if fragment is not None:
+			remote = remote.get(fragment)
+		
+		return remote
 	
 	response = await backends.localResources().openWarehouse(url)
 	return Folder(response.root)

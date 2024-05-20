@@ -20,19 +20,22 @@ async def test_timer():
 	"""
 
 @fsc.asnc.asyncFunction
-async def test_nested():
+async def test_nested():	
 	async def nested():
 		return None
 	
 	@fsc.asnc.asyncFunction
 	async def nestedAF():
 		return None
-	
+		
 	await nested()
 	await nestedAF.asnc()
 	
 	return None
 
+# Fibers are currently not available
+"""
 @fsc.asnc.asyncFunction
 async def test_fiberPool(fiberPool):
 	await fiberPool.startFiber(test_nested)
+"""
