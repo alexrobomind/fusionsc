@@ -8,7 +8,7 @@
 #include <kj/encoding.h>
 #include <fsc/typing.h>
 #include <fsc/common.h>
-#include <fsc/textio-yaml.h>
+#include <fsc/structio-yaml.h>
 #include <fsc/json-schema.h>
 
 using capnp::AnyPointer;
@@ -337,10 +337,10 @@ kj::String DynamicStructInterface<StructType>::toYaml(bool flow) {
 		emitter -> SetSeqFormat(YAML::Flow);
 	}
 	
-	textio::SaveOptions so;
+	structio::SaveOptions so;
 	so.compact = true;
 	
-	textio::save(toReader(this -> wrapped()), *textio::createVisitor(*emitter), so);
+	structio::save(toReader(this -> wrapped()), *structio::createVisitor(*emitter), so);
 	
 	kj::ArrayPtr<char> stringData(const_cast<char*>(emitter -> c_str()), emitter -> size() + 1);
 	return kj::String(stringData.attach(mv(emitter)));
@@ -1073,7 +1073,7 @@ DynamicValueReader castReader(DynamicValueReader reader, capnp::Type dstType) {
 
 kj::String getJsonSchemaForType(capnp::Type t) {
 	kj::VectorOutputStream os;
-	writeJsonSchema(t, *textio::createVisitor(os, textio::Dialect::JSON));
+	writeJsonSchema(t, *structio::createVisitor(os, structio::Dialect::JSON));
 	
 	return kj::heapString(os.getArray().asChars());
 }

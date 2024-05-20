@@ -4,14 +4,14 @@
 
 namespace fsc {
 
-using Visitor = textio::Visitor;
+using Visitor = structio::Visitor;
 
 namespace {
 
-void writeSchema(capnp::Schema s, textio::Visitor& v, kj::HashSet<capnp::Schema>& alreadyWritten);
-void writeType(capnp::Type t, textio::Visitor& v, kj::HashSet<capnp::Schema>& alreadyWritten, bool root = false);
+void writeSchema(capnp::Schema s, structio::Visitor& v, kj::HashSet<capnp::Schema>& alreadyWritten);
+void writeType(capnp::Type t, structio::Visitor& v, kj::HashSet<capnp::Schema>& alreadyWritten, bool root = false);
 
-void writeEnumSchema(capnp::EnumSchema s, textio::Visitor& v, kj::HashSet<capnp::Schema>& alreadyWritten) {
+void writeEnumSchema(capnp::EnumSchema s, structio::Visitor& v, kj::HashSet<capnp::Schema>& alreadyWritten) {
 	v.acceptString("anyOf");
 	v.beginArray(nullptr);
 		writeType(capnp::schema::Type::UINT16, v, alreadyWritten);
@@ -27,7 +27,7 @@ void writeEnumSchema(capnp::EnumSchema s, textio::Visitor& v, kj::HashSet<capnp:
 	v.endArray();
 }
 
-void writeStructSchema(capnp::StructSchema s, textio::Visitor& v, kj::HashSet<capnp::Schema>& alreadyWritten) {
+void writeStructSchema(capnp::StructSchema s, structio::Visitor& v, kj::HashSet<capnp::Schema>& alreadyWritten) {
 	v.acceptString("anyOf");
 	v.beginArray(nullptr);
 		v.beginObject(nullptr);
@@ -61,7 +61,7 @@ void writeStructSchema(capnp::StructSchema s, textio::Visitor& v, kj::HashSet<ca
 	v.endArray();
 }
 
-void writeInterfaceSchema(capnp::InterfaceSchema s, textio::Visitor& v, kj::HashSet<capnp::Schema>& alreadyWritten) {
+void writeInterfaceSchema(capnp::InterfaceSchema s, structio::Visitor& v, kj::HashSet<capnp::Schema>& alreadyWritten) {
 	// Check if we are a DataRef schema or not
 	constexpr uint64_t DR_ID = capnp::typeId<DataRef<capnp::AnyPointer>>();
 	
@@ -91,7 +91,7 @@ void writeInterfaceSchema(capnp::InterfaceSchema s, textio::Visitor& v, kj::Hash
 	}
 }
 
-void writeListSchema(capnp::ListSchema s, textio::Visitor& v, kj::HashSet<capnp::Schema>& alreadyWritten) {	
+void writeListSchema(capnp::ListSchema s, structio::Visitor& v, kj::HashSet<capnp::Schema>& alreadyWritten) {	
 	v.acceptString("type");
 	v.acceptString("array");
 	
@@ -109,7 +109,7 @@ kj::String idFor(capnp::Schema s) {
 	return kj::str(s.getUnqualifiedName(), "_", s.getProto().getId(), "_", kj::encodeBase64(capnp::canonicalize(brand.asReader()).asBytes()));
 }
 
-void writeSchema(capnp::Schema s, textio::Visitor& v, kj::HashSet<capnp::Schema>& alreadyWritten) {
+void writeSchema(capnp::Schema s, structio::Visitor& v, kj::HashSet<capnp::Schema>& alreadyWritten) {
 	bool isGroup = s.getProto().isStruct() && s.getProto().getStruct().getIsGroup();
 	if(!isGroup) {
 		if(alreadyWritten.contains(s)) {
@@ -167,7 +167,7 @@ void writeInt(kj::StringPtr name, Visitor& v) {
 	v.acceptInt((T) kj::maxValue);
 }
 
-void writeType(capnp::Type t, textio::Visitor& v, kj::HashSet<capnp::Schema>& alreadyWritten, bool root) {
+void writeType(capnp::Type t, structio::Visitor& v, kj::HashSet<capnp::Schema>& alreadyWritten, bool root) {
 	using T = capnp::schema::Type;
 	
 	v.beginObject(nullptr);
@@ -262,7 +262,7 @@ void writeType(capnp::Type t, textio::Visitor& v, kj::HashSet<capnp::Schema>& al
 
 }
 
-void writeJsonSchema(capnp::Type t, textio::Visitor& v) {
+void writeJsonSchema(capnp::Type t, structio::Visitor& v) {
 	kj::HashSet<capnp::Schema> alreadyWritten;
 	writeType(t, v, alreadyWritten, true);
 }

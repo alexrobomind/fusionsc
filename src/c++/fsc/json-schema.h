@@ -1,6 +1,6 @@
-#include "textio.h"
+#include "structio.h"
 
 namespace fsc {
-	void writeJsonSchema(capnp::Type, textio::Visitor&);
-	void writeJsonSchema(capnp::Schema, textio::Visitor&);
+	void writeJsonSchema(capnp::Type, structio::Visitor&);
+	void writeJsonSchema(capnp::Schema, structio::Visitor&);
 }

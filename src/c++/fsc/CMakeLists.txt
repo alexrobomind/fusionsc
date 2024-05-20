@@ -37,12 +37,12 @@ add_library(
 	data.h
 	data.cpp
 		
-	textio.h
-	textio-yaml.h
-	textio.cpp
-	textio-node.cpp
-	textio-json.cpp
-	textio-yaml.cpp
+	structio.h
+	structio-yaml.h
+	structio.cpp
+	structio-node.cpp
+	structio-json.cpp
+	structio-yaml.cpp
 	
 	json-schema.h
 	json-schema.cpp
@@ -186,7 +186,7 @@ if(BUILD_TESTING)
 		vmec-tests.cpp
 		blob-store-tests.cpp
 		db-cache-tests.cpp
-		textio-tests.cpp
+		structio-tests.cpp
 		streams-tests.cpp
 		json-schema-tests.cpp
 		

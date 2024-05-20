@@ -3,7 +3,7 @@
 #include <fsc/services.h>
 #include <fsc/sqlite.h>
 #include <fsc/odb.h>
-#include <fsc/textio.h>
+#include <fsc/structio.h>
 #include <fsc/data-viewer.h>
 
 #include <fsc/dynamic.capnp.h>

@@ -2,7 +2,7 @@
 #include <fsc/services.h>
 #include <fsc/data.h>
 #include <fsc/networking.h>
-#include <fsc/textio-yaml.h>
+#include <fsc/structio-yaml.h>
 #include <fsc/load-balancer.h>
 
 #include <capnp/rpc-twoparty.h>
@@ -137,7 +137,7 @@ struct LoadBalancerTool {
 				configString = readFromStdin();
 			}
 			
-			textio::load(configString.asBytes(), *textio::createVisitor(loadedConfig), textio::Dialect::YAML);
+			structio::load(configString.asBytes(), *structio::createVisitor(loadedConfig), structio::Dialect::YAML);
 		}
 		
 		// Dump configuration to console

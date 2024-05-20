@@ -2,7 +2,7 @@
 #include <fsc/services.h>
 #include <fsc/data.h>
 #include <fsc/networking.h>
-#include <fsc/textio-yaml.h>
+#include <fsc/structio-yaml.h>
 #include <fsc/matcher.h>
 
 #include <capnp/rpc-twoparty.h>
@@ -118,12 +118,12 @@ struct WorkerTool {
 		if(config.is<kj::Path>()) {
 			auto configFile = lt -> filesystem().getCurrent().openFile(config.get<kj::Path>());
 			auto configString = configFile -> readAllText();
-			textio::load(configFile -> readAllBytes(), *textio::createVisitor(loadedConfig), textio::Dialect::YAML);
+			structio::load(configFile -> readAllBytes(), *structio::createVisitor(loadedConfig), structio::Dialect::YAML);
 		} else if(config.is<LocalConfig::Reader>()) {
 			loadedConfig = config.get<LocalConfig::Reader>();
 		} else if(config.is<ReadFromStdin>()){
 			auto configString = readFromStdin();
-			textio::load(configString.asBytes(), *textio::createVisitor(loadedConfig), textio::Dialect::YAML);
+			structio::load(configString.asBytes(), *structio::createVisitor(loadedConfig), structio::Dialect::YAML);
 		}
 		
 		// Dump configuration to console

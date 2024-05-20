@@ -10,7 +10,7 @@
 #include "local.h"
 #include "magnetics.h"
 #include "geometry.h"
-#include "textio.h"
+#include "structio.h"
 
 #include <iostream>
 
@@ -87,7 +87,7 @@ TEST_CASE("flt") {
 		auto response = traceReq.send().wait(ws);
 		
 		// kj::VectorOutputStream os;
-		// textio::save((capnp::DynamicStruct::Reader) response, os, textio::Dialect { textio::Dialect::YAML });
+		// structio::save((capnp::DynamicStruct::Reader) response, os, structio::Dialect { structio::Dialect::YAML });
 		
 		// KJ_DBG(kj::heapString(os.getArray().asChars()));
 		

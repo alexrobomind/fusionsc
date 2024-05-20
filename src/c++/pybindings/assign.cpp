@@ -1,7 +1,7 @@
 #include "assign.h"
 #include "tensor.h"
 #include "async.h"
-#include "formats.h"
+#include "structio.h"
 
 using capnp::DynamicValue;
 using capnp::DynamicList;
@@ -190,15 +190,15 @@ void assign(const BuilderSlot& dst, py::object object) {
 	if(py::isinstance<py::str>(object) && (dst.type.isList() || dst.type.isStruct())) {
 		KJ_IF_MAYBE(pException, kj::runCatchingExceptions([&]() {
 			// Create destination visitor
-			Own<textio::Visitor> v;
+			Own<::fsc::structio::Visitor> v;
 			auto t = dst.type;			
 			if(t.isList()) {
 				auto initializer = [&](size_t s) {
 					return dst.init(s).as<capnp::DynamicList>();
 				};
-				v = textio::createVisitor(t.asList(), initializer);
+				v = ::fsc::structio::createVisitor(t.asList(), initializer);
 			} else {
-				v = textio::createVisitor(dst.init().as<capnp::DynamicStruct>());
+				v = ::fsc::structio::createVisitor(dst.init().as<capnp::DynamicStruct>());
 			}
 			
 			// Load buffer
@@ -209,7 +209,7 @@ void assign(const BuilderSlot& dst, py::object object) {
 			kj::ArrayPtr<const kj::byte> bufferPtr((const kj::byte*) utf8, size);
 						
 			// Perform load
-			textio::load(bufferPtr, *v, textio::Dialect::YAML);
+			::fsc::structio::load(bufferPtr, *v, ::fsc::structio::Dialect::YAML);
 			return;
 		})) {
 			auto& error = *pException;

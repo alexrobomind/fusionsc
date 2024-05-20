@@ -10,12 +10,12 @@ from .asnc import asyncFunction
 from typing import Union
 
 _langs = {
-	'json' : native.formats.Language.JSON,
-	'yaml' : native.formats.Language.YAML,
-	'cbor' : native.formats.Language.CBOR,
-	'bson' : native.formats.Language.BSON,
-	'ubjson' : native.formats.Language.UBJSON,
-	'msgpack' : native.formats.Language.MSGPACK
+	'json' : native.structio.Language.JSON,
+	'yaml' : native.structio.Language.YAML,
+	'cbor' : native.structio.Language.CBOR,
+	'bson' : native.structio.Language.BSON,
+	'ubjson' : native.structio.Language.UBJSON,
+	'msgpack' : native.structio.Language.MSGPACK
 }
 
 def _checkLang(lang):
@@ -36,7 +36,7 @@ def dumps(data, lang='json', compact=False, binary=None) -> Union[str, bytes]:
 	Returns:
 		A bytes or str object holding the stored data according to the requested format.
 	"""
-	asBytes = native.formats.dumpToBytes(data, _checkLang(lang), compact)
+	asBytes = native.structio.dumpToBytes(data, _checkLang(lang), compact)
 	
 	if binary is None:
 		binary = (lang not in ["json", "yaml"])
@@ -59,14 +59,14 @@ def dump(data, file, lang='json', compact=False):
 	"""
 	file.flush()
 	fd = file.fileno()
-	native.formats.dumpToFd(data, fd, _checkLang(lang), compact)
+	native.structio.dumpToFd(data, fd, _checkLang(lang), compact)
 
 @asyncFunction
 async def recursiveDumps(data, lang='json', compact=False, binary=None) -> Union[str, bytes]:
 	"""
 	Like dumps(...), but also serializes nested DataRefs.
 	"""
-	asBytes = await native.formats.dumpAllToBytes(data, _checkLang(lang), compact)
+	asBytes = await native.structio.dumpAllToBytes(data, _checkLang(lang), compact)
 	
 	if binary is None:
 		binary = (lang not in ["json", "yaml"])
@@ -83,7 +83,7 @@ async def recursiveDump(data, file, lang='json', compact=False):
 	"""
 	file.flush()
 	fd = file.fileno()
-	await native.formats.dumpAllToFd(data, fd, _checkLang(lang), compact)
+	await native.structio.dumpAllToFd(data, fd, _checkLang(lang), compact)
 
 def load(src, dst=None, lang='json'):
 	"""
@@ -107,9 +107,9 @@ def load(src, dst=None, lang='json'):
 	cl = _checkLang(lang)
 	
 	if hasattr(src, 'fileno'):
-		return native.formats.readFd(src.fileno(), dst, cl)
+		return native.structio.readFd(src.fileno(), dst, cl)
 	
 	if isinstance(src, str):
-		return native.formats.readBuffer(src.encode(), dst, cl)
+		return native.structio.readBuffer(src.encode(), dst, cl)
 	
-	return native.formats.readBuffer(src, dst, cl)
+	return native.structio.readBuffer(src, dst, cl)

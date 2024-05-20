@@ -1,5 +1,5 @@
 #include "data-viewer.h"
-#include "textio.h"
+#include "structio.h"
 
 #include <kj/compat/url.h>
 
@@ -56,10 +56,10 @@ kj::String escape(kj::StringPtr s) {
 	return kj::String(out.releaseAsArray().releaseAsChars());
 }
 
-struct EscapingVisitor : public textio::SaveOptions::CapabilityStrategy, public textio::Visitor {
-	textio::Visitor& backend;
+struct EscapingVisitor : public structio::SaveOptions::CapabilityStrategy, public structio::Visitor {
+	structio::Visitor& backend;
 	
-	EscapingVisitor(textio::Visitor& newBackend) : backend(newBackend) {}
+	EscapingVisitor(structio::Visitor& newBackend) : backend(newBackend) {}
 	
 	void acceptNull() override { backend.acceptNull(); }
 	void acceptInt(int64_t v) override { backend.acceptInt(v); }
@@ -78,7 +78,7 @@ struct EscapingVisitor : public textio::SaveOptions::CapabilityStrategy, public 
 		backend.acceptString(escape(s));
 	}
 	
-	void saveCapability(capnp::DynamicCapability::Client clt, textio::Visitor&, const textio::SaveOptions&, Maybe<kj::WaitScope&> maybeWs) const override {
+	void saveCapability(capnp::DynamicCapability::Client clt, structio::Visitor&, const structio::SaveOptions&, Maybe<kj::WaitScope&> maybeWs) const override {
 		auto schema = clt.getSchema();
 		auto id = schema.getProto().getId();
 
@@ -168,7 +168,7 @@ struct DataViewerImpl : public kj::HttpService {
 			kj::VectorOutputStream os;
 			if(o.is<DataRef<>::Client>()) {
 				auto asRef = getActiveThread().dataService().download(o.get<DataRef<>::Client>()).wait(ws);
-				writeRefBody(asRef, textio::Dialect::YAML, os);
+				writeRefBody(asRef, structio::Dialect::YAML, os);
 			} else if(o.is<Warehouse::File<>::Client>()) {
 				writeFileBody(os);
 			} else {
@@ -303,7 +303,7 @@ struct DataViewerImpl : public kj::HttpService {
 	}
 	
 	//! Outputs the body of a DataRef (and links to download)
-	void writeRefBody(LocalDataRef<AnyPointer> ref, const textio::Dialect& dialect, kj::BufferedOutputStream& os) {
+	void writeRefBody(LocalDataRef<AnyPointer> ref, const structio::Dialect& dialect, kj::BufferedOutputStream& os) {
 		auto wrapped = createWrapper(ref);
 		
 		auto md = ref.getMetadata();
@@ -327,7 +327,7 @@ struct DataViewerImpl : public kj::HttpService {
 		auto backingVisitor = createVisitor(os, dialect);
 		EscapingVisitor ev(*backingVisitor);
 		
-		textio::SaveOptions opts;
+		structio::SaveOptions opts;
 		opts.capabilityStrategy = &ev;
 
 		Maybe<capnp::Type> maybeType;
@@ -357,11 +357,11 @@ struct DataViewerImpl : public kj::HttpService {
 				"<br /><br />", schema.getUnqualifiedName(), "<br />"
 				"<pre><code>"
 			));
-			textio::save(asStruct, ev, opts);
+			structio::save(asStruct, ev, opts);
 			writeStr("</code></pre>");
 		} else {
 			writeStr("Schema lookup for message type failed<br /><pre><code>");
-			textio::save(typeReader, ev);
+			structio::save(typeReader, ev);
 			writeStr("</code></pre>");
 		}
 	}
