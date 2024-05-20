@@ -140,8 +140,24 @@ namespace {
 					case State::tagFor<Done>(): KJ_FAIL_REQUIRE("Error: pop() called on state Done");
 				}
 			}
-			
+						
 			states.removeLast();
+			
+			// Check if object is a candidate for shaped array conversion
+			if(py::isinstance<py::dict>(result)) {
+				py::dict asDict = result;
+				
+				if(asDict.size() == 2 && asDict.contains("shape") && asDict.contains("data")) {
+					try {
+						py::object shape = asDict["shape"];
+						py::array data = py::array::ensure(asDict["data"]);
+						
+						result = data.attr("reshape")(shape);
+					} catch(py::cast_error& e) {
+					} catch(py::error_already_set& e) {
+					}
+				}
+			}
 			
 			if(states.size() > 0) {
 				auto& s = state();
@@ -619,11 +635,6 @@ namespace formats {
 
 void initFormats(py::module_& m) {
 	auto formatsMod = m.def_submodule("formats");
-	
-	py::class_<formats::ArrayHolder>(formatsMod, "ArrayHolder")
-		.def(py::init<>())
-		.def_readwrite("value", &formats::ArrayHolder::value)
-	;
 	
 	formatsMod.def("readFd", &formats::readFd);
 	formatsMod.def("readBuffer", &formats::readBuffer);

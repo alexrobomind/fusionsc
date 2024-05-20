@@ -71,21 +71,37 @@ def test_recdump(siodata, lang, tmp_path):
 	loaded = fsc.structio.load(dumped, lang = lang)
 
 @pytest.mark.parametrize("lang", ['json', 'yaml', 'cbor', 'bson', 'ubjson', 'msgpack'])
-def test_loadarray(lang):
+def test_nparray(lang):
+	data = np.asarray([["Hi", 2], [3, 4]])
+	
+	dumped = fsc.structio.dumps(data, lang)
+	print("Dump:", dumped)
+	
+	dst = fsc.structio.load(dumped, lang = lang)
+	print(data, data.shape, data.dtype)
+
+@pytest.mark.parametrize("lang", ['json', 'yaml', 'cbor', 'bson', 'ubjson', 'msgpack'])
+def test_npfake1(lang):
 	data = {
-		"uint" : [1, 2, 3],
-		"int" : [1, -1, 0],
-		"float" : [0, 1, 0.5],
-		"obj" : [0, 1, "Hello", None],
-		"nest" : [[0, -1], [2, 3]]
+		"shape" : [1, 2, "Hi"],
+		"data" : [1, 2, 3, 4]
 	}
 	
 	dumped = fsc.structio.dumps(data, lang)
 	print("Dump:", dumped)
 	
 	dst = fsc.structio.load(dumped, lang = lang)
+	print(data)
+
+@pytest.mark.parametrize("lang", ['json', 'yaml', 'cbor', 'bson', 'ubjson', 'msgpack'])
+def test_npfake2(lang):
+	data = {
+		"shape" : [2, 2],
+		"data" : [1, 2, 3, 4, 5]
+	}
 	
-	for k, v in dst.items():
-		print(k, "IsArray:", isinstance(v, np.ndarray))
-		v = np.asarray(v)
-		print(v.dtype, v)
+	dumped = fsc.structio.dumps(data, lang)
+	print("Dump:", dumped)
+	
+	dst = fsc.structio.load(dumped, lang = lang)
+	print(data)

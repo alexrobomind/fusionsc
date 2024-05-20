@@ -8,8 +8,6 @@ from . import native
 from .asnc import asyncFunction
 
 from typing import Union
-	
-from .native.formats import ArrayHolder
 
 _langs = {
 	'json' : native.formats.Language.JSON,
