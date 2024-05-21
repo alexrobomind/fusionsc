@@ -255,19 +255,6 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 			i += polySize
 		
 		return Geometry.polyMesh(vertices, linesOut)
-	
-	@staticmethod
-	@unstableApi
-	def importFrom(filename: str):
-		"""Creates a geometry from a file (non-PLY loaded using pyvista)"""
-		
-		if filename.endswith(".ply"):
-			return Geometry(native.geometry.readPly(filename), byReference = True)
-		
-		import pyvista as pv
-		polyData = pv.PolyData(filename)
-		
-		return Geometry.fromPyvista(polyData)
 
 	@asyncFunction
 	async def planarCut(self, phi = None, normal = None, center = None):
@@ -389,24 +376,69 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 			'areas' : response.areas
 		}
 	
+	@staticmethod
+	@unstableApi
+	def importFrom(filename: str):
+		"""Creates a geometry from a file (non-PLY loaded using meshio)"""
+		
+		if filename.endswith(".ply"):
+			return Geometry(native.geometry.readPly(filename), byReference = True)
+		
+		import meshio
+		inputMesh = meshio.read(filename)
+		
+		all = []
+		
+		cellsDict = inputMesh.cells_dict
+		all = sum([
+			cellsDict.get("triangle", []),
+			cellsDict.get("quad", []),
+			cellsDict.get("polygon", [])
+		])
+		
+		return Geometry(native.geometry.importRaw(inputMesh.points, all), byReference = True)
+	
 	@asyncFunction
 	@unstableApi
-	async def exportTo(self, filename: str, binary = True):
+	async def exportTo(self, filename: str, binary = True, triangulate = True):
 		"""Saves the geometry to the given filename. Supports '.ply', '.stl', and '.vtk' files."""
 		
 		if filename.endswith(".ply"):
-			resolved = await self.resolve.asnc()
-			await native.geometry.writePly(resolved.data, filename, binary)
+			merged = await self.merge.asnc()
+			await native.geometry.writePly(await data.download.asnc(merged.data.merged), filename, binary)
 			return
-			
-		asPv = await self.asPyvista.asnc()
 		
-		import pyvista as pv
+		import meshio
 		
-		if isinstance(asPv, pv.MultiBlock):
-			asPv = asPv.combine()
+		reduced = await self.reduce.asnc()
+		mergedData = await data.download.asnc(reduced.data.merged)
 		
-		pv.save_meshio(filename, asPv)
+		tris = []
+		quads = []
+		polys = []
+		
+		rawPoints, rawPolys = native.geometry.exportRaw(mergedData, triangulate)
+		
+		for p in rawPolys:
+			if len(p) == 2:
+				pass
+			elif len(p) == 3:
+				tris.append(p)
+			elif len(p) == 4:
+				quads.append(p)
+			else:
+				polys.append(p)
+		
+		cells = {}
+		if tris:
+			cells["triangles"] = tris
+		if quads:
+			cells["triangles"] = quads
+		if polys:
+			cells["polygons"] = polys
+		
+		output = meshio.Mesh(points = points, cells = cells)
+		output.write(filename)
 
 def asTagValue(x):
 	"""Convert a possible tag value into an instance of fsc.service.TagValue"""
