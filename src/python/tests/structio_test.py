@@ -71,8 +71,18 @@ def test_recdump(siodata, lang, tmp_path):
 	loaded = fsc.structio.load(dumped, lang = lang)
 
 @pytest.mark.parametrize("lang", ['json', 'yaml', 'cbor', 'bson', 'ubjson', 'msgpack'])
-def test_nparray(lang):
+def test_nparray1(lang):
 	data = np.asarray([["Hi", 2], [3, 4]])
+	
+	dumped = fsc.structio.dumps(data, lang)
+	print("Dump:", dumped)
+	
+	dst = fsc.structio.load(dumped, lang = lang)
+	print(data, data.shape, data.dtype)
+
+@pytest.mark.parametrize("lang", ['json', 'yaml', 'cbor', 'bson', 'ubjson', 'msgpack'])
+def test_nparray2(lang):
+	data = np.asarray([1, 2, 3, 4])
 	
 	dumped = fsc.structio.dumps(data, lang)
 	print("Dump:", dumped)

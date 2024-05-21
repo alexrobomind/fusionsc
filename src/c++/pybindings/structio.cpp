@@ -509,6 +509,16 @@ namespace structio {
 		void dumpNumpyArray(py::handle o, ::fsc::structio::Visitor& dst, const ::fsc::structio::SaveOptions& opts, Maybe<kj::WaitScope&> ws) {
 			py::list shape = o.attr("shape");
 			py::object flat = o.attr("flatten")();
+			
+			// 1D-arrays are written as lists
+			if(shape.size() == 1) {
+				dst.beginArray(py::len(flat));
+				for(auto el : flat)
+					dumpToVisitor(el, dst, opts, ws);
+				dst.endArray();
+				return;
+			}
+			
 			dst.beginObject(2);
 			
 			dst.acceptString("shape");
