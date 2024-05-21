@@ -93,6 +93,7 @@ add_library(
 	geometry.h
 	geometry.cpp
 	geometry-ply.cpp
+	geometry-io.cpp
 	
 	magnetics.h
 	magnetics-kernels.h

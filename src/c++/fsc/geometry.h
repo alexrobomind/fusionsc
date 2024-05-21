@@ -40,9 +40,12 @@ inline EIGEN_DEVICE_FUNC Vec3u locationInGrid(Vec3d point, Vec3d min, Vec3d max,
 	return result.cast<unsigned int>();
 }
 
-Temporary<Geometry> readPly(kj::StringPtr filename, size_t nMaxVerts = 0, size_t nMaxEntries = 0);
+Temporary<Geometry> readPly(kj::StringPtr filename);
 
 Promise<void> writePly(Geometry::Reader, kj::StringPtr filename, bool binary = true);
-void writePly(kj::ArrayPtr<Mesh::Reader> meshes, kj::StringPtr filename, bool binary);
+void writePly(MergedGeometry::Reader, kj::StringPtr filename, bool binary);
+
+void importRaw(kj::ArrayPtr<std::array<const double, 3>> vertices, kj::ArrayPtr<kj::Array<const size_t>> faces, MergedGeometry::Builder out);
+kj::Tuple<kj::Array<std::array<double, 3>>, kj::Array<kj::Array<size_t>>> exportRaw(MergedGeometry::Reader, bool triangulate);
 
 }
