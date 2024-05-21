@@ -390,11 +390,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		all = []
 		
 		cellsDict = inputMesh.cells_dict
-		all = sum([
-			cellsDict.get("triangle", []),
-			cellsDict.get("quad", []),
-			cellsDict.get("polygon", [])
-		])
+		all = list(cellsDict.get("triangle", [])) + list(cellsDict.get("quad", [])) + list(cellsDict.get("polygon", []))
 		
 		return Geometry(native.geometry.importRaw(inputMesh.points, all), byReference = True)
 	
@@ -405,19 +401,18 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		
 		if filename.endswith(".ply"):
 			merged = await self.merge.asnc()
-			await native.geometry.writePly(await data.download.asnc(merged.data.merged), filename, binary)
+			await native.geometry.writePly(merged.data, filename, binary)
 			return
 		
 		import meshio
 		
-		reduced = await self.reduce.asnc()
-		mergedData = await data.download.asnc(reduced.data.merged)
+		merged = await self.merge.asnc()
 		
 		tris = []
 		quads = []
 		polys = []
 		
-		rawPoints, rawPolys = native.geometry.exportRaw(mergedData, triangulate)
+		rawPoints, rawPolys = await native.geometry.exportRaw(merged.data, triangulate)
 		
 		for p in rawPolys:
 			if len(p) == 2:
@@ -431,13 +426,13 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		
 		cells = {}
 		if tris:
-			cells["triangles"] = tris
+			cells["triangle"] = tris
 		if quads:
-			cells["triangles"] = quads
+			cells["quad"] = quads
 		if polys:
-			cells["polygons"] = polys
+			cells["polygon"] = polys
 		
-		output = meshio.Mesh(points = points, cells = cells)
+		output = meshio.Mesh(points = rawPoints, cells = cells)
 		output.write(filename)
 
 def asTagValue(x):

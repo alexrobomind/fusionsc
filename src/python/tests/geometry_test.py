@@ -15,6 +15,7 @@ def test_jtextGeo(tmp_path):
 	geo = jtext.pfcs(0.24)
 	geo = geo.reduce()
 	geo.exportTo(str(tmp_path / "test.ply"))
+	geo.exportTo(str(tmp_path / "test.off"))
 
 def test_poly():
 	points = [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]]
