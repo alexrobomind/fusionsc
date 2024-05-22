@@ -7,4 +7,4 @@ ENV PATH /spack/bin:$PATH
 RUN spack bootstrap now
 
 FROM fusionsc-spack AS fusionsc-deps
-RUN spack install hdf5+hl+cxx libssh2 ninja cmake yaml-cpp catch2 eigen botan libssh2 sqlite zlib
+RUN spack install hdf5+hl+cxx~mpi libssh2 ninja cmake yaml-spackcpp catch2 eigen botan libssh2 sqlite zlib
