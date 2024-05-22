@@ -3,4 +3,8 @@ WORKDIR /spack
 
 # Install spack
 RUN git clone https://github.com/spack/spack.git --depth 1 .
-RUN . /spack/share/spack/setup-env.sh
+ENV PATH /spack/bin:$PATH
+RUN spack bootstrap now
+
+FROM fusionsc-spack AS fusionsc-deps
+RUN spack install hdf5+hl+cxx libssh2 ninja cmake yaml-cpp catch2 eigen botan libssh2 sqlite zlib
