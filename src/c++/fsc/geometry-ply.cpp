@@ -32,7 +32,7 @@ Temporary<Geometry> readPly(kj::StringPtr filename) {
 }
 
 void writePly(MergedGeometry::Reader merged, kj::StringPtr filename, bool binary) {
-	auto doExport = [&](kj::Array<std::array<double, 3>>& pos, kj::Array<kj::Array<size_t>>& ind) {
+	auto doExport = [&](kj::Array<std::array<double, 3>>&& pos, kj::Array<kj::Array<size_t>>&& ind) {
 		std::vector<std::array<double, 3>> meshVertexPositions(pos.begin(), pos.end());
 		std::vector<std::vector<size_t>> meshFaceIndices(ind.size());
 		

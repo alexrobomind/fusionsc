@@ -4,6 +4,7 @@
 #include <fsc/networking.h>
 #include <fsc/structio-yaml.h>
 #include <fsc/matcher.h>
+#include <fsc/break.h>
 
 #include <capnp/rpc-twoparty.h>
 
@@ -109,6 +110,8 @@ struct WorkerTool {
 	}
 		
 	bool run() {
+		BreakHandler breakHandler;
+		
 		auto l = newLibrary();
 		auto lt = l -> newThread();
 		auto& ws = lt->waitScope();
@@ -157,7 +160,7 @@ struct WorkerTool {
 		putRequest.send().wait(ws);
 		
 		std::cout << "Waiting for completion ..." << std::endl;
-		disconnectEvent.promise.wait(ws);
+		disconnectEvent.promise.exclusiveJoin(breakHandler.onBreak()).wait(ws);
 		
 		std::cout << "Shutting down" << std::endl;		
 		return true;

@@ -4,6 +4,7 @@
 #include <fsc/networking.h>
 #include <fsc/structio-yaml.h>
 #include <fsc/load-balancer.h>
+#include <fsc/break.h>
 
 #include <capnp/rpc-twoparty.h>
 
@@ -121,6 +122,8 @@ struct LoadBalancerTool {
 	}
 		
 	bool run() {
+		BreakHandler breakHandler;
+		
 		auto l = newLibrary();
 		auto lt = l -> newThread();
 		auto& ws = lt->waitScope();
@@ -165,17 +168,16 @@ struct LoadBalancerTool {
 		std::cout << "Serving protocol version " << FSC_PROTOCOL_VERSION << std::endl;
 		std::cout << "Listening on port " << info.getPort() << std::endl;
 		
-		while(true) {
-			try {
-				lt -> timer().afterDelay(1 * kj::SECONDS).wait(ws);
-			} catch(kj::Exception e) {
-				KJ_DBG("Received exception", e);
-				break;
-			}
-		}
+		breakHandler.onBreak().wait(ws);
 		
 		std::cout << "Draining ..." << std::endl;
-		openPort.drainRequest().send().wait(ws);
+		
+		openPort.stopListeningRequest().send().wait(ws);
+		
+		try {
+			breakHandler.wrap(openPort.drainRequest().send()).wait(ws);
+		} catch(kj::Exception& ) {
+		}
 		
 		std::cout << "Shutting down" << std::endl;		
 		return true;

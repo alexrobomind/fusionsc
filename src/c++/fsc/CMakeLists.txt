@@ -16,6 +16,9 @@ add_library(
 	common.h
 	common.cpp
 	
+	break.h
+	break.cpp
+	
 	typing.h
 	typing.cpp
 	
