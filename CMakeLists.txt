@@ -215,6 +215,7 @@ add_vendored_dependency(
 	PREFIX vendor/hdf5
 	NAME HDF5
 	VERSION 1.14.2
+	FIND_ARGS COMPONENTS CPP HL
 )
 
 if(HDF5_VENDORED)

@@ -3,17 +3,17 @@ option(FSC_DEP_ALLOW_VENDORED "Whether to allow vendored dependencies" On)
 option(FSC_DEP_PREF_VENDORED "Whether to preferentially use vendored dependencies" On)
 
 macro(add_vendored_dependency)
-	cmake_parse_arguments(AVDARGS "SETUP_ONLY" "PREFIX;NAME;VERSION" "" ${ARGN})
+	cmake_parse_arguments(AVDARGS "SETUP_ONLY" "PREFIX;NAME;VERSION" "FIND_ARGS" ${ARGN})
 	
 	option(FSC_DEP_${AVDARGS_NAME}_PREF_VENDORED "Whether to default to vendored dependency for ${AVDARGS_NAME}" Off)
 			
 	if(NOT SKBUILD AND (NOT FSC_DEP_PREF_VENDORED OR NOT FSC_DEP_ALLOW_VENDORED) AND NOT FSC_DEP_${AVDARGS_NAME}_PREF_VENDORED AND NOT (DEFINED FSC_DEP_${AVDARGS_NAME}_STRATEGY AND FSC_DEP_${AVDARGS_NAME}_STRATEGY STREQUAL "vendored"))
 		if(${FSC_DEP_IGNORE_VERSIONS})
 			message(STATUS "Searching for dependency ${AVDARGS_NAME} (any version)")
-			find_package(${AVDARGS_NAME})
+			find_package(${AVDARGS_NAME} ${AVDARGS_FIND_ARGS})
 		else()
 			message(STATUS "Searching for dependency ${AVDARGS_NAME} version ${AVDARGS_VERSION}")
-			find_package(${AVDARGS_NAME} ${AVDARGS_VERSION})
+			find_package(${AVDARGS_NAME} ${AVDARGS_VERSION} ${AVDARGS_FIND_ARGS})
 		endif()
 		
 		if(${AVDARGS_NAME}_FOUND)
