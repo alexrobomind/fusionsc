@@ -23,8 +23,8 @@ struct BackendImpl : public Backend {
 	
 	bool errorLogged = false;
 	Maybe<capnp::Capability::Client> target = nullptr;
+	bool ok = false;
 	
-			
 	BackendImpl(LoadBalancerConfig::Reader gConf, NetworkInterface::Client ni, LoadBalancerConfig::Backend::Reader lConf) :
 		globalConfig(gConf), config(lConf),
 		networkInterface(mv(ni)),
@@ -49,9 +49,9 @@ struct BackendImpl : public Backend {
 	}
 	
 	Promise<void> performMaintenance() {
-		KJ_IF_MAYBE(pTarget, target) {
+		if(ok) {
 			// Perform a heartbeat request to a bogus interface
-			auto heartbeat = pTarget -> typelessRequest(0, 0, nullptr, capnp::Capability::Client::CallHints());
+			auto heartbeat = connect().typelessRequest(0, 0, nullptr, capnp::Capability::Client::CallHints());
 			return heartbeat.send().ignoreResult()
 			.catch_([this](kj::Exception&& e) -> Promise<void> {
 				switch(e.getType()){
@@ -72,11 +72,11 @@ struct BackendImpl : public Backend {
 				// Heartbeat call failed
 				[this](kj::Exception error) {
 					KJ_LOG(WARNING, "Lost connection to backend, reconnecting ...", config.getUrl(), error);
+					ok = false;
 					target = nullptr;
 					return performMaintenance();
 				}
 			);
-			
 		} else {
 			// Try to connect to target
 			
@@ -88,10 +88,12 @@ struct BackendImpl : public Backend {
 			.then(
 				[this](auto response) {
 					errorLogged = false;
+					ok = true;
 					
 					auto conn = response.getConnection();
 					
-					target = conn.getRemoteRequest().sendForPipeline().getRemote();
+					if(config.getPersistent())
+						target = conn.getRemoteRequest().sendForPipeline().getRemote();
 					
 					KJ_LOG(INFO, "Connected to backend", config.getUrl());
 					
@@ -111,8 +113,22 @@ struct BackendImpl : public Backend {
 		}
 	}
 	
+	capnp::Capability::Client connect() {
+		KJ_IF_MAYBE(pTarget, target) {
+			return *pTarget;
+		}
+		
+		auto connectRequest = networkInterface.connectRequest();
+		connectRequest.setUrl(config.getUrl());
+		
+		return connectRequest.sendForPipeline().getConnection().getRemoteRequest().sendForPipeline().getRemote();
+	}
+	
 	Maybe<capnp::Capability::Client> getTarget(uint16_t) override {
-		return target;
+		if(ok)
+			return connect();
+		
+		return nullptr;
 	}
 	
 	void buildStatus(kj::Vector<LoadBalancer::StatusInfo::Backend>& out) override {
@@ -176,92 +192,6 @@ struct Pool : public Backend {
 	}
 };
 
-struct ExternallyBalanced : public Backend {
-	LoadBalancerConfig::Reader globalConfig;
-	LoadBalancerConfig::Backend::Reader config;
-	NetworkInterface::Client networkInterface;
-	
-	bool ok = true;
-	Promise<void> maintenanceTask = READY_NOW;
-	
-	ExternallyBalanced(LoadBalancerConfig::Reader gConf, NetworkInterface::Client ni, LoadBalancerConfig::Backend::Reader lConf) :
-		globalConfig(gConf), config(lConf), networkInterface(mv(ni))
-	{
-		maintenanceTask = heartbeat().eagerlyEvaluate([this](kj::Exception error) {
-			KJ_LOG(ERROR, "Maintenance task for backend failed", config.getUrl(), error);
-		});
-	}
-	
-	Promise<void> retryAfter(kj::Duration time) {
-		return getActiveThread().timer().afterDelay(time)
-		.then([this]() { return heartbeat(); });
-	}
-	
-	Promise<void> heartbeat() {
-		auto heartbeat = connect().typelessRequest(0, 0, nullptr, capnp::Capability::Client::CallHints());	
-		
-		return heartbeat.send().ignoreResult()
-		.catch_([this](kj::Exception&& e) -> Promise<void> {
-			switch(e.getType()){
-				// This is what we expect
-				case kj::Exception::Type::UNIMPLEMENTED:
-					return READY_NOW;
-				
-				default:
-					return mv(e);
-			}
-		})
-		.then(
-			// Connection is OK
-			[this]() {
-				if(!ok) {
-					KJ_LOG(INFO, "Connection to backend successful", config.getUrl());
-				}
-				ok = true;
-				return retryAfter(globalConfig.getHeartbeatIntervalSeconds() * kj::SECONDS);
-			},
-			
-			// Heartbeat call failed
-			[this](kj::Exception error) {
-				if(ok) {
-					KJ_LOG(WARNING, "Heart-beat fail on backend ...", config.getUrl(), error);
-				}
-				ok = false;
-				return retryAfter(globalConfig.getReconnectIntervalSeconds() * kj::SECONDS);
-			}
-		);
-	}
-	
-	capnp::Capability::Client connect() {
-		auto connectRequest = networkInterface.connectRequest();
-		connectRequest.setUrl(config.getUrl());
-		
-		auto conn = connectRequest.sendForPipeline().getConnection();
-		return conn.getRemoteRequest().sendForPipeline().getRemote();
-	}
-	
-	Maybe<capnp::Capability::Client> getTarget(uint16_t methodId) override {
-		if(!ok)
-			return nullptr;
-		
-		return connect();
-	}
-	
-	void buildStatus(kj::Vector<LoadBalancer::StatusInfo::Backend>& out) override {
-		using B = LoadBalancer::StatusInfo::Backend;
-		B result;
-		result.url = kj::heapString(config.hasName() ? config.getName() : config.getUrl());
-		
-		if(ok) {
-			result.status = B::OK;
-		} else {
-			result.status = B::DISCONNECTED;
-		}
-		
-		out.add(mv(result));
-	}
-};
-
 struct Rule : public Backend {
 	LoadBalancerConfig::Rule::Reader ruleConfig;
 	
@@ -274,8 +204,6 @@ struct Rule : public Backend {
 			impl = kj::heap<Pool>(globalConfig, mv(ni), rule.getPool());
 		} else if(rule.isBackend()) {
 			impl = kj::heap<BackendImpl>(globalConfig, mv(ni), rule.getBackend());
-		} else if(rule.isExternallyBalanced()) {
-			impl = kj::heap<ExternallyBalanced>(globalConfig, mv(ni), rule.getExternallyBalanced());
 		} else {
 			KJ_FAIL_REQUIRE("Unknown rule type", rule);
 		}

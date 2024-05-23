@@ -75,6 +75,7 @@ struct LoadBalancerConfig {
 	struct Backend {
 		url @0 : Text;
 		name @1 : Text;
+		persistent @2 : Bool = false;
 	}
 	
 	struct Rule {
@@ -87,7 +88,6 @@ struct LoadBalancerConfig {
 		union {
 			backend @3 : Backend;
 			pool @4 : List(Backend);
-			externallyBalanced @5 : Backend;
 		}
 	}
 	
