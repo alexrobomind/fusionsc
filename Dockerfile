@@ -1,4 +1,4 @@
-FROM alpine as build
+FROM alpine AS build
 
 RUN apk add g++ clang botan yaml-cpp catch2 eigen libssh2 sqlite zlib
 
