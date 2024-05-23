@@ -1,10 +1,7 @@
-FROM python:3.12 AS fusionsc-spack
-WORKDIR /spack
+FROM alpine as build
 
-# Install spack
-RUN git clone https://github.com/spack/spack.git --depth 1 .
-ENV PATH /spack/bin:$PATH
-RUN spack bootstrap now
+RUN apk add g++ clang botan yaml-cpp catch2 eigen libssh2 sqlite zlib
 
-FROM fusionsc-spack AS fusionsc-deps
-RUN spack install hdf5+hl+cxx~mpi libssh2 ninja cmake yaml-spackcpp catch2 eigen botan libssh2 sqlite zlib
+COPY . /src
+WORKDIR /build
+RUN cmake --DCMAKE_BUILD_TYPE=Release -DCMAKE_PREF_VENDORED=Off /src
