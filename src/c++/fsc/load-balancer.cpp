@@ -198,44 +198,53 @@ struct ExternallyBalanced : public Backend {
 	}
 	
 	Promise<void> heartbeat() {
-		KJ_IF_MAYBE(pTarget, getTarget(0)) {
-			auto heartbeat = pTarget -> typelessRequest(0, 0, nullptr, capnp::Capability::Client::CallHints());
-			
-			return heartbeat.send().ignoreResult()
-			.catch_([this](kj::Exception&& e) -> Promise<void> {
-				switch(e.getType()){
-					// This is what we expect
-					case kj::Exception::Type::UNIMPLEMENTED:
-						return READY_NOW;
-					
-					default:
-						return mv(e);
-				}
-			})
-			.then(
-				// Connection is OK
-				[this]() {
-					ok = true;
-					return retryAfter(globalConfig.getHeartbeatIntervalSeconds() * kj::SECONDS);
-				},
-				
-				// Heartbeat call failed
-				[this](kj::Exception error) {
-					ok = false;
-					return retryAfter(globalConfig.getHeartbeatIntervalSeconds() * kj::SECONDS);
-				}
-			);
-		}
+		auto heartbeat = connect().typelessRequest(0, 0, nullptr, capnp::Capability::Client::CallHints());	
 		
-		KJ_FAIL_REQUIRE("Internal error");
+		return heartbeat.send().ignoreResult()
+		.catch_([this](kj::Exception&& e) -> Promise<void> {
+			switch(e.getType()){
+				// This is what we expect
+				case kj::Exception::Type::UNIMPLEMENTED:
+					return READY_NOW;
+				
+				default:
+					return mv(e);
+			}
+		})
+		.then(
+			// Connection is OK
+			[this]() {
+				if(!ok) {
+					KJ_LOG(INFO, "Connection to backend successful", config.getUrl());
+				}
+				ok = true;
+				return retryAfter(globalConfig.getHeartbeatIntervalSeconds() * kj::SECONDS);
+			},
+			
+			// Heartbeat call failed
+			[this](kj::Exception error) {
+				if(ok) {
+					KJ_LOG(WARNING, "Heart-beat fail on backend ...", config.getUrl(), error);
+				}
+				ok = false;
+				return retryAfter(globalConfig.getReconnectIntervalSeconds() * kj::SECONDS);
+			}
+		);
 	}
 	
-	Maybe<capnp::Capability::Client> getTarget(uint16_t methodId) override {
+	capnp::Capability::Client connect() {
 		auto connectRequest = networkInterface.connectRequest();
 		connectRequest.setUrl(config.getUrl());
 		
 		auto conn = connectRequest.sendForPipeline().getConnection();
 		return conn.getRemoteRequest().sendForPipeline().getRemote();
+	}
+	
+	Maybe<capnp::Capability::Client> getTarget(uint16_t methodId) override {
+		if(!ok)
+			return nullptr;
+		
+		return connect();
 	}
 	
 	void buildStatus(kj::Vector<LoadBalancer::StatusInfo::Backend>& out) override {
@@ -365,7 +374,7 @@ struct LoadBalancerImpl : public capnp::Capability::Server, public kj::Refcounte
 			return *pTarget;
 		}
 		
-		KJ_FAIL_REQUIRE("No matching load-balancing rule for method", methodId);
+		KJ_FAIL_REQUIRE("No suitable backend for method was available", methodId);
 	}
 	
 	DispatchCallResult dispatchCall(
