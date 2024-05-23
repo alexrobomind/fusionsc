@@ -53,14 +53,14 @@ struct BackendImpl : public Backend {
 			// Perform a heartbeat request to a bogus interface
 			auto heartbeat = pTarget -> typelessRequest(0, 0, nullptr, capnp::Capability::Client::CallHints());
 			return heartbeat.send().ignoreResult()
-			.catch_([this](kj::Exception&& e) {
-				switch(e.getType()) {
+			.catch_([this](kj::Exception&& e) -> Promise<void> {
+				switch(e.getType()){
 					// This is what we expect
 					case kj::Exception::Type::UNIMPLEMENTED:
-						return;
+						return READY_NOW;
 					
 					default:
-						kj::throwFatalException(mv(e));
+						return mv(e);
 				}
 			})
 			.then(
@@ -176,15 +176,101 @@ struct Pool : public Backend {
 	}
 };
 
+struct ExternallyBalanced : public Backend {
+	LoadBalancerConfig::Reader globalConfig;
+	LoadBalancerConfig::Backend::Reader config;
+	NetworkInterface::Client networkInterface;
+	
+	bool ok = true;
+	Promise<void> maintenanceTask = READY_NOW;
+	
+	ExternallyBalanced(LoadBalancerConfig::Reader gConf, NetworkInterface::Client ni, LoadBalancerConfig::Backend::Reader lConf) :
+		globalConfig(gConf), config(lConf), networkInterface(mv(ni))
+	{
+		maintenanceTask = heartbeat().eagerlyEvaluate([this](kj::Exception error) {
+			KJ_LOG(ERROR, "Maintenance task for backend failed", config.getUrl(), error);
+		});
+	}
+	
+	Promise<void> retryAfter(kj::Duration time) {
+		return getActiveThread().timer().afterDelay(time)
+		.then([this]() { return heartbeat(); });
+	}
+	
+	Promise<void> heartbeat() {
+		KJ_IF_MAYBE(pTarget, getTarget(0)) {
+			auto heartbeat = pTarget -> typelessRequest(0, 0, nullptr, capnp::Capability::Client::CallHints());
+			
+			return heartbeat.send().ignoreResult()
+			.catch_([this](kj::Exception&& e) -> Promise<void> {
+				switch(e.getType()){
+					// This is what we expect
+					case kj::Exception::Type::UNIMPLEMENTED:
+						return READY_NOW;
+					
+					default:
+						return mv(e);
+				}
+			})
+			.then(
+				// Connection is OK
+				[this]() {
+					ok = true;
+					return retryAfter(globalConfig.getHeartbeatIntervalSeconds() * kj::SECONDS);
+				},
+				
+				// Heartbeat call failed
+				[this](kj::Exception error) {
+					ok = false;
+					return retryAfter(globalConfig.getHeartbeatIntervalSeconds() * kj::SECONDS);
+				}
+			);
+		}
+		
+		KJ_FAIL_REQUIRE("Internal error");
+	}
+	
+	Maybe<capnp::Capability::Client> getTarget(uint16_t methodId) override {
+		auto connectRequest = networkInterface.connectRequest();
+		connectRequest.setUrl(config.getUrl());
+		
+		auto conn = connectRequest.sendForPipeline().getConnection();
+		return conn.getRemoteRequest().sendForPipeline().getRemote();
+	}
+	
+	void buildStatus(kj::Vector<LoadBalancer::StatusInfo::Backend>& out) override {
+		using B = LoadBalancer::StatusInfo::Backend;
+		B result;
+		result.url = kj::heapString(config.hasName() ? config.getName() : config.getUrl());
+		
+		if(ok) {
+			result.status = B::OK;
+		} else {
+			result.status = B::DISCONNECTED;
+		}
+		
+		out.add(mv(result));
+	}
+};
+
 struct Rule : public Backend {
 	LoadBalancerConfig::Rule::Reader ruleConfig;
 	
-	Pool pool;
+	Own<Backend> impl;
 	
-	Rule(LoadBalancerConfig::Reader globalConfig, NetworkInterface::Client ni, LoadBalancerConfig::Rule::Reader config) :
-		ruleConfig(config),
-		pool(globalConfig, mv(ni), config.getPool())
-	{}
+	Rule(LoadBalancerConfig::Reader globalConfig, NetworkInterface::Client ni, LoadBalancerConfig::Rule::Reader rule) :
+		ruleConfig(rule)
+	{
+		if(rule.isPool()) {
+			impl = kj::heap<Pool>(globalConfig, mv(ni), rule.getPool());
+		} else if(rule.isBackend()) {
+			impl = kj::heap<BackendImpl>(globalConfig, mv(ni), rule.getBackend());
+		} else if(rule.isExternallyBalanced()) {
+			impl = kj::heap<ExternallyBalanced>(globalConfig, mv(ni), rule.getExternallyBalanced());
+		} else {
+			KJ_FAIL_REQUIRE("Unknown rule type", rule);
+		}
+	}
 	
 	Maybe<capnp::Capability::Client> getTarget(uint16_t methodId) override {
 		auto matches = ruleConfig.getMatches();
@@ -213,11 +299,11 @@ struct Rule : public Backend {
 			}
 		}
 		
-		return pool.getTarget(methodId);
+		return impl -> getTarget(methodId);
 	}
 	
 	void buildStatus(kj::Vector<LoadBalancer::StatusInfo::Backend>& out) override {
-		pool.buildStatus(out);
+		impl -> buildStatus(out);
 	}
 };
 

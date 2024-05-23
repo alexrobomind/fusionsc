@@ -176,6 +176,9 @@ struct StreamNetworkConnection : public capnp::BootstrapFactory<capnp::rpc::twop
 		constructCommon();
 	}
 	
+	~StreamNetworkConnection() {
+	}
+	
 	Own<MembranePolicy> membranePolicy() {
 		return kj::refcounted<ConnectionMembrane>(kj::addRef(*this), canceler.wrap(Promise<void>(NEVER_DONE)));
 	}
@@ -183,29 +186,16 @@ struct StreamNetworkConnection : public capnp::BootstrapFactory<capnp::rpc::twop
 	void constructCommon() {
 		rpcSystem.emplace(static_cast<capnp::TwoPartyVatNetworkBase&>(*vatNetwork), *this);
 		
-		localDisconnectHandler = vatNetwork -> onDisconnect()
+		disconnectHandler = vatNetwork -> onDisconnect()
 		.then([this]() {
-			KJ_IF_MAYBE(pDontCare, rpcSystem) {
-				rpcSystem = nullptr;
-			}
+			disconnect(KJ_EXCEPTION(DISCONNECTED, "Connection closed remotely"));
+			stream = nullptr;
 		}).eagerlyEvaluate(nullptr);
-		
-		auto onDC = vatNetwork -> onDisconnect();
-		onDC = onDC.then([stream = mv(stream)]() mutable -> Promise<void> {
-			if(stream.is<Own<MessageStream>>()) {
-				auto result = stream.get<Own<MessageStream>>() -> end();
-				return result.attach(mv(stream));
-			}
-			return READY_NOW;
-		}).attach(mv(vatNetwork));
-		getActiveThread().detach(mv(onDC));
 	}
 	
 	void disconnect(kj::Exception e) {
 		canceler.cancel(mv(e));
 		rpcSystem = nullptr;
-		
-		// stream = nullptr;
 	}
 	
 	// Refcounting & remote interface access
@@ -249,7 +239,8 @@ struct StreamNetworkConnection : public capnp::BootstrapFactory<capnp::rpc::twop
 	kj::Function<Capability::Client()> factory;
 	Side peerSide;
 	Maybe<capnp::RpcSystem<VatId>> rpcSystem;
-	Promise<void> localDisconnectHandler = nullptr;
+	
+	Promise<void> disconnectHandler = nullptr;
 	
 	kj::Canceler canceler;
 };
@@ -395,11 +386,7 @@ struct HttpListener : public kj::HttpService {
 		}
 		
 		auto nc = kj::refcounted<StreamNetworkConnection>(mv(msgStream), mv(acceptFunc), Side::SERVER, Side::CLIENT);
-		
-		KJ_IF_MAYBE(pRPC, nc -> rpcSystem) {
-			return pRPC -> run().attach(mv(nc));
-		}
-		return READY_NOW;
+		return nc -> vatNetwork -> onDisconnect().attach(kj::addRef(*nc));
 	}
 };
 

@@ -84,7 +84,11 @@ struct LoadBalancerConfig {
 			allExcept @2 : List(UInt16);
 		}
 		
-		pool @3 : List(Backend);
+		union {
+			backend @3 : Backend;
+			pool @4 : List(Backend);
+			externallyBalanced @5 : Backend;
+		}
 	}
 	
 	# backends @0 : List(Backend);
