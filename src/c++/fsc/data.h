@@ -375,6 +375,7 @@ public:
 	
 private:
 	LocalDataRef(Own<internal::LocalDataRefImpl> backend, capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>>& wrapper);
+	LocalDataRef(capnp::Capability::Client capView, Own<internal::LocalDataRefImpl> backend);
 
 	template<typename T2>	
 	LocalDataRef(LocalDataRef<T2>& other);

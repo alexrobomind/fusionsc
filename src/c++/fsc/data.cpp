@@ -454,7 +454,10 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 		
 		backend->entry = mv(dataEntry);
 		
-		return ResultType(mv(backend), service -> serverSet);
+		if(recursive)
+			return ResultType(mv(backend), service -> serverSet);
+		else
+			return ResultType(this -> src, mv(backend));
 	}
 };
 

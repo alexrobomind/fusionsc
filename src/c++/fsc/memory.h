@@ -149,8 +149,13 @@ struct AtomicShared {
 	AtomicShared<T>& operator=(AtomicShared<T>&& other) = default;
 	
 	T& get() { return *(impl -> payload); }
+	const T& get() const { return *(impl -> payload); }
+	
 	T& operator*() { return get(); }
 	T* operator->() { return &get(); }
+	
+	const T& operator*() const { return get(); }
+	const T* operator->() const { return &get(); }
 	
 	// no attach() since we assume Impl to be cross-thread and therefore
 	// unsafe to mutate

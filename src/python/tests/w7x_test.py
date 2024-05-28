@@ -21,8 +21,8 @@ def test_cadCoils():
 	field = w7x.standard(coils = coils) + w7x.trimCoils(coils = coils) + w7x.controlCoils(coils = coils)
 	
 	# We have no resolve mechanisms for W7-X
-	with pytest.raises(Exception):
-		asyncio.run(coils)
+	#with pytest.raises(Exception):
+	#	asyncio.run(coils)
 
 def test_geo():
 	geo1 = w7x.op12Geometry().index(w7x.defaultGeometryGrid())

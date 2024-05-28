@@ -496,6 +496,13 @@ LocalDataRef<T>::LocalDataRef(Own<internal::LocalDataRefImpl> nbackend, capnp::C
 	backend(nbackend->addRef())
 {}
 
+// For some reason using capnp::Capability::Client here causes MSVC to parse it as a parameter name...
+template<typename T>
+LocalDataRef<T>::LocalDataRef(capnp::Capability::Client capView, Own<internal::LocalDataRefImpl> nbackend) :
+	capnp::Capability::Client(mv(capView)),
+	backend(mv(nbackend))
+{}
+
 template<typename T>
 template<typename T2>	
 LocalDataRef<T>::LocalDataRef(LocalDataRef<T2>& other) :

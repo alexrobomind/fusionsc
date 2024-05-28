@@ -162,7 +162,7 @@ struct Pool : public Backend {
 		backends = backendsBuilder.finish();
 	}
 	
-	Maybe<capnp::Capability::Client> getTarget(uint64_t schemaId, uint16_t methodId) {
+	Maybe<capnp::Capability::Client> getTarget(uint64_t schemaId, uint16_t methodId) override {
 		for(auto retries : kj::indices(backends)) {				
 			// Adjust counter
 			if(counter > backends.size()) {
