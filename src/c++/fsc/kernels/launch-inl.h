@@ -70,10 +70,11 @@ struct KernelLauncher<CPUDevice> {
 		AtomicShared<Context> ctx = kj::heap<Context>();
 		AtomicShared<Tuple<Params...>> sharedParams = kj::heap<Tuple<Params...>>(kj::tuple(kj::fwd<Params>(params)...));
 		
-		getActiveThread().detach(onCancel.catch_([ctx](kj::Exception&&) { ctx -> active = false; }));
+		onCancel = onCancel.attach(kj::defer([ctx]() { ctx -> active = false; }));
+		
+		// getActiveThread().detach(onCancel.catch_());
 		
 		auto func = [ctx, sharedParams](Eigen::Index start, Eigen::Index end) mutable {
-			KJ_DBG(ctx -> active.load());
 			if(!ctx -> active.load())
 				return;
 			
@@ -95,7 +96,6 @@ struct KernelLauncher<CPUDevice> {
 		};
 		
 		auto whenDone = [fulfiller, ctx]() mutable {
-			
 			auto locked = ctx -> exception.lockExclusive();
 			
 			KJ_IF_MAYBE(pErr, *locked) {
@@ -106,7 +106,7 @@ struct KernelLauncher<CPUDevice> {
 		};
 		device.eigenDevice().parallelForAsync(n, cost, func, whenDone);
 		
-		return mv(paf.promise);
+		return paf.promise.attach(mv(onCancel));
 	}
 };
 

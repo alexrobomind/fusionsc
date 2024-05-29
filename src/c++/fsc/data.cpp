@@ -1222,7 +1222,7 @@ struct Proxy : public capnp::Capability::Server {
 		request.set(context.getParams());
 		context.releaseParams();
 		
-		return { context.tailCall(mv(request)), false, false };
+		return { context.tailCall(mv(request)), false, true };
 	}
 };
 

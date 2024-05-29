@@ -114,7 +114,6 @@ ThreadContext::~ThreadContext() {
 	// We need to turn the event loop so that we can make sure the cancellations
 	// have propagated.
 	waitScope().poll();
-	
 	drain().wait(waitScope());
 	
 	current = nullptr;
