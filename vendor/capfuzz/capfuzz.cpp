@@ -422,8 +422,8 @@ private:
 		size_t source = input.read(builders.size() + 1);
 		if(source < builders.size()) {
 			builders[source] -> fillStruct(data, *this);
+			return;
 		}
-		source -= 1;
 		
 		auto setField = [&data, this](capnp::StructSchema::Field field) {
 			if(field.getProto().isGroup()) {
