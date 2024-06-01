@@ -88,7 +88,8 @@ namespace fsc {
 		}
 		
 		KJ_IF_MAYBE(pExc, locked -> isClosed) {
-			kj::throwFatalException(cp(*pExc));
+			//kj::throwFatalException(cp(*pExc));
+			return cp(*pExc);
 		}
 		
 		auto paf = kj::newPromiseAndCrossThreadFulfiller<T>();

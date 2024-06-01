@@ -9,7 +9,7 @@ namespace {
 
 struct Backend {
 	virtual ~Backend() noexcept(false) {};
-	virtual Maybe<capnp::Capability::Client> getTarget(uint16_t methodId) = 0;
+	virtual Maybe<capnp::Capability::Client> getTarget(uint64_t schemaId, uint16_t methodId) = 0;
 	virtual void buildStatus(kj::Vector<LoadBalancer::StatusInfo::Backend>& out) = 0;
 };
 
@@ -124,7 +124,7 @@ struct BackendImpl : public Backend {
 		return connectRequest.sendForPipeline().getConnection().getRemoteRequest().sendForPipeline().getRemote();
 	}
 	
-	Maybe<capnp::Capability::Client> getTarget(uint16_t) override {
+	Maybe<capnp::Capability::Client> getTarget(uint64_t schemaId, uint16_t methodId) override {
 		if(ok)
 			return connect();
 		
@@ -162,7 +162,7 @@ struct Pool : public Backend {
 		backends = backendsBuilder.finish();
 	}
 	
-	Maybe<capnp::Capability::Client> getTarget(uint16_t methodId) {
+	Maybe<capnp::Capability::Client> getTarget(uint64_t schemaId, uint16_t methodId) override {
 		for(auto retries : kj::indices(backends)) {				
 			// Adjust counter
 			if(counter > backends.size()) {
@@ -174,7 +174,7 @@ struct Pool : public Backend {
 			++counter;
 			
 			index %= backends.size();				
-			auto maybeResult = backends[index].getTarget(methodId);
+			auto maybeResult = backends[index].getTarget(schemaId, methodId);
 			
 			KJ_IF_MAYBE(pResult, maybeResult) {
 				return *pResult;
@@ -209,34 +209,50 @@ struct Rule : public Backend {
 		}
 	}
 	
-	Maybe<capnp::Capability::Client> getTarget(uint16_t methodId) override {
+	Maybe<capnp::Capability::Client> getTarget(uint64_t schemaId, uint16_t methodId) override {
+		auto check = [&](LoadBalancerConfig::Rule::MethodSpec::Reader spec) {
+			if(spec.getInterface() != 0 && spec.getInterface() != schemaId)
+				return false;
+			
+			for(auto m : spec.getMethods()) {
+				if(m == methodId) return true;
+			}
+			
+			return false;
+		};
+		
 		auto matches = ruleConfig.getMatches();
 		switch(matches.which()) {
 			case LoadBalancerConfig::Rule::Matches::ALL:
-				break;
+				goto match;
+
+			case LoadBalancerConfig::Rule::Matches::ONLY:
+				if(check(matches.getOnly()))
+					goto match;
+				goto no_match;
 			
 			case LoadBalancerConfig::Rule::Matches::ANY_OF: {
-				bool found = false;
-				for(auto candidate : matches.getAnyOf()) {
-					if(methodId == candidate)
-						found = true;
+				for(auto spec : matches.getAnyOf()) {
+					if(check(spec))
+						goto match;
 				}
-				
-				if(!found)
-					return nullptr;
-				break;
+				goto no_match;
 			}
 			
 			case LoadBalancerConfig::Rule::Matches::ALL_EXCEPT: {
-				for(auto candidate : matches.getAllExcept()) {
-					if(methodId == candidate)
-						return nullptr;
+				for(auto spec : matches.getAllExcept()) {
+					if(check(spec))
+						goto no_match;
 				}
-				break;
+				goto match;
 			}
 		}
+				
+		no_match:
+			return nullptr;
 		
-		return impl -> getTarget(methodId);
+		match:
+			return impl -> getTarget(schemaId, methodId);
 	}
 	
 	void buildStatus(kj::Vector<LoadBalancer::StatusInfo::Backend>& out) override {
@@ -255,9 +271,9 @@ struct RuleSet : public Backend {
 		rules = rulesBuilder.finish();
 	}
 	
-	Maybe<capnp::Capability::Client> getTarget(uint16_t methodId) override {
+	Maybe<capnp::Capability::Client> getTarget(uint64_t schemaId, uint16_t methodId) override {
 		for(auto& rule : rules) {
-			KJ_IF_MAYBE(pResult, rule.getTarget(methodId)) {
+			KJ_IF_MAYBE(pResult, rule.getTarget(schemaId, methodId)) {
 				return *pResult;
 			}
 		}
@@ -297,8 +313,8 @@ struct LoadBalancerImpl : public capnp::Capability::Server, public kj::Refcounte
 		return Own<capnp::Capability::Server>(kj::addRef(*this));
 	}
 	
-	capnp::Capability::Client selectCallTarget(uint16_t methodId) {
-		KJ_IF_MAYBE(pTarget, ruleSet.getTarget(methodId)) {
+	capnp::Capability::Client selectCallTarget(uint64_t schemaId, uint16_t methodId) {
+		KJ_IF_MAYBE(pTarget, ruleSet.getTarget(schemaId, methodId)) {
 			return *pTarget;
 		}
 		
@@ -312,7 +328,7 @@ struct LoadBalancerImpl : public capnp::Capability::Server, public kj::Refcounte
 		auto params = context.getParams();
 		capnp::MessageSize size = params.targetSize();
 		
-		auto tailRequest = selectCallTarget(methodId)
+		auto tailRequest = selectCallTarget(interfaceId, methodId)
 			.typelessRequest(interfaceId, methodId, size, capnp::Capability::Client::CallHints());
 		tailRequest.set(params);
 		

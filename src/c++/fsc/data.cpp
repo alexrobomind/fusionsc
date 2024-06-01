@@ -454,7 +454,10 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 		
 		backend->entry = mv(dataEntry);
 		
-		return ResultType(mv(backend), service -> serverSet);
+		if(recursive)
+			return ResultType(mv(backend), service -> serverSet);
+		else
+			return ResultType(this -> src, mv(backend));
 	}
 };
 
@@ -1219,7 +1222,7 @@ struct Proxy : public capnp::Capability::Server {
 		request.set(context.getParams());
 		context.releaseParams();
 		
-		return { context.tailCall(mv(request)), false, false };
+		return { context.tailCall(mv(request)), false, true };
 	}
 };
 

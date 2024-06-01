@@ -44,12 +44,18 @@ TEST_CASE("http-connect") {
 	auto openPort = serveRequest.send().wait(ws).getOpenPort();
 	auto port = openPort.getInfoRequest().send().wait(ws).getPort();
 	
+	KJ_DBG(port);
+	
 	auto connReq = lr.connectRequest();
 	connReq.setUrl(kj::str("http://localhost:", port));
 	auto connection = connReq.send().wait(ws).getConnection();
 	
+	KJ_DBG("Connection established");
+	
 	auto remote = connection.getRemoteRequest().send().wait(ws).getRemote();
-	auto copy = ds.download(remote.castAs<DataRef<capnp::Data>>()).wait(ws);
+	auto copy = ds.download(remote.castAs<DataRef<capnp::Data>>(), true).wait(ws);
+	
+	KJ_DBG("Copy downloaded");
 	
 	KJ_REQUIRE(copy.get() == data);
 	

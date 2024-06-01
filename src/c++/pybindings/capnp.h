@@ -729,6 +729,10 @@ struct MethodInfo {
 	inline capnp::StructSchema resultType() {
 		return method.getResultType();
 	}
+	
+	inline uint16_t getOrdinal() {
+		return method.getOrdinal();
+	}
 };
 
 DynamicValueBuilder castBuilder(DynamicValueBuilder, capnp::Type);

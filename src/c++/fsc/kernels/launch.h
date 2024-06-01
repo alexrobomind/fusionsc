@@ -31,6 +31,8 @@ namespace fsc {
 		# endif
 	}
 	
+	
+	
 	/**
 	 * Helper to launch an int-based kernel on a specific device. Currently supports thread-pool- and GPU devices.
 	 * \ingroup kernelSupport
@@ -44,7 +46,7 @@ namespace fsc {
 		 *  The kernel will run asynchronously. It is guaranteed that it will not start before this function has returned.
 		 */
 		template<typename Kernel, Kernel f, typename... Params>
-		static Promise<void> launch(Device& device, size_t n, Eigen::TensorOpCost& cost, Promise<void> prerequisite, Params... params) {
+		static Promise<void> launch(Device& device, size_t n, Eigen::TensorOpCost& cost, Promise<void> onCancel, Params... params) {
 			static_assert(sizeof(Device) == 0, "Kernel launcher not implemented / enabled for this device.");
 			return READY_NOW;
 		}

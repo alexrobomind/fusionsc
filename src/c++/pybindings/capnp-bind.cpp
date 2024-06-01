@@ -531,6 +531,9 @@ void bindType() {
 				
 		return defaultLoader.capnpLoader.get(self.getProto().getId(), brandEx);
 	});
+	schema.def_property_readonly("id_", [](capnp::Schema& self) {
+		return self.getProto().getId();
+	});
 	
 	ClassBinding<capnp::StructSchema, capnp::Schema> structSchema("StructSchema");
 	structSchema
@@ -629,6 +632,7 @@ void bindType() {
 	ClassBinding<MethodInfo>("_MethodInfo")
 		.def_property_readonly("Params", &MethodInfo::paramType)
 		.def_property_readonly("Results", &MethodInfo::resultType)
+		.def_property_readonly("ordinal", &MethodInfo::getOrdinal)
 	;
 	
 	/*py::implicitly_convertible<capnp::StructSchema, capnp::Type>();

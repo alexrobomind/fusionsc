@@ -14,28 +14,28 @@ namespace internal {
 					
 		using givemeatype = int[];
 		
+		auto paf = kj::newPromiseAndFulfiller<void>();
+		
 		Promise<void> result = prerequisite.then([&device, mappers]() mutable {
 			// Update device memory
 			// Note: This is an extremely convoluted looking way of calling updateDevice on all tuple members
 			// C++ 17 has a neater way to do this, but we don't wanna require it just yet
 			(void) (givemeatype { 0, (kj::get<i>(*mappers) -> updateDevice(), 0)... });
-			
 			return device.barrier();
 		})
-		.then([&device, cost, n, mappers]() mutable {
+		.then([&device, cost, n, mappers, onCancel = mv(paf.promise)]() mutable {
 			// Call kernel
-			Promise<void> promise = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params>...>(device, n, cost, kj::get<i>(*mappers) -> get()...);
+			Promise<void> promise = KernelLauncher<Device>::template launch<Kernel, f, DeviceType<Params>...>(device, n, cost, mv(onCancel), kj::get<i>(*mappers) -> get()...);
 			promise = promise.attach(device.addRef(), kj::get<i>(*mappers) -> addRef()...);
-			return getActiveThread().uncancelable(mv(promise));
+			return promise;
 		}).then([&device, mappers]() mutable {
 			// Update host memory
 			(void) (givemeatype { 0, (kj::get<i>(*mappers) -> updateHost(), 0)... });
-			
 			return device.barrier();
 		})
 		.attach(mappers.x(), device.addRef());
 		
-		return getActiveThread().uncancelable(mv(result));
+		return getActiveThread().uncancelable(mv(result)).attach(mv(paf.fulfiller));
 	}
 }
 
@@ -59,19 +59,29 @@ inline void potentiallySynchronize<Eigen::GpuDevice>(Eigen::GpuDevice& d) {
 template<>
 struct KernelLauncher<CPUDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
-	static Promise<void> launch(CPUDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+	static Promise<void> launch(CPUDevice& device, size_t n, const Eigen::TensorOpCost& cost, Promise<void> onCancel, Params... params) {
 		auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
 		AtomicShared<kj::CrossThreadPromiseFulfiller<void>> fulfiller = mv(paf.fulfiller);
 		
 		struct Context {
 			kj::MutexGuarded<Maybe<kj::Exception>> exception;
+			mutable std::atomic<bool> active = true;
 		};
 		AtomicShared<Context> ctx = kj::heap<Context>();
+		AtomicShared<Tuple<Params...>> sharedParams = kj::heap<Tuple<Params...>>(kj::tuple(kj::fwd<Params>(params)...));
 		
-		auto func = [ctx, params...](Eigen::Index start, Eigen::Index end) mutable {
-			auto maybeException = kj::runCatchingExceptions([params..., start, end]() mutable {
+		onCancel = onCancel.attach(kj::defer([ctx]() { ctx -> active = false; }));
+		
+		// getActiveThread().detach(onCancel.catch_());
+		
+		auto func = [ctx, sharedParams](Eigen::Index start, Eigen::Index end) mutable {
+			if(!ctx -> active.load())
+				return;
+			
+			auto maybeException = kj::runCatchingExceptions([&sharedParams, start, end]() mutable {
 				for(Eigen::Index i = start; i < end; ++i)
-					f(i, params...);
+					//f(i, params...);
+					kj::apply(f, i, *sharedParams);
 			});
 			
 			// If we failed, transfer exception
@@ -96,14 +106,17 @@ struct KernelLauncher<CPUDevice> {
 		};
 		device.eigenDevice().parallelForAsync(n, cost, func, whenDone);
 		
-		return mv(paf.promise);
+		return paf.promise.attach(mv(onCancel));
 	}
 };
 
 template<>
 struct KernelLauncher<LoopDevice> {
 	template<typename Kernel, Kernel f, typename... Params>
-	static Promise<void> launch(LoopDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+	static Promise<void> launch(LoopDevice& device, size_t n, const Eigen::TensorOpCost& cost, Promise<void> onCancel, Params... params) {
+		// Ignore cancelation
+		(void) onCancel;
+		
 		for(size_t i : kj::range(0, n)) {
 			f(i, params...);
 		}
@@ -121,7 +134,10 @@ struct KernelLauncher<LoopDevice> {
 template<>
 struct KernelLauncher<Eigen::GpuDevice> {
 	template<typename Kernel, Kernel func, typename... Params>
-	static Promise<void> launch(Eigen::GpuDevice& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+	static Promise<void> launch(Eigen::GpuDevice& device, size_t n, const Eigen::TensorOpCost& cost, Promise<void> onCancel, Params... params) {
+		// Ignore cancelation
+		(void) onCancel;
+		
 		internal::gpuLaunch<Kernel, func, Params...>(device, n, params...);
 		
 		auto streamStatus = cudaStreamQuery(device.stream());
@@ -147,10 +163,10 @@ struct KernelLauncher<Eigen::GpuDevice> {
 template<>
 struct KernelLauncher<DeviceBase> {
 	template<typename Kernel, Kernel func, typename... Params>
-	static Promise<void> launch(DeviceBase& device, size_t n, const Eigen::TensorOpCost& cost, Params... params) {
+	static Promise<void> launch(DeviceBase& device, size_t n, const Eigen::TensorOpCost& cost, Promise<void> onCancel, Params... params) {
 		#define FSC_HANDLE_TYPE(DevType) \
 			if(device.brand == &DevType::BRAND) \
-				return KernelLauncher<DevType>::launch<Kernel, func, Params...>(static_cast<DevType&>(device), n, cost, fwd<Params>(params)...);
+				return KernelLauncher<DevType>::launch<Kernel, func, Params...>(static_cast<DevType&>(device), n, cost, mv(onCancel), fwd<Params>(params)...);
 				
 		FSC_HANDLE_TYPE(CPUDevice);
 		FSC_HANDLE_TYPE(LoopDevice);

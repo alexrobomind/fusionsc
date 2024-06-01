@@ -10,6 +10,27 @@
 #include "tensor.h"
 
 namespace fsc {
+	
+TEST_CASE("build-field-cancel") {
+	auto field = WIRE_FIELD.get();
+	
+	Library l = newLibrary();
+	LibraryThread lt = l -> newThread();
+	auto& ws = lt->waitScope();
+		
+	auto grid = TEST_GRID.get();
+	auto session = newFieldCalculator(CPUDevice::create(CPUDevice::estimateNumThreads()));
+	
+	auto computeRequest = session.computeRequest();
+	computeRequest.setField(WIRE_FIELD.get());
+	computeRequest.setGrid(grid);
+	
+	{
+		auto comp = computeRequest.sendForPipeline().getComputedField();
+		
+		ws.poll(10);
+	}
+}
 
 TEST_CASE("build-field") {
 	auto field = WIRE_FIELD.get();

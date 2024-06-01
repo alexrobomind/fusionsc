@@ -79,15 +79,21 @@ struct LoadBalancerConfig {
 	}
 	
 	struct Rule {
+		struct MethodSpec {
+			interface @0 : UInt64;
+			methods @1 : List(UInt16);
+		}
+		
 		matches : union {
 			all @0 : Void;
-			anyOf @1 : List(UInt16);
-			allExcept @2 : List(UInt16);
+			only @1 : MethodSpec;
+			anyOf @2 : List(MethodSpec);
+			allExcept @3 : List(MethodSpec);
 		}
 		
 		union {
-			backend @3 : Backend;
-			pool @4 : List(Backend);
+			backend @4 : Backend;
+			pool @5 : List(Backend);
 		}
 	}
 	

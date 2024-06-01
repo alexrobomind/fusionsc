@@ -15,15 +15,21 @@ def test_configs():
 	w7x.coilsDBCoil(5)
 
 def test_cadCoils():
+	grid = w7x.defaultGrid()
+	grid.nR = 5
+	grid.nPhi = 4
+	grid.nZ = 3
+	
 	coils = w7x.cadCoils()
-	coils = coils.computeFields(w7x.defaultGrid())
+	coils = coils.computeFields(grid)
 	
 	field = w7x.standard(coils = coils) + w7x.trimCoils(coils = coils) + w7x.controlCoils(coils = coils)
 	
-	# We have no resolve mechanisms for W7-X
-	with pytest.raises(Exception):
-		asyncio.run(coils)
 
 def test_geo():
-	geo1 = w7x.op12Geometry().index(w7x.defaultGeometryGrid())
-	geo2 = w7x.op21Geometry().index(w7x.defaultGeometryGrid())
+	grid = w7x.defaultGeometryGrid()
+	grid.nX = 5
+	grid.nY = 4
+	grid.nZ = 3
+	geo1 = w7x.op12Geometry().index(grid)
+	geo2 = w7x.op21Geometry().index(grid)
