@@ -60,13 +60,6 @@ FieldResolver::Client newCache(MagneticField::Reader field, ComputedField::Reade
  */
 void simpleTokamak(MagneticField::Builder output, double rMajor = 5.5, double rMinor = 1.5, unsigned int nCoils = 25, double Ip = 0.3);
 
-/**
- *  Sets the cache key to a copy of the canonicalized field
- *
- * Returns: true if the cache key could be calculated, false if not (e.g. because of nested DataRefs)
- */
-bool setCacheKey(MagneticField::Builder field);
-
 // Inline Implementation
 
 }

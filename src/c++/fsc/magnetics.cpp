@@ -806,6 +806,38 @@ struct CalculationSession : public FieldCalculator::Server {
 			}
 			case MagneticField::CACHED: {
 				auto cached = node.getCached();
+				
+				// Check if all points fit
+				auto hostPoints = calculator.points -> getHost();
+				auto nPoints = hostPoints.dimension(0);
+				
+				ToroidalGridStruct grid;
+				try {
+					constexpr unsigned int GRID_VERSION = 7;
+					grid = readGrid(cached.getComputed().getGrid(), GRID_VERSION);
+				} catch(kj::Exception&) {
+					goto recalculate;
+				}
+				
+				for(auto iPoint : kj::range(0, nPoints)) {
+					double x = hostPoints(iPoint, 0);
+					double y = hostPoints(iPoint, 1);
+					double z = hostPoints(iPoint, 2);
+					
+					double r = sqrt(x*x + y*y);
+					if(r < grid.rMin || r > grid.rMax)
+						goto recalculate;
+					if(z < grid.zMin || z > grid.zMax)
+						goto recalculate;
+				}
+							
+				return getActiveThread().dataService().download(cached.getComputed().getData())
+				.then([&calculator, scale, grid](LocalDataRef<Float64Tensor> field) {					
+					calculator.addComputed(scale, field.get(), grid);
+				});
+				
+				// Jump to this label when we can not use the cached field
+				recalculate:
 				return processField(calculator, cached.getNested(), scale);
 			}
 			case MagneticField::AXISYMMETRIC_EQUILIBRIUM: {
@@ -941,11 +973,7 @@ Promise<void> FieldResolverBase::resolveFilament(ResolveFilamentContext ctx) {
 	});
 }
 
-Promise<void> FieldResolverBase::processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) {
-	if(input.hasCacheKey()) {
-		output.setCacheKey(input.getCacheKey());
-	}
-	
+Promise<void> FieldResolverBase::processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) {	
 	switch(input.which()) {
 		case MagneticField::SUM: {
 			auto inSum = input.getSum();
@@ -1126,20 +1154,6 @@ void simpleTokamak(MagneticField::Builder output, double rMajor, double rMinor, 
 		
 		buildAxis(rMajor, filamentField.getFilament());
 	}
-}
-
-bool setCacheKey(MagneticField::Builder field) {
-	if(field.hasCacheKey())
-		field.disownCacheKey();
-	
-	auto maybeException = kj::runCatchingExceptions([&]() {
-		field.setCacheKey(ID::fromReader(field.asReader()).data);
-	});
-	
-	if(maybeException == nullptr)
-		return true;
-	
-	return false;
 }
 
 }

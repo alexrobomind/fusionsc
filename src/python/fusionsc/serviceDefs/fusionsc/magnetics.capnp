@@ -303,13 +303,7 @@ struct W7XCoilSet {
 #   required data are not shipped with fscdue to data protection requirements of the
 #   individual facilities.
 
-struct MagneticField {
-	# If this is set, this indicates to the field calculator that caching this
-	# field is a good idea.
-	# This should always point to a canonicalized binary representation of
-	# the field struct itself (minus the cached data)
-	cacheKey @22 : Data;
-	
+struct MagneticField {	
 	# Different ways to calculate the magnetic field
 	union {
 		# ============================= General =================================
@@ -384,8 +378,8 @@ struct MagneticField {
 		}
 		
 		custom : group {
-			device @23 : Text;
-			name   @24 : Text;
+			device @22 : Text;
+			name   @23 : Text;
 		}
 	}
 }

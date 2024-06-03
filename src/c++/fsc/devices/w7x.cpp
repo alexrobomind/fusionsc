@@ -692,8 +692,6 @@ void buildCoilFields(W7XCoilSet::Reader in, W7XCoilSet::Fields::Builder output) 
 			auto filField = initField(sum[i_mod], nWindMain[i_coil], coils.getInvertMainCoils());
 			getMainCoil(i_mod, i_coil, filField.getFilament());
 		}
-		
-		setCacheKey(mainFields[i_coil]);
 	}
 	
 	auto trimFields = output.initTrimFields(N_TRIM_COILS);
@@ -701,8 +699,6 @@ void buildCoilFields(W7XCoilSet::Reader in, W7XCoilSet::Fields::Builder output) 
 	for(unsigned int i_coil = 0; i_coil < N_TRIM_COILS; ++i_coil) {
 		auto filField = initField(trimFields[i_coil], nWindTrim[i_coil], false);
 		getTrimCoil(i_coil, filField.getFilament());
-		
-		setCacheKey(trimFields[i_coil]);
 	}
 	
 	auto controlFields = output.initControlFields(N_CONTROL_COILS);
@@ -710,8 +706,6 @@ void buildCoilFields(W7XCoilSet::Reader in, W7XCoilSet::Fields::Builder output) 
 	for(unsigned int i_coil = 0; i_coil < N_CONTROL_COILS; ++i_coil) {
 		auto filField = initField(controlFields[i_coil], nWindControl[i_coil], coils.getInvertControlCoils()[i_coil]);
 		getControlCoil(i_coil, filField.getFilament());
-		
-		setCacheKey(controlFields[i_coil]);
 	}
 }
 	

@@ -15,6 +15,8 @@ from ...backends import localResources
 from typing import Union, Optional, Literal
 import numpy as np
 
+import contextvars
+
 # Databases
 
 def _provider():
@@ -132,10 +134,40 @@ def cadCoils(convention = '1-AA-R0004.5') -> CoilPack:
 		coilPack.coils.invertMainCoils = False
 	
 	return CoilPack(coilPack)
+	
+# The W7XCoilSet type defaults to the W7-X coils 160 ... 230
+defaultCoils = None # cadCoils('archive')
+_cachedCadCoils = contextvars.ContextVar("fusionsc.devices.w7x._cachedCadCoils")
+
+def _defaultCoils():
+	# Allow users to override
+	if defaultCoils is not None:
+		return defaultCoils
+	
+	# Get config context
+	from ... import config, warehouse
+	cc = config.context()
+	
+	def getCadCoils():
+		coils = _cachedCadCoils.get(None)
+		if coils is not None:
+			return coils
+		
+		coils = cadCoils('archive')
+		if "w7xdb" in warehouse.lsRemote():
+			try:
+				coils = warehouse.openRemote("w7xdb").get("coilPacks/cadCoils")
+			except e:
+				print("Failed to open precomputed coils, defaulting to raw cad coils", e)
+		
+		_cachedCadCoils.set(coils)
+		return coils
+	
+	return config.context().run(getCadCoils)
 
 def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coils: Optional[CoilPack] = None) -> MagneticConfig:
 	if coils is None:
-		coils = defaultCoils
+		coils = _defaultCoils()
 	
 	config = MagneticConfig()
 	
@@ -149,7 +181,7 @@ def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coil
 
 def trimCoils(i_trim = [0, 0, 0, 0, 0], coils: Optional[CoilPack] = None) -> MagneticConfig:
 	if coils is None:
-		coils = defaultCoils
+		coils = _defaultCoils()
 	
 	config = MagneticConfig()
 	
@@ -162,7 +194,7 @@ def trimCoils(i_trim = [0, 0, 0, 0, 0], coils: Optional[CoilPack] = None) -> Mag
 
 def controlCoils(i_cc = [0, 0], coils: Optional[CoilPack] = None) -> MagneticConfig:
 	if coils is None:
-		coils = defaultCoils
+		coils = _defaultCoils()
 	
 	config = MagneticConfig()
 	
@@ -287,9 +319,6 @@ def op12Geometry() -> Geometry:
 
 def op21Geometry() -> Geometry:
 	return divertor('OP21') + baffles('OP21') + heatShield('OP21') + pumpSlits() + steelPanels() + vessel() + toroidalClosure()
-	
-# The W7XCoilSet type defaults to the W7-X coils 160 ... 230
-defaultCoils = cadCoils('archive')
 
 def defaultGrid() -> service.ToroidalGrid.Builder:
 	"""
