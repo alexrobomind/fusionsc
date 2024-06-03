@@ -136,7 +136,7 @@ struct BackendImpl : public Backend {
 		B result;
 		result.url = kj::heapString(config.hasName() ? config.getName() : config.getUrl());
 		
-		if(target != nullptr) {
+		if(ok) {
 			result.status = B::OK;
 		} else {
 			result.status = B::DISCONNECTED;
