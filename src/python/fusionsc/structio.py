@@ -107,7 +107,17 @@ def load(src, dst=None, lang='json'):
 	cl = _checkLang(lang)
 	
 	if hasattr(src, 'fileno'):
-		return native.structio.readFd(src.fileno(), dst, cl)
+		fd = src.fileno()
+		
+		# Since the 'native' libary might be linked to a different crt,
+		# the C file descriptors might not be interchangeable
+		# However, the os fhandles are
+		import os
+		if os.name == 'nt':
+			import msvcrt
+			fd = msvcrt.get_osfhandle(fd)
+		
+		return native.structio.readFd(fd, dst, cl)
 	
 	if isinstance(src, str):
 		return native.structio.readBuffer(src.encode(), dst, cl)

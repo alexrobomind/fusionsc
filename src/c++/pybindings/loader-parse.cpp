@@ -96,6 +96,9 @@ struct PyResourceFile : public capnp::SchemaFile {
 		} catch(std::exception& e) {
 			py::print("Error occurred opening file", e.what());
 			return nullptr;
+		} catch(kj::Exception& e) {
+			py::print("Error occurred opening file", kj::str(e).cStr());
+			return nullptr;
 		}
 	}
 	
@@ -154,7 +157,7 @@ Maybe<Own<capnp::SchemaFile>> SourceLoader::openFile(py::object pathRoot, kj::Pa
 		current = current.attr("joinpath")(el);
 	}
 			
-	if(!py::bool_(current.attr("is_file")))
+	if(!py::bool_(current.attr("is_file")()))
 		return nullptr;
 	
 	return kj::heap<PyResourceFile>(pathRoot, path, mv(current), *this);

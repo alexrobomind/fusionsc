@@ -103,6 +103,12 @@ class SurfaceArray(wrappers.structWrapper(service.FourierSurfaces)):
 			'phiDerivatives' : np.asarray(response.phiDerivatives),
 			'thetaDerivatives' : np.asarray(response.thetaDerivatives)
 		}
+	
+	def asGeometry(self, nPhi = 100, nTheta = 100, radialShift = 0):
+		from . import geometry
+		pipeline = _calculator().surfaceToMesh(self.data, nPhi, nTheta, radialShift).pipeline
+		
+		return geometry.Geometry({"merged" : pipeline.merged})
 
 class CoilFilament(wrappers.structWrapper(service.Filament)):
 	"""

@@ -8,6 +8,11 @@
 
 #include <pybind11/numpy.h>
 
+#ifdef WIN32
+#include <windows.h>
+#include <fcntl.h>
+#endif
+
 
 namespace fscpy {
 
@@ -487,8 +492,33 @@ namespace {
 	}
 }
 
-namespace structio {		
-	py::object readFd(int fd, py::object dst, Language lang) {
+namespace structio {
+	#ifdef WIN32
+	using StructioFd = intptr_t;
+	
+	HANDLE cloneHandle(HANDLE in) {
+		HANDLE proc = GetCurrentProcess();
+		HANDLE out;
+
+		DuplicateHandle(
+			proc, in, proc, &out, 
+			0, FALSE, DUPLICATE_SAME_ACCESS
+		);
+		return out;
+	}
+	
+	#else
+	using StructioFd = int;
+	#endif
+	
+	py::object readFd(StructioFd inputFd, py::object dst, Language lang) {
+		#ifdef WIN32
+			int fd = _open_osfhandle((intptr_t) cloneHandle(reinterpret_cast<HANDLE>(inputFd)), _O_RDONLY);
+			KJ_REQUIRE(fd != -1, "Failed to open OS handle");
+			KJ_DEFER({ _close(fd); });
+		# else
+			int fd = inputFd;
+		#endif
 		kj::FdInputStream is(fd);
 		kj::BufferedInputStreamWrapper buffered(is);
 		

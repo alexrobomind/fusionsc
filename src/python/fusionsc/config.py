@@ -66,7 +66,7 @@ def _apply():
 
 if userPath.exists():
 	try:
-		with userPath.open() as f:
+		with userPath.open("rb") as f:
 			config = structio.load(f, lang="yaml")
 	
 		if "siteName" in config:

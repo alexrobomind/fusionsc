@@ -10,6 +10,10 @@
 
 #include <cstdlib>
 
+#ifdef WIN32
+#include <crtdbg.h>
+#endif
+
 using namespace fscpy;
 
 kj::Own<py::dict> globalClasses;
@@ -108,10 +112,32 @@ py::object simpleObject() {
 
 }
 
+namespace {
+
+#ifdef WIN32
+
+int crtReportHook(int nRptType, char *szMsg, int *retVal) {
+	if(nRptType == _CRT_ASSERT) {
+		KJ_LOG(WARNING, "Win32 assertion failed", kj::getStackTrace());
+		// KJ_FAIL_REQUIRE("Assertion failed", szMsg);
+	}
+	return 0;
+}
+
+#endif
+
+}
+
 PYBIND11_MODULE(native, m) {
 	// Creating a temporary ClientHook initializes a run-time
 	// link between the capnp library and the capnp-rpc library
 	(void) capnp::newBrokenCap("Don't look at me. I'm shy.");
+	
+	#ifdef WIN32
+	#ifdef _DEBUG
+		_CrtSetReportHook(&crtReportHook);
+	#endif
+	#endif
 	
 	/* Note: The following call makes sense in standalone
 	   programs, but pybind11 and python have their own

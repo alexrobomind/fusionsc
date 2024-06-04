@@ -9,8 +9,11 @@ $Java.outerClassname("Magnetics");
 
 using D = import "data.capnp";
 
+using G = import "geometry.capnp";
+
 using DataRef = D.DataRef;
 using Float64Tensor = D.Float64Tensor;
+using ShapedList = D.ShapedList;
 
 # BEGIN [magnetics]
 
@@ -159,6 +162,14 @@ interface FieldCalculator $Cxx.allowCancellation {
 	# as slicing from the end (as is done in NumPy).
 	#
 	# The order of storage for polidal modes is [0, ..., mPol]
+	
+	surfaceToMesh @6 (
+		surfaces : FourierSurfaces,
+		nPhi : UInt32, nTheta : UInt32,
+		radialShift : Float64
+	) -> (
+		merged : DataRef(G.MergedGeometry)
+	);
 		
 	
 	# Fourier-mode evaluation

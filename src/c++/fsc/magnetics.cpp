@@ -701,6 +701,105 @@ struct CalculationSession : public FieldCalculator::Server {
 			results.setTheta(thetaVals);
 		});
 	}
+	
+	Promise<void> surfaceToMesh(SurfaceToMeshContext ctx) {			
+		auto params = ctx.getParams();
+		auto surfaces = params.getSurfaces();
+				
+		auto phiVals = kj::heapArray<double>(params.getNPhi());
+		for(auto iPhi : kj::indices(phiVals)) {
+			phiVals[iPhi] = 2 * fsc::pi * surfaces.getNTurns() / phiVals.size() * iPhi;
+		}
+		
+		auto thetaVals = kj::heapArray<double>(params.getNTheta());
+		for(auto iTheta : kj::indices(thetaVals)) {
+			thetaVals[iTheta] = 2 * fsc::pi / thetaVals.size() * iTheta;
+		}
+		
+		// Calculate surface points
+		auto req = thisCap().evalFourierSurfaceRequest();
+		req.setSurfaces(surfaces);
+		req.setPhi(phiVals); req.setTheta(thetaVals);
+		
+		return req.send().then([ctx, params, surfaces](auto response) mutable {
+			const double shift = params.getRadialShift();
+			
+			// Read surface positions
+			Eigen::Tensor<double, 4> pos;
+			Eigen::Tensor<double, 4> dXdPhi;
+			Eigen::Tensor<double, 4> dXdTheta;
+			readVardimTensor(response.getPoints(), 1, pos);
+			readVardimTensor(response.getPhiDerivatives(), 1, dXdPhi);
+			readVardimTensor(response.getThetaDerivatives(), 1, dXdTheta);
+			
+			uint32_t nTheta = (uint32_t) pos.dimension(0);
+			uint32_t nPhi = (uint32_t) pos.dimension(1);
+			int64_t nSurf = pos.dimension(2);
+			
+			// auto merged = ctx.initResults().initMerged(nSurf);			
+			Temporary<MergedGeometry> merged;
+			auto entries = merged.initEntries(nSurf);
+			
+			for(auto iSurf : kj::range(0, nSurf)) {
+				auto mesh = entries[iSurf].getMesh();
+				
+				mesh.getVertices().setShape({nTheta * nPhi, 3});
+				auto meshData = mesh.getVertices().initData(3 * nTheta * nPhi);
+				auto idxData = mesh.initIndices(4 * nPhi * nTheta);
+				
+				auto linearIndex = [&](uint32_t iPhi, uint32_t iTheta) {
+					// KJ_DBG(iPhi, iTheta, nPhi, nTheta);
+					iPhi %= nPhi;
+					iTheta %= nTheta;
+					// KJ_DBG(iPhi, iTheta);
+					
+					return nTheta * iPhi + iTheta;
+				};
+				
+				for(auto iPhi : kj::range(0, nPhi)) {
+					for(auto iTheta : kj::range(0, nTheta)) {
+						Vec3d ePhi(
+							dXdPhi(iTheta, iPhi, iSurf, 0),
+							dXdPhi(iTheta, iPhi, iSurf, 1),
+							dXdPhi(iTheta, iPhi, iSurf, 2)
+						);
+						Vec3d eTheta(
+							dXdTheta(iTheta, iPhi, iSurf, 0),
+							dXdTheta(iTheta, iPhi, iSurf, 1),
+							dXdTheta(iTheta, iPhi, iSurf, 2)
+						);
+						
+						Vec3d eRad = ePhi.cross(eTheta);
+						eRad /= eRad.norm();
+						
+						Vec3d x(
+							pos(iTheta, iPhi, iSurf, 0),
+							pos(iTheta, iPhi, iSurf, 1),
+							pos(iTheta, iPhi, iSurf, 2)
+						);
+						x += shift * eRad;
+						
+						for(size_t i = 0; i < 3; ++i)
+							meshData.set(3 * nTheta * iPhi + 3 * iTheta + i, x[i]);
+						
+						const uint32_t offset = 4 * linearIndex(iPhi, iTheta);
+						idxData.set(offset + 0, linearIndex(iPhi + 0, iTheta + 0));
+						idxData.set(offset + 1, linearIndex(iPhi + 0, iTheta + 1));
+						idxData.set(offset + 2, linearIndex(iPhi + 1, iTheta + 1));
+						idxData.set(offset + 3, linearIndex(iPhi + 1, iTheta + 0));
+					}
+				}
+				
+				auto polyData = mesh.initPolyMesh(nPhi * nTheta + 1);
+				for(auto i : kj::indices(polyData))
+					polyData.set(i, 4 * i);
+			}
+			
+			ctx.initResults().setMerged(
+				getActiveThread().dataService().publish(merged.asReader())
+			);
+		});
+	}
 		
 	//! Processes a root node of a magnetic field (creates calculator)
 	Promise<void> processRoot(MagneticField::Reader node, Eigen::Tensor<double, 2>&& points, Float64Tensor::Builder out) {		
