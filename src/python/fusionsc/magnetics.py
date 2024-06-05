@@ -218,6 +218,21 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		
 		return result
 	
+	@asyncFunction
+	async def computeCached(self, grid):
+		"""
+		Attaches a cached computed version of this field. In future computations, this field will be interpolated
+		as long as all points of the compute request lie inside its grid definition.
+		"""
+		
+		computed = await self.compute.asnc(grid)
+		return MagneticConfig({
+			"cached" : {
+				"nested" : self.data,
+				"computed" : computed.data.computedField
+			}
+		})
+	
 	def __await__(self):
 		assert self.data.which_() == 'computedField', 'Can only await computed fields'
 		return self.data.computedField.data.__await__()

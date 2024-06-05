@@ -168,6 +168,7 @@ void bindListClasses() {
 	ClassBinding<LB, L, B>("ListBuilder", py::buffer_protocol())
 		.withListInterface()
 		.def("init", &LB::initList)
+		.def("__setitem__", &LB::set)
 	;
 	
 	ClassBinding<LR, L, R>("ListReader", py::buffer_protocol())

@@ -78,12 +78,11 @@ class CoilPack(wrappers.structWrapper(service.W7XCoilSet)):
 	async def computeFields(self, grid) -> "CoilPack":
 		"""Returns a new coil pack consisting of precomputed fields"""
 		
-		async def resolveAndCompute(x):
+		async def computeField(x):
 			config = MagneticConfig(x)
-			config = await config.resolve.asnc()
-			config = config.compute(grid)
+			config = await config.computeCached.asnc(grid)
 			
-			return config.data.computedField
+			return config.data
 			
 		result = CoilPack()
 		w7xnative.buildCoilFields(self.data, result.data.initFields())
@@ -91,13 +90,13 @@ class CoilPack(wrappers.structWrapper(service.W7XCoilSet)):
 		fields = result.data.fields
 		
 		for i in range(7):
-			fields.mainFields[i].computedField = await resolveAndCompute(fields.mainFields[i])
+			fields.mainFields[i] = await computeField(fields.mainFields[i])
 		
 		for i in range(5):
-			fields.trimFields[i].computedField = await resolveAndCompute(fields.trimFields[i])
+			fields.trimFields[i] = await computeField(fields.trimFields[i])
 		
 		for i in range(10):
-			fields.controlFields[i].computedField = await resolveAndCompute(fields.controlFields[i])
+			fields.controlFields[i] = await computeField(fields.controlFields[i])
 		
 		return result
 	
@@ -118,6 +117,15 @@ class CoilPack(wrappers.structWrapper(service.W7XCoilSet)):
 		
 		return coro().__await__()
 
+coil_conventions = ['coilsdb', '1-AA-R0004.5', 'archive']
+def processCoilConvention(convention: str) -> str:
+	assert convention in coil_conventions,	'Invalid coil convention {}, must be one of {}'.format(convention, coil_conventions)
+	
+	if convention == 'archive':
+		return '1-AA-R0004.5'
+	
+	return convention
+
 def cadCoils(convention = '1-AA-R0004.5') -> CoilPack:
 	"""
 	Returns the coil pack for the standard W7-X CAD coils. The winding direction
@@ -137,7 +145,11 @@ def cadCoils(convention = '1-AA-R0004.5') -> CoilPack:
 	
 # The W7XCoilSet type defaults to the W7-X coils 160 ... 230
 defaultCoils = None # cadCoils('archive')
-_cachedCadCoils = contextvars.ContextVar("fusionsc.devices.w7x._cachedCadCoils")
+_configDefaultCoils = contextvars.ContextVar("fusionsc.devices.w7x._configDefaultCoils")
+
+def _loadDefaultCoils(url: str):
+	coils = warehouse.open(url)
+	_configDefaultCoils.set(CoilPack(coils.download()))
 
 def _defaultCoils():
 	# Allow users to override
@@ -148,22 +160,7 @@ def _defaultCoils():
 	from ... import config, warehouse
 	cc = config.context()
 	
-	def getCadCoils():
-		coils = _cachedCadCoils.get(None)
-		if coils is not None:
-			return coils
-		
-		coils = cadCoils('archive')
-		if "w7xdb" in warehouse.lsRemote():
-			try:
-				coils = warehouse.openRemote("w7xdb").get("coilPacks/cadCoils")
-			except e:
-				print("Failed to open precomputed coils, defaulting to raw cad coils", e)
-		
-		_cachedCadCoils.set(coils)
-		return coils
-	
-	return config.context().run(getCadCoils)
+	return cc.get(_configDefaultCoils, cadCoils('archive'))
 
 def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coils: Optional[CoilPack] = None) -> MagneticConfig:
 	if coils is None:
@@ -218,15 +215,6 @@ def highIota(bAx = 2.72, coils: Optional[CoilPack] = None) -> MagneticConfig:
 def lowIota(bAx = 2.72, coils: Optional[CoilPack] = None) -> MagneticConfig:
 	return mainField([12222.22 * bAx / 2.45] * 5, [9166.67 * bAx / 2.45] * 2, coils = coils)
 	
-
-coil_conventions = ['coilsdb', '1-AA-R0004.5', 'archive']
-def processCoilConvention(convention: str) -> str:
-	assert convention in coil_conventions,	'Invalid coil convention {}, must be one of {}'.format(convention, coil_conventions)
-	
-	if convention == 'archive':
-		return '1-AA-R0004.5'
-	
-	return convention
 
 def coilsDBConfig(id: int, biotSavartSettings: Optional[service.BiotSavartSettings.ReaderOrBuilder] = None) -> MagneticConfig:
 	result = MagneticConfig()

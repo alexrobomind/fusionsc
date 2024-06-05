@@ -168,5 +168,5 @@ interface LocalResources extends(Networking.NetworkInterface) {
 	
 	w7xProvider @5 () -> (service : W7X.Provider);
 	
-	openWarehouse @6 (url : Text, networkInterface : Networking.NetworkInterface) -> (root : Warehouse.Warehouse.Folder);
+	openWarehouse @6 (url : Text, networkInterface : Networking.NetworkInterface) -> (object : Warehouse.Warehouse.GenericObject, storedObject : Warehouse.Warehouse.StoredObject);
 }

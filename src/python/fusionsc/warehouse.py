@@ -64,7 +64,7 @@ async def open(url: str):
 		return remote
 	
 	response = await backends.localResources().openWarehouse(url)
-	return Folder(response.root)
+	return _decode(response.storedObject)
 
 class Folder(Object):
 	"""
@@ -187,7 +187,7 @@ def _encode(obj: Storable) -> capnp.CapabilityClient:
 		
 	return data.publish(obj)
 
-def _decode(obj: service.Warehouse.StoredObject.Reader):
+def _decode(obj: service.Warehouse.StoredObject.ReaderOrBuilder):
 	which = obj.which_()
 	
 	# Cases where the object type is already known

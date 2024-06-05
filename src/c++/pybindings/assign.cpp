@@ -58,7 +58,61 @@ struct ListItemSlot : public BuilderSlot {
 		list(list), index(index)
 	{}
 	
-	void set(DynamicValue::Reader newVal) const override { list.set(index, newVal); }
+	void set(DynamicValue::Reader newVal) const override {
+		if(list.getSchema().getElementType().isStruct() && newVal.getType() == DynamicValue::STRUCT) {
+			// Check if the list can hold all data
+			capnp::AnyStruct::Builder dst = list[index].as<DynamicStruct>();
+			capnp::AnyStruct::Reader src = newVal.as<DynamicStruct>();
+			
+			size_t srcDataSize = src.getDataSection().size();
+			size_t dstDataSize = dst.getDataSection().size();
+			size_t srcPointerSize = src.getPointerSection().size();
+			size_t dstPointerSize = dst.getPointerSection().size();
+			
+			auto logWarning = [](kj::StringPtr msg) {
+				auto warnings = py::module_::import("warnings");
+				warnings.attr("warn")(msg.cStr());
+			};
+			
+			if(dstDataSize < srcDataSize) {
+				bool isSet = false;
+				
+				for(const byte b : src.getDataSection().slice(dstDataSize, srcDataSize))
+					if(b != 0) isSet = true;
+				
+				if(isSet) {
+					logWarning(kj::str(
+						"You are assigning a struct into a list whose struct size is smaller "
+						"than the source list. The extra data will be truncated and will be "
+						"missing. Target data size: ", dstDataSize, " bytes, source "
+						"data size: ", srcDataSize, " bytes."
+					));
+				}
+			}
+			
+			if(dstPointerSize < srcPointerSize) {
+				bool isSet = false;
+				
+				auto ps = src.getPointerSection();
+				for(auto i : kj::range(dstPointerSize, srcPointerSize)) {
+					auto p = ps[i];
+					if(!p.isNull())
+						isSet = true;
+				}					
+				
+				if(isSet) {
+					logWarning(kj::str(
+						"You are assigning a struct into a list whose struct size is smaller "
+						"than the source list. Extra pointers will be truncated and will be "
+						"missing. Target pointer size: ", dstPointerSize, " words, Src "
+						"pointer size: ", srcPointerSize, " words."
+					));
+				}
+			}
+			
+		}
+		list.set(index, newVal);
+	}
 	void adopt(capnp::Orphan<DynamicValue>&& orphan) const override { list.adopt(index, mv(orphan)); }
 	DynamicValue::Builder get() const override { return list[index]; }
 	

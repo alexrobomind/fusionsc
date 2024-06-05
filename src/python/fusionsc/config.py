@@ -57,6 +57,11 @@ def _apply():
 					resolve.connectWarehouse(entry["warehouse"])
 				if "archive" in entry:
 					resolve.importOfflineData(entry["archive"])
+		
+		if "w7x" in config:
+			if "defaultCoilsUrl" in config["w7x"]:
+				from .devices import w7x
+				w7x._loadDefaultCoils(config["w7x"]["defaultCoilsUrl"])
 	except:
 		print("!!! --- Failed to apply user configuration --- !!!")
 		print("")

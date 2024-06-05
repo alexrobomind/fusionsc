@@ -65,7 +65,7 @@ Own<DeviceBase> selectDevice(LocalConfig::Reader config) {
 	return CPUDevice::create(numThreads);
 }
 
-Promise<Warehouse::Folder::Client> connectWarehouse(kj::StringPtr urlString, NetworkInterface::Client networkInterface) {
+Promise<Temporary<Warehouse::StoredObject>> connectWarehouse(kj::StringPtr urlString, NetworkInterface::Client networkInterface) {
 	kj::UrlOptions opts;
 	opts.allowEmpty = false;
 	
@@ -79,7 +79,7 @@ Promise<Warehouse::Folder::Client> connectWarehouse(kj::StringPtr urlString, Net
 		" connection to remote DB server) or 'http' (alias for 'ws') are supported",
 		url.scheme
 	);
-	
+		
 	if(url.scheme == "sqlite") {			
 		bool readOnly = false;
 		kj::StringPtr tablePrefix = "warehouse";
@@ -107,10 +107,16 @@ Promise<Warehouse::Folder::Client> connectWarehouse(kj::StringPtr urlString, Net
 		KJ_IF_MAYBE(pFragment, url.fragment) {
 			auto getRequest = root.getRequest();
 			getRequest.setPath(*pFragment);
-			return getRequest.sendForPipeline().getAsGeneric();
+			
+			return getRequest.send().then([](auto response) {
+				return Temporary<Warehouse::StoredObject>((Warehouse::StoredObject::Reader) response);
+			});
+		} else {
+			Temporary<Warehouse::StoredObject> result;
+			result.setFolder(root);
+			result.setAsGeneric(root.castAs<Warehouse::GenericObject>());
+			return result;
 		}
-		
-		return root;
 	}
 	
 	KJ_REQUIRE(url.host != ".", "Must specify authority (hostname) in remote URLs");
@@ -126,16 +132,22 @@ Promise<Warehouse::Folder::Client> connectWarehouse(kj::StringPtr urlString, Net
 	.then([](auto response) {
 		return response.getConnection().getRemoteRequest().send();
 	})
-	.then([maybeFragment = mv(url.fragment)](auto response) -> Warehouse::Folder::Client {
+	.then([maybeFragment = mv(url.fragment)](auto response) -> Promise<Temporary<Warehouse::StoredObject>> {		
 		auto root = response.getRemote().template castAs<Warehouse::Folder>();
 		
 		KJ_IF_MAYBE(pFragment, maybeFragment) {
 			auto getRequest = root.getRequest();
 			getRequest.setPath(*pFragment);
-			return getRequest.sendForPipeline().getAsGeneric();
+			
+			return getRequest.send().then([](auto response) {
+				return Temporary<Warehouse::StoredObject>((Warehouse::StoredObject::Reader) response);
+			});
+		} else {
+			Temporary<Warehouse::StoredObject> result;
+			result.setFolder(root);
+			result.setAsGeneric(root.castAs<Warehouse::GenericObject>());
+			return result;
 		}
-		
-		return root;
 	});
 }
 
@@ -147,7 +159,16 @@ struct RootServer : public RootService::Server {
 		NetworkInterface::Client nif = kj::heap<LocalNetworkInterface>();
 		
 		for(auto entry : config.getWarehouses()) {
-			Warehouse::Folder::Client root = connectWarehouse(entry.getUrl(), nif);
+			Warehouse::Folder::Client root = connectWarehouse(entry.getUrl(), nif)
+			.then([name = entry.getName()](auto storedObject) {
+				if(!storedObject.isFolder()) {
+					KJ_LOG(ERROR, "Failed to open backend warehouse, connect succeeded but did not return a folder object", name, storedObject);
+					KJ_FAIL_REQUIRE("Backend is not a folder");
+				}
+				
+				KJ_REQUIRE(storedObject.isFolder(), "Invalid backend, not a folder");
+				return storedObject.getFolder();
+			});
 			auto getReq = root.getRequest();
 			getReq.setPath(entry.getPath());
 			
@@ -366,8 +387,9 @@ struct LocalResourcesImpl : public LocalResources::Server, public LocalNetworkIn
 			thisCap();
 		
 		return connectWarehouse(params.getUrl(), networkInterface)
-		.then([ctx](Warehouse::Folder::Client root) mutable {
-			ctx.getResults().setRoot(mv(root));
+		.then([ctx](Temporary<Warehouse::StoredObject> so) mutable {
+			ctx.getResults().setObject(so.getAsGeneric());
+			ctx.getResults().setStoredObject(so);
 		});
 	}
 };
