@@ -189,6 +189,7 @@ struct DataViewerImpl : public kj::HttpService {
 			getActiveThread().dataService().writeArchive(o.get<DataRef<>::Client>(), *file).wait(ws);
 
 			headers.set(kj::HttpHeaderId::CONTENT_TYPE, "application/octet-stream");
+			headers.add("Content-Disposition", kj::str("attachment; filename=\"", objPath[objPath.size() - 1], ".fsc\""));
 			auto aos = response.send(200, "OK", headers);
 
 			// Stream file into memory
