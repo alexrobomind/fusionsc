@@ -133,7 +133,7 @@ Promise<Temporary<Warehouse::StoredObject>> connectWarehouse(kj::StringPtr urlSt
 		return response.getConnection().getRemoteRequest().send();
 	})
 	.then([maybeFragment = mv(url.fragment)](auto response) -> Promise<Temporary<Warehouse::StoredObject>> {		
-		auto root = response.getRemote().template castAs<Warehouse::Folder>();
+		Warehouse::Folder::Client root = response.getRemote().template castAs<Warehouse::Folder>();
 		
 		KJ_IF_MAYBE(pFragment, maybeFragment) {
 			auto getRequest = root.getRequest();

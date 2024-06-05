@@ -287,10 +287,10 @@ struct DataViewerImpl : public kj::HttpService {
 				name = kj::strTree("<a href='", name.flatten(), "/show'>", name.flatten(), "</a>");
 			}
 			
-			response = strTree(mv(response), "<td>", mv(name), "</td><td>", mv(content), "</td>");
+			response = strTree(mv(response), "<tr><td>", mv(name), "</td><td>", mv(content), "</td></tr>");
 		}
 		
-		response = strTree(mv(response), "</tr></table>");
+		response = strTree(mv(response), "</table>");
 		
 		auto flat = response.flatten();
 		os.write(flat.begin(), flat.size());
@@ -320,6 +320,18 @@ struct DataViewerImpl : public kj::HttpService {
 		if(!md.getFormat().isSchema()) {
 			writeStr("Unknown format");
 			return;
+		}
+		
+		{
+			auto backingVisitor = createVisitor(os, dialect);
+			EscapingVisitor ev(*backingVisitor);
+			
+			structio::SaveOptions opts;
+			opts.capabilityStrategy = &ev;
+			
+			writeStr("<pre><code>");
+			structio::save(ref.getMetadata(), ev, opts);
+			writeStr("</code></pre><br /><br />");
 		}
 		
 		auto typeReader = md.getFormat().getSchema().getAs<capnp::schema::Type>();

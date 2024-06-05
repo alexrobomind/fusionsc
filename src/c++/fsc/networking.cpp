@@ -399,10 +399,10 @@ struct DefaultEntropySource : public kj::EntropySource  {
 
 DefaultEntropySource DefaultEntropySource::INSTANCE;
 
-NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, kj::StringPtr host, kj::StringPtr url) {
+NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, kj::StringPtr host, kj::StringPtr url, bool allowCompression) {
 	HttpClientSettings settings;
 	settings.entropySource = DefaultEntropySource::INSTANCE;
-	settings.webSocketCompressionMode = HttpClientSettings::AUTOMATIC_COMPRESSION;
+	settings.webSocketCompressionMode = allowCompression ? HttpClientSettings::AUTOMATIC_COMPRESSION : HttpClientSettings::NO_COMPRESSION;
 	
 	auto client = ownHeld(kj::newHttpClient(DEFAULT_HEADERS, *stream, settings));
 	client.attach(mv(stream));
@@ -503,7 +503,7 @@ Promise<void> NetworkInterfaceBase::connect(ConnectContext ctx) {
 	return makeConnection(host, port)
 	.then([ctx, url = mv(url), host = kj::heapString(host)](Own<kj::AsyncIoStream> stream) mutable {
 		kj::String httpUrl = url.toString(Url::HTTP_REQUEST);
-		ctx.getResults().setConnection(connectViaHttp(mv(stream), host, httpUrl));
+		ctx.getResults().setConnection(connectViaHttp(mv(stream), host, httpUrl, ctx.getParams().getAllowCompression()));
 	});	
 }
 

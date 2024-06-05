@@ -90,7 +90,10 @@ defaults = {
 		"backend" : "http://fusionsc-site:8888/load-balancer",
 		"resolve" : [
 			{"warehouse" : "remote:w7xdb"}
-		]
+		],
+		"w7x" : {
+			"defaultCoilsUrl" : "remote:w7xdb#precomputedCoils/cadCoils"
+		}
 	}
 }
 

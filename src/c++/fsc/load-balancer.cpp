@@ -120,6 +120,7 @@ struct BackendImpl : public Backend {
 		
 		auto connectRequest = networkInterface.connectRequest();
 		connectRequest.setUrl(config.getUrl());
+		connectRequest.setAllowCompression(config.getCompressed());
 		
 		return connectRequest.sendForPipeline().getConnection().getRemoteRequest().sendForPipeline().getRemote();
 	}
