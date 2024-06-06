@@ -5,7 +5,7 @@
 namespace fsc {
 	
 struct LoadLimiter {
-	class Token : public Own<void> { using Own<void>::Own; };
+	struct Token { inline virtual ~Token() noexcept(false) {} };
 	
 	LoadLimiter(size_t capacity = 1);
 	
@@ -13,8 +13,9 @@ struct LoadLimiter {
 	void setCapacity(size_t newCapacity);
 	
 	size_t getActive();
+	size_t getQueued();
 	
-	Promise<Token> getToken();
+	Promise<Own<Token>> getToken();
 	
 	template<typename C, typename T = capnp::FromClient<C>>
 	typename T::Client limit(C);
@@ -32,7 +33,7 @@ KJ_DECLARE_NON_POLYMORPHIC(LoadLimiter::Impl);
 template<typename C, typename T>
 typename T::Client LoadLimiter::limit(C client) {
 	return getToken()
-	.then([c = mv(client)](Token t) mutable -> typename T::Client {
+	.then([c = mv(client)](Own<Token> t) mutable -> typename T::Client {
 		return attach(mv(c), mv(t));
 	});
 }

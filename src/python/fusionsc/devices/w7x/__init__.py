@@ -92,23 +92,11 @@ class CoilPack(wrappers.structWrapper(service.W7XCoilSet)):
 		for i in range(7):
 			fields.mainFields[i] = await computeField(fields.mainFields[i])
 		
-		# Wait until main fields are computed
-		for f in fields.mainFields:
-			await f.cached.computed.data
-		
 		for i in range(5):
 			fields.trimFields[i] = await computeField(fields.trimFields[i])
 		
-		# Wait until trim fields are computed
-		for f in fields.trimFields:
-			await f.cached.computed.data
-		
 		for i in range(10):
 			fields.controlFields[i] = await computeField(fields.controlFields[i])
-		
-		# Wait until control coil fields are computed
-		for f in fields.controlFields:
-			await f.cached.computed.data
 		
 		return result
 	

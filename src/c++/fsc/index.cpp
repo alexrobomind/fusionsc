@@ -358,7 +358,7 @@ namespace {
 }
 
 namespace fsc {
-	KDTreeService::Client newKDTreeService() {
+	Own<KDTreeService::Server> newKDTreeService() {
 		return kj::heap<KDServiceImpl>();
 	}
 }

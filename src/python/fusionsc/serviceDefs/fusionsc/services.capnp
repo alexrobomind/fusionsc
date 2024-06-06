@@ -113,6 +113,10 @@ struct NodeInfo {
 	warehouses @2 : List(Text);
 	name @3 : Text;
 	commitHash @4 : Text;
+	
+	activeCalls @5 : UInt64;
+	queuedCalls @6 : UInt64;
+	capacity @7 : UInt64;
 }
 
 # Main service interface that can be connected to by clients.

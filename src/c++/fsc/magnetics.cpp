@@ -1191,7 +1191,7 @@ Promise<void> FieldResolverBase::processFilament(Filament::Reader input, Filamen
 	}
 }
 
-FieldCalculator::Client newFieldCalculator(Own<DeviceBase> dev) {
+Own<FieldCalculator::Server> newFieldCalculator(Own<DeviceBase> dev) {
 	return kj::heap<CalculationSession<Eigen::ThreadPoolDevice>>(mv(dev));
 }
 

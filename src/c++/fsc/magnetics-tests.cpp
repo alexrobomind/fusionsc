@@ -19,7 +19,7 @@ TEST_CASE("build-field-cancel") {
 	auto& ws = lt->waitScope();
 		
 	auto grid = TEST_GRID.get();
-	auto session = newFieldCalculator(CPUDevice::create(CPUDevice::estimateNumThreads()));
+	FieldCalculator::Client session = newFieldCalculator(CPUDevice::create(CPUDevice::estimateNumThreads()));
 	
 	auto computeRequest = session.computeRequest();
 	computeRequest.setField(WIRE_FIELD.get());
@@ -40,7 +40,7 @@ TEST_CASE("build-field") {
 	auto& ws = lt->waitScope();
 		
 	auto grid = TEST_GRID.get();
-	auto session = newFieldCalculator(CPUDevice::create(CPUDevice::estimateNumThreads()));
+	FieldCalculator::Client session = newFieldCalculator(CPUDevice::create(CPUDevice::estimateNumThreads()));
 	
 	auto computeRequest = session.computeRequest();
 	computeRequest.setField(WIRE_FIELD.get());
@@ -134,7 +134,7 @@ TEST_CASE("build-field-interp") {
 	
 	auto grid1 = TEST_GRID.get();
 	auto grid2 = TEST_GRID2.get();
-	auto session = newFieldCalculator(CPUDevice::create(CPUDevice::estimateNumThreads()));
+	FieldCalculator::Client session = newFieldCalculator(CPUDevice::create(CPUDevice::estimateNumThreads()));
 	
 	// Compute field on standard grid
 	auto cr1 = session.computeRequest();
@@ -179,7 +179,7 @@ TEST_CASE("build-field-gpu") {
 	auto& ws = lt->waitScope();
 	
 	auto grid = TEST_GRID.get();
-	auto session = newFieldCalculator(newGpuDevice());
+	FieldCalculator::Client session = newFieldCalculator(newGpuDevice());
 	
 	auto computeRequest = session.computeRequest();
 	computeRequest.setField(WIRE_FIELD.get());

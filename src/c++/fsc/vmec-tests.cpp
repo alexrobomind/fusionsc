@@ -75,7 +75,7 @@ static void vmecRequest(VmecRequest::Builder req) {
     auto field = req.getFreeBoundary().initVacuumFieldHl();
     parseGeqdsk(field.initAxisymmetricEquilibrium(), devices::jtext::EXAMPLE_GFILE.get());
     
-    auto calculator = newFieldCalculator(CPUDevice::create(CPUDevice::estimateNumThreads()));
+    FieldCalculator::Client calculator = newFieldCalculator(CPUDevice::create(CPUDevice::estimateNumThreads()));
     auto computeRequest = calculator.computeRequest();
     computeRequest.setField(field);
     computeRequest.setGrid(req.getFreeBoundary().getVacuumField().getGrid());
@@ -113,7 +113,7 @@ TEST_CASE("vmec-run", "[.]") {
     auto lt = l -> newThread();
     auto& ws = lt -> waitScope();
 	
-	auto driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."));
+	VmecDriver::Client driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."));
 	auto req = driver.runRequest();
 	vmecRequest(req);
 	
@@ -129,7 +129,7 @@ TEST_CASE("vmec-run-fb", "[.]") {
     auto lt = l -> newThread();
     auto& ws = lt -> waitScope();
 	
-	auto driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."));
+	VmecDriver::Client driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."));
 	auto req = driver.runRequest();
 	vmecRequest(req);
 	
@@ -147,7 +147,7 @@ TEST_CASE("vmec-surf") {
     auto lt = l -> newThread();
     auto& ws = lt -> waitScope();
 	
-	auto driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."));
+	VmecDriver::Client driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."));
 	auto req = driver.computePositionsRequest();
 	
 	auto surf = req.initSurfaces();
@@ -198,7 +198,7 @@ TEST_CASE("vmec-surf-inv") {
     auto lt = l -> newThread();
     auto& ws = lt -> waitScope();
 	
-	auto driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."));
+	VmecDriver::Client driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."));
 	auto req = driver.invertPositionsRequest();
 	
 	auto surf = req.initSurfaces();

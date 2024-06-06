@@ -800,7 +800,7 @@ Promise<void> writeMGridFile(kj::PathPtr path, ComputedField::Reader cField) {
 	});
 }
 
-VmecDriver::Client createVmecDriver(Own<DeviceBase>&& dev, Own<JobLauncher>&& scheduler) {
+Own<VmecDriver::Server> createVmecDriver(Own<DeviceBase>&& dev, Own<JobLauncher>&& scheduler) {
 	return kj::heap<VmecDriverImpl>(mv(dev), mv(scheduler));
 }
 

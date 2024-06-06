@@ -10,7 +10,7 @@
 
 namespace fsc {
 	
-Mapper::Client newMapper(FLT::Client flt, KDTreeService::Client indexer, DeviceBase& device);
+Own<Mapper::Server> newMapper(FLT::Client flt, KDTreeService::Client indexer, DeviceBase& device);
 
 struct RFLM {
 	//! Computes the real-space coordinates of the last-mapped position projected to the given phi plane

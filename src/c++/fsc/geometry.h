@@ -20,7 +20,7 @@ struct GeometryResolverBase : public GeometryResolver::Server {
 /**
  * Creates C++ interface to geometry library.
  */
-GeometryLib::Client newGeometryLib();
+Own<GeometryLib::Server> newGeometryLib();
 
 Vec3u locationInGrid(Vec3d point, CartesianGrid::Reader reader);
 

@@ -1296,8 +1296,8 @@ Promise<void> GeometryLibImpl::planarCut(PlanarCutContext context) {
 	});
 }
 
-GeometryLib::Client newGeometryLib() {
-	return GeometryLib::Client(kj::heap<GeometryLibImpl>());
+Own<GeometryLib::Server> newGeometryLib() {
+	return kj::heap<GeometryLibImpl>();
 };
 
 // Grid location methods

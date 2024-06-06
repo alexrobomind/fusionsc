@@ -302,7 +302,7 @@ struct MapperImpl : public Mapper::Server {
 	}
 };
 
-Mapper::Client newMapper(FLT::Client flt, KDTreeService::Client indexer, DeviceBase& device) {
+Own<Mapper::Server> newMapper(FLT::Client flt, KDTreeService::Client indexer, DeviceBase& device) {
 	return kj::heap<MapperImpl>(mv(flt), mv(indexer), device);
 }
 
