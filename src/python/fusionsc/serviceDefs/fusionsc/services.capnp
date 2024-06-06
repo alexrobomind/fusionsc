@@ -78,6 +78,7 @@ struct LoadBalancerConfig {
 		url @0 : Text;
 		name @1 : Text;
 		persistent @2 : Bool = false;
+		compressed @3 : Bool = true;
 	}
 	
 	struct Rule {

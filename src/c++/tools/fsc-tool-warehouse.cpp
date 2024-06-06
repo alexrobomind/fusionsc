@@ -61,6 +61,9 @@ struct WarehouseTool {
 	
 	kj::String backupFile;
 	
+	kj::String url;
+	kj::String localFile;
+	
 	bool writeAccess = false;
 	bool truncate = false;
 	
@@ -105,6 +108,74 @@ struct WarehouseTool {
 	
 	bool setPath(kj::StringPtr pathStr) {
 		rootPath = kj::heapString(pathStr);
+		return true;
+	}
+	
+	bool setUrl(kj::StringPtr urlStr) {
+		url = kj::heapString(urlStr);
+		return true;
+	}
+	
+	bool setLocalFile(kj::StringPtr fileStr) {
+		localFile = kj::heapString(fileStr);
+		return true;
+	}
+	
+	bool get() {
+		auto l = newLibrary();
+		auto lt = l -> newThread();
+		auto& ws = lt->waitScope();
+		
+		// Connect to warehouse
+		LocalResources::Client lr = createLocalResources(LocalConfig::Reader());
+		auto whReq = lr.openWarehouseRequest();
+		whReq.setUrl(url);
+		
+		// Open warehouse
+		auto response = whReq.send().wait(ws);
+		auto so = response.getStoredObject();
+		
+		KJ_REQUIRE(so.isDataRef() || so.isUnresolved(), "Stored object is not a DataRef", so);
+		
+		auto ref = so.getDataRef().getAsRef();
+		
+		auto fs = kj::newDiskFilesystem();
+		auto localPath = fs -> getCurrentPath().eval(localFile);
+		auto outputFile = fs -> getRoot().openFile(localPath, kj::WriteMode::CREATE | kj::WriteMode::CREATE_PARENT | kj::WriteMode::MODIFY);
+		
+		getActiveThread().dataService().writeArchive(ref, *outputFile).wait(ws);
+		
+		return true;
+	}
+	
+	bool put() {
+		auto l = newLibrary();
+		auto lt = l -> newThread();
+		auto& ws = lt->waitScope();
+		
+		// Open input
+		auto fs = kj::newDiskFilesystem();
+		auto localPath = fs -> getCurrentPath().eval(localFile);
+		auto inputFile = fs -> getRoot().openFile(localPath);
+		
+		auto ref = getActiveThread().dataService().publishArchive<capnp::AnyPointer>(*inputFile);
+		
+		// Connect to warehouse
+		LocalResources::Client lr = createLocalResources(LocalConfig::Reader());
+		auto whReq = lr.openWarehouseRequest();
+		whReq.setUrl(url);
+		
+		// Open warehouse
+		auto response = whReq.send().wait(ws);
+		auto parent = response.getObject();
+		
+		// Put object
+		auto putReq = parent.putRequest();
+		putReq.setPath(rootPath);
+		putReq.setValue(ref);
+		
+		putReq.send().wait(ws);
+		
 		return true;
 	}
 		
@@ -269,6 +340,25 @@ struct WarehouseTool {
 		return true;
 	}
 	
+	auto getCmd() {
+		return kj::MainBuilder(context, "", "Retrieves an object from a FusionSC warehouse into an archive. Use the URL fragment to indicate what do downloats, e.g. https://warehouse#path/to/object")
+			.expectArg("<database URL>", KJ_BIND_METHOD(*this, setUrl))
+			.expectArg("<archive file>", KJ_BIND_METHOD(*this, setLocalFile))
+			.callAfterParsing(KJ_BIND_METHOD(*this, get))
+			.build()
+		;	
+	}
+	
+	auto putCmd() {
+		return kj::MainBuilder(context, "", "Stores an object into a FusionSC warehouse")
+			.expectArg("<database URL>", KJ_BIND_METHOD(*this, setUrl))
+			.expectArg("<path>", KJ_BIND_METHOD(*this, setPath))
+			.expectArg("<archive file>", KJ_BIND_METHOD(*this, setLocalFile))
+			.callAfterParsing(KJ_BIND_METHOD(*this, put))
+			.build()
+		;	
+	}
+	
 	auto vacuumCmd() {
 		return kj::MainBuilder(context, "", "Runs an sqlite VACUUM command to rebuild the database in-place. This command should be periodically"
 			" executed in order to mitigate database fragmentation.")
@@ -323,6 +413,9 @@ struct WarehouseTool {
 		);
 		
 		return kj::MainBuilder(context, infoString, "Manages a warehouse database")
+			.addSubCommand("get", KJ_BIND_METHOD(*this, getCmd), "Retrieves data object from warehouse")
+			.addSubCommand("put", KJ_BIND_METHOD(*this, putCmd), "Stores data object in warehouse")
+			
 			.addSubCommand("serve", KJ_BIND_METHOD(*this, serveCmd), "Serves a warehouse from an sqlite database")
 			
 			.addSubCommand("backup", KJ_BIND_METHOD(*this, backupCmd), "Create a backup of the database at target location.")

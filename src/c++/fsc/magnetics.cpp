@@ -914,7 +914,7 @@ struct CalculationSession : public FieldCalculator::Server {
 				try {
 					constexpr unsigned int GRID_VERSION = 7;
 					grid = readGrid(cached.getComputed().getGrid(), GRID_VERSION);
-				} catch(kj::Exception&) {
+				} catch(kj::Exception& e) {
 					goto recalculate;
 				}
 				
@@ -923,11 +923,15 @@ struct CalculationSession : public FieldCalculator::Server {
 					double y = hostPoints(iPoint, 1);
 					double z = hostPoints(iPoint, 2);
 					
+					constexpr double tol = 1e-6;
+					
 					double r = sqrt(x*x + y*y);
-					if(r < grid.rMin || r > grid.rMax)
+					if(r < grid.rMin - tol || r > grid.rMax + tol) {
 						goto recalculate;
-					if(z < grid.zMin || z > grid.zMax)
+					}
+					if(z < grid.zMin - tol || z > grid.zMax + tol) {
 						goto recalculate;
+					}
 				}
 							
 				return getActiveThread().dataService().download(cached.getComputed().getData())
@@ -1127,7 +1131,7 @@ Promise<void> FieldResolverBase::processField(MagneticField::Reader input, Magne
 		}
 		case MagneticField::CACHED: {
 			auto cachedIn = input.getCached();
-			auto cachedOut = output.getCached();
+			auto cachedOut = output.initCached();
 			
 			cachedOut.setComputed(cachedIn.getComputed());
 			

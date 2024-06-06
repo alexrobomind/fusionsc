@@ -92,11 +92,23 @@ class CoilPack(wrappers.structWrapper(service.W7XCoilSet)):
 		for i in range(7):
 			fields.mainFields[i] = await computeField(fields.mainFields[i])
 		
+		# Wait until main fields are computed
+		for f in fields.mainFields:
+			await f.cached.computed.data
+		
 		for i in range(5):
 			fields.trimFields[i] = await computeField(fields.trimFields[i])
 		
+		# Wait until trim fields are computed
+		for f in fields.trimFields:
+			await f.cached.computed.data
+		
 		for i in range(10):
 			fields.controlFields[i] = await computeField(fields.controlFields[i])
+		
+		# Wait until control coil fields are computed
+		for f in fields.controlFields:
+			await f.cached.computed.data
 		
 		return result
 	
@@ -151,7 +163,7 @@ def _loadDefaultCoils(url: str):
 	coils = warehouse.open(url)
 	_configDefaultCoils.set(CoilPack(coils.download()))
 
-def _defaultCoils():
+def getDefaultCoils():
 	# Allow users to override
 	if defaultCoils is not None:
 		return defaultCoils
@@ -164,7 +176,7 @@ def _defaultCoils():
 
 def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coils: Optional[CoilPack] = None) -> MagneticConfig:
 	if coils is None:
-		coils = _defaultCoils()
+		coils = getDefaultCoils()
 	
 	config = MagneticConfig()
 	
@@ -178,7 +190,7 @@ def mainField(i_12345 = [15000, 15000, 15000, 15000, 15000], i_ab = [0, 0], coil
 
 def trimCoils(i_trim = [0, 0, 0, 0, 0], coils: Optional[CoilPack] = None) -> MagneticConfig:
 	if coils is None:
-		coils = _defaultCoils()
+		coils = getDefaultCoils()
 	
 	config = MagneticConfig()
 	
@@ -191,7 +203,7 @@ def trimCoils(i_trim = [0, 0, 0, 0, 0], coils: Optional[CoilPack] = None) -> Mag
 
 def controlCoils(i_cc = [0, 0], coils: Optional[CoilPack] = None) -> MagneticConfig:
 	if coils is None:
-		coils = _defaultCoils()
+		coils = getDefaultCoils()
 	
 	config = MagneticConfig()
 	

@@ -41,7 +41,7 @@ interface NetworkInterface {
 		unsafeCloseAllNow @4 () -> ();
 	}
 	
-	connect    @0 (url : Text) -> (connection : Connection);
+	connect    @0 (url : Text, allowCompression : Bool = true) -> (connection : Connection);
 	listen     @1 (host : Text = "0.0.0.0", portHint : UInt16, listener : Listener, fallback : SimpleHttpServer) -> (openPort : OpenPort);
 	serve      @2 (host : Text = "0.0.0.0", portHint : UInt16, server : Capability, fallback : SimpleHttpServer) -> (openPort : OpenPort);
 	
