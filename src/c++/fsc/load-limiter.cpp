@@ -5,7 +5,7 @@
 namespace fsc {
 
 struct LoadLimiter::Impl : public kj::Refcounted {
-	Own<Impl> addRef() { return kj::addRef(this); }
+	Own<Impl> addRef() { return kj::addRef(*this); }
 	
 	struct TokenImpl {
 		Own<Impl> parent;
@@ -27,7 +27,7 @@ struct LoadLimiter::Impl : public kj::Refcounted {
 	}
 	
 	Token createToken() {
-		return Token { kj::heap<TokenImpl>(addRef()) };
+		return (Own<void>) kj::heap<TokenImpl>(addRef());
 	}
 };
 
@@ -36,10 +36,14 @@ LoadLimiter::LoadLimiter(size_t newCap) :
 {}
 
 Promise<LoadLimiter::Token> LoadLimiter::getToken() {
-	if(nActive < capacity)
-		return createToken();
+	if(pImpl -> nActive < pImpl -> capacity)
+		return pImpl -> createToken();
 	
-	return queue.wait();
+	return pImpl -> queue.wait();
 }
+
+size_t LoadLimiter::getCapacity() { return pImpl -> capacity; }
+
+size_t LoadLimiter::getActive() { return pImpl -> nActive; }
 
 }

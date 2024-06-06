@@ -11,6 +11,7 @@
 #include "jobs.h"
 #include "matcher.h"
 #include "vmec.h"
+#include "load-limiter.h"
 
 #include "odb.h"
 #include "sqlite.h"
