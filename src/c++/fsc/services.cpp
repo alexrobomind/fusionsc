@@ -154,7 +154,8 @@ Promise<Temporary<Warehouse::StoredObject>> connectWarehouse(kj::StringPtr urlSt
 struct RootServer : public RootService::Server {
 	RootServer(LocalConfig::Reader config) :
 		config(config),
-		device(selectDevice(config))
+		device(selectDevice(config)),
+		limiter(config.getLoadLimit())
 	{
 		NetworkInterface::Client nif = kj::heap<LocalNetworkInterface>();
 		
@@ -181,6 +182,7 @@ struct RootServer : public RootService::Server {
 	Own<DeviceBase> device;
 	
 	Matcher::Client myMatcher = newMatcher();
+	LoadLimiter limiter;
 	
 	kj::TreeMap<kj::String, Warehouse::Folder::Client> warehouses;
 	
@@ -201,35 +203,35 @@ struct RootServer : public RootService::Server {
 	Promise<void> newFieldCalculator(NewFieldCalculatorContext context) override {
 		KJ_REQUIRE(config.getEnableCompute(), "Computation is disabled on this node");
 		
-		context.initResults().setService(::fsc::newFieldCalculator(device -> addRef()));		
+		context.initResults().setService(limiter.limit(::fsc::newFieldCalculator(device -> addRef())));
 		return READY_NOW;
 	}
 	
 	Promise<void> newTracer(NewTracerContext context) override {		
 		KJ_REQUIRE(config.getEnableCompute(), "Computation is disabled on this node");	
 		
-		context.initResults().setService(newFLT(device -> addRef(), config.getFlt()));		
+		context.initResults().setService(limiter.limit(newFLT(device -> addRef(), config.getFlt())));		
 		return READY_NOW;
 	}
 	
 	Promise<void> newGeometryLib(NewGeometryLibContext context) override {
 		KJ_REQUIRE(config.getEnableCompute(), "Computation is disabled on this node");
 		
-		context.initResults().setService(fsc::newGeometryLib());
+		context.initResults().setService(limiter.limit(fsc::newGeometryLib()));
 		return READY_NOW;
 	}
 	
 	Promise<void> newHFCamProvider(NewHFCamProviderContext context) override {
 		KJ_REQUIRE(config.getEnableCompute(), "Computation is disabled on this node");
 		
-		context.initResults().setService(fsc::newHFCamProvider());
+		context.initResults().setService(limiter.limit(fsc::newHFCamProvider()));
 		return READY_NOW;
 	}
 	
 	Promise<void> newKDTreeService(NewKDTreeServiceContext context) override {
 		KJ_REQUIRE(config.getEnableCompute(), "Computation is disabled on this node");
 		
-		context.initResults().setService(fsc::newKDTreeService());
+		context.initResults().setService(limiter.limit(fsc::newKDTreeService()));
 		return READY_NOW;
 	}
 	
@@ -239,12 +241,12 @@ struct RootServer : public RootService::Server {
 		auto flt = thisCap().newTracerRequest().sendForPipeline().getService();
 		auto idx = thisCap().newKDTreeServiceRequest().sendForPipeline().getService();
 		
-		ctx.initResults().setService(fsc::newMapper(mv(flt), mv(idx), *device));
+		ctx.initResults().setService(limiter.limit(fsc::newMapper(mv(flt), mv(idx), *device)));
 		return READY_NOW;
 	}
 	
 	Promise<void> newVmecDriver(NewVmecDriverContext ctx) override {
-		ctx.initResults().setService(::fsc::createVmecDriver(device -> addRef(), selectScheduler()));
+		ctx.initResults().setService(limiter.limit(::fsc::createVmecDriver(device -> addRef(), selectScheduler())));
 		
 		return READY_NOW;
 	}

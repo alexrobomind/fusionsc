@@ -140,6 +140,9 @@ add_library(
 	
 	load-balancer.h
 	load-balancer.cpp
+	
+	load-limiter.h
+	load-limiter.cpp
 
 	data-viewer.h
 	data-viewer.cpp
