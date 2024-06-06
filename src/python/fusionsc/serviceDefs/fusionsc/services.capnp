@@ -69,6 +69,8 @@ struct LocalConfig {
 	}
 	
 	warehouses @11 : List(WarehouseConfig);
+	
+	loadLimit @15 : UInt32 = 100;
 }
 
 struct LoadBalancerConfig {
