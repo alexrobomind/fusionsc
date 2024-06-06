@@ -75,7 +75,7 @@ struct ReversibleFieldlineMapping {
 		
 		phi @3 : Float64;
 		lenOffset @4 : Float64;
-	};
+	}
 }
 
 struct FLTRequest {

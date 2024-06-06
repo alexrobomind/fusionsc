@@ -115,7 +115,7 @@ EIGEN_DEVICE_FUNC void RFLM::load(cu::ReversibleFieldlineMapping::State::Reader 
 	uv(1) = in.getV();
 	phi = in.getPhi();
 	lenOffset = in.getLenOffset();
-	activateSection(in.getSection()),
+	activateSection(in.getSection());
 }
 
 void RFLM::save(ReversibleFieldlineMapping::State::Builder out) {
@@ -131,7 +131,7 @@ void RFLM::load(ReversibleFieldlineMapping::State::Reader in) {
 	uv(1) = in.getV();
 	phi = in.getPhi();
 	lenOffset = in.getLenOffset();
-	activateSection(in.getSection()),
+	activateSection(in.getSection());
 }
 	
 double RFLM::unwrap(double dphi) {
