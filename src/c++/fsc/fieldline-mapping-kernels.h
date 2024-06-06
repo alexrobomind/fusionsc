@@ -14,6 +14,7 @@
 namespace fsc {
 	
 using Tensor3Ref = Eigen::TensorMap<Eigen::Tensor<double, 3>>;
+using Tensor2Ref = Eigen::TensorMap<Eigen::Tensor<double, 2>>;
 
 FSC_DECLARE_KERNEL(
 	invertRflmKernel,
@@ -107,6 +108,34 @@ EIGEN_DEVICE_FUNC inline void invertRflmKernel(unsigned int idx, Tensor3Ref rVal
 	
 	uVals(iR, iZ, iPhi) = u;
 	vVals(iR, iZ, iPhi) = v;
+}
+
+EIGEN_DEVICE_FUNC inline void mapKernel(unsigned int idx, Tensor2Ref in, cu::RFLMKernelData::Builder out, cu::ReversibleFieldlineMapping::Reader mapping) {
+	double x = in(idx, 0);
+	double y = in(idx, 1);
+	double z = in(idx, 2);
+	
+	RFLM m(mapping);
+	m.map(Vec3d(x, y, z), true);
+	m.save(out.mutateStates()[idx]);
+}
+
+EIGEN_DEVICE_FUNC inline void unmapKernel(unsigned int idx, cu::RFLMKernelData::Reader in, Tensor2Ref out, cu::ReversibleFieldlineMapping::Reader mapping) {	
+	RFLM m(mapping);
+	m.load(in.getStates()[idx]);
+	
+	auto pv = in.getPhiValues();
+	
+	double phi;
+	if(pv.size() > 0)
+		phi = pv[idx];
+	else
+		phi = m.phi;
+	
+	Vec3d pos = m.unmap(phi);
+	out(idx, 0) = pos(0);
+	out(idx, 1) = pos(1);
+	out(idx, 2) = pos(2);
 }
 
 }

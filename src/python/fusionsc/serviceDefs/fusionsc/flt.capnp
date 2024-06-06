@@ -66,6 +66,16 @@ struct ReversibleFieldlineMapping {
 	# axis. These can be used for higher-order interpolation methods to estimate
 	# correct derivative values.
 	nPad @2 : UInt64;
+	
+	struct State {
+		u @0 : Float64;
+		v @1 : Float64;
+		
+		section @2 : UInt64;
+		
+		phi @3 : Float64;
+		lenOffset @4 : Float64;
+	}
 }
 
 struct FLTRequest {
@@ -287,7 +297,7 @@ struct RFLMRequest {
 	v0 @9 : List(Float64) = [0.5];
 }
 
-interface Mapper {
+interface Mapper {	
 	computeRFLM @0 RFLMRequest -> (mapping : Data.DataRef(ReversibleFieldlineMapping));
 }
 
@@ -383,4 +393,9 @@ struct FLTKernelRequest {
 	#
 	#collisionLimit @6 : UInt32;
 	serviceRequest @0 : FLTRequest;
+}
+
+struct RFLMKernelData {
+	states @0 : List(ReversibleFieldlineMapping.State);
+	phiValues @1 : List(Float64);
 }

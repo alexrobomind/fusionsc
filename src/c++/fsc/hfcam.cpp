@@ -542,7 +542,7 @@ struct CamProvider : public HFCamProvider::Server {;
 		using Mat = Eigen::MatrixXd;
 		
 		// Postprocess using local geometry library
-		auto geoLib = newGeometryLib();
+		GeometryLib::Client geoLib = newGeometryLib();
 		auto mergeRequest = geoLib.mergeRequest();
 		mergeRequest.setNested(context.getParams().getGeometry());
 		
@@ -598,7 +598,7 @@ struct CamProvider : public HFCamProvider::Server {;
 
 } // anonymous namespace
 
-HFCamProvider::Client newHFCamProvider() {
+Own<HFCamProvider::Server> newHFCamProvider() {
 	return kj::heap<CamProvider>();
 }
 

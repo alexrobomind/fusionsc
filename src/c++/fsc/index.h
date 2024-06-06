@@ -6,7 +6,7 @@
 #include <fsc/index.capnp.h>
 
 namespace fsc {
-	KDTreeService::Client newKDTreeService();
+	Own<KDTreeService::Server> newKDTreeService();
 	
 	template<int dims>
 	struct KDTreeIndex {

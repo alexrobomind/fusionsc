@@ -49,7 +49,7 @@ Own<FieldCache> lruFieldCache(unsigned int size);
 /**
  * Creates a new field calculator.
  */
-FieldCalculator::Client newFieldCalculator(Own<DeviceBase> dev);
+Own<FieldCalculator::Server> newFieldCalculator(Own<DeviceBase> dev);
 
 /**
  * Creates a field resolver that will insert a cache instruction when detecting the passed field

@@ -251,12 +251,18 @@ struct ThreadPoolDevice {
                         std::function<void(Index, Index)> f,
                         std::function<void()> done) const {
     // Compute small problems directly in the caller thread.
-    if (n <= 1 || numThreads() == 1 ||
+    
+    // !!!!!! DOWNSTREAM MODIFICATION BY FUSIONSC !!!!!!!
+    //
+    // We do not want this to happen, as the computation will block the IO loop and
+    // the scheduling of other threads.
+    
+    /*if (n <= 1 || numThreads() == 1 ||
         CostModel::numThreads(n, cost, static_cast<int>(numThreads())) == 1) {
       f(0, n);
       done();
       return;
-    }
+    }*/
 
     // Compute block size and total count of blocks.
     ParallelForBlock block = CalculateParallelForBlock(n, cost, block_align);
@@ -283,15 +289,15 @@ struct ThreadPoolDevice {
       if (ctx->count.fetch_sub(1) == 1) delete ctx;
     };
 
-    if (block.count <= numThreads()) {
+    /*if (block.count <= numThreads()) {
       // Avoid a thread hop by running the root of the tree and one block on the
       // main thread.
       ctx->handle_range(0, n);
-    } else {
+    } else {*/
       // Execute the root in the thread pool to avoid running work on more than
       // numThreads() threads.
       pool_->Schedule([ctx, n]() { ctx->handle_range(0, n); });
-    }
+    /* } */
   }
 
   // Convenience wrapper for parallelForAsync that does not align blocks.

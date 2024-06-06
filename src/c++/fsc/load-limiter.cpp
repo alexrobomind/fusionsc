@@ -7,27 +7,29 @@ namespace fsc {
 struct LoadLimiter::Impl : public kj::Refcounted {
 	Own<Impl> addRef() { return kj::addRef(*this); }
 	
-	struct TokenImpl {
+	struct TokenImpl : public Token {
 		Own<Impl> parent;
 		
-		TokenImpl(Own<Impl> parent) : parent(mv(parent)) { ++parent -> nActive; }
+		TokenImpl(Impl& p) : parent(p.addRef()) { ++p.nActive; }
 		~TokenImpl() { --parent -> nActive; parent -> update(); }
 	};
 	
 	size_t capacity;
 	size_t nActive = 0;
-	kj::WaiterQueue<Token> queue;
+	size_t nQueued = 0;
+	kj::WaiterQueue<Own<Token>> queue;
 	
 	Impl(size_t cap) : capacity(cap) {}
 	
 	void update() {
 		while(!queue.empty() && nActive < capacity) {
 			queue.fulfill(createToken());
+			--nQueued;
 		}
 	}
 	
-	Token createToken() {
-		return (Own<void>) kj::heap<TokenImpl>(addRef());
+	Own<Token> createToken() {
+		return kj::heap<TokenImpl>(*this);
 	}
 };
 
@@ -35,15 +37,17 @@ LoadLimiter::LoadLimiter(size_t newCap) :
 	pImpl(kj::refcounted<Impl>(newCap))
 {}
 
-Promise<LoadLimiter::Token> LoadLimiter::getToken() {
+Promise<Own<LoadLimiter::Token>> LoadLimiter::getToken() {
 	if(pImpl -> nActive < pImpl -> capacity)
 		return pImpl -> createToken();
 	
-	return pImpl -> queue.wait();
+	++pImpl -> nQueued;
+	return pImpl -> queue.wait().attach(pImpl -> addRef());
 }
 
 size_t LoadLimiter::getCapacity() { return pImpl -> capacity; }
 
 size_t LoadLimiter::getActive() { return pImpl -> nActive; }
+size_t LoadLimiter::getQueued() { return pImpl -> nQueued; }
 
 }

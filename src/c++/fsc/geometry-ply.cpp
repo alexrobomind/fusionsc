@@ -58,7 +58,8 @@ Promise<void> writePly(Geometry::Reader geo, kj::StringPtr filename, bool binary
 	// Try to push the whole geometry into a single mesh
 	// constexpr uint32_t CAPNP_MAX_LIST_SIZE = 1 << 29 - 1;
 	// auto req = newGeometryLib().reduceRequest();
-	auto req = newGeometryLib().mergeRequest();
+	GeometryLib::Client geoLib = newGeometryLib();
+	auto req = geoLib.mergeRequest();
 	req.setNested(geo);
 	// req.setGeometry(geo);
 	// req.setMaxVertices(CAPNP_MAX_LIST_SIZE);

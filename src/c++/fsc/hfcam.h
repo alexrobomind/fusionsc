@@ -4,6 +4,6 @@
 
 namespace fsc {
 
-HFCamProvider::Client newHFCamProvider();
+Own<HFCamProvider::Server> newHFCamProvider();
 
 }

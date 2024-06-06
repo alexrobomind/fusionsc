@@ -1107,7 +1107,7 @@ struct FLTImpl : public FLT::Server {
 
 namespace fsc {	
 	// TODO: Make this accept data service instead	
-	FLT::Client newFLT(Own<DeviceBase> device, FLTConfig::Reader config) {
+	Own<FLT::Server> newFLT(Own<DeviceBase> device, FLTConfig::Reader config) {
 		return kj::heap<FLTImpl>(mv(device), config);
 	}
 }
