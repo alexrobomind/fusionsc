@@ -58,7 +58,7 @@ struct BlobImpl : public Blob, kj::Refcounted {
 };
 
 struct BlobBuilderImpl : public BlobBuilder {
-	BlobBuilderImpl(BlobStoreImpl& parent, size_t chunkSize);
+	BlobBuilderImpl(BlobStoreImpl& parent, size_t chunkSize, int compressionLevel);
 	
 	void write(const void* buffer, size_t size) override;
 	Own<Blob> finish() override;
@@ -152,7 +152,7 @@ Own<Blob> BlobStoreImpl::get(int64_t id) {
 }
 
 Own<BlobBuilder> BlobStoreImpl::create(size_t chunkSize) {
-	return kj::heap<BlobBuilderImpl>(*this, chunkSize);
+	return kj::heap<BlobBuilderImpl>(*this, chunkSize, -1);
 }
 
 // class BlobImpl
@@ -210,12 +210,12 @@ Own<kj::InputStream> BlobImpl::open() {
 
 // class BlobBuilderImpl
 
-BlobBuilderImpl::BlobBuilderImpl(BlobStoreImpl& parent, size_t chunkSize) :
+BlobBuilderImpl::BlobBuilderImpl(BlobStoreImpl& parent, size_t chunkSize, int compressionLevel) :
 	id(parent.createBlob.insert()),
 	parent(kj::addRef(parent)),
 	buffer(kj::heapArray<byte>(chunkSize)),
 	
-	compressor(9),
+	compressor(compressionLevel),
 	hashFunction(Botan::HashFunction::create("Blake2b"))
 {
 	KJ_REQUIRE(!parent.readOnly);
