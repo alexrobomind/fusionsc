@@ -29,6 +29,12 @@ struct RFLM {
 	inline EIGEN_DEVICE_FUNC RFLM(cu::ReversibleFieldlineMapping::Reader mapping);
 	inline EIGEN_DEVICE_FUNC RFLM(const RFLM& other) = default;
 	
+	inline EIGEN_DEVICE_FUNC void save(cu::ReversibleFieldlineMapping::State::Builder);
+	inline EIGEN_DEVICE_FUNC void load(cu::ReversibleFieldlineMapping::State::Reader);
+	
+	inline void save(ReversibleFieldlineMapping::State::Builder);
+	inline void load(ReversibleFieldlineMapping::State::Reader);
+	
 	cu::ReversibleFieldlineMapping::Reader mapping;
 	Vec2d uv;
 	uint64_t currentSection;
@@ -95,6 +101,38 @@ EIGEN_DEVICE_FUNC RFLM::RFLM(cu::ReversibleFieldlineMapping::Reader mapping) :
 	
 	nPhi(0), nZ(0), nR(0)
 {}
+
+EIGEN_DEVICE_FUNC void RFLM::save(cu::ReversibleFieldlineMapping::State::Builder out) {
+	out.setU(uv(0));
+	out.setV(uv(1));
+	out.setPhi(phi);
+	out.setLenOffset(lenOffset);
+	out.setSection(currentSection);
+}
+
+EIGEN_DEVICE_FUNC void RFLM::load(cu::ReversibleFieldlineMapping::State::Reader in) {
+	uv(0) = in.getU();
+	uv(1) = in.getV();
+	phi = in.getPhi();
+	lenOffset = in.getLenOffset();
+	activateSection(in.getSection()),
+}
+
+void RFLM::save(ReversibleFieldlineMapping::State::Builder out) {
+	out.setU(uv(0));
+	out.setV(uv(1));
+	out.setPhi(phi);
+	out.setLenOffset(lenOffset);
+	out.setSection(currentSection);
+}
+
+void RFLM::load(ReversibleFieldlineMapping::State::Reader in) {
+	uv(0) = in.getU();
+	uv(1) = in.getV();
+	phi = in.getPhi();
+	lenOffset = in.getLenOffset();
+	activateSection(in.getSection()),
+}
 	
 double RFLM::unwrap(double dphi) {
 	dphi = fmod(dphi, 2 * pi);
