@@ -3,8 +3,13 @@
 #include "db.h"
 
 #include <kj/io.h>
+#include <kj/async-io.h>
 
 namespace fsc {
+
+struct BlobReader : public kj::InputStream {
+	virtual Promise<size_t> tryReadAsync(void* buf, size_t min, size_t max, const kj::Executor& decompressionThread) = 0;
+};
 	
 struct Blob {
 	virtual Own<Blob> addRef() = 0;
@@ -27,7 +32,7 @@ struct Blob {
 	inline bool isFinished() { return getHash() != nullptr; }
 	
 	//! Opens the blob for reading
-	virtual Own<kj::InputStream> open() = 0;
+	virtual Own<BlobReader> open() = 0;
 };
 
 /** Construction helper for new Blobs
@@ -49,7 +54,20 @@ struct Blob {
  * to an external object during the construction phase, and the Blob can be deleted implicitly
  * if that object gets deleted.
  */
-struct BlobBuilder : public kj::OutputStream {	
+struct BlobBuilder : public kj::OutputStream {
+	/**
+	 * Alternative write API. This does not call the underlying database and only manipulates
+	 * the compressor and the buffer. It can be called from other thread as long as no simul
+	 * taneous other calls to the blob builder are made.
+	 *
+	 * Returns true if the buffer was completely consumed. If it returns false, flush() must
+	 * be called before calling tryConsume again.
+	 */
+	virtual bool tryConsume(kj::ArrayPtr<const byte> input) = 0;
+	
+	//! Flushes buffer to database. UNLIKE tryConsume CAN NOT BE USED CROSS-THREAD
+	virtual void flush() = 0;
+	
 	virtual Own<Blob> finish() = 0;	
 	virtual Own<Blob> getBlobUnderConstruction() = 0;
 };

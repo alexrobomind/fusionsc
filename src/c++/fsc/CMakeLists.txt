@@ -147,6 +147,9 @@ add_library(
 	data-viewer.h
 	data-viewer.cpp
 	
+	thread-pool.h
+	thread-pool.cpp
+	
 	kernels/array.h
 	kernels/device.h
 	kernels/karg.h

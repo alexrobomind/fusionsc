@@ -1,6 +1,7 @@
 #include "odb.h"
 #include "data.h"
 #include "blob-store.h"
+#include "thread-pool.h"
 
 #include <capnp/rpc.capnp.h>
 #include <fsc/warehouse-internal.capnp.h>
@@ -17,6 +18,11 @@ using namespace capnp;
 using ::fsc::internal::ObjectInfo;
 
 namespace fsc { namespace {
+
+LightWorkerPool& globalWorkerPool() {
+	static LightWorkerPool pool;
+	return pool;
+}
 	
 template<typename T>
 auto withODBBackoff(T func) {
@@ -1740,12 +1746,25 @@ Promise<void> DatarefDownloadProcess::receiveData(kj::ArrayPtr<const kj::byte> d
 	return withODBBackoff([this, data]() mutable -> Promise<void> {
 		KJ_REQUIRE(builder.get() != nullptr);
 		
+		return globalWorkerPool().select().executeAsync([this, data]() {
+			return builder -> tryConsume(data);
+		})
+		.then([this, data](bool consumed) -> Promise<void> {
+			if(consumed)
+				return READY_NOW;
+			
+			db.writeLock();
+			builder -> flush();
+			return receiveData(data);
+		});
+		
+		/*
 		// BlobBuilder::write() does not go inside a transaction
 		// Still, enable the global batch transaction
 		db.writeLock();
 		builder -> write(data.begin(), data.size());
 		
-		return READY_NOW;
+		return READY_NOW;*/
 	});
 }
 
@@ -1856,7 +1875,7 @@ struct DataRefInterface : public DataRef<AnyPointer>::Server {
 struct TransmissionProcess {
 	constexpr static inline size_t CHUNK_SIZE = 1024 * 1024;
 	
-	Own<kj::InputStream> reader;
+	Own<BlobReader> reader;
 	
 	DataRef<capnp::AnyPointer>::Receiver::Client receiver;
 	size_t start;
@@ -1864,7 +1883,7 @@ struct TransmissionProcess {
 	
 	// Array<byte> buffer;
 	
-	TransmissionProcess(Own<kj::InputStream>&& reader, DataRef<capnp::AnyPointer>::Receiver::Client receiver, size_t start, size_t end);
+	TransmissionProcess(Own<BlobReader>&& reader, DataRef<capnp::AnyPointer>::Receiver::Client receiver, size_t start, size_t end);
 	
 	Promise<void> run();
 	Promise<void> transmit(size_t chunkStart);
@@ -2330,7 +2349,7 @@ Promise<void> DataRefInterface::transmit(TransmitContext ctx) {
 		
 		// Open blob
 		Own<Blob> blob = snapshot -> blobStore -> get(blobIdQuery[0]);
-		Own<kj::InputStream> reader = blob -> open();
+		Own<BlobReader> reader = blob -> open();
 		
 		// Create transmission process
 		auto transProc = heapHeld<TransmissionProcess>(mv(reader), params.getReceiver(), params.getStart(), params.getEnd());
@@ -2340,7 +2359,7 @@ Promise<void> DataRefInterface::transmit(TransmitContext ctx) {
 
 // class TransmissionProcess
 	
-TransmissionProcess::TransmissionProcess(Own<kj::InputStream>&& reader, DataRef<capnp::AnyPointer>::Receiver::Client receiver, size_t start, size_t end) :
+TransmissionProcess::TransmissionProcess(Own<BlobReader>&& reader, DataRef<capnp::AnyPointer>::Receiver::Client receiver, size_t start, size_t end) :
 	reader(mv(reader)),
 	receiver(mv(receiver)),
 	// buffer(kj::heapArray<byte>(CHUNK_SIZE)),
@@ -2365,7 +2384,13 @@ Promise<void> TransmissionProcess::transmit(size_t chunkStart) {
 	// Do a transmission
 	auto request = receiver.receiveRequest();
 	auto buffer = request.initData(kj::min(CHUNK_SIZE, end - chunkStart));
-	reader -> read(buffer.begin(), buffer.size());
+	
+	return reader -> tryReadAsync(buffer.begin(), buffer.size(), buffer.size(), globalWorkerPool().select())
+	.then([this, chunkStart, request = mv(request), buffer](size_t nBytesRead) mutable {
+		KJ_REQUIRE(nBytesRead >= buffer.size(), "Insufficient bytes read");
+		return request.send().then([this, chunkEnd = chunkStart + buffer.size()]() { return transmit(chunkEnd); });
+	});
+	// reader -> read(buffer.begin(), buffer.size());
 	
 	/*if(chunkStart == 0) {
 		uint32_t* prefix = reinterpret_cast<uint32_t*>(buffer.begin());
@@ -2380,7 +2405,6 @@ Promise<void> TransmissionProcess::transmit(size_t chunkStart) {
 		KJ_DBG("Transmitting from ODB", end, nSegments, segmentSizes, expected, end / 8);
 	}*/
 	
-	return request.send().then([this, chunkEnd = chunkStart + buffer.size()]() { return transmit(chunkEnd); });
 }
 
 OneOf<decltype(nullptr), Capability::Client, kj::Exception> createInterface(ObjectDBEntry& entry, kj::Badge<ObjectDBHook> badge) {

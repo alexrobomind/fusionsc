@@ -38,7 +38,7 @@ struct BlobStoreImpl : public BlobStore, kj::Refcounted {
 	const bool readOnly;
 };
 
-struct BlobImpl : public Blob, kj::Refcounted {
+struct BlobImpl final : public Blob, kj::Refcounted {
 	BlobImpl(BlobStoreImpl& parent, int64_t id);
 	
 	Own<Blob> addRef() override;
@@ -50,19 +50,22 @@ struct BlobImpl : public Blob, kj::Refcounted {
 	kj::Array<const byte> getHash() override;
 	int64_t getId() override;
 	
-	Own<kj::InputStream> open() override;
+	Own<BlobReader> open() override;
 	
 	// Impl
 	Own<BlobStoreImpl> parent;
 	int64_t id;
 };
 
-struct BlobBuilderImpl : public BlobBuilder {
+struct BlobBuilderImpl final : public BlobBuilder {
 	BlobBuilderImpl(BlobStoreImpl& parent, size_t chunkSize, int compressionLevel);
 	
 	void write(const void* buffer, size_t size) override;
 	Own<Blob> finish() override;
 	Own<Blob> getBlobUnderConstruction() override;
+	
+	bool tryConsume(ArrayPtr<const byte>) override;
+	void flush() override;
 	
 	void flushBuffer();
 		
@@ -78,10 +81,13 @@ struct BlobBuilderImpl : public BlobBuilder {
 	kj::Array<uint8_t> hash;
 };
 
-struct BlobReaderImpl : public kj::InputStream {
+struct BlobReaderImpl final : public BlobReader {
 	BlobReaderImpl(BlobStoreImpl& parent, int64_t id);
 	
 	size_t tryRead(void* buf, size_t min, size_t max) override;
+	Promise<size_t> tryReadAsync(void* buf, size_t min, size_t max, const kj::Executor& decompressionThread) override;
+	
+	Promise<size_t> readAsyncStep(size_t min, size_t max, Own<const kj::Executor>);
 	
 	Decompressor decompressor;
 	db::PreparedStatement readStatement;
@@ -203,7 +209,7 @@ int64_t BlobImpl::getId() {
 	return id;
 }
 
-Own<kj::InputStream> BlobImpl::open() {
+Own<BlobReader> BlobImpl::open() {
 	KJ_REQUIRE(isFinished(), "Can not open an unfinished blob");
 	return kj::heap<BlobReaderImpl>(*parent, id);
 }
@@ -230,9 +236,10 @@ void BlobBuilderImpl::write(const void* buf, size_t count) {
 	
 	kj::ArrayPtr<const byte> data((const byte*) buf, count);
 	
-	// If a previous run failed, pick up where we left off
+	/*// If a previous run failed, pick up where we left off
 	KJ_IF_MAYBE(pOffset, partialCompressionOffset) {
-		compressor.setInput(data.slice(*pOffset, data.size()));
+		KJ_REQUIRE(compressor.remainingIn() + partialCompressionOffset == count);
+		// compressor.setInput(data.slice(*pOffset, data.size()));
 	} else {
 		compressor.setInput(data);
 	}
@@ -250,7 +257,36 @@ void BlobBuilderImpl::write(const void* buf, size_t count) {
 			break;
 	}
 	
+	hashFunction -> update(data.begin(), data.size());*/
+	while(!tryConsume(data)) {
+		flush();
+	}
+}
+
+bool BlobBuilderImpl::tryConsume(kj::ArrayPtr<const byte> data) {
+	// If a previous run failed, pick up where we left off
+	KJ_IF_MAYBE(pOffset, partialCompressionOffset) {
+		KJ_REQUIRE(compressor.remainingIn() + *pOffset == data.size());
+		// compressor.setInput(data.slice(*pOffset, data.size()));
+	} else {
+		compressor.setInput(data);
+	}
+	
+	compressor.step(false);
+	
+	if(compressor.remainingIn() > 0) {
+		partialCompressionOffset = data.size() - compressor.remainingIn();
+		return false;
+	}
+	
+	partialCompressionOffset = nullptr;
 	hashFunction -> update(data.begin(), data.size());
+	return true;
+}
+
+void BlobBuilderImpl::flush() {
+	if(compressor.remainingOut() == 0)
+		flushBuffer();
 }
 
 Own<Blob> BlobBuilderImpl::getBlobUnderConstruction() {
@@ -319,23 +355,47 @@ BlobReaderImpl::BlobReaderImpl(BlobStoreImpl& parent, int64_t id) :
 }
 
 size_t BlobReaderImpl::tryRead(void* output, size_t minSize, size_t maxSize) {
+	KJ_ASSERT(maxSize >= minSize);
+	
 	decompressor.setOutput(kj::ArrayPtr<byte>((byte*) output, maxSize));
 	
 	while(true) {
 		ZLib::State state = decompressor.step();
+		size_t filled = maxSize - decompressor.remainingOut();
 		
-		if(state == ZLib::FINISHED)
-			break;
-		
-		if(decompressor.remainingOut() == 0)
-			break;
+		if(state == ZLib::FINISHED || filled >= minSize)
+			return filled;
 		
 		KJ_ASSERT(decompressor.remainingIn() == 0);
 		KJ_REQUIRE(query.step(), "Missing chunks despite expecting more");
 		decompressor.setInput(query[0]);		
 	}
 	
-	return maxSize - decompressor.remainingOut();
+	// return maxSize - decompressor.remainingOut();
+	KJ_UNREACHABLE;
+}
+
+Promise<size_t> BlobReaderImpl::tryReadAsync(void* output, size_t minSize, size_t maxSize, const kj::Executor& executor) {
+	KJ_ASSERT(maxSize >= minSize);
+	decompressor.setOutput(kj::ArrayPtr<byte>((byte*) output, maxSize));
+	return readAsyncStep(minSize, maxSize, executor.addRef());
+}
+
+Promise<size_t> BlobReaderImpl::readAsyncStep(size_t minSize, size_t maxSize, Own<const kj::Executor> executor) {	
+	return executor -> executeAsync([this]() {
+		return decompressor.step();
+	})
+	.then([this, minSize, maxSize, e = executor -> addRef()](ZLib::State state) mutable -> Promise<size_t> {
+		size_t filled = maxSize - decompressor.remainingOut();
+		if(filled >= minSize || state == ZLib::FINISHED)
+			return maxSize - decompressor.remainingOut();
+		
+		KJ_ASSERT(decompressor.remainingIn() == 0);
+		KJ_REQUIRE(query.step(), "Missing chunks despite expecting more");
+		decompressor.setInput(query[0]);
+		
+		return readAsyncStep(minSize, maxSize, mv(e));
+	});
 }
 
 }
