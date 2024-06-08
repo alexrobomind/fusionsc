@@ -72,6 +72,27 @@ namespace {
 		
 		return result;
 	}
+	
+	struct LocalRefServerSet : capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> {
+		using Base = capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>>;
+		
+		DataRef<capnp::AnyPointer>::Client wrap(Own<internal::LocalDataRefImplV2> s) {
+			return add(mv(s));
+		}
+		
+		Promise<Maybe<internal::LocalDataRefImplV2&>> tryUnwrap(DataRef<capnp::AnyPointer>::Client c) {
+			return getLocalServer(mv(c))
+			.then([](Maybe<DataRef<capnp::AnyPointer>::Server&> s) -> Maybe<internal::LocalDataRefImplV2&> {
+				KJ_IF_MAYBE(pS, s) {
+					return static_cast<internal::LocalDataRefImplV2&>(*pS);
+				}
+				
+				return nullptr;
+			});
+		}
+	};
+	
+	static LocalRefServerSet LOCAL_REF_SERVER_SET = LocalRefServerSet();
 }
 	
 Promise<bool> isDataRef(capnp::Capability::Client clt) {
@@ -306,6 +327,112 @@ capnp::FlatArrayMessageReader& internal::LocalDataRefImpl::ensureReader(const ca
 
 kj::Array<const byte> internal::LocalDataRefImpl::addRefRaw() {
 	return entry.asArray();
+}
+
+// === class internal::LocalDataRefBackend ===
+
+internal::LocalDataRefBackend::LocalDataRefBackend(LocalDataRefGroup& g, StoreEntry e, Temporary<DataRefMetadata>&& metadata, kj::ArrayPtr<capnp::Capability::Client> capTable) :
+	group(g),
+	storeEntry(mv(e)),
+	metadata(mv(metadata))
+{
+	auto ctBuilder = kj::heapArrayBuilder<CapTableEntry>(capTable.size());
+	for(auto& e : capTable) {
+		ctBuilder.add(processCapTableEntry(e));
+	}
+	
+	this -> capTable = ctBuilder.finish();
+	data = storeEntry.asArray();
+}
+
+internal::LocalDataRefBackend::~LocalDataRefBackend() {
+	if(groupLink.isLinked())
+		group.entries.remove(*this);
+}
+
+Array<capnp::Capability::Client> internal::LocalDataRefBackend::getCapTable() {
+	auto builder = kj::heapArrayBuilder<capnp::Capability::Client>(capTable.size());
+	
+	for(CapTableEntry& e : capTable) {
+		capnp::Capability::Client forked = e.addBranch()
+		.then([](auto oneOf) -> capnp::Capability::Client {
+			if(oneOf.is<capnp::Capability::Client>())
+				return oneOf.get<capnp::Capability::Client>();
+			
+			auto pBackend = oneOf.get<Shared<LocalDataRefBackend>>();
+			return LOCAL_REF_SERVER_SET.wrap(
+				kj::refcounted<LocalDataRefImplV2>(*pBackend)
+			);
+		});
+	}
+	
+	return builder.finish();
+}
+
+internal::LocalDataRefBackend::CapTableEntry internal::LocalDataRefBackend::processCapTableEntry(capnp::Capability::Client c) {
+	return LOCAL_REF_SERVER_SET.tryUnwrap(c.castAs<DataRef<capnp::AnyPointer>>())
+	.then([c, &myGroup = this -> group](Maybe<LocalDataRefImplV2&> maybeRef) mutable -> CapTableData {
+		KJ_IF_MAYBE(pRef, maybeRef) {
+			auto& backend = *(pRef -> backend);
+			
+			// Check if backend is from same group.
+			// Otherwise we need to treat it as if external ref
+			if(&(backend.group) != &myGroup)
+				return mv(c);
+				
+			// We need to keep the client alive until after this
+			// promise resolves. If we do not, the containing
+			// promise might get destroyed during the deallocation
+			// of the surrounding lambda, because the client holds
+			// a reference to the group that the internal reference
+			// does not hold.
+			auto keepAlive = kj::evalLater([c](){});
+			getActiveThread().detach(mv(keepAlive));
+			
+			return Shared<LocalDataRefBackend>(backend.addRefInternal());
+		}
+		
+		return mv(c);
+	})
+	.fork();
+}
+
+Own<internal::LocalDataRefBackend> internal::LocalDataRefBackend::addRefExternal() {
+	return addRefInternal().attach(group.addRef());
+}
+
+// === class internal::LocalDataRefGroup ===
+
+internal::LocalDataRefGroup::~LocalDataRefGroup() {
+	// We need to keep all contents temporarily alive
+	// so that the contents list doesn't change
+	auto keepAlive = kj::heapArrayBuilder<Own<LocalDataRefBackend>>(entries.size());
+	for(auto& e : entries)
+		keepAlive.add(e.addRefInternal());
+	
+	// Clear all capability tables
+	// This breaks all recursive links of objects with each
+	// other, so that everything can get cleared up in time.
+	for(auto& e : entries) {
+		e.capTable = nullptr;
+		entries.remove(e);
+	}
+	
+	keepAlive.clear();
+}
+
+// === class internal::LocalDataRefImplV2 ===
+
+internal::LocalDataRefImplV2::LocalDataRefImplV2(LocalDataRefBackend& b) :
+	backend(b.addRefExternal())
+{}
+
+kj::ArrayPtr<capnp::Capability::Client> internal::LocalDataRefImplV2::getCapTable() {
+	KJ_IF_MAYBE(pTbl, cachedCapTable) {
+		return *pTbl;
+	}
+	
+	return cachedCapTable.emplace(backend -> getCapTable());
 }
 
 // === class internal::LocalDataServiceImpl ===

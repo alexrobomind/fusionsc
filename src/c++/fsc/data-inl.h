@@ -254,61 +254,81 @@ private:
 	bool debugChunks = false;
 };
 
-/*
+
 
 //! A group of (possibly strongly-connected) DataRefs downloaded to local memory
-struct DataRefGroup;
+struct LocalDataRefGroup;
 
-struct DataRefBackend {	
-	using CapTableEntry = kj::ForkedPromise<OneOf<DataRefBackend*, Capability::Client>>;
+struct LocalDataRefBackend : kj::Refcounted {
+	using CapTableData = OneOf<Shared<LocalDataRefBackend>, capnp::Capability::Client>;
+	using CapTableEntry = kj::ForkedPromise<CapTableData>;
 	
-	DataRefBackend(DataRefGroup& g, StoreEntry e, Temporary<Metadata>&& metadata, kj::ArrayPtr<capnp::Capability::Client> capTable);
-	~DataRefBackend();
+	LocalDataRefBackend(LocalDataRefGroup& g, StoreEntry e, Temporary<DataRefMetadata>&& metadata, kj::ArrayPtr<capnp::Capability::Client> capTable);
+	~LocalDataRefBackend();
 	
-	inline Metadata::Reader getMetadata() { return metadata; }
+	inline DataRefMetadata::Reader getMetadata() { return metadata; }
 	
+	//! Computes the cap table
 	kj::Array<capnp::Capability::Client> getCapTable();
 	
 	inline kj::ArrayPtr<const kj::byte> getData() { return data; }
+	
+	//! Returns an owning view to the stored data detached from the LocalDataRef
 	kj::Array<const kj::byte> addRefData();
 	
-	inline void incRef() { ++refCount; }
-	void decRef();
+	//! Obtain a reference for use within the same group
+	inline Own<LocalDataRefBackend> addRefInternal() { return kj::addRef(*this); }
+	
+	//! Obtain a reference for external access
+	inline Own<LocalDataRefBackend> addRefExternal();
 
 private:
-	Temporary<Metadata> metadata;
+	CapTableEntry processCapTableEntry(capnp::Capability::Client);
+	
+	Temporary<DataRefMetadata> metadata;
 	kj::Array<CapTableEntry> capTable;
 	kj::Array<const byte> data;
 	
-	StoreEntry entry = nullptr;
+	StoreEntry storeEntry = nullptr;
 	
-	DataRefGroup& group;
-	kj::ListLink<DataRefGroup> linkInGroup;
+	LocalDataRefGroup& group;
+	kj::ListLink<LocalDataRefBackend> groupLink;
 	
 	size_t refCount = 0;
+	
+	friend struct LocalDataRefGroup;
 };
 
-struct DataRefGroup : kj::Refcounted {
-	kj::List<DataRefBackend, &DataRef::linkInGroup> entries;
+struct LocalDataRefGroup : kj::Refcounted {
+	~LocalDataRefGroup();
+	
+	inline Own<LocalDataRefGroup> addRef() { return kj::addRef(*this); }
+	
+	kj::List<LocalDataRefBackend, &LocalDataRefBackend::groupLink> entries;
 };
 
-struct LocalDataRefImpl : public DataRef<capnp::AnyPointer>::Server, public kj::Refcounted {
-	LocalDataRefImpl(DataRefBackend&);
+struct LocalDataRefImplV2 : public DataRef<capnp::AnyPointer>::Server, public kj::Refcounted {
+	LocalDataRefImplV2(LocalDataRefBackend&);
 	
 	// Returns a reader to the locally stored metadata
-	inline Metadata::Reader localMetadata() { return backend -> getMetadata(); }
-	inline kj::Array<capnp::Capability::Client> getCapTable() { return backend -> getCapTable(); }
+	inline DataRefMetadata::Reader getMetadata() { return backend -> getMetadata(); }
+	kj::ArrayPtr<capnp::Capability::Client> getCapTable();
 	
 	Promise<void> metaAndCapTable(MetaAndCapTableContext) override ;
 	Promise<void> rawBytes(RawBytesContext) override ;
 	Promise<void> transmit(TransmitContext) override ;
 	
 private:
-	Own<DataRefGroup> backendGroup;
-	DataRefBackend* backend;
+	Own<LocalDataRefBackend> backend;
+	
+	Maybe<kj::Array<capnp::Capability::Client>> cachedCapTable;
+	Maybe<capnp::ReaderCapabilityTable> readerCapTable;
+	Maybe<capnp::FlatArrayMessageReader> messageReader;
+	
+	friend struct LocalDataRefBackend;
 };
 
-*/
+
 
 /**
  * Backend implementation for locally stored data refs. Holds a reference to the
@@ -347,9 +367,6 @@ public:
 	// Serialized metadata
 	capnp::MallocMessageBuilder _metadata;
 	
-	Maybe<DownloadGroup&> group;
-	kj::ListLink<LocalDataRefImpl> groupLink;
-
 	virtual ~LocalDataRefImpl() {};
 	
 	capnp::FlatArrayMessageReader& ensureReader(const capnp::ReaderOptions& options);
