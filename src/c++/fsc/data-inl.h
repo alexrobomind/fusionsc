@@ -254,6 +254,39 @@ private:
 	bool debugChunks = false;
 };
 
+/*
+//! A group of (possibly strongly-connected) DataRefs downloaded to local memory
+struct DataRefGroup;
+
+struct DataRefBackend {	
+	using CapTableEntry = kj::ForkedPromise<OneOf<DataRefBackend*, Capability::Client>>;
+	
+	Temporary<Metadata> metadata;
+	kj::Array<CapTableEntry> capTable;
+	kj::Array<const byte> data;
+	
+	DataRefGroup& group;
+	kj::ListLink<DataRefGroup> linkInGroup;
+	
+	DataRefBackend(DataRefGroup& g, Array<const byte> data, Temporary<Metadata>&& metadata, kj::ArrayPtr<capnp::Capability::Client> capTable);
+	~DataRefBackend();
+	
+	inline Metadata::Reader getMetadata() { return metadata; }
+	kj::Array<capnp::Capability::Client> getCapTable();
+	inline kj::ArrayPtr<const kj::byte> getData() { return data; }
+
+private:
+	Temporary<Metadata> metadata;
+	kj::Array<CapTableEntry> capTable;
+	kj::Array<const byte> data;
+	
+	size_t refCount = 0;
+};
+
+struct DataRefGroup : kj::Refcounted {
+	kj::List<DataRefBackend, &DataRef::linkInGroup> entries;
+};*/
+
 /**
  * Backend implementation for locally stored data refs. Holds a reference to the
  * binary data store for the encoded binary data and a table of capabilities
@@ -261,7 +294,6 @@ private:
  */
 class LocalDataRefImpl : public DataRef<capnp::AnyPointer>::Server, public kj::Refcounted {
 public:
-	
 	using Metadata = DataRefMetadata;
 	
 	Own<LocalDataRefImpl> addRef();
@@ -291,6 +323,9 @@ public:
 	
 	// Serialized metadata
 	capnp::MallocMessageBuilder _metadata;
+	
+	Maybe<DownloadGroup&> group;
+	kj::ListLink<LocalDataRefImpl> groupLink;
 
 	virtual ~LocalDataRefImpl() {};
 	

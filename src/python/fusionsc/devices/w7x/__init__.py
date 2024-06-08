@@ -92,6 +92,11 @@ class CoilPack(wrappers.structWrapper(service.W7XCoilSet)):
 		for i in range(7):
 			fields.mainFields[i] = await computeField(fields.mainFields[i])
 		
+		if grid.nSym != 1:
+			import warnings
+			warnings.warn("Skipped pre-computation of control- and trim-coils because the grid is symmetric")
+			return result
+		
 		for i in range(5):
 			fields.trimFields[i] = await computeField(fields.trimFields[i])
 		
