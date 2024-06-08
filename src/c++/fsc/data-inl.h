@@ -274,7 +274,7 @@ struct LocalDataRefBackend : kj::Refcounted {
 	inline kj::ArrayPtr<const kj::byte> getData() { return data; }
 	
 	//! Returns an owning view to the stored data detached from the LocalDataRef
-	kj::Array<const kj::byte> addRefData();
+	kj::Array<const kj::byte> forkData();
 	
 	//! Obtain a reference for use within the same group
 	inline Own<LocalDataRefBackend> addRefInternal() { return kj::addRef(*this); }
@@ -312,11 +312,19 @@ struct LocalDataRefImplV2 : public DataRef<capnp::AnyPointer>::Server, public kj
 	
 	// Returns a reader to the locally stored metadata
 	inline DataRefMetadata::Reader getMetadata() { return backend -> getMetadata(); }
-	kj::ArrayPtr<capnp::Capability::Client> getCapTable();
+	ArrayPtr<capnp::Capability::Client> getCapTable();
+	
+	inline ArrayPtr<const byte> getData() { return backend -> getData(); }
+	inline Array<const byte> forkData() { return backend -> forkData(); }
 	
 	Promise<void> metaAndCapTable(MetaAndCapTableContext) override ;
 	Promise<void> rawBytes(RawBytesContext) override ;
 	Promise<void> transmit(TransmitContext) override ;
+	
+	capnp::AnyPointer::Reader getRoot(const capnp::ReaderOptions& opts = READ_UNLIMITED);
+	
+	template<typename T>
+	T::Reader getAs(const capnp::ReaderOptions& opts = READ_UNLIMITED);
 	
 private:
 	Own<LocalDataRefBackend> backend;
@@ -380,6 +388,19 @@ private:
 };
 
 // Helper methods to handle the special representation for capnp::Data.
+
+template<typename T>
+typename T::Reader internal::LocalDataRefImplV2::getAs(const capnp::ReaderOptions& opts) {
+	if(kj::isSameType<T, capnp::Data>()) {
+		if(metadata.getFormat().isRaw()) {
+			return getData();
+		} else {
+			return getRoot(opts).getAs<capnp::Data>();
+		}
+	} else {
+		return getRoot(opts).getAs<T>();
+	}
+}
 
 template<typename T>
 typename T::Reader getDataRefAs(LocalDataRefImpl& impl, const capnp::ReaderOptions& options);

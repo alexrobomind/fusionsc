@@ -404,6 +404,10 @@ Own<internal::LocalDataRefBackend> internal::LocalDataRefBackend::addRefExternal
 	return addRefInternal().attach(group.addRef());
 }
 
+Array<const byte> internal::LocalDataRefBackend::forkData() {
+	return storeEntry.asArray();
+}
+
 // === class internal::LocalDataRefGroup ===
 
 internal::LocalDataRefGroup::~LocalDataRefGroup() {
@@ -436,6 +440,49 @@ kj::ArrayPtr<capnp::Capability::Client> internal::LocalDataRefImplV2::getCapTabl
 	}
 	
 	return cachedCapTable.emplace(backend -> getCapTable());
+}
+
+capnp::AnyPointer::Reader internal::LocalDataRefImplV2::getRoot(const capnp::ReaderOptions& opts) {
+	KJ_REQUIRE(!metadata.getFormat().isRaw(), "Can not obtain message root in raw data");
+	
+	capnp::ReaderCapabilityTable* rct;
+	capnp::FlatArrayMessageReader* mr;
+	
+	// If neccessary, construct reader capability table
+	KJ_IF_MAYBE(pTbl, this -> readerCapTable) {
+		rct = pTbl;
+	} else {
+		auto capTable = getCapTable();
+		auto rctBuilder = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(capTable.size());
+		
+		for(auto client : capTable) {
+			auto hook = capnp::ClientHook::from(mv(client));
+			if(hook -> isNull()) {
+				rctBuilder.add(nullptr);
+			} else {
+				rctBuilder.add(mv(hook));
+			}
+		}
+		
+		rct = &(this -> readerCapTable.emplace(rctBuilder.finish()));
+	}
+	
+	KJ_IF_MAYBE(pReader, this -> messageReader) {
+		mr = pReader;
+	} else {
+		// Obtain data as a byte pointer (note that this drops all attached objects to keep alive0
+		ArrayPtr<const byte> bytePtr = getData();
+		
+		// Cast the data to a word array (let's hope they are aligned properly)
+		ArrayPtr<const capnp::word> wordPtr = ArrayPtr<const capnp::word>(
+			reinterpret_cast<const capnp::word*>(bytePtr.begin()),
+			bytePtr.size() / sizeof(capnp::word)
+		);
+		
+		mr = &(messageReader.emplace(wordPtr, opts));
+	}
+	
+	return rct -> imbue(mr -> getRoot<capnp::AnyPointer>());
 }
 
 // === class internal::LocalDataServiceImpl ===
