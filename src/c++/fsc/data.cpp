@@ -351,11 +351,13 @@ internal::LocalDataRefBackend::~LocalDataRefBackend() {
 }
 
 Array<capnp::Capability::Client> internal::LocalDataRefBackend::getCapTable() {
+	KJ_REQUIRE(groupLink.isLinked(), "Internal error: getCapTable() called from non-external reference");
+
 	auto builder = kj::heapArrayBuilder<capnp::Capability::Client>(capTable.size());
 	
 	for(CapTableEntry& e : capTable) {
 		capnp::Capability::Client forked = e.addBranch()
-		.then([](auto oneOf) -> capnp::Capability::Client {
+		.then([g = group.addRef()](auto oneOf) -> capnp::Capability::Client {
 			if(oneOf.is<capnp::Capability::Client>())
 				return oneOf.get<capnp::Capability::Client>();
 			
