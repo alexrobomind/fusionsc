@@ -255,37 +255,60 @@ private:
 };
 
 /*
+
 //! A group of (possibly strongly-connected) DataRefs downloaded to local memory
 struct DataRefGroup;
 
 struct DataRefBackend {	
 	using CapTableEntry = kj::ForkedPromise<OneOf<DataRefBackend*, Capability::Client>>;
 	
-	Temporary<Metadata> metadata;
-	kj::Array<CapTableEntry> capTable;
-	kj::Array<const byte> data;
-	
-	DataRefGroup& group;
-	kj::ListLink<DataRefGroup> linkInGroup;
-	
-	DataRefBackend(DataRefGroup& g, Array<const byte> data, Temporary<Metadata>&& metadata, kj::ArrayPtr<capnp::Capability::Client> capTable);
+	DataRefBackend(DataRefGroup& g, StoreEntry e, Temporary<Metadata>&& metadata, kj::ArrayPtr<capnp::Capability::Client> capTable);
 	~DataRefBackend();
 	
 	inline Metadata::Reader getMetadata() { return metadata; }
+	
 	kj::Array<capnp::Capability::Client> getCapTable();
+	
 	inline kj::ArrayPtr<const kj::byte> getData() { return data; }
+	kj::Array<const kj::byte> addRefData();
+	
+	inline void incRef() { ++refCount; }
+	void decRef();
 
 private:
 	Temporary<Metadata> metadata;
 	kj::Array<CapTableEntry> capTable;
 	kj::Array<const byte> data;
 	
+	StoreEntry entry = nullptr;
+	
+	DataRefGroup& group;
+	kj::ListLink<DataRefGroup> linkInGroup;
+	
 	size_t refCount = 0;
 };
 
 struct DataRefGroup : kj::Refcounted {
 	kj::List<DataRefBackend, &DataRef::linkInGroup> entries;
-};*/
+};
+
+struct LocalDataRefImpl : public DataRef<capnp::AnyPointer>::Server, public kj::Refcounted {
+	LocalDataRefImpl(DataRefBackend&);
+	
+	// Returns a reader to the locally stored metadata
+	inline Metadata::Reader localMetadata() { return backend -> getMetadata(); }
+	inline kj::Array<capnp::Capability::Client> getCapTable() { return backend -> getCapTable(); }
+	
+	Promise<void> metaAndCapTable(MetaAndCapTableContext) override ;
+	Promise<void> rawBytes(RawBytesContext) override ;
+	Promise<void> transmit(TransmitContext) override ;
+	
+private:
+	Own<DataRefGroup> backendGroup;
+	DataRefBackend* backend;
+};
+
+*/
 
 /**
  * Backend implementation for locally stored data refs. Holds a reference to the
