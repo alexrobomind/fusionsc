@@ -398,6 +398,7 @@ internal::LocalDataRefBackend::CapTableEntry internal::LocalDataRefBackend::proc
 }
 
 Own<internal::LocalDataRefBackend> internal::LocalDataRefBackend::addRefExternal() {
+	KJ_REQUIRE(groupLink.isLinked(), "Internal error: Adding external ref after group is destroyed");
 	return addRefInternal().attach(group.addRef());
 }
 
