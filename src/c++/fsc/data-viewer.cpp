@@ -28,7 +28,7 @@ int indexOf(Capability::Client clt) {
 LocalDataRef<AnyPointer> createWrapper(LocalDataRef<AnyPointer> local) {
 	auto capTable = local.getCapTable();
 	
-	auto newCapTable = kj::heapArrayBuilder<Maybe<Capability::Client>>(capTable.size());
+	auto newCapTable = kj::heapArrayBuilder<Capability::Client>(capTable.size());
 	for(auto i : kj::indices(capTable)) {
 		newCapTable.add(kj::heap<RefProxy>(i));
 	}

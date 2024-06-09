@@ -76,6 +76,57 @@ private:
 	Own<const kj::Directory> dir;
 };
 
+//! A group of (possibly strongly-connected) DataRefs downloaded to local memory
+struct LocalDataRefGroup;
+
+struct LocalDataRefBackend : kj::Refcounted {
+	using CapTableData = OneOf<Shared<LocalDataRefBackend>, capnp::Capability::Client>;
+	using CapTableEntry = kj::ForkedPromise<CapTableData>;
+	
+	LocalDataRefBackend(LocalDataRefGroup& g, StoreEntry e, Temporary<DataRefMetadata>&& metadata, kj::ArrayPtr<capnp::Capability::Client> capTable);
+	~LocalDataRefBackend();
+	
+	inline DataRefMetadata::Reader getMetadata() { return metadata; }
+	
+	//! Computes the cap table
+	kj::Array<capnp::Capability::Client> getCapTable();
+	
+	inline kj::ArrayPtr<const kj::byte> getData() { return data; }
+	
+	//! Returns an owning view to the stored data detached from the LocalDataRef
+	kj::Array<const kj::byte> forkData();
+	
+	//! Obtain a reference for use within the same group
+	inline Own<LocalDataRefBackend> addRefInternal() { return kj::addRef(*this); }
+	
+	//! Obtain a reference for external access
+	inline Own<LocalDataRefBackend> addRefExternal();
+
+private:
+	CapTableEntry processCapTableEntry(capnp::Capability::Client);
+	
+	Temporary<DataRefMetadata> metadata;
+	kj::Array<CapTableEntry> capTable;
+	kj::Array<const byte> data;
+	
+	StoreEntry storeEntry = nullptr;
+	
+	LocalDataRefGroup& group;
+	kj::ListLink<LocalDataRefBackend> groupLink;
+	
+	size_t refCount = 0;
+	
+	friend struct LocalDataRefGroup;
+};
+
+struct LocalDataRefGroup : kj::Refcounted {
+	~LocalDataRefGroup();
+	
+	inline Own<LocalDataRefGroup> addRef() { return kj::addRef(*this); }
+	
+	kj::List<LocalDataRefBackend, &LocalDataRefBackend::groupLink> entries;
+};
+
 	
 /** Common download logic.
  * 
@@ -117,13 +168,14 @@ struct DownloadTask : public kj::Refcounted {
 	};
 	
 	struct Context {
-		mutable Own<Registry> registry;
+		mutable Own<Registry> registry = kj::refcounted<Registry>();
+		mutable Own<LocalDataRefGroup> localGroup = kj::refcounted<LocalDataRefGroup>();
 		
 		Context() : registry(kj::refcounted<Registry>()) {}
-		Context(const Context& other) : registry(other.registry -> addRef()) {}
+		Context(const Context& other) : registry(other.registry -> addRef()), localGroup(other.localGroup -> addRef()) {}
 		Context(Context&& other) = default;
 		
-		Context& operator=(const Context& other) { registry = other.registry -> addRef(); }
+		Context& operator=(const Context& other) { registry = other.registry -> addRef(); localGroup = other.localGroup -> addRef(); }
 		Context& operator=(Context&& other) = default;
 	};
 	
@@ -211,7 +263,7 @@ public:
 	
 	Promise<LocalDataRef<capnp::AnyPointer>> download(DataRef<capnp::AnyPointer>::Client src, bool recursive, DTContext ctx = DTContext());
 	
-	LocalDataRef<capnp::AnyPointer> publish(DataRefMetadata::Reader metaData, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable);
+	LocalDataRef<capnp::AnyPointer> publish(DataRefMetadata::Reader metaData, Array<const byte>&& data, ArrayPtr<capnp::Capability::Client> capTable);
 	
 	Promise<void> writeArchive(DataRef<capnp::AnyPointer>::Client ref, const kj::File& out);
 	
@@ -239,7 +291,7 @@ public:
 	Promise<Maybe<LocalDataRef<capnp::AnyPointer>>> unwrap(DataRef<capnp::AnyPointer>::Client ref);
 	
 private:
-	capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> serverSet;
+	// capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> serverSet;
 	Library library;
 	
 	Own<DBCache> dbCache;
@@ -254,59 +306,6 @@ private:
 	bool debugChunks = false;
 };
 
-
-
-//! A group of (possibly strongly-connected) DataRefs downloaded to local memory
-struct LocalDataRefGroup;
-
-struct LocalDataRefBackend : kj::Refcounted {
-	using CapTableData = OneOf<Shared<LocalDataRefBackend>, capnp::Capability::Client>;
-	using CapTableEntry = kj::ForkedPromise<CapTableData>;
-	
-	LocalDataRefBackend(LocalDataRefGroup& g, StoreEntry e, Temporary<DataRefMetadata>&& metadata, kj::ArrayPtr<capnp::Capability::Client> capTable);
-	~LocalDataRefBackend();
-	
-	inline DataRefMetadata::Reader getMetadata() { return metadata; }
-	
-	//! Computes the cap table
-	kj::Array<capnp::Capability::Client> getCapTable();
-	
-	inline kj::ArrayPtr<const kj::byte> getData() { return data; }
-	
-	//! Returns an owning view to the stored data detached from the LocalDataRef
-	kj::Array<const kj::byte> forkData();
-	
-	//! Obtain a reference for use within the same group
-	inline Own<LocalDataRefBackend> addRefInternal() { return kj::addRef(*this); }
-	
-	//! Obtain a reference for external access
-	inline Own<LocalDataRefBackend> addRefExternal();
-
-private:
-	CapTableEntry processCapTableEntry(capnp::Capability::Client);
-	
-	Temporary<DataRefMetadata> metadata;
-	kj::Array<CapTableEntry> capTable;
-	kj::Array<const byte> data;
-	
-	StoreEntry storeEntry = nullptr;
-	
-	LocalDataRefGroup& group;
-	kj::ListLink<LocalDataRefBackend> groupLink;
-	
-	size_t refCount = 0;
-	
-	friend struct LocalDataRefGroup;
-};
-
-struct LocalDataRefGroup : kj::Refcounted {
-	~LocalDataRefGroup();
-	
-	inline Own<LocalDataRefGroup> addRef() { return kj::addRef(*this); }
-	
-	kj::List<LocalDataRefBackend, &LocalDataRefBackend::groupLink> entries;
-};
-
 struct LocalDataRefImplV2 : public DataRef<capnp::AnyPointer>::Server, public kj::Refcounted {
 	LocalDataRefImplV2(LocalDataRefBackend&);
 	
@@ -314,8 +313,8 @@ struct LocalDataRefImplV2 : public DataRef<capnp::AnyPointer>::Server, public kj
 	inline DataRefMetadata::Reader getMetadata() { return backend -> getMetadata(); }
 	ArrayPtr<capnp::Capability::Client> getCapTable();
 	
-	inline ArrayPtr<const byte> getData() { return backend -> getData(); }
-	inline Array<const byte> forkData() { return backend -> forkData(); }
+	inline ArrayPtr<const byte> getRaw() { return backend -> getData(); }
+	inline Array<const byte> forkRaw() { return backend -> forkData(); }
 	
 	Promise<void> metaAndCapTable(MetaAndCapTableContext) override ;
 	Promise<void> rawBytes(RawBytesContext) override ;
@@ -324,7 +323,9 @@ struct LocalDataRefImplV2 : public DataRef<capnp::AnyPointer>::Server, public kj
 	capnp::AnyPointer::Reader getRoot(const capnp::ReaderOptions& opts = READ_UNLIMITED);
 	
 	template<typename T>
-	T::Reader getAs(const capnp::ReaderOptions& opts = READ_UNLIMITED);
+	typename T::Reader getAs(const capnp::ReaderOptions& opts = READ_UNLIMITED);
+	
+	Own<LocalDataRefImplV2> addRef() { return kj::addRef(*this); }
 	
 private:
 	Own<LocalDataRefBackend> backend;
@@ -333,83 +334,27 @@ private:
 	Maybe<capnp::ReaderCapabilityTable> readerCapTable;
 	Maybe<capnp::FlatArrayMessageReader> messageReader;
 	
+	// This class needs access to the backend to unwrap it out
 	friend struct LocalDataRefBackend;
 };
+	
 
-
-
-/**
- * Backend implementation for locally stored data refs. Holds a reference to the
- * binary data store for the encoded binary data and a table of capabilities
- * referenced inside the binary data.
- */
-class LocalDataRefImpl : public DataRef<capnp::AnyPointer>::Server, public kj::Refcounted {
-public:
-	using Metadata = DataRefMetadata;
-	
-	Own<LocalDataRefImpl> addRef();
-	
-	// Decodes the underlying data as a capnproto message
-	template<typename T>
-	typename T::Reader get(const capnp::ReaderOptions& options);
-	
-	// Returns an additional owning ref to the underlying data
-	kj::Array<const byte> addRefRaw();
-	
-	// Returns a reader to the locally stored metadata
-	Metadata::Reader localMetadata();
-	
-	Promise<void> metaAndCapTable(MetaAndCapTableContext) override ;
-	Promise<void> rawBytes(RawBytesContext) override ;
-	Promise<void> transmit(TransmitContext) override ;
-	
-	// Reference to the local data store entry holding our data
-	StoreEntry entry = nullptr;
-	
-	// Array-of-clients view onto the capability table
-	Array<capnp::Capability::Client> capTableClients;
-	
-	// ReaderCapabilityTable view onto the capability table
-	Own<capnp::ReaderCapabilityTable> readerTable;
-	
-	// Serialized metadata
-	capnp::MallocMessageBuilder _metadata;
-	
-	virtual ~LocalDataRefImpl() {};
-	
-	capnp::FlatArrayMessageReader& ensureReader(const capnp::ReaderOptions& options);
-
-private:
-	LocalDataRefImpl() {};
-	
-	Maybe<capnp::FlatArrayMessageReader> maybeReader;
-
-	friend Own<LocalDataRefImpl> kj::refcounted<LocalDataRefImpl>();
-};
 
 // Helper methods to handle the special representation for capnp::Data.
 
 template<typename T>
 typename T::Reader internal::LocalDataRefImplV2::getAs(const capnp::ReaderOptions& opts) {
-	if(kj::isSameType<T, capnp::Data>()) {
-		if(metadata.getFormat().isRaw()) {
-			return getData();
-		} else {
-			return getRoot(opts).getAs<capnp::Data>();
-		}
-	} else {
-		return getRoot(opts).getAs<T>();
-	}
+	return getRoot(opts).getAs<T>();
 }
 
-template<typename T>
-typename T::Reader getDataRefAs(LocalDataRefImpl& impl, const capnp::ReaderOptions& options);
-
 template<>
-capnp::Data::Reader getDataRefAs<capnp::Data>(LocalDataRefImpl& impl, const capnp::ReaderOptions& options);
-
-template<>
-inline capnp::DynamicStruct::Reader getDataRefAs<capnp::DynamicStruct>(LocalDataRefImpl& impl, const capnp::ReaderOptions& options);
+inline capnp::Data::Reader internal::LocalDataRefImplV2::getAs<capnp::Data>(const capnp::ReaderOptions& opts) {
+	if(getMetadata().getFormat().isRaw()) {
+		return getRaw();
+	} else {
+		return getRoot(opts).getAs<capnp::Data>();
+	}
+}
 
 template<typename T>
 Array<const byte> buildData(typename T::Reader reader, capnp::BuilderCapabilityTable& builderTable);
@@ -470,52 +415,52 @@ struct References_<LocalDataRef<T>> { using Type = T; };
 // === class LocalDataService ===
 
 template<typename Reader, typename T>
-LocalDataRef<T> LocalDataService::publish(Reader data) {
-	capnp::BuilderCapabilityTable capTable;
+LocalDataRef<T> LocalDataService::publish(Reader reader) {
+	Temporary<capnp::schema::Type> typeBuilder;
+	extractType(internal::typeFor<T>(reader), typeBuilder);
 	
-	Array<const byte> byteData = internal::buildData<T>(data, capTable);
+	capnp::BuilderCapabilityTable builderTable;
+	kj::Array<const byte> data = internal::buildData<T>(reader, builderTable);
+		
+	// Convert hooks
+	auto rawTbl = builderTable.getTable();
+	auto clients = kj::heapArrayBuilder<capnp::Capability::Client>(rawTbl.size());
+	for(auto& maybeHook : rawTbl) {
+		KJ_IF_MAYBE(pHook, maybeHook) {
+			clients.add(mv(*pHook));
+		} else {
+			clients.add(nullptr);
+		}
+	}
 	
 	Temporary<DataRefMetadata> metadata;
 	metadata.setId(getActiveThread().randomID());
-	metadata.setCapTableSize(capTable.getTable().size());
-	metadata.setDataSize(byteData.size());
-	// dataHash set by impl->publish()
-	
-	Temporary<capnp::schema::Type> typeBuilder;
-	extractType(internal::typeFor<T>(data), typeBuilder);
+	metadata.setDataSize(data.size());
+	metadata.setCapTableSize(clients.size());
 	
 	if(typeBuilder.isData()) {
 		metadata.getFormat().setRaw();
 	} else {
 		metadata.getFormat().initSchema().setAs<capnp::schema::Type>(typeBuilder.asReader());
 	}
-			
-	return impl->publish(
+	
+	return this -> publish<T>(
 		metadata,
-		mv(byteData),
-		capTable.getTable()
-	).template as<T>();
+		mv(data),
+		clients
+	);
 }
 
 template<typename T>
 LocalDataRef<T> LocalDataService::publish(
 	typename DataRefMetadata::Reader metaData,
 	Array<const byte> backingArray,
-	ArrayPtr<Maybe<capnp::Capability::Client>> capTable
-) {
-	auto hooks = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(capTable.size());
-	for(auto& maybeClient : capTable) {
-		KJ_IF_MAYBE(pClient, maybeClient) {
-			hooks.add(capnp::ClientHook::from(*pClient));
-		} else {
-			hooks.add(nullptr);
-		}
-	}
-	
+	ArrayPtr<capnp::Capability::Client> capTable
+) {	
 	return impl->publish(
 		metaData,
 		mv(backingArray),
-		hooks.finish()
+		capTable
 	).template as<T>();
 }
 
@@ -577,24 +522,10 @@ Promise<kj::Array<kj::Array<const byte>>> LocalDataService::downloadFlat(LocalDa
 	return impl -> downloadFlat(ref.template as<capnp::AnyPointer>());
 }
 
-// === class LocalDataRefImpl ===
-
-template<typename T>
-typename T::Reader internal::LocalDataRefImpl::get(const capnp::ReaderOptions& options) {
-	return internal::getDataRefAs<T>(*this, options);
-}
-
 // === class LocalDataRef ===
 
 template<typename T>
-LocalDataRef<T>::LocalDataRef(Own<internal::LocalDataRefImpl> nbackend, capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>>& wrapper) :
-	capnp::Capability::Client(wrapper.add(nbackend->addRef())),
-	backend(nbackend->addRef())
-{}
-
-// For some reason using capnp::Capability::Client here causes MSVC to parse it as a parameter name...
-template<typename T>
-LocalDataRef<T>::LocalDataRef(capnp::Capability::Client capView, Own<internal::LocalDataRefImpl> nbackend) :
+LocalDataRef<T>::LocalDataRef(DataRef<capnp::AnyPointer>::Client capView, Own<internal::LocalDataRefImplV2> nbackend) :
 	capnp::Capability::Client(mv(capView)),
 	backend(mv(nbackend))
 {}
@@ -636,17 +567,17 @@ LocalDataRef<T>& LocalDataRef<T>::operator=(LocalDataRef<T>&& other) {
 
 template<typename T>
 ArrayPtr<const byte> LocalDataRef<T>::getRaw() {
-	return backend -> get<capnp::Data>(READ_UNLIMITED);
+	return backend -> getRaw();
 }
 
 template<typename T>
 Array<const byte> LocalDataRef<T>::forkRaw() {
-	return backend -> addRefRaw();
+	return backend -> forkRaw();
 }
 
 template<typename T>
 typename T::Reader LocalDataRef<T>::get(const capnp::ReaderOptions& options) {
-	return backend -> get<T>(options);
+	return backend -> getAs<T>(options);
 }
 
 template<typename T>
@@ -657,22 +588,22 @@ LocalDataRef<T2> LocalDataRef<T>::as() {
 
 template<typename T>
 ArrayPtr<const byte> LocalDataRef<T>::getID() {
-	return backend -> localMetadata().getId();
+	return backend -> getMetadata().getId();
 }
 
 template<typename T>
 ArrayPtr<capnp::Capability::Client> LocalDataRef<T>::getCapTable() {
-	return backend -> capTableClients.asPtr();
+	return backend -> getCapTable();
 }
 
 template<typename T>
 DataRefMetadata::Format::Reader LocalDataRef<T>::getFormat() {
-	return backend -> localMetadata().getFormat();
+	return getMetadata().getFormat();
 }
 
 template<typename T>
 typename DataRefMetadata::Reader LocalDataRef<T>::getMetadata() {
-	return backend -> _metadata.getRoot<DataRefMetadata>();
+	return backend -> getMetadata();
 }
 
 // === function attachToClient ===
@@ -744,16 +675,6 @@ Array<const byte> internal::buildData(typename T::Reader reader, capnp::BuilderC
 	
 	kj::Array<const capnp::word> flatArray = capnp::messageToFlatArray(builder);
 	
-	/*kj::ArrayPtr<const uint32_t> asInts(reinterpret_cast<const uint32_t*>(flatArray.begin()), flatArray.size());
-	uint32_t nSegments = asInts[0] + 1;
-	auto segmentSizes = asInts.slice(1, nSegments + 1);
-	
-	size_t expected = nSegments / 2 + 1;
-	for(auto s : segmentSizes)
-		expected += s;
-		
-	KJ_DBG("Published", flatArray.size(), expected, nSegments, segmentSizes, sizeof(capnp::word) * flatArray.size());*/
-	
 	// Since releaseAsBytes doesn't work, we need to force the conversion
 	kj::ArrayPtr<const byte> byteView(
 		reinterpret_cast<const byte*>(flatArray.begin()),
@@ -761,25 +682,6 @@ Array<const byte> internal::buildData(typename T::Reader reader, capnp::BuilderC
 	);
 	kj::Array<const byte> stableByteView = byteView.attach(kj::heap<kj::Array<const capnp::word>>(mv(flatArray)));
 	return stableByteView;
-}
-
-template<typename T>
-typename T::Reader internal::getDataRefAs(internal::LocalDataRefImpl& impl, const capnp::ReaderOptions& options) {
-	auto& msgReader = impl.ensureReader(options);
-	
-	KJ_REQUIRE(!impl.localMetadata().getFormat().isRaw(), "Attempting to read raw DataRef as structured type");
-	
-	// Return the reader's root at the requested type
-	capnp::AnyPointer::Reader root = msgReader.getRoot<capnp::AnyPointer>();
-	root = impl.readerTable -> imbue(root);
-	
-	// Copy root onto the heap and attach objects needed to keep it running
-	return root.getAs<T>();
-}
-
-template<>
-capnp::DynamicStruct::Reader internal::getDataRefAs<capnp::DynamicStruct>(internal::LocalDataRefImpl& impl, const capnp::ReaderOptions& options) {
-	KJ_UNIMPLEMENTED("Reading a DataRef<DynamicStruct> is unsupported because that would require a global schema loader");
 }
 
 // === class DownloadTask ===

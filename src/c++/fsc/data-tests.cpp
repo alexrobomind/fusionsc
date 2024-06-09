@@ -86,6 +86,12 @@ TEST_CASE("local_publish") {
 			REQUIRE(inner.getData() == inner2.getData());
 		}
 		
+		SECTION("local-recursive") {
+			LocalDataRef<DataHolder> ref12 = ds.download(ref2.get().getRef(), true).wait(ws);
+			DataHolder::Reader inner2 = ref12.get();
+			REQUIRE(inner.getData() == inner2.getData());
+		}
+		
 		SECTION("local_bypass") {
 			LocalDataService ds2(l);
 			

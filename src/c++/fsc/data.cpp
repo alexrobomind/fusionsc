@@ -80,8 +80,8 @@ namespace {
 			return add(mv(s));
 		}
 		
-		Promise<Maybe<internal::LocalDataRefImplV2&>> tryUnwrap(DataRef<capnp::AnyPointer>::Client c) {
-			return getLocalServer(mv(c))
+		Promise<Maybe<internal::LocalDataRefImplV2&>> tryUnwrap(DataRef<capnp::AnyPointer>::Client& c) {
+			return getLocalServer(c)
 			.then([](Maybe<DataRef<capnp::AnyPointer>::Server&> s) -> Maybe<internal::LocalDataRefImplV2&> {
 				KJ_IF_MAYBE(pS, s) {
 					return static_cast<internal::LocalDataRefImplV2&>(*pS);
@@ -115,13 +115,6 @@ Promise<bool> isDataRef(capnp::Capability::Client clt) {
 	);
 }
 	
-// === functions in internal ===
-
-template<>
-capnp::Data::Reader internal::getDataRefAs<capnp::Data>(internal::LocalDataRefImpl& impl, const capnp::ReaderOptions& options) {
-	(void) options;
-	return impl.entry.asPtr();
-}
 	
 // === class LocalDataService ===
 
@@ -199,136 +192,6 @@ void LocalDataService::setChunkDebugMode() {
 	impl -> setChunkDebugMode();
 }
 
-// === class internal::LocalDataRefImpl ===
-
-Own<internal::LocalDataRefImpl> internal::LocalDataRefImpl::addRef() {
-	return kj::addRef(*this);
-}
-
-DataRefMetadata::Reader internal::LocalDataRefImpl::localMetadata() {
-	return _metadata.getRoot<DataRefMetadata>();
-}
-
-Promise<void> internal::LocalDataRefImpl::metaAndCapTable(MetaAndCapTableContext context) {
-	using CC = capnp::Capability::Client;
-	
-	context.getResults().setMetadata(localMetadata());
-	
-	auto results = context.getResults();
-	results.initTable((unsigned int) capTableClients.size());
-	
-	for(unsigned int i = 0; i < capTableClients.size(); ++i) {
-		results.getTable().set(i, capTableClients[i]);
-	}
-	
-	return kj::READY_NOW;
-}
-
-Promise<void> internal::LocalDataRefImpl::rawBytes(RawBytesContext context) {
-	uint64_t start = context.getParams().getStart();
-	uint64_t end   = context.getParams().getEnd();
-	
-	auto ptr = get<capnp::Data>(READ_UNLIMITED);
-	
-	KJ_REQUIRE(end >= start);
-	KJ_REQUIRE(start < ptr.size());
-	KJ_REQUIRE(end <= ptr.size());
-	
-	if(end == start)
-		return kj::READY_NOW;
-	
-	context.getResults().setData(ptr.slice(start, end));
-	
-	return kj::READY_NOW;
-}
-
-namespace {	
-	struct TransmissionProcess {
-		constexpr static inline size_t CHUNK_SIZE = 1024 * 1024;
-		
-		DataRef<capnp::AnyPointer>::Receiver::Client receiver;
-		size_t end;
-		
-		Array<const byte> data;
-		
-		TransmissionProcess() :
-			receiver(nullptr)
-		{}
-		
-		Promise<void> run(size_t start) {
-			KJ_REQUIRE(end >= start);
-			
-			auto request = receiver.beginRequest();
-			request.setNumBytes(end - start);
-			return request.send().ignoreResult().then([this, start]() { return transmit(start); });
-		}
-		
-		Promise<void> transmit(size_t start) {
-			size_t chunkEnd = start + CHUNK_SIZE;
-			
-			if(chunkEnd > end)
-				chunkEnd = end;
-			
-			// Check if we are done transmitting
-			if(chunkEnd == start)
-				return receiver.doneRequest().send().ignoreResult();
-			
-			auto slice = data.slice(start, chunkEnd);
-			
-			// Do a transmission
-			auto request = receiver.receiveRequest();
-			
-			if(slice.size() % 8 == 0) {
-				// Note: This is safe because we keep this object alive until the transmission
-				// succeeds or fails
-				auto orphanage = capnp::Orphanage::getForMessageContaining((DataRef<capnp::AnyPointer>::Receiver::ReceiveParams::Builder) request);
-				auto externalData = orphanage.referenceExternalData(slice);
-				request.adoptData(mv(externalData));
-			} else {
-				request.setData(slice);
-			}
-			
-			return request.send().then([this, chunkEnd]() { return transmit(chunkEnd); });
-		}
-	};
-}
-
-Promise<void> internal::LocalDataRefImpl::transmit(TransmitContext context) {
-	auto params = context.getParams();
-	
-	auto process = kj::heap<TransmissionProcess>();
-	
-	// Prepare a pointer to the data that will also keep the data alive
-	process -> data = getDataRefAs<capnp::Data>(*this, READ_UNLIMITED).attach(addRef());
-	process -> end = params.getEnd();
-	process -> receiver = params.getReceiver();
-	
-	auto result = process -> run(params.getStart());
-	
-	return result.attach(mv(process));
-}	
-
-capnp::FlatArrayMessageReader& internal::LocalDataRefImpl::ensureReader(const capnp::ReaderOptions& options) {
-	KJ_IF_MAYBE(reader, maybeReader) {
-		return *reader;
-	}
-	
-	// Obtain data as a byte pointer (note that this drops all attached objects to keep alive0
-	ArrayPtr<const byte> bytePtr = getDataRefAs<capnp::Data>(*this, options);
-	
-	// Cast the data to a word array (let's hope they are aligned properly)
-	ArrayPtr<const capnp::word> wordPtr = ArrayPtr<const capnp::word>(
-		reinterpret_cast<const capnp::word*>(bytePtr.begin()),
-		bytePtr.size() / sizeof(capnp::word)
-	);
-	
-	return maybeReader.emplace(wordPtr, options);
-}
-
-kj::Array<const byte> internal::LocalDataRefImpl::addRefRaw() {
-	return entry.asArray();
-}
-
 // === class internal::LocalDataRefBackend ===
 
 internal::LocalDataRefBackend::LocalDataRefBackend(LocalDataRefGroup& g, StoreEntry e, Temporary<DataRefMetadata>&& metadata, kj::ArrayPtr<capnp::Capability::Client> capTable) :
@@ -336,6 +199,8 @@ internal::LocalDataRefBackend::LocalDataRefBackend(LocalDataRefGroup& g, StoreEn
 	storeEntry(mv(e)),
 	metadata(mv(metadata))
 {
+	group.entries.add(*this);
+	
 	auto ctBuilder = kj::heapArrayBuilder<CapTableEntry>(capTable.size());
 	for(auto& e : capTable) {
 		ctBuilder.add(processCapTableEntry(e));
@@ -357,7 +222,7 @@ Array<capnp::Capability::Client> internal::LocalDataRefBackend::getCapTable() {
 	
 	for(CapTableEntry& e : capTable) {
 		capnp::Capability::Client forked = e.addBranch()
-		.then([g = group.addRef()](auto oneOf) -> capnp::Capability::Client {
+		.then([g = group.addRef()](CapTableData oneOf) -> capnp::Capability::Client {
 			if(oneOf.is<capnp::Capability::Client>())
 				return oneOf.get<capnp::Capability::Client>();
 			
@@ -366,13 +231,16 @@ Array<capnp::Capability::Client> internal::LocalDataRefBackend::getCapTable() {
 				kj::refcounted<LocalDataRefImplV2>(*pBackend)
 			);
 		});
+		builder.add(forked);
 	}
 	
 	return builder.finish();
 }
 
 internal::LocalDataRefBackend::CapTableEntry internal::LocalDataRefBackend::processCapTableEntry(capnp::Capability::Client c) {
-	return LOCAL_REF_SERVER_SET.tryUnwrap(c.castAs<DataRef<capnp::AnyPointer>>())
+	DataRef<capnp::AnyPointer>::Client asRef = c.castAs<DataRef<capnp::AnyPointer>>();
+	
+	return LOCAL_REF_SERVER_SET.tryUnwrap(asRef)
 	.then([c, &myGroup = this -> group](Maybe<LocalDataRefImplV2&> maybeRef) mutable -> CapTableData {
 		KJ_IF_MAYBE(pRef, maybeRef) {
 			auto& backend = *(pRef -> backend);
@@ -443,7 +311,7 @@ kj::ArrayPtr<capnp::Capability::Client> internal::LocalDataRefImplV2::getCapTabl
 }
 
 capnp::AnyPointer::Reader internal::LocalDataRefImplV2::getRoot(const capnp::ReaderOptions& opts) {
-	KJ_REQUIRE(!metadata.getFormat().isRaw(), "Can not obtain message root in raw data");
+	KJ_REQUIRE(!getMetadata().getFormat().isRaw(), "Can not obtain message root in raw data");
 	
 	capnp::ReaderCapabilityTable* rct;
 	capnp::FlatArrayMessageReader* mr;
@@ -471,7 +339,7 @@ capnp::AnyPointer::Reader internal::LocalDataRefImplV2::getRoot(const capnp::Rea
 		mr = pReader;
 	} else {
 		// Obtain data as a byte pointer (note that this drops all attached objects to keep alive0
-		ArrayPtr<const byte> bytePtr = getData();
+		ArrayPtr<const byte> bytePtr = getRaw();
 		
 		// Cast the data to a word array (let's hope they are aligned properly)
 		ArrayPtr<const capnp::word> wordPtr = ArrayPtr<const capnp::word>(
@@ -484,6 +352,101 @@ capnp::AnyPointer::Reader internal::LocalDataRefImplV2::getRoot(const capnp::Rea
 	
 	return rct -> imbue(mr -> getRoot<capnp::AnyPointer>());
 }
+
+Promise<void> internal::LocalDataRefImplV2::metaAndCapTable(MetaAndCapTableContext context) {	
+	context.getResults().setMetadata(getMetadata());
+	
+	auto tblIn = getCapTable();
+	auto tblOut = context.getResults().initTable(tblIn.size());
+	for(auto i : kj::indices(tblIn))
+		tblOut.set(i, tblIn[i]);
+	
+	return kj::READY_NOW;
+}
+
+Promise<void> internal::LocalDataRefImplV2::rawBytes(RawBytesContext context) {
+	uint64_t start = context.getParams().getStart();
+	uint64_t end   = context.getParams().getEnd();
+	
+	auto ptr = getRaw();
+	
+	KJ_REQUIRE(end >= start);
+	KJ_REQUIRE(start < ptr.size());
+	KJ_REQUIRE(end <= ptr.size());
+	
+	if(end == start)
+		return kj::READY_NOW;
+	
+	context.getResults().setData(ptr.slice(start, end));
+	
+	return kj::READY_NOW;
+}
+
+namespace {	
+	struct TransmissionProcess {
+		constexpr static inline size_t CHUNK_SIZE = 1024 * 1024;
+		
+		DataRef<capnp::AnyPointer>::Receiver::Client receiver;
+		size_t end;
+		
+		Array<const byte> data;
+		
+		TransmissionProcess() :
+			receiver(nullptr)
+		{}
+		
+		Promise<void> run(size_t start) {
+			KJ_REQUIRE(end >= start);
+			
+			auto request = receiver.beginRequest();
+			request.setNumBytes(end - start);
+			return request.send().ignoreResult().then([this, start]() { return transmit(start); });
+		}
+		
+		Promise<void> transmit(size_t start) {
+			size_t chunkEnd = start + CHUNK_SIZE;
+			
+			if(chunkEnd > end)
+				chunkEnd = end;
+			
+			// Check if we are done transmitting
+			if(chunkEnd == start)
+				return receiver.doneRequest().send().ignoreResult();
+			
+			auto slice = data.slice(start, chunkEnd);
+			
+			// Do a transmission
+			auto request = receiver.receiveRequest();
+			
+			if(slice.size() % 8 == 0) {
+				// Note: This is safe because we keep this object alive until the transmission
+				// succeeds or fails
+				auto orphanage = capnp::Orphanage::getForMessageContaining((DataRef<capnp::AnyPointer>::Receiver::ReceiveParams::Builder) request);
+				auto externalData = orphanage.referenceExternalData(slice);
+				request.adoptData(mv(externalData));
+			} else {
+				request.setData(slice);
+			}
+			
+			return request.send().then([this, chunkEnd]() { return transmit(chunkEnd); });
+		}
+	};
+}
+
+Promise<void> internal::LocalDataRefImplV2::transmit(TransmitContext context) {
+	auto params = context.getParams();
+	
+	auto process = kj::heap<TransmissionProcess>();
+	
+	// Prepare a pointer to the data that will also keep the data alive
+	process -> data = getRaw().attach(addRef());
+	process -> end = params.getEnd();
+	process -> receiver = params.getReceiver();
+	
+	auto result = process -> run(params.getStart());
+	
+	return result.attach(mv(process));
+}	
 
 // === class internal::LocalDataServiceImpl ===
 
@@ -515,20 +478,13 @@ void internal::LocalDataServiceImpl::setChunkDebugMode() {
 }
 
 Promise<Maybe<LocalDataRef<capnp::AnyPointer>>> internal::LocalDataServiceImpl::unwrap(DataRef<capnp::AnyPointer>::Client src) {
-	return serverSet.getLocalServer(src).then([this, src](Maybe<DataRef<capnp::AnyPointer>::Server&> maybeServer) mutable -> Maybe<LocalDataRef<capnp::AnyPointer>> {
-		KJ_IF_MAYBE(server, maybeServer) {
-			#if KJ_NO_RTTI
-				auto backend = static_cast<internal::LocalDataRefImpl*>(server);
-			#else
-				auto backend = dynamic_cast<internal::LocalDataRefImpl*>(server);
-				KJ_REQUIRE(backend != nullptr);
-			#endif
-
-			// If yes, extract the backend and return it
-			return LocalDataRef<capnp::AnyPointer>(backend -> addRef(), this -> serverSet);
-		} else {
-			return nullptr;
-		}
+	return LOCAL_REF_SERVER_SET.getLocalServer(src).then([this, src](Maybe<DataRef<capnp::AnyPointer>::Server&> maybeServer) mutable -> Maybe<LocalDataRef<capnp::AnyPointer>> {
+		auto unwrap = [src](DataRef<capnp::AnyPointer>::Server& srv) mutable {
+			auto& backend = static_cast<internal::LocalDataRefImplV2&>(srv);
+			return LocalDataRef<capnp::AnyPointer>(src, backend.addRef());
+		};
+		
+		return maybeServer.map(unwrap);
 	}).attach(addRef());
 }
 
@@ -611,30 +567,20 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 	}
 	
 	Promise<ResultType> buildResult() override {
-		auto backend = kj::refcounted<internal::LocalDataRefImpl>();
+		LocalDataRefGroup& group = *(ctx.localGroup);
 		
-		// Build reader capability table
-		auto capHooks = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(capTable.size());
-		for(auto client : capTable) {
-			Own<capnp::ClientHook> hookPtr = capnp::ClientHook::from(mv(client));
-			
-			if(hookPtr.get() != nullptr)
-				capHooks.add(mv(hookPtr));
-			else
-				capHooks.add(nullptr);
-		}
-	
-		backend->readerTable = kj::heap<capnp::ReaderCapabilityTable>(capHooks.finish());
-		backend->capTableClients = mv(capTable);
-		
-		backend->_metadata.setRoot(metadata.asReader());
-		
-		backend->entry = mv(dataEntry);
+		auto backend = kj::refcounted<internal::LocalDataRefBackend>(
+			group,
+			mv(dataEntry),
+			mv(metadata),
+			capTable
+		);
+		auto impl = kj::refcounted<internal::LocalDataRefImplV2>(*backend);
 		
 		if(recursive)
-			return ResultType(mv(backend), service -> serverSet);
+			return ResultType(impl -> addRef(), impl -> addRef());
 		else
-			return ResultType(this -> src, mv(backend));
+			return ResultType(this -> src, mv(impl));
 	}
 };
 
@@ -649,17 +595,14 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::downloa
 	});
 }
 
-LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRefMetadata::Reader metaData, Array<const byte>&& data, ArrayPtr<Maybe<Own<capnp::ClientHook>>> capTable) {	
+LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRefMetadata::Reader metaData, Array<const byte>&& data, ArrayPtr<capnp::Capability::Client> capTable) {	
 	KJ_REQUIRE(data.size() >= metaData.getDataSize(), "Data do not fit inside provided array");
 	KJ_REQUIRE(metaData.getCapTableSize() == capTable.size(), "Specified capability count must match provided table");
 	
-	auto backend = kj::refcounted<internal::LocalDataRefImpl>();
-	
-	backend -> _metadata.setRoot(metaData);
-	auto myMetaData = backend -> _metadata.getRoot<DataRefMetadata>();
+	Temporary<DataRefMetadata> myMetaData = metaData;
 	
 	// Check if hash is nullptr. If yes, construct own.
-	if(metaData.getDataHash().size() == 0) {
+	if(myMetaData.getDataHash().size() == 0) {
 		auto hashFunction = getActiveThread().library() -> defaultHash();
 		hashFunction -> update(data.begin(), data.size());
 		
@@ -669,27 +612,18 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRefM
 		myMetaData.setDataHash(hashOutput);
 	}
 	
-	// Prepare some clients
-	auto clients   = kj::heapArrayBuilder<capnp::Capability::Client>    (capTable.size());
-	auto tableCopy = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(capTable.size());
+	auto storeEntry = library -> store().publish(myMetaData.getDataHash(), mv(data));
 	
-	for(size_t i = 0; i < capTable.size(); ++i) {
-		KJ_IF_MAYBE(hook, capTable[i]) {
-			clients.add((*hook) -> addRef());
-			tableCopy.add((*hook) -> addRef());
-		} else {
-			clients.add(nullptr);
-			tableCopy.add(nullptr); // note that this does not add a nullptr own inside the maybe, but an empty maybe
-		}
-	}
+	auto lg = kj::refcounted<LocalDataRefGroup>();
+	auto backend = kj::refcounted<LocalDataRefBackend>(
+		*lg,
+		mv(storeEntry),
+		mv(myMetaData),
+		capTable
+	);
 	
-	// Prepare backend
-	backend->readerTable = kj::heap<capnp::ReaderCapabilityTable>(tableCopy.finish());
-	backend->capTableClients = clients.finish();
-	backend->entry = library -> store().publish(myMetaData.getDataHash(), mv(data));
-		
-	// Now construct a local data ref from the backend
-	return LocalDataRef<capnp::AnyPointer>(backend->addRef(), this -> serverSet);
+	auto impl = kj::refcounted<LocalDataRefImplV2>(*backend);
+	return LocalDataRef<capnp::AnyPointer>(impl -> addRef(), impl -> addRef());
 }
 
 Promise<void> internal::LocalDataServiceImpl::hash(HashContext ctx) {
@@ -1214,23 +1148,17 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(M
 		auto object = objectInfo[i];
 		auto refs = object.getRefs();
 		
-		auto refBuilder = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(refs.size());
+		auto refBuilder = kj::heapArrayBuilder<capnp::Capability::Client>(refs.size());
 		for(auto iRef : kj::indices(refs)) {
 			auto refInfo = refs[iRef];
 			if(refInfo.isNull()) {
 				refBuilder.add(nullptr);
 			} else if(refInfo.isException()) {
-				refBuilder.add(capnp::ClientHook::from(capnp::Capability::Client(
-					fromProto(refInfo.getException())
-				)));
+				refBuilder.add(fromProto(refInfo.getException()));
 			} else if(refInfo.isObject()) {
-				refBuilder.add(capnp::ClientHook::from(capnp::Capability::Client(
-					refPromises[refInfo.getObject()].addBranch()
-				)));
+				refBuilder.add(refPromises[refInfo.getObject()].addBranch());
 			} else {
-				refBuilder.add(capnp::ClientHook::from(capnp::Capability::Client(
-					KJ_EXCEPTION(DISCONNECTED, "Unknown object type")
-				)));
+				refBuilder.add(KJ_EXCEPTION(DISCONNECTED, "Unknown object type"));
 			}
 		}
 		
@@ -1324,11 +1252,21 @@ Promise<void> internal::LocalDataServiceImpl::store(StoreContext context) {
 		metaData.getFormat().initSchema().set(schema);
 	metaData.setCapTableSize(capTable.getTable().size());
 	metaData.setDataSize(data.size());
+	
+	auto rawTbl = capTable.getTable();
+	auto clientBuilder = kj::heapArrayBuilder<capnp::Capability::Client>(rawTbl.size());
+	for(auto& maybeHook : rawTbl) {
+		KJ_IF_MAYBE(pHook, maybeHook) {
+			clientBuilder.add(mv(*pHook));
+		} else {
+			clientBuilder.add(nullptr);
+		}
+	}
 
 	auto ref = publish(
 		metaData,
 		mv(data),
-		capTable.getTable()
+		clientBuilder.finish()
 	);
 	
 	auto cachedRef = dbCache -> cache(mv(ref));
@@ -1953,7 +1891,7 @@ LocalDataRef<> LocalDataServiceImpl::publishFlat(kj::Array<kj::Array<const byte>
 		auto refInfo = info.getObjects()[i];
 		auto links = refInfo.getRefs();
 		
-		auto capTableBuilder = kj::heapArrayBuilder<Maybe<Own<capnp::ClientHook>>>(links.size());
+		auto capTableBuilder = kj::heapArrayBuilder<capnp::Capability::Client>(links.size());
 		for(auto iLink : kj::indices(links)) {
 			auto link = links[iLink];
 			
@@ -1964,15 +1902,13 @@ LocalDataRef<> LocalDataServiceImpl::publishFlat(kj::Array<kj::Array<const byte>
 			
 			DataRef<>::Client target(nullptr);
 			if(link.isException()) {
-				target = DataRef<>::Client(fromProto(link.getException()));
+				capTableBuilder.add(fromProto(link.getException()));
 			} else if(link.isObject()) {
 				KJ_REQUIRE(link.getObject() < refs.size(), "Out of bounds link");
-				target = DataRef<>::Client(refs[link.getObject()].addBranch());
+				capTableBuilder.add(refs[link.getObject()].addBranch());
 			} else {
 				KJ_FAIL_REQUIRE("Unknown link type encountered in flat representation");
 			}
-			
-			capTableBuilder.add(capnp::ClientHook::from(mv(target)));
 		}
 		
 		auto dataId = refInfo.getDataId();

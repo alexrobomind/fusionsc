@@ -29,7 +29,7 @@ namespace fsc {
 // Internal forward declarations
 
 namespace internal {
-	class LocalDataRefImpl;
+	class LocalDataRefImplV2;
 	class LocalDataServiceImpl;
 	
 	template<typename T>
@@ -184,7 +184,7 @@ public:
 	 *          DataRef::Client.
 	 */
 	template<typename T = capnp::Data>
-	LocalDataRef<T> publish(typename DataRefMetadata::Reader metaData, Array<const byte> backingArray, ArrayPtr<Maybe<capnp::Capability::Client>> capTable = kj::heapArrayBuilder<Maybe<capnp::Capability::Client>>(0).finish());
+	LocalDataRef<T> publish(typename DataRefMetadata::Reader metaData, Array<const byte> backingArray, ArrayPtr<capnp::Capability::Client> capTable = nullptr);
 	
 	//! Publishes Cap'n'proto message
 	/**
@@ -305,8 +305,6 @@ private:
 	
 	template<typename T>
 	friend class LocalDataRef;
-	
-	friend class internal::LocalDataRefImpl;
 };
 
 //! Local version of DataRef::Client.
@@ -373,14 +371,12 @@ public:
 
 	LocalDataRef() = delete;
 	
-private:
-	LocalDataRef(Own<internal::LocalDataRefImpl> backend, capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>>& wrapper);
-	LocalDataRef(capnp::Capability::Client capView, Own<internal::LocalDataRefImpl> backend);
+	LocalDataRef(DataRef<capnp::AnyPointer>::Client capView, Own<internal::LocalDataRefImplV2> backend);
 
 	template<typename T2>	
 	LocalDataRef(LocalDataRef<T2>& other);
 	
-	Own<internal::LocalDataRefImpl> backend;
+	Own<internal::LocalDataRefImplV2> backend;
 	
 	friend class internal::LocalDataServiceImpl;
 	
