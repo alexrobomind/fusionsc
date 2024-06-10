@@ -154,7 +154,7 @@ _configDefaultCoils = contextvars.ContextVar("fusionsc.devices.w7x._configDefaul
 
 def _loadDefaultCoils(url: str):
 	coils = warehouse.open(url)
-	_configDefaultCoils.set(CoilPack(coils.download()))
+	_configDefaultCoils.set(CoilPack(coils.download()).upload())
 
 def getDefaultCoils():
 	# Allow users to override

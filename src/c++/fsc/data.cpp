@@ -123,34 +123,21 @@ LocalDataService::LocalDataService(Library& lib) :
 {}
 
 LocalDataService::LocalDataService(internal::LocalDataServiceImpl& newImpl) :
-	DataService::Client(newImpl.addRef()),
 	impl(newImpl.addRef())
 {}
 
 // Non-const copy constructor
 LocalDataService::LocalDataService(LocalDataService& other) : 
-	DataService::Client(other),
 	impl(other.impl -> addRef())
 {}
-
-// Move constructor
-LocalDataService::LocalDataService(LocalDataService&& other) : 
-	DataService::Client(other),
-	impl(other.impl -> addRef())
-{}
-
 // Copy assignment operator
 LocalDataService& LocalDataService::operator=(LocalDataService& other) {
-	DataService::Client::operator=(other);
 	impl = other.impl -> addRef();
 	return *this;
 }
 
-// Copy assignment operator
-LocalDataService& LocalDataService::operator=(LocalDataService&& other) {
-	DataService::Client::operator=(other);
-	impl = other.impl -> addRef();
-	return *this;
+LocalDataService::operator DataService::Client() {
+	return impl -> addRef();
 }
 	
 LocalDataRef<capnp::Data> LocalDataService::publish(kj::ArrayPtr<const byte> bytes) {
@@ -1214,7 +1201,6 @@ Promise<void> internal::LocalDataServiceImpl::clone(CloneContext context) {
 Promise<void> internal::LocalDataServiceImpl::cloneAllIntoMemory(CloneAllIntoMemoryContext ctx) {
 	return download(ctx.getParams().getSource(), true)
 	.then([this, ctx](auto localRef) mutable {
-		KJ_DBG("Download OK");
 		ctx.initResults().setRef(localRef);
 	});
 }

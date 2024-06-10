@@ -89,3 +89,11 @@ def readArchive(filename: str) -> asnc.Future[Any]:
 	"""
 	archiveRef = openArchive(filename)
 	return download.asnc(archiveRef)
+
+def upload(ref: service.DataRef.Client) -> service.DataRef.Client:
+	# Obtain backend data service
+	backend = backends.activeBackend()
+	dataService = backend.dataService().pipeline.service
+	
+	# Start upload to remote end
+	return dataService.cloneAllIntoMemory(ref).pipeline.ref

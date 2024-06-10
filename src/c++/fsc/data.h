@@ -116,7 +116,7 @@ Promise<bool> isDataRef(capnp::Capability::Client);
  * remotely-downloadable data references with its 'publish' methods and download (as in, create
  * local copies of) remote references with its 'download' methods.
  */
-class LocalDataService : public DataService::Client {
+class LocalDataService {
 public:
 	using Nursery = kj::Vector<kj::Own<void>>;
 	
@@ -278,6 +278,8 @@ public:
 	//! Reduces chunk size to 1kB and throws error if chunks can't be mapped
 	void setChunkDebugMode();
 	
+	operator DataService::Client();
+	
 	/**
 	 * Constructs a new data service instance using the shared backing store contained in the given
 	 * library handle.
@@ -288,13 +290,13 @@ public:
 	LocalDataService(LocalDataService& other);
 	
 	// Move constructor
-	LocalDataService(LocalDataService&& other);
+	LocalDataService(LocalDataService&& other) = default;
 
 	// Copy assignment operator
 	LocalDataService& operator=(LocalDataService& other);
 
 	// Copy assignment operator
-	LocalDataService& operator=(LocalDataService&& other);
+	LocalDataService& operator=(LocalDataService&& other) = default;
 	
 	LocalDataService() = delete;
 		
