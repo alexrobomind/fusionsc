@@ -10,19 +10,27 @@ namespace fsc {
 
 namespace {
 
-struct RefProxy : public DataRef<>::Server {
+struct RefProxy : public capnp::Capability::Server {
 	const int index;
 
 	RefProxy(int val) : index(val) {}
 	
-	virtual Maybe<int> getFd() { return index; }
+	DispatchCallResult dispatchCall(uint64_t, uint16_t, capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>) override {
+		KJ_UNIMPLEMENTED();
+	}
 };
 
-int indexOf(Capability::Client clt) {
-	KJ_IF_MAYBE(pIdx, capnp::ClientHook::from(mv(clt)) -> getFd()) {
-		return *pIdx;
-	}
-	KJ_FAIL_REQUIRE("Reference is not a wrapped proxy");
+capnp::CapabilityServerSet<capnp::Capability> SERVER_SET;
+
+Promise<int> indexOf(Capability::Client& clt) {
+	return SERVER_SET.getLocalServer(clt)
+	.then([](Maybe<capnp::Capability::Server&> maybeServer) {
+		KJ_IF_MAYBE(pSrv, maybeServer) {
+			return ((RefProxy*) pSrv) -> index;
+		}
+		
+		KJ_FAIL_REQUIRE("Reference is not a wrapped proxy");
+	});
 }
 
 LocalDataRef<AnyPointer> createWrapper(LocalDataRef<AnyPointer> local) {
@@ -30,7 +38,7 @@ LocalDataRef<AnyPointer> createWrapper(LocalDataRef<AnyPointer> local) {
 	
 	auto newCapTable = kj::heapArrayBuilder<Capability::Client>(capTable.size());
 	for(auto i : kj::indices(capTable)) {
-		newCapTable.add(kj::heap<RefProxy>(i));
+		newCapTable.add(SERVER_SET.add(kj::heap<RefProxy>(i)));
 	}
 	
 	return getActiveThread().dataService().publish<AnyPointer>(
@@ -96,8 +104,12 @@ struct EscapingVisitor : public structio::SaveOptions::CapabilityStrategy, publi
 			brandName = kj::strTree(mv(brandName), "[", kj::StringTree(brandArgs.releaseAsArray(), ", "), "]");
 		
 		// Pass raw link to backend
-		size_t idx = indexOf(clt);
-		backend.acceptString(kj::str("<a href='", idx, "/show'>", mv(brandName), "</a>"));
+		KJ_IF_MAYBE(pWs, maybeWs) {
+			size_t idx = indexOf(clt).wait(*pWs);
+			backend.acceptString(kj::str("<a href='", idx, "/show'>", mv(brandName), "</a>"));
+		} else {
+			KJ_FAIL_REQUIRE("No waitScope specified");
+		}
 	}
 };
 
@@ -168,7 +180,7 @@ struct DataViewerImpl : public kj::HttpService {
 			kj::VectorOutputStream os;
 			if(o.is<DataRef<>::Client>()) {
 				auto asRef = getActiveThread().dataService().download(o.get<DataRef<>::Client>()).wait(ws);
-				writeRefBody(asRef, structio::Dialect::YAML, os);
+				writeRefBody(asRef, structio::Dialect::YAML, os, ws);
 			} else if(o.is<Warehouse::File<>::Client>()) {
 				writeFileBody(os);
 			} else {
@@ -304,7 +316,7 @@ struct DataViewerImpl : public kj::HttpService {
 	}
 	
 	//! Outputs the body of a DataRef (and links to download)
-	void writeRefBody(LocalDataRef<AnyPointer> ref, const structio::Dialect& dialect, kj::BufferedOutputStream& os) {
+	void writeRefBody(LocalDataRef<AnyPointer> ref, const structio::Dialect& dialect, kj::BufferedOutputStream& os, kj::WaitScope& ws) {
 		auto wrapped = createWrapper(ref);
 		
 		auto md = ref.getMetadata();
@@ -331,7 +343,7 @@ struct DataViewerImpl : public kj::HttpService {
 			opts.capabilityStrategy = &ev;
 			
 			writeStr("<pre><code>");
-			structio::save(ref.getMetadata(), ev, opts);
+			structio::save(ref.getMetadata(), ev, opts, ws);
 			writeStr("</code></pre><br /><br />");
 		}
 		
@@ -370,7 +382,7 @@ struct DataViewerImpl : public kj::HttpService {
 				"<br /><br />", schema.getUnqualifiedName(), "<br />"
 				"<pre><code>"
 			));
-			structio::save(asStruct, ev, opts);
+			structio::save(asStruct, ev, opts, ws);
 			writeStr("</code></pre>");
 		} else {
 			writeStr("Schema lookup for message type failed<br /><pre><code>");

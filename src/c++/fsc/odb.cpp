@@ -770,9 +770,9 @@ OneOf<Own<ObjectDBEntry>, Capability::Client, decltype(nullptr)> ObjectDB::unwra
 	
 	if(matchingHook.get() != nullptr) {
 		return matchingHook -> entry -> addRef();
-	} else if (inner -> whenMoreResolved() != nullptr) {
+	} /*else if (inner -> whenMoreResolved() != nullptr) {
 		KJ_DBG("unwrap() encountered unresolved promise outside DB");
-	}
+	} */
 	
 	// ... otherwise check whether it is a null cap ... 
 	if(inner -> isNull()) {
