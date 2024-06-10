@@ -45,6 +45,9 @@ interface DataService @0xc6d48902ddb7e122 {
 	# Have the remote service inspect the linked tree of refs and their content tables and
 	# compute a hash based on the received information.
 	hash @2 [T] (source : DataRef(T)) -> (hash : Data);
+	
+	# Have the remote data service download a complete copy
+	cloneAllIntoMemory @3 [T] (source : DataRef(T)) -> (ref : DataRef(T));
 }
 #//! [DataService]
 

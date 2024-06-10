@@ -61,6 +61,26 @@ class StructWrapperBase:
 		# Load again
 		return await self.load.asnc(str(filename))
 	
+	@asyncFunction
+	async def pushToBackend(self):
+		# Publish data
+		published = data.publish(self.data)
+		
+		# Obtain backend data service
+		from . import backends
+		backend = backends.activeBackend()
+		dataService = backend.dataService().pipeline.service
+		
+		# Start upload to remote end
+		#remote = dataService.cloneAllIntoMemory(published).pipeline.ref
+		remote = (await dataService.cloneAllIntoMemory(published)).ref
+		print(remote)
+		
+		# Download & clone
+		downloaded = await data.download.asnc(remote)
+		print(downloaded)
+		return self.__class__(downloaded)
+	
 	def ptree(self):
 		"""
 		Prints a tree version of this object. Requires the printree library.

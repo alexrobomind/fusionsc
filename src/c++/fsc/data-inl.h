@@ -263,7 +263,7 @@ public:
 	
 	Promise<LocalDataRef<capnp::AnyPointer>> download(DataRef<capnp::AnyPointer>::Client src, bool recursive, DTContext ctx = DTContext());
 	
-	LocalDataRef<capnp::AnyPointer> publish(DataRefMetadata::Reader metaData, Array<const byte>&& data, ArrayPtr<capnp::Capability::Client> capTable);
+	LocalDataRef<capnp::AnyPointer> publish(DataRefMetadata::Reader metaData, Array<const byte>&& data, ArrayPtr<capnp::Capability::Client> capTable, Maybe<LocalDataRefGroup&> group = nullptr);
 	
 	Promise<void> writeArchive(DataRef<capnp::AnyPointer>::Client ref, const kj::File& out);
 	
@@ -283,6 +283,9 @@ public:
 	Promise<void> clone(CloneContext context) override;
 	Promise<void> store(StoreContext context) override;
 	Promise<void> hash(HashContext context) override;
+	Promise<void> cloneAllIntoMemory(CloneAllIntoMemoryContext context) override;
+	
+	inline DataService::Client asClient() { return addRef(); }
 	
 	inline void setLimits(LocalDataService::Limits newLimits);
 	

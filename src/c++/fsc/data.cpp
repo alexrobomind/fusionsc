@@ -123,32 +123,32 @@ LocalDataService::LocalDataService(Library& lib) :
 {}
 
 LocalDataService::LocalDataService(internal::LocalDataServiceImpl& newImpl) :
-	Client(newImpl.addRef()),
+	DataService::Client(newImpl.addRef()),
 	impl(newImpl.addRef())
 {}
 
 // Non-const copy constructor
 LocalDataService::LocalDataService(LocalDataService& other) : 
-	capnp::Capability::Client(other),
+	DataService::Client(other),
 	impl(other.impl -> addRef())
 {}
 
 // Move constructor
 LocalDataService::LocalDataService(LocalDataService&& other) : 
-	capnp::Capability::Client(other),
+	DataService::Client(other),
 	impl(other.impl -> addRef())
 {}
 
 // Copy assignment operator
 LocalDataService& LocalDataService::operator=(LocalDataService& other) {
-	capnp::Capability::Client::operator=(other);
+	DataService::Client::operator=(other);
 	impl = other.impl -> addRef();
 	return *this;
 }
 
 // Copy assignment operator
 LocalDataService& LocalDataService::operator=(LocalDataService&& other) {
-	capnp::Capability::Client::operator=(other);
+	DataService::Client::operator=(other);
 	impl = other.impl -> addRef();
 	return *this;
 }
@@ -595,7 +595,7 @@ Promise<LocalDataRef<capnp::AnyPointer>> internal::LocalDataServiceImpl::downloa
 	});
 }
 
-LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRefMetadata::Reader metaData, Array<const byte>&& data, ArrayPtr<capnp::Capability::Client> capTable) {	
+LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRefMetadata::Reader metaData, Array<const byte>&& data, ArrayPtr<capnp::Capability::Client> capTable, Maybe<LocalDataRefGroup&> maybeGroup) {	
 	KJ_REQUIRE(data.size() >= metaData.getDataSize(), "Data do not fit inside provided array");
 	KJ_REQUIRE(metaData.getCapTableSize() == capTable.size(), "Specified capability count must match provided table");
 	
@@ -614,7 +614,13 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRefM
 	
 	auto storeEntry = library -> store().publish(myMetaData.getDataHash(), mv(data));
 	
-	auto lg = kj::refcounted<LocalDataRefGroup>();
+	Own<LocalDataRefGroup> lg;
+	KJ_IF_MAYBE(pGroup, maybeGroup) {
+		lg = pGroup -> addRef();
+	} else {
+		lg = kj::refcounted<LocalDataRefGroup>();
+	}
+	
 	auto backend = kj::refcounted<LocalDataRefBackend>(
 		*lg,
 		mv(storeEntry),
@@ -641,7 +647,7 @@ Promise<void> internal::LocalDataServiceImpl::hash(HashContext ctx) {
 		
 		for(auto child : response.getTable()) {
 			hashAll = hashAll.then([this, child = mv(child)]() mutable {
-				auto childHashReq = thisCap().hashRequest<capnp::AnyPointer>();
+				auto childHashReq = asClient().hashRequest<capnp::AnyPointer>();
 				childHashReq.setSource(mv(child).castAs<DataRef<capnp::AnyPointer>>());
 				return childHashReq.send();
 			})
@@ -1143,6 +1149,8 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(M
 	
 	Maybe<LocalDataRef<capnp::AnyPointer>> root;
 	
+	auto group = kj::refcounted<LocalDataRefGroup>();
+	
 	// Scan all refs, looking to feed out root and fulfill any dependencies
 	for(auto i : kj::indices(objectInfo)) {
 		auto object = objectInfo[i];
@@ -1169,7 +1177,8 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(M
 		LocalDataRef<capnp::AnyPointer> published = publish(
 			object.getMetadata(),
 			mv(dataMapping),
-			refBuilder.finish()
+			refBuilder.finish(),
+			*group
 		);
 		
 		if(i == archiveInfo.getRoot())
@@ -1200,6 +1209,14 @@ Promise<void> internal::LocalDataServiceImpl::writeArchive(DataRef<capnp::AnyPoi
 Promise<void> internal::LocalDataServiceImpl::clone(CloneContext context) {
 	context.getResults().setRef(dbCache -> cache(context.getParams().getSource()));
 	return READY_NOW;
+}
+
+Promise<void> internal::LocalDataServiceImpl::cloneAllIntoMemory(CloneAllIntoMemoryContext ctx) {
+	return download(ctx.getParams().getSource(), true)
+	.then([this, ctx](auto localRef) mutable {
+		KJ_DBG("Download OK");
+		ctx.initResults().setRef(localRef);
+	});
 }
 
 Promise<void> internal::LocalDataServiceImpl::store(StoreContext context) {
@@ -1886,6 +1903,8 @@ LocalDataRef<> LocalDataServiceImpl::publishFlat(kj::Array<kj::Array<const byte>
 	
 	Maybe<LocalDataRef<>> result;
 	
+	auto group = kj::refcounted<LocalDataRefGroup>();
+	
 	// Fill in references
 	for(auto i : kj::range(0, nRefs)) {
 		auto refInfo = info.getObjects()[i];
@@ -1922,7 +1941,7 @@ LocalDataRef<> LocalDataServiceImpl::publishFlat(kj::Array<kj::Array<const byte>
 			refData = mp.get<LocalDataRef<>>().forkRaw();
 		}
 		
-		auto publishedRef = publish(refInfo.getMetadata(), mv(refData), capTableBuilder.finish());
+		auto publishedRef = publish(refInfo.getMetadata(), mv(refData), capTableBuilder.finish(), *group);
 		if(mp.is<kj::Array<const byte>>()) {
 			mp = publishedRef;
 		}
