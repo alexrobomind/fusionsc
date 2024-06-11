@@ -182,7 +182,6 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		Creates a polygon mesh from a [N, 3] array-like of vertices and a list of polygins (which is each a list of vertex indices)
 		"""
 		vertices = np.asarray(vertices)
-		print(vertices.shape)
 		assert len(vertices.shape) == 2
 		assert vertices.shape[1] == 3
 		
@@ -396,6 +395,16 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 	
 	@asyncFunction
 	@unstableApi
+	async def asPolyMesh(self, triangulate: bool = False):
+		"""Exports as a single merged polygon mesh"""
+		merged = await self.merge.asnc()
+		points, polys = await native.geometry.exportRaw(merged.data, triangulate)
+		
+		return points, polys
+		
+	
+	@asyncFunction
+	@unstableApi
 	async def exportTo(self, filename: str, binary = True, triangulate = True):
 		"""Saves the geometry to the given filename. Supports '.ply', '.stl', and '.vtk' files."""
 		
@@ -406,13 +415,11 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		
 		import meshio
 		
-		merged = await self.merge.asnc()
+		rawPoints, rawPolys = await self.asPolyMesh.asnc(triangulate)
 		
 		tris = []
 		quads = []
 		polys = []
-		
-		rawPoints, rawPolys = await native.geometry.exportRaw(merged.data, triangulate)
 		
 		for p in rawPolys:
 			if len(p) == 2:

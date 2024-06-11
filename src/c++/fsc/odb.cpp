@@ -645,7 +645,7 @@ Promise<void> ObjectDB::getRoot(GetRootContext ctx) {
 		
 		// Look for root
 		{
-			db::Transaction(*conn);
+			db::Transaction transaction(*conn);
 			auto q = findRoot.bind(ctx.getParams().getName());
 			if(q.step()) {
 				ctx.initResults().setRoot(wrap(open(q[0].asInt64())).castAs<Warehouse::Folder>());

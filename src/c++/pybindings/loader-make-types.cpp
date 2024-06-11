@@ -79,6 +79,8 @@ py::type Loader::makeCommonType(capnp::Type type) {
 		case Which::VOID: return py::type::of(py::none());
 		case Which::BOOL: return py::type::of(py::bool_(true));
 		
+		case Which::ENUM: return py::type::of<EnumInterface>();
+		
 		case Which::UINT8:
 		case Which::UINT16:
 		case Which::UINT32:
