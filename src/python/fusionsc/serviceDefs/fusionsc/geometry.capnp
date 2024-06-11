@@ -142,6 +142,20 @@ struct Plane {
 	center @2 : List(Float64);
 }
 
+struct GeometryFilter {
+	union {
+		true @0 : Void;
+		and @1 : List(GeometryFilter);
+		or @2 : List(GeometryFilter);
+		not @3 : GeometryFilter;
+	
+		isOneOf : group {
+			tagName @4 : Text;
+			values @5 : List(TagValue);
+		}
+	}
+}
+
 struct Geometry {
 	tags @0 : List(Tag);
 	
@@ -171,6 +185,11 @@ struct Geometry {
 					close @16 : Bool = true;
 				}
 			}
+		}
+		
+		filter : group {
+			filter @29 : GeometryFilter;
+			geometry @30 : Geometry;
 		}
 		
 		# ====== Device-specific ======

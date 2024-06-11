@@ -43,6 +43,12 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		return result
 	
 	@asyncFunction
+	async def getMerged(self):
+		merged = await self.merge.asnc()
+		return await data.download.asnc(merged.data.merged)
+		
+	
+	@asyncFunction
 	async def index(self, geometryGrid):
 		"""Computes an indexed geometry for accelerated intersection tests"""
 		if geometryGrid is None:
@@ -164,6 +170,32 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		]
 		
 		return result
+	
+	def filter(self, filter):
+		"""Restricts the geometry to meshes where the given tags meet one (or more) specified values"""		
+		if not isinstance(filter, service.GeometryFilter.ReaderOrBuilder):
+			assert isinstance(filter, dict)
+			
+			def processEntry(tag, val):
+				if not isinstance(val, list):
+					val = [val]
+				
+				val = [asTagValue(e) for e in val]
+				
+				return {
+					"isOneOf" : {
+						"tagName" : tag,
+						"values" : val
+					}
+				}
+			
+			filter = service.GeometryFilter.newMessage({
+				"and" : [
+					processEntry(k, v) for k, v in filter.items()
+				]
+			})
+		
+		return Geometry({"filter" : {"filter" : filter, "geometry" : self.data}})
 	
 	@asyncFunction
 	async def download(self):

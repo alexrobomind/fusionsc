@@ -31,6 +31,7 @@ bool isBuiltin(Geometry::Reader in) {
 		case Geometry::MESH:
 		case Geometry::MERGED:
 		case Geometry::INDEXED:
+		case Geometry::FILTER:
 			return true;
 		
 		default:
@@ -85,6 +86,13 @@ Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geom
 			output.setMerged(input.getMerged());
 			return READY_NOW;
 		}
+		case Geometry::FILTER: {
+			auto fIn = input.getFilter();
+			auto fOut = output.initFilter();
+			
+			fOut.setFilter(fIn.getFilter());
+			return processGeometry(fIn.getGeometry(), fOut.initGeometry(), context);
+		}
 		case Geometry::INDEXED: {
 			output.setIndexed(input.getIndexed());
 			return READY_NOW;
@@ -136,35 +144,6 @@ Promise<void> GeometryResolverBase::resolveGeometry(ResolveGeometryContext conte
 	return processGeometry(input, output, context);
 }
 
-// Class GeometryLibImpl
-
-struct GeometryLibImpl : public GeometryLib::Server {	
-	Promise<void> merge(MergeContext context) override;
-	Promise<void> index(IndexContext context) override;
-	Promise<void> planarCut(PlanarCutContext context) override;
-	Promise<void> reduce(ReduceContext context) override;
-	Promise<void> weightedSample(WeightedSampleContext context) override;
-	
-private:
-	struct GeometryAccumulator {
-		kj::Vector<Temporary<MergedGeometry::Entry>> entries;
-		
-		inline void finish(MergedGeometry::Builder output) {
-			auto outEntries = output.initEntries(entries.size());
-			for(size_t i = 0; i < entries.size(); ++i) {
-				outEntries.setWithCaveats(i, entries[i]);
-				entries[i] = nullptr;
-			}
-		}			
-	};
-	
-	Promise<void> mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, GeometryAccumulator& output);
-	Promise<void> mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, GeometryAccumulator& output);
-	
-	Promise<void> collectTagNames(Geometry::Reader input, kj::HashSet<kj::String>& output);
-	Promise<void> collectTagNames(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& output);
-};
-
 namespace {
 	
 	/**
@@ -201,8 +180,122 @@ namespace {
 		
 		return shift2 * turn * shift1;
 	}
-	
+
+	struct FilterContext : kj::Refcounted {
+		Maybe<Own<FilterContext>> parent;
+		Temporary<GeometryFilter> filter;
+		
+		FilterContext() {}
+		
+		FilterContext(kj::Maybe<FilterContext&> maybeParent, GeometryFilter::Reader f) :
+			filter(f)
+		{
+			KJ_IF_MAYBE(pP, maybeParent) {
+				parent = pP -> addRef();
+			}
+		}
+		
+		Own<FilterContext> addRef() { return kj::addRef(*this); }
+		
+		bool matches(kj::HashSet<kj::String>& tagTable, capnp::List<TagValue>::Reader tagValues) const {
+			if(!matchImpl(filter, tagTable, tagValues))
+				return false;
+			
+			KJ_IF_MAYBE(pParent, parent) {
+				return (**pParent).matches(tagTable, tagValues);
+			} else {
+				return true;
+			}
+		}
+		
+	private:
+		bool matchImpl(GeometryFilter::Reader f, kj::HashSet<kj::String>& tagTable, capnp::List<TagValue>::Reader tagValues) const {
+			switch(f.which()) {
+				case GeometryFilter::TRUE: return true;
+				case GeometryFilter::AND: {
+					for(auto sub : f.getAnd()) {
+						if(!matchImpl(sub, tagTable, tagValues))	return false;
+					}
+					
+					return true;
+				}
+				
+				case GeometryFilter::OR: {
+					for(auto sub : f.getOr()) {
+						if(matchImpl(sub, tagTable, tagValues)) return true;
+					}
+					
+					return false;
+				}
+				
+				case GeometryFilter::NOT:
+					return !matchImpl(f.getNot(), tagTable, tagValues);
+				
+				case GeometryFilter::IS_ONE_OF: {
+					auto oneOf = f.getIsOneOf();
+					
+					TagValue::Reader value;
+		
+					KJ_IF_MAYBE(rowPtr, tagTable.find(oneOf.getTagName())) {
+						size_t tagIdx = rowPtr - tagTable.begin();
+						value = tagValues[tagIdx];
+					}
+					
+					for(auto c : oneOf.getValues()) {
+						if(c.which() != value.which()) continue;
+						
+						switch(c.which()) {
+							case TagValue::NOT_SET:
+								return true;
+							case TagValue::U_INT64:
+								if(c.getUInt64() == value.getUInt64())
+									return true;
+								break;
+							case TagValue::TEXT:
+								if(c.getText() == value.getText())
+									return true;
+								break;
+						}
+					}
+					
+					return false;
+				}
+				
+				default:
+					KJ_FAIL_REQUIRE("Unknown filter type");
+			}
+		}
+	};
 }
+
+// Class GeometryLibImpl
+
+struct GeometryLibImpl : public GeometryLib::Server {	
+	Promise<void> merge(MergeContext context) override;
+	Promise<void> index(IndexContext context) override;
+	Promise<void> planarCut(PlanarCutContext context) override;
+	Promise<void> reduce(ReduceContext context) override;
+	Promise<void> weightedSample(WeightedSampleContext context) override;
+	
+private:
+	struct GeometryAccumulator {
+		kj::Vector<Temporary<MergedGeometry::Entry>> entries;
+		
+		inline void finish(MergedGeometry::Builder output) {
+			auto outEntries = output.initEntries(entries.size());
+			for(size_t i = 0; i < entries.size(); ++i) {
+				outEntries.setWithCaveats(i, entries[i]);
+				entries[i] = nullptr;
+			}
+		}			
+	};
+	
+	Promise<void> mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, FilterContext& filterCtx, GeometryAccumulator& output);
+	Promise<void> mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, FilterContext& filterCtx, GeometryAccumulator& output);
+	
+	Promise<void> collectTagNames(Geometry::Reader input, kj::HashSet<kj::String>& output);
+	Promise<void> collectTagNames(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& output);
+};
 
 Promise<void> GeometryLibImpl::collectTagNames(Geometry::Reader input, kj::HashSet<kj::String>& output) {
 	for(auto tag : input.getTags()) {
@@ -245,6 +338,8 @@ Promise<void> GeometryLibImpl::collectTagNames(Geometry::Reader input, kj::HashS
 		}
 		case Geometry::MESH:
 			return READY_NOW;
+		case Geometry::FILTER:
+			return collectTagNames(input.getFilter().getGeometry(), output);
 		case Geometry::MERGED:
 			return handleMerged(input.getMerged());
 		case Geometry::INDEXED:
@@ -274,7 +369,7 @@ Promise<void> GeometryLibImpl::collectTagNames(Transformed<Geometry>::Reader inp
 
 using Mat4d = Eigen::Matrix<double, 4, 4>;
 
-Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, GeometryAccumulator& output) {
+Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, FilterContext& ctx, GeometryAccumulator& output) {
 	// KJ_CONTEXT("Merge Operation", input);
 	
 	Temporary<capnp::List<TagValue>> tagValues(tagScope);
@@ -290,7 +385,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 		}
 	}
 	
-	auto handleMesh = [&tagTable, transform, &output ](Mesh::Reader inputMesh, capnp::List<TagValue>::Reader tagValues) {
+	auto handleMesh = [&tagTable, transform, &output](Mesh::Reader inputMesh, capnp::List<TagValue>::Reader tagValues) {
 		auto vertexShape = inputMesh.getVertices().getShape();
 		KJ_REQUIRE(vertexShape.size() == 2);
 		KJ_REQUIRE(vertexShape[1] == 3);
@@ -333,9 +428,9 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 		output.entries.add(mv(newEntry));
 	};
 	
-	auto handleMerged = [&output, &tagTable, handleMesh](DataRef<MergedGeometry>::Client ref, capnp::List<TagValue>::Reader tagScope) {
+	auto handleMerged = [&output, &tagTable, handleMesh, &ctx](DataRef<MergedGeometry>::Client ref, capnp::List<TagValue>::Reader tagScope) {
 		return getActiveThread().dataService().download(ref)
-		.then([&output, &tagTable, tagScope, handleMesh = mv(handleMesh)](LocalDataRef<MergedGeometry> localRef) {
+		.then([&output, &tagTable, tagScope, handleMesh = mv(handleMesh), ctx = ctx.addRef()](LocalDataRef<MergedGeometry> localRef) {
 			auto merged = localRef.get();
 			
 			for(auto entry : merged.getEntries()) {
@@ -359,6 +454,9 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 					}
 				}
 				
+				if(!ctx -> matches(tagTable, tagValues))
+					continue;
+				
 				handleMesh(entry.getMesh(), tagValues);
 			}
 		});
@@ -369,23 +467,26 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 			auto promises = kj::heapArrayBuilder<Promise<void>>(input.getCombined().size());
 			
 			for(auto child : input.getCombined()) {
-				promises.add(mergeGeometries(child, tagTable, tagValues, transform, output));
+				promises.add(mergeGeometries(child, tagTable, tagValues, transform, ctx, output));
 			}
 				
 			return joinPromises(promises.finish());
 		}
 		case Geometry::TRANSFORMED:
-			return mergeGeometries(input.getTransformed(), tagTable, tagValues, transform, output);
+			return mergeGeometries(input.getTransformed(), tagTable, tagValues, transform, ctx, output);
 			
 		case Geometry::REF:
 			return getActiveThread().dataService().download(input.getRef())
-			.then([input, &tagTable, tagValues = mv(tagValues), transform, &output, this](LocalDataRef<Geometry> geo) {
-				return mergeGeometries(geo.get(), tagTable, tagValues, transform, output);
+			.then([input, &tagTable, tagValues = mv(tagValues), ctx = ctx.addRef(), transform, &output, this](LocalDataRef<Geometry> geo) mutable {
+				return mergeGeometries(geo.get(), tagTable, tagValues, transform, *ctx, output);
 			});
 		case Geometry::NESTED:
-			return mergeGeometries(input.getNested(), tagTable, tagValues, transform, output);
+			return mergeGeometries(input.getNested(), tagTable, tagValues, transform, ctx, output);
 			
 		case Geometry::MESH:
+			if(!ctx.matches(tagTable, tagValues))
+				return READY_NOW;
+			
 			return getActiveThread().dataService().download(input.getMesh())
 			.then([&tagTable, tagValues = mv(tagValues), &output, handleMesh](LocalDataRef<Mesh> inputMeshRef) {
 				handleMesh(inputMeshRef.get(), tagValues);
@@ -397,7 +498,16 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 		case Geometry::INDEXED:
 			return handleMerged(input.getIndexed().getBase(), tagValues.asReader()).attach(mv(tagValues));
 		
+		case Geometry::FILTER: {
+			auto f = input.getFilter();
+			auto newCtx = kj::refcounted<FilterContext>(ctx, f.getFilter());
+			return mergeGeometries(f.getGeometry(), tagTable, tagValues, transform, *newCtx, output);
+		}
+		
 		case Geometry::WRAP_TOROIDALLY: {
+			if(!ctx.matches(tagTable, tagValues))
+				return READY_NOW;
+			
 			auto wt = input.getWrapToroidally();
 			
 			double phiStart = 0;
@@ -515,13 +625,13 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 	}
 }
 
-Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, GeometryAccumulator& output) {
+Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, FilterContext& ctx, GeometryAccumulator& output) {
 	Mat4d transformBase;
 	Transformed<Geometry>::Reader node;
 	
 	switch(input.which()) {
 		case Transformed<Geometry>::LEAF:
-			return mergeGeometries(input.getLeaf(), tagTable, tagScope, transform, output);
+			return mergeGeometries(input.getLeaf(), tagTable, tagScope, transform, ctx, output);
 			
 		case Transformed<Geometry>::SHIFTED: {
 			node = input.getShifted().getNode();
@@ -573,9 +683,9 @@ Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader inp
 	}
 			
 	KJ_IF_MAYBE(pTransform, transform) {
-		return mergeGeometries(node, tagTable, tagScope, (Mat4d)((*pTransform) * transformBase), output);
+		return mergeGeometries(node, tagTable, tagScope, (Mat4d)((*pTransform) * transformBase), ctx, output);
 	} else {
-		return mergeGeometries(node, tagTable, tagScope, transformBase, output);
+		return mergeGeometries(node, tagTable, tagScope, transformBase, ctx, output);
 	}
 }
 
@@ -783,7 +893,8 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 		Temporary<capnp::List<TagValue>> tagScope(tagNameTable->size());
 		
 		KJ_LOG(INFO, "Beginning merge operation");
-		return mergeGeometries(context.getParams(), *tagNameTable, tagScope, nullptr, *geomAccum);
+		auto rootCtx = kj::refcounted<FilterContext>();
+		return mergeGeometries(context.getParams(), *tagNameTable, tagScope, nullptr, *rootCtx, *geomAccum);
 	})
 	
 	// Finally, copy the data from the accumulator into the output
