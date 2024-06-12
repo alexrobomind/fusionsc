@@ -25,6 +25,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 			return Geometry(self.data)
 		
 		resolved = await self.resolve.asnc()
+		print("M", resolved)
 		mergedRef = geometryLib().merge(resolved.data).pipeline.ref
 		
 		result = Geometry()

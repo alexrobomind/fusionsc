@@ -931,14 +931,17 @@ Promise<void> GeometryLibImpl::reduce(ReduceContext context) {
 	switch(geometry.which()) {
 		case Geometry::INDEXED: {
 			ref = geometry.getIndexed().getBase();
+			break;
 		}
 		case Geometry::MERGED: {
 			ref = geometry.getMerged();
+			break;
 		}
 		default: {
 			auto mergeRequest = thisCap().mergeRequest();
 			mergeRequest.setNested(geometry);
 			ref = mergeRequest.sendForPipeline().getRef();
+			break;
 		}
 	}
 	
