@@ -224,7 +224,7 @@ struct RootServer : public RootService::Server {
 		
 		return limiter.getToken()
 		.then([this, context](auto token) mutable {
-			context.initResults().setService(fsc::newGeometryLib().attach(mv(token)));
+			context.initResults().setService(fsc::newGeometryLib(device -> addRef()).attach(mv(token)));
 		});
 	}
 	
@@ -233,7 +233,7 @@ struct RootServer : public RootService::Server {
 		
 		return limiter.getToken()
 		.then([this, context](auto token) mutable {
-			context.initResults().setService(fsc::newHFCamProvider().attach(mv(token)));
+			context.initResults().setService(fsc::newHFCamProvider(device -> addRef()).attach(mv(token)));
 		});
 	}
 	

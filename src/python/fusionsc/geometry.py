@@ -47,7 +47,6 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 	async def getMerged(self):
 		merged = await self.merge.asnc()
 		return await data.download.asnc(merged.data.merged)
-		
 	
 	@asyncFunction
 	async def index(self, geometryGrid):
@@ -79,6 +78,21 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		
 		if self.data.which_() == 'merged':
 			return self.data.merged.__await__()
+	
+	@asyncFunction
+	async def intersect(self, pStart, pEnd, grid = None):
+		indexed = await self.index.asnc(grid)
+		
+		response = await geometryLib().intersect(indexed.data.indexed, pStart, pEnd)
+		
+		return {
+			'lambda' : np.asarray(response['lambda']),
+			'position' : np.asarray(response.position),
+			'tags' : {
+				e.name : np.asarray(e.values)
+				for e in response.tags
+			}
+		}
 	
 	def __add__(self, other):
 		if isinstance(other, int) and other == 0:
@@ -442,8 +456,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		"""Saves the geometry to the given filename. Supports '.ply', '.stl', and '.vtk' files."""
 		
 		if filename.endswith(".ply"):
-			merged = await self.merge.asnc()
-			await native.geometry.writePly(merged.data, filename, binary)
+			native.geometry.writePly(await self.getMerged.asnc(), filename, binary)
 			return
 		
 		import meshio

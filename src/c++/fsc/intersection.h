@@ -29,6 +29,72 @@ inline EIGEN_DEVICE_FUNC double vecdet(const Vec3d v0, const Vec3d v1, const Vec
 	;
 }
 
+inline EIGEN_DEVICE_FUNC double intersectBox(const Vec3d& start, const Vec3d& end, const Vec3d& p1, const Vec3d& p2) {
+	constexpr double inf = std::numeric_limits<double>::infinity();
+	constexpr double tol = 5 * std::numeric_limits<double>::epsilon();
+	
+	constexpr size_t dim = 3;
+	
+	double lower_bound = 0;
+	double upper_bound = inf;
+	
+	for(size_t i = 0; i < 3; ++i) {
+		double i_low;
+		double i_high;
+		
+		// In case we don't point in the i'th direction, we have to see whether we are inside the box
+		// If we are, any value is OK
+		// If we are not, none is
+		if(std::abs(end[i] - start[i]) <= tol) {
+			if((p1[i] - start[i]) * (p2[i] - start[i]) <= 0) {
+				i_low = -inf;
+				i_high = inf;
+			} else {
+				i_low = inf;
+				i_high = -inf;
+			}
+		} else {
+			const double l1 = (p1[i] - start[i]) / (end[i] - start[i]);
+			const double l2 = (p2[i] - start[i]) / (end[i] - start[i]);
+			
+			if(l1 < l2) {
+				i_low = l1; i_high = l2;
+			} else {
+				i_low = l2; i_high = l1;
+			}
+		}
+		
+		// Reduction
+		lower_bound = std::max(lower_bound, i_low);
+		upper_bound = std::min(upper_bound, i_high);
+	}
+	
+	if(lower_bound > upper_bound)
+		return inf;
+	
+	return lower_bound;
+}
+
+inline EIGEN_DEVICE_FUNC double intersectGridElement(const Vec3d& p1, const Vec3d& p2, const cu::CartesianGrid::Reader grid, size_t iX, size_t iY, size_t iZ) {
+	double dx = (grid.getXMax() - grid.getXMin()) / (grid.getNX() - 1);
+	double dy = (grid.getYMax() - grid.getYMin()) / (grid.getNY() - 1);
+	double dz = (grid.getZMax() - grid.getZMin()) / (grid.getNZ() - 1);
+	
+	Vec3d box1(
+		grid.getXMin() + iX * dx,
+		grid.getYMin() + iY * dy,
+		grid.getZMin() + iZ * dz
+	);
+	
+	Vec3d box2(
+		grid.getXMin() + (iX + 1) * dx,
+		grid.getYMin() + (iY + 1) * dy,
+		grid.getZMin() + (iZ + 1) * dz
+	);
+	
+	return intersectBox(p1, p2, box1, box2);
+}
+
 inline EIGEN_DEVICE_FUNC double rayCastTriangle(const Vec3d point, const Vec3d direction, const Vec3d triangle[3]) {
 	using Eigen::seq;
 	using Eigen::all;
@@ -156,10 +222,17 @@ inline EIGEN_DEVICE_FUNC uint32_t intersectGeometryAllEvents(
 			FSC_NEXT_EVENT() \
 		} \
 	}
+
+	int nFlatDims = (imin[0] == imax[0]) + (imin[1] == imax[1]) + (imin[2] == imax[2]);
 	
 	for(size_t iX = imin[0]; iX <= imax[0]; ++iX) {
 	for(size_t iY = imin[1]; iY <= imax[1]; ++iY) {
 	for(size_t iZ = imin[2]; iZ <= imax[2]; ++iZ) {
+		// If we have more than 1 dim that has extent > 1, it is worthwhile to check
+		// whether we actually intersect a diagonal ray.
+		if(nFlatDims < 2 && intersectGridElement(p1, p2, grid, iX, iY, iZ) > 1)
+			continue;
+		
 		size_t globalIdx = (iX * gridSize[1] + iY) * gridSize[2] + iZ;
 		
 		const auto indexNode = indexGridData[globalIdx];
@@ -227,7 +300,7 @@ inline EIGEN_DEVICE_FUNC uint32_t intersectGeometryAllEvents(
  * \ingroup geometry
  */
 inline EIGEN_DEVICE_FUNC IntersectResult intersectGeometryFirstHit(
-	const Vec3d p1, const Vec3d p2,
+	const Vec3d& p1, const Vec3d& p2,
 	cu::MergedGeometry::Reader geometry, cu::IndexedGeometry::Reader index, cu::IndexedGeometry::IndexData::Reader indexData
 ) {
 	constexpr double inf = std::numeric_limits<double>::infinity();
@@ -247,9 +320,16 @@ inline EIGEN_DEVICE_FUNC IntersectResult intersectGeometryFirstHit(
 	size_t iMesh = 0;
 	size_t iElement = 0;
 	
+	int nFlatDims = (imin[0] == imax[0]) + (imin[1] == imax[1]) + (imin[2] == imax[2]);
+	
 	for(size_t iX = imin[0]; iX <= imax[0]; ++iX) {
 	for(size_t iY = imin[1]; iY <= imax[1]; ++iY) {
 	for(size_t iZ = imin[2]; iZ <= imax[2]; ++iZ) {
+		// If we have more than 1 dim that has extent > 1, it is worthwhile to check
+		// whether we actually intersect a diagonal ray.
+		if(nFlatDims < 2 && intersectGridElement(p1, p2, grid, iX, iY, iZ) > 1)
+			continue;
+		
 		size_t globalIdx = (iX * gridSize[1] + iY) * gridSize[2] + iZ;
 		
 		const auto indexNode = indexGridData[globalIdx];

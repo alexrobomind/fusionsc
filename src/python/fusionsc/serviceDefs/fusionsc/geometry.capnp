@@ -18,6 +18,23 @@ interface GeometryResolver {
 }
 
 interface GeometryLib $Cxx.allowCancellation {
+	struct IntersectRequest {
+		geometry @0 : IndexedGeometry;
+		pStart @1 : Float64Tensor;
+		pEnd @2 : Float64Tensor;
+	}
+	
+	struct IntersectResponse {
+		struct TagEntry {
+			name @0 : Text;
+			values @1 : ShapedList(List(TagValue));
+		}
+		
+		position @0 : Float64Tensor;
+		lambda @1 : Float64Tensor;
+		tags @2 : List(TagEntry);
+	}
+	
 	merge @0 Geometry -> (ref : DataRef(MergedGeometry));
 	index @1 (geometry : Geometry, grid : CartesianGrid) -> (indexed : IndexedGeometry);
 	planarCut @2 (geometry : Geometry, plane : Plane) -> (edges : Float64Tensor); # edges has shape [3, :, 2]
@@ -25,6 +42,8 @@ interface GeometryLib $Cxx.allowCancellation {
 	reduce @3 (geometry : Geometry, maxVertices : UInt32 = 1000000, maxIndices : UInt32 = 1000000) -> (ref : DataRef(MergedGeometry));
 	
 	weightedSample @4 (geometry : Geometry, scale : Float64 = 0.01) -> (centers : Float64Tensor, areas : List(Float64));
+	
+	intersect @5 IntersectRequest -> IntersectResponse;
 }
 
 struct TagValue {
@@ -32,35 +51,6 @@ struct TagValue {
 		notSet @0 : Void;
 		uInt64 @1 : UInt64;
 		text   @2 : Text;
-		
-		#w7xComponent : group {
-		#	union {
-		#		baffle : group {
-		#			module @4 : UInt8;
-		#			upper @5 : Bool;
-		#			row @6 : Text;
-		#			tileNo @7 : UInt8;
-		#		}
-		#		
-		#		heatShieldTile : group {
-		#			halfModule @8 : UInt8;
-		#			section @9 : Text;
-		#			tileNo @10 : UInt8;
-		#		}
-		#		
-		#		divertorPart : group {
-		#			module @11 : UInt8;
-		#			upper @12 : Bool;
-		#			section @13 : Text;
-		#			partNo @14 : UInt8;
-		#			
-		#			type : union {
-		#				finger @15 : Void;
-		#				fingerProtector @16 : Void;
-		#				toroidalClosure @17 : Void;
-		#				
-		#	}
-		#}
 	}
 }
 

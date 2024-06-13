@@ -34,3 +34,9 @@ def test_wrap():
 	geo.plotCut(np.radians(0))
 	
 	print(geo.reduce())
+
+def test_intersect():
+	p1 = [0, 0, 0]
+	p2 = [2, 0, 0]
+	
+	jtext.pfcs(0.24).intersect(p1, p2, grid = jtext.defaultGeometryGrid())

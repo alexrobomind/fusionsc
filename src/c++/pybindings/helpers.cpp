@@ -50,7 +50,7 @@ namespace {
 		return newOfflineGeometryResolver(ref.castAs<DataRef<OfflineData>>());
 	}
 	
-	Promise<void> writePlyHelper(WithMessage<Geometry::Reader> geo, kj::StringPtr filename, bool binary) {
+	void writePlyHelper(WithMessage<MergedGeometry::Reader> geo, kj::StringPtr filename, bool binary) {
 		return writePly(geo, filename, binary);
 	}
 	

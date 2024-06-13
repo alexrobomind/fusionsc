@@ -524,6 +524,10 @@ struct HFCamImpl : public HFCam::Server {
 struct CamProvider : public HFCamProvider::Server {;
 	using Parent = HFCamProvider::Server;
 	
+	Own<DeviceBase> device;
+	
+	CamProvider(Own<DeviceBase> device) : device(mv(device)) {}
+	
 	Promise<void> makeToroidalProjection(MakeToroidalProjectionContext context) override {
 		auto params = context.getParams();
 		
@@ -542,7 +546,7 @@ struct CamProvider : public HFCamProvider::Server {;
 		using Mat = Eigen::MatrixXd;
 		
 		// Postprocess using local geometry library
-		GeometryLib::Client geoLib = newGeometryLib();
+		GeometryLib::Client geoLib = newGeometryLib(device -> addRef());
 		auto mergeRequest = geoLib.mergeRequest();
 		mergeRequest.setNested(context.getParams().getGeometry());
 		
@@ -598,8 +602,8 @@ struct CamProvider : public HFCamProvider::Server {;
 
 } // anonymous namespace
 
-Own<HFCamProvider::Server> newHFCamProvider() {
-	return kj::heap<CamProvider>();
+Own<HFCamProvider::Server> newHFCamProvider(Own<DeviceBase> device) {
+	return kj::heap<CamProvider>(mv(device));
 }
 
 } // namespace fsc

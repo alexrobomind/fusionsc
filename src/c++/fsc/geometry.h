@@ -3,6 +3,7 @@
 #include "common.h"
 #include "eigen.h"
 #include "data.h"
+#include "kernels/device.h"
 
 #include <fsc/geometry.capnp.h>
 
@@ -20,7 +21,7 @@ struct GeometryResolverBase : public GeometryResolver::Server {
 /**
  * Creates C++ interface to geometry library.
  */
-Own<GeometryLib::Server> newGeometryLib();
+Own<GeometryLib::Server> newGeometryLib(Own<DeviceBase>);
 
 Vec3u locationInGrid(Vec3d point, CartesianGrid::Reader reader);
 
@@ -42,7 +43,6 @@ inline EIGEN_DEVICE_FUNC Vec3u locationInGrid(Vec3d point, Vec3d min, Vec3d max,
 
 Temporary<Geometry> readPly(kj::StringPtr filename);
 
-Promise<void> writePly(Geometry::Reader, kj::StringPtr filename, bool binary = true);
 void writePly(MergedGeometry::Reader, kj::StringPtr filename, bool binary);
 
 void importRaw(kj::ArrayPtr<std::array<const double, 3>> vertices, kj::ArrayPtr<kj::Array<const size_t>> faces, MergedGeometry::Builder out);

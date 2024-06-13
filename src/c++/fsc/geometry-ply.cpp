@@ -54,24 +54,4 @@ void writePly(MergedGeometry::Reader merged, kj::StringPtr filename, bool binary
 	kj::apply(doExport, exportRaw(merged, /* triangulate = */ false));
 }
 
-Promise<void> writePly(Geometry::Reader geo, kj::StringPtr filename, bool binary) {
-	// Try to push the whole geometry into a single mesh
-	// constexpr uint32_t CAPNP_MAX_LIST_SIZE = 1 << 29 - 1;
-	// auto req = newGeometryLib().reduceRequest();
-	GeometryLib::Client geoLib = newGeometryLib();
-	auto req = geoLib.mergeRequest();
-	req.setNested(geo);
-	// req.setGeometry(geo);
-	// req.setMaxVertices(CAPNP_MAX_LIST_SIZE);
-	// req.setMaxIndices(CAPNP_MAX_LIST_SIZE);
-	
-	auto mergedRef = req.send().getRef();
-	
-	return getActiveThread().dataService().download(mergedRef)
-	.then([filename = kj::heapString(filename), binary](auto mergedLocalRef) {
-		writePly(mergedLocalRef.get(), filename, binary);
-	});
-}
-
-
 }

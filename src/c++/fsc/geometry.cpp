@@ -3,6 +3,11 @@
 #include "data.h"
 #include "tensor.h"
 
+#include "geometry-kernels.h"
+
+#include "kernels/karg.h"
+#include "kernels/launch.h"
+
 #include <random>
 
 #include <kj/map.h>
@@ -270,12 +275,17 @@ namespace {
 
 // Class GeometryLibImpl
 
-struct GeometryLibImpl : public GeometryLib::Server {	
-	Promise<void> merge(MergeContext context) override;
-	Promise<void> index(IndexContext context) override;
-	Promise<void> planarCut(PlanarCutContext context) override;
-	Promise<void> reduce(ReduceContext context) override;
-	Promise<void> weightedSample(WeightedSampleContext context) override;
+struct GeometryLibImpl : public GeometryLib::Server {
+	Own<DeviceBase> device;
+	
+	GeometryLibImpl(Own<DeviceBase> device) : device(mv(device)) {}
+	
+	Promise<void> merge(MergeContext) override;
+	Promise<void> index(IndexContext) override;
+	Promise<void> planarCut(PlanarCutContext) override;
+	Promise<void> reduce(ReduceContext) override;
+	Promise<void> weightedSample(WeightedSampleContext) override;
+	Promise<void> intersect(IntersectContext) override;
 	
 private:
 	struct GeometryAccumulator {
@@ -1237,8 +1247,6 @@ Promise<void> GeometryLibImpl::weightedSample(WeightedSampleContext context) {
 	});
 }
 
-
-
 Promise<void> GeometryLibImpl::planarCut(PlanarCutContext context) {
 	auto mergeRequest = thisCap().mergeRequest();
 	mergeRequest.setNested(context.getParams().getGeometry());
@@ -1410,8 +1418,106 @@ Promise<void> GeometryLibImpl::planarCut(PlanarCutContext context) {
 	});
 }
 
-Own<GeometryLib::Server> newGeometryLib() {
-	return kj::heap<GeometryLibImpl>();
+Promise<void> GeometryLibImpl::intersect(IntersectContext ctx) {
+	return kj::startFiber(1024 * 1024, [this, ctx = mv(ctx)](kj::WaitScope& ws) mutable {
+		// Merge geometry
+		auto params = ctx.getParams();
+		
+		auto& ds = getActiveThread().dataService();
+		
+		// Download all required data
+		Temporary<IndexedGeometry> indexedGeo = ctx.getParams().getGeometry();
+		auto indexData = ds.download(indexedGeo.getData()).wait(ws);
+		auto base = ds.download(indexedGeo.getBase()).wait(ws);
+		
+		Tensor<double, 2> p1;
+		readVardimTensor(params.getPStart(), 1, p1);
+		
+		Tensor<double, 2> p2;
+		readVardimTensor(params.getPEnd(), 1, p2);
+		
+		KJ_REQUIRE(p2.dimension(0) == p1.dimension(0), "No. of start and end points inconsistent");
+		size_t nPoints = p1.dimension(0);
+		
+		KJ_REQUIRE(p1.dimension(1) == 3);
+		KJ_REQUIRE(p2.dimension(1) == 3);
+		
+		// Prepare kernel space
+		auto mappedGeo = FSC_MAP_BUILDER(::fsc, IndexedGeometry, mv(indexedGeo), *device, true);
+		auto mappedData = FSC_MAP_READER(::fsc, IndexedGeometry::IndexData, indexData, *device, true);
+		auto mappedBase = FSC_MAP_READER(::fsc, MergedGeometry, base, *device, true);
+		auto mappedResults = mapToDevice(kj::heapArray<IntersectResult>(nPoints), *device, true);
+		
+		// Start kernel and wait for result
+		FSC_LAUNCH_KERNEL(
+			rayCastKernel, *device,
+			
+			nPoints,
+			
+			FSC_KARG(p1, ALIAS_IN), FSC_KARG(p2, ALIAS_IN),
+			FSC_KARG(mappedBase, IN), FSC_KARG(mappedGeo, IN), FSC_KARG(mappedData, IN),
+			
+			mappedResults
+		)
+		.wait(ws);
+		
+		// Wait until memcpy to host is finished
+		device -> barrier().wait(ws);
+		
+		// Post-process
+		auto kernelResult = mappedResults -> getHost();
+		auto results = ctx.initResults();
+		
+		// Set positions
+		auto lambdas = results.initLambda().initData(nPoints);
+		auto positions = results.initPosition().initData(3 * nPoints);
+		for(auto i : kj::indices(lambdas)) {
+			double l = kernelResult[i].l;
+			
+			if(l > 1)
+				l = std::numeric_limits<double>::infinity();
+			
+			lambdas.set(i, l);
+			positions.set(3 * i + 0, l * p2(i, 0) + (1 - l) * p1(i, 0));
+			positions.set(3 * i + 1, l * p2(i, 1) + (1 - l) * p1(i, 1));
+			positions.set(3 * i + 2, l * p2(i, 2) + (1 - l) * p1(i, 2));
+		}
+		
+		auto inShape = params.getPStart().getShape();
+		auto vectorShape = kj::heapArray<uint64_t>(inShape.begin(), inShape.end());
+		auto scalarShape = vectorShape.slice(1, vectorShape.size());
+		
+		results.getPosition().setShape(vectorShape);
+		results.getLambda().setShape(scalarShape);
+		
+		// Set tags
+		size_t nTags = base.get().getTagNames().size();
+		auto tagEntries = results.initTags(nTags);
+		
+		auto baseVal = base.get();
+		
+		for(auto iTag : kj::range(0, nTags)) {
+			auto entry = tagEntries[iTag];
+			entry.setName(base.get().getTagNames()[iTag]);
+			
+			auto values = entry.initValues();
+			values.setShape(scalarShape);
+			auto data = values.initData(nPoints);
+			
+			for(auto iPoint : kj::range(0, nPoints)) {
+				auto& res = kernelResult[iPoint];
+				
+				if(res.l > 1)
+					continue;
+				
+				data.setWithCaveats(iPoint, baseVal.getEntries()[kernelResult[iPoint].iMesh].getTags()[iTag]);
+			}
+		}
+	});
+}
+
+Own<GeometryLib::Server> newGeometryLib(Own<DeviceBase> device) {
+	return kj::heap<GeometryLibImpl>(mv(device));
 };
 
 // Grid location methods

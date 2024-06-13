@@ -10,6 +10,55 @@
 
 namespace fsc {
 
+namespace {
+	auto newCpuDevice() {
+		return CPUDevice::create(CPUDevice::estimateNumThreads());
+	}
+}
+
+TEST_CASE("intersect") {
+	Library l = newLibrary();
+	LibraryThread lt = l -> newThread();
+	auto& ws = lt -> waitScope();
+	
+	DataRef<Mesh>::Client cube = lt->dataService().publish(TEST_CUBE.get());
+	
+	GeometryLib::Client geoLib = newGeometryLib(newCpuDevice());
+	
+	auto indexRequest = geoLib.indexRequest();
+	indexRequest.initGeometry().setMesh(cube);
+	
+	auto grid = indexRequest.initGrid();
+	grid.setNX(1);
+	grid.setXMin(-10);
+	grid.setXMax(10);
+	
+	grid.setNY(1);
+	grid.setYMin(-10);
+	grid.setYMax(10);
+	
+	grid.setNZ(1);
+	grid.setZMin(-10);
+	grid.setZMax(10);
+	
+	auto resp1 = indexRequest.send().wait(ws);
+	auto indexed = resp1.getIndexed();
+	KJ_DBG("Index OK");
+	
+	auto intersectRequest = geoLib.intersectRequest();
+	intersectRequest.setGeometry(indexed);
+	auto p1 = intersectRequest.initPStart();
+	auto p2 = intersectRequest.initPEnd();
+	
+	p1.setShape({3});
+	p1.setData({0, 0, 0});
+	p2.setShape({3});
+	p2.setData({2, 0, 0});
+	
+	auto response = intersectRequest.send().wait(ws);
+	KJ_DBG(response);
+}
+
 TEST_CASE("transform-cube") {
 	Library l = newLibrary();
 	LibraryThread lt = l -> newThread();
@@ -29,7 +78,7 @@ TEST_CASE("transform-cube") {
 	
 	turned.initNode().initLeaf().setMesh(cube);
 	
-	GeometryLib::Client geoLib = newGeometryLib();
+	GeometryLib::Client geoLib = newGeometryLib(newCpuDevice());
 	
 	auto mergeRequest = geoLib.mergeRequest();
 	mergeRequest.setRef(lt->dataService().publish(geometry.asReader()));
@@ -47,7 +96,7 @@ TEST_CASE("index-cube") {
 	auto l  = newLibrary();
 	auto lt = l -> newThread();
 	auto& ws = lt -> waitScope();
-	GeometryLib::Client geoLib = newGeometryLib();
+	GeometryLib::Client geoLib = newGeometryLib(newCpuDevice());
 	
 	Mesh::Reader geo = TEST_CUBE.get();
 	

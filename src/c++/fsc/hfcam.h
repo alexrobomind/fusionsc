@@ -4,6 +4,6 @@
 
 namespace fsc {
 
-Own<HFCamProvider::Server> newHFCamProvider();
+Own<HFCamProvider::Server> newHFCamProvider(Own<DeviceBase>);
 
 }
