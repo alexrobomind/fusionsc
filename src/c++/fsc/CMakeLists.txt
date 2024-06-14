@@ -94,6 +94,7 @@ add_library(
 	efit.cpp
 	
 	geometry.h
+	geometry-kernels.h
 	geometry.cpp
 	geometry-ply.cpp
 	geometry-io.cpp
