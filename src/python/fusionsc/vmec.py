@@ -52,6 +52,12 @@ async def phizrToSphitheta(surfaces : magnetics.SurfaceArray, phi, z, r, sValues
 	s, phi, theta = np.asarray(response.sPhiTheta)
 	return s, phi, theta
 
+@asyncFunction
+@unstableApi
+async def writeMGrid(field: magnetics.MagneticConfig, path: str, grid: Optional[service.ToroidalGrid.ReaderOrBuilder] = None):
+	computed = await field.compute.asnc(grid)
+	await native.vmec.writeMGrid(computed.data.computed, path)
+
 @unstableApi
 class VmecEquilibrium(wrappers.structWrapper(service.VmecResult)):		
 	@property

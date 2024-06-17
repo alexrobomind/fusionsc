@@ -112,6 +112,13 @@ namespace {
 		
 		return result;
 	}
+	
+	Promise<void> writeMgridHelper(ComputedField::Reader cf, kj::StringPtr fileName) {
+		auto& fs = getActiveThread().filesystem();
+		
+		auto fsPath = fs.getCurrentPath().evalNative(fileName);
+		return writeMGridFile(fsPath, cf);
+	}
 }
 
 void initHelpers(py::module_& m) {
@@ -128,6 +135,7 @@ void initHelpers(py::module_& m) {
 	
 	py::module_ vmecModule = m.def_submodule("vmec");
 	vmecModule.def("loadOutput", &loadVmecOutput);
+	vmecModule.def("writeMGrid", &writeMgridHelper);
 	
 	py::module_ geometryModule = m.def_submodule("geometry");
 	geometryModule.def(

@@ -437,7 +437,7 @@ struct VmecDriverImpl : public VmecDriver::Server {
 		return kj::evalLater([this, run]() mutable {
 			return run -> run(*launcher);
 		})
-		.attach(run.x());
+		.attach(run.x(), ctx);
 	}
 	
 	Promise<void> computePositions(ComputePositionsContext ctx) override {
