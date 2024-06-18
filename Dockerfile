@@ -3,9 +3,9 @@ FROM debian as base
 
 # Baseline FusionSC dependencies
 RUN apt-get -q update
-RUN apt-get install g++ cmake ninja libopenssl-dev python3 linux-headers
+RUN apt-get install -y g++ cmake ninja-build libssl-dev python3
 
-FROM build-core as build
+FROM base as build
 
 COPY . /src
 WORKDIR /build
@@ -14,13 +14,13 @@ RUN ninja fsc-tool
 
 FROM debian as light
 RUN apt-get -q update
-RUN apt-get install libgomp libstdc++6
+RUN apt-get install -y libgomp libstdc++ openssl
 COPY --from=build /build/src/c++/tools/fusionsc /usr/local/bin/fusionsc
 
 # VMEC dependencies
 FROM base as full
 
-RUN apt-get install \
+RUN apt-get install -y \
   gfortran \
   libopenmpi-dev openmpi-bin \
   \
@@ -30,9 +30,13 @@ RUN apt-get install \
   libblas-dev liblapack-dev libscalapack-openmpi-dev \
   make curl git
 
-RUN git clone https://github.com/PrincetonUniversity/STELLOPT /stellopt
+RUN git clone --depth 1 https://github.com/PrincetonUniversity/STELLOPT /stellopt
 ENV STELLOPT_PATH=/stellopt
-ENV MACHINE=docker
+
+# Copy fusionsc machine file into container
+COPY util/make_fusionsc.inc /stellopt/SHARE/make_fusionsc.inc
+ENV MACHINE=fusionsc
+
 WORKDIR /stellopt
-RUN ./build_all -o release -j 8 XVMEC2000
+RUN ./build_all -o release XVMEC2000
 COPY --from=build /build/src/c++/tools/fusionsc /usr/local/bin/fusionsc
