@@ -25,7 +25,6 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 			return Geometry(self.data)
 		
 		resolved = await self.resolve.asnc()
-		print("M", resolved)
 		mergedRef = geometryLib().merge(resolved.data).pipeline.ref
 		
 		result = Geometry()
@@ -45,6 +44,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 	
 	@asyncFunction
 	async def getMerged(self):
+		"""After merging the geometry, downloads the merged data and returns them"""
 		merged = await self.merge.asnc()
 		return await data.download.asnc(merged.data.merged)
 	
@@ -81,6 +81,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 	
 	@asyncFunction
 	async def intersect(self, pStart, pEnd, grid = None):
+		"""Computes a line intersection test"""
 		indexed = await self.index.asnc(grid)
 		
 		response = await geometryLib().intersect(indexed.data.indexed, pStart, pEnd)
@@ -285,6 +286,14 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 	
 	@staticmethod
 	def quadMesh(vertices, wrapU = False, wrapV = False):
+		"""
+		Creates a geometry out of a quad mesh
+		
+		params:
+		  - vertices: A numpy array-like of shape [3, nU, nV] containing the individual vertices
+		  - wrapU: Whether to link the first and last slice of the "u" dimension
+		  - wrapV: Whether to link the first and last slice of the "v" dimension
+		"""
 		asTensor = service.Float64Tensor.newMessage(np.transpose(vertices, [1, 2, 0]))
 		
 		return Geometry({
@@ -565,5 +574,5 @@ def cuboid(x1, x2, tags = {}):
 	})
 
 def geometryLib():
-	"""Creates an in-thread GeometryLib instance"""
+	"""Requests a service.GeometryLib instance from the active backend"""
 	return backends.activeBackend().newGeometryLib().pipeline.service
