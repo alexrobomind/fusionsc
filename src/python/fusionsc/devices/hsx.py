@@ -36,6 +36,9 @@ def wall():
 def mainCoil(i):
 	return CoilFilament({"hsx" : {"mainCoil" : i}})
 
+def auxCoil(i):
+	return CoilFilament({"hsx" : {"auxCoil" : i}})
+
 def mainField(currents):
 	assert len(currents) == 6
 	
