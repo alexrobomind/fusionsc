@@ -764,21 +764,22 @@ struct FLTImpl : public FLT::Server {
 								nTor(m, toroidalIndex(n)) = n * phiMultiplier;
 								mPol(m, toroidalIndex(n)) = m;
 								
-								double parallelAngle = n * phiMultiplier + m * iota;
+								double parallelAngle = std::abs(n * phiMultiplier + m * iota);
 								
 								// bool isResonant = std::abs(n * phiMultiplier * iota - m) < aliasThreshold;
 								
-								kj::Maybe<FM&> modeAliases = nullptr;
-								for(auto& prevMode : modes) {
-									double prevParAngle = prevMode.coeffs[0] * phiMultiplier + prevMode.coeffs[1] * iota;
-									
-									if(std::abs(parallelAngle - prevParAngle) < aliasThreshold) {
-										modeAliases = prevMode;
-									}
-								}
-								
 								if(m == 0 && n < 0) {
 									continue;
+								}
+								
+								kj::Maybe<FM&> modeAliases = nullptr;
+								for(auto& prevMode : modes) {
+									double prevParAngle = std::abs(prevMode.coeffs[0] * phiMultiplier + prevMode.coeffs[1] * iota);
+									
+									if(std::abs(parallelAngle - prevParAngle) < aliasThreshold) {
+										// KJ_DBG("Mode alias", n, m, parallelAngle, prevMode.coeffs[0], prevMode.coeffs[1], prevParAngle);
+										modeAliases = prevMode;
+									}
 								}
 								
 								KJ_IF_MAYBE(pOther, modeAliases) {
@@ -796,6 +797,8 @@ struct FLTImpl : public FLT::Server {
 									
 									if((m == 0 && n == 0) || (m == 1 && n == 0)) keepMe = true;
 									if((om == 0 && on == 0) || (om == 1 && on == 0)) keepOther = true;
+									
+									// KJ_DBG(keepMe, keepOther);
 									
 									if(keepMe && !keepOther) {
 										pOther -> coeffs[0] = n;
