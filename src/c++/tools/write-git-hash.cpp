@@ -68,7 +68,7 @@ struct MainCls {
 				gitHash = kj::heapString(charBuf.releaseAsArray());
 			}
 			
-			auto retCode = std::system(kj::str("git status -s -uno > ", hashFile).cStr());
+			auto retCode = std::system(kj::str("git status -s -uno . > ", hashFile).cStr());
 			KJ_REQUIRE(retCode == 0, "git rev-parse HEAD succeeded, but git status failed");
 			
 			{
