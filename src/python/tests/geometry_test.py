@@ -35,6 +35,16 @@ def test_wrap():
 	
 	print(geo.reduce())
 
+def test_quad():
+	rg, phig = np.meshgrid(np.linspace(5, 6, 100), np.linspace(0, 1.6 * np.pi, 100), indexing = 'ij')
+	
+	x = rg * np.cos(phig)
+	y = rg * np.sin(phig)
+	z = (rg - 5.5)**2
+	
+	geo = fsc.geometry.Geometry.quadMesh([x, y, z], wrapU = False, wrapV = True)
+	geo.getMerged()
+
 def test_intersect():
 	p1 = [0, 0, 0]
 	p2 = [2, 0, 0]

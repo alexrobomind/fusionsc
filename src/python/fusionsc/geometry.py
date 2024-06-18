@@ -284,6 +284,18 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		return result.withTags(tags)
 	
 	@staticmethod
+	def quadMesh(vertices, wrapU = False, wrapV = False):
+		asTensor = service.Float64Tensor.newMessage(np.transpose(vertices, [1, 2, 0]))
+		
+		return Geometry({
+			"quadMesh" : {
+				"vertices" : data.publish(asTensor),
+				"wrapU" : wrapU,
+				"wrapV" : wrapV
+			}
+		})
+	
+	@staticmethod
 	@unstableApi
 	def fromPyvista(polyData):
 		"""Creates a geometry from a pyvista.PolyData object"""

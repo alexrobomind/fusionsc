@@ -37,6 +37,7 @@ bool isBuiltin(Geometry::Reader in) {
 		case Geometry::MERGED:
 		case Geometry::INDEXED:
 		case Geometry::FILTER:
+		case Geometry::QUAD_MESH:
 			return true;
 		
 		default:
@@ -356,6 +357,8 @@ Promise<void> GeometryLibImpl::collectTagNames(Geometry::Reader input, kj::HashS
 			return handleMerged(input.getIndexed().getBase());
 		case Geometry::WRAP_TOROIDALLY:
 			return READY_NOW;
+		case Geometry::QUAD_MESH:
+			return READY_NOW;
 			
 		default:
 			KJ_FAIL_REQUIRE("Unknown geometry node type encountered during merge operation. Likely an unresolved node", input);
@@ -498,7 +501,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 				return READY_NOW;
 			
 			return getActiveThread().dataService().download(input.getMesh())
-			.then([&tagTable, tagValues = mv(tagValues), &output, handleMesh](LocalDataRef<Mesh> inputMeshRef) {
+			.then([&tagTable, tagValues = mv(tagValues), handleMesh](LocalDataRef<Mesh> inputMeshRef) {
 				handleMesh(inputMeshRef.get(), tagValues);
 			});
 		
@@ -628,6 +631,61 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 				}
 			}
 			return READY_NOW;
+		}
+		
+		case Geometry::QUAD_MESH: {
+			if(!ctx.matches(tagTable, tagValues))
+				return READY_NOW;
+			
+			auto qm = input.getQuadMesh();
+			
+			auto data = qm.getVertices();
+			bool wrapU = qm.getWrapU();
+			bool wrapV = qm.getWrapV();
+			
+			return getActiveThread().dataService().download(data)
+			.then([&tagTable, tagValues = mv(tagValues), handleMesh, wrapU, wrapV](auto localRef) mutable {
+				auto input = localRef.get();
+				auto shape = input.getShape();
+				KJ_REQUIRE(shape.size() == 3);
+				KJ_REQUIRE(shape[2] == 3);
+				
+				uint32_t nU = shape[0];
+				uint32_t nV = shape[1];
+				
+				auto linearIndex = [&](int64_t u, int64_t v) {
+					if(u < 0) u += nU;
+					if(v < 0) v += nV;
+					
+					u %= nU;
+					v %= nV;
+					
+					return v + nV * u;
+				};
+				
+				kj::Vector<uint32_t> indices(4 * nU * nV);
+				for(auto iU : kj::range(0, wrapU ? nU : (nU - 1))) {
+					for(auto iV : kj::range(0, wrapV ? nV : (nV - 1))) {
+						indices.add(linearIndex(iU, iV));
+						indices.add(linearIndex(iU + 1, iV));
+						indices.add(linearIndex(iU + 1, iV + 1));
+						indices.add(linearIndex(iU, iV + 1));
+					}
+				}
+				
+				kj::Vector<uint32_t> polys;
+				for(uint32_t i = 0; i <= indices.size(); i += 4) // Yes, <= is correct here
+					polys.add(i);
+				
+				Temporary<Mesh> mesh;
+				mesh.initVertices().setData(input.getData());
+				mesh.getVertices().setShape({nU * nV, 3});
+				
+				mesh.setIndices(indices);
+				mesh.setPolyMesh(polys);
+				
+				handleMesh(mesh, tagValues);
+			});
 		}
 			
 		default:

@@ -182,6 +182,12 @@ struct Geometry {
 			geometry @30 : Geometry;
 		}
 		
+		quadMesh : group {
+			vertices @31 : DataRef(Float64Tensor);
+			wrapU @32 : Bool;
+			wrapV @33 : Bool;
+		}
+		
 		# ====== Device-specific ======
 		# ----------- W7-X ------------
 		

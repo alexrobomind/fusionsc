@@ -87,6 +87,32 @@ TEST_CASE("transform-cube") {
 	auto transformedCube = lt->dataService().download(mergeResult.getRef()).wait(lt->waitScope());
 }
 
+TEST_CASE("quad") {
+	Library l = newLibrary();
+	LibraryThread lt = l -> newThread();
+	auto& ws = lt -> waitScope();
+	GeometryLib::Client geoLib = newGeometryLib(newCpuDevice());
+		
+	Temporary<Geometry> geometry;
+	auto qm = geometry.initQuadMesh();
+	
+	{
+		Temporary<Float64Tensor> t;
+		t.setData({0,0,0,0,0,1});
+		t.setShape({2, 1, 3});
+		qm.setVertices(getActiveThread().dataService().publish(t.asReader()));
+	}
+	
+	qm.setWrapU(false);
+	qm.setWrapV(true);
+	
+	auto req1 = geoLib.mergeRequest();
+	req1.setNested(geometry);
+	auto resp = req1.send().wait(ws);
+	
+	KJ_DBG(getActiveThread().dataService().download(resp.getRef()).wait(ws).get());
+}
+
 TEST_CASE("index-cube") {
 	// Note: This test contains a lot of manual extraction of values into unpacked numbers (x, y, z, etc.)
 	// This is to ensure a different coding style than the geometry utilities and avoid using them as much
