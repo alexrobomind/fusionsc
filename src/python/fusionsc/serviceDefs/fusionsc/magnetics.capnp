@@ -143,13 +143,16 @@ interface FieldCalculator $Cxx.allowCancellation {
 		surfaces : FourierSurfaces,
 		nMax : UInt32, mMax : UInt32,
 		nPhi : UInt32, nTheta : UInt32,
-		nSym : UInt32 = 1
+		nSym : UInt32 = 1,
+		useFFT : Bool = true
 	) -> (
 		cosCoeffs : Float64Tensor, sinCoeffs : Float64Tensor,
 		mPol : List(Float64), nTor : List(Float64),
 		
 		radialValues : Float64Tensor, # Tensor of shape [3, ..., nPhi, nTheta]
-		phi : List(Float64), theta : List(Float64)
+		phi : List(Float64), theta : List(Float64),
+		
+		reCoeffs : Float64Tensor, imCoeffs : Float64Tensor
 	);
 	# Evaluate points on Fourier surfaces
 	#

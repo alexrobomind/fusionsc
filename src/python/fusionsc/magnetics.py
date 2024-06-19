@@ -307,7 +307,8 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 	async def calculateRadialModes(
 		self, surfaces: SurfaceArray,
 		normalizeAgainst : "Optional[MagneticConfig]" = None,
-		nMax = 5, mMax = 5, nPhi = 30, nTheta = 30, nSym = 1
+		nMax = 5, mMax = 5, nPhi = 0, nTheta = 0, nSym = 1,
+		useFFT = True
 	):
 		"""
 		Calculates the radial Fourier modes of this field (or the ratio to the given
@@ -336,17 +337,30 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		if normalizeAgainst is not None:
 			background = (await normalizeAgainst.resolve.asnc()).data
 		
+		if nPhi == 0:
+			nPhi = 2 * nMax + 1
+		
+		if nTheta == 0:
+			nTheta = 2 * mMax + 1
+		
+		if (nPhi != 2 * nMax + 1 or nTheta != 2 * mMax + 1) and useFFT:
+			import warnings
+			warnings.warn("calculateRadialModes can only use the FFT fast path if nPhi == 2 * nMax + 1 and nTheta == 2 * mMax + 1. Other values are not recommended")
+		
 		response = await _calculator().calculateRadialModes(
 			resolved.data, background,
 			surfaces.data,
 			nMax, mMax,
 			nPhi, nTheta,
-			nSym
+			nSym,
+			useFFT
 		)
 		
 		return {
 			"cosCoeffs" : np.asarray(response.cosCoeffs),
 			"sinCoeffs" : np.asarray(response.sinCoeffs),
+			"reCoeffs" : np.asarray(response.reCoeffs),
+			"imCoeffs" : np.asarray(response.imCoeffs),
 			"radialValues" : np.asarray(response.radialValues),
 			"nTor" : np.asarray(response.nTor),
 			"mPol" : np.asarray(response.mPol),

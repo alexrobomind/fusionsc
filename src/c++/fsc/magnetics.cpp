@@ -12,6 +12,8 @@
 
 #include "magnetics-kernels.h"
 
+#include <complex>
+
 namespace fsc {
 	
 namespace {
@@ -473,6 +475,8 @@ struct CalculationSession : public FieldCalculator::Server {
 	}
 	
 	Promise<void> calculateRadialModes(CalculateRadialModesContext ctx) {
+		auto params = ctx.getParams();
+		
 		return kj::startFiber(65536 * 8, [this, ctx](kj::WaitScope& ws) mutable {			
 			auto params = ctx.getParams();
 			auto surfaces = params.getSurfaces();
@@ -607,62 +611,159 @@ struct CalculationSession : public FieldCalculator::Server {
 			const int numN = 2 * nMax + 1;
 			const int numM = mMax + 1;
 			
-			using FP = nudft::FourierPoint<2, 1>;
-			using FM = nudft::FourierMode<2, 1>;
-						
-			kj::Vector<FM> modes;
-			modes.reserve(mMax * (2 * nMax + 1));
-			
-			for(int iM : kj::range(0, numM)) {
-			for(int iN : kj::range(0, numN)) {
-				int m = iM;
-				int n = iN <= nMax ? iN : iN - numN;
-				
-				if(m == 0 && n < 0)
-					continue;
-				
-				FM mode;
-				mode.coeffs[0] = n;
-				mode.coeffs[1] = m;
-				modes.add(mode);
-			}}
-			
 			// Run NUDFT (Non-uniform DFT)
 			Tensor<double, 3> cosCoeffs(numM, numN, nSurfs);
 			Tensor<double, 3> sinCoeffs(numM, numN, nSurfs);
 			
+			Tensor<double, 3> dftReal(2 * mMax + 1, 2 * nMax + 1, nSurfs);
+			Tensor<double, 3> dftImag(2 * mMax + 1, 2 * nMax + 1, nSurfs);
+			
 			sinCoeffs.setZero();
 			cosCoeffs.setZero();
 			
-			for(int iSurf : kj::range(0, nSurfs)) {				
-				kj::Vector<FP> points;
-				points.reserve(nPhi * nTheta);
+			dftReal.setZero();
+			dftImag.setZero();
+			
+			bool canUseFft = params.getNPhi() == 2 * params.getNMax() + 1 && params.getNTheta() == 2 * params.getMMax() + 1;
+			
+			if(params.getUseFFT() && canUseFft) {
+				// Fast path using 2D FFT
+				KJ_DBG("FFT fast path enabled");
 				
-				for(int iPhi : kj::range(0, nPhi)) {
-				for(int iTheta : kj::range(0, nTheta)) {
-					FP newPoint;
+				// Checked before
+				KJ_ASSERT(nPhi == 2 * nMax + 1);
+				KJ_ASSERT(nTheta == 2 * mMax + 1);
+				
+				std::array<int, 2> dims = {0, 1};
+				Tensor<std::complex<double>, 3> fft = radialValues.fft<Eigen::BothParts, Eigen::FFT_FORWARD>(dims);
+				
+				double scale = 1.0 / (nPhi * nTheta);
+				dftReal = fft.real() * scale;
+				dftImag = fft.imag() * scale;
+				
+				// Compute cos and sin coefficients
+				for(auto iSurf : kj::range(0, nSurfs)) {
+					cosCoeffs(0, 0, iSurf) = dftReal(0, 0, iSurf);
+					sinCoeffs(0, 0, iSurf) = dftImag(0, 0, iSurf);
+				
+					for(auto in : kj::range(1, nMax + 1)) {
+						cosCoeffs(0, in, iSurf) = dftReal(0, in, iSurf);
+						sinCoeffs(0, in, iSurf) = dftImag(0, in, iSurf);
+					}
 					
-					newPoint.angles[0] = phiVals[iPhi] / phiMultiplier;
-					newPoint.angles[1] = thetaVals[iTheta];
-					newPoint.y[0] = radialValues(iTheta, iPhi, iSurf);
+					for(auto im : kj::range(1, mMax + 1)) {
+						cosCoeffs(im, 0, iSurf) = dftReal(im, 0, iSurf);
+						sinCoeffs(im, 0, iSurf) = dftImag(im, 0, iSurf);
+					}
 					
-					points.add(newPoint);
+					for(auto in : kj::range(1, numN)) {
+						for(auto im : kj::range(1, numM)) {
+							auto in2 = 2 * nMax + 1 - in;
+							auto im2 = 2 * mMax + 1 - im;
+							
+							cosCoeffs(im, in, iSurf) = dftReal(im, in, iSurf); //+ dftReal(im2, in2, Eigen::all);
+							sinCoeffs(im, in, iSurf) = dftImag(im, in, iSurf); //- dftImag(im2, in2, Eigen::all);
+						}
+					}
+				}
+				
+				sinCoeffs = -sinCoeffs; // e(ix) - e(-ix) is 2i * sin. ai e(ix) - ai(e-ix) is -2asin
+				
+			} else {
+				KJ_DBG("Using slow NUDFT path");
+				using FP = nudft::FourierPoint<2, 1>;
+				using FM = nudft::FourierMode<2, 1>;
+							
+				kj::Vector<FM> modes;
+				modes.reserve(mMax * (2 * nMax + 1));
+				
+				for(int iM : kj::range(0, numM)) {
+				for(int iN : kj::range(0, numN)) {
+					int m = iM;
+					int n = iN <= nMax ? iN : iN - numN;
+					
+					if(m == 0 && n < 0)
+						continue;
+					
+					FM mode;
+					mode.coeffs[0] = n;
+					mode.coeffs[1] = m;
+					modes.add(mode);
 				}}
 				
-				nudft::calculateModes<2, 1>(points, modes);
-				
-				for(auto& mode : modes) {
-					int in = mode.coeffs[0];
-					int im = mode.coeffs[1];
-					if(in < 0) in += numN;
+				for(int iSurf : kj::range(0, nSurfs)) {				
+					kj::Vector<FP> points;
+					points.reserve(nPhi * nTheta);
 					
-					cosCoeffs(im, in, iSurf) = mode.cosCoeffs[0];
-					sinCoeffs(im, in, iSurf) = mode.sinCoeffs[0];
+					for(int iPhi : kj::range(0, nPhi)) {
+					for(int iTheta : kj::range(0, nTheta)) {
+						FP newPoint;
+						
+						newPoint.angles[0] = phiVals[iPhi] / phiMultiplier;
+						newPoint.angles[1] = thetaVals[iTheta];
+						newPoint.y[0] = radialValues(iTheta, iPhi, iSurf);
+						
+						points.add(newPoint);
+					}}
+					
+					nudft::calculateModes<2, 1>(points, modes);
+					
+					for(auto& mode : modes) {
+						int in = mode.coeffs[0];
+						int im = mode.coeffs[1];
+						if(in < 0) in += numN;
+						
+						cosCoeffs(im, in, iSurf) = mode.cosCoeffs[0];
+						sinCoeffs(im, in, iSurf) = mode.sinCoeffs[0];
+					}
 				}
+				
+				// Compute Re and Im coefficients
+				for(auto iSurf : kj::range(0, nSurfs)) {
+					dftReal(0, 0, iSurf) = cosCoeffs(0, 0, iSurf);
+					dftImag(0, 0, iSurf) = sinCoeffs(0, 0, iSurf);
+				
+					for(auto in : kj::range(1, nMax + 1)) {
+						auto in2 = 2 * nMax + 1 - in;
+						
+						dftReal(0, in, iSurf) = cosCoeffs(0, in, iSurf);
+						dftImag(0, in, iSurf) = sinCoeffs(0, in, iSurf);
+						
+						dftReal(0, in2, iSurf) =  cosCoeffs(0, in, iSurf);
+						dftImag(0, in2, iSurf) = -sinCoeffs(0, in, iSurf);
+					}
+					
+					for(auto im : kj::range(1, mMax + 1)) {
+						auto im2 = 2 * mMax + 1 - im;
+						
+						dftReal(im, 0, iSurf) = cosCoeffs(im, 0, iSurf);
+						dftImag(im, 0, iSurf) = sinCoeffs(im, 0, iSurf);
+						
+						dftReal(im2, 0, iSurf) =  cosCoeffs(im, 0, iSurf);
+						dftImag(im2, 0, iSurf) = -sinCoeffs(im, 0, iSurf);
+					}
+					
+					for(auto in : kj::range(1, numN)) {
+						for(auto im : kj::range(1, numM)) {
+							auto in2 = 2 * nMax + 1 - in;
+							auto im2 = 2 * mMax + 1 - im;
+							
+							dftReal(im, in, iSurf) = cosCoeffs(im, in, iSurf);
+							dftImag(im, in, iSurf) = sinCoeffs(im, in, iSurf);
+							
+							dftReal(im2, in2, iSurf) =  cosCoeffs(im, in, iSurf);
+							dftImag(im2, in2, iSurf) = -sinCoeffs(im, in, iSurf);
+						}
+					}
+				}
+				
+				dftImag = -dftImag; // e(ix) - e(-ix) is 2i * sin. ai e(ix) - ai(e-ix) is -2asin
 			}
 			
 			// Write results
 			auto results = ctx.initResults();
+			
+			// Cos coeffs
 			writeTensor(cosCoeffs, results.initCosCoeffs());
 			writeTensor(sinCoeffs, results.initSinCoeffs());
 			
@@ -676,6 +777,21 @@ struct CalculationSession : public FieldCalculator::Server {
 			};
 			adjustShape(results.getCosCoeffs());
 			adjustShape(results.getSinCoeffs());
+			
+			// Fourier components
+			writeTensor(dftReal, results.initReCoeffs());
+			writeTensor(dftImag, results.initImCoeffs());
+			
+			auto adjustShape2 = [&](Float64Tensor::Builder out) {
+				auto surfShape = surfaces.getRCos().getShape();
+				auto shape = out.initShape(surfShape.size());
+				for(auto i : kj::range(0, surfShape.size() - 2))
+					shape.set(i, surfShape[i]);
+				shape.set(shape.size() - 2, 2 * nMax + 1);
+				shape.set(shape.size() - 1, 2 * mMax + 1);
+			};
+			adjustShape2(results.getReCoeffs());
+			adjustShape2(results.getImCoeffs());
 
 			// Write radial values tensor
 			{
@@ -687,7 +803,6 @@ struct CalculationSession : public FieldCalculator::Server {
 				shape.set(shape.size() - 2, nPhi);
 				shape.set(shape.size() - 1, nTheta);
 			}
-			
 			
 			auto mOut = results.initMPol(numM);
 			for(auto i : kj::indices(mOut))
