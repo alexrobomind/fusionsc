@@ -558,7 +558,9 @@ struct CalculationSession : public FieldCalculator::Server {
 					surfThetaDeriv(iTheta, iPhi, iSurf, 2)
 				);
 				Vec3d eRad = ePhi.cross(eTheta);
-				eRad /= eRad.norm();
+				
+				if(params.getQuantity() == FieldCalculator::RadialModeQuantity::FIELD)
+					eRad /= eRad.norm();
 				
 				radialBasis(iTheta, iPhi, iSurf, 0) = eRad(0);
 				radialBasis(iTheta, iPhi, iSurf, 1) = eRad(1);

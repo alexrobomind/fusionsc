@@ -14,7 +14,7 @@ from ._api_markers import unstableApi
 import numpy as np
 import copy
 
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Literal
 
 def _calculator():
 	return backends.activeBackend().newFieldCalculator().pipeline.service
@@ -308,7 +308,8 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		self, surfaces: SurfaceArray,
 		normalizeAgainst : "Optional[MagneticConfig]" = None,
 		nMax = 5, mMax = 5, nPhi = 0, nTheta = 0, nSym = 1,
-		useFFT = True
+		useFFT = True,
+		quantity: Literal["field", "flux"] = "field"
 	):
 		"""
 		Calculates the radial Fourier modes of this field (or the ratio to the given
@@ -322,6 +323,8 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			- nPhi: Number of toroidal points on grid
 			- nTheta: Number of poloidal points on grid
 			- nSym: Toroidal symmetry
+			- useFFT: Whether to use the fast FFT-based Fourier path (as opposed to a slower cosine fit)
+			- quantity: Whether to calculate the radial field or the radial flux (field * (dx/dPhi x dx/dTheta))
 		
 		Returns:
 			A dict with the following entries:
@@ -353,7 +356,8 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			nMax, mMax,
 			nPhi, nTheta,
 			nSym,
-			useFFT
+			useFFT,
+			quantity
 		)
 		
 		return {

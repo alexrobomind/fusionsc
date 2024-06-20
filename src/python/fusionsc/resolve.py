@@ -17,6 +17,8 @@ from .native.devices import jtext as cppjtext
 import contextlib
 import contextvars
 
+from typing import Union
+
 # Ensure event loop is running
 startEventLoop()
 
@@ -162,14 +164,18 @@ async def updateWarehouse(db, updates):
 	
 	# Store updated data (only uploads index and missing data)
 	await db.put.asnc("resolveIndex", root)
-	
-
-def importOfflineData(filename: str):
+ 
+def importOfflineData(filenameOrData: Union[str, dict, service.OfflineData.ReaderOrBuilder]):
 	"""
 	Loads the data contained in the given offline archives and uses them to
-	perform offline resolution.
+	perform offline resolution. Alternatively can 
 	"""
-	offlineData = data.openArchive(filename)
+	if isinstance(filenameOrData, str):
+		offlineData = data.openArchive(filenameOrData)
+	elif isinstance(filenameOrData, dict):
+		offlineData = fsc.data.publish(createOfflineData(filenameOrData))
+	else:
+		offlineData = fsc.data.publish(filenameOrData)
 	
 	# Install offline resolvers
 	_addOfflineResolvers(offlineData)

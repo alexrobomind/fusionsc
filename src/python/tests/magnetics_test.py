@@ -38,9 +38,11 @@ def test_eval(field):
 	field.interpolateXyz(x)
 	field.evaluatePhizr(x)
 
-def test_compradmodes(field, surfaces):
-	field.calculateRadialModes(surfaces)
-	field.calculateRadialModes(surfaces, field)
+@pytest.mark.parametrize("quantity", ["field", "flux"])
+@pytest.mark.parametrize("useFFT", [False, True])
+def test_compradmodes(field, surfaces, quantity, useFFT):
+	field.calculateRadialModes(surfaces, quantity = quantity, useFFT = useFFT)
+	field.calculateRadialModes(surfaces, field, quantity = quantity, useFFT = useFFT)
 	
 def test_ops(field):
 	field + field

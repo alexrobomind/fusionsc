@@ -138,13 +138,19 @@ interface FieldCalculator $Cxx.allowCancellation {
 	# Returns tensors of shape [3, ..., nPhi, nTheta]
 	# with the remainder being the surfaces shape.
 	
+	enum RadialModeQuantity {
+		field @0;
+		flux @1;
+	}
+	
 	calculateRadialModes @5 (
 		field : MagneticField, background : MagneticField,
 		surfaces : FourierSurfaces,
 		nMax : UInt32, mMax : UInt32,
 		nPhi : UInt32, nTheta : UInt32,
 		nSym : UInt32 = 1,
-		useFFT : Bool = true
+		useFFT : Bool = true,
+		quantity : RadialModeQuantity = field
 	) -> (
 		cosCoeffs : Float64Tensor, sinCoeffs : Float64Tensor,
 		mPol : List(Float64), nTor : List(Float64),

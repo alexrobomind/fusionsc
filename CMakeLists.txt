@@ -304,6 +304,8 @@ add_subdirectory(vendor/capfuzz)
 
 add_subdirectory(vendor/happly)
 
+add_subdirectory(vendor/pocketfft)
+
 add_library(fusionsc_poissongen INTERFACE)
 target_include_directories(fusionsc_poissongen INTERFACE vendor/pdg)
 
@@ -327,6 +329,7 @@ target_link_libraries(
 	SQLite::SQLite3
 	ZLIB::ZLIB
 	yaml-cpp::yaml-cpp
+	pfft
 )
 
 if(FSC_WITH_CUDA)

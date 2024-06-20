@@ -2,9 +2,10 @@ from .. import service
 
 from ..geometry import Geometry
 from ..magnetics import CoilFilament
+from .. import service
 
 def defaultGrid():
-	grid = fsc.service.ToroidalGrid.newMessage()
+	grid = service.ToroidalGrid.newMessage()
 	grid.rMin = 0.5
 	grid.rMax = 2.0
 	grid.zMin = -0.5
@@ -17,7 +18,7 @@ def defaultGrid():
 	return grid
 
 def defaultGeometryGrid():
-	geoGrid = fsc.service.CartesianGrid.newMessage()
+	geoGrid = service.CartesianGrid.newMessage()
 	geoGrid.xMin = -1.8
 	geoGrid.xMax = 1.8
 	geoGrid.yMin = -1.8
