@@ -31,6 +31,8 @@ struct MagKernelContext {
 	double scale = 1;
 	Eigen::Matrix<double, 3, 4> transform = Eigen::Matrix<double, 3, 4>::Zero();
 	
+	bool transformed = false;
+	
 	MagKernelContext(FieldValuesRef pointsIn, FieldValuesRef fieldOut) :
 		points(pointsIn), field(fieldOut)
 	{		
@@ -43,14 +45,23 @@ struct MagKernelContext {
 	inline MagKernelContext(MagKernelContext&&) = default;
 		
 	EIGEN_DEVICE_FUNC inline Vec3d getPosition(unsigned int idx) const {
+		if(!transformed)
+			return Vec3d(points(idx, 0), points(idx, 1), points(idx, 2));
+		
 		return transform * Vec4d(points(idx, 0), points(idx, 1), points(idx, 2), 1);
 	}
 	
 	EIGEN_DEVICE_FUNC inline void addField(unsigned int idx, Vec3d fieldContrib) const {
-		Vec4d adjointTransformed = transform.transpose() * fieldContrib;
-		field(idx, 0) += scale * adjointTransformed(0);
-		field(idx, 1) += scale * adjointTransformed(1);
-		field(idx, 2) += scale * adjointTransformed(2);
+		if(transformed) {
+			Vec4d adjointTransformed = transform.transpose() * fieldContrib;
+			field(idx, 0) += scale * adjointTransformed(0);
+			field(idx, 1) += scale * adjointTransformed(1);
+			field(idx, 2) += scale * adjointTransformed(2);
+		} else {
+			field(idx, 0) += scale * fieldContrib(0);
+			field(idx, 1) += scale * fieldContrib(1);
+			field(idx, 2) += scale * fieldContrib(2);
+		}	
 	}
 	
 	EIGEN_DEVICE_FUNC inline MagKernelContext scaleBy(double scale) const {

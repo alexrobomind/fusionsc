@@ -38,6 +38,7 @@ private:
 	// These are implemented in magnetics-calc-field.cpp
 	Promise<void> processRoot(MagneticField::Reader node, Eigen::Tensor<double, 2>&& points, Float64Tensor::Builder out);
 	Promise<void> processField(FieldCalculation& calculator, MagneticField::Reader node, const MagKernelContext& ctx);
+	Promise<void> processTransform(FieldCalculation& calculator, Transformed<MagneticField>::Reader node, const MagKernelContext& ctx);
 	Promise<void> processFilament(FieldCalculation& calculator, Filament::Reader node, BiotSavartSettings::Reader settings, const MagKernelContext& ctx);
 };
 

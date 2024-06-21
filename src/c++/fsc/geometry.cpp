@@ -14,15 +14,7 @@
 
 namespace fsc {
 
-namespace {
-	double angle(Angle::Reader in) {
-		switch(in.which()) {
-			case Angle::RAD: return in.getRad();
-			case Angle::DEG: return pi / 180 * in.getDeg();
-		}
-		KJ_FAIL_REQUIRE("Unknown angle type");
-	}
-	
+namespace {	
 	// Limit to 128 million grid cells
 	constexpr size_t MAX_GRID_SIZE = 1024 * 1024 * 128;
 }
@@ -150,42 +142,50 @@ Promise<void> GeometryResolverBase::resolveGeometry(ResolveGeometryContext conte
 	return processGeometry(input, output, context);
 }
 
-namespace {
-	
-	/**
-	  * Calculates a rotation matrix around an axis and angle
-	*/
-	Mat4d rotationAxisAngle(Vec3d center, Vec3d axis, double angle) {
-		double x = axis[0];
-		double y = axis[1];
-		double z = axis[2];
-		double c = std::cos(angle);
-		double s = std::sin(angle);
-		
-		// http://en.wikipedia.org/wiki/Rotation_matrix#Rotation_matrix_from_axis_and_angle
-		Mat4d turn {
-			{ c + x * x * (1 - c)    ,    x * y * (1 - c) - z * s,    x * z * (1 - c) + y * s, 0},
-			{ x * y * (1 - c) + z * s,    c + y * y * (1 - c)    ,    y * z * (1 - c) - x * s, 0},
-			{ x * z * (1 - c) - y * s,    y * z * (1 - c) + x * s,    c + z * z * (1 - c)    , 0},
-			{            0           ,                0          ,                0          , 1}
-		};
-		
-		Mat4d shift1 {
-			{ 1, 0, 0, -center(0) },
-			{ 0, 1, 0, -center(1) },
-			{ 0, 0, 1, -center(2) },
-			{ 0, 0, 0, 1 }
-		};
-		
-		Mat4d shift2 {
-			{ 1, 0, 0, center(0) },
-			{ 0, 1, 0, center(1) },
-			{ 0, 0, 1, center(2) },
-			{ 0, 0, 0, 1 }
-		};
-		
-		return shift2 * turn * shift1;
+double angle(Angle::Reader in) {
+	switch(in.which()) {
+		case Angle::RAD: return in.getRad();
+		case Angle::DEG: return pi / 180 * in.getDeg();
 	}
+	KJ_FAIL_REQUIRE("Unknown angle type");
+}
+	
+/**
+  * Calculates a rotation matrix around an axis and angle
+*/
+Mat4d rotationAxisAngle(Vec3d center, Vec3d axis, double angle) {
+	double x = axis[0];
+	double y = axis[1];
+	double z = axis[2];
+	double c = std::cos(angle);
+	double s = std::sin(angle);
+	
+	// http://en.wikipedia.org/wiki/Rotation_matrix#Rotation_matrix_from_axis_and_angle
+	Mat4d turn {
+		{ c + x * x * (1 - c)    ,    x * y * (1 - c) - z * s,    x * z * (1 - c) + y * s, 0},
+		{ x * y * (1 - c) + z * s,    c + y * y * (1 - c)    ,    y * z * (1 - c) - x * s, 0},
+		{ x * z * (1 - c) - y * s,    y * z * (1 - c) + x * s,    c + z * z * (1 - c)    , 0},
+		{            0           ,                0          ,                0          , 1}
+	};
+	
+	Mat4d shift1 {
+		{ 1, 0, 0, -center(0) },
+		{ 0, 1, 0, -center(1) },
+		{ 0, 0, 1, -center(2) },
+		{ 0, 0, 0, 1 }
+	};
+	
+	Mat4d shift2 {
+		{ 1, 0, 0, center(0) },
+		{ 0, 1, 0, center(1) },
+		{ 0, 0, 1, center(2) },
+		{ 0, 0, 0, 1 }
+	};
+	
+	return shift2 * turn * shift1;
+}
+
+namespace {
 
 	struct FilterContext : kj::Refcounted {
 		Maybe<Own<FilterContext>> parent;

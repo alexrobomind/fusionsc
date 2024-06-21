@@ -6,6 +6,8 @@
 #include "kernels/message.h"
 #include "kernels/karg.h"
 
+#include "geometry.h"
+
 #include "magnetics-kernels.h"
 
 namespace fsc { namespace internal {
@@ -300,6 +302,9 @@ Promise<void> FieldCalculatorImpl::processField(FieldCalculation& calculator, Ma
 			auto hostPoints = calculator.points -> getHost();
 			auto nPoints = hostPoints.dimension(0);
 			
+			MagKernelContext hostCtx = ctx;
+			hostCtx.points = calculator.points -> getHost();
+			
 			ToroidalGridStruct grid;
 			try {
 				constexpr unsigned int GRID_VERSION = 7;
@@ -309,12 +314,13 @@ Promise<void> FieldCalculatorImpl::processField(FieldCalculation& calculator, Ma
 			}
 			
 			for(auto iPoint : kj::range(0, nPoints)) {
-				double x = hostPoints(iPoint, 0);
-				double y = hostPoints(iPoint, 1);
-				double z = hostPoints(iPoint, 2);
+				Vec3d xyz = ctx.getPosition(iPoint);
+				double x = xyz(0);
+				double y = xyz(1);
+				double z = xyz(2);
 				
 				constexpr double tol = 1e-6;
-				
+								
 				double r = sqrt(x*x + y*y);
 				if(r < grid.rMin - tol || r > grid.rMax + tol) {
 					goto recalculate;
@@ -341,8 +347,59 @@ Promise<void> FieldCalculatorImpl::processField(FieldCalculation& calculator, Ma
 			calculator.dipoles(ctx, node.getDipoleCloud());
 			return READY_NOW;
 		}
+		case MagneticField::TRANSFORMED: {
+			return processTransform(calculator, node.getTransformed(), ctx);
+		}
 		default:
 			KJ_FAIL_REQUIRE("Unresolved magnetic field node encountered during field calculation.", node);
+	}
+}
+
+Promise<void> FieldCalculatorImpl::processTransform(FieldCalculation& calculator, Transformed<MagneticField>::Reader node, const MagKernelContext& ctx) {
+	using T = Transformed<MagneticField>;
+	
+	switch(node.which()) {
+		case T::LEAF: return processField(calculator, node.getLeaf(), ctx);
+		case T::TURNED: {
+			auto turned = node.getTurned();
+			auto inAxis = turned.getAxis();
+			auto inCenter = turned.getCenter();
+			double ang = angle(turned.getAngle());
+			
+			KJ_REQUIRE(inAxis.size() == 3);
+			KJ_REQUIRE(inCenter.size() == 3);
+			
+			Vec3d axis   { inAxis[0], inAxis[1], inAxis[2] };
+			Vec3d center { inCenter[0], inCenter[1], inCenter[2] };
+			
+			// Make a rotation AGAINST the angle
+			Mat3d pointTransform = rotationAxisAngle(center, axis, -ang)(Eigen::seq(Eigen::fix<0>, Eigen::fix<2>), Eigen::seq(Eigen::fix<0>, Eigen::fix<2>));
+			
+			auto newCtx = ctx;
+			newCtx.transformed = true;
+			newCtx.transform = pointTransform * ctx.transform;
+			
+			return processTransform(calculator, turned.getNode(), newCtx);
+		}
+		
+		case T::SHIFTED: {
+			auto shift = node.getShifted().getShift();
+			KJ_REQUIRE(shift.size() == 3);
+			
+			auto newCtx = ctx;
+			newCtx.transformed = true;
+			newCtx.transform(0, 3) -= shift[0];
+			newCtx.transform(1, 3) -= shift[1];
+			newCtx.transform(2, 3) -= shift[2];
+			
+			return processTransform(calculator, node.getShifted().getNode(), newCtx);
+		}
+		
+		case T::SCALED:
+			return KJ_EXCEPTION(FAILED, "Scaling magnetic fields is not supported. If you need this, file an issue on GitHub");
+		
+		default:
+			KJ_FAIL_REQUIRE("Unknown transform node encountered");
 	}
 }
 

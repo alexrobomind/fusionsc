@@ -134,7 +134,11 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		transformed = result.data.initTransformed()
 		shifted = transformed.initShifted()
 		shifted.shift = dx
-		shifted.node.leaf = self.data
+		
+		if self.data.which_() == "transformed":
+			shifted.node = self.data.transformed
+		else:
+			shifted.node.leaf = self.data
 		
 		return result
 	
@@ -149,7 +153,11 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		transformed = result.data.initTransformed()
 		scaled = transformed.initScaled()
 		scaled.scale = by
-		scaled.node.leaf = self.data
+		
+		if self.data.which_() == "transformed":
+			scaled.node = self.data.transformed
+		else:
+			scaled.node.leaf = self.data
 		
 		return result
 	
@@ -162,7 +170,11 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		turned.axis = axis
 		turned.angle.rad = angle
 		turned.center = center
-		turned.node.leaf = self.data
+		
+		if self.data.which_() == "transformed":
+			turned.node = self.data.transformed
+		else:
+			turned.node.leaf = self.data
 		
 		return result
 	

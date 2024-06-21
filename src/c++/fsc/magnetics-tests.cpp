@@ -138,8 +138,31 @@ TEST_CASE("build-field-interp") {
 	
 	// Compute field on standard grid
 	auto cr1 = session.computeRequest();
-	cr1.setField(WIRE_FIELD.get());
+	
+	auto fieldIn = cr1.initField();
+	
+	SECTION("base") {}
+	
+	SECTION("shift") {
+		auto t = fieldIn.initTransformed();
+		auto s = t.initShifted();
+		s.setShift({0, 0, 1});
+		fieldIn = s.getNode().initLeaf();
+	}
+	
+	SECTION("turn") {
+		auto t = fieldIn.initTransformed();
+		auto tu = t.initTurned();
+		tu.setAxis({0, 0, 1});
+		tu.getAngle().setDeg(30);
+		
+		fieldIn = tu.getNode().initLeaf();
+	}
+	
+	fieldIn.setNested(WIRE_FIELD.get());
 	cr1.setGrid(grid1);
+	
+	KJ_DBG(cr1.getField());
 	
 	auto result1 = cr1.send().wait(ws);
 	
@@ -162,7 +185,7 @@ TEST_CASE("build-field-interp") {
 	
 	auto data1 = ref1.get().getData();
 	auto data2 = ref2.get().getData();
-	
+		
 	KJ_REQUIRE(data1.size() == data2.size());
 	for(auto i : kj::indices(data1)) {
 		KJ_REQUIRE(std::abs(2 * data1[i] - data2[i]) < 0.05);

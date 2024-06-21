@@ -237,6 +237,38 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		assert self.data.which_() == 'computedField', 'Can only await computed fields'
 		return self.data.computedField.data.__await__()
 	
+	def translate(self, dx):
+		"""Returns a new field shifted by the given vector"""
+		result = MagneticConfig()
+		
+		transformed = result.data.initTransformed()
+		shifted = transformed.initShifted()
+		shifted.shift = dx
+		
+		if self.data.which_() == "transformed":
+			shifted.node = self.data.transformed
+		else:
+			shifted.node.leaf = self.data
+		
+		return result
+	
+	def rotate(self, angle, axis, center = [0, 0, 0]):
+		"""Returns a new field rotated around the prescribed axis and center point"""
+		result = MagneticConfig()
+		
+		transformed = result.data.initTransformed()
+		turned = transformed.initTurned()
+		turned.axis = axis
+		turned.angle.rad = angle
+		turned.center = center
+		
+		if self.data.which_() == "transformed":
+			turned.node = self.data.transformed
+		else:
+			turned.node.leaf = self.data
+		
+		return result
+	
 	@asyncFunction
 	async def interpolateXyz(self, points, grid = None):
 		"""

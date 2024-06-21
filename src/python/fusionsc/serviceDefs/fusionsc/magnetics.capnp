@@ -361,6 +361,8 @@ struct MagneticField {
 		axisymmetricEquilibrium @20 : AxisymmetricEquilibrium;
 		dipoleCloud @21 : DipoleCloud;
 		
+		transformed @24 : G.Transformed(MagneticField);
+		
 		# ========================= Device-specific ==========================
 		
 		# ------------------------------ W7-X --------------------------------

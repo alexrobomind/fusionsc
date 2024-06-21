@@ -48,4 +48,7 @@ void writePly(MergedGeometry::Reader, kj::StringPtr filename, bool binary);
 void importRaw(kj::ArrayPtr<std::array<const double, 3>> vertices, kj::ArrayPtr<kj::Array<const size_t>> faces, MergedGeometry::Builder out);
 kj::Tuple<kj::Array<std::array<double, 3>>, kj::Array<kj::Array<size_t>>> exportRaw(MergedGeometry::Reader, bool triangulate);
 
+Mat4d rotationAxisAngle(Vec3d center, Vec3d axis, double angle);
+double angle(Angle::Reader);
+
 }

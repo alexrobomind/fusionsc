@@ -264,6 +264,7 @@ bool isBuiltin(MagneticField::Reader field) {
 		case MagneticField::INVERT:
 		case MagneticField::CACHED:
 		case MagneticField::NESTED:
+		case MagneticField::TRANSFORMED:
 			return true;
 		default:
 			return false;
@@ -396,6 +397,56 @@ Promise<void> FieldResolverBase::processField(MagneticField::Reader input, Magne
 			cachedOut.setComputed(cachedIn.getComputed());
 			
 			return processField(cachedIn.getNested(), cachedOut.getNested(), context);
+		}
+		case MagneticField::TRANSFORMED: {
+			using T = Transformed<MagneticField>;
+			
+			auto in = input.getTransformed();
+			auto out = output.initTransformed();
+			
+			while(true) {
+				switch(in.which()) {
+					case T::LEAF: return processField(in.getLeaf(), out.initLeaf(), context);
+					
+					case T::TURNED: {
+						auto turnedIn = in.getTurned();
+						auto turnedOut = out.initTurned();
+						
+						turnedOut.setAxis(turnedIn.getAxis());
+						turnedOut.setCenter(turnedIn.getCenter());
+						turnedOut.setAngle(turnedIn.getAngle());
+						
+						in = turnedIn.getNode();
+						out = turnedOut.initNode();
+						break;
+					}
+					
+					case T::SHIFTED: {
+						auto shiftedIn = in.getShifted();
+						auto shiftedOut = out.initShifted();
+						
+						shiftedOut.setShift(shiftedIn.getShift());
+						
+						in = shiftedIn.getNode();
+						out = shiftedOut.initNode();
+						break;
+					}
+					
+					case T::SCALED: {
+						auto scaledIn = in.getScaled();
+						auto scaledOut = out.initScaled();
+						
+						scaledOut.setScale(scaledIn.getScale());
+						
+						in = scaledIn.getNode();
+						out = scaledOut.initNode();
+						break;
+					}
+					
+					default:
+						KJ_FAIL_REQUIRE("Unknown transform type", input.which());
+				}
+			}
 		}
 		default: {
 			output.setNested(input);
