@@ -101,8 +101,11 @@ add_library(
 	
 	magnetics.h
 	magnetics-kernels.h
+	magnetics-internal.h
 	magnetics.cpp
 	magnetics-cache-impl.cpp
+	magnetics-calc-field.cpp
+	magnetics-calc-fourier.cpp
 	
 	offline.h
 	offline.cpp

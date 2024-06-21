@@ -56,6 +56,26 @@ protected:
 	mutable Own<DeviceBase> device;
 };
 
+namespace internal {
+	template<typename T>
+	struct IsTriviallyCopyable_ {
+		static constexpr bool value = std::is_trivially_copyable<T>::value;
+	};
+}
+
+#define FSC_DECLARE_TRIVIALLY_COPYABLE(T) \
+	namespace internal { \
+		template<> \
+		struct IsTriviallyCopyable_<T> { \
+			static constexpr bool value = true; \
+		}; \
+	}
+
+template<typename T>
+constexpr bool isTriviallyCopyable() {
+	return internal::IsTriviallyCopyable_<T>::value;
+}
+
 template<typename T>
 struct DeviceMapping : public DeviceMappingBase {
 	T target;
@@ -64,7 +84,7 @@ struct DeviceMapping : public DeviceMappingBase {
 		DeviceMappingBase(device),
 		target(newTarget)
 	{
-		static_assert(std::is_trivially_copyable<T>::value, "Default mappings only work for trivially copyable types");
+		static_assert(isTriviallyCopyable<T>(), "Default mappings only work for trivially copyable types");
 	}
 
 	void doUpdateDevice() override {}

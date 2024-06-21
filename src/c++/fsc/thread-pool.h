@@ -13,9 +13,10 @@ struct LightWorkerThread {
 private:
 	void run();
 	
-	kj::Thread thread;
 	kj::MutexGuarded<Maybe<Own<const kj::Executor>>> executor;
 	Own<kj::CrossThreadPromiseFulfiller<void>> onDestroy;
+	
+	kj::Thread thread;
 };
 
 struct LightWorkerPool {

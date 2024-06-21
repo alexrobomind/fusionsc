@@ -97,10 +97,44 @@ struct LRUFieldCacheImpl : public FieldCache {
 	}
 };
 
+struct FieldCacheResolver : public FieldResolverBase {
+	ID target;
+	Temporary<ComputedField> compField;
+	
+	FieldCacheResolver(ID target, Temporary<ComputedField> compField) :
+		target(mv(target)),
+		compField(mv(compField))
+	{}
+		
+	Promise<void> processField(MagneticField::Reader input, MagneticField::Builder output, ResolveFieldContext context) override {
+		return ID::fromReaderWithRefs(input)
+		.then([this, input, output, context](ID id) mutable -> Promise<void> {
+			if(id == target) {
+				auto cached = output.initCached();
+				cached.setComputed(compField);
+				cached.setNested(input);
+				
+				return READY_NOW;
+			}
+		
+			return FieldResolverBase::processField(input, output, context);
+		});
+	}
+};
+
 }
 
 Own<FieldCache> lruFieldCache(unsigned int size) {
 	return kj::heap<LRUFieldCacheImpl>(size);
+}
+
+FieldResolver::Client newCache(MagneticField::Reader field, ComputedField::Reader computed) {
+	Temporary<ComputedField> cf(computed);
+	auto clientPromise = ID::fromReaderWithRefs(field).then([cf = mv(cf)](ID id) mutable -> FieldResolver::Client {
+		return kj::heap<FieldCacheResolver>(mv(id), mv(cf));
+	});
+	
+	return clientPromise;
 }
 
 Array<const byte> FieldCache::hashPoints(Eigen::TensorMap<Eigen::Tensor<double, 2>> points) {

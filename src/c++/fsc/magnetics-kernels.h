@@ -22,10 +22,70 @@ using FieldValuesRef = Eigen::TensorMap<FieldValues>;
 using MFilament = Eigen::Tensor<double, 2>;
 using FilamentRef = Eigen::TensorMap<MFilament>;
 
-FSC_DECLARE_KERNEL(addFieldInterpKernel, FieldValuesRef, FieldValuesRef, FieldRef, ToroidalGridStruct, double);
-FSC_DECLARE_KERNEL(biotSavartKernel, FieldValuesRef, FilamentRef, double, double, double, FieldValuesRef);
-FSC_DECLARE_KERNEL(dipoleFieldKernel, FieldValuesRef, FieldValuesRef, FieldValuesRef, kj::ArrayPtr<double>, double, FieldValuesRef);
-FSC_DECLARE_KERNEL(eqFieldKernel, FieldValuesRef, cu::AxisymmetricEquilibrium::Reader, double, FieldValuesRef);
+using MagTransform = Eigen::Matrix<double, 3, 4>;
+	
+struct MagKernelContext {
+	FieldValuesRef field;
+	FieldValuesRef points;
+	
+	double scale = 1;
+	Eigen::Matrix<double, 3, 4> transform = Eigen::Matrix<double, 3, 4>::Zero();
+	
+	MagKernelContext(FieldValuesRef pointsIn, FieldValuesRef fieldOut) :
+		points(pointsIn), field(fieldOut)
+	{		
+		transform(0, 0) = 1;
+		transform(1, 1) = 1;
+		transform(2, 2) = 1;
+	}
+	
+	inline MagKernelContext(const MagKernelContext&) = default;
+	inline MagKernelContext(MagKernelContext&&) = default;
+		
+	EIGEN_DEVICE_FUNC inline Vec3d getPosition(unsigned int idx) const {
+		return transform * Vec4d(points(idx, 0), points(idx, 1), points(idx, 2), 1);
+	}
+	
+	EIGEN_DEVICE_FUNC inline void addField(unsigned int idx, Vec3d fieldContrib) const {
+		Vec4d adjointTransformed = transform.transpose() * fieldContrib;
+		field(idx, 0) += scale * adjointTransformed(0);
+		field(idx, 1) += scale * adjointTransformed(1);
+		field(idx, 2) += scale * adjointTransformed(2);
+	}
+	
+	EIGEN_DEVICE_FUNC inline MagKernelContext scaleBy(double scale) const {
+		MagKernelContext result = *this;
+		result.scale *= scale;
+		return result;
+	}
+};
+
+} // namespace kernels
+
+// We don't map contexts directly, since they don't keep the
+// field alive. Instead, we map Own<...>, so that we can attach
+// the storage to the mapping.
+template<>
+struct DeviceMapping<Own<kernels::MagKernelContext>> : public DeviceMappingBase {
+	Own<kernels::MagKernelContext> pCtx;
+	
+	inline DeviceMapping(Own<kernels::MagKernelContext>&& p, DeviceBase& device, bool allowAlias) :
+		DeviceMappingBase(device),
+		pCtx(mv(p))
+	{}
+	
+	inline void doUpdateDevice() override {}
+	inline void doUpdateHost() override {}
+	
+	inline kernels::MagKernelContext get() { return *pCtx; }
+};
+
+namespace kernels {
+
+FSC_DECLARE_KERNEL(addFieldInterpKernel, MagKernelContext, FieldRef, ToroidalGridStruct);
+FSC_DECLARE_KERNEL(biotSavartKernel, MagKernelContext, FilamentRef, double, double);
+FSC_DECLARE_KERNEL(dipoleFieldKernel, MagKernelContext, FieldValuesRef, FieldValuesRef, kj::ArrayPtr<double>);
+FSC_DECLARE_KERNEL(eqFieldKernel, MagKernelContext, cu::AxisymmetricEquilibrium::Reader);
 
 /**
  \ingroup kernels
@@ -34,32 +94,22 @@ FSC_DECLARE_KERNEL(eqFieldKernel, FieldValuesRef, cu::AxisymmetricEquilibrium::R
 	out.data()[idx] += in.data()[idx] * scale;
 }*/
 
-EIGEN_DEVICE_FUNC inline void addFieldInterpKernel(unsigned int idx, FieldValuesRef out, FieldValuesRef pointsOut, FieldRef in, ToroidalGridStruct gridIn, double scale) {	
-	double x = pointsOut(idx, 0);
-	double y = pointsOut(idx, 1);
-	double z = pointsOut(idx, 2);
-	
-	double r = std::sqrt(x*x + y*y);
-	double phi = std::atan2(y, x);
-	
-	// Custom addition here
+EIGEN_DEVICE_FUNC inline void addFieldInterpKernel(unsigned int idx, MagKernelContext ctx, FieldRef in, ToroidalGridStruct gridIn) {	
 	using InterpolationStrategy = C1CubicInterpolation<double>;
 	SlabFieldInterpolator<InterpolationStrategy> interpolator(InterpolationStrategy(), gridIn);
-	Vec3d field = interpolator(in, Vec3d(x, y, z));
 	
-	double bTor = std::cos(phi) * field[1] - std::sin(phi) * field[0];
-	
-	out(idx, 0) += scale * field[0];
-	out(idx, 1) += scale * field[1];
-	out(idx, 2) += scale * field[2];
+	Vec3d field = interpolator(in,  ctx.getPosition(idx));
+	ctx.addField(idx, field);
 }
 	
 /**
  \ingroup kernels
  */
-EIGEN_DEVICE_FUNC inline void biotSavartKernel(unsigned int idx, FieldValuesRef pointsOut, FilamentRef filament, double current, double coilWidth, double stepSize, FieldValuesRef out) {	
-	Vec3d x_grid(pointsOut(idx, 0), pointsOut(idx, 1), pointsOut(idx, 2));
+EIGEN_DEVICE_FUNC inline void biotSavartKernel(unsigned int idx, MagKernelContext ctx, FilamentRef filament, double coilWidth, double stepSize) {	
+	Vec3d x_grid = ctx.getPosition(idx);
 	Vec3d field_cartesian { 0, 0, 0 };
+	
+	constexpr double current = 1;
 		
 	auto n_points = filament.dimension(1);
 	for(int i_fil = 0; i_fil < n_points - 1; ++i_fil) {
@@ -90,17 +140,15 @@ EIGEN_DEVICE_FUNC inline void biotSavartKernel(unsigned int idx, FieldValuesRef 
 		}
 	}
 	
-	out(idx, 0) += current * field_cartesian(0);
-	out(idx, 1) += current * field_cartesian(1);
-	out(idx, 2) += current * field_cartesian(2);
+	ctx.addField(idx, field_cartesian * current);
 }
 
-EIGEN_DEVICE_FUNC inline void dipoleFieldKernel(unsigned int idx, FieldValuesRef pointsOut, FieldValuesRef dipolePoints, FieldValuesRef dipoleMoments, kj::ArrayPtr<double> radii, double scale, FieldValuesRef out) {
+EIGEN_DEVICE_FUNC inline void dipoleFieldKernel(unsigned int idx, MagKernelContext ctx, FieldValuesRef dipolePoints, FieldValuesRef dipoleMoments, kj::ArrayPtr<double> radii) {
 	// Based on field of magnetized sphere
 	// https://farside.ph.utexas.edu/teaching/jk1/Electromagnetism/node61.html
 	
 	Vec3d field(0, 0, 0);
-	Vec3d x(pointsOut(idx, 0), pointsOut(idx, 1), pointsOut(idx, 2));
+	Vec3d x = ctx.getPosition(idx);
 	
 	auto nPoints = dipolePoints.dimension(0);
 	for(int64_t iPoint = 0; iPoint < nPoints; ++iPoint) {
@@ -126,21 +174,21 @@ EIGEN_DEVICE_FUNC inline void dipoleFieldKernel(unsigned int idx, FieldValuesRef
 		Vec3d rNorm = r / rAbs;
 		
 		Vec3d unscaled = 3 * rNorm * (rNorm.dot(m)) - m;
-		field += scale * mu0over4pi / (rAbs * rAbs * rAbs) * unscaled;
+		field += mu0over4pi / (rAbs * rAbs * rAbs) * unscaled;
 	}
 	
-	out(idx, 0) += field(0);
-	out(idx, 1) += field(1);
-	out(idx, 2) += field(2);
+	ctx.addField(idx, field);
 }
 
 /**
  \ingroup kernels
  */
-EIGEN_DEVICE_FUNC inline void eqFieldKernel(unsigned int idx, FieldValuesRef pointsOut, fsc::cu::AxisymmetricEquilibrium::Reader equilibrium, double scale, FieldValuesRef out) {	
-	double x = pointsOut(idx, 0);
-	double y = pointsOut(idx, 1);
-	double z = pointsOut(idx, 2);
+EIGEN_DEVICE_FUNC inline void eqFieldKernel(unsigned int idx, MagKernelContext ctx, fsc::cu::AxisymmetricEquilibrium::Reader equilibrium) {
+	Vec3d xyz = ctx.getPosition(idx);
+	
+	double x = xyz(0);
+	double y = xyz(1);
+	double z = xyz(2);
 	
 	double r = std::sqrt(x*x + y*y);
 	
@@ -206,9 +254,7 @@ EIGEN_DEVICE_FUNC inline void eqFieldKernel(unsigned int idx, FieldValuesRef poi
 	double bX = (bR * x - bTor * y) / r;
 	double bY = (bR * y + bTor * x) / r;
 	
-	out(idx, 0) += scale * bX;
-	out(idx, 1) += scale * bY;
-	out(idx, 2) += scale * bZ;
+	ctx.addField(idx, Vec3d(bX, bY, bZ));
 }
 
 /**
