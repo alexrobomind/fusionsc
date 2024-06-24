@@ -637,7 +637,7 @@ async def calculateIota(
 	# Determine axis shape (required for phase unwrapping)
 	if axis is None:
 		startPoint = startPoints.reshape([3, -1]).mean(axis = 1)
-		_, axis = await findAxis.asnc(field, startPoint = startPoint, islandM = islandM, targetError = targetError, relativeErrorTolerance = relativeErrorTolerance, minStepSize = minStepSize, maxStepSize = maxStepSize)
+		_, axis = await findAxis.asnc(field, nTurns = 10 * islandM, startPoint = startPoint, islandM = islandM, targetError = targetError, relativeErrorTolerance = relativeErrorTolerance, minStepSize = minStepSize, maxStepSize = maxStepSize)
 	
 	xAx, yAx, zAx = axis
 	rAx = np.sqrt(xAx**2 + yAx**2)
@@ -674,12 +674,12 @@ async def calculateFourierModes(
 	field, startPoints, turnCount,
 	nMax = 1, mMax = 1, toroidalSymmetry = 1, aliasThreshold = None,
 	grid = None, stellaratorSymmetric = False,
-	unwrapEvery = 1, recordEvery = 10, distanceLimit = 1e4,
+	unwrapEvery = 1, recordEvery = 10, distanceLimit = 0,
 	targetError = 1e-4, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2,
 	islandM = 1
 ):
 	if aliasThreshold is None:
-		aliasThreshold = 0.2 * np.pi / turnCount
+		aliasThreshold = 0.05 / turnCount
 		
 	field = await field.compute.asnc(grid)
 	
@@ -717,8 +717,12 @@ async def calculateFourierModes(
 	adaptive.relativeTolerance = relativeErrorTolerance
 	adaptive.min = minStepSize
 	adaptive.max = maxStepSize
-		
-	errorEstimationDistance = min(turnCount * 2 * np.pi * field.data.computedField.grid.rMax, distanceLimit)
+	
+	if distanceLimit > 0:
+		errorEstimationDistance = min(turnCount * 2 * np.pi * field.data.computedField.grid.rMax, distanceLimit)
+	else:
+		errorEstimationDistance = turnCount * 2 * np.pi * field.data.computedField.grid.rMax
+	
 	adaptive.errorUnit.integratedOver = errorEstimationDistance
 	
 	# Perform trace command
