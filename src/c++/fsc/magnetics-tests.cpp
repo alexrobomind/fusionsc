@@ -10,6 +10,32 @@
 #include "tensor.h"
 
 namespace fsc {
+
+TEST_CASE("sphere_field") {
+	Library l = newLibrary();
+	LibraryThread lt = l -> newThread();
+	auto& ws = lt->waitScope();
+	
+	FieldCalculator::Client session = newFieldCalculator(CPUDevice::create(CPUDevice::estimateNumThreads()));
+	
+	auto computeRequest = session.evaluateXyzRequest();
+	
+	auto field = computeRequest.initField();
+	auto dc = field.initDipoleCloud();
+	dc.getPositions().setShape({3, 1});
+	dc.getPositions().setData({0 ,0, 0});
+	
+	dc.getMagneticMoments().setShape({3, 1});
+	dc.getMagneticMoments().setData({0 ,0, 1});
+	
+	dc.setRadii({1});
+	
+	computeRequest.getPoints().setShape({3, 3});
+	computeRequest.getPoints().setData({0,0,0,0,0,0,0.999,1.00001, 1.2});
+	
+	auto response = computeRequest.send().wait(ws);
+	KJ_DBG(response);
+}
 	
 TEST_CASE("build-field-cancel") {
 	auto field = WIRE_FIELD.get();
