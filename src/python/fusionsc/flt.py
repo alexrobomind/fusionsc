@@ -405,7 +405,8 @@ def decodeTraceResponse(response: service.FLTResponse.ReaderOrBuilder, resultFor
 async def findAxis(
 	field, grid = None, startPoint = None,
 	stepSize = 0.001, nTurns = 10, nIterations = 10, nPhi = 200, direction = "ccw", mapping = None,
-	targetError = None, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2
+	targetError = None, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2,
+	islandM = 1
 ):
 	"""
 	Computes the magnetic axis by repeatedly tracing a Poincaré map and averaging the points.
@@ -434,6 +435,7 @@ async def findAxis(
 	request.nTurns = nTurns
 	request.nIterations = nIterations
 	request.nPhi = nPhi
+	request.islandM = islandM
 	
 	if mapping is not None:
 		request.mapping = mapping.ref
@@ -624,7 +626,8 @@ async def calculateIota(
 	field, startPoints, turnCount, grid = None, 
 	axis = None, unwrapEvery = 1,
 	distanceLimit = 1e4, 
-	targetError = 1e-4, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2
+	targetError = 1e-4, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2,
+	islandM = 1
 ):
 	# Make sure we have a computed field reference
 	field = await field.compute.asnc(grid)
@@ -634,7 +637,7 @@ async def calculateIota(
 	# Determine axis shape (required for phase unwrapping)
 	if axis is None:
 		startPoint = startPoints.reshape([3, -1]).mean(axis = 1)
-		_, axis = await findAxis.asnc(field, startPoint = startPoint)
+		_, axis = await findAxis.asnc(field, startPoint = startPoint, islandM = islandM, targetError = targetError, relativeErrorTolerance = relativeErrorTolerance, minStepSize = minStepSize, maxStepSize = maxStepSize)
 	
 	xAx, yAx, zAx = axis
 	rAx = np.sqrt(xAx**2 + yAx**2)
@@ -651,6 +654,7 @@ async def calculateIota(
 	calcIota.unwrapEvery = unwrapEvery
 	calcIota.rAxis = rAx
 	calcIota.zAxis = zAx
+	calcIota.islandM = islandM
 	
 	adaptive = request.stepSizeControl.initAdaptive()
 	adaptive.targetError = targetError
@@ -668,11 +672,15 @@ async def calculateIota(
 @asyncFunction
 async def calculateFourierModes(
 	field, startPoints, turnCount,
-	nMax = 1, mMax = 1, toroidalSymmetry = 1, aliasThreshold = 0.001,
+	nMax = 1, mMax = 1, toroidalSymmetry = 1, aliasThreshold = None,
 	grid = None, stellaratorSymmetric = False,
 	unwrapEvery = 1, recordEvery = 10, distanceLimit = 1e4,
-	targetError = 1e-4, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2
+	targetError = 1e-4, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2,
+	islandM = 1
 ):
+	if aliasThreshold is None:
+		aliasThreshold = 0.2 * np.pi / turnCount
+		
 	field = await field.compute.asnc(grid)
 	
 	startPoints = np.asarray(startPoints)
@@ -682,7 +690,8 @@ async def calculateFourierModes(
 		field, startPoints, turnCount * 20,
 		grid = None, axis = None, unwrapEvery = unwrapEvery,
 		distanceLimit = distanceLimit,
-		targetError = targetError, relativeErrorTolerance = relativeErrorTolerance, minStepSize = minStepSize, maxStepSize = maxStepSize
+		targetError = targetError, relativeErrorTolerance = relativeErrorTolerance, minStepSize = minStepSize, maxStepSize = maxStepSize,
+		islandM = islandM
 	)
 	
 	# Initialize Fourier trace request
@@ -701,6 +710,7 @@ async def calculateFourierModes(
 	calcSurf.toroidalSymmetry = toroidalSymmetry
 	calcSurf.modeAliasingThreshold = aliasThreshold 
 	calcSurf.stellaratorSymmetric = stellaratorSymmetric
+	calcSurf.islandM = islandM
 	
 	adaptive = request.stepSizeControl.initAdaptive()
 	adaptive.targetError = targetError

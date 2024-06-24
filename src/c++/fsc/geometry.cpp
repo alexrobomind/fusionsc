@@ -1108,16 +1108,20 @@ Promise<void> GeometryLibImpl::reduce(ReduceContext context) {
 				
 				auto polys = newMesh.initPolyMesh(polyCount);
 				uint32_t iPoly = 0;
+				uint32_t indexOffset = 0;
+				
 				for(auto mesh : meshes) {
 					if(mesh.isTriMesh()) {
 						for(auto i : kj::range(0, mesh.getIndices().size() / 3)) {
-							polys.set(iPoly++, 3);
+							polys.set(iPoly++, 3 * i + indexOffset);
 						}
 					} else {
 						for(uint32_t poly : mesh.getPolyMesh()) {
-							polys.set(iPoly++, poly);
+							polys.set(iPoly++, poly + indexOffset);
 						}
 					}
+					
+					indexOffset += mesh.getIndices().size();
 				}
 			}
 			

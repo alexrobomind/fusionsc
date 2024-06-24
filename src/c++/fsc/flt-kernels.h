@@ -230,6 +230,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	double unwrappedPhi = state.getPhi();
 	uint32_t unwrapEvery = 0;
 	uint32_t recFourierEvery = 0;
+	uint32_t islandM = 1;
 		
 	{
 		auto fla = request.getFieldLineAnalysis();
@@ -237,6 +238,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			rAxis = fla.getCalculateIota().getRAxis();
 			zAxis = fla.getCalculateIota().getZAxis();
 			unwrapEvery = fla.getCalculateIota().getUnwrapEvery();
+			islandM = fla.getCalculateIota().getIslandM();
 		} else if(fla.isCalculateFourierModes()) {
 			//rAxis = fla.getCalculateFourierModes().getRAxis();
 			//zAxis = fla.getCalculateFourierModes().getZAxis();
@@ -245,7 +247,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	}
 	
 	using AxisInterpolator = NDInterpolator<1, C1CubicInterpolation<double>>;
-	AxisInterpolator axisInterpolator(C1CubicInterpolation<double>(), { AxisInterpolator::Axis(0, 2 * pi, rAxis.size()) });
+	AxisInterpolator axisInterpolator(C1CubicInterpolation<double>(), { AxisInterpolator::Axis(0, 2 * pi * islandM, rAxis.size()) });
 	
 	bool processDisplacements = perpModel.hasIsotropicDiffusionCoefficient() || perpModel.hasRzDiffusionCoefficient();
 	
@@ -383,9 +385,13 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		
 		// Unwrapping of poloidal phase
 		if(unwrapEvery != 0 && (step % unwrapEvery == 0)) {
-			double phi = atan2(x[1], x[0]);
-			double rAxisVal = axisInterpolator(rAxisAt, V1(phi));
-			double zAxisVal = axisInterpolator(zAxisAt, V1(phi));
+			// double phi = atan2(x[1], x[0]);
+			if(step == 0) {
+				KJ_DBG(unwrappedPhi / (2 * fsc::pi));
+			}
+			
+			double rAxisVal = axisInterpolator(rAxisAt, V1(unwrappedPhi));
+			double zAxisVal = axisInterpolator(zAxisAt, V1(unwrappedPhi));
 			
 			double dr = r - rAxisVal;
 			double dz = z - zAxisVal;

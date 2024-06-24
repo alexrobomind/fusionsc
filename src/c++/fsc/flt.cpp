@@ -169,7 +169,11 @@ struct TraceCalculation {
 			for(unsigned char iDim = 0; iDim < 3; ++iDim)
 				pos.set(iDim, positions(iDim, i));
 			
-			state.setPhi0(std::atan2(pos[1], pos[0]));
+			double phi0 = std::atan2(pos[1], pos[0]);
+			if(phi0 < 0) phi0 += 2 * pi;
+			
+			state.setPhi0(phi0);
+			state.setPhi(phi0);
 			state.setForward(request.getServiceRequest().getForward());
 			
 			fsc::MT19937::seed((uint32_t) seedGenerator(), state.getRngState());
@@ -712,7 +716,7 @@ struct FLTImpl : public FLT::Server {
 					
 					// We use expansions of the form sin(m * theta - n * phi)
 					// Therefore phiMultiplier must be negative
-					const double phiMultiplier = -static_cast<double>(calcFM.getToroidalSymmetry());					
+					const double phiMultiplier = -static_cast<double>(calcFM.getToroidalSymmetry()) / calcFM.getIslandM();					
 					
 					const int maxM = calcFM.getMMax();
 					const int maxN = calcFM.getNMax();
@@ -863,6 +867,7 @@ struct FLTImpl : public FLT::Server {
 					surf.setNTor(maxN);
 					surf.setMPol(maxM);
 					surf.setToroidalSymmetry(calcFM.getToroidalSymmetry());
+					surf.setNTurns(calcFM.getIslandM());
 					writeTensor(rCos, surf.getRCos());
 					writeTensor(zSin, surf.getZSin());
 					writeTensor(t0, out.getTheta0());
@@ -937,29 +942,52 @@ struct FLTImpl : public FLT::Server {
 				req.getStepSizeControl().setAdaptive(params.getStepSizeControl().getAdaptive());
 			
 			size_t nSym = params.getField().getGrid().getNSym();
+			auto islandM = params.getIslandM();
 			auto planes = req.initPlanes(nSym);
 			for(auto i : kj::indices(planes)) {
-				planes[i].getOrientation().setPhi(phi + i * 2 * pi / nSym);
+				planes[i].getOrientation().setPhi(phi + (i + 1) * 2 * pi / nSym);
 			}
 			
 			return req.send()
-			.then([phi, nSym](capnp::Response<FLTResponse> response) mutable {
+			.then([phi, nSym, islandM](capnp::Response<FLTResponse> response) mutable {
 				// After tracing, take mean of points
 				Tensor<double, 3> result;
 				readTensor(response.getPoincareHits(), result);
 				KJ_REQUIRE(result.dimension(1) == nSym);
 				KJ_REQUIRE(result.dimension(2) == 5);
 				
-				Tensor<double, 0> rMean = (result.chip(0, 2).square() + result.chip(1, 2).square()).sqrt().mean();
-				Tensor<double, 0> zMean = result.chip(2, 2).mean();
+				uint32_t n = 0;
+				double r = 0;
+				double z = 0;
 				
-				return IterResult { rMean(), zMean() };
+				size_t iPoint = 0;
+				for(auto iTurn : kj::range(0, result.dimension(0))) {
+					for(auto iPlane : kj::range(0, result.dimension(1))) {
+						if(++iPoint % islandM == 0) {
+							double x = result(iTurn, iPlane, 0);
+							double y = result(iTurn, iPlane, 1);
+							
+							double rContrib = sqrt(x * x + y * y);
+							double zContrib = result(iTurn, iPlane, 2);
+							
+							r += rContrib;
+							z += zContrib;
+							++n;
+							
+							KJ_DBG(iPlane, iTurn, iPoint, rContrib, zContrib);
+						}
+					}
+				}
+				
+				return IterResult { r / n, z / n };
 			});
 		};
 		
 		auto traceAxis = [this, ctx, params, phi](IterResult iter) mutable {
 			double r = iter.r;
 			double z = iter.z;
+			
+			auto islandM = params.getIslandM();
 			
 			auto req = thisCap().traceRequest();
 			auto sp = req.initStartPoints();
@@ -969,7 +997,7 @@ struct FLTImpl : public FLT::Server {
 			// Copy position into output
 			ctx.getResults().setPos(sp.getData());
 			
-			req.setTurnLimit(1);
+			req.setTurnLimit(islandM);
 			req.setStepSize(params.getStepSize());
 			req.setField(params.getField());
 			
@@ -986,16 +1014,34 @@ struct FLTImpl : public FLT::Server {
 				planes[i].getOrientation().setPhi(2 * i * pi / nPhi);
 			
 			return req.send()
-			.then([ctx, nPhi](capnp::Response<FLTResponse> response) mutable {
+			.then([ctx, nPhi, islandM, phi](capnp::Response<FLTResponse> response) mutable {
 				// Extract field line
-				Tensor<double, 3> result;
-				readTensor(response.getPoincareHits(), result);
-				KJ_REQUIRE(result.dimension(0) == 1);    // nTurns
-				KJ_REQUIRE(result.dimension(1) == nPhi); // nPlanes
-				KJ_REQUIRE(result.dimension(2) == 5);    // x, y, z, lc_fwd, lc_bwd
+				Tensor<double, 3> pcHits;
+				readTensor(response.getPoincareHits(), pcHits);
+				KJ_REQUIRE(pcHits.dimension(0) == islandM);    // nTurns
+				KJ_REQUIRE(pcHits.dimension(1) == nPhi); // nPlanes
+				KJ_REQUIRE(pcHits.dimension(2) == 5);    // x, y, z, lc_fwd, lc_bwd
 				
-				Tensor<double, 2> subRegion = result.chip(0, 0).slice(Eigen::array<int64_t, 2> {0, 0}, Eigen::array<int64_t, 2> {(int) nPhi, 3});
-				writeTensor(subRegion, ctx.getResults().getAxis());
+				Tensor<double, 2> result(nPhi * islandM, 3);
+				
+				double phiStartPositive = fmod(phi + 2 * pi, 2 * pi);
+				
+				for(auto iTurn : kj::range(0, islandM)) {
+					for(auto iPlane : kj::range(0, nPhi)) {
+						double planePhi = 2 * iPlane * pi / nPhi;
+						
+						// Planes that are before phiStart need to be extracted from
+						// the previous turn. This includes the starting plane.
+						size_t iTurnActual = planePhi > phiStartPositive ? iTurn : iTurn + (islandM - 1);
+						iTurnActual %= islandM;
+						
+						result(iPlane + iTurn * nPhi, 0) = pcHits(iTurnActual, iPlane, 0);
+						result(iPlane + iTurn * nPhi, 1) = pcHits(iTurnActual, iPlane, 1);
+						result(iPlane + iTurn * nPhi, 2) = pcHits(iTurnActual, iPlane, 2);
+					}
+				}
+				
+				writeTensor(result, ctx.getResults().getAxis());
 				
 				// Compute mean field along axis
 				double accum = 0;

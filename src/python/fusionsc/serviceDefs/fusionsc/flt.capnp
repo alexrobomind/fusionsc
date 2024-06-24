@@ -138,6 +138,7 @@ struct FLTRequest {
 			unwrapEvery @20 : UInt32;
 			rAxis @21 : List(Float64);
 			zAxis @22 : List(Float64);
+			islandM @37 : UInt32 = 1;
 		}
 		calculateFourierModes : group {			
 			unusedRAxis @23 : List(Float64);
@@ -164,6 +165,9 @@ struct FLTRequest {
 			modeAliasingThreshold @35 : Float64 = 0.001;
 			
 			stellaratorSymmetric @36 : Bool = false;
+			
+			# Denominator for toroidal mode numbers
+			islandM @38 : UInt32 = 1;
 		}
 	}
 	
@@ -250,6 +254,8 @@ struct FindAxisRequest {
 		fixed @7 : Void;
 		adaptive @8 : FLTRequest.AdaptiveStepControl;
 	}
+	
+	islandM @9 : UInt32 = 1;
 }
 
 struct FindLcfsRequest {
