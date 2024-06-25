@@ -103,6 +103,10 @@ struct FLTRequest {
 	stepLimit @6 : UInt32;
 	collisionLimit @7 : UInt32;
 	
+	# Minimum distance to traverse before
+	# collisions will be processed
+	ignoreCollisionsBefore @39 : Float64;
+	
 	stepSize @8 : Float64 = 0.001;
 	stepSizeControl : union {
 		fixed @31 : Void;

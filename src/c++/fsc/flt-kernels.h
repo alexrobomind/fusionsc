@@ -667,6 +667,19 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 				FSC_FLT_RETURN(EVENT_BUFFER_FULL);
 			}
 			
+			// Delete all collisions that we don't want
+			for(uint32_t iEvt = eventCount; iEvt < newEventCount; /* No ++iEvt here, it's conditional */) {
+				auto event = eventBuffer[iEvt];
+				
+				if(event.getDistance() < request.getIgnoreCollisionsBefore()) {
+					// Swap to end and decrease buffer fill
+					cupnp::swapData(event, eventBuffer[newEventCount]);
+					--newEventCount;
+				} else {
+					++iEvt;
+				}
+			}
+			
 			numCollisions = newEventCount - eventCount;
 			
 			for(auto iEvt = eventCount; iEvt < newEventCount; ++iEvt) {

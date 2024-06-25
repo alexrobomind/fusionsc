@@ -660,6 +660,14 @@ struct FLTImpl : public FLT::Server {
 				applyPointShape(results.getEndPoints(), {4}, {});
 				
 				if(nRecorded > 0) {
+					KJ_REQUIRE(
+						3 * nRecorded * nStartPoints * capnp::ELEMENTS <= capnp::MAX_LIST_ELEMENTS,
+						"The number of recorded points is so large that the returned"
+						" tensor would exceed size limitations. Please reduce the number"
+						" of points, increase step size, or increase no. of steps between"
+						" recordings"
+					);
+					
 					Tensor<double, 3> fieldLines(nRecorded, nStartPoints, 3);
 					fieldLines.setConstant(std::nan(""));
 					
