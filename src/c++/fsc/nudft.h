@@ -32,6 +32,31 @@ void calculateModes(kj::ArrayPtr<const FourierPoint<xdim, ydim>> points, kj::Arr
 	//REMOVE THIS AFTER DBG
 	//KJ_DBG
 	// kj::FixedArray<Vec, 2> holder;
+	KJ_DBG("NUDFT prepare", points.size(), modes.size());
+		
+	Mat A(points.size(), 2 * modes.size());
+	
+	#pragma omp parallel for
+	for(int64_t iPoint = 0; iPoint < points.size(); ++iPoint) {
+		for(auto iMode : kj::indices(modes)) {
+			double angle = 0;
+			
+			for(unsigned int i = 0; i < xdim; ++i) {
+				angle += modes[iMode].coeffs[i] * points[iPoint].angles[i];
+			}
+			
+			A(iPoint, 2 * iMode) = std::sin(angle);
+			A(iPoint, 2 * iMode + 1) = std::cos(angle);
+		}
+	}
+		
+	KJ_DBG("NUDFT reduce");
+	
+	Mat AtA = A.transpose() * A; 
+		
+	KJ_DBG("NUDFT cholesky");
+
+	auto cholesky = AtA.ldlt();
 	
 	#pragma omp parallel for
 	for(int iDim = 0; iDim < ydim; ++iDim) {
@@ -44,45 +69,32 @@ void calculateModes(kj::ArrayPtr<const FourierPoint<xdim, ydim>> points, kj::Arr
 		// 0 = -2 A^T y + 2 A^T A x
 		// => A^T A x = A^T y
 		
+		KJ_DBG("NUDFT build RHS", iDim);
+		
 		Vec y(points.size());
 		for(auto i : kj::indices(points))
 			y[i] = points[i].y[iDim];
 		
-		Mat A(points.size(), 2 * modes.size());
-		for(auto iPoint : kj::indices(points)) {
-			for(auto iMode : kj::indices(modes)) {
-				double angle = 0;
-				
-				for(unsigned int i = 0; i < xdim; ++i) {
-					angle += modes[iMode].coeffs[i] * points[iPoint].angles[i];
-				}
-				
-				A(iPoint, 2 * iMode) = std::sin(angle);
-				A(iPoint, 2 * iMode + 1) = std::cos(angle);
-			}
-		}
-		
-		Mat AtA = A.transpose() * A;
 		Vec Aty = A.transpose() * y;
 		
 		// Perform Cholesky decomposition
-		auto cholesky = AtA.ldlt();
+		KJ_DBG("NUDFT solve");
 		Vec x = cholesky.solve(Aty);
 		
 		// Check against reference
-		Vec yOpt = A * x;
-		/*for(auto iPoint : kj::indices(points)) {
+		/*Vec yOpt = A * x;
+		for(auto iPoint : kj::indices(points)) {
 			KJ_DBG(iPoint, y[iPoint], yOpt[iPoint]);
-		}*/
 		Vec AtyOpt = A.transpose() * yOpt;
 		
-		/*for(auto i : kj::range(0, modes.size())) {
+		for(auto i : kj::range(0, modes.size())) {
 			auto& mode = modes[i];
 			auto n = mode.coeffs[0];
 			auto m = mode.coeffs[1];
 			KJ_DBG("Sin", i, n, m, AtyOpt[2 * i + 0], Aty[2 * i + 0], x[2 * i + 0]);
 			KJ_DBG("Cos", i, n, m, AtyOpt[2 * i + 1], Aty[2 * i + 1], x[2 * i + 1]);
 		}*/
+		KJ_DBG("NUDFT extract");
 		
 		for(auto iMode : kj::indices(modes)) {
 			modes[iMode].sinCoeffs[iDim] = x[2 * iMode];
