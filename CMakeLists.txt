@@ -249,10 +249,16 @@ add_vendored_dependency(
 #)
 
 if(Libssh2_VENDORED)
-	add_library(Libssh2::libssh2 ALIAS libssh2)
 	target_compile_definitions(libssh2 PRIVATE LIBSSH2DEBUG)
+	set(LIBSSH2_LIBRARY libssh2)
 	
 	# TODO: Install rules?
+elseif(TARGET Libssh2::libssh2)
+	set(LIBSSH2_LIBRARY Libssh2::libssh2)
+elseif(TARGET libssh2::libssh2)
+	set(LIBSSH2_LIBRARY libssh2::libssh2)
+else()
+	MESSAGE(SEND_ERROR "Neither Libssh2::libssh2 nor libssh2::libssh2 were found")
 endif()
 
 if(FSC_WITH_PYTHON)
@@ -324,7 +330,7 @@ target_link_libraries(
 	happly::happly
 	hdf5::hdf5_cpp
 	hdf5::hdf5_hl_cpp
-	Libssh2::libssh2
+	${LIBSSH2_LIBRARY}
 	SQLite::SQLite3
 	ZLIB::ZLIB
 	yaml-cpp::yaml-cpp
