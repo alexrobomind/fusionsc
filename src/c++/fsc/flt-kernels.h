@@ -386,9 +386,9 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		// Unwrapping of poloidal phase
 		if(unwrapEvery != 0 && (step % unwrapEvery == 0)) {
 			// double phi = atan2(x[1], x[0]);
-			if(step == 0) {
+			/*if(step == 0) {
 				KJ_DBG(unwrappedPhi / (2 * fsc::pi));
-			}
+			}*/
 			
 			double rAxisVal = axisInterpolator(rAxisAt, V1(unwrappedPhi));
 			double zAxisVal = axisInterpolator(zAxisAt, V1(unwrappedPhi));

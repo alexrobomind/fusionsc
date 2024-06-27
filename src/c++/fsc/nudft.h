@@ -32,7 +32,7 @@ void calculateModes(kj::ArrayPtr<const FourierPoint<xdim, ydim>> points, kj::Arr
 	//REMOVE THIS AFTER DBG
 	//KJ_DBG
 	// kj::FixedArray<Vec, 2> holder;
-	KJ_DBG("NUDFT prepare", points.size(), modes.size());
+	// KJ_DBG("NUDFT prepare", points.size(), modes.size());
 		
 	Mat A(points.size(), 2 * modes.size());
 	
@@ -50,11 +50,11 @@ void calculateModes(kj::ArrayPtr<const FourierPoint<xdim, ydim>> points, kj::Arr
 		}
 	}
 		
-	KJ_DBG("NUDFT reduce");
+	// KJ_DBG("NUDFT reduce");
 	
 	Mat AtA = A.transpose() * A; 
 		
-	KJ_DBG("NUDFT cholesky");
+	// KJ_DBG("NUDFT cholesky");
 
 	auto cholesky = AtA.ldlt();
 	
@@ -69,7 +69,7 @@ void calculateModes(kj::ArrayPtr<const FourierPoint<xdim, ydim>> points, kj::Arr
 		// 0 = -2 A^T y + 2 A^T A x
 		// => A^T A x = A^T y
 		
-		KJ_DBG("NUDFT build RHS", iDim);
+		// KJ_DBG("NUDFT build RHS", iDim);
 		
 		Vec y(points.size());
 		for(auto i : kj::indices(points))
@@ -78,7 +78,7 @@ void calculateModes(kj::ArrayPtr<const FourierPoint<xdim, ydim>> points, kj::Arr
 		Vec Aty = A.transpose() * y;
 		
 		// Perform Cholesky decomposition
-		KJ_DBG("NUDFT solve");
+		// KJ_DBG("NUDFT solve");
 		Vec x = cholesky.solve(Aty);
 		
 		// Check against reference
@@ -94,7 +94,7 @@ void calculateModes(kj::ArrayPtr<const FourierPoint<xdim, ydim>> points, kj::Arr
 			KJ_DBG("Sin", i, n, m, AtyOpt[2 * i + 0], Aty[2 * i + 0], x[2 * i + 0]);
 			KJ_DBG("Cos", i, n, m, AtyOpt[2 * i + 1], Aty[2 * i + 1], x[2 * i + 1]);
 		}*/
-		KJ_DBG("NUDFT extract");
+		// KJ_DBG("NUDFT extract");
 		
 		for(auto iMode : kj::indices(modes)) {
 			modes[iMode].sinCoeffs[iDim] = x[2 * iMode];

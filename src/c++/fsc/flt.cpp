@@ -549,8 +549,6 @@ struct FLTImpl : public FLT::Server {
 					auto entry = kData[iStartPoint].asReader();
 					auto state = entry.getState();
 					auto events = entry.getEvents();
-								
-					int64_t iTurn = 0;
 					
 					kj::Vector<double> backwardLCs(events.size());
 					Maybe<FLTKernelEvent::Reader> lastCollision;
@@ -589,6 +587,9 @@ struct FLTImpl : public FLT::Server {
 					}
 					
 					size_t recordedForThis = 0;
+								
+					int64_t iTurn = 0;
+					double lastNewTurnDistance = 0;
 					
 					for(auto iEvt : kj::indices(events)) {
 						auto evt = events[iEvt];
@@ -597,21 +598,34 @@ struct FLTImpl : public FLT::Server {
 												
 						if(evt.isNewTurn()) {
 							iTurn = evt.getNewTurn();
+							lastNewTurnDistance = evt.getDistance();
 						} else if(evt.isPhiPlaneIntersection()) {
+							int64_t iTurnActual = iTurn;
+							
+							// Due to numerical inaccuracy, it can happen that the event for the new turn
+							// and an event for an almost identical phi crossing get emitted in inconsistent
+							// order. The rule is: If the two planes are (within tolerance) same, the event should
+							// always count from the PREVIOUS turn (so Poincare hits register at the end of the turn,
+							// not the beginning).
+							
+							if(evt.getDistance() - lastNewTurnDistance < 1e-8) {
+								if(iTurn == 0) continue;
+								iTurnActual = iTurn - 1;
+							}
 							// It can happen that a phi intersection event lying after
 							// the last turn increment is emitted (due to event sorting)
 							// These need to be clipped from the result tensor.
-							if(iTurn >= nTurns)
+							if(iTurnActual >= nTurns)
 								continue;
 							
 							auto ppi = evt.getPhiPlaneIntersection();
 							
 							auto loc = getEventLocation(evt);
 							for(int64_t iDim = 0; iDim < 3; ++iDim) {
-								pcCuts(iTurn, iStartPoint, ppi.getPlaneNo(), iDim) = loc[iDim];
+								pcCuts(iTurnActual, iStartPoint, ppi.getPlaneNo(), iDim) = loc[iDim];
 							}
-							pcCuts(iTurn, iStartPoint, ppi.getPlaneNo(), 3) = forwardLCs[iEvt];
-							pcCuts(iTurn, iStartPoint, ppi.getPlaneNo(), 4) = backwardLCs[iEvt];
+							pcCuts(iTurnActual, iStartPoint, ppi.getPlaneNo(), 3) = forwardLCs[iEvt];
+							pcCuts(iTurnActual, iStartPoint, ppi.getPlaneNo(), 4) = backwardLCs[iEvt];
 						} else if(evt.isRecord() || (request.getRecordEvery() != 0 && iEvt == events.size() - 1 /* Always record last event */)) {
 							++recordedForThis;
 						}
@@ -982,7 +996,7 @@ struct FLTImpl : public FLT::Server {
 							z += zContrib;
 							++n;
 							
-							KJ_DBG(iPlane, iTurn, iPoint, rContrib, zContrib);
+							// KJ_DBG(iPlane, iTurn, iPoint, rContrib, zContrib);
 						}
 					}
 				}
