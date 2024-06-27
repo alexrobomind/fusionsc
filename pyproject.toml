@@ -5,9 +5,9 @@ name = "fusionsc"
 dependencies = [
 	"typing-extensions >= 3.10",
 	"importlib_resources",
-	"numpy>=1.19.5 ; python_version < '3.10'",
-	"numpy>=1.23.4 ; python_version >= '3.10' and python_version < '3.12'",
-	"numpy>=1.26.2 ; python_version >= '3.12'",
+	"numpy>=1.19.5, <2 ; python_version < '3.10'",
+	"numpy>=1.23.4, <2 ; python_version >= '3.10' and python_version < '3.12'",
+	"numpy>=1.26.2, <2 ; python_version >= '3.12'",
 	"nest-asyncio",
 	"netCDF4",
 	"scipy"
