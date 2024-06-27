@@ -59,9 +59,6 @@ async def connect(url : str, tunnel = None, ServiceType = service.RootService):
 async def serve(target, host = "0.0.0.0", port = None, tunnel = None):
 	"""Serves the given object (or the active backend) on the given host and port, optionally over the specified connection"""
 	
-	import warnings
-	warnings.warn("Currently, the fusionsc.remove.serve function caused spurious memory errors in tests. The implementation will need a review")
-	
 	networkInterface = tunnel
 	
 	if networkInterface is None:
