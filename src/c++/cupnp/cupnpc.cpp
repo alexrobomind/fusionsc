@@ -584,7 +584,7 @@ StringTree generateInterface(uint64_t nodeId) {
 		"\n",
 		"inline CUPNP_FUNCTION bool isDefault() { return ptrData == 0; }\n",
 		"\n",
-		"friend CUPNP_FUNCTION void cupnp::swapData<", name.flatten(), ">(", name.flatten(), "&, ", name.flatten(), "&); \n",
+		"friend CUPNP_FUNCTION void cupnp::swapData<", name.flatten(), ">(", name.flatten(), ", ", name.flatten(), "); \n",
 		"\n",
 		generateNested(nodeId),
 		"};\n\n"
@@ -732,7 +732,7 @@ StringTree generateStructSection(uint64_t nodeId, ClassType classType) {
 		"	\n",
 		"	inline CUPNP_FUNCTION bool isDefault() { return dataSectionSize == 0 && pointerSectionSize == 0; }\n",
 		"	\n",
-		"	friend CUPNP_FUNCTION void cupnp::swapData<", name, ">(", name, "&, ", name, "&); \n"
+		"	friend CUPNP_FUNCTION void cupnp::swapData<", name, ">(", name, ", ", name, "); \n"
 	);
 	
 	if(classType == ClassType::READER) {

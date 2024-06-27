@@ -604,7 +604,7 @@ CUPNP_FUNCTION inline void copyData(T1& dst, const T2& src) {
 }
 
 template<typename T>
-CUPNP_FUNCTION void swapData(T& t1, T& t2) {
+CUPNP_FUNCTION void swapData(T t1, T t2) {
 	/*uint16_t dsWords1 = getDataSectionSizeInWords(t1.structure);
 	uint16_t dsWords2 = getDataSectionSizeInWords(t2.structure);
 	

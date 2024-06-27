@@ -1,14 +1,12 @@
 # Container for libc++
-FROM debian as macproxy
+FROM alpine as macproxy
 
 # Baseline FusionSC dependencies
-RUN apt-get -q update
-RUN apt-get install -y g++ cmake ninja-build libssl-dev python3
+RUN apk add g++ cmake ninja python3 openssl-dev libc++-dev clang linux-headers libucontext-dev
 
-# Libc++
-RUN apt-get install libc++-dev
+COPY . /src
 WORKDIR /build
-RUN cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DFSC_DEP_PREF_VENDORED=Off /src
+RUN CC=clang CXX=clang++ cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DFSC_DEP_PREF_VENDORED=Off -DCMAKE_CXX_FLAGS=-stdlib=libc++ /src
 RUN ninja tests
 
 # Baseline build container

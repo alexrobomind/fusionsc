@@ -142,6 +142,7 @@ add_vendored_dependency(
 )
 
 set(WITH_ZLIB OFF)
+set(WITH_FIBERS ON CACHE STRING "Whether or not to build libkj-async with fibers")
 add_vendored_dependency(
 	PREFIX vendor/capnproto
 	NAME CapnProto
