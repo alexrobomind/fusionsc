@@ -31,7 +31,7 @@ if(FSC_WITH_PYTHON)
 
 	target_link_libraries(
 		fsc-python-bindings
-		PUBLIC
+		PRIVATE
 		fsc
 	)
 
