@@ -2,12 +2,12 @@
 FROM alpine as macproxy
 
 # Baseline FusionSC dependencies
-RUN apk add g++ cmake ninja python3 openssl-dev libc++-dev clang linux-headers libucontext-dev
+RUN apk add g++ cmake ninja python3-dev openssl-dev libc++-dev clang linux-headers libucontext-dev py3-numpy-dev
 
 COPY . /src
 WORKDIR /build
 RUN CC=clang CXX=clang++ cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DFSC_DEP_PREF_VENDORED=Off -DCMAKE_CXX_FLAGS=-stdlib=libc++ /src
-RUN ninja tests
+RUN ninja tests fsc-python-bindings
 
 # Baseline build container
 FROM debian as base
