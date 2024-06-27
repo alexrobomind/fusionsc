@@ -186,7 +186,10 @@ async def trace(
 	
 	# Adaptive step size control
 	targetError = None, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2,
-	errorEstimationDistance = None
+	errorEstimationDistance = None,
+	
+	# Minimum tracing before processing collisions
+	ignoreCollisionsBefore = 0
 ):
 	"""
 	Performs a tracing request.
@@ -230,6 +233,9 @@ async def trace(
 		
 		- errorEstimationDistance: Maximum trace length to be assumed for the purpose of error estimation. If this is not set, the service will try to estimate it
 		  from the limits. Can be set to "step" to indicate per-step error targets.
+		
+		- ignoreCollisionsBefore: Minimum distance to trace before collisions will be actively processed. Useful when starting a trace on / very close to a mesh and
+		  not wanting to immediately have this mesh terminate the trace.
 	
 	Returns:
 		The format of the result depends on the `resultFormat` parameter.
@@ -293,6 +299,8 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	request.stepLimit = stepLimit
 	request.collisionLimit = collisionLimit
 	request.turnLimit = turnLimit
+	
+	request.ignoreCollisionsBefore = ignoreCollisionsBefore
 	
 	assert direction in ["forward", "backward", "cw", "ccw"]
 	
