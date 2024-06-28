@@ -1,3 +1,4 @@
+
 // Copyright (c) 2013-2014 Sandstorm Development Group, Inc. and contributors
 // Licensed under the MIT License:
 //
@@ -21,27 +22,41 @@
 
 #pragma once
 
-// This exposes IndexingIterator as something compatible with std::iterator so that things like
-// std::copy work with List::begin/List::end.
+#include "common.h"
+#include <cstdint>
 
-// Make sure that if this header is before list.h by the user it includes it to make
-// IndexingIterator visible to avoid brittle header problems.
-#include "../list.h"
-#include <iterator>
+KJ_BEGIN_HEADER
 
-CAPNP_BEGIN_HEADER
+struct sockaddr;
 
-namespace std {
+namespace kj {
 
-template <typename Container, typename Element>
-struct iterator_traits<capnp::_::IndexingIterator<Container, Element>> {
-  using iterator_category = std::random_access_iterator_tag;
-  using value_type = Element;
-  using difference_type	= int;
-  using pointer = Element*;
-  using reference = Element;
+class CidrRange {
+public:
+  CidrRange(StringPtr pattern);
+
+  static CidrRange inet4(ArrayPtr<const byte> bits, uint bitCount);
+  static CidrRange inet6(ArrayPtr<const uint16_t> prefix, ArrayPtr<const uint16_t> suffix,
+                         uint bitCount);
+  // Zeros are inserted between `prefix` and `suffix` to extend the address to 128 bits.
+
+  uint getSpecificity() const { return bitCount; }
+
+  bool matches(const struct sockaddr* addr) const;
+  bool matchesFamily(int family) const;
+
+  String toString() const;
+
+private:
+  int family;
+  byte bits[16];
+  uint bitCount;    // how many bits in `bits` need to match
+
+  CidrRange(int family, ArrayPtr<const byte> bits, uint bitCount);
+
+  void zeroIrrelevantBits();
 };
 
-}  // namespace std
+}  // namespace kj
 
-CAPNP_END_HEADER
+KJ_END_HEADER

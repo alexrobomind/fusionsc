@@ -23,7 +23,7 @@
 // For Unix implementation, see async-io-unix.c++.
 
 // Request Vista-level APIs.
-#include "win32-api-version.h"
+#include <kj/win32-api-version.h>
 
 #include "async-io.h"
 #include "async-io-internal.h"
@@ -350,6 +350,10 @@ public:
     socklen_t socklen = *length;
     KJ_WINSOCK(::getpeername(fd, addr, &socklen));
     *length = socklen;
+  }
+
+  Maybe<void*> getWin32Handle() const {
+    return reinterpret_cast<void*>(fd);
   }
 
 private:
@@ -1086,7 +1090,7 @@ public:
       : lowLevel(parent.lowLevel), filter(allow, deny, parent.filter) {}
 
   Promise<Own<NetworkAddress>> parseAddress(StringPtr addr, uint portHint = 0) override {
-    return evalLater([this,portHint,addr=kj::mv(addr)]() {
+    return evalNow([&]() {
       return SocketAddress::parse(lowLevel, addr, portHint, filter);
     }).then([this](Array<SocketAddress> addresses) -> Own<NetworkAddress> {
       return heap<NetworkAddressImpl>(lowLevel, filter, kj::mv(addresses));

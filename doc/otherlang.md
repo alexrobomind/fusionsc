@@ -14,9 +14,9 @@ project's documentation for details.
 ##### Serialization + RPC
 
 * [C++](cxx.html) by [@kentonv](https://github.com/kentonv)
-* [C# (.NET Core)](https://github.com/c80k/capnproto-dotnetcore) by [@c80k](https://github.com/c80k)
+* [C#](https://github.com/c80k/capnproto-dotnetcore) by [@c80k](https://github.com/c80k)
 * [Erlang](http://ecapnp.astekk.se/) by [@kaos](https://github.com/kaos)
-* [Go](https://github.com/zombiezen/go-capnproto2) by [@zombiezen](https://github.com/zombiezen) (forked from [@glycerine](https://github.com/glycerine)'s serialization-only version, below)
+* [Go](https://github.com/capnproto/go-capnp) currently maintained by [@zenhack](https://github.com/zenhack) and [@lthibault](https://github.com/lthibault)
 * [Haskell](https://github.com/zenhack/haskell-capnp) by [@zenhack](https://github.com/zenhack)
 * [JavaScript (Node.js only)](https://github.com/capnproto/node-capnp) by [@kentonv](https://github.com/kentonv)
 * [OCaml](https://github.com/capnproto/capnp-ocaml) by [@pelzlpj](https://github.com/pelzlpj) with [RPC](https://github.com/mirage/capnp-rpc) by [@talex5](https://github.com/talex5)
@@ -25,9 +25,9 @@ project's documentation for details.
 
 ##### Serialization only
 
-* [C](https://github.com/opensourcerouting/c-capnproto) by [OpenSourceRouting](https://www.opensourcerouting.org/) / [@eqvinox](https://github.com/eqvinox) (originally by [@jmckaskill](https://github.com/jmckaskill))
+* [C](https://github.com/opensourcerouting/c-capnproto) by [OpenSourceRouting](https://www.opensourcerouting.org/) / [@eqvinox](https://github.com/eqvinox) (originally by [@jmckaskill](https://github.com/jmckaskill)) (no longer maintained)
+    * [Forked and maintained](https://gitlab.com/dkml/ext/c-capnproto) by [@jonahbeckford](https://github.com/jonahbeckford)
 * [D](https://github.com/capnproto/capnproto-dlang) by [@ThomasBrixLarsen](https://github.com/ThomasBrixLarsen)
-* [Go](https://github.com/glycerine/go-capnproto) by [@glycerine](https://github.com/glycerine) (originally by [@jmckaskill](https://github.com/jmckaskill))
 * [Java](https://github.com/capnproto/capnproto-java/) by [@dwrensha](https://github.com/dwrensha)
 * [JavaScript](https://github.com/capnp-js/plugin/) by [@popham](https://github.com/popham)
 * [JavaScript](https://github.com/jscheid/capnproto-js) (older, abandoned) by [@jscheid](https://github.com/jscheid)
@@ -48,6 +48,8 @@ new languages.
 * [Wireshark Dissector Plugin](https://github.com/kaos/wireshark-plugins) by [@kaos](https://github.com/kaos)
 * [VS Code Syntax Highlighter](https://marketplace.visualstudio.com/items?itemName=xmonader.vscode-capnp) by [@xmonader](https://github.com/xmonader)
 * [IntelliJ Syntax Highlighter](https://github.com/xmonader/sercapnp) by [@xmonader](https://github.com/xmonader)
+* [RPC Tracer](https://github.com/toyota-digital-cockpit-pf/capnp-trace) by [@t-kondo-tmc](https://github.com/t-kondo-tmc)
+* [Flow-IPC](https://github.com/Flow-IPC) (shared memory IPC transport in C++) by [Akamai](https://www.akamai.com) / [@ygoldfeld](https://github.com/ygoldfeld)
 
 ## Contribute Your Own!
 
