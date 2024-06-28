@@ -215,7 +215,7 @@ set(HDF5_BUILD_CPP_LIB ON CACHE BOOL "description" FORCE)
 add_vendored_dependency(
 	PREFIX vendor/hdf5
 	NAME HDF5
-	VERSION 1.14.2
+	VERSION 1.12.0
 	FIND_ARGS CONFIG COMPONENTS HL C CXX
 )
 
