@@ -216,7 +216,7 @@ add_vendored_dependency(
 	PREFIX vendor/hdf5
 	NAME HDF5
 	VERSION 1.14.2
-	FIND_ARGS COMPONENTS CXX HL
+	FIND_ARGS COMPONENTS C CXX HL
 )
 
 if(HDF5_VENDORED)
@@ -332,6 +332,8 @@ target_link_libraries(
 	CapnProto::kj
 	Eigen3::Eigen
 	happly::happly
+	hdf5::hdf5
+	hdf5::hdf5_hl
 	hdf5::hdf5_cpp
 	hdf5::hdf5_hl_cpp
 	${LIBSSH2_LIBRARY}
