@@ -239,7 +239,7 @@ if(FSC_WITH_CUDA)
 	set_target_properties(tests PROPERTIES LINKER_LANGUAGE CUDA)
 endif()
 
-if(OPENMP_CXX_FOUND AND FSC_WITH_OPENMP)
+if(FSC_WITH_OPENMP)
 	target_link_libraries(fsc PRIVATE OpenMP::OpenMP_CXX)
 endif()
 

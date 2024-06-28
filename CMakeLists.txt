@@ -1,40 +1,62 @@
 cmake_minimum_required(VERSION 3.20)
 
-# Configure project
+# ===================== Project setup =====================
 
 project(FSC LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/src/cmake/modules)
 
-# Configure languages
+include(CTest)
+include(GNUInstallDirs)
 
-# Try to enable CUDA
+option(BUILD_SHARED_LIBS "Build Shared Libraries" OFF)
+option(BUILD_STATIC_LIBS "Build Static Libraries" ON)
+
+# ===================== Language setup =====================
+
 option(FSC_WITH_CUDA "Whether to use CUDA compilation")
 if(FSC_WITH_CUDA)
 	enable_language(CUDA)
 	find_package(CUDAToolkit)
 endif()
 
-option(BUILD_SHARED_LIBS "Build Shared Libraries" OFF)
-option(BUILD_STATIC_LIBS "Build Static Libraries" ON)
-
 set(CMAKE_CXX_EXTENSIONS On)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 include(src/cmake/OptimizeForTarget.cmake)
 
-# Prepare CTest
-include(CTest)
-include(GNUInstallDirs)
+# ===================== Dependency setup =====================
 
-# Pre-load python to make sure we have compatible dev environment and interpreter
-#set(CMAKE_FIND_DEBUG_MODE On)
-find_package(Python COMPONENTS Interpreter Development.Module NumPy)
+include(src/cmake/AddVendoredDependency.cmake)
 
-# Try loading OpenMP
+# Disable BUILD_TESTING while compiling dependencies
+set(BUILD_TESTING_TMP ${BUILD_TESTING})
+set(BUILD_TESTING OFF CACHE BOOL "Temporarily disable testing" FORCE)
+
+set(BUILD_EXAMPLES_TMP ${BUILD_EXAMPLES})
+set(BUILD_EXAMPLES OFF CACHE BOOL "Temporarily disable examples" FORCE)
+
+# ----------- OpenMP -----------
+
 find_package(OpenMP)
 
+if(OPENMP_CXX_FOUND)
+	set(FSC_OPENMP_DEFAULT On)
+else()
+	set(FSC_OPENMP_DEFAULT Off)
+endif()
+
+option(FSC_WITH_OPENMP "Whether to enable OpenMP support" ${FSC_OPENMP_DEFAULT})
+
+if(FSC_WITH_OPENMP AND NOT OPENMP_CXX_FOUND)
+	MESSAGE(SEND_ERROR "OpenMP requested, but not found")
+endif()
+
+# ----------- Python -----------
+
+# Pre-load python to make sure we have compatible dev environment and interpreter
+find_package(Python COMPONENTS Interpreter Development.Module NumPy)
+
 message(STATUS "Python sitearch dir: ${Python_SITEARCH}")
-#set(CMAKE_FIND_DEBUG_MODE Off)
 
 if(${Python_Development.Module_FOUND} AND ${Python_NumPy_FOUND})
 	set(FSC_WITH_PYTHON ON)
@@ -50,40 +72,19 @@ if(SKBUILD AND NOT Python_NumPy_FOUND)
 	message(FATAL_ERROR "NumPy missing in SKBUILD build")
 endif()
 
-# Configure CCache if available
-#find_program(CCACHE_LOC ccache)
-#if(CCACHE_LOC)
-#	message(STATUS "ccache found at ${CCACHE_LOC}")
-#	
-#	set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_LOC})
-#	set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_LOC})
-#else()
-#	message(STATUS "ccache not found")
-#endif()
-
-include(src/cmake/AddVendoredDependency.cmake)
+# ----------- OpenSSl -----------
 
 find_package(OpenSSL COMPONENTS Crypto SSL)
 
-# Disable BUILD_TESTING while compiling dependencies
-set(BUILD_TESTING_TMP ${BUILD_TESTING})
-set(BUILD_TESTING OFF CACHE BOOL "Temporarily disable testing" FORCE)
+# ----------- Catch2 -----------
 
-set(BUILD_EXAMPLES_TMP ${BUILD_EXAMPLES})
-set(BUILD_EXAMPLES OFF CACHE BOOL "Temporarily disable examples" FORCE)
-
-# Standard fetching for Catch2, capnproto and eigen
-#CPMAddPackage(
-#  Catch2
-#  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-#  GIT_TAG        devel
-#)
-
-add_vendored_dependency(
-	PREFIX vendor/catch2
-	NAME Catch2
-	VERSION 3.0
-)
+if(BUILD_TESTING_TMP)
+	add_vendored_dependency(
+		PREFIX vendor/catch2
+		NAME Catch2
+		VERSION 3.0
+	)
+endif()
 
 # We need to include the test scan macro manually if we downloaded it manually
 if(Catch2_VENDORED)
@@ -92,6 +93,8 @@ else()
 	list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
 endif()
 
+# ----------- ZLib -----------
+
 set(SKIP_INSTALL_ALL On)
 add_vendored_dependency(
 	PREFIX vendor/zlib
@@ -99,13 +102,6 @@ add_vendored_dependency(
 	VERSION 1.2.0
 )
 unset(SKIP_INSTALL_ALL)
-
-#CPMAddPackage(
-#	NAME ZLIB
-#	GIT_REPOSITORY https://github.com/madler/zlib.git
-#	GIT_TAG        v1.2.13
-#	VERSION        1.2.0
-#)
 
 if(ZLIB_VENDORED)
 	set(ZLIB_CUSTOM_INCLUDES $<BUILD_INTERFACE:${ZLIB_SOURCE_DIR}> $<BUILD_INTERFACE:${ZLIB_BINARY_DIR}>)
@@ -135,12 +131,20 @@ set(ZLIB_LIBRARY ZLIB::zlib)
 set(ZLIB_INCLUDE_DIRECTORIES "")
 set(ZLIB_INCLUDE_DIR "")
 
+# ----------- ZLib -----------
+
 add_vendored_dependency(
 	PREFIX vendor/sqlite3
 	NAME SQLite3
 	VERSION 3.9.0
 )
 
+# ----------- Cap'n'proto -----------
+
+# Bypass automatic ZLIB detection,
+# as it doesn't work properly with
+# our vendored ZLIB. Instead, we
+# force it into the build below.
 set(WITH_ZLIB OFF)
 set(WITH_FIBERS ON CACHE STRING "Whether or not to build libkj-async with fibers")
 add_vendored_dependency(
@@ -160,6 +164,8 @@ if(CapnProto_VENDORED)
 	endif()
 endif()
 
+# ----------- yaml-cpp -----------
+
 add_vendored_dependency(
 	PREFIX vendor/yaml-cpp
 	NAME yaml-cpp
@@ -176,26 +182,7 @@ else()
 	endif()
 endif()
 
-#CPMAddPackage(
-#  NAME CapnProto
-#  GIT_REPOSITORY https://github.com/capnproto/capnproto.git
-#  GIT_TAG        master
-#  VERSION        0.11
-#  OPTIONS
-#    "WITH_ZLIB OFF"
-#)
-
-# We use Capn'n'protos builtin install rules
-
-# Cap'n'proto provides a great macro to configure compilation of its interface files
-# This macro either uses the target capnp_tool (for self-build) or the CAPNP_INCLUDE_DIRECTORY
-# variable (when configured by find_package) to define its reference directories.
-# However, when using a find_package call through CPMAddPackage, the CAPNP_INCLUDE_DIRECTORY
-# does not get propagated to this scope. Therefore, we have to extract it manually.
-
-#if(CapnProto_DIR)
-#	get_property(CAPNP_INCLUDE_DIRECTORY TARGET CapnProto::capnp PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
-#endif()
+# ----------- Eigen3 -----------
 
 add_vendored_dependency(
 	PREFIX vendor/eigen3
@@ -203,10 +190,11 @@ add_vendored_dependency(
 	VERSION 3.4
 )
 
+# ----------- HDF5 -----------
+
 set(FSC_WITH_HDF5 On)
 set(HDF5_EXTERNALLY_CONFIGURED 1)
 set(H5_ZLIB_HEADER "zlib.h")
-#set(HDF5_LIB_DEPENDENCIES ZLIB::ZLIB)
 set(HDF5_EXPORTED_TARGETS "FSCTargets")
 set(LINK_COMP_LIBS ZLIB::ZLIB)
 
@@ -227,12 +215,7 @@ else()
 	set(HDF5_LIBS hdf5::hdf5 hdf5::hdf5_hl hdf5::hdf5_cpp hdf5::hdf5_hl_cpp)
 endif()
 
-# NetCDF requires a pre-built HDF5 to work, so we can't package it in here :/
-#CPMAddPackage(
-#	NAME netCDF
-#	GIT_REPOSITORY https://github.com/Unidata/netcdf-c
-#	GIT_TAG        v4.9.0
-#)
+# ----------- LibSSH2 -----------
 
 add_vendored_dependency(
 	PREFIX vendor/libssh2
@@ -240,20 +223,9 @@ add_vendored_dependency(
 	VERSION 1.10
 )
 
-	
-
-#CPMAddPackage(
-#	NAME Libssh2
-#	GIT_REPOSITORY https://github.com/libssh2/libssh2
-#	GIT_TAG        libssh2-1.10.0
-#	VERSION        1.10.0
-#)
-
 if(Libssh2_VENDORED)
 	target_compile_definitions(libssh2 PRIVATE LIBSSH2DEBUG)
 	set(LIBSSH2_LIBRARY libssh2)
-	
-	# TODO: Install rules?
 elseif(TARGET Libssh2::libssh2)
 	set(LIBSSH2_LIBRARY Libssh2::libssh2)
 elseif(TARGET Libssh2::libssh2_shared)
@@ -266,19 +238,17 @@ else()
 	MESSAGE(SEND_ERROR "Neither Libssh2::libssh2, Libssh2::libssh2_shared, libssh2::libssh2, nor libssh2::libssh2_shared were found")
 endif()
 
+# ----------- Pybind11 -----------
+
 if(FSC_WITH_PYTHON)
 	add_vendored_dependency(
 		PREFIX vendor/pybind11
 		NAME pybind11
 		VERSION 2.9.1
 	)
-	#CPMAddPackage(
-	#	NAME pybind11
-	#	GIT_REPOSITORY https://github.com/pybind/pybind11.git
-	#	GIT_TAG        v2.9.1
-	#	VERSION        2.9.1
-	#)
 endif()
+
+# ----------- Botan -----------
 
 add_vendored_dependency(
 	PREFIX vendor/botan
@@ -295,29 +265,26 @@ if(Botan_VENDORED)
 	get_property(BOTAN_HEADERS TARGET botan_selfbuilt PROPERTY BUILT_HEADERS)
 	INSTALL(DIRECTORY "${BOTAN_HEADERS}/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
-	
-# For Botan, we have to be fancier, as it does not use CMake
-#CPMAddPackage(
-#	NAME Botan
-#	GIT_REPOSITORY https://github.com/randombit/botan.git
-#	GIT_TAG 2.19.0
-#	VERSION 2.19.0
-#	DOWNLOAD_ONLY
-#)
+
+# ----------- Jsonscons -----------
 
 add_library(fusionsc_jsonscons INTERFACE)
 target_include_directories(fusionsc_jsonscons INTERFACE vendor/jsonscons/include)
 
-# Re-enable BUILD_TESTING if desired
-set(BUILD_TESTING ${BUILD_TESTING_TMP} CACHE BOOL "" FORCE)
-set(BUILD_EXAMPLES ${BUILD_EXAMPLES_TMP} CACHE BOOL "" FORCE)
-
-add_subdirectory(vendor/capfuzz)
+# ----------- Happly -----------
 
 add_subdirectory(vendor/happly)
 
+# ----------- Poissongen -----------
+
 add_library(fusionsc_poissongen INTERFACE)
 target_include_directories(fusionsc_poissongen INTERFACE vendor/pdg)
+
+# ----------- Capfuzz (internal) -----------
+
+add_subdirectory(vendor/capfuzz)
+
+# ===================== Dependency aggregation =====================
 
 add_library(deps INTERFACE)
 target_link_libraries(
@@ -367,6 +334,37 @@ if(FSC_WITH_PYTHON)
 	)
 endif()
 
+# ===================== Build orchestration =====================
+
+# Re-enable BUILD_TESTING if desired
+set(BUILD_TESTING ${BUILD_TESTING_TMP} CACHE BOOL "" FORCE)
+set(BUILD_EXAMPLES ${BUILD_EXAMPLES_TMP} CACHE BOOL "" FORCE)
+
+# Set up testing subsystem
+include(Catch)
+
+# First build ancillary Cap'n'proto infrastructure
+add_subdirectory(src/c++/cupnp) # Capnproto for CUDA
+add_subdirectory(src/c++/capnpc-java) # Rudimentary Java compiler
+add_subdirectory(src/c++/capnp-sphinx) # WIP Capnproto Sphinx bridge
+
+# Compile the service interfaces
+add_subdirectory(src/python/fusionsc/serviceDefs/fusionsc)
+
+# Build and install the libraries & tools
+add_subdirectory(src/c++)
+
+# Build the documentation
+add_subdirectory(src/docs)
+
+# Install exports
+install(EXPORT FSCTargets DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake NAMESPACE FSC::)
+export(EXPORT FSCTargets NAMESPACE fsc FILE FSCExports.cmake)
+
+# ===================== Goodies =====================
+
+# ----------- ASAN -----------
+
 option(FSC_SANITIZE_ADDRESS "Whether to enable address sanitizer")
 
 if(FSC_SANITIZE_ADDRESS)
@@ -378,6 +376,8 @@ if(FSC_SANITIZE_ADDRESS)
 		target_link_options(kj PUBLIC "-fsanitize=address")
 	endif()
 endif()
+
+# ----------- march=native -----------
 
 option(FSC_ARCH_NATIVE "Whether to build for host architecture")
 
@@ -395,30 +395,8 @@ else()
 	set(FSC_ARCH_NATIVE_RESULT "Disabled")
 endif()
 
-option(FSC_WITH_OPENMP "Whether to enable OpenMP support" On)
+# ----------- CLANG coverage and instrumentation -----------
 
-# Set up the scikit build
-if(SKBUILD)
-	add_custom_target(fsc-skbuild-target)
-	set(FSC_WITH_OPENMP Off CACHE BOOL "OpenMP disabled in scikit build")
-endif()
-
-# Set up testing subsystem
-include(Catch)
-
-# First build the cupnp library / compiler
-add_subdirectory(src/c++/cupnp)
-add_subdirectory(src/c++/capnpc-java)
-add_subdirectory(src/c++/capnp-sphinx)
-
-# Build and install the libraries
-add_subdirectory(src/python/fusionsc/serviceDefs/fusionsc) # This directory contains the service interface
-add_subdirectory(src/c++)
-
-# Build the documentation
-add_subdirectory(src/docs)
-
-# Coverage testing
 option(FSC_WITH_INSTRUMENTATION "Whether to perform instrumentation")
 if(FSC_WITH_INSTRUMENTATION AND (CMAKE_CXX_COMPILER_ID STREQUAL "Clang") AND BUILD_TESTING)
 
@@ -445,10 +423,39 @@ if(FSC_WITH_INSTRUMENTATION AND (CMAKE_CXX_COMPILER_ID STREQUAL "Clang") AND BUI
 	)
 endif()
 
-install(EXPORT FSCTargets DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake NAMESPACE FSC::)
-export(EXPORT FSCTargets NAMESPACE fsc FILE FSCExports.cmake)
+# ----------- Extra build targets -----------
 
-# Print information about build
+# Generates a new Cap'n'proto id
+add_custom_target(
+	capnp-id
+	COMMAND capnp_tool id
+)
+
+# Copies the library into the source folder
+# (great for .pth dev installs)
+if(FSC_WITH_PYTHON)
+	add_custom_target(
+		copy-pybindings
+		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:fsc-python-bindings> ${CMAKE_CURRENT_SOURCE_DIR}/src/python/fusionsc
+	)
+endif()
+
+# ===================== Scikit build setup (pip build) =====================
+
+if(SKBUILD)
+	add_custom_target(fsc-skbuild-target)
+	
+	# FusionSC command line tool
+	add_dependencies(fsc-skbuild-target fsc-tool)
+	install(TARGETS fsc-tool RUNTIME DESTINATION ${SKBUILD_SCRIPTS_DIR} COMPONENT SKBUILD)
+	
+	# FusionSC native python library
+	add_dependencies(fsc-skbuild-target fsc-python-bindings)
+	INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION ${SKBUILD_PLATLIB_DIR}/fusionsc COMPONENT SKBUILD)
+endif()
+
+# ===================== Summary =====================
+
 message(STATUS "")
 message(STATUS "--- Configuration options ---")
 message(STATUS "Python support: ${FSC_WITH_PYTHON}")
@@ -456,3 +463,6 @@ message(STATUS "CUDA support: ${FSC_WITH_CUDA}")
 message(STATUS "OpenMP support: ${OPENMP_CXX_FOUND}")
 message(STATUS "OpenMP usage: ${FSC_WITH_OPENMP}")
 message(STATUS "Native Arch support: ${FSC_ARCH_NATIVE_RESULT}")
+message(STATUS "Tests: ${BUILD_TESTING}")
+message(STATUS "")
+message(STATUS "")

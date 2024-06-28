@@ -36,9 +36,4 @@ add_executable(
 
 target_link_libraries(write-git-hash deps)
 
-if(SKBUILD)
-	add_dependencies(fsc-skbuild-target fsc-tool)
-	install(TARGETS fsc-tool RUNTIME DESTINATION ${SKBUILD_SCRIPTS_DIR} COMPONENT SKBUILD)
-endif()
-
 install(TARGETS fsc-tool EXPORT FSCTargets)

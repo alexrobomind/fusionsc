@@ -27,7 +27,6 @@ if(FSC_WITH_PYTHON)
 		
 		helpers.cpp
 	)
-	# capnp.cpp
 
 	target_link_libraries(
 		fsc-python-bindings
@@ -36,14 +35,6 @@ if(FSC_WITH_PYTHON)
 	)
 
 	set_target_properties(fsc-python-bindings PROPERTIES OUTPUT_NAME "native")
-	
-	if(SKBUILD)
-		# If we build with scikit-build, this library needs to go into a special path that mirrors the package structure
-		# Scikit will then automatically detect its presence and copy it into the source tree before packaging or creating
-		# editable installs (!!!).
-		add_dependencies(fsc-skbuild-target fsc-python-bindings)
-		INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION ${SKBUILD_PLATLIB_DIR}/fusionsc COMPONENT SKBUILD)
-	endif()
 	
 	if(DEFINED FSC_PYLIB_DIR)
 		set(INSTALL_DIR ${FSC_PYLIB_DIR})

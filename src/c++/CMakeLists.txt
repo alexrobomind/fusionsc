@@ -40,16 +40,3 @@ add_subdirectory(fsc)
 # Now we can build tools / bindings
 add_subdirectory(tools)
 add_subdirectory(pybindings)
-
-# Some fun extra targets
-add_custom_target(
-	capnp-id
-	COMMAND capnp_tool id
-)
-
-if(FSC_WITH_PYTHON)
-	add_custom_target(
-		copy-pybindings
-		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:fsc-python-bindings> ${CMAKE_CURRENT_SOURCE_DIR}/../python/fusionsc
-	)
-endif()
