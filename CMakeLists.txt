@@ -219,11 +219,12 @@ add_vendored_dependency(
 	FIND_ARGS COMPONENTS C CXX HL
 )
 
-if(HDF5_VENDORED)
-	add_library(hdf5::hdf5 ALIAS hdf5-static)
-	add_library(hdf5::hdf5_cpp ALIAS hdf5_cpp-static)
-	add_library(hdf5::hdf5_hl ALIAS hdf5_hl-static)
-	add_library(hdf5::hdf5_hl_cpp ALIAS hdf5_hl_cpp-static)
+if(HDF5_VENDORED OR NOT TARGET hdf5-shared)
+	set(HDF5_LIBS hdf5-static hdf5_hl-static hdf5_cpp-static hdf5_hl_cpp-static)
+elseif(TARGET hdf5-static)
+	set(HDF5_LIBS hdf5-shared hdf5_hl-shared hdf5_cpp-shared hdf5_hl_cpp-shared)
+else()
+	set(HDF5_LIBS hdf5::hdf5 hdf5::hdf5_hl hdf5::hdf5_cpp hdf5::hdf5_hl_cpp)
 endif()
 
 # NetCDF requires a pre-built HDF5 to work, so we can't package it in here :/
@@ -332,10 +333,7 @@ target_link_libraries(
 	CapnProto::kj
 	Eigen3::Eigen
 	happly::happly
-	hdf5::hdf5
-	hdf5::hdf5_hl
-	hdf5::hdf5_cpp
-	hdf5::hdf5_hl_cpp
+	${HDF5_LIBS}
 	${LIBSSH2_LIBRARY}
 	SQLite::SQLite3
 	ZLIB::ZLIB
