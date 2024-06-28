@@ -60,12 +60,18 @@
 #define KJ_HAS_COMPILER_FEATURE(x) 0
 #endif
 
+#if defined(_MSVC_LANG) && !defined(__clang__)
+#define KJ_CPP_STD _MSVC_LANG
+#else
+#define KJ_CPP_STD __cplusplus
+#endif
+
 KJ_BEGIN_HEADER
 
 #ifndef KJ_NO_COMPILER_CHECK
 // Technically, __cplusplus should be 201402L for C++14, but GCC 4.9 -- which is supported -- still
 // had it defined to 201300L even with -std=c++14.
-#if __cplusplus < 201300L && !__CDT_PARSER__ && !_MSC_VER
+#if KJ_CPP_STD < 201300L && !__CDT_PARSER__
   #error "This code requires C++14. Either your compiler does not support it or it is not enabled."
   #ifdef __GNUC__
     // Compiler claims compatibility with GCC, so presumably supports -std.
@@ -77,7 +83,7 @@ KJ_BEGIN_HEADER
   #if __clang__
     #if __clang_major__ < 5
       #warning "This library requires at least Clang 5.0."
-    #elif __cplusplus >= 201402L && !__has_include(<initializer_list>)
+    #elif KJ_CPP_STD >= 201402L && !__has_include(<initializer_list>)
       #warning "Your compiler supports C++14 but your C++ standard library does not.  If your "\
                "system has libc++ installed (as should be the case on e.g. Mac OSX), try adding "\
                "-stdlib=libc++ to your CXXFLAGS."
@@ -103,7 +109,7 @@ KJ_BEGIN_HEADER
 #include <initializer_list>
 #include <string.h>
 
-#if __linux__ && __cplusplus > 201200L
+#if __linux__ && KJ_CPP_STD > 201200L
 // Hack around stdlib bug with C++14 that exists on some Linux systems.
 // Apparently in this mode the C library decides not to define gets() but the C++ library still
 // tries to import it into the std namespace. This bug has been fixed at the source but is still
@@ -275,7 +281,7 @@ typedef unsigned char byte;
 #define KJ_UNUSED_MEMBER
 #endif
 
-#if __cplusplus > 201703L || (__clang__  && __clang_major__ >= 9 && __cplusplus >= 201103L)
+#if KJ_CPP_STD > 201703L || (__clang__  && __clang_major__ >= 9 && KJ_CPP_STD >= 201103L)
 // Technically this was only added to C++20 but Clang allows it for >= C++11 and spelunking the
 // attributes manual indicates it first came in with Clang 9.
 #define KJ_NO_UNIQUE_ADDRESS [[no_unique_address]]
@@ -323,10 +329,11 @@ KJ_NORETURN(void unreachable());
 
 }  // namespace _ (private)
 
-#ifdef KJ_DEBUG
 #if _MSC_VER && !defined(__clang__) && (!defined(_MSVC_TRADITIONAL) || _MSVC_TRADITIONAL)
 #define KJ_MSVC_TRADITIONAL_CPP 1
 #endif
+
+#ifdef KJ_DEBUG
 #if KJ_MSVC_TRADITIONAL_CPP
 #define KJ_IREQUIRE(condition, ...) \
     if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
@@ -618,7 +625,7 @@ template <> constexpr bool isIntegral<unsigned long long>() { return true; }
 template <typename T>
 struct CanConvert_ {
   static int sfinae(T);
-  static bool sfinae(...);
+  static char sfinae(...);
 };
 
 template <typename T, typename U>
@@ -1314,7 +1321,7 @@ inline T* readMaybe(T* ptr) { return ptr; }
 
 #define KJ_IF_MAYBE(name, exp) if (auto name = ::kj::_::readMaybe(exp))
 
-#if __GNUC__
+#if __GNUC__ || __clang__
 // These two macros provide a friendly syntax to extract the value of a Maybe or return early.
 //
 // Use KJ_UNWRAP_OR_RETURN if you just want to return a simple value when the Maybe is null:
@@ -1347,6 +1354,9 @@ inline T* readMaybe(T* ptr) { return ptr; }
 // "statement expressions" extension. IIFEs don't do the trick here because a lambda cannot
 // return out of the parent scope. These macros should therefore only be used in projects that
 // target GCC or GCC-compatible compilers.
+//
+// `__GNUC__` is not defined when using LLVM's MSVC-compatible compiler driver `clang-cl` (even
+// though clang supports the required extension), hence the additional `|| __clang__`.
 
 #define KJ_UNWRAP_OR_RETURN(value, ...) \
   (*({ \
@@ -1832,6 +1842,7 @@ public:
   inline bool operator==(const ArrayPtr& other) const {
     if (size_ != other.size_) return false;
     if (isIntegral<RemoveConst<T>>()) {
+      if (size_ == 0) return true;
       return memcmp(ptr, other.ptr, size_ * sizeof(T)) == 0;
     }
     for (size_t i = 0; i < size_; i++) {
@@ -1839,7 +1850,9 @@ public:
     }
     return true;
   }
+#if !__cpp_impl_three_way_comparison
   inline bool operator!=(const ArrayPtr& other) const { return !(*this == other); }
+#endif
 
   template <typename U>
   inline bool operator==(const ArrayPtr<U>& other) const {
@@ -1849,8 +1862,10 @@ public:
     }
     return true;
   }
+#if !__cpp_impl_three_way_comparison
   template <typename U>
   inline bool operator!=(const ArrayPtr<U>& other) const { return !(*this == other); }
+#endif
 
   template <typename... Attachments>
   Array<T> attach(Attachments&&... attachments) const KJ_WARN_UNUSED_RESULT;
