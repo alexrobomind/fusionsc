@@ -10,7 +10,6 @@ include(CTest)
 include(GNUInstallDirs)
 
 option(BUILD_SHARED_LIBS "Build Shared Libraries" OFF)
-option(BUILD_STATIC_LIBS "Build Static Libraries" ON)
 
 # ===================== Language setup =====================
 
