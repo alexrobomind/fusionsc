@@ -1,0 +1,89 @@
+{% set name = "fusionsc" %}
+{% set version = "2.3.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  git_rev: main
+  git_url: https://github.com/alexrobomind/fusionsc
+  git_depth: 1
+#  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/fusionsc-{{ version }}.tar.gz
+#  sha256: 1aac64b32796a0f7afe5cbce6a56b014637d1ea868eb7297ec955b09c912089b
+
+build:
+  skip: true  # [py2k]
+  entry_points:
+    - fusionsc-config = fusionsc.config:configCli
+  number: 0
+
+requirements:
+  build:
+    - {{compiler('cxx')}}
+    - {{compiler('c')}}
+    - git
+    - cmake >=3.15
+  host:
+    - python
+    - scikit-build-core
+    - setuptools-scm >=6.2
+    - numpy ==1.19.5  # [py<310]
+    - numpy ==1.23.4  # [py>=310 and py < 312]
+    - numpy ==1.26.2  # [py>=312]
+    - pip
+    - hdf5
+    - zlib
+    - libssh2
+    - libsqlite
+    - yaml-cpp   
+    - llvm-openmp  # [osx]
+    - libgomp      # [linux]
+  run:
+    - python
+    - typing-extensions >=3.10
+    - importlib_resources
+    - numpy >=1.19.5,<2  # [py<310]
+    - numpy >=1.23.4,<2  # [py>=310 and py < 312]
+    - numpy >=1.26.2,<2  # [py>=312]
+    - nest-asyncio
+    - netcdf4
+    - scipy
+
+test:
+  imports:
+    - fusionsc
+  commands:
+    - pip check
+    - fusionsc-config --help
+    - fusionsc --help
+  requires:
+    - pip
+
+about:
+  home: https://github.com/alexrobomind/fusionsc
+  license: MIT AND BSD-3-Clause AND LGPL-2.1 AND BSD-4.3TAHOE AND BSD-2-Clause AND Apache-2.0 AND MPL-2.0
+  license_file:
+    - LICENSE.txt
+    - vendor/botan/license.txt
+    - vendor/capnproto/LICENSE
+    - vendor/capnproto/c++/LICENSE.txt
+    - vendor/catch2/LICENSE.txt
+    - vendor/eigen3/COPYING.APACHE
+    - vendor/eigen3/COPYING.BSD
+    - vendor/eigen3/COPYING.README
+    - vendor/eigen3/bench/btl/COPYING
+    - vendor/hdf5/COPYING
+    - vendor/hdf5/config/sanitizer/LICENSE
+    - vendor/hdf5/src/H5FDsubfiling/mercury/LICENSE.txt
+    - vendor/jsonscons/LICENSE
+    - vendor/libssh2/COPYING
+    - vendor/mbedtls/LICENSE
+    - vendor/pdg/LICENSE
+    - vendor/pybind11/LICENSE
+    - vendor/yaml-cpp/LICENSE
+    - vendor/zlib/LICENSE
+
+extra:
+  recipe-maintainers:
+    - alexrobomind
