@@ -6,6 +6,7 @@
 #include <capnp/capability.h>
 
 #include <list>
+#include <algorithm>
 
 using kj::byte;
 using kj::Array;

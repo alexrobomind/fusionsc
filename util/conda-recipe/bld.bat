@@ -1,5 +1,12 @@
 mkdir build
 cd build
-cmake -DFSC_DEP_PREF_VENDORED=Off -DFSC_DEP_IGNORE_VERSIONS=On -DBUILD_SHARED_LIBS=On ..
-cmake --build . --target fsc-python-bindings fsc-tool --config Release
-cmake --install . --config Release
+
+cmake -E echo === Configuring ===
+cmake -E echo Config command command cmake %CMAKE_ARGS% -DFSC_DEP_PREF_VENDORED=Off -DFSC_DEP_IGNORE_VERSIONS=On -DFSC_PYLIB_DIR:PATH=%SP_DIR% ..
+cmake %CMAKE_ARGS% -DFSC_DEP_PREF_VENDORED=Off -DFSC_DEP_IGNORE_VERSIONS=On -DFSC_PYLIB_DIR:PATH=%SP_DIR% ..
+
+cmake -E echo === Building ===
+cmake --build .
+
+cmake -E echo === Installing ===
+cmake --install .
