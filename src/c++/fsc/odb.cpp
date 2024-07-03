@@ -1733,7 +1733,7 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
 		return nullptr;
 	}).then([this](Maybe<Own<ObjectDBEntry>> e) -> Promise<Maybe<Own<ObjectDBEntry>>> {
 		if(e == nullptr)
-			return e;
+			return mv(e);
 		
 		return kj::joinPromises(childImports.releaseAsArray())
 		.then([e = mv(e)]() mutable {

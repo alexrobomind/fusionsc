@@ -92,7 +92,7 @@ struct Shared {
 	Shared(Shared<T>&& other) = default;
 	Shared<T>& operator=(Shared<T>&& other) = default;
 		
-	~Shared() noexcept = default;
+	~Shared() noexcept {};
 	
 	T& get() { return *(impl -> payload); }
 	T& operator*() { return get(); }
@@ -150,7 +150,7 @@ struct AtomicShared {
 	AtomicShared(AtomicShared<T>&& other) = default;
 	AtomicShared<T>& operator=(AtomicShared<T>&& other) = default;
 		
-	~AtomicShared() noexcept = default;
+	~AtomicShared() noexcept {};
 	
 	T& get() { return *(impl -> payload); }
 	const T& get() const { return *(impl -> payload); }
