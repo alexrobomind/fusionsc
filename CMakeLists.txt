@@ -11,6 +11,7 @@ include(GNUInstallDirs)
 
 option(BUILD_SHARED_LIBS "Build Shared Libraries" OFF)
 
+
 # ===================== Language setup =====================
 
 option(FSC_WITH_CUDA "Whether to use CUDA compilation")
@@ -22,6 +23,9 @@ endif()
 set(CMAKE_CXX_EXTENSIONS On)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 include(src/cmake/OptimizeForTarget.cmake)
+
+# Enable auto-export of symbols to DLL
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 # ===================== Dependency setup =====================
 

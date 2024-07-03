@@ -36,7 +36,8 @@ requirements:
     - zlib
     - libssh2
     - libsqlite
-    - yaml-cpp   
+    - yaml-cpp
+    - pybind11
     - llvm-openmp  # [osx]
     - libgomp      # [linux]
   run:
