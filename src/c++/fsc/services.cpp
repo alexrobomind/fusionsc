@@ -147,7 +147,7 @@ Promise<Temporary<Warehouse::StoredObject>> connectWarehouse(kj::StringPtr urlSt
 			Temporary<Warehouse::StoredObject> result;
 			result.setFolder(root);
 			result.setAsGeneric(root.castAs<Warehouse::GenericObject>());
-			return result;
+			return mv(result);
 		}
 	});
 }
