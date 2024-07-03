@@ -171,10 +171,10 @@ void writeTensor(const TensorType& in, T2 builder) {
 }
 
 template<typename T>
-void validateTensor(T t, kj::ArrayPtr<const Maybe<uint32_t>> shapeConstraints = nullptr) {
+void validateTensor(T t, kj::ArrayPtr<const Maybe<uint64_t>> shapeConstraints = nullptr) {
 	auto shape = t.getShape();
 	
-	uint32_t shapeProd = 1;
+	uint64_t shapeProd = 1;
 	for(auto el : shape)
 		shapeProd *= el;
 	
@@ -187,7 +187,7 @@ void validateTensor(T t, kj::ArrayPtr<const Maybe<uint32_t>> shapeConstraints = 
 	
 	for(auto dimension : kj::range(0, desiredRank)) {
 		KJ_IF_MAYBE(pExp, shapeConstraints[dimension]) {
-			uint32_t expectedSize = *pExp;
+			uint64_t expectedSize = *pExp;
 			KJ_REQUIRE(shape[dimension] == expectedSize, "Shape mismatch along dimension", dimension);
 		}
 	}
