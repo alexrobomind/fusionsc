@@ -3,6 +3,8 @@
 #include <kj/encoding.h>
 #include <capnp/serialize-packed.h>
 
+#include <cctype>
+
 using capnp::DynamicList;
 using capnp::DynamicValue;
 using capnp::DynamicStruct;
