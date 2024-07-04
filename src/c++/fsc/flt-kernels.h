@@ -312,8 +312,8 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		++eventCount; \
 	}
 	
-	auto recordFieldline = [&]() {
-		auto rec = currentEvent().mutateRecord();
+	auto recordFieldline = [&](::fsc::cu::FLTKernelEvent::Builder evt) {
+		auto rec = evt.mutateRecord();
 		V3 fv = interpolator(fieldData, x);
 		rec.setFieldStrength(std::sqrt(fv[0] * fv[0] + fv[1] * fv[1] + fv[2] * fv[2]));
 	};
@@ -353,7 +353,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		
 		// Position recording
 		if(request.getRecordEvery() != 0 && (step % request.getRecordEvery() == 0)) {
-			recordFieldline();			
+			recordFieldline(currentEvent());			
 			FSC_FLT_LOG_EVENT(x, distance)
 		}
 					
@@ -799,10 +799,18 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		// Since we still have one event in the buffer: Let's record the field strength
 		// at the end point
 		
-		// Copy the recorded event once
-		cupnp::copyData(myData.mutateEvents()[eventCount], myData.mutateEvents()[eventCount + 1]);
-		recordFieldline();
-		++eventCount;
+		if(eventCount > 0) {
+			auto prevEvt = myData.mutateEvents()[eventCount - 1];
+			
+			// If last recorded event is not a record, duplicate
+			// it and replace the previous version with a record event
+			if(!prevEvt.isRecord()) {
+				auto curEvt = myData.mutateEvents()[eventCount];
+				cupnp::copyData(prevEvt, curEvt);
+				recordFieldline(prevEvt);
+				++eventCount;
+			}
+		}
 	}
 	
 	// KJ_DBG("Kernel returned", (int) myData.getStopReason());
