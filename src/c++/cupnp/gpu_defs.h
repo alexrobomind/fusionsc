@@ -80,9 +80,7 @@ namespace cupnp {
 	
 	namespace internal {
 		// Implementation of kj::Array for GPU devices
-		struct DeviceArrayDisposer final : public kj::ArrayDisposer {
-			const static DeviceArrayDisposer instance;
-			
+		struct DeviceArrayDisposer final : public kj::ArrayDisposer {			
 			inline DeviceArrayDisposer() = default;
 			
 			inline void disposeImpl(
@@ -97,7 +95,7 @@ namespace cupnp {
 			}
 		};
 		
-		const inline DeviceArrayDisposer DeviceArrayDisposer::instance;
+		const inline DeviceArrayDisposer DEVICE_ARRAY_DISPOSTER_INSTANCE;
 	}
 	
 	template<typename T>
@@ -106,6 +104,6 @@ namespace cupnp {
 		auto err = deviceMalloc(&ptr, size * sizeof(T));
 		KJ_REQUIRE(err == 0, "Device allocation failure");
 		
-		return kj::Array<T>(reinterpret_cast<T*>(ptr), size, internal::DeviceArrayDisposer::instance);
+		return kj::Array<T>(reinterpret_cast<T*>(ptr), size, internal::DEVICE_ARRAY_DISPOSTER_INSTANCE);
 	}
 }
