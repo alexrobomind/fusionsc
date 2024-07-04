@@ -642,6 +642,43 @@ CUPNP_FUNCTION void swapData(T t1, T t2) {
 		std::swap(*(data1 + dsWords1 + i), *(data2 + dsWords2 + i));*/
 }
 
+template<typename T>
+CUPNP_FUNCTION void copyData(T t1, T t2) {
+	/*uint16_t dsWords1 = getDataSectionSizeInWords(t1.structure);
+	uint16_t dsWords2 = getDataSectionSizeInWords(t2.structure);
+	
+	CUPNP_REQUIRE(dsWords1 == dsWords2);
+	
+	// uint16_t nPtr1 = getPointerSectionSize(t1.structure);
+	// uint16_t nPtr2 = getPointerSectionSize(t2.structure);
+	
+	// CUPNP_REQUIRE(nPtr1 == nPtr2);
+	
+	uint16_t nWords = std::min(dsWords1, dsWords2);
+	// uint16_t nPtrs  = std::min(nPtr1, nPtr2);*/
+	
+	char* data1 = (char*) t1.data.ptr;
+	char* data2 = (char*) t2.data.ptr;
+	
+	/*for(uint16_t i = 0; i < nWords; ++i) {
+		uint64_t tmp = data1[i];
+		data1[i] = data2[i];
+		data2[i] = tmp;
+	}*/
+	
+	uint32_t dsBytes1 = t1.dataSectionSize;
+	uint32_t dsBytes2 = t2.dataSectionSize;
+	
+	uint32_t nBytes = std::min(dsBytes1, dsBytes2);
+	
+	for(uint32_t i = 0; i < nBytes; ++i) {
+		data2[i] = data1[i];
+	}
+	
+	/*for(uint16_t i = 0; i < nPtrs; ++i)
+		std::swap(*(data1 + dsWords1 + i), *(data2 + dsWords2 + i));*/
+}
+
 /**
  * Reads the in-memory information at the given location and tries
  * to decode it as a near- or far-pointer. Returns a reference

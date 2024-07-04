@@ -282,6 +282,10 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		return result;
 	};
 	
+	auto currentEvent = [&]() {
+		return myData.mutateEvents()[eventCount];
+	};
+		
 	// The kernel terminates its execution with this macro
 	#define FSC_FLT_RETURN(reason) {\
 		myData.setStopReason(::fsc::cu::FLTStopReason::reason); \
@@ -308,8 +312,10 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		++eventCount; \
 	}
 	
-	auto currentEvent = [&]() {
-		return myData.mutateEvents()[eventCount];
+	auto recordFieldline = [&]() {
+		auto rec = currentEvent().mutateRecord();
+		V3 fv = interpolator(fieldData, x);
+		rec.setFieldStrength(std::sqrt(fv[0] * fv[0] + fv[1] * fv[1] + fv[2] * fv[2]));
 	};
 	
 	RFLM flm(flmData);
@@ -347,10 +353,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		
 		// Position recording
 		if(request.getRecordEvery() != 0 && (step % request.getRecordEvery() == 0)) {
-			auto rec = currentEvent().mutateRecord();
-			V3 fv = interpolator(fieldData, x);
-			rec.setFieldStrength(std::sqrt(fv[0] * fv[0] + fv[1] * fv[1] + fv[2] * fv[2]));
-			
+			recordFieldline();			
 			FSC_FLT_LOG_EVENT(x, distance)
 		}
 					
@@ -673,7 +676,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 				
 				if(event.getDistance() < request.getIgnoreCollisionsBefore()) {
 					// Swap to end and decrease buffer fill
-					cupnp::swapData(event, eventBuffer[newEventCount]);
+					cupnp::swapData(event, eventBuffer[newEventCount - 1]);
 					--newEventCount;
 				} else {
 					++iEvt;
@@ -785,10 +788,21 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	// !!! The kernel returns by jumping to this label !!!
 	THE_END:
 	
+	// Restore event count from state
+	eventCount = state.getEventCount();
+	
 	if(myData.getStopReason() == ::fsc::cu::FLTStopReason::EVENT_BUFFER_FULL) {
 		if(step == state.getNumSteps()) {
 			myData.setStopReason(::fsc::cu::FLTStopReason::COULD_NOT_STEP);
 		}
+	} else if(request.getRecordEvery() > 0) {
+		// Since we still have one event in the buffer: Let's record the field strength
+		// at the end point
+		
+		// Copy the recorded event once
+		cupnp::copyData(myData.mutateEvents()[eventCount], myData.mutateEvents()[eventCount + 1]);
+		recordFieldline();
+		++eventCount;
 	}
 	
 	// KJ_DBG("Kernel returned", (int) myData.getStopReason());
@@ -800,6 +814,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	state.setDistance(distance);
 	state.setTheta(theta);
 	state.setPhi(unwrappedPhi);
+	state.setEventCount(eventCount);
 	
 	// Note: The event count is not updated here but at the end of the loop
 	// This ensures that events from unfinished steps do not get added

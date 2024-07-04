@@ -626,7 +626,7 @@ struct FLTImpl : public FLT::Server {
 							}
 							pcCuts(iTurnActual, iStartPoint, ppi.getPlaneNo(), 3) = forwardLCs[iEvt];
 							pcCuts(iTurnActual, iStartPoint, ppi.getPlaneNo(), 4) = backwardLCs[iEvt];
-						} else if(evt.isRecord() || (request.getRecordEvery() != 0 && iEvt == events.size() - 1 /* Always record last event */)) {
+						} else if(evt.isRecord()) {
 							++recordedForThis;
 						}
 					}
@@ -697,7 +697,7 @@ struct FLTImpl : public FLT::Server {
 							auto evt = events[iEvt];
 							
 							// Process only "record" events
-							if(!evt.isRecord() && iEvt != events.size() - 1)
+							if(!evt.isRecord())
 								continue;
 							
 							auto loc = getEventLocation(evt);
