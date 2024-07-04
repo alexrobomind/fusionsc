@@ -22,10 +22,9 @@ kj::Array<const byte> fromPythonBuffer(py::buffer buf) {
 	}));
 }
 
-py::list flattenDataRef(uint32_t pickleVersion, capnp::DynamicCapability::Client dynamicRef) {
-	auto payloadType = getRefPayload(dynamicRef.getSchema());
-	
-	kj::Array<kj::Array<const byte>> data = PythonWaitScope::wait(getActiveThread().dataService().downloadFlat(dynamicRef.castAs<DataRef<>>()));
+py::list flattenDataRef(uint32_t pickleVersion, capnp::DynamicCapability::Client dynamicRef) {	
+	DataRef<>::Client staticRef = dynamicRef.castAs<DataRef<>>();
+	kj::Array<kj::Array<const byte>> data = PythonWaitScope::wait(getActiveThread().dataService().downloadFlat(staticRef));
 	
 	py::list result(data.size());
 	
