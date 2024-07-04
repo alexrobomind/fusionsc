@@ -515,7 +515,7 @@ LocalDataRef<T> LocalDataService::publishFlat(kj::Array<kj::Array<const byte>> d
 	return impl -> publishFlat(mv(data)).as<T>();
 }
 
-template<typename C, typename T>
+template<typename C>
 Promise<kj::Array<kj::Array<const byte>>> LocalDataService::downloadFlat(C ref) {
 	return impl -> downloadFlat(ref.template castAs<DataRef<>>());
 }

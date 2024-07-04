@@ -245,7 +245,7 @@ public:
 	//! \name Flat representation
 	///@{
 	
-	template<typename Client, typename T = capnp::FromClient<Client>>
+	template<typename Client>
 	Promise<kj::Array<kj::Array<const byte>>> downloadFlat(Client src);
 	
 	template<typename T>
