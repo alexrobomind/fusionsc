@@ -23,7 +23,7 @@ requirements:
     - {{compiler('cxx')}}
     - {{compiler('c')}}
     - git
-    - cmake >=3.15
+    - cmake >=3.17
   host:
     - python
     - scikit-build-core
