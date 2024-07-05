@@ -580,7 +580,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 			}
 			KJ_LOG(INFO, "Triangles generated");
 			
-			using A = Eigen::array<int64_t, 2>;
+			using A = Eigen::array<Eigen::Index, 2>;
 			
 			Tensor<double, 2> flatVerts = vertices.reshape(A({3, nVerts * (nPhi + 1)}));
 			KJ_LOG(INFO, "Verts reshaped");
