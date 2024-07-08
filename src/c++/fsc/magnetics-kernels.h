@@ -223,9 +223,10 @@ EIGEN_DEVICE_FUNC inline void eqFieldKernel(unsigned int idx, MagKernelContext c
 		return (unsigned int) in;
 	};
 	
-	auto psi = [&](int iZ, int iR) -> double {		
+	auto psi = [&](int iZ, int iR) -> double {	
 		auto idx = psiNR * clamp(iZ, psiNZ) + clamp(iR, psiNR);
-		return psiIn.getData()[idx];
+		double result = psiIn.getData()[idx];
+		return result;
 	};
 	
 	auto bTorNorm = [&](int i) -> double {		
@@ -240,7 +241,7 @@ EIGEN_DEVICE_FUNC inline void eqFieldKernel(unsigned int idx, MagKernelContext c
 		using Interpolator = NDInterpolator<2, DiffStrategy>;
 		using Axis = Interpolator::Axis;
 		
-		Interpolator interp(DiffStrategy(), { Axis(equilibrium.getZMin(), equilibrium.getZMax(), psiNZ), Axis(equilibrium.getRMin(), equilibrium.getRMax(), psiNR) });
+		Interpolator interp(DiffStrategy(), { Axis(equilibrium.getZMin(), equilibrium.getZMax(), psiNZ - 1), Axis(equilibrium.getRMin(), equilibrium.getRMax(), psiNR - 1) });
 		
 		ADS valueAndDeriv = interp(psi, { ADS(z, 2, 0), ADS(r, 2, 1) });
 		psiVal = valueAndDeriv.value();
@@ -254,7 +255,7 @@ EIGEN_DEVICE_FUNC inline void eqFieldKernel(unsigned int idx, MagKernelContext c
 		using Interpolator = NDInterpolator<1, InterpStrategy>;
 		using Axis = Interpolator::Axis;
 		
-		Interpolator interp(InterpStrategy(), { Axis(equilibrium.getFluxAxis(), equilibrium.getFluxBoundary(), nPsiBtor) });
+		Interpolator interp(InterpStrategy(), { Axis(equilibrium.getFluxAxis(), equilibrium.getFluxBoundary(), nPsiBtor - 1) });
 		
 		bTor = interp(bTorNorm, Vec1d { psiVal }) / r;
 	}
