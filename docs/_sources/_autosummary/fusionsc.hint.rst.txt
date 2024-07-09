@@ -1,0 +1,45 @@
+fusionsc.hint
+=============
+
+.. automodule:: fusionsc.hint
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autosummary::
+
+	loadFortranSnapfile
+	loadNetcdfFile
+
+
+
+
+
+.. rubric:: Classes
+
+.. autosummary::
+  :toctree:
+  :template: summary-class.rst
+
+    HintEquilibrium
+
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autofunction:: loadFortranSnapfile
+.. autofunction:: loadNetcdfFile
+
+
+
+

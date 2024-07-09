@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Iota Calculation, Fourier Surface Extraction, and Perturbations (Wendelstein 7-X) &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/mystnb.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/togglebutton.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+        <script>let toggleHintShow = 'Click to show';</script>
+        <script>let toggleHintHide = 'Click to hide';</script>
+        <script>let toggleOpenOnPrint = 'true';</script>
+        <script src="../_static/togglebutton.js"></script>
+        <script>var togglebuttonSelector = '.toggle, .admonition.dropdown, .tag_hide_input div.cell_input, .tag_hide-input div.cell_input, .tag_hide_output div.cell_output, .tag_hide-output div.cell_output, .tag_hide_cell.cell, .tag_hide-cell.cell';</script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Architecture" href="../architecture.html" />
+    <link rel="prev" title="Accelerating computations with field-line mapping" href="Mapping.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Usage examples (How To …)</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="W7X%20Current%20Scan.html">Current scan (W7-X on-site)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="JText.html">Adding 3D perturbations to a 2D equilibrium (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Field%20Interpolation.html">Magnetic field interpolation (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Field%20Line%20Following.html">Field line following (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Poincare.html">Poincare plots (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Connection%20Length.html">Connection length plots (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Heat%20Load%20Calculation.html">Heat load calculation (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Server.html">Creating a server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Client.html">Connecting to a remote server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Mapping.html">Accelerating computations with field-line mapping</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Iota Calculation, Fourier Surface Extraction, and Perturbations (Wendelstein 7-X)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference.html">Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="index.html">Usage examples (How To …)</a> &raquo;</li>
+      <li>Iota Calculation, Fourier Surface Extraction, and Perturbations (Wendelstein 7-X)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/howto/CalculateIota.ipynb.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="iota-calculation-fourier-surface-extraction-and-perturbations-wendelstein-7-x">
+<h1>Iota Calculation, Fourier Surface Extraction, and Perturbations (Wendelstein 7-X)<a class="headerlink" href="#iota-calculation-fourier-surface-extraction-and-perturbations-wendelstein-7-x" title="Permalink to this heading"></a></h1>
+<p>This example shows how to calculate the rotational transform for Wendelstein 7-X.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">fusionsc</span> <span class="k">as</span> <span class="nn">fsc</span>
+<span class="kn">from</span> <span class="nn">fusionsc.devices</span> <span class="kn">import</span> <span class="n">w7x</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>First, we need to perform some setup to make sure W7-X data are available.</p>
+<p>Note: The W7-X geometry is currently protected by the W7-X data access agreement. Therefore, the file referenced below is available to W7-X team members (including external collaborators who signed this agreement) upon request.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">fsc</span><span class="o">.</span><span class="n">resolve</span><span class="o">.</span><span class="n">importOfflineData</span><span class="p">(</span><span class="s1">&#39;../../w7x-op21.fsc&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Now we need to setup the geometry and magnetic field configuration. To speed up the magnetic field calculation, we use a slightly coarser grid.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">field</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">standard</span><span class="p">()</span>
+
+<span class="n">grid</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">defaultGrid</span><span class="p">()</span>
+<span class="n">grid</span><span class="o">.</span><span class="n">nR</span> <span class="o">=</span> <span class="mi">32</span>
+<span class="n">grid</span><span class="o">.</span><span class="n">nZ</span> <span class="o">=</span> <span class="mi">32</span>
+<span class="n">grid</span><span class="o">.</span><span class="n">nPhi</span> <span class="o">=</span> <span class="mi">32</span>
+
+<span class="n">field</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">grid</span><span class="p">)</span><span class="o">.</span><span class="n">cache</span><span class="p">(</span><span class="s2">&quot;surfField.fsc&quot;</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">field</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Finally, we need to decide in which phi planes we want to evaluate our iota and start our surfaces from.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">xStart</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">5.65</span><span class="p">,</span> <span class="mf">6.3</span><span class="p">,</span> <span class="mi">30</span><span class="p">)</span>
+<span class="n">yStart</span> <span class="o">=</span> <span class="mi">0</span> <span class="o">*</span> <span class="n">xStart</span>
+<span class="n">zStart</span> <span class="o">=</span> <span class="mi">0</span> <span class="o">*</span> <span class="n">xStart</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Now it’s time to run our calculation.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">iotas</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">flt</span><span class="o">.</span><span class="n">calculateIota</span><span class="p">(</span>
+    <span class="n">field</span><span class="p">,</span> <span class="p">[</span><span class="n">xStart</span><span class="p">,</span> <span class="n">yStart</span><span class="p">,</span> <span class="n">zStart</span><span class="p">],</span>
+    <span class="mi">200</span><span class="p">,</span> <span class="c1"># Turn count</span>
+    <span class="n">unwrapEvery</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span> <span class="n">distanceLimit</span> <span class="o">=</span> <span class="mf">1e4</span><span class="p">,</span> 
+    <span class="n">targetError</span> <span class="o">=</span> <span class="mf">1e-3</span><span class="p">,</span> <span class="n">minStepSize</span> <span class="o">=</span> <span class="mf">1e-3</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>The iota profile is returned in a shape matching the start point shape, and can be easily plotted.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">xStart</span><span class="p">,</span> <span class="n">iotas</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[&lt;matplotlib.lines.Line2D at 0x1dadea70820&gt;]
+</pre></div>
+</div>
+<img alt="../_images/56eedc0828267e7fb5de335d0b62bb6fed5ea60c20f548ea3fa5613f99dd940c.png" src="../_images/56eedc0828267e7fb5de335d0b62bb6fed5ea60c20f548ea3fa5613f99dd940c.png" />
+</div>
+</div>
+<p>Additionally, the field line tracer can also extract the Fourier decomposition of the magnetic surfaces from the field line.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">modes</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">flt</span><span class="o">.</span><span class="n">calculateFourierModes</span><span class="p">(</span>
+    <span class="n">field</span><span class="p">,</span> <span class="p">[</span><span class="n">xStart</span><span class="p">,</span> <span class="n">yStart</span><span class="p">,</span> <span class="n">zStart</span><span class="p">],</span>
+    <span class="mi">30</span><span class="p">,</span> <span class="c1"># Turn count</span>
+    <span class="n">nMax</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">mMax</span> <span class="o">=</span> <span class="mi">7</span><span class="p">,</span> <span class="n">toroidalSymmetry</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span>
+    <span class="n">unwrapEvery</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span> <span class="n">recordEvery</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+    <span class="n">targetError</span> <span class="o">=</span> <span class="mf">1e-3</span><span class="p">,</span> <span class="n">distanceLimit</span> <span class="o">=</span> <span class="mf">1e5</span><span class="p">,</span> <span class="n">maxStepSize</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
+    <span class="n">stellaratorSymmetric</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">aliasThreshold</span> <span class="o">=</span> <span class="mf">0.05</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>The modes are returned with a dict containing rotational transform and the Fourier expansion of the modes, as well as an encoding of the result as a FourierSurfaces object that can also be used in VMEC inputs.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">modes</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>dict_keys([&#39;surfaces&#39;, &#39;iota&#39;, &#39;theta&#39;, &#39;rCos&#39;, &#39;zSin&#39;, &#39;mPol&#39;, &#39;nTor&#39;])
+</pre></div>
+</div>
+</div>
+</div>
+<p>Of particular interest are two components: The first one is the ‘iota’ array, which returns the rotational transforms.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">modes</span><span class="p">[</span><span class="s2">&quot;iota&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>array([1.09444021, 1.05147633, 0.99584491, 0.9590963 , 0.93131329,
+       0.90825292, 0.89044472, 0.87708746, 0.86824525, 0.86214925,
+       0.85839433, 0.85571463, 0.85474872, 0.85227694, 0.854434  ,
+       0.85656028, 0.85808343, 0.86058415, 0.86416049, 0.87002159,
+       0.87808519, 0.8886919 , 0.90319517, 0.92180227, 0.9465071 ,
+       1.00047059, 1.00011697, 1.00030078, 1.04812043, 1.08246331])
+</pre></div>
+</div>
+</div>
+</div>
+<p>Secondarily relevant is the ‘surfaces’ element, which contains the magnetic surfaces. This is an instance of the class fusionsc.magnetics.SurfaceArray, which can be sliced, added, and multiplied similar to a regular NumPy array.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">modes</span><span class="p">[</span><span class="s2">&quot;theta&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>array([ 3.05499683e+00,  3.06511679e+00, -1.53853968e+00,  3.04789752e+00,
+        3.06011133e+00,  3.06951309e+00,  3.09790724e+00,  3.04396081e+00,
+        3.05466676e+00,  3.04656444e+00,  3.03134871e+00,  3.04420938e+00,
+        2.08799946e+00,  2.15265923e+00, -7.35932886e-01,  5.58303403e-03,
+        9.70771550e-03,  1.86229450e-03, -1.10290469e-02,  3.34755947e-03,
+        8.34118608e-03, -4.59210820e-03, -1.23285713e-02, -2.30900669e-02,
+       -2.34730191e-03, -1.72983632e-01,  2.25624473e-01, -2.43986656e-02,
+        4.52786654e-04, -4.80124755e-03])
+</pre></div>
+</div>
+</div>
+</div>
+<p>To plot the modes, we need to multiply the Fourier coefficients with the appropriate angles.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">surfaces</span> <span class="o">=</span> <span class="n">modes</span><span class="p">[</span><span class="s2">&quot;surfaces&quot;</span><span class="p">]</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">surfaces</span><span class="p">))</span>
+<span class="c1">#print(&quot;First:\n&quot;, surfaces[0])</span>
+<span class="c1">#print(&quot;Last:\n&quot;, surfaces[-1])</span>
+<span class="c1">#print(&quot;Average:\n&quot;, (surfaces[0] + surfaces[-1]) / 2)</span>
+<span class="c1">#for i in range(0, surfaces.shape[0]):</span>
+<span class="c1">#    print(surfaces[i].data.rCos)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">surfaces</span><span class="p">[</span><span class="o">-</span><span class="mi">4</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">rCos</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&lt;class &#39;fusionsc.magnetics.SurfaceArray&#39;&gt;
+shape: [11, 8]
+data: [5.476880400064875, 0.53577153746381545, 0.086167257070756273, 0, 0, 0, 0, 0, 0.24876703804113193, -0.25344980078147678, 0.060435086389045906, 0, 0, 0, 0, 0, -0.0092448214569930964, -0.015347356935070616, 0.082366898480248446, 0, 0, 0, 0, 0, -0.0035084950642083426, 0.0049147018688642527, -0.0018620218509459619, 0, 0, 0, 0, 0, -0.0013348871253378103, 0.0019298282016008107, -0.0013484427825197721, 0, 0, 0, 0, 0, 0.00018728042288860972, 0.00014438647819070509, 0.00047911938569339429, 0, 0, 0, 0, 0, 0, 0.0004307223562607721, -0.0006657845089401757, 0.00026031098998514137, -0.0002146445781512002, -0.00050418404840430354, -0.00068061417494623747, 0.00077431061969340906, 0, -0.00078948921587734333, -0.00016404005604234341, 0, 0, 0, 0, 0, 0, 0.00098511761996553744, 0.0010089547019746055, 0, 0, 0, 0, 0, 0, 0.0099168954380363002, -0.015903625207850932, 0, 0, 0, 0, 0, 0, 0.034890273755331186, -0.0060424732478256008, 0, 0, 0, 0, 0]
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">iSurf</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">thetas</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<span class="n">phis</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+
+<span class="n">data</span> <span class="o">=</span> <span class="n">surfaces</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">phis</span><span class="p">,</span> <span class="n">thetas</span><span class="p">)</span> <span class="c1"># Surfaces -5, -4, -3 are rational and failed to reconstruct</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;points&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">iPhi</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">phis</span><span class="p">)):</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">iSurf</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">surfaces</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+        <span class="c1">#if abs(modes[&#39;iota&#39;][iSurf] - 1) &lt; 0.02:</span>
+        <span class="c1">#    continue</span>
+            
+        <span class="n">dp</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s1">&#39;points&#39;</span><span class="p">][:,</span><span class="n">iSurf</span><span class="p">,</span><span class="n">iPhi</span><span class="p">,::</span><span class="n">dp</span><span class="p">]</span>
+        <span class="n">dx</span><span class="p">,</span> <span class="n">dy</span><span class="p">,</span> <span class="n">dz</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s1">&#39;thetaDerivatives&#39;</span><span class="p">][:,</span><span class="n">iSurf</span><span class="p">,</span><span class="n">iPhi</span><span class="p">,::</span><span class="n">dp</span><span class="p">]</span>
+        
+        <span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">x</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">y</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+        
+        <span class="n">dr</span> <span class="o">=</span> <span class="p">(</span><span class="n">dx</span> <span class="o">*</span> <span class="n">x</span> <span class="o">+</span> <span class="n">dy</span> <span class="o">*</span> <span class="n">y</span><span class="p">)</span> <span class="o">/</span> <span class="n">r</span>
+        
+        
+        <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">z</span><span class="p">)</span>
+        <span class="c1">#plt.quiver(r, z, dr, dz)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">7</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">(</span><span class="o">-</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>(3, 30, 3, 100)
+</pre></div>
+</div>
+<img alt="../_images/3716ce8124209c949394d85406794e3170a80e5b7e7cfa7a85d79076d56b5af3.png" src="../_images/3716ce8124209c949394d85406794e3170a80e5b7e7cfa7a85d79076d56b5af3.png" />
+<img alt="../_images/fcd5a54705a3a711e33b98637bad55cd2d0da2ce05b49cf468390db1747ada67.png" src="../_images/fcd5a54705a3a711e33b98637bad55cd2d0da2ce05b49cf468390db1747ada67.png" />
+<img alt="../_images/02eea32ed5daa28dbf733ed4f230f1449f996a1c7608ef776a508c3799b256e9.png" src="../_images/02eea32ed5daa28dbf733ed4f230f1449f996a1c7608ef776a508c3799b256e9.png" />
+</div>
+</div>
+<p>The obtained surfaces can also be used to calculate a mode decomposition of the magnetic field</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">surfaces</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">asGeometry</span><span class="p">(</span><span class="n">nPhi</span> <span class="o">=</span> <span class="mi">360</span><span class="p">,</span> <span class="n">nTheta</span> <span class="o">=</span> <span class="mi">360</span><span class="p">)</span><span class="o">.</span><span class="n">asPyvista</span><span class="p">()</span><span class="o">.</span><span class="n">plot</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>C:\Users\Alexander\AppData\Roaming\Python\Python310\site-packages\pyvista\jupyter\notebook.py:58: UserWarning: Failed to use notebook backend: 
+
+No module named &#39;trame&#39;
+
+Falling back to a static output.
+  warnings.warn(
+</pre></div>
+</div>
+<img alt="../_images/97dcd54a39ebd236bfc45f201736ec9b4a6d126a52c658cafde70777aa5c17db.png" src="../_images/97dcd54a39ebd236bfc45f201736ec9b4a6d126a52c658cafde70777aa5c17db.png" />
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">surf</span> <span class="o">=</span> <span class="n">surfaces</span><span class="p">[</span><span class="mi">6</span><span class="p">]</span>
+<span class="c1">#np.asarray(surf.data.rCos)[0,0] += 0.03</span>
+
+<span class="n">fieldModes</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">calculateRadialModes</span><span class="p">(</span><span class="n">surf</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">nSym</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">mMax</span> <span class="o">=</span> <span class="mi">15</span><span class="p">,</span> <span class="n">nMax</span> <span class="o">=</span> <span class="mi">15</span><span class="p">,</span> <span class="n">nTheta</span> <span class="o">=</span> <span class="mi">400</span><span class="p">,</span> <span class="n">nPhi</span> <span class="o">=</span> <span class="mi">400</span><span class="p">)</span>
+<span class="n">cc</span> <span class="o">=</span> <span class="n">fieldModes</span><span class="p">[</span><span class="s2">&quot;cosCoeffs&quot;</span><span class="p">]</span>
+<span class="n">sc</span> <span class="o">=</span> <span class="n">fieldModes</span><span class="p">[</span><span class="s2">&quot;sinCoeffs&quot;</span><span class="p">]</span>
+
+<span class="n">m</span> <span class="o">=</span> <span class="n">fieldModes</span><span class="p">[</span><span class="s2">&quot;mPol&quot;</span><span class="p">]</span>
+<span class="n">n</span> <span class="o">=</span> <span class="n">fieldModes</span><span class="p">[</span><span class="s2">&quot;nTor&quot;</span><span class="p">]</span>
+
+<span class="n">phi</span> <span class="o">=</span> <span class="n">fieldModes</span><span class="p">[</span><span class="s2">&quot;phi&quot;</span><span class="p">]</span>
+<span class="n">theta</span> <span class="o">=</span> <span class="n">fieldModes</span><span class="p">[</span><span class="s2">&quot;theta&quot;</span><span class="p">]</span>
+
+<span class="n">tot</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">cc</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">sc</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span><span class="mi">9</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">fieldModes</span><span class="p">[</span><span class="s2">&quot;radialValues&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="s1">&#39;lower&#39;</span><span class="p">,</span> <span class="n">extent</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">360</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">360</span><span class="p">])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Brad / B&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Phi [deg]&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Theta [deg]&#39;</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span><span class="mi">9</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">tot</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">origin</span> <span class="o">=</span> <span class="s2">&quot;lower&quot;</span><span class="p">,</span> <span class="n">norm</span> <span class="o">=</span> <span class="s2">&quot;log&quot;</span><span class="p">)</span>
+<span class="c1">#plt.xlabel(f&quot;n[0, {n[1]:.0f} ... {max(n):.0f}, {min(n):.0f}, ..., {n[-1]:.0f}]&quot;)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s2">&quot;n&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">&quot;m&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xticks</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">n</span><span class="p">)),</span> <span class="n">n</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Fourier components of Brad / B&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">fieldModes</span><span class="p">[</span><span class="s2">&quot;radialValues&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">i_m</span><span class="p">,</span> <span class="n">mVal</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">i_n</span><span class="p">,</span> <span class="n">nVal</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">mVal</span> <span class="o">&gt;</span> <span class="mi">5</span><span class="p">:</span> <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">nVal</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span> <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">nVal</span> <span class="o">&gt;</span> <span class="mi">10</span><span class="p">:</span> <span class="k">continue</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;n = </span><span class="si">{</span><span class="n">nVal</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">, m = </span><span class="si">{</span><span class="n">mVal</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">, val = </span><span class="si">{</span><span class="n">tot</span><span class="p">[</span><span class="n">i_n</span><span class="p">][</span><span class="n">i_m</span><span class="p">]</span><span class="si">:</span><span class="s2">.2e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>C:\Daten\repos\fsc\src\python\fusionsc\_api_markers.py:15: UserWarning: The function fusionsc.magnetics.MagneticConfig.calculateRadialModes is part of the unstable API. It might change or get removed in the near future. While unlikely, it might also not be compatible across client/server versions.
+  warnings.warn(f&quot;The function {f.__module__}.{f.__qualname__} is part of the unstable API. It might change or get removed in the near future. While unlikely, it might also not be compatible across client/server versions.&quot;)
+</pre></div>
+</div>
+<img alt="../_images/322a281096e07a3583c1b9f4003aedd0a4df3f1c24646dc5a5cd336a09680307.png" src="../_images/322a281096e07a3583c1b9f4003aedd0a4df3f1c24646dc5a5cd336a09680307.png" />
+<img alt="../_images/e475618bd7ab7b0fea384d0441e8bce2a13fcda9e01144af0482126bf3ba94c5.png" src="../_images/e475618bd7ab7b0fea384d0441e8bce2a13fcda9e01144af0482126bf3ba94c5.png" />
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>(400, 400)
+n = 0, m = 0, val = 1.02e-08
+n = 5, m = 0, val = 5.13e-06
+n = 10, m = 0, val = 2.46e-05
+n = 0, m = 1, val = 4.73e-05
+n = 5, m = 1, val = 8.47e-05
+n = 10, m = 1, val = 5.85e-05
+n = 0, m = 2, val = 1.51e-06
+n = 5, m = 2, val = 8.72e-06
+n = 10, m = 2, val = 4.20e-06
+n = 0, m = 3, val = 3.17e-05
+n = 5, m = 3, val = 4.46e-05
+n = 10, m = 3, val = 7.38e-06
+n = 0, m = 4, val = 2.95e-05
+n = 5, m = 4, val = 7.71e-05
+n = 10, m = 4, val = 4.86e-06
+n = 0, m = 5, val = 6.37e-05
+n = 5, m = 5, val = 5.40e-05
+n = 10, m = 5, val = 6.06e-05
+</pre></div>
+</div>
+</div>
+</div>
+<p>The calculated surfaces can also be converted into geometries to plot.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">asPv</span> <span class="o">=</span> <span class="n">surfaces</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">asGeometry</span><span class="p">(</span><span class="n">nPhi</span> <span class="o">=</span> <span class="mi">360</span><span class="p">,</span> <span class="n">nTheta</span> <span class="o">=</span> <span class="mi">360</span><span class="p">)</span><span class="o">.</span><span class="n">asPyvista</span><span class="p">()</span>
+<span class="n">asPv</span><span class="o">.</span><span class="n">plot</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>C:\Users\Alexander\AppData\Roaming\Python\Python310\site-packages\pyvista\jupyter\notebook.py:58: UserWarning: Failed to use notebook backend: 
+
+No module named &#39;trame&#39;
+
+Falling back to a static output.
+  warnings.warn(
+</pre></div>
+</div>
+<img alt="../_images/37e25a044bdcaf3dbc516626a7e45e5021ebf65a056c19e8014041806d2ac881.png" src="../_images/37e25a044bdcaf3dbc516626a7e45e5021ebf65a056c19e8014041806d2ac881.png" />
+</div>
+</div>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="Mapping.html" class="btn btn-neutral float-left" title="Accelerating computations with field-line mapping" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../architecture.html" class="btn btn-neutral float-right" title="Architecture" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

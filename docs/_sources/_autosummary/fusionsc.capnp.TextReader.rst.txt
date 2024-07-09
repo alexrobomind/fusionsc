@@ -1,0 +1,46 @@
+fusionsc.capnp.TextReader
+=========================
+
+.. currentmodule:: fusionsc
+
+.. autoclass:: capnp.TextReader
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~capnp.TextReader.__init__
+  ~capnp.TextReader.castAs
+  ~capnp.TextReader.clone
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~capnp.TextReader.type_
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: capnp.TextReader.__init__
+.. automethod:: capnp.TextReader.castAs
+.. automethod:: capnp.TextReader.clone
+
+
+
+
+

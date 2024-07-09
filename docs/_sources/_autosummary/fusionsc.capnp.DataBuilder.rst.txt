@@ -1,0 +1,46 @@
+fusionsc.capnp.DataBuilder
+==========================
+
+.. currentmodule:: fusionsc
+
+.. autoclass:: capnp.DataBuilder
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~capnp.DataBuilder.__init__
+  ~capnp.DataBuilder.castAs
+  ~capnp.DataBuilder.clone
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~capnp.DataBuilder.type_
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: capnp.DataBuilder.__init__
+.. automethod:: capnp.DataBuilder.castAs
+.. automethod:: capnp.DataBuilder.clone
+
+
+
+
+

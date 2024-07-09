@@ -1,0 +1,47 @@
+fusionsc.magnetics
+==================
+
+.. automodule:: fusionsc.magnetics
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autosummary::
+
+	extractCoils
+	visualizeCoils
+
+
+
+
+
+.. rubric:: Classes
+
+.. autosummary::
+  :toctree:
+  :template: summary-class.rst
+
+    CoilFilament
+    MagneticConfig
+    SurfaceArray
+
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autofunction:: extractCoils
+.. autofunction:: visualizeCoils
+
+
+
+

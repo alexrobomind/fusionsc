@@ -1,0 +1,43 @@
+fusionsc.structio
+=================
+
+.. automodule:: fusionsc.structio
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autosummary::
+
+	dump
+	dumps
+	load
+	recursiveDump
+	recursiveDumps
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autofunction:: dump
+.. autofunction:: dumps
+.. autofunction:: load
+.. autofunction:: recursiveDump
+.. autofunction:: recursiveDumps
+
+
+
+
