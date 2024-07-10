@@ -12,8 +12,13 @@ Built-in physics
 FusionSC comes with a series of fast built-in physics modules intended to handle the
 basic aspects of 3D MCF physics:
 
-- Biot-Savart calculations to obtain 3D vacuum fields from coil descriptions
-- Interpolation of axisymmetric 3D fields from 2D equilibria (incl. EFIT files)
+- A flexible 3D magnetic field computation engine that supports various operations:
+  - Coil filament fields based on Biot-Savart law (with finite-wire regularization)
+  - Dipole fields from magnetized spheres (constant field within sphere)
+  - Interpolation of 3D fields corresponding to 2D equilibria (e.g. EFIT files)
+  - Cross-interpolation between different grids
+  - Geometric operations (rotation, shift) applied to the fields
+
 - An advanced field line tracer module, including the following capabilities:
 
   - Computation of reversible field line mappings and usage of these mappings

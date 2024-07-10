@@ -20,7 +20,7 @@ TEST_CASE("local_publish") {
 	Library l = newLibrary();
 	LibraryThread th = l -> newThread();
 	
-	LocalDataService ds(l);
+	LocalDataService ds(*l);
 	ds.setChunkDebugMode();
 	
 	auto id   = kj::heapArray<const byte>({0x00, 0xFF});
@@ -93,7 +93,8 @@ TEST_CASE("local_publish") {
 		}
 		
 		SECTION("local_bypass") {
-			LocalDataService ds2(l);
+			auto l2 = newLibrary();
+			LocalDataService ds2(*l2);
 			
 			LocalDataRef<DataHolder> ref12 = ds2.download(ref2.get().getRef()).wait(ws);
 			DataHolder::Reader inner2 = ref12.get();
@@ -101,8 +102,8 @@ TEST_CASE("local_publish") {
 		}
 		
 		SECTION("remote") {
-			Library l2 = newLibrary();
-			LocalDataService ds2(l2);
+			auto l2 = newLibrary();
+			LocalDataService ds2(*l2);
 			
 			LocalDataRef<DataHolder> ref12 = ds2.download(
 				ds2.download(ref2).wait(ws).get().getRef()
@@ -143,7 +144,7 @@ TEST_CASE("local_publish") {
 			ds.writeArchive(ref2, *file).wait(ws);
 			
 			Library l2 = newLibrary();
-			LocalDataService ds2(l2);
+			LocalDataService ds2(*l2);
 			
 			INFO("reading");
 			LocalDataRef<DDH> ref22 = ds2.publishArchive<DDH>(*file);
@@ -157,7 +158,7 @@ TEST_CASE("local_publish") {
 			auto asFlat = ds.downloadFlat(ref2).wait(ws);
 			
 			Library l2 = newLibrary();
-			LocalDataService ds2(l2);
+			LocalDataService ds2(*l2);
 			
 			LocalDataRef<DDH> ref22 = ds2.publishFlat<DDH>(mv(asFlat));
 			LocalDataRef<DataHolder> ref12 = ds2.download(ref22.get().getRef()).wait(ws);

@@ -118,8 +118,8 @@ Promise<bool> isDataRef(capnp::Capability::Client clt) {
 	
 // === class LocalDataService ===
 
-LocalDataService::LocalDataService(Library& lib) :
-	LocalDataService(*kj::refcounted<internal::LocalDataServiceImpl>(lib))
+LocalDataService::LocalDataService(const LibraryHandle& hdl) :
+	LocalDataService(*kj::refcounted<internal::LocalDataServiceImpl>(hdl))
 {}
 
 LocalDataService::LocalDataService(internal::LocalDataServiceImpl& newImpl) :
@@ -445,8 +445,8 @@ namespace {
 	}
 }
 
-internal::LocalDataServiceImpl::LocalDataServiceImpl(Library& lib) :
-	library(lib -> addRef()),
+internal::LocalDataServiceImpl::LocalDataServiceImpl(const LibraryHandle& hdl) :
+	backingStore(hdl.store()),
 	fileBackedMemory(kj::newDiskFilesystem()->getCurrent().clone()),
 	dbCache(createSqliteTempCache())
 {}
@@ -505,7 +505,7 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 	virtual Promise<Maybe<ResultType>> useCached() override {
 		auto dataHash = metadata.getDataHash();
 		if(dataHash.size() > 0) {			
-			KJ_IF_MAYBE(rowPtr, getActiveThread().library() -> store().query(dataHash)) {
+			KJ_IF_MAYBE(rowPtr, service -> backingStore.query(dataHash)) {
 				dataEntry = mv(*rowPtr);
 				return buildResult()
 				.then([](ResultType result) {
@@ -548,7 +548,7 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 		KJ_DBG("Finalizing downloaded ref", nSegments, segmentSizes, expected, downloadOffset / 8);*/
 		
 		// Note: The hash is computed in the parent class.
-		dataEntry = getActiveThread().library() -> store().publish(metadata.getDataHash(), mv(downloadBuffer));
+		dataEntry = service -> backingStore.publish(metadata.getDataHash(), mv(downloadBuffer));
 		
 		return READY_NOW;
 	}
@@ -599,7 +599,7 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publish(DataRefM
 		myMetaData.setDataHash(hashOutput);
 	}
 	
-	auto storeEntry = library -> store().publish(myMetaData.getDataHash(), mv(data));
+	auto storeEntry = backingStore.publish(myMetaData.getDataHash(), mv(data));
 	
 	Own<LocalDataRefGroup> lg;
 	KJ_IF_MAYBE(pGroup, maybeGroup) {

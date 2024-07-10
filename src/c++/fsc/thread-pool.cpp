@@ -1,11 +1,11 @@
-#include "thread-pool.h"
+#include "local.h"
 
 #include <thread>
 
-namespace fsc {
+namespace fsc { namespace internal {
 	
-LightWorkerThread::LightWorkerThread() :
-	thread([this]() mutable { run(); })
+LightWorkerThread::LightWorkerThread(LibraryHandle& hdl) :
+	thread([this, &hdl]() mutable { run(hdl); })
 {
 	// Wait until thread is running
 	auto locked = executor.lockExclusive();
@@ -18,9 +18,8 @@ LightWorkerThread::~LightWorkerThread() {
 	}
 }
 
-void LightWorkerThread::run() {
-	kj::EventLoop eventLoop;
-	kj::WaitScope ws(eventLoop);
+void LightWorkerThread::run(LibraryHandle& libHandle) {
+	WorkerContext ctx(kj::attachRef(libHandle));
 	
 	// Create cross thread promise
 	auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
@@ -30,11 +29,10 @@ void LightWorkerThread::run() {
 	*(executor.lockExclusive()) = kj::getCurrentThreadExecutor().addRef();
 	
 	// Wait until destruction
-	paf.promise.wait(ws);
-	ws.cancelAllDetached();
+	paf.promise.wait(ctx.waitScope());
 }
 
-const kj::Executor& LightWorkerThread::getExecutor() {
+const kj::Executor& LightWorkerThread::getExecutor() const {
 	auto locked = executor.lockShared();
 	
 	KJ_IF_MAYBE(pExec, *locked) {
@@ -44,26 +42,24 @@ const kj::Executor& LightWorkerThread::getExecutor() {
 	KJ_UNREACHABLE;
 }
 
-LightWorkerPool::LightWorkerPool(size_t nWorkers) {
+LightWorkerPool::LightWorkerPool(LibraryHandle& hdl, size_t nWorkers) {
 	if(nWorkers == 0)
 		nWorkers = std::thread::hardware_concurrency();
 	
 	auto builder = kj::heapArrayBuilder<Own<LightWorkerThread>>(nWorkers);
 	
 	for(auto i : kj::range(0, nWorkers)) {
-		builder.add(kj::heap<LightWorkerThread>());
+		builder.add(kj::heap<LightWorkerThread>(hdl));
 	}
 	
 	workers = builder.finish();
 }
 
-const kj::Executor& LightWorkerPool::select() {
-	size_t idx = base + offset;
+const kj::Executor& LightWorkerPool::select() const {
+	size_t idx = base.load() + (offset++);
 	idx %= workers.size();
-	
-	++offset;
 		
-	if(offset >= workers.size()) {
+	if(offset.load() >= workers.size()) {
 		offset = 0;
 		base = rand();
 	}
@@ -71,4 +67,4 @@ const kj::Executor& LightWorkerPool::select() {
 	return workers[idx] -> getExecutor();
 }
 
-}
+}}

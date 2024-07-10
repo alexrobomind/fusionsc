@@ -19,21 +19,21 @@ TEST_CASE("local-setup") {
 	}
 	
 	SECTION("th", "Can have a thread handle") {
-		ThreadHandle th(lib->addRef());
+		ThreadContext ctx(lib->addRef());
 		SUCCEED();
 		
 		SECTION("randworks") {
 			kj::FixedArray<byte, 128> a1;
-			th.rng().randomize(a1);
+			ctx.rng().randomize(a1);
 			
 			SUCCEED();
 		}
 	}
 	
 	SECTION("no2th", "Can not have more than one thread handle") {
-		ThreadHandle th1(lib->addRef());
+		ThreadContext ctx(lib->addRef());
 		
-		REQUIRE_THROWS(ThreadHandle(lib->addRef()));
+		REQUIRE_THROWS(ThreadContext(lib->addRef()));
 	}
 }
 
@@ -45,7 +45,7 @@ TEST_CASE("threading") {
 	SECTION("launchout", "Can open a second handle in another thread") {
 		{
 			kj::Thread t([&]() {
-				ThreadHandle h2(lib->addRef());
+				ThreadContext h2(lib->addRef());
 			});
 		}
 		SUCCEED();
