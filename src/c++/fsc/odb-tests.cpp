@@ -44,7 +44,7 @@ TEST_CASE("warehouse-stress", "[warehouse]") {
 							req.setValue(obj);
 							
 							auto storedObj = req.send().wait(ws);
-							KJ_REQUIRE(storedObj.isDataRef());
+							KJ_REQUIRE(storedObj.isDataRef(), storedObj);
 							
 							auto downloaded = getActiveThread().dataService().download(storedObj.getDataRef().getAsRef()).wait(ws);
 							KJ_REQUIRE(downloaded.getRaw() == data);
