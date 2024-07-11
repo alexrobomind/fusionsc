@@ -60,7 +60,10 @@ struct SQLiteStatementHook : public PreparedStatementHook {
 		try {
 			return parent -> check(result);
 		} catch(kj::Exception& e) {
-			kj::StringPtr sql = sqlite3_sql(handle);
+			const char* sqlRaw = sqlite3_sql(handle);
+			
+			if(sqlRaw == nullptr) sqlRaw = "<SQL missing>";
+			kj::StringPtr sql = sqlRaw;
 			KJ_LOG(WARNING, "SQLite failure", e, sql);
 			throw;
 		}
