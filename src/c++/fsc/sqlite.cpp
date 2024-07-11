@@ -60,6 +60,9 @@ struct SQLiteStatementHook : public PreparedStatementHook {
 		try {
 			return parent -> check(result);
 		} catch(kj::Exception& e) {
+			if(e.getType() == kj::Exception::Type::OVERLOADED)
+				throw;
+			
 			const char* sqlRaw = sqlite3_sql(handle);
 			
 			if(sqlRaw == nullptr) sqlRaw = "<SQL missing>";
@@ -124,7 +127,7 @@ int SQLiteConnection::check(int result) {
 	if(result == SQLITE_DONE)
 		return result;
 	
-	if(result == SQLITE_BUSY) {
+	if(result == SQLITE_BUSY || result == SQLITE_BUSY_RECOVERY) {
 		kj::throwFatalException(KJ_EXCEPTION(OVERLOADED, "Database busy"));
 	}
 	
@@ -132,7 +135,7 @@ int SQLiteConnection::check(int result) {
 	int extendedErrorCode = sqlite3_extended_errcode(handle);
 	kj::String errorMessage = kj::str(sqlite3_errmsg(handle));
 	
-	KJ_FAIL_REQUIRE("SQL error in sqlite", errorCode, extendedErrorCode, errorMessage);
+	KJ_FAIL_REQUIRE("SQL error in sqlite", result, errorCode, extendedErrorCode, errorMessage);
 }
 
 bool SQLiteConnection::inTransaction() {

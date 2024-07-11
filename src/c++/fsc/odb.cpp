@@ -1387,8 +1387,6 @@ struct ImportContext {
 	//! Create an (unresolved) object representing a future import.
 	ImportTask import(Capability::Client target);
 	
-	Promise<void> whenDone();
-	
 private:
 	//! Kicks off import tasks, called by destructor.
 	void scheduleImports();

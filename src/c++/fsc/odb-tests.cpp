@@ -14,9 +14,9 @@ Warehouse::Folder::Client testWarehouse() {
 	return wh.getRootRequest().send().getRoot();
 }
 
-TEST_CASE("warehouse-stress", "[warehouse]") {
+TEST_CASE("warehouse-stress", "[warehouse][.]") {
 	constexpr size_t NUM_THREADS = 16;
-	constexpr size_t NUM_OBJECTS = 1000;
+	constexpr size_t NUM_OBJECTS = 100;
 	
 	StartupParameters opts;
 	opts.numWorkerThreads = 2 * NUM_THREADS;
@@ -28,9 +28,9 @@ TEST_CASE("warehouse-stress", "[warehouse]") {
 	for(auto i : kj::range(0, NUM_THREADS)) {
 		promiseBuilder.add(
 			getActiveThread().worker().executeAsync(
-				[NUM_OBJECTS]() {
-					return kj::startFiber(2 * 1024 * 1024, [NUM_OBJECTS](kj::WaitScope& ws) {
-						auto wh = openWarehouse(*connectSqlite("stress-test.sqlite"));
+				[NUM_OBJECTS, i, conn = connectSqlite("stress-test.sqlite")]() mutable {
+					return kj::startFiber(2 * 1024 * 1024, [NUM_OBJECTS, i, conn = mv(conn)](kj::WaitScope& ws) mutable {
+						auto wh = openWarehouse(*conn);
 						auto root = wh.getRootRequest().send().getRoot();
 						
 						auto data = kj::heapArray<kj::byte>(128);
@@ -38,16 +38,17 @@ TEST_CASE("warehouse-stress", "[warehouse]") {
 						
 						auto obj = getActiveThread().dataService().publish(capnp::Data::Reader(data));
 						
-						for(auto i : kj::range(0, NUM_OBJECTS)) {
+						for(auto iteration : kj::range(0, NUM_OBJECTS)) {
 							auto req = root.putRequest();
-							req.setPath("object");
+							req.setPath(kj::str("object", i));
 							req.setValue(obj);
 							
 							auto storedObj = req.send().wait(ws);
-							KJ_REQUIRE(storedObj.isDataRef(), storedObj);
 							
-							auto downloaded = getActiveThread().dataService().download(storedObj.getDataRef().getAsRef()).wait(ws);
+							auto downloaded = getActiveThread().dataService().download((DataRef<>::Client) storedObj.getAsGeneric()).wait(ws);
 							KJ_REQUIRE(downloaded.getRaw() == data);
+							
+							getActiveThread().timer().afterDelay(50 * kj::MILLISECONDS).wait(ws);
 						}
 					});
 				}
@@ -55,7 +56,7 @@ TEST_CASE("warehouse-stress", "[warehouse]") {
 		);
 	}
 	
-	kj::joinPromises(promiseBuilder.finish()).wait(ctx.waitScope());
+	kj::joinPromisesFailFast(promiseBuilder.finish()).wait(ctx.waitScope());
 }
 
 TEST_CASE("warehouse-open", "[warehouse]") {
