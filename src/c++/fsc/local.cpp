@@ -13,7 +13,7 @@ namespace fsc {
 // === class LibraryHandle ===
 	
 LibraryHandle::LibraryHandle(StartupParameters params) :
-	stewardThread([this]() { runSteward(); })
+	workerPool(*this, params.numWorkerThreads)
 {	
 	KJ_IF_MAYBE(pStore, params.dataStore) {
 		sharedStore = mv(*pStore);
@@ -21,19 +21,13 @@ LibraryHandle::LibraryHandle(StartupParameters params) :
 		sharedStore = createStore();
 	}
 	
-	// stewardThread.detach();
-	
-	// Wait for steward thread to finish starting.
-	steward();
+	// Start steward thread
+	worker().executeSync([this]() {
+		runSteward();
+	});
 };
 
-LibraryHandle::~LibraryHandle() {
-	stopSteward();
-}
-
-void LibraryHandle::stopSteward() const {
-	stewardFulfiller -> fulfill();
-}
+LibraryHandle::~LibraryHandle() {}
 
 std::unique_ptr<Botan::HashFunction> LibraryHandle::defaultHash() const {
 	auto result = Botan::HashFunction::create("Blake2b");
@@ -41,48 +35,19 @@ std::unique_ptr<Botan::HashFunction> LibraryHandle::defaultHash() const {
 	return result;
 }
 
-const kj::Executor& LibraryHandle::steward() const {
-	auto locked = stewardExecutor.lockExclusive();
-	locked.wait([](const Maybe<Own<const kj::Executor>>& exec) { return exec != nullptr; });
+void LibraryHandle::runSteward() {
+	store().gc();
 	
-	FSC_ASSERT_MAYBE(pExecutor, *locked, "Internal error");
-		
-	// The life of this is guarded by the lifetime of the LibraryHandle instance,
-	// so this is safe.
-	return **pExecutor;
+	// Run steward every minute
+	auto& at = getActiveThread();
+	return at.detach(
+		at.timer().afterDelay(1 * kj::MINUTES)
+		.then([this]() { runSteward(); })
+	);
 }
 
-void LibraryHandle::runSteward() {
-	// We use a special thread context for the steward that doesn't
-	// have back-access to the library.
-	StewardContext ctx;
-	
-	// Register fulfiller for shutdown	
-	auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-	stewardFulfiller = mv(paf.fulfiller);
-	
-	// Pass back the executor
-	{
-		auto locked = stewardExecutor.lockExclusive();
-		*locked = ctx.executor().addRef();
-	}
-
-	auto runPromise = mv(paf.promise);
-	
-	// Execute GC loop
-	kj::Function<Promise<void>()> gcLoop = [this, &ctx, &gcLoop]() {
-		store().gc();
-		
-		return ctx.timer().afterDelay(1 * kj::MINUTES)
-		.then(gcLoop);
-	};
-	
-	Promise<void> runningLoop = gcLoop().eagerlyEvaluate([](kj::Exception&& e) {
-		KJ_LOG(WARNING, "Store GC failure", e);
-	});
-
-	// loopbackReferenceForStewardStartup = nullptr;
-	runPromise.wait(ctx.waitScope());
+const kj::Executor& LibraryHandle::worker() const {
+	return workerPool.select();
 }
 
 // === class NullErrorHandler ===
@@ -94,11 +59,13 @@ NullErrorHandler NullErrorHandler::instance;
 
 // === class ThreadContext ===
 
-ThreadContext::ThreadContext(Maybe<kj::EventPort&> port) :
+ThreadContext::ThreadContext(Library lh, Maybe<kj::EventPort&> port) :
+	_library(mv(lh)),
 	asyncInfrastructure(makeAsyncInfrastructure(port)),
 	_executor(kj::getCurrentThreadExecutor()),
 	_filesystem(kj::newDiskFilesystem()),
 	_streamConverter(newStreamConverter()),
+	_dataService(kj::heap<LocalDataService>(*_library)),
 	detachedTasks(NullErrorHandler::instance)
 {	
 	KJ_REQUIRE(current == nullptr, "Can only have one active thread context per thread");
@@ -148,85 +115,21 @@ ThreadContext::CustomEventPort::CustomEventPort(kj::EventPort& port) :
 	loop(kj::heap<kj::EventLoop>(port)),
 	waitScope(kj::heap<kj::WaitScope>(*loop))
 {}
-	
-// === class ThreadHandle ===
 
-struct ThreadHandle::Ref {		
-	Ref(const kj::MutexGuarded<RefData>* refData);
-	~Ref();
-		
-	kj::ListLink<Ref> link;
-	const kj::MutexGuarded<RefData>* refData;
-};
+// === class WorkerContext ===
 
-struct ThreadHandle::RefData {
-	kj::List<Ref, &Ref::link> refs;
-	Own<CrossThreadPromiseFulfiller<void>> whenNoRefs;
-	const ThreadHandle* owner;
-};
-		
-ThreadHandle::Ref::Ref(const kj::MutexGuarded<RefData>* refData) :
-	refData(refData)
-{
-	refData -> lockExclusive() -> refs.add(*this);
-}
-
-ThreadHandle::Ref::~Ref() {
-	auto locked = refData -> lockExclusive();
-	locked -> refs.remove(*this);
-	
-	auto& pFulfiller = locked -> whenNoRefs;
-	if(pFulfiller.get() != nullptr) {
-		pFulfiller->fulfill();
-		pFulfiller = nullptr;
-	}
-}
-
-ThreadHandle::ThreadHandle(Library l, Maybe<kj::EventPort&> eventPort) :
-	ThreadContext(eventPort),
-	_library(l -> addRef()),
-	_dataService(kj::heap<LocalDataService>(l))
-	// refData(new kj::MutexGuarded<RefData>())
+WorkerContext::WorkerContext(Library l) :
+	ThreadContext(mv(l))
 {}
 
-ThreadHandle::~ThreadHandle() {		
-	/*KJ_DBG("Waiting for refs to release");
-	while(true) {
-		Promise<void> noMoreRefs = READY_NOW;
-		
-		{
-			auto locked = refData -> lockExclusive();
-			
-			if(locked -> refs.size() == 0)
-				break;
-			
-			auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
-			noMoreRefs = mv(paf.promise);
-			
-			locked -> whenNoRefs = mv(paf.fulfiller);
-		}
-		
-		noMoreRefs.wait(waitScope());
-	}
-	KJ_DBG("Refs released");*/
+WorkerContext::~WorkerContext() {
+	auto& ws = waitScope();
+	ws.cancelAllDetached();
 	
-	// delete refData;
-}
-
-/*Own<ThreadHandle> ThreadHandle::addRef() {
-	return Own<ThreadHandle>(this, kj::NullDisposer::instance).attach(kj::heap<ThreadHandle::Ref>(this->refData));
-}
-
-Own<const ThreadHandle> ThreadHandle::addRef() const {
-	return Own<const ThreadHandle>(this, kj::NullDisposer::instance).attach(kj::heap<ThreadHandle::Ref>(this->refData));
-}*/
-
-// === class StewardContext ===
-
-StewardContext::StewardContext() {};
-StewardContext::~StewardContext() {
-	// detachedTasks.clear();
+	while(!detachedTasks.isEmpty()) {
+		detachedTasks.clear();
+		ws.cancelAllDetached();
+	}
 };
-
 
 }

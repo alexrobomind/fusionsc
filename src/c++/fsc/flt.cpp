@@ -427,13 +427,6 @@ struct FLTImpl : public FLT::Server {
 		return downloadMappingData.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), fieldData = mv(fieldData), this](Maybe<LocalDataRef<ReversibleFieldlineMapping>> mappingData) mutable {			
 			// Extract kernel request
 			Temporary<FLTKernelRequest> kernelRequest;
-			/*kernelRequest.setPhiPlanes(request.getPoincarePlanes());
-			kernelRequest.setTurnLimit(request.getTurnLimit());
-			kernelRequest.setCollisionLimit(request.getCollisionLimit());
-			kernelRequest.setDistanceLimit(request.getDistanceLimit());
-			kernelRequest.setStepLimit(request.getStepLimit());
-			kernelRequest.setStepSize(request.getStepSize());
-			kernelRequest.setGrid(request.getField().getGrid());*/
 			kernelRequest.setServiceRequest(request);
 			
 			// Extract field data
@@ -461,8 +454,6 @@ struct FLTImpl : public FLT::Server {
 			Tensor<double, 2> positions = mapTensor<Tensor<double, 2>>(reshapedStartPoints.asReader())
 				-> shuffle(Eigen::array<int, 2>{1, 0});
 			
-			// KJ_UNIMPLEMENTED("Load mapping data");
-			
 			auto calc = heapHeld<TraceCalculation>(
 				*device, mv(kernelRequest), mv(field), mv(positions),
 				request.getGeometry(), mv(indexData), geometryData,
@@ -470,8 +461,7 @@ struct FLTImpl : public FLT::Server {
 				config
 			);
 			
-			return calc->run()
-			.then([ctx, calc, request, startPointShape, nStartPoints, geometryData = mv(geometryData)]() mutable {
+			auto postProcessing = [ctx, calc, request, startPointShape, nStartPoints, geometryData = mv(geometryData)]() mutable {
 				auto applyPointShape = [&](auto builder, kj::ArrayPtr<const int64_t> preShape, kj::ArrayPtr<const int64_t> postShape) {
 					const size_t shapeSize = startPointShape.size() - 1 + preShape.size() + postShape.size();
 					size_t shapeProd = nStartPoints;
@@ -915,7 +905,13 @@ struct FLTImpl : public FLT::Server {
 					for(int i : kj::indices(oMPol))
 						oMPol.set(i, mPol(i, 0));
 				}
-			}).attach(calc.x());
+			};
+			
+			return calc->run()
+			.then([pp = mv(postProcessing)]() mutable {
+				return getActiveThread().worker().executeAsync(mv(pp));
+			})
+			.attach(calc.x());
 		});
 		});
 		});

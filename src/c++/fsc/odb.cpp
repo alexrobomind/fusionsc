@@ -18,11 +18,6 @@ using namespace capnp;
 using ::fsc::internal::ObjectInfo;
 
 namespace fsc { namespace {
-
-LightWorkerPool& globalWorkerPool() {
-	static LightWorkerPool pool;
-	return pool;
-}
 	
 template<typename T>
 auto withODBBackoff(T func) {
@@ -1746,7 +1741,7 @@ Promise<void> DatarefDownloadProcess::receiveData(kj::ArrayPtr<const kj::byte> d
 	return withODBBackoff([this, data]() mutable -> Promise<void> {
 		KJ_REQUIRE(builder.get() != nullptr);
 		
-		return globalWorkerPool().select().executeAsync([this, data]() {
+		return getActiveThread().worker().executeAsync([this, data]() {
 			return builder -> tryConsume(data);
 		})
 		.then([this, data](bool consumed) -> Promise<void> {
@@ -2385,7 +2380,7 @@ Promise<void> TransmissionProcess::transmit(size_t chunkStart) {
 	auto request = receiver.receiveRequest();
 	auto buffer = request.initData(kj::min(CHUNK_SIZE, end - chunkStart));
 	
-	return reader -> tryReadAsync(buffer.begin(), buffer.size(), buffer.size(), globalWorkerPool().select())
+	return reader -> tryReadAsync(buffer.begin(), buffer.size(), buffer.size(), getActiveThread().worker())
 	.then([this, chunkStart, request = mv(request), buffer](size_t nBytesRead) mutable {
 		KJ_REQUIRE(nBytesRead >= buffer.size(), "Insufficient bytes read");
 		return request.send().then([this, chunkEnd = chunkStart + buffer.size()]() { return transmit(chunkEnd); });

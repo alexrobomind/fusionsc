@@ -258,7 +258,7 @@ public:
 	using Nursery = LocalDataService::Nursery;
 	using DTContext = DownloadTask<LocalDataRef<capnp::AnyPointer>>::Context;
 	
-	LocalDataServiceImpl(Library& h);
+	LocalDataServiceImpl(const LibraryHandle& hdl);
 	Own<LocalDataServiceImpl> addRef();
 	
 	Promise<LocalDataRef<capnp::AnyPointer>> download(DataRef<capnp::AnyPointer>::Client src, bool recursive, DTContext ctx = DTContext());
@@ -294,16 +294,13 @@ public:
 	Promise<Maybe<LocalDataRef<capnp::AnyPointer>>> unwrap(DataRef<capnp::AnyPointer>::Client ref);
 	
 private:
-	// capnp::CapabilityServerSet<DataRef<capnp::AnyPointer>> serverSet;
-	Library library;
-	
+	DataStore backingStore;
 	Own<DBCache> dbCache;
 	
 	LocalDataService::Limits limits;
 	MMapTemporary fileBackedMemory;
 	
 	struct DataRefDownloadProcess;
-	
 	friend class LocalDataRefImpl;
 	
 	bool debugChunks = false;

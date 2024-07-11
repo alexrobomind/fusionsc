@@ -1,17 +1,18 @@
 #pragma once
 
-#include "common.h"
-#include "local.h"
-
 namespace fsc {
+	class LibraryHandle;
+}
+
+namespace fsc { namespace internal {
 	
 struct LightWorkerThread {
-	LightWorkerThread();
+	LightWorkerThread(LibraryHandle&);
 	~LightWorkerThread();
-	const kj::Executor& getExecutor();
+	const kj::Executor& getExecutor() const;
 	
 private:
-	void run();
+	void run(LibraryHandle&);
 	
 	kj::MutexGuarded<Maybe<Own<const kj::Executor>>> executor;
 	Own<kj::CrossThreadPromiseFulfiller<void>> onDestroy;
@@ -20,15 +21,15 @@ private:
 };
 
 struct LightWorkerPool {
-	LightWorkerPool(size_t numWorkers = 0);
+	LightWorkerPool(LibraryHandle&, size_t numWorkers = 0);
 	
-	const kj::Executor& select();
+	const kj::Executor& select() const;
 	
 	kj::Array<Own<LightWorkerThread>> workers;
 
 private:
-	size_t offset = 0;
-	size_t base = 0;
+	mutable std::atomic<size_t> offset = 0;
+	mutable std::atomic<size_t> base = 0;
 };
 
-}
+}}

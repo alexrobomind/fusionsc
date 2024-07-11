@@ -281,10 +281,9 @@ public:
 	operator DataService::Client();
 	
 	/**
-	 * Constructs a new data service instance using the shared backing store contained in the given
-	 * library handle.
+	 * Constructs a new data service instance using the shared backing store.
 	 */
-	LocalDataService(Library& lib);
+	LocalDataService(const LibraryHandle& hdl);
 
 	// Non-const copy constructor
 	LocalDataService(LocalDataService& other);
