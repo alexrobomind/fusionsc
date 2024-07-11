@@ -28,6 +28,8 @@ struct DataStore {
 	DataStore(fusionsc_DataStore* store);
 	~DataStore();
 	
+	DataStore() = delete;
+	
 	DataStore(const DataStore&);
 	DataStore(DataStore&&);
 	
