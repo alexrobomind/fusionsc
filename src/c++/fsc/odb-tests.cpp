@@ -18,34 +18,35 @@ TEST_CASE("warehouse-stress", "[warehouse]") {
 	constexpr size_t NUM_THREADS = 16;
 	constexpr size_t NUM_OBJECTS = 1000;
 	
-	StartupOptions opts;
+	StartupParameters opts;
 	opts.numWorkerThreads = 2 * NUM_THREADS;
 	
 	Library l = newLibrary();
-	ThreadContext ctx(l);
+	ThreadContext ctx(l -> addRef());
 	
 	auto promiseBuilder = kj::heapArrayBuilder<Promise<void>>(NUM_THREADS);
 	for(auto i : kj::range(0, NUM_THREADS)) {
 		promiseBuilder.add(
 			getActiveThread().worker().executeAsync(
 				[NUM_OBJECTS]() {
-					return kj::startFiber(2 * 1024 * 1024, [](kj::WaitScope& ws) {
+					return kj::startFiber(2 * 1024 * 1024, [NUM_OBJECTS](kj::WaitScope& ws) {
 						auto wh = openWarehouse(*connectSqlite("stress-test.sqlite"));
+						auto root = wh.getRootRequest().send().getRoot();
 						
 						auto data = kj::heapArray<kj::byte>(128);
 						getActiveThread().rng().randomize(data);
 						
-						auto obj = getActiveThread().dataService().publish<capnp::Data>(data);
+						auto obj = getActiveThread().dataService().publish(capnp::Data::Reader(data));
 						
 						for(auto i : kj::range(0, NUM_OBJECTS)) {
-							auto req = wh.putRequest();
+							auto req = root.putRequest();
 							req.setPath("object");
 							req.setValue(obj);
 							
 							auto storedObj = req.send().wait(ws);
 							KJ_REQUIRE(storedObj.isDataRef());
 							
-							auto downloaded = getActiveThread().dataService().download(storeObj.getDataRef().getAsRef());
+							auto downloaded = getActiveThread().dataService().download(storedObj.getDataRef().getAsRef()).wait(ws);
 							KJ_REQUIRE(downloaded.getRaw() == data);
 						}
 					});
