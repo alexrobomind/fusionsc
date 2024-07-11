@@ -13,14 +13,9 @@ namespace fsc {
 // === class LibraryHandle ===
 	
 LibraryHandle::LibraryHandle(StartupParameters params) :
+	sharedStore(createStoreFromSettings(params)),
 	workerPool(*this, params.numWorkerThreads)
-{	
-	KJ_IF_MAYBE(pStore, params.dataStore) {
-		sharedStore = mv(*pStore);
-	} else {
-		sharedStore = createStore();
-	}
-	
+{		
 	// Start steward thread
 	worker().executeSync([this]() {
 		runSteward();
@@ -28,6 +23,14 @@ LibraryHandle::LibraryHandle(StartupParameters params) :
 };
 
 LibraryHandle::~LibraryHandle() {}
+
+DataStore LibraryHandle::createStoreFromSettings(StartupParameters& params) {
+	KJ_IF_MAYBE(pStore, params.dataStore) {
+		return *pStore;
+	} else {
+		return createStore();
+	}
+}
 
 std::unique_ptr<Botan::HashFunction> LibraryHandle::defaultHash() const {
 	auto result = Botan::HashFunction::create("Blake2b");

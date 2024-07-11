@@ -66,7 +66,9 @@ private:
 	//! Executes the steward thread
 	void runSteward();
 	
-	mutable DataStore sharedStore = nullptr;
+	static DataStore createStoreFromSettings(StartupParameters& params);
+	
+	mutable DataStore sharedStore;
 	
 	internal::LightWorkerPool workerPool;
 	
