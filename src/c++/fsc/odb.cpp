@@ -797,7 +797,12 @@ void ObjectDB::exportStoredObject(Capability::Client c, Warehouse::StoredObject:
 	auto data = entry -> loadPreserved();
 	switch(data -> which()) {
 		case ObjectInfo::UNRESOLVED:
-			out.setUnresolved();
+			if(entry -> isLive()) {
+				out.setUnresolved();
+			} else {
+				out.setDead();
+			}
+		
 			return;
 			
 		case ObjectInfo::NULL_VALUE:
