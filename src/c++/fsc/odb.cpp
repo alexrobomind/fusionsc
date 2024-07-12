@@ -320,17 +320,17 @@ private:
  *
  * This class maintains a builder that can be modified to change the state of the object.
  * Upon destruction (or release(true) ), the modified representation will be written back
- * into the database. The accessor implicitly maintains a database transaction.
+ * into the database. 
  */
 struct ObjectDBEntry::Accessor : public ObjectInfo::Builder {
 	Accessor(ObjectDBEntry& e);
 	~Accessor();
 	
 	/**
-	 * Release the built-in transaction, optionally with (true) or without (false) writing the
+	 * Release the accessor, optionally with (true) or without (false) writing the
 	 * object representation back to the database.
 	 */
-	void release(bool doSave) { KJ_REQUIRE(transaction -> active()); if(doSave) { save(); } else { transaction -> commit(); } }
+	void release(bool doSave) { if(doSave && !released) { save(); released = true; } }
 	
 private:
 	void load();
@@ -338,11 +338,12 @@ private:
 	
 	kj::UnwindDetector ud;
 	
-	Own<db::Transaction> transaction;
 	Own<ObjectDBEntry> target;
 	
 	MallocMessageBuilder messageBuilder;
 	BuilderCapabilityTable capTable;
+	
+	bool released = false;
 };
 
 /** Object database
@@ -578,72 +579,15 @@ Promise<void> ObjectDB::syncTask() {
 	.then([this]() { return syncTask(); });
 }
 
-/*Promise<void> ObjectDB::writer() {
-	// return getActiveThread().timer().afterDelay(50 * kj::MILLISECONDS)
-	//.then([this]() {
-	return kj::evalLast([this]() {
-		return withODBBackoff([this]() {
-			{
-				// Note: This implementation depends on sqlite's global locking
-				// behavior. Having a global lock implies that after the first
-				// write task succeeds, the transaction will no longer fail (due to contention)
-				// since it has acquired its global lock.
-				//
-				// This means that a successful write task will never need to be re-run, and
-				// all tasks can be immediately deleted from their queue. We need to eagerly
-				// delete successful tasks to ensure that task failure will not re-run previous
-				// possibly read-only tasks.
-				
-				db::Transaction t(*conn);
-				
-				for(auto it = writeTasks.begin(); it != writeTasks.end(); ) {
-					// Call target task
-					it -> operator()();
-					
-					auto it2 = it++;
-					writeTasks.erase(it2);
-					
-					++checkpointCounter;
-				}
-			}
-			
-			changed();
-		});
-	});
-}*/
-	
-/*template<typename F>
-kj::PromiseForResult<F, void> ObjectDB::runWriteTask(F&& f) {
-	using ResultType = decltype(f());
-	auto paf = kj::newPromiseAndFulfiller<ResultType>();
-	
-	if(writeTasks.empty()) {
-		writePromise = writer().eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(FATAL, "Error in writer loop: ", e); });
-	}
-	
-	writeTasks.push_back([this, f = fwd<F>(f), ff = mv(paf.fulfiller)]() mutable {
-		try {
-			ff -> fulfill(f());
-		} catch(kj::Exception& e) {
-			if(e.getType() == kj::Exception::Type::OVERLOADED)
-				throw;
-			
-			ff -> reject(mv(e));
-		}	
-	});
-	
-	return paf.promise.attach(addRef());
-}*/
-
 Promise<void> ObjectDB::getRoot(GetRootContext ctx) {
 	return withODBBackoff([this, ctx]() mutable {
 		
 		// Look for root
 		{
-			db::Transaction transaction(*conn);
-			auto q = findRoot.bind(ctx.getParams().getName());
+			auto& snapshot = getCurrentSnapshot();
+			auto q = snapshot.findRoot.bind(ctx.getParams().getName());
 			if(q.step()) {
-				ctx.initResults().setRoot(wrap(open(q[0].asInt64())).castAs<Warehouse::Folder>());
+				ctx.initResults().setRoot(wrap(open(q[0].asInt64(), snapshot)).castAs<Warehouse::Folder>());
 				return;
 			}
 		}
@@ -1053,7 +997,8 @@ Own<ObjectInfo::Reader> ObjectDBEntry::doLoad(Maybe<ObjectDBSnapshot&> snapshotT
 	ObjectDBBase& targetBase = getTargetBase();
 	
 	// Start transaction
-	db::Transaction t(*targetBase.conn);
+	// db::Transaction t(*targetBase.conn);
+	KJ_REQUIRE(targetBase.conn -> inTransaction(), "Internal error: Accessor loaded outside transaction");
 	
 	auto q = targetBase.getInfo.bind(id);
 	KJ_REQUIRE(q.step(), "Object not present in database");
@@ -1121,14 +1066,13 @@ void ObjectDBEntry::restore() {
 
 ObjectDBEntry::Accessor::Accessor(ObjectDBEntry& e) :
 	ObjectInfo::Builder(nullptr),
-	transaction(e.parent -> writeTransaction()),
 	target(e.addRef())
 {
 	load();
 }
 
 ObjectDBEntry::Accessor::~Accessor() {
-	if(transaction -> active() && !ud.isUnwinding())
+	if(!released && !ud.isUnwinding())
 		save();
 }
 
@@ -1200,17 +1144,6 @@ void ObjectDBEntry::Accessor::save() {
 	for(int64_t id : idsToCheck) {
 		target -> parent -> deleteIfOrphan(id);
 	}
-	
-	// Commit transaction
-	transaction -> commit();
-	
-	// Register change with database (and immediately resync same object)
-	// target -> parent -> changed();
-	/*for(auto& e : target -> parent -> liveEntries) {
-		if(e.id == target -> id) {
-			e.trySync();
-		}
-	}*/
 }
 
 // class ObjectDBHook
@@ -1622,21 +1555,27 @@ Promise<void> ImportContext::importTask(int64_t id, Capability::Client src) {
 		return withODBBackoff([&myParent, id, e = mv(e)]() {
 			auto t = myParent.writeTransaction();
 			
-			myParent.open(id)
-			-> open()
-			-> setException(
-				toProto(e)
-			);
-			
 			// Delete partially written results
 			auto q = myParent.getBlob.bind(id);
-			KJ_REQUIRE(q.step(), "Internal error");
+			
+			if(!q.step()) {
+				// Object was deleted, just return
+				return;
+			}
+			
 			if(!q[0].isNull()) {
 				int64_t blobId = q[0];
 				
 				myParent.setBlob(id, nullptr);
 				myParent.blobStore -> get(blobId) -> decRef();
 			}
+			
+			// Write exception into object record
+			myParent.open(id)
+			-> open()
+			-> setException(
+				toProto(e)
+			);
 		});
 	});
 }
@@ -2045,12 +1984,8 @@ Promise<void> FolderInterface::put(PutContext ctx) {
 				
 				db.incRefcount(id);
 				db.updateFolderEntry(parentFolder -> id, filename.asPtr(), id);
-				
-				// Export saved object to result
-				db.exportStoredObject(db.wrap((**pEntry).addRef()), ctx.initResults());
 			} else {
 				db.deleteFolderEntry(parentFolder -> id, filename.asPtr());
-				ctx.initResults().setNullValue();
 			}
 			
 			KJ_IF_MAYBE(pOldId, oldId) {
@@ -2059,7 +1994,16 @@ Promise<void> FolderInterface::put(PutContext ctx) {
 			}
 		}
 		
-		return importTask.task.then([&db]() { return db.writeBarrier(); });
+		return importTask.task
+		.then([&db]() { return db.writeBarrier(); })
+		.then([&db, e = mv(importTask.entry), ctx]() mutable {
+			KJ_IF_MAYBE(pEntry, e) {
+				// Export saved object to result
+				db.exportStoredObject(db.wrap((**pEntry).addRef()), ctx.initResults());
+			} else {
+				ctx.initResults().setNullValue();
+			}
+		});
 	});
 }
 

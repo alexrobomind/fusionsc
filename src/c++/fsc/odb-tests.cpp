@@ -48,8 +48,10 @@ TEST_CASE("warehouse-stress", "[warehouse][.]") {
 							auto downloaded = getActiveThread().dataService().download((DataRef<>::Client) storedObj.getAsGeneric()).wait(ws);
 							KJ_REQUIRE(downloaded.getRaw() == data);
 							
-							getActiveThread().timer().afterDelay(50 * kj::MILLISECONDS).wait(ws);
+							getActiveThread().timer().afterDelay(1 * kj::MILLISECONDS).wait(ws);
 						}
+						
+						KJ_DBG("Thread complete", i);
 					});
 				}
 			)
