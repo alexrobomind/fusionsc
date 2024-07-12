@@ -113,7 +113,7 @@ namespace {
 			size_t offset = 0;
 		};
 		struct Dict {
-			py::dict dict;
+			py::dict dict = py::dict();
 			kj::Maybe<py::object> key = nullptr;
 		};
 		struct Forward {
@@ -121,6 +121,10 @@ namespace {
 			py::object original;
 		};
 		struct Done { py::object result; };
+		
+		Forward forwardToVoid() {
+			return Forward {::fsc::structio::createVoidVisitor(), py::make_tuple()};
+		}
 		
 		using State = kj::OneOf<Preset, PresetList, Dict, Forward, NewArray, Done>;
 		kj::Vector<State> states;
@@ -219,6 +223,12 @@ namespace {
 					return;
 				}
 				
+				if(py::isinstance<py::tuple>(o) && py::len(o) == 0) {
+					states.add(forwardToVoid());
+					state().get<Forward>().visitor -> beginObject(s);
+					return;
+				}
+				
 				py::object unwrapped = o;
 				while(py::hasattr(unwrapped, "_fusionsc_wraps"))
 					unwrapped = unwrapped.attr("_fusionsc_wraps");
@@ -284,6 +294,9 @@ namespace {
 					states.add(NewArray());
 				} else if(py::isinstance<py::list>(o)) {
 					states.add(PresetList {o});
+				} else if(py::isinstance<py::tuple>(o) && py::len(o) == 0) {
+					states.add(forwardToVoid());
+					state().get<Forward>().visitor -> beginArray(s);
 				} else {
 					std::string typeName = py::str(py::type::of(o));
 					KJ_FAIL_REQUIRE("Targets for array objects must be None or list", typeName);
@@ -362,21 +375,44 @@ namespace {
 			
 			if(state().is<Preset>()) {
 				auto& ps = state().get<Preset>();
-				KJ_REQUIRE(ps.object.is_none(), "Primitive value can only be unified with None");
 				
-				state() = Done { asPy };
+				if(py::isinstance<py::tuple>(ps.object) && py::len(ps.object) == 0) {
+					state() = Done { ps.object };
+				} else if(ps.object.is_none()) {
+					state() = Done { asPy };
+				} else {
+					KJ_FAIL_REQUIRE("Primitive value can only be unified with None or ()");
+				}
 			} else if(state().is<PresetList>()) {
 				auto& p = state().get<PresetList>();
 				
 				KJ_REQUIRE(p.offset < p.list.size(), "List too small");
-				KJ_REQUIRE(p.list[p.offset].is_none(), "Primitive value can only be unified with None");
-				p.list[p.offset++] = asPy;
+				
+				auto ps = p.list[p.offset];
+				
+				if(py::isinstance<py::tuple>(ps) && py::len(ps) == 0) {
+					p.list[p.offset++] = ps;
+				} else if(ps.is_none()) {
+					p.list[p.offset++] = asPy;
+				} else {
+					KJ_FAIL_REQUIRE("Primitive value can only be unified with None or ()");
+				}
 			} else if(state().is<Dict>()) {
 				auto& d = state().get<Dict>();
-				KJ_IF_MAYBE(pKey, d.key) {
-					KJ_REQUIRE(!d.dict.contains(*pKey), "Dict already contains key");
-					
-					d.dict[*pKey] = asPy;
+				KJ_IF_MAYBE(pKey, d.key) {					
+					if(d.dict.contains(*pKey)) {				
+						auto ps = d.dict[*pKey];
+						
+						if(py::isinstance<py::tuple>(ps) && py::len(ps) == 0) {
+							d.dict[*pKey] = ps;
+						} else if(ps.is_none()) {
+							d.dict[*pKey] = asPy;
+						} else {
+							KJ_FAIL_REQUIRE("Primitive value can only be unified with None or ()");
+						}
+					} else {
+						d.dict[*pKey] = asPy;
+					}
 					d.key = nullptr;
 				} else {
 					d.key = asPy;

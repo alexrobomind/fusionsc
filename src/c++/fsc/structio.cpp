@@ -73,10 +73,20 @@ namespace {
 		virtual capnp::Type expectedType() = 0;
 		
 		virtual void finish() {};
+	};
+	
+	struct VoidSink : public Sink {
+		DynamicStruct::Builder newObject() override {
+			KJ_FAIL_REQUIRE("Internal error");
+		}
 		
-		// virtual void acceptKey(kj::StringPtr) = 0;
+		DynamicList::Builder newList(size_t) override {
+			KJ_FAIL_REQUIRE("Internal error");
+		}
 		
-		// capnp::Orphanage orphanage() = 0;
+		void accept(DynamicValue::Reader) override {}
+		
+		capnp::Type expectedType() { return capnp::schema::Type::VOID; }
 	};
 	
 	struct ExternalStructSink : public Sink {
@@ -778,7 +788,7 @@ namespace {
 		}
 		
 		bool done() override {
-			return backend.isDone;
+			return backend.isDone && ignoreDepth == 0;
 		}
 	
 	private:		
@@ -1091,6 +1101,10 @@ Own<Visitor> createVisitor(capnp::ListSchema schema, ListInitializer initializer
 
 Own<Visitor> createDebugVisitor() {
 	return kj::heap<DebugVisitor>();
+}
+
+Own<Visitor> createVoidVisitor() {
+	return makeBuilderStack(kj::heap<VoidSink>());
 }
 
 Own<Visitor> createVisitor(kj::BufferedOutputStream& os, const Dialect& dialect, const SaveOptions& opts) {

@@ -133,7 +133,9 @@ namespace fsc { namespace structio {
 	Own<Visitor> createVisitor(capnp::DynamicStruct::Builder);
 	Own<Visitor> createVisitor(capnp::ListSchema, ListInitializer);
 	Own<Visitor> createVisitor(Node&);
+	
 	Own<Visitor> createDebugVisitor();
+	Own<Visitor> createVoidVisitor();
 	
 	void load(kj::ArrayPtr<const kj::byte>, Visitor&, const Dialect&);
 	void load(kj::BufferedInputStream&, Visitor&, const Dialect&);
