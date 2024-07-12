@@ -127,7 +127,7 @@ int SQLiteConnection::check(int result) {
 	if(result == SQLITE_DONE)
 		return result;
 	
-	if(result == SQLITE_BUSY || result == SQLITE_BUSY_RECOVERY) {
+	if(result == SQLITE_BUSY || result == SQLITE_BUSY_RECOVERY || result == SQLITE_BUSY_SNAPSHOT) {
 		kj::throwFatalException(KJ_EXCEPTION(OVERLOADED, "Database busy"));
 	}
 	
