@@ -581,7 +581,7 @@ default values."""
 	return result
 
 @asyncFunction
-async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit = 1e3, padding = 2, numPlanes = 20, stepSize = 0.001, u0 = [0.5], v0 = [0.5]):
+async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit = 1e3, padding = 2, numPlanes = 20, stepSize = 0.001, u0 = [0.5], v0 = [0.5], toroidalSymmetry = None):
 	"""
 	Computes a reversible field line mapping. This mapping type divides the device into toroidal
 	sections. Each section is covered by a curved conforming hexahedral grid. The "mapping planes"
@@ -614,6 +614,9 @@ async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit 
 	
 	backend = backends.activeBackend()
 	
+	if toroidalSymmetry is None:
+		toroidalSymmetry = computedField.grid.nSym
+	
 	request = service.RFLMRequest.newMessage()
 	request.gridR = r
 	request.gridZ = z
@@ -623,6 +626,7 @@ async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit 
 	request.numPaddingPlanes = padding
 	request.distanceLimit = distanceLimit
 	request.stepSize = stepSize
+	request.nSym = toroidalSymmetry
 	
 	request.u0 = [u0] if isinstance(u0, numbers.Number) else u0
 	request.v0 = [v0] if isinstance(v0, numbers.Number) else v0

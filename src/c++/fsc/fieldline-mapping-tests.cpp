@@ -52,10 +52,19 @@ TEST_CASE("rflm") {
 	rflmRequest.setGridZ({-0.49, -0.25, 0, 0.25, 0.49});
 	rflmRequest.setMappingPlanes({0});
 	
+	SECTION("non-symmetric") {
+	}
+	SECTION("symmetric") {
+		rflmRequest.setNSym(5);
+	}
+	
 	prepareToroidalField(rflmRequest.getField());
 	
 	auto mapping = rflmRequest.sendForPipeline().getMapping();
 	auto data = lt->dataService().download(mapping).wait(ws);
+	KJ_DBG(data.get().getNSym());
+	for(double d : data.get().getSurfaces())
+		KJ_DBG(d);
 	
 	auto fltReq = root.newTracerRequest();
 	auto flt = fltReq.send().getService();

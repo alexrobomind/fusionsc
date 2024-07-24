@@ -99,12 +99,23 @@ def test_anisotropic_diffusion(field, geometry, upstreamPoints, heatCam):
 	# Check symmetrize function
 	fsc.flt.symmetrize(traceResult['endPoints'][:3], 10, True)
 
-def test_mapping(field):
+def test_mapping1(field):
 	mapping = fsc.flt.computeMapping(
 		field,
-		[0, np.pi],
+		np.radians([0, 36]),
 		np.linspace(0.8, 1.2, 5), np.linspace(-0.2, 0.2, 5),
-		distanceLimit = 2 * np.pi * 1.5 + 1
+		distanceLimit = 2 * np.pi * 1.5 + 1,
+		toroidalSymmetry = 5
+	)
+	fsc.asnc.wait(mapping)
+	
+def test_mapping2(field):
+	mapping = fsc.flt.computeMapping(
+		field,
+		np.radians([0, 180]),
+		np.linspace(0.8, 1.2, 5), np.linspace(-0.2, 0.2, 5),
+		distanceLimit = 2 * np.pi * 1.5 + 1,
+		toroidalSymmetry = 1
 	)
 	fsc.asnc.wait(mapping)
 

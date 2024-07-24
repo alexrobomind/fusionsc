@@ -344,26 +344,46 @@ def axisCurrent(field, current, grid = None, startPoint = [6.0, 0, 0], stepSize 
 	return flt.axisCurrent.asnc(field, current, grid, startPoint, stepSize, nTurns, nIterations, nPhi, direction, mapping)
 
 @asyncFunction
-def computeMapping(
+async def computeMapping(
 	field,
-	mappingPlanes = np.radians(72 * np.arange(0, 5)),
-	r = np.linspace(4, 7, 200), z = np.linspace(-1.5, 1.5, 200),
+	mappingPlanes = None,
+	r = None, z = None,
 	grid = None,
 	distanceLimit = 7 * 2 * np.pi / 8,
 	padding = 2, numPlanes = 20,
 	stepSize = 0.01,
-	u0 = [0.5], v0 = [0.5]
+	u0 = [0.5], v0 = [0.5],
+	toroidalSymmetry = None
 ) -> MagneticConfig:
 	"""
 	Variant of fsc.flt.computeMapping with more reasonable W7-X-tailored default values.
 	"""
 	if field.data.which_() != 'computedField' and grid is None:
 		grid = defaultGrid()
+	
+	field = await field.compute.asnc(grid)
+	
+	if r is None:
+		r = np.linspace(4, 7, 200)
+	
+	if z is None:
+		z = np.linspace(-1.5, 1.5, 200)
+	
+	if toroidalSymmetry is None:
+		toroidalSymmetry = field.data.computedField.grid.nSym
+	
+	if mappingPlanes is None:
+		assert toroidalSymmetry in [1, 5], "Can only auto-deduce mappingPlanes for symmetry 1 and 5"
+		if toroidalSymmetry == 5:
+			mappingPlanes = [0]
+		else:
+			mappingPlanes = np.radians(72 * np.arange(0, 5))
 		
-	return flt.computeMapping.asnc(
+	return await flt.computeMapping.asnc(
 		field,
 		mappingPlanes,
 		r, z, grid,
 		distanceLimit, padding, numPlanes,
-		stepSize, u0, v0
+		stepSize, u0, v0,
+		toroidalSymmetry
 	)
