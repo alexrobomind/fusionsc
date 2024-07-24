@@ -45,7 +45,7 @@ async def open(url: str):
 	Supported url schemes are:
 		'sqlite': SQLite database on current file system
 		'ws' or 'http': Remote warehouse server that can be connected to via network.
-		'remote': Looks up a named warehouse exposed by the active backend (remote:myrepo)
+		'remote': Looks up a named warehouse exposed by the active backend, optionally by requesting a named endpoint from the target (remote:name[@endpointName]).
 	"""
 	if url.startswith('remote:'):
 		# URL fragments indicate subfolders
@@ -56,7 +56,14 @@ async def open(url: str):
 			
 		name = url[7:].split('?')[0]
 		
-		remote = await openRemote.asnc(name)
+		if '@' in name:
+			name, endpointName = name.split('@')
+			endpoint = await backends.namedEndpoint.asnc(endpointName)
+		else:
+			endpoint = backends.activeBackend()
+		
+		with backends.useBackend(endpoint):
+			remote = await openRemote.asnc(name)
 		
 		if fragment is not None:
 			remote = remote.get(fragment)

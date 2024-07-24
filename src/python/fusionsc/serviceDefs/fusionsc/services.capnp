@@ -100,11 +100,21 @@ struct LoadBalancerConfig {
 		}
 	}
 	
-	# backends @0 : List(Backend);
+	struct NamedEndpoint {
+		name @0 : Text;
+		rules @1 : List(Rule);
+	}
+	
 	rules @0 : List(Rule);
+	
+	namedEndpoints @3 : List(NamedEndpoint);
 	
 	heartbeatIntervalSeconds @1 : UInt64 = 60;
 	reconnectIntervalSeconds @2 : UInt64 = 60;
+}
+
+interface Ingress {
+	getNamedEndpoint @0 (name : Text) -> (endpoint : Capability);
 }
 
 struct NodeInfo {

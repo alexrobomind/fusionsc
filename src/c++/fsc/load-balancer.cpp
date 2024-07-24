@@ -287,17 +287,69 @@ struct RuleSet : public Backend {
 			r.buildStatus(out);
 	}
 };
+
+struct LoadBalancerBase : public Ingress::Server {
+	virtual RuleSet& getRules() = 0;
 	
-struct LoadBalancerImpl : public capnp::Capability::Server, public kj::Refcounted, public LoadBalancer {	
+	capnp::Capability::Client selectCallTarget(uint64_t schemaId, uint16_t methodId) {		
+		KJ_IF_MAYBE(pTarget, getRules().getTarget(schemaId, methodId)) {
+			return *pTarget;
+		}
+		
+		KJ_FAIL_REQUIRE("No suitable backend for method was available", methodId);
+	}
+	
+	DispatchCallResult dispatchCall(
+		uint64_t interfaceId, uint16_t methodId,
+        capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> context
+	) override {
+		// Consume calls to Ingress interface
+		// by redirecting to static dispatch
+		if(interfaceId == capnp::typeId<Ingress>()) {
+			return Ingress::Server::dispatchCall(interfaceId, methodId, mv(context));
+		}
+		
+		auto params = context.getParams();
+		capnp::MessageSize size = params.targetSize();
+		
+		auto tailRequest = selectCallTarget(interfaceId, methodId)
+			.typelessRequest(interfaceId, methodId, size, capnp::Capability::Client::CallHints());
+		tailRequest.set(params);
+		
+		return DispatchCallResult {
+			context.tailCall(mv(tailRequest)),
+			false, // isStreaming
+			true   // allowCancellation
+		};
+	}
+};
+
+struct SubBalancer : public LoadBalancerBase {
+	RuleSet& rules;
+	
+	SubBalancer(RuleSet& r) : rules(r) {}
+	
+	RuleSet& getRules() override { return rules; }
+};
+	
+struct LoadBalancerImpl : public LoadBalancerBase, public kj::Refcounted, public LoadBalancer {	
 	NetworkInterface::Client networkInterface;
 	Temporary<LoadBalancerConfig> config;
 	
 	RuleSet ruleSet;
 	
+	kj::HashMap<kj::String, RuleSet> namedEndpoints;
+	
 	LoadBalancerImpl(NetworkInterface::Client networkInterface_, LoadBalancerConfig::Reader config_) :
 		networkInterface(mv(networkInterface_)), config(config_),
 		ruleSet(config, networkInterface)
-	{}
+	{
+		for(auto ep : config.getNamedEndpoints()) {
+			namedEndpoints.insert(kj::heapString(ep.getName().asReader()), RuleSet(config, networkInterface));
+		}
+	}
+	
+	RuleSet& getRules() override { return ruleSet; }
 		
 	Own<LoadBalancer> addRef() override { return kj::addRef(*this); }
 	
@@ -314,30 +366,14 @@ struct LoadBalancerImpl : public capnp::Capability::Server, public kj::Refcounte
 		return Own<capnp::Capability::Server>(kj::addRef(*this));
 	}
 	
-	capnp::Capability::Client selectCallTarget(uint64_t schemaId, uint16_t methodId) {
-		KJ_IF_MAYBE(pTarget, ruleSet.getTarget(schemaId, methodId)) {
-			return *pTarget;
+	Promise<void> getNamedEndpoint(GetNamedEndpointContext ctx) override {
+		kj::StringPtr name = ctx.getParams().getName();
+		KJ_IF_MAYBE(pRule, namedEndpoints.find(name)) {
+			ctx.initResults().setEndpoint(kj::heap<SubBalancer>(*pRule).attach(addRef()));
+			return READY_NOW;
 		}
 		
-		KJ_FAIL_REQUIRE("No suitable backend for method was available", methodId);
-	}
-	
-	DispatchCallResult dispatchCall(
-		uint64_t interfaceId, uint16_t methodId,
-        capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> context
-	) override {
-		auto params = context.getParams();
-		capnp::MessageSize size = params.targetSize();
-		
-		auto tailRequest = selectCallTarget(interfaceId, methodId)
-			.typelessRequest(interfaceId, methodId, size, capnp::Capability::Client::CallHints());
-		tailRequest.set(params);
-		
-		return DispatchCallResult {
-			context.tailCall(mv(tailRequest)),
-			false, // isStreaming
-			true   // allowCancellation
-		};
+		return KJ_EXCEPTION(FAILED, "Named endpoint not found", name);
 	}
 };
 

@@ -111,3 +111,8 @@ def alwaysUseBackend(newBackend: service.RootService.Client):
 async def backendInfo() -> service.NodeInfo.Reader:
 	"""Returns information about the currently active backend"""
 	return await activeBackend().getInfo()
+
+@asnc.asyncFunction
+async def namedEndpoint(name: str):
+	response = await activeBackend().castAs_(service.LoadBalancer).getNamedEndpoint(name)
+	return response.endpoint
