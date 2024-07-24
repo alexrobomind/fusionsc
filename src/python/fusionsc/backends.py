@@ -114,5 +114,5 @@ async def backendInfo() -> service.NodeInfo.Reader:
 
 @asnc.asyncFunction
 async def namedEndpoint(name: str):
-	response = await activeBackend().castAs_(service.LoadBalancer).getNamedEndpoint(name)
+	response = await activeBackend().castAs_(service.Ingress).getNamedEndpoint(name)
 	return response.endpoint
