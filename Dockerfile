@@ -1,3 +1,7 @@
+# Build setup
+ARG CACHE_DIR=/tmp/fusionsc-build-cache
+ARG WITH_CACHE=--mount=type=bind,source=${CACHE_DIR},target=/build-cache
+
 # Container for libc++
 FROM alpine as macproxy
 
@@ -14,14 +18,22 @@ FROM debian as base
 
 # Baseline FusionSC dependencies
 RUN apt-get -q update
-RUN apt-get install -y g++ cmake ninja-build libssl-dev python3
+RUN apt-get install -y g++ cmake ninja-build libssl-dev python3 ccache
 
 FROM base as build
 
 COPY . /src
 WORKDIR /build
-RUN cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DFSC_DEP_PREF_VENDORED=Off /src
-RUN ninja fsc-tool tests
+ENV CCACHE_DIR=/build-cache
+RUN ${WITH_CACHE} cmake \
+  -GNinja \
+  -DCMAKE_BUILD_TYPE=Release \
+  \
+  -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+  \
+  -DFSC_DEP_PREF_VENDORED=Off /src
+RUN ${WITH_CACHE} ninja fsc-tool tests
 
 FROM debian as light
 RUN apt-get -q update
