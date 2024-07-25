@@ -117,7 +117,7 @@ build:docker:
 
   script:
     - mkdir -p /cache
-    - DOCKER_BUILDKIT=1 docker build -t fusionsc .
+    - DOCKER_BUILDKIT=1 docker build --build-arg="CACHE_DIR=/cache/build" -t fusionsc .
     - docker run fusionsc /usr/local/bin/fusionsc-tests
 
 # Test stage
