@@ -98,6 +98,19 @@ build:clang:
 build:msvc:
   <<: *build-windows
   <<: *msvc
+  
+# Docker build
+
+build:docker:
+  <<: *job
+  
+  image:docker:20.10.16
+  services:
+    - name: docker:20.10.16-dind
+      alias: docker
+  stage: build
+    - docker build -t fusionsc .
+    - docker run fusionsc /usr/local/bin/fusionsc-tests
 
 # Test stage
 

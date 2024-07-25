@@ -21,7 +21,7 @@ FROM base as build
 COPY . /src
 WORKDIR /build
 RUN cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DFSC_DEP_PREF_VENDORED=Off /src
-RUN ninja fsc-tool
+RUN ninja fsc-tool tests
 
 FROM debian as light
 RUN apt-get -q update
@@ -51,3 +51,4 @@ ENV MACHINE=fusionsc
 WORKDIR /stellopt
 RUN ./build_all -o release XVMEC2000
 COPY --from=build /build/src/c++/tools/fusionsc /usr/local/bin/fusionsc
+COPY --from=build /build/src/c++/tests /usr/local/bin/fusionsc-tests
