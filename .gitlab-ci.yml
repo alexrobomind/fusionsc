@@ -104,11 +104,12 @@ build:msvc:
 build:docker:
   <<: *job
   
-  image:docker:20.10.16
+  image: docker:20.10.16
   services:
     - name: docker:20.10.16-dind
       alias: docker
   stage: build
+  script:
     - docker build -t fusionsc .
     - docker run fusionsc /usr/local/bin/fusionsc-tests
 
