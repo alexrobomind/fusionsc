@@ -109,7 +109,14 @@ build:docker:
     - name: docker:20.10.16-dind
       alias: docker
   stage: build
+
+  cache:
+    key: build-cache
+    paths:
+      - /cache
+
   script:
+    - mkdir -p /cache
     - DOCKER_BUILDKIT=1 docker build -t fusionsc .
     - docker run fusionsc /usr/local/bin/fusionsc-tests
 
