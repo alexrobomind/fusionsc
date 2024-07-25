@@ -110,7 +110,7 @@ build:docker:
       alias: docker
   stage: build
   script:
-    - docker build -t fusionsc .
+    - DOCKER_BUILDKIT=1 docker build -t fusionsc .
     - docker run fusionsc /usr/local/bin/fusionsc-tests
 
 # Test stage
