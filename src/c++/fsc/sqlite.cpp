@@ -108,6 +108,7 @@ SQLiteConnection::SQLiteConnection(kj::StringPtr filename, bool readOnly) :
 			nullptr
 		));
 	} catch(...) {
+		KJ_LOG(WARNING, "Failed to open database file", filename, readOnly);
 		sqlite3_close_v2(handle);
 		throw;
 	}
