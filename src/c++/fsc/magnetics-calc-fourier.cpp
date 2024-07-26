@@ -320,17 +320,19 @@ Promise<void> FieldCalculatorImpl::calculateRadialModes(CalculateRadialModesCont
 			
 			// Compute cos and sin coefficients
 			for(auto iSurf : kj::range(0, nSurfs)) {
+				// THESE ONES HAVE NO NEGATIVE FREQ COUNTERPART
+				// SO NO FACTOR 2 !!!
 				cosCoeffs(0, 0, iSurf) = dftReal(0, 0, iSurf);
 				sinCoeffs(0, 0, iSurf) = dftImag(0, 0, iSurf);
 			
 				for(auto in : kj::range(1, nMax + 1)) {
-					cosCoeffs(0, in, iSurf) = dftReal(0, in, iSurf);
-					sinCoeffs(0, in, iSurf) = dftImag(0, in, iSurf);
+					cosCoeffs(0, in, iSurf) = 2 * dftReal(0, in, iSurf);
+					sinCoeffs(0, in, iSurf) = 2 * dftImag(0, in, iSurf);
 				}
 				
 				for(auto im : kj::range(1, mMax + 1)) {
-					cosCoeffs(im, 0, iSurf) = dftReal(im, 0, iSurf);
-					sinCoeffs(im, 0, iSurf) = dftImag(im, 0, iSurf);
+					cosCoeffs(im, 0, iSurf) = 2 * dftReal(im, 0, iSurf);
+					sinCoeffs(im, 0, iSurf) = 2 * dftImag(im, 0, iSurf);
 				}
 				
 				for(auto in : kj::range(1, numN)) {
@@ -338,8 +340,8 @@ Promise<void> FieldCalculatorImpl::calculateRadialModes(CalculateRadialModesCont
 						auto in2 = 2 * nMax + 1 - in;
 						auto im2 = 2 * mMax + 1 - im;
 						
-						cosCoeffs(im, in, iSurf) = dftReal(im, in, iSurf); //+ dftReal(im2, in2, Eigen::all);
-						sinCoeffs(im, in, iSurf) = dftImag(im, in, iSurf); //- dftImag(im2, in2, Eigen::all);
+						cosCoeffs(im, in, iSurf) = 2 * dftReal(im, in, iSurf); //+ dftReal(im2, in2, Eigen::all);
+						sinCoeffs(im, in, iSurf) = 2 * dftImag(im, in, iSurf); //- dftImag(im2, in2, Eigen::all);
 					}
 				}
 			}
@@ -403,21 +405,21 @@ Promise<void> FieldCalculatorImpl::calculateRadialModes(CalculateRadialModesCont
 				for(auto in : kj::range(1, nMax + 1)) {
 					auto in2 = 2 * nMax + 1 - in;
 					
-					dftReal(0, in, iSurf) = cosCoeffs(0, in, iSurf);
-					dftImag(0, in, iSurf) = sinCoeffs(0, in, iSurf);
+					dftReal(0, in, iSurf) = 0.5 * cosCoeffs(0, in, iSurf);
+					dftImag(0, in, iSurf) = 0.5 * sinCoeffs(0, in, iSurf);
 					
-					dftReal(0, in2, iSurf) =  cosCoeffs(0, in, iSurf);
-					dftImag(0, in2, iSurf) = -sinCoeffs(0, in, iSurf);
+					dftReal(0, in2, iSurf) =  0.5 * cosCoeffs(0, in, iSurf);
+					dftImag(0, in2, iSurf) = -0.5 * sinCoeffs(0, in, iSurf);
 				}
 				
 				for(auto im : kj::range(1, mMax + 1)) {
 					auto im2 = 2 * mMax + 1 - im;
 					
-					dftReal(im, 0, iSurf) = cosCoeffs(im, 0, iSurf);
-					dftImag(im, 0, iSurf) = sinCoeffs(im, 0, iSurf);
+					dftReal(im, 0, iSurf) = 0.5 * cosCoeffs(im, 0, iSurf);
+					dftImag(im, 0, iSurf) = 0.5 * sinCoeffs(im, 0, iSurf);
 					
-					dftReal(im2, 0, iSurf) =  cosCoeffs(im, 0, iSurf);
-					dftImag(im2, 0, iSurf) = -sinCoeffs(im, 0, iSurf);
+					dftReal(im2, 0, iSurf) =  0.5 * cosCoeffs(im, 0, iSurf);
+					dftImag(im2, 0, iSurf) = -0.5 * sinCoeffs(im, 0, iSurf);
 				}
 				
 				for(auto in : kj::range(1, numN)) {
@@ -425,11 +427,11 @@ Promise<void> FieldCalculatorImpl::calculateRadialModes(CalculateRadialModesCont
 						auto in2 = 2 * nMax + 1 - in;
 						auto im2 = 2 * mMax + 1 - im;
 						
-						dftReal(im, in, iSurf) = cosCoeffs(im, in, iSurf);
-						dftImag(im, in, iSurf) = sinCoeffs(im, in, iSurf);
+						dftReal(im, in, iSurf) = 0.5 * cosCoeffs(im, in, iSurf);
+						dftImag(im, in, iSurf) = 0.5 * sinCoeffs(im, in, iSurf);
 						
-						dftReal(im2, in2, iSurf) =  cosCoeffs(im, in, iSurf);
-						dftImag(im2, in2, iSurf) = -sinCoeffs(im, in, iSurf);
+						dftReal(im2, in2, iSurf) =  0.5 * cosCoeffs(im, in, iSurf);
+						dftImag(im2, in2, iSurf) = -0.5 * sinCoeffs(im, in, iSurf);
 					}
 				}
 			}
