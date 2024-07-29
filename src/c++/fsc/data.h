@@ -514,6 +514,9 @@ Promise<ID> ID::fromReaderWithRefs(T t) {
 	});
 }
 
+//! Provides an overlay over the input data ref that changes the references
+DataRef<capnp::AnyPointer>::Client overrideRefs(DataRef<capnp::AnyPointer>::Client, kj::Array<capnp::Capability::Client>);
+
 }
 
 #include "data-inl.h"

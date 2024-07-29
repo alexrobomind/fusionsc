@@ -54,6 +54,40 @@ interface Warehouse {
 			dataRef @4 : Data.DataRef;
 		}
 	}
+
+	struct ObjectGraph {
+		struct ObjectRef {
+			union {
+				null @0 : Void;
+				object @1 : UInt64;
+			}
+		}
+		
+		struct FolderEntry {
+			name @0 : Text;
+			object @1 : UInt64;
+		}
+		
+		struct Object {
+			id @0 : UInt64;
+			
+			union {
+				unresolved @1 : Void;
+				null @2 : Void;
+				exception @3 : Rpc.Exception;
+				dataRef : group {
+					data @4 : Data.DataRef;
+					refs @5 : List(ObjectRef);
+				}
+				folder @6 : List(FolderEntry);
+				file @7 : ObjectRef;
+				link @8 : ObjectRef;
+			}
+		}
+		
+		objects @0 : List(Object);
+		root @1 : UInt64;
+	}
 	
 	interface Folder {
 		struct Entry {
@@ -73,6 +107,9 @@ interface Warehouse {
 		createFile @6 (path : Text) -> (file : File);
 		
 		freeze @7 (path : Text) -> (ref : Data.DataRef(FrozenFolder));
+		
+		exportGraph @8 (path : Text) -> (graph : ObjectGraph);
+		importGraph @9 (path : Text, graph: ObjectGraph) -> StoredObject;
 	}
 	
 	interface File(StaticType) {

@@ -158,6 +158,12 @@ TEST_CASE("warehouse-rw-1", "[warehouse]") {
 			REQUIRE(innerCopy.get() == data);
 		}
 	}
+	
+	auto egReq = dbRoot.exportGraphRequest();
+	egReq.setPath("obj");
+	
+	auto response = egReq.send().wait(ws);
+	KJ_DBG(response.getGraph());
 }
 
 TEST_CASE("warehouse-rw-2", "[warehouse]") {

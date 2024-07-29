@@ -1947,4 +1947,48 @@ LocalDataRef<> LocalDataServiceImpl::publishFlat(kj::Array<kj::Array<const byte>
 
 } // namespace internal
 
+// function overrideRefs
+
+namespace {
+	struct CapTableOverride : public DataRef<capnp::AnyPointer>::Server {
+		DataRef<capnp::AnyPointer>::Client delegate;
+		kj::Array<capnp::Capability::Client> capTable;
+		
+		CapTableOverride(DataRef<capnp::AnyPointer>::Client d, kj::Array<capnp::Capability::Client> t) :
+			delegate(mv(d)), capTable(mv(t))
+		{}
+		
+		DispatchCallResult dispatchCall(
+			uint64_t interfaceId, uint16_t methodId,
+			capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> context
+		) override {
+			// Check for metaAndCapTable
+			if(interfaceId == capnp::typeId<DataRef<capnp::AnyPointer>>() && methodId == 0) {
+				return DataRef<capnp::AnyPointer>::Server::dispatchCall(interfaceId, methodId, mv(context));
+			}
+			
+			auto params = context.getParams();
+			auto targetRequest = delegate.typelessRequest(interfaceId, methodId, capnp::MessageSize{ params.targetSize().wordCount + 1 }, capnp::Capability::Client::CallHints());
+			targetRequest.set(params);
+			
+			return DispatchCallResult { context.tailCall(mv(targetRequest)), false, true };
+		}
+		
+		Promise<void> metaAndCapTable(MetaAndCapTableContext ctx) {
+			return delegate.metaAndCapTableRequest().send()
+			.then([ctx, this](auto response) mutable {
+				ctx.setResults(response);
+				
+				auto tbl = ctx.getResults().initTable(capTable.size());
+				for(auto i : kj::indices(capTable))
+					tbl.set(i, capTable[i]);
+			});
+		}
+	};
+}
+
+DataRef<capnp::AnyPointer>::Client overrideRefs(DataRef<capnp::AnyPointer>::Client base, kj::Array<capnp::Capability::Client> refs) {
+	return kj::heap<CapTableOverride>(mv(base), mv(refs));
+}
+
 } // namespace fsc

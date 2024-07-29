@@ -8,6 +8,8 @@
 
 #include <capnp/serialize-packed.h>
 
+#include <kj/map.h>
+
 #include <list>
 #include <set>
 
@@ -1775,6 +1777,7 @@ struct FolderInterface : public Warehouse::Folder::Server {
 	Promise<void> mkdir(MkdirContext ctx) override;
 	Promise<void> createFile(CreateFileContext ctx) override;
 	Promise<void> freeze(FreezeContext ctx) override;
+	Promise<void> exportGraph(ExportGraphContext ctx) override;
 
 	// Implementation
 	FolderInterface(Own<ObjectDBEntry>&& object, kj::Badge<ObjectDBHook>) :
@@ -2101,6 +2104,137 @@ Promise<void> FolderInterface::freeze(FreezeContext ctx) {
 	.then([target = mv(target), ctx]() mutable {
 		auto ref = getActiveThread().dataService().publish(target.asReader());
 		ctx.initResults().setRef(mv(ref));
+	});
+}
+
+Promise<void> FolderInterface::exportGraph(ExportGraphContext ctx) {
+	return withODBBackoff([this, ctx] () mutable {
+		auto entry = locate(kj::Path::parse(ctx.getParams().getPath()));
+		
+		auto& snapshot = entry -> getSnapshot();
+		
+		// Collect mappings from DB id to section IDs
+		kj::HashMap<int64_t, uint64_t> idMap;
+		kj::Vector<int64_t> ids;
+		{
+			std::list<int64_t> queue;
+			uint64_t counter = 0;
+			
+			queue.push_back(entry -> id);
+			
+			while(!queue.empty()) {
+				int64_t front = *queue.begin();
+				queue.pop_front();
+				
+				if(idMap.find(front) != nullptr)
+					continue;
+				
+				idMap.insert(front, counter++);
+				ids.add(front);
+				
+				auto q1 = snapshot.listOutgoingRefs.bind(front);
+				while(q1.step()) {
+					if(q1[0].isNull()) continue;
+					
+					queue.push_back(q1[0].asInt64());
+				}
+				
+				auto q2 = snapshot.listFolderEntries.bind(front);
+				while(q2.step()) {
+					queue.push_back(q2[1].asInt64());
+				}
+			}
+		}
+		
+		// We now know how many objects to process
+		auto entries = ctx.initResults().initGraph().initObjects(ids.size());
+		
+		for(auto i : kj::indices(ids)) {
+			int64_t id = ids[i];
+			
+			auto outEntry = entries[i];
+			
+			// Serialize ObjectInfo
+			outEntry.setId(i);
+			
+			auto& db = entry -> getDb();
+			auto current = db.open(id, snapshot);
+			auto preserved = current -> loadPreserved();
+			
+			auto exportObject = [&](capnp::Capability::Client obj, Warehouse::ObjectGraph::ObjectRef::Builder out) {
+				auto unwrapped  =db.unwrap(obj);
+				if(unwrapped.is<decltype(nullptr)>()) {
+					out.setNull();
+					return;
+				}
+				
+				KJ_REQUIRE(unwrapped.is<Own<ObjectDBEntry>>(), "Internal error: DB yielded un-unwrappable object during export");
+				KJ_IF_MAYBE(pTargetId, idMap.find(unwrapped.get<Own<ObjectDBEntry>>() -> id)) {
+					out.setObject(*pTargetId);
+				} else {
+					KJ_FAIL_REQUIRE("Could not resolve ID of linked object");
+				}
+			};
+			
+			switch(preserved -> which()) {
+				case ObjectInfo::UNRESOLVED:
+					outEntry.setUnresolved();
+					break;
+				
+				case ObjectInfo::NULL_VALUE:
+					outEntry.setNull();
+					break;
+				
+				case ObjectInfo::EXCEPTION:
+					outEntry.setException(preserved -> getException());
+					break;
+				
+				case ObjectInfo::LINK:
+					exportObject(preserved -> getLink(), outEntry.initLink());
+					break;
+					
+				case ObjectInfo::DATA_REF: {					
+					auto refInfo = outEntry.initDataRef();
+					refInfo.setData(overrideRefs(db.wrap(current -> addRef()).castAs<DataRef<AnyPointer>>(), nullptr));
+					
+					auto capTableIn = preserved -> getDataRef().getCapTable();
+					auto capTableOut = refInfo.initRefs(capTableIn.size());
+					
+					for(auto i : kj::indices(capTableIn)) {
+						exportObject(capTableIn[i], capTableOut[i]);
+					}
+					
+					break;
+				}
+				
+				case ObjectInfo::FOLDER: {
+					kj::Vector<kj::Tuple<kj::String, uint64_t>> entries;
+					
+					auto q = snapshot.listFolderEntries.bind(id);
+					while(q.step()) {
+						auto name = q[0].asText();
+						
+						KJ_IF_MAYBE(pId, idMap.find(q[1].asInt64())) {
+							entries.add(kj::tuple(kj::heapString(name), *pId));
+						} else {
+							KJ_FAIL_REQUIRE("Internal error: Id lookup failed");
+						}
+					}
+					
+					auto entriesOut = outEntry.initFolder(entries.size());
+					for(auto iRef : kj::indices(entries)) {
+						entriesOut[iRef].setName(kj::get<0>(entries[iRef]));
+						entriesOut[iRef].setObject(kj::get<1>(entries[iRef]));
+					}
+					break;
+				}
+				
+				case ObjectInfo::FILE: {
+					exportObject(preserved -> getFile(), outEntry.initFile());
+					break;
+				}
+			}
+		}
 	});
 }
 
