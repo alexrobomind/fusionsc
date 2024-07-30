@@ -2281,18 +2281,6 @@ Promise<void> FolderInterface::importGraph(ImportGraphContext ctx) {
 			{
 				auto t = db.writeTransaction();
 				
-				kj::Path path = kj::Path::parse(ctx.getParams().getPath());
-				
-				auto parentFolder = locateWriteDir(path.parent(), true);
-				auto& objectName = path.basename()[0];
-				
-				// Decrease old refcount if present
-				Maybe<int64_t> oldId;
-				auto oldIdQuery = db.getFolderEntry.bind(parentFolder -> id, objectName.asPtr());
-				if(oldIdQuery.step()) {
-					oldId = oldIdQuery[0].asInt64();
-				}
-				
 				// Prepare import of graph
 				auto objects = graph.get().getObjects();
 				kj::HashMap<uint64_t, Own<ObjectDBEntry>> importMap;
@@ -2309,20 +2297,28 @@ Promise<void> FolderInterface::importGraph(ImportGraphContext ctx) {
 					}
 				}
 				
-				kj::Function<ObjectDBEntry& (uint64_t)> import = [&](uint64_t id) -> ObjectDBEntry& {
+				auto getGraphObject = [&](uint64_t id) {
+					size_t listIdx = std::upper_bound(startAddresses.begin(), startAddresses.end(), id) - startAddresses.begin() - 1;
+					KJ_REQUIRE(id <= startAddresses[listIdx] + objects[listIdx].size(), "Invalid graph object ID");
+					
+					return objects[listIdx][id - startAddresses[listIdx]];
+				};
+				
+				kj::Function<ObjectDBEntry& (uint64_t, bool)> import = [&](uint64_t id, bool force) -> ObjectDBEntry& {
 					// Check if object already allocated
-					KJ_IF_MAYBE(pEntry, importMap.find(id)) {
-						return **pEntry;
+					if(!force) {
+						KJ_IF_MAYBE(pEntry, importMap.find(id)) {
+							return **pEntry;
+						}
 					}
 					
 					using Object = Warehouse::ObjectGraph::Object;	
-					size_t listIdx = std::upper_bound(startAddresses.begin(), startAddresses.end(), id) - startAddresses.begin() - 1;
-					Object::Reader object = objects[listIdx][id - startAddresses[listIdx]];
+					Object::Reader object = getGraphObject(id);
 					
 					// Helper to import object references
 					auto importRef = [&](Warehouse::ObjectGraph::ObjectRef::Reader ref) -> Maybe<Own<ObjectDBEntry>> {
 						if(ref.isNull()) return nullptr;
-						if(ref.isObject()) return import(ref.getObject()).addRef();
+						if(ref.isObject()) return import(ref.getObject(), false).addRef();
 						KJ_FAIL_REQUIRE("Unknown ref type");
 					};
 					
@@ -2369,14 +2365,23 @@ Promise<void> FolderInterface::importGraph(ImportGraphContext ctx) {
 						case Object::FOLDER: {
 							dst -> open() -> setFolder();
 													
-							for(auto e : object.getFolder()) {
-								// Check that entry does not exist (otherwise we get inconsistent refcount)
-								KJ_REQUIRE(!db.getFolderEntry.bind(dst -> id, e.getName()).step(), "Duplicate folder names in input");
-								
+							for(auto e : object.getFolder()) {								
 								// Attach child object
-								auto& child = import(e.getObject());
+								Maybe<int64_t> oldChild;
+								
+								auto q = db.getFolderEntry.bind(dst -> id, e.getName());
+								if(q.step()) {
+									oldChild = q[0].asInt64();
+								}
+								
+								auto& child = import(e.getObject(), false);
 								db.incRefcount(child.id);
 								db.updateFolderEntry(dst -> id, e.getName(), child.id);
+								
+								KJ_IF_MAYBE(pOld, oldChild) {
+									db.decRefcount(*pOld);
+									db.deleteIfOrphan(*pOld);
+								}
 							}
 							
 							break;
@@ -2385,7 +2390,7 @@ Promise<void> FolderInterface::importGraph(ImportGraphContext ctx) {
 							dst -> open() -> setFile(db.wrap(importRef(object.getFile())));
 							break;
 						case Object::LINK:
-							dst -> open() -> setLink(db.wrap(import(object.getLink()).addRef()));
+							dst -> open() -> setLink(db.wrap(import(object.getLink(), false).addRef()));
 							break;
 						default:
 							KJ_FAIL_REQUIRE("Import failure: Unknown object type");
@@ -2394,17 +2399,43 @@ Promise<void> FolderInterface::importGraph(ImportGraphContext ctx) {
 					return *dst;
 				};
 				
-				auto& newObject = import(ctx.getParams().getRoot());
+				kj::Path path = kj::Path::parse(ctx.getParams().getPath());
+				auto rootId = ctx.getParams().getRoot();
 				
-				db.incRefcount(newObject.id);
-				db.updateFolderEntry(parentFolder -> id, objectName.asPtr(), newObject.id);
+				if(ctx.getParams().getMerge()) {
+					auto dst = locateWriteDir(path, true);
+					
+					KJ_REQUIRE(getGraphObject(rootId).isFolder(), "Can only use merge mode when source is folder");
+					
+					// Install dst as root 
+					importMap.insert(rootId, dst -> addRef());
 				
-				KJ_IF_MAYBE(pOldId, oldId) {
-					db.decRefcount(*pOldId);
-					db.deleteIfOrphan(*pOldId);
+					db.exportStoredObject(db.wrap(import(rootId, true).addRef()), ctx.initResults());
+				} else {
+					KJ_REQUIRE(path.size() >= 1, "Can not replace self, with empty dst path use merge mode");
+				
+					auto parentFolder = locateWriteDir(path.parent(), true);
+					auto& objectName = path.basename()[0];
+				
+					// Decrease old refcount if present
+					Maybe<int64_t> oldId;
+					auto oldIdQuery = db.getFolderEntry.bind(parentFolder -> id, objectName.asPtr());
+					if(oldIdQuery.step()) {
+						oldId = oldIdQuery[0].asInt64();
+					}
+					
+					auto& newObject = import(ctx.getParams().getRoot(), false);
+					
+					db.incRefcount(newObject.id);
+					db.updateFolderEntry(parentFolder -> id, objectName.asPtr(), newObject.id);
+					
+					KJ_IF_MAYBE(pOldId, oldId) {
+						db.decRefcount(*pOldId);
+						db.deleteIfOrphan(*pOldId);
+					}
+				
+					db.exportStoredObject(db.wrap(newObject.addRef()), ctx.initResults());
 				}
-				
-				db.exportStoredObject(db.wrap(newObject.addRef()), ctx.initResults());
 				return kj::joinPromisesFailFast(importTasks.releaseAsArray())
 				.then([&db]() mutable {
 					return db.writeBarrier();

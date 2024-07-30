@@ -64,6 +64,8 @@ struct WarehouseTool {
 	kj::String url;
 	kj::String localFile;
 	
+	kj::String dstUrl;
+	
 	bool writeAccess = false;
 	bool truncate = false;
 	
@@ -113,6 +115,11 @@ struct WarehouseTool {
 	
 	bool setUrl(kj::StringPtr urlStr) {
 		url = kj::heapString(urlStr);
+		return true;
+	}
+	
+	bool setDstUrl(kj::StringPtr urlStr) {
+		dstUrl = kj::heapString(urlStr);
 		return true;
 	}
 	
@@ -177,6 +184,38 @@ struct WarehouseTool {
 		putReq.send().wait(ws);
 		
 		return true;
+	}
+	
+	bool transfer() {
+		auto l = newLibrary();
+		auto lt = l -> newThread();
+		auto& ws = lt->waitScope();
+		
+		LocalResources::Client lr = createLocalResources(LocalConfig::Reader());
+		
+		auto openWarehouse = [&](kj::StringPtr url) {
+			auto whReq = lr.openWarehouseRequest();
+			whReq.setUrl(url);
+			auto response = whReq.send().wait(ws);
+			auto obj = response.getObject();
+		};
+		
+		size_t srcSlice = url.find('#').orDefault(url.size());
+		size_t dstSlice = dstUrl.find('#').orDefault(dstUrl.size());
+		
+		KJ_REQUIRE(dstSlice < dstUrl.size(), "Destination URL must contain a path to store object under, can not be root");
+		
+		auto src = openWarehouse(url1);
+		auto dst = openWarehouse(url2);
+		
+		KJ_REQUIRE(dst.isFolder(), "Destination URL must point to a folder");
+		
+		auto exportRequest = src.exportGraphRequest();
+		exportRequest.setPath(rootPath);
+		
+		
+		
+		// Connect to warehouse
 	}
 		
 	bool serve() {

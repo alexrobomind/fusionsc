@@ -106,7 +106,7 @@ interface Warehouse {
 		freeze @7 (path : Text) -> (ref : Data.DataRef(FrozenFolder));
 		
 		exportGraph @8 (path : Text) -> (graph : Data.DataRef(ObjectGraph));
-		importGraph @9 (path : Text, graph: Data.DataRef(ObjectGraph), root : UInt64) -> StoredObject;
+		importGraph @9 (path : Text, graph: Data.DataRef(ObjectGraph), root : UInt64, merge : Bool) -> StoredObject;
 		
 		deepCopy @10 (srcPath : Text, dstPath : Text) -> StoredObject;
 	}
