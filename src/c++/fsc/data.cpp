@@ -499,7 +499,15 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 		if(!recursive)
 			return mv(ref);
 		
-		return service -> download(ref.castAs<DataRef<capnp::AnyPointer>>(), true, this -> ctx);
+		capnp::Capability::Client adjusted = service -> download(ref.castAs<DataRef<capnp::AnyPointer>>(), true, this -> ctx);
+		
+		return adjusted.whenResolved()
+		.then([adjusted]() mutable { return adjusted;  })
+		.catch_([ref](kj::Exception&& e) mutable {				
+			if(e.getType() == kj::Exception::Type::UNIMPLEMENTED)
+				return ref;
+			throw e;
+		});
 	}
 	
 	virtual Promise<Maybe<ResultType>> useCached() override {

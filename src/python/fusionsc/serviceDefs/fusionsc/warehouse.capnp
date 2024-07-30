@@ -68,25 +68,22 @@ interface Warehouse {
 			object @1 : UInt64;
 		}
 		
-		struct Object {
-			id @0 : UInt64;
-			
+		struct Object {			
 			union {
-				unresolved @1 : Void;
-				null @2 : Void;
-				exception @3 : Rpc.Exception;
+				unresolved @0 : Void;
+				nullValue @1 : Void;
+				exception @2 : Rpc.Exception;
 				dataRef : group {
-					data @4 : Data.DataRef;
-					refs @5 : List(ObjectRef);
+					data @3 : Data.DataRef;
+					refs @4 : List(ObjectRef);
 				}
-				folder @6 : List(FolderEntry);
-				file @7 : ObjectRef;
-				link @8 : ObjectRef;
+				folder @5 : List(FolderEntry);
+				file @6 : ObjectRef;
+				link @7 : UInt64;
 			}
 		}
 		
-		objects @0 : List(Object);
-		root @1 : UInt64;
+		objects @0 : List(List(Object));
 	}
 	
 	interface Folder {
@@ -108,8 +105,10 @@ interface Warehouse {
 		
 		freeze @7 (path : Text) -> (ref : Data.DataRef(FrozenFolder));
 		
-		exportGraph @8 (path : Text) -> (graph : ObjectGraph);
-		importGraph @9 (path : Text, graph: ObjectGraph) -> StoredObject;
+		exportGraph @8 (path : Text) -> (graph : Data.DataRef(ObjectGraph));
+		importGraph @9 (path : Text, graph: Data.DataRef(ObjectGraph), root : UInt64) -> StoredObject;
+		
+		deepCopy @10 (srcPath : Text, dstPath : Text) -> StoredObject;
 	}
 	
 	interface File(StaticType) {

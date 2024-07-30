@@ -163,7 +163,14 @@ TEST_CASE("warehouse-rw-1", "[warehouse]") {
 	egReq.setPath("obj");
 	
 	auto response = egReq.send().wait(ws);
-	KJ_DBG(response.getGraph());
+	KJ_DBG(getActiveThread().dataService().download(response.getGraph()).wait(ws).get());
+	
+	auto importRequest = dbRoot.importGraphRequest();
+	importRequest.setPath("obj");
+	importRequest.setGraph(response.getGraph());
+	
+	auto importResponse = importRequest.send().wait(ws);
+	KJ_DBG(importResponse);
 }
 
 TEST_CASE("warehouse-rw-2", "[warehouse]") {
@@ -203,13 +210,43 @@ TEST_CASE("warehouse-rw-2", "[warehouse]") {
 	REQUIRE(outerCopy.get().hasRef() == refHolder.hasRef());
 	
 	if(refHolder.hasRef()) {
-		auto innerCopy = th -> dataService().download(refHolder.getRef()).wait(ws);
+		auto innerCopy = th -> dataService().download(outerCopy.get().getRef()).wait(ws);
 		REQUIRE(innerCopy.get() == data);
 	}
 	
+	auto egReq = dbRoot.exportGraphRequest();
+	egReq.setPath("obj");
+	
+	auto response = egReq.send().wait(ws);
+	KJ_DBG(getActiveThread().dataService().download(response.getGraph()).wait(ws).get());
+	
+	// Delete object, then reimport 
+	KJ_DBG("Deleting");
 	auto rmreq = dbRoot.rmRequest();
 	rmreq.setPath("obj");
 	rmreq.send().wait(ws);
+	KJ_DBG("Deletion done");
+	
+	auto importRequest = dbRoot.importGraphRequest();
+	importRequest.setPath("obj");
+	importRequest.setGraph(response.getGraph());
+	
+	auto importResponse = importRequest.send().wait(ws);
+	KJ_DBG(importResponse);
+	storedObject = putResponse.getAsGeneric().castAs<HolderRef>();
+	
+	auto outerCopy2 = th -> dataService().download(storedObject).wait(ws);
+	REQUIRE(outerCopy2.get().hasRef() == refHolder.hasRef());
+	
+	if(refHolder.hasRef()) {
+		auto innerCopy = th -> dataService().download(outerCopy2.get().getRef()).wait(ws);
+		REQUIRE(innerCopy.get() == data);
+	}
+	
+	auto dcr = dbRoot.deepCopyRequest();
+	dcr.setSrcPath("obj");
+	dcr.setDstPath("obj2");
+	dcr.send().wait(ws);
 }
 
 TEST_CASE("warehouse-rw-3", "[warehouse]") {

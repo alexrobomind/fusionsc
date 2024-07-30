@@ -185,7 +185,7 @@ struct DownloadTask : public kj::Refcounted {
 	//! Check whether "src" can be directly unwrapped
 	virtual Promise<Maybe<Result>> unwrap() { return Maybe<Result>(nullptr); }
 	
-	//! Adjust refs e.g. by performing additional downloads. If the resulting client is broken with an exception of type "unimplemented", the original ref is used instead.
+	//! Adjust refs e.g. by performing additional downloads.
 	virtual capnp::Capability::Client adjustRef(capnp::Capability::Client ref) { return ref; }
 	
 	//! Check whether we can build a result from given metadata and captable
@@ -787,17 +787,7 @@ Promise<void> DownloadTask<Result>::downloadMetaAndCapTable() {
 		auto capTable = response.getTable();
 		auto builder = kj::heapArrayBuilder<capnp::Capability::Client>(capTable.size());
 		for(auto ref : capTable) {
-			auto adjusted = adjustRef(ref);
-			
-			auto clientPromise = adjusted.whenResolved()
-			.then([adjusted]() mutable { return adjusted;  })
-			.catch_([ref](kj::Exception&& e) mutable {				
-				if(e.getType() == kj::Exception::Type::UNIMPLEMENTED)
-					return ref;
-				throw e;
-			});
-			
-			builder.add(mv(clientPromise));
+			builder.add(adjustRef(ref));
 		}
 		
 		this -> capTable = builder.finish();

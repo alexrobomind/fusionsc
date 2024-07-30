@@ -39,6 +39,9 @@ def context():
 	
 	return ctx
 
+def reset():
+	del _configContext.value
+
 def _apply():
 	from . import resolve
 	from . import backends

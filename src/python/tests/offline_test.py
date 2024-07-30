@@ -21,6 +21,9 @@ def test_updateOfflineData(offlineData):
 	fsc.resolve.updateOfflineData(offlineData, {w7x.component(1) : Geometry()})
 
 def test_createOfflineData(tmp_path, offlineData):
+	fsc.config.config = {}
+	fsc.config.reset()
+	
 	fsc.data.writeArchive(offlineData, str(tmp_path / "offline.fsc"))
 	fsc.resolve.importOfflineData(str(tmp_path / "offline.fsc"))
 	
@@ -32,6 +35,9 @@ def test_createOfflineData(tmp_path, offlineData):
 		fsc.asnc.wait(w7x.component(0).merge())
 
 def test_createOfflineWarehouse(tmp_path, offlineData):
+	fsc.config.config = {}
+	fsc.config.reset()
+	
 	whPath = "sqlite" + (tmp_path / "offline.sqlite").as_uri()[4:]
 	print(whPath)
 	
