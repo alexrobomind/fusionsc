@@ -2274,7 +2274,7 @@ Promise<void> FolderInterface::exportGraph(ExportGraphContext ctx) {
 
 Promise<void> FolderInterface::importGraph(ImportGraphContext ctx) {
 	return getActiveThread().dataService().download(ctx.getParams().getGraph())
-	.then([this, ctx](auto graph) {
+	.then([this, ctx](auto graph) mutable {
 		return withODBBackoff([this, ctx, graph = mv(graph)] () mutable {
 			auto& db = object -> getDb();
 			
