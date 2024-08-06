@@ -33,6 +33,7 @@ struct FieldCalculatorImpl : public FieldCalculator::Server {
 	// These are implemented in magnetics-calc-fourier.cpp
 	Promise<void> evalFourierSurface(EvalFourierSurfaceContext ctx) override;
 	Promise<void> calculateRadialModes(CalculateRadialModesContext ctx) override;
+	Promise<void> surfaceToFourier(SurfaceToFourierContext ctx) override;
 
 private:
 	// These are implemented in magnetics-calc-field.cpp

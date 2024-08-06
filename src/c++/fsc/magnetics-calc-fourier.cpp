@@ -2,6 +2,8 @@
 
 #include "nudft.h"
 
+#include <iostream>
+
 namespace fsc { namespace internal {
 
 Promise<void> FieldCalculatorImpl::evalFourierSurface(EvalFourierSurfaceContext ctx) {
@@ -145,6 +147,101 @@ Promise<void> FieldCalculatorImpl::evalFourierSurface(EvalFourierSurfaceContext 
 	writeAdjusted(val, results.initPoints());
 	writeAdjusted(ddPhi, results.initPhiDerivatives());
 	writeAdjusted(ddTheta, results.initThetaDerivatives());
+	
+	return READY_NOW;
+}
+
+Promise<void> FieldCalculatorImpl::surfaceToFourier(SurfaceToFourierContext ctx) {
+	auto surfaces = ctx.getParams().getSurfaces();
+	
+	auto surfNMax = surfaces.getNTor();
+	auto surfMMax = surfaces.getMPol();
+	
+	auto surfNumN = 2 * surfNMax + 1;
+	auto surfNumM = surfMMax + 1;
+	
+	
+	Eigen::Tensor<double, 3> rCos;
+	Eigen::Tensor<double, 3> zSin;
+	
+	readVardimTensor(surfaces.getRCos(), 0, rCos);
+	readVardimTensor(surfaces.getZSin(), 0, zSin);
+	
+	int64_t nSurf = rCos.dimension(2);
+	
+	auto transformTensor = [&](const Eigen::Tensor<double, 3>& in, bool isCos) {
+		KJ_REQUIRE(in.dimension(0) == surfNumM);
+		KJ_REQUIRE(in.dimension(1) == surfNumN);
+		KJ_REQUIRE(in.dimension(2) == nSurf);
+		
+		Eigen::Tensor<double, 3> out(2 * surfMMax + 1, 2 * surfNMax + 1, nSurf);
+		
+		for(auto iSurf : kj::range(0, nSurf)) {
+			for(auto iN : kj::range(0, 2 * surfNMax + 1)) {
+				auto iN2 = (iN == 0) ? 0 : 2 * surfNMax + 1 - iN;
+				// Skip m == 0, n < 0 modes
+				for(auto iM : kj::range(0, surfMMax + 1)) {
+					auto iM2 = (iM == 0) ? 0 : 2 * surfMMax + 1 - iM;
+					
+					// The n < 0, m = 0 modes are empty
+					if(iN > surfNMax && iM == 0) continue;
+					
+					// Because we use ang = m * theta - n * phi, we need
+					// to use iN2 and iM together (and vice-versa)
+					
+					// In sin, the first one needs negative sign (a naive look
+					// at Euler's formula suggest the second one, but we have a
+					// 1/i multiplier in front which results in a -i for the
+					// complex parts, which changes the sign.
+					
+					out(iM, iN2, iSurf) = isCos ? in(iM, iN, iSurf) / 2 : -in(iM, iN, iSurf) / 2;
+					out(iM2, iN, iSurf) = in(iM, iN, iSurf) / 2;
+				}
+			}
+			
+			out(0, 0, iSurf) = in(0, 0, iSurf);
+		}
+		
+		return out;
+	};
+			
+	auto adjustShape = [&](Float64Tensor::Builder out) {
+		auto surfShape = surfaces.getRCos().getShape();
+		auto shape = out.initShape(surfShape.size());
+		for(auto i : kj::range(0, surfShape.size() - 2))
+			shape.set(i, surfShape[i]);
+		shape.set(shape.size() - 2, 2 * surfNMax + 1);
+		shape.set(shape.size() - 1, 2 * surfMMax + 1);
+	};
+	
+	auto transform = [&](const Eigen::Tensor<double, 3>& in, bool symmetric, Float64Tensor::Builder out) {
+		writeTensor(transformTensor(in, symmetric), out);
+		adjustShape(out);
+	};
+	
+	auto zero = [&](Float64Tensor::Builder out) {
+		Tensor<double, 3> tmp(2 * surfMMax + 1, 2 * surfNMax + 1, nSurf);
+		tmp.setZero();
+		writeTensor(tmp, out);
+		adjustShape(out);
+	};
+	
+	transform(rCos, true, ctx.getResults().getRReal());
+	transform(zSin, false, ctx.getResults().getZImag());
+	
+	if(surfaces.isNonSymmetric()) {
+		Tensor<double, 3> zCos;
+		Tensor<double, 3> rSin;
+		
+		readVardimTensor(surfaces.getNonSymmetric().getZCos(), 0, zCos);
+		readVardimTensor(surfaces.getNonSymmetric().getRSin(), 0, rSin);
+		
+		transform(zCos, true, ctx.getResults().getZReal());
+		transform(rSin, false, ctx.getResults().getRImag());
+	} else {
+		zero(ctx.getResults().getZReal());
+		zero(ctx.getResults().getRImag());
+	}
 	
 	return READY_NOW;
 }

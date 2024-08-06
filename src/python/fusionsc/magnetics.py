@@ -109,6 +109,15 @@ class SurfaceArray(wrappers.structWrapper(service.FourierSurfaces)):
 		pipeline = _calculator().surfaceToMesh(self.data, nPhi, nTheta, radialShift).pipeline
 		
 		return geometry.Geometry({"merged" : pipeline.merged})
+	
+	@asyncFunction
+	async def asFourier(self):
+		response = await _calculator().surfaceToFourier(self.data)
+		
+		return {
+			"r" : np.asarray(response.rReal) + 1j * np.asarray(response.rImag),
+			"z" : np.asarray(response.zReal) + 1j * np.asarray(response.zImag)
+		}
 
 class CoilFilament(wrappers.structWrapper(service.Filament)):
 	"""
