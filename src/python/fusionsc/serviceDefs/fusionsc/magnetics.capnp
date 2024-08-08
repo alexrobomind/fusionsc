@@ -144,7 +144,7 @@ interface FieldCalculator $Cxx.allowCancellation {
 	}
 	
 	enum FourierConvention {
-		normal @0;
+		regular @0;
 		vmec @1;
 	}
 	

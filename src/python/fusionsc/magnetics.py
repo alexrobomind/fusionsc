@@ -351,7 +351,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		nMax = 5, mMax = 5, nPhi = 0, nTheta = 0, nSym = 1,
 		useFFT = True,
 		quantity: Literal["field", "flux"] = "field",
-		fourierConvention: Literal["normal", "vmec"] = "vmec",
+		fourierConvention: Literal["regular", "vmec"] = "vmec",
 		fourierNormalization: Literal["normalized", "l2Preserving", "unnormalized"] = "normalized"
 	):
 		"""
@@ -369,7 +369,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			- useFFT: Whether to use the fast FFT-based Fourier path (as opposed to a slower cosine fit)
 			- quantity: Whether to calculate the radial field or the radial flux (field * (dx/dPhi x dx/dTheta))
 			- fourierConvention: What type of Fourier modes to expand in. Also affects the DFT expansion Possible values are:
-			  - normal: Usual Fourier modes of type exp(2 *pi * i * (n * phi + m * theta))
+			  - regular: Usual Fourier modes of type exp(2 *pi * i * (n * phi + m * theta))
 			  - vmec: VMEC-style Fourier expansion of type exp(2 * pi * i * (m * theta - n * phi))
 			- fourierNormalization: How to normalize the Fourier modes. Available normalizations are:
 			  - unnormalized: Performs no normalization of the Fourier transform.
