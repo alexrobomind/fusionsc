@@ -143,6 +143,17 @@ interface FieldCalculator $Cxx.allowCancellation {
 		flux @1;
 	}
 	
+	enum FourierConvention {
+		normal @0;
+		vmec @1;
+	}
+	
+	enum FourierNormalization {
+		unnormalized @0;
+		l2Preserving @1;
+		normalized @2;
+	}
+	
 	calculateRadialModes @5 (
 		field : MagneticField, background : MagneticField,
 		surfaces : FourierSurfaces,
@@ -150,7 +161,9 @@ interface FieldCalculator $Cxx.allowCancellation {
 		nPhi : UInt32, nTheta : UInt32,
 		nSym : UInt32 = 1,
 		useFFT : Bool = true,
-		quantity : RadialModeQuantity = field
+		quantity : RadialModeQuantity = field,
+		fourierConvention : FourierConvention = vmec,
+		fourierNormalization : FourierNormalization = normalized
 	) -> (
 		cosCoeffs : Float64Tensor, sinCoeffs : Float64Tensor,
 		mPol : List(Float64), nTor : List(Float64),
