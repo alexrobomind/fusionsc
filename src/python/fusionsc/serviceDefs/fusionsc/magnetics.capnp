@@ -193,13 +193,15 @@ interface FieldCalculator $Cxx.allowCancellation {
 		merged : DataRef(G.MergedGeometry)
 	);
 		
-	
-	# Fourier-mode evaluation
-	#calculatePerturbation @4 (
-	#	field : MagneticField, surfaces : FourierSurfaces,
-	#	nMax : UInt32, mMax : UInt32, toroidalSymmetry : UInt32,
-	#	nTor : UInt32, mPol : UInt32
-	#) -> (components : Float64Tensor, mPol : Float64Tensor, nTor : Float64Tensor);
+	surfaceToFourier @7 (
+		surfaces : FourierSurfaces
+	) -> (
+		rReal : Float64Tensor,
+		rImag : Float64Tensor,
+		
+		zReal : Float64Tensor,
+		zImag : Float64Tensor
+	);
 }
 
 struct BiotSavartSettings {
