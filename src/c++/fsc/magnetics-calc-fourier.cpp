@@ -378,6 +378,17 @@ Promise<void> FieldCalculatorImpl::calculateRadialModes(CalculateRadialModesCont
 			}}}
 		}
 		
+		// If we have VMEC fourier convention (ang = m * theta - n * phi),
+		// swap the order along the phi coordinate
+		if(params.getFourierConvention() == FieldCalculator::FourierConvention::VMEC) {
+			auto tmp = radialValues;
+			
+			for(int64_t i : kj::range(0, nPhi)) {
+				int64_t i2 = i == 0 ? 0 : nPhi - i;
+				radialValues.chip(i, 1) = tmp.chip(i2, 1);
+			}
+		}
+		
 		// Prepare modes to calculate
 		const int nMax = params.getNMax();
 		const int mMax = params.getMMax();
@@ -411,7 +422,21 @@ Promise<void> FieldCalculatorImpl::calculateRadialModes(CalculateRadialModesCont
 			std::array<int, 2> dims = {0, 1};
 			Tensor<std::complex<double>, 3> fft = radialValues.fft<Eigen::BothParts, Eigen::FFT_FORWARD>(dims);
 			
-			double scale = 1.0 / (nPhi * nTheta);
+			double scale = 0;
+			switch(params.getFourierNormalization()) {
+				case FieldCalculator::FourierNormalization::UNNORMALIZED:
+					scale = 1;
+					break;
+				case FieldCalculator::FourierNormalization::L2_PRESERVING:
+					scale = 1.0 / sqrt(nPhi * nTheta);
+					break;
+				case FieldCalculator::FourierNormalization::NORMALIZED:
+					scale = 1.0 / (nPhi * nTheta);
+					break;
+				default:
+					KJ_FAIL_REQUIRE("Unknown normalization spec");
+			}
+			
 			dftReal = fft.real() * scale;
 			dftImag = fft.imag() * scale;
 			
@@ -493,6 +518,24 @@ Promise<void> FieldCalculatorImpl::calculateRadialModes(CalculateRadialModesCont
 					sinCoeffs(im, in, iSurf) = mode.sinCoeffs[0];
 				}
 			}
+			
+			double scale = 0;
+			switch(params.getFourierNormalization()) {
+				case FieldCalculator::FourierNormalization::UNNORMALIZED:
+					scale = nPhi * nTheta;
+					break;
+				case FieldCalculator::FourierNormalization::L2_PRESERVING:
+					scale = sqrt(nPhi * nTheta);
+					break;
+				case FieldCalculator::FourierNormalization::NORMALIZED:
+					scale = 1.0;
+					break;
+				default:
+					KJ_FAIL_REQUIRE("Unknown normalization spec");
+			}
+			
+			cosCoeffs = cosCoeffs * scale;
+			sinCoeffs = sinCoeffs * scale;
 			
 			// Compute Re and Im coefficients
 			for(auto iSurf : kj::range(0, nSurfs)) {
