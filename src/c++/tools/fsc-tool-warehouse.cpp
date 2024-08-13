@@ -68,6 +68,7 @@ struct WarehouseTool {
 	
 	bool writeAccess = false;
 	bool truncate = false;
+	bool merge = false;
 	
 	WarehouseTool(kj::ProcessContext& context):
 		context(context), tablePrefix(kj::heapString("warehouse")), rootPath(kj::heapString(""))
@@ -90,6 +91,11 @@ struct WarehouseTool {
 	
 	bool setTruncate() {
 		truncate = true;
+		return true;
+	}
+	
+	bool setMerge() {
+		merge = true;
 		return true;
 	}
 	
@@ -198,24 +204,39 @@ struct WarehouseTool {
 			whReq.setUrl(url);
 			auto response = whReq.send().wait(ws);
 			auto obj = response.getObject();
+			return obj;
 		};
 		
-		size_t srcSlice = url.find('#').orDefault(url.size());
-		size_t dstSlice = dstUrl.find('#').orDefault(dstUrl.size());
+		KJ_REQUIRE(url.size() > 0);
+		KJ_REQUIRE(dstUrl.size() > 0);
+		
+		size_t srcSlice = url.findFirst('#').orDefault(url.size() - 1);
+		size_t dstSlice = dstUrl.findFirst('#').orDefault(dstUrl.size() - 1);
 		
 		KJ_REQUIRE(dstSlice < dstUrl.size(), "Destination URL must contain a path to store object under, can not be root");
 		
-		auto src = openWarehouse(url1);
-		auto dst = openWarehouse(url2);
-		
-		KJ_REQUIRE(dst.isFolder(), "Destination URL must point to a folder");
+		auto src = openWarehouse(kj::heapString(url.slice(0, srcSlice)));
+		auto dst = openWarehouse(kj::heapString(url.slice(0, srcSlice)));
 		
 		auto exportRequest = src.exportGraphRequest();
-		exportRequest.setPath(rootPath);
+		exportRequest.setPath(url.slice(srcSlice + 1));
 		
+		KJ_LOG(INFO, "Beginning export...");
+		auto response = exportRequest.send().wait(ws);
+		auto graph = response.getGraph();
 		
+		KJ_LOG(INFO, "Export finished");
 		
-		// Connect to warehouse
+		auto importRequest = dst.importGraphRequest();
+		importRequest.setMerge(merge);
+		exportRequest.setPath(dstUrl.slice(dstSlice + 1));
+		importRequest.setGraph(graph);
+		
+		KJ_LOG(INFO, "Beginning import...");
+		importRequest.send().wait(ws);
+		KJ_LOG(INFO, "Done");
+		
+		return true;
 	}
 		
 	bool serve() {
