@@ -157,13 +157,18 @@ struct StreamNetworkConnection : public capnp::BootstrapFactory<capnp::rpc::twop
 	using Side = capnp::rpc::twoparty::Side;
 	
 	// Hard-coded network options limit with 4GB of traversal limit and nesting depth of 64.
-	inline static capnp::ReaderOptions NETWORK_READ_LIMITS = { 8 * 1024 * 1024 * 1024, 64 };
+	static capnp::ReaderOptions readLimits() {
+		capnp::ReaderOptions result;
+		result.traversalLimitInWords = 256ull * 1024ull * 1024ull;
+		result.nestingLimit = 64;
+		return result;
+	}
 	
 	// Constructors
 	
 	StreamNetworkConnection(Own<AsyncIoStream> newStream, kj::Function<Capability::Client()> factory, Side local, Side remote) :
 		stream(mv(newStream)),
-		vatNetwork(kj::heap<capnp::TwoPartyVatNetwork>(*(stream.get<Own<AsyncIoStream>>()), local, NETWORK_READ_LIMITS)),
+		vatNetwork(kj::heap<capnp::TwoPartyVatNetwork>(*(stream.get<Own<AsyncIoStream>>()), local, readLimits())),
 		factory(mv(factory)),
 		peerSide(remote)
 	{
@@ -172,7 +177,7 @@ struct StreamNetworkConnection : public capnp::BootstrapFactory<capnp::rpc::twop
 	
 	StreamNetworkConnection(Own<MessageStream> newStream, kj::Function<Capability::Client()> factory, Side local, Side remote) :
 		stream(mv(newStream)),
-		vatNetwork(kj::heap<capnp::TwoPartyVatNetwork>(*(stream.get<Own<MessageStream>>()), local, NETWORK_READ_LIMITS)),
+		vatNetwork(kj::heap<capnp::TwoPartyVatNetwork>(*(stream.get<Own<MessageStream>>()), local, readLimits())),
 		factory(mv(factory)),
 		peerSide(remote)
 	{

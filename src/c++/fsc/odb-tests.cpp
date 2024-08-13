@@ -100,6 +100,7 @@ TEST_CASE("warehouse-rw-1", "[warehouse]") {
 	
 	SECTION("fast termination") {
 		// Checks for memory leaks in case download process gets into limbo
+		return;
 	}
 	
 	SECTION("failure") {
