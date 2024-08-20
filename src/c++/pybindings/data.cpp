@@ -13,12 +13,11 @@ namespace fscpy {
 capnp::Type getRefPayload(capnp::InterfaceSchema refSchema) {
 	constexpr uint64_t DR_ID = capnp::typeId<DataRef<capnp::AnyPointer>>();
 	
-	KJ_REQUIRE(
-		refSchema.getProto().getId() == DR_ID,
-		"Type must be a DataRef instance", refSchema.getProto().getDisplayName()
-	);
-	
-	return refSchema.getBrandArgumentsAtScope(DR_ID)[0];
+	KJ_IF_MAYBE(pRef, refSchema.findSuperclass(DR_ID)) {
+		return pRef -> getBrandArgumentsAtScope(DR_ID)[0];
+	} else {
+		KJ_FAIL_REQUIRE("Type must be a DataRef instance", refSchema.getProto().getDisplayName());
+	}
 }
 
 capnp::InterfaceSchema createRefSchema(capnp::Type payloadType) {

@@ -520,6 +520,30 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		
 		output = meshio.Mesh(points = rawPoints, cells = cells)
 		output.write(filename)
+	
+	@asyncFunction
+	async def getTags(self):
+		merged = await self.getMerged.asnc()
+		
+		def asValue(x):
+			if x.which_() == 'text':
+				return str(x.text)
+			if x.which_() == 'uInt64':
+				return x.uInt64
+			if x.which_() == 'notSet':
+				return None
+			raise ValueError("Unknown tag value type")
+				
+		result = {
+			tagName : {
+				asValue(e.tags[iTag])
+				for e in merged.entries
+			}
+			
+			for iTag, tagName in enumerate(merged.tagNames)
+		}
+		
+		return result
 
 def asTagValue(x):
 	"""Convert a possible tag value into an instance of fsc.service.TagValue"""

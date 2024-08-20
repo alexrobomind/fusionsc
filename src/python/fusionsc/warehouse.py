@@ -45,7 +45,7 @@ async def open(url: str):
 	Supported url schemes are:
 		'sqlite': SQLite database on current file system
 		'ws' or 'http': Remote warehouse server that can be connected to via network.
-		'remote': Looks up a named warehouse exposed by the active backend (remote:myrepo)
+		'remote': Looks up a named warehouse exposed by the active backend, optionally by requesting a named endpoint from the target (remote:name[@endpointName]).
 	"""
 	if url.startswith('remote:'):
 		# URL fragments indicate subfolders
@@ -56,7 +56,14 @@ async def open(url: str):
 			
 		name = url[7:].split('?')[0]
 		
-		remote = await openRemote.asnc(name)
+		if '@' in name:
+			name, endpointName = name.split('@')
+			endpoint = await backends.namedEndpoint.asnc(endpointName)
+		else:
+			endpoint = backends.activeBackend()
+		
+		with backends.useBackend(endpoint):
+			remote = await openRemote.asnc(name)
 		
 		if fragment is not None:
 			remote = remote.get(fragment)
@@ -135,10 +142,46 @@ class Folder(Object):
 		Returns a frozen version of the directory structure contained inside this folder
 		tree. The structure returns a snapshot of all directories and files. Actual stored
 		data will be linked as DataRefs.
+		
+		Note: This function will not save mutable structures (files, folders) embedded inside
+		DataRefs. If you require this, use exportGraph insteadl.
 		"""
 		
 		pipeline = self.backend.freeze(path)
 		return wrappers.RefWrapper(pipeline.ref)
+	
+	@asyncFunction
+	async def exportGraph(self, path: str = ""):
+		"""
+		Saves the subgraph of objects reachable from the given path. The graph mirrors the
+		exact stored data in the warehouse, and can hold mutable objects referenced by
+		immutable data structures.
+		"""
+		response = await self.backend.exportGraph(path)
+		return wrappers.RefWrapper(response.graph)
+	
+	@asyncFunction
+	async def importGraph(self, graph, path, root = 0):
+		"""
+		Restored a full graph of reachable objects to the given path. A 1:1 copy of this graph
+		will be created in the database, preserving referential identity of all mutable nodes.
+		
+		:param path: Path under which the restored object will be placed. Must not be empty.
+		"""
+		response = await self.backend.importGraph(path, graph, root)
+		return _decode(response)
+	
+	@asyncFunction
+	async def deepCopy(self, srcPath: str, dstPath: str):
+		"""
+		Creates a deep copy of all objects from one path to another.
+		
+		Since all data objects are hash-indexed, this does not duplicate the stored data. Instead,
+		the graph structure itself is copied. The term "deep copy" referes primarily to the mutable
+		slot objects (folders, files) and their references.
+		"""
+		response = await self.backend.deepCopy(srcPath, dstPath)
+		return _decode(response)
 
 class File(Object):
 	def __init__(self, backend):

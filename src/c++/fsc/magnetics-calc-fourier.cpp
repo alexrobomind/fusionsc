@@ -2,6 +2,8 @@
 
 #include "nudft.h"
 
+#include <iostream>
+
 namespace fsc { namespace internal {
 
 Promise<void> FieldCalculatorImpl::evalFourierSurface(EvalFourierSurfaceContext ctx) {
@@ -149,6 +151,101 @@ Promise<void> FieldCalculatorImpl::evalFourierSurface(EvalFourierSurfaceContext 
 	return READY_NOW;
 }
 
+Promise<void> FieldCalculatorImpl::surfaceToFourier(SurfaceToFourierContext ctx) {
+	auto surfaces = ctx.getParams().getSurfaces();
+	
+	auto surfNMax = surfaces.getNTor();
+	auto surfMMax = surfaces.getMPol();
+	
+	auto surfNumN = 2 * surfNMax + 1;
+	auto surfNumM = surfMMax + 1;
+	
+	
+	Eigen::Tensor<double, 3> rCos;
+	Eigen::Tensor<double, 3> zSin;
+	
+	readVardimTensor(surfaces.getRCos(), 0, rCos);
+	readVardimTensor(surfaces.getZSin(), 0, zSin);
+	
+	int64_t nSurf = rCos.dimension(2);
+	
+	auto transformTensor = [&](const Eigen::Tensor<double, 3>& in, bool isCos) {
+		KJ_REQUIRE(in.dimension(0) == surfNumM);
+		KJ_REQUIRE(in.dimension(1) == surfNumN);
+		KJ_REQUIRE(in.dimension(2) == nSurf);
+		
+		Eigen::Tensor<double, 3> out(2 * surfMMax + 1, 2 * surfNMax + 1, nSurf);
+		
+		for(auto iSurf : kj::range(0, nSurf)) {
+			for(auto iN : kj::range(0, 2 * surfNMax + 1)) {
+				auto iN2 = (iN == 0) ? 0 : 2 * surfNMax + 1 - iN;
+				// Skip m == 0, n < 0 modes
+				for(auto iM : kj::range(0, surfMMax + 1)) {
+					auto iM2 = (iM == 0) ? 0 : 2 * surfMMax + 1 - iM;
+					
+					// The n < 0, m = 0 modes are empty
+					if(iN > surfNMax && iM == 0) continue;
+					
+					// Because we use ang = m * theta - n * phi, we need
+					// to use iN2 and iM together (and vice-versa)
+					
+					// In sin, the first one needs negative sign (a naive look
+					// at Euler's formula suggest the second one, but we have a
+					// 1/i multiplier in front which results in a -i for the
+					// complex parts, which changes the sign.
+					
+					out(iM, iN2, iSurf) = isCos ? in(iM, iN, iSurf) / 2 : -in(iM, iN, iSurf) / 2;
+					out(iM2, iN, iSurf) = in(iM, iN, iSurf) / 2;
+				}
+			}
+			
+			out(0, 0, iSurf) = in(0, 0, iSurf);
+		}
+		
+		return out;
+	};
+			
+	auto adjustShape = [&](Float64Tensor::Builder out) {
+		auto surfShape = surfaces.getRCos().getShape();
+		auto shape = out.initShape(surfShape.size());
+		for(auto i : kj::range(0, surfShape.size() - 2))
+			shape.set(i, surfShape[i]);
+		shape.set(shape.size() - 2, 2 * surfNMax + 1);
+		shape.set(shape.size() - 1, 2 * surfMMax + 1);
+	};
+	
+	auto transform = [&](const Eigen::Tensor<double, 3>& in, bool symmetric, Float64Tensor::Builder out) {
+		writeTensor(transformTensor(in, symmetric), out);
+		adjustShape(out);
+	};
+	
+	auto zero = [&](Float64Tensor::Builder out) {
+		Tensor<double, 3> tmp(2 * surfMMax + 1, 2 * surfNMax + 1, nSurf);
+		tmp.setZero();
+		writeTensor(tmp, out);
+		adjustShape(out);
+	};
+	
+	transform(rCos, true, ctx.getResults().getRReal());
+	transform(zSin, false, ctx.getResults().getZImag());
+	
+	if(surfaces.isNonSymmetric()) {
+		Tensor<double, 3> zCos;
+		Tensor<double, 3> rSin;
+		
+		readVardimTensor(surfaces.getNonSymmetric().getZCos(), 0, zCos);
+		readVardimTensor(surfaces.getNonSymmetric().getRSin(), 0, rSin);
+		
+		transform(zCos, true, ctx.getResults().getZReal());
+		transform(rSin, false, ctx.getResults().getRImag());
+	} else {
+		zero(ctx.getResults().getZReal());
+		zero(ctx.getResults().getRImag());
+	}
+	
+	return READY_NOW;
+}
+
 Promise<void> FieldCalculatorImpl::calculateRadialModes(CalculateRadialModesContext ctx) {
 	auto params = ctx.getParams();
 	
@@ -281,6 +378,17 @@ Promise<void> FieldCalculatorImpl::calculateRadialModes(CalculateRadialModesCont
 			}}}
 		}
 		
+		// If we have VMEC fourier convention (ang = m * theta - n * phi),
+		// swap the order along the phi coordinate
+		if(params.getFourierConvention() == FieldCalculator::FourierConvention::VMEC) {
+			auto tmp = radialValues;
+			
+			for(int64_t i : kj::range(0, nPhi)) {
+				int64_t i2 = i == 0 ? 0 : nPhi - i;
+				radialValues.chip(i, 1) = tmp.chip(i2, 1);
+			}
+		}
+		
 		// Prepare modes to calculate
 		const int nMax = params.getNMax();
 		const int mMax = params.getMMax();
@@ -314,23 +422,39 @@ Promise<void> FieldCalculatorImpl::calculateRadialModes(CalculateRadialModesCont
 			std::array<int, 2> dims = {0, 1};
 			Tensor<std::complex<double>, 3> fft = radialValues.fft<Eigen::BothParts, Eigen::FFT_FORWARD>(dims);
 			
-			double scale = 1.0 / (nPhi * nTheta);
+			double scale = 0;
+			switch(params.getFourierNormalization()) {
+				case FieldCalculator::FourierNormalization::UNNORMALIZED:
+					scale = 1;
+					break;
+				case FieldCalculator::FourierNormalization::L2_PRESERVING:
+					scale = 1.0 / sqrt(nPhi * nTheta);
+					break;
+				case FieldCalculator::FourierNormalization::NORMALIZED:
+					scale = 1.0 / (nPhi * nTheta);
+					break;
+				default:
+					KJ_FAIL_REQUIRE("Unknown normalization spec");
+			}
+			
 			dftReal = fft.real() * scale;
 			dftImag = fft.imag() * scale;
 			
 			// Compute cos and sin coefficients
 			for(auto iSurf : kj::range(0, nSurfs)) {
+				// THESE ONES HAVE NO NEGATIVE FREQ COUNTERPART
+				// SO NO FACTOR 2 !!!
 				cosCoeffs(0, 0, iSurf) = dftReal(0, 0, iSurf);
 				sinCoeffs(0, 0, iSurf) = dftImag(0, 0, iSurf);
 			
 				for(auto in : kj::range(1, nMax + 1)) {
-					cosCoeffs(0, in, iSurf) = dftReal(0, in, iSurf);
-					sinCoeffs(0, in, iSurf) = dftImag(0, in, iSurf);
+					cosCoeffs(0, in, iSurf) = 2 * dftReal(0, in, iSurf);
+					sinCoeffs(0, in, iSurf) = 2 * dftImag(0, in, iSurf);
 				}
 				
 				for(auto im : kj::range(1, mMax + 1)) {
-					cosCoeffs(im, 0, iSurf) = dftReal(im, 0, iSurf);
-					sinCoeffs(im, 0, iSurf) = dftImag(im, 0, iSurf);
+					cosCoeffs(im, 0, iSurf) = 2 * dftReal(im, 0, iSurf);
+					sinCoeffs(im, 0, iSurf) = 2 * dftImag(im, 0, iSurf);
 				}
 				
 				for(auto in : kj::range(1, numN)) {
@@ -338,8 +462,8 @@ Promise<void> FieldCalculatorImpl::calculateRadialModes(CalculateRadialModesCont
 						auto in2 = 2 * nMax + 1 - in;
 						auto im2 = 2 * mMax + 1 - im;
 						
-						cosCoeffs(im, in, iSurf) = dftReal(im, in, iSurf); //+ dftReal(im2, in2, Eigen::all);
-						sinCoeffs(im, in, iSurf) = dftImag(im, in, iSurf); //- dftImag(im2, in2, Eigen::all);
+						cosCoeffs(im, in, iSurf) = 2 * dftReal(im, in, iSurf); //+ dftReal(im2, in2, Eigen::all);
+						sinCoeffs(im, in, iSurf) = 2 * dftImag(im, in, iSurf); //- dftImag(im2, in2, Eigen::all);
 					}
 				}
 			}
@@ -395,6 +519,24 @@ Promise<void> FieldCalculatorImpl::calculateRadialModes(CalculateRadialModesCont
 				}
 			}
 			
+			double scale = 0;
+			switch(params.getFourierNormalization()) {
+				case FieldCalculator::FourierNormalization::UNNORMALIZED:
+					scale = nPhi * nTheta;
+					break;
+				case FieldCalculator::FourierNormalization::L2_PRESERVING:
+					scale = sqrt(nPhi * nTheta);
+					break;
+				case FieldCalculator::FourierNormalization::NORMALIZED:
+					scale = 1.0;
+					break;
+				default:
+					KJ_FAIL_REQUIRE("Unknown normalization spec");
+			}
+			
+			cosCoeffs = cosCoeffs * scale;
+			sinCoeffs = sinCoeffs * scale;
+			
 			// Compute Re and Im coefficients
 			for(auto iSurf : kj::range(0, nSurfs)) {
 				dftReal(0, 0, iSurf) = cosCoeffs(0, 0, iSurf);
@@ -403,21 +545,21 @@ Promise<void> FieldCalculatorImpl::calculateRadialModes(CalculateRadialModesCont
 				for(auto in : kj::range(1, nMax + 1)) {
 					auto in2 = 2 * nMax + 1 - in;
 					
-					dftReal(0, in, iSurf) = cosCoeffs(0, in, iSurf);
-					dftImag(0, in, iSurf) = sinCoeffs(0, in, iSurf);
+					dftReal(0, in, iSurf) = 0.5 * cosCoeffs(0, in, iSurf);
+					dftImag(0, in, iSurf) = 0.5 * sinCoeffs(0, in, iSurf);
 					
-					dftReal(0, in2, iSurf) =  cosCoeffs(0, in, iSurf);
-					dftImag(0, in2, iSurf) = -sinCoeffs(0, in, iSurf);
+					dftReal(0, in2, iSurf) =  0.5 * cosCoeffs(0, in, iSurf);
+					dftImag(0, in2, iSurf) = -0.5 * sinCoeffs(0, in, iSurf);
 				}
 				
 				for(auto im : kj::range(1, mMax + 1)) {
 					auto im2 = 2 * mMax + 1 - im;
 					
-					dftReal(im, 0, iSurf) = cosCoeffs(im, 0, iSurf);
-					dftImag(im, 0, iSurf) = sinCoeffs(im, 0, iSurf);
+					dftReal(im, 0, iSurf) = 0.5 * cosCoeffs(im, 0, iSurf);
+					dftImag(im, 0, iSurf) = 0.5 * sinCoeffs(im, 0, iSurf);
 					
-					dftReal(im2, 0, iSurf) =  cosCoeffs(im, 0, iSurf);
-					dftImag(im2, 0, iSurf) = -sinCoeffs(im, 0, iSurf);
+					dftReal(im2, 0, iSurf) =  0.5 * cosCoeffs(im, 0, iSurf);
+					dftImag(im2, 0, iSurf) = -0.5 * sinCoeffs(im, 0, iSurf);
 				}
 				
 				for(auto in : kj::range(1, numN)) {
@@ -425,11 +567,11 @@ Promise<void> FieldCalculatorImpl::calculateRadialModes(CalculateRadialModesCont
 						auto in2 = 2 * nMax + 1 - in;
 						auto im2 = 2 * mMax + 1 - im;
 						
-						dftReal(im, in, iSurf) = cosCoeffs(im, in, iSurf);
-						dftImag(im, in, iSurf) = sinCoeffs(im, in, iSurf);
+						dftReal(im, in, iSurf) = 0.5 * cosCoeffs(im, in, iSurf);
+						dftImag(im, in, iSurf) = 0.5 * sinCoeffs(im, in, iSurf);
 						
-						dftReal(im2, in2, iSurf) =  cosCoeffs(im, in, iSurf);
-						dftImag(im2, in2, iSurf) = -sinCoeffs(im, in, iSurf);
+						dftReal(im2, in2, iSurf) =  0.5 * cosCoeffs(im, in, iSurf);
+						dftImag(im2, in2, iSurf) = -0.5 * sinCoeffs(im, in, iSurf);
 					}
 				}
 			}

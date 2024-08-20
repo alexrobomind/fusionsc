@@ -8,8 +8,11 @@
 
 #include <capnp/serialize-packed.h>
 
+#include <kj/map.h>
+
 #include <list>
 #include <set>
+#include <typeinfo>
 
 using kj::str;
 
@@ -695,8 +698,6 @@ OneOf<Own<ObjectDBEntry>, Capability::Client, decltype(nullptr)> ObjectDB::unwra
 			
 			if(asObjectHook -> entry -> parent.get() == this) {
 				matchingHook = kj::addRef(*asObjectHook);
-			} else {
-				KJ_DBG("Object hook found, but wrong DB");
 			}
 		}
 		
@@ -1319,6 +1320,7 @@ struct ImportContext {
 	
 	//! Create an (unresolved) object representing a future import.
 	ImportTask import(Capability::Client target);
+	ImportTask importIntoExisting(Capability::Client target, ObjectDBEntry& dst);
 	
 private:
 	//! Kicks off import tasks, called by destructor.
@@ -1475,6 +1477,19 @@ ImportTask ImportContext::import(Capability::Client target) {
 	result.task = mv(paf.promise);
 	
 	PendingImport import { newEntry -> id, target, mv(paf.fulfiller) };
+	pendingImports.push_back(mv(import));
+	
+	return result;
+}
+
+ImportTask ImportContext::importIntoExisting(capnp::Capability::Client src, ObjectDBEntry& dst) {
+	ImportTask result;
+	result.entry = dst.addRef();
+	
+	auto paf = kj::newPromiseAndFulfiller<Promise<void>>();
+	result.task = mv(paf.promise);
+	
+	PendingImport import { dst.id, src, mv(paf.fulfiller) };
 	pendingImports.push_back(mv(import));
 	
 	return result;
@@ -1654,6 +1669,7 @@ Promise<Maybe<Own<ObjectDBEntry>>> DatarefDownloadProcess::useCached() {
 			
 			return mv(dst);
 		} else {
+			ref.getDownloadStatus().setDownloading();
 		}
 		
 		// Transfer data
@@ -1775,6 +1791,9 @@ struct FolderInterface : public Warehouse::Folder::Server {
 	Promise<void> mkdir(MkdirContext ctx) override;
 	Promise<void> createFile(CreateFileContext ctx) override;
 	Promise<void> freeze(FreezeContext ctx) override;
+	Promise<void> exportGraph(ExportGraphContext ctx) override;
+	Promise<void> importGraph(ImportGraphContext ctx) override;
+	Promise<void> deepCopy(DeepCopyContext ctx) override;
 
 	// Implementation
 	FolderInterface(Own<ObjectDBEntry>&& object, kj::Badge<ObjectDBHook>) :
@@ -2104,6 +2123,341 @@ Promise<void> FolderInterface::freeze(FreezeContext ctx) {
 	});
 }
 
+Promise<void> FolderInterface::exportGraph(ExportGraphContext ctx) {
+	return withODBBackoff([this, ctx] () mutable {
+		auto entry = locate(kj::Path::parse(ctx.getParams().getPath()));
+		
+		auto& snapshot = entry -> getSnapshot();
+		
+		// Collect mappings from DB id to section IDs
+		kj::HashMap<int64_t, uint64_t> idMap;
+		kj::Vector<int64_t> ids;
+		{
+			std::list<int64_t> queue;
+			uint64_t counter = 0;
+			
+			queue.push_back(entry -> id);
+			
+			while(!queue.empty()) {
+				int64_t front = *queue.begin();
+				queue.pop_front();
+				
+				if(idMap.find(front) != nullptr)
+					continue;
+				
+				idMap.insert(front, counter++);
+				ids.add(front);
+				
+				auto q1 = snapshot.listOutgoingRefs.bind(front);
+				while(q1.step()) {
+					if(q1[0].isNull()) continue;
+					
+					queue.push_back(q1[0].asInt64());
+				}
+				
+				auto q2 = snapshot.listFolderEntries.bind(front);
+				while(q2.step()) {
+					queue.push_back(q2[1].asInt64());
+				}
+			}
+		}
+		
+		KJ_REQUIRE(ids.size() <= ((uint64_t) 1) << 48, "Graph size too large for storage");
+		
+		constexpr uint64_t MAX_LIST_SIZE = 1 << 29 - 1;
+		const uint64_t nLists = ids.size() / MAX_LIST_SIZE + 1;
+		
+		Temporary<Warehouse::ObjectGraph> result;
+		auto entryLists = result.initObjects(nLists);
+		
+		for(auto i : kj::indices(entryLists)) {
+			uint64_t listStart = MAX_LIST_SIZE * i;
+			uint64_t listEnd = kj::min(listStart + MAX_LIST_SIZE, ids.size());
+			
+			if(listEnd > listStart) {
+				entryLists.init(i, listEnd - listStart);
+			}
+		}
+		
+		for(auto i : kj::indices(ids)) {
+			int64_t id = ids[i];
+			
+			uint64_t addr1 = i / MAX_LIST_SIZE;
+			uint64_t addr2 = i - addr1 * MAX_LIST_SIZE;
+			
+			auto outEntry = entryLists[addr1][addr2];
+			
+			auto& db = entry -> getDb();
+			auto current = db.open(id, snapshot);
+			auto preserved = current -> loadPreserved();
+			
+			auto exportObject = [&](capnp::Capability::Client obj, Warehouse::ObjectGraph::ObjectRef::Builder out) {
+				auto unwrapped = db.unwrap(obj);
+				if(unwrapped.is<decltype(nullptr)>()) {
+					out.setNull();
+					return;
+				}
+				
+				KJ_REQUIRE(unwrapped.is<Own<ObjectDBEntry>>(), "Internal error: DB yielded un-unwrappable object during export");
+				KJ_IF_MAYBE(pTargetId, idMap.find(unwrapped.get<Own<ObjectDBEntry>>() -> id)) {
+					out.setObject(*pTargetId);
+				} else {
+					KJ_FAIL_REQUIRE("Could not resolve ID of linked object");
+				}
+			};
+			
+			switch(preserved -> which()) {
+				case ObjectInfo::UNRESOLVED:
+					outEntry.setUnresolved();
+					break;
+				
+				case ObjectInfo::NULL_VALUE:
+					outEntry.setNullValue();
+					break;
+				
+				case ObjectInfo::EXCEPTION:
+					outEntry.setException(preserved -> getException());
+					break;
+				
+				case ObjectInfo::LINK:
+					outEntry.setLink(db.unwrapValid(preserved -> getLink()) -> id);
+					break;
+					
+				case ObjectInfo::DATA_REF: {					
+					auto refInfo = outEntry.initDataRef();
+					refInfo.setData(overrideRefs(db.wrap(current -> addRef()).castAs<DataRef<AnyPointer>>(), nullptr));
+					
+					auto capTableIn = preserved -> getDataRef().getCapTable();
+					auto capTableOut = refInfo.initRefs(capTableIn.size());
+					
+					for(auto i : kj::indices(capTableIn)) {
+						exportObject(capTableIn[i], capTableOut[i]);
+					}
+					
+					break;
+				}
+				
+				case ObjectInfo::FOLDER: {
+					kj::Vector<kj::Tuple<kj::String, uint64_t>> entries;
+					
+					auto q = snapshot.listFolderEntries.bind(id);
+					while(q.step()) {
+						auto name = q[0].asText();
+						
+						KJ_IF_MAYBE(pId, idMap.find(q[1].asInt64())) {
+							entries.add(kj::tuple(kj::heapString(name), *pId));
+						} else {
+							KJ_FAIL_REQUIRE("Internal error: Id lookup failed");
+						}
+					}
+					
+					auto entriesOut = outEntry.initFolder(entries.size());
+					for(auto iRef : kj::indices(entries)) {
+						entriesOut[iRef].setName(kj::get<0>(entries[iRef]));
+						entriesOut[iRef].setObject(kj::get<1>(entries[iRef]));
+					}
+					break;
+				}
+				
+				case ObjectInfo::FILE: {
+					exportObject(preserved -> getFile(), outEntry.initFile());
+					break;
+				}
+			}
+		}
+		
+		ctx.initResults().setGraph(
+			getActiveThread().dataService().publish(mv(result))
+		);
+	});
+}
+
+Promise<void> FolderInterface::importGraph(ImportGraphContext ctx) {
+	return getActiveThread().dataService().download(ctx.getParams().getGraph())
+	.then([this, ctx](auto graph) mutable {
+		return withODBBackoff([this, ctx, graph = mv(graph)] () mutable {
+			auto& db = object -> getDb();
+			
+			{
+				auto t = db.writeTransaction();
+				
+				// Prepare import of graph
+				auto objects = graph.get().getObjects();
+				kj::HashMap<uint64_t, Own<ObjectDBEntry>> importMap;
+				ImportContext ic(db);
+				kj::Vector<Promise<void>> importTasks;
+				
+				// Calculate starting points of all lists
+				auto startAddresses = kj::heapArray<uint64_t>(objects.size());
+				{
+					uint64_t offset = 0;
+					for(auto i : kj::indices(objects)) {
+						startAddresses[i] = offset;
+						offset += objects[i].size();
+					}
+				}
+				
+				auto getGraphObject = [&](uint64_t id) {
+					size_t listIdx = std::upper_bound(startAddresses.begin(), startAddresses.end(), id) - startAddresses.begin() - 1;
+					KJ_REQUIRE(id <= startAddresses[listIdx] + objects[listIdx].size(), "Invalid graph object ID");
+					
+					return objects[listIdx][id - startAddresses[listIdx]];
+				};
+				
+				kj::Function<ObjectDBEntry& (uint64_t, bool)> import = [&](uint64_t id, bool force) -> ObjectDBEntry& {
+					// Check if object already allocated
+					if(!force) {
+						KJ_IF_MAYBE(pEntry, importMap.find(id)) {
+							return **pEntry;
+						}
+					}
+					
+					using Object = Warehouse::ObjectGraph::Object;	
+					Object::Reader object = getGraphObject(id);
+					
+					// Helper to import object references
+					auto importRef = [&](Warehouse::ObjectGraph::ObjectRef::Reader ref) -> Maybe<Own<ObjectDBEntry>> {
+						if(ref.isNull()) return nullptr;
+						if(ref.isObject()) return import(ref.getObject(), false).addRef();
+						KJ_FAIL_REQUIRE("Unknown ref type");
+					};
+					
+					// Allocate object
+					Own<ObjectDBEntry> dst = db.create();
+					importMap.insert(id, dst -> addRef());
+									
+					switch(object.which()) {
+						case Object::UNRESOLVED:
+							dst -> open() -> setException(toProto(KJ_EXCEPTION(FAILED, "Object was unresolved at export time")));
+							break;
+						case Object::NULL_VALUE:
+							dst -> open() -> setNullValue();
+							break;
+						case Object::EXCEPTION:
+							dst -> open() -> setException(object.getException());
+							break;
+						case Object::DATA_REF: {
+							auto asDR = object.getDataRef();
+							auto refsIn = asDR.getRefs();
+							auto refBuilder = kj::heapArrayBuilder<capnp::Capability::Client>(refsIn.size());
+							
+							for(auto refIn : refsIn) {
+								refBuilder.add(db.wrap(importRef(refIn)));
+							}
+							
+							// We need to find a place to attach the objects so that they
+							// stay alive. Since we have an unfinished DataRef, we can use
+							// that as a housing place.
+							{
+								auto acc = dst -> open();
+								auto ref = acc -> initDataRef();
+								auto ct = ref.initCapTable(refBuilder.size());
+								for(auto i : kj::indices(refBuilder))
+									ct.set(i, refBuilder[i]);
+							}
+													
+							auto importSrc = overrideRefs(asDR.getData(), refBuilder.finish());
+							
+							auto task = ic.importIntoExisting(importSrc, *dst);
+							importTasks.add(mv(task.task));
+							break;
+						}
+						case Object::FOLDER: {
+							dst -> open() -> setFolder();
+													
+							for(auto e : object.getFolder()) {								
+								// Attach child object
+								Maybe<int64_t> oldChild;
+								
+								auto q = db.getFolderEntry.bind(dst -> id, e.getName());
+								if(q.step()) {
+									oldChild = q[0].asInt64();
+								}
+								
+								auto& child = import(e.getObject(), false);
+								db.incRefcount(child.id);
+								db.updateFolderEntry(dst -> id, e.getName(), child.id);
+								
+								KJ_IF_MAYBE(pOld, oldChild) {
+									db.decRefcount(*pOld);
+									db.deleteIfOrphan(*pOld);
+								}
+							}
+							
+							break;
+						}
+						case Object::FILE:
+							dst -> open() -> setFile(db.wrap(importRef(object.getFile())));
+							break;
+						case Object::LINK:
+							dst -> open() -> setLink(db.wrap(import(object.getLink(), false).addRef()));
+							break;
+						default:
+							KJ_FAIL_REQUIRE("Import failure: Unknown object type");
+					}
+					
+					return *dst;
+				};
+				
+				kj::Path path = kj::Path::parse(ctx.getParams().getPath());
+				auto rootId = ctx.getParams().getRoot();
+				
+				if(ctx.getParams().getMerge()) {
+					auto dst = locateWriteDir(path, true);
+					
+					KJ_REQUIRE(getGraphObject(rootId).isFolder(), "Can only use merge mode when source is folder");
+					
+					// Install dst as root 
+					importMap.insert(rootId, dst -> addRef());
+				
+					db.exportStoredObject(db.wrap(import(rootId, true).addRef()), ctx.initResults());
+				} else {
+					KJ_REQUIRE(path.size() >= 1, "Can not replace self, with empty dst path use merge mode");
+				
+					auto parentFolder = locateWriteDir(path.parent(), true);
+					auto& objectName = path.basename()[0];
+				
+					// Decrease old refcount if present
+					Maybe<int64_t> oldId;
+					auto oldIdQuery = db.getFolderEntry.bind(parentFolder -> id, objectName.asPtr());
+					if(oldIdQuery.step()) {
+						oldId = oldIdQuery[0].asInt64();
+					}
+					
+					auto& newObject = import(ctx.getParams().getRoot(), false);
+					
+					db.incRefcount(newObject.id);
+					db.updateFolderEntry(parentFolder -> id, objectName.asPtr(), newObject.id);
+					
+					KJ_IF_MAYBE(pOldId, oldId) {
+						db.decRefcount(*pOldId);
+						db.deleteIfOrphan(*pOldId);
+					}
+				
+					db.exportStoredObject(db.wrap(newObject.addRef()), ctx.initResults());
+				}
+				return kj::joinPromisesFailFast(importTasks.releaseAsArray())
+				.then([&db]() mutable {
+					return db.writeBarrier();
+				});
+			}
+		});
+	});
+}
+
+Promise<void> FolderInterface::deepCopy(DeepCopyContext ctx) {
+	auto exportReq = thisCap().exportGraphRequest();
+	exportReq.setPath(ctx.getParams().getSrcPath());
+	
+	return exportReq.send().then([this, ctx](auto graphResponse) mutable {
+		auto importReq = thisCap().importGraphRequest();
+		importReq.setPath(ctx.getParams().getDstPath());
+		importReq.setGraph(graphResponse.getGraph());
+		
+		return ctx.tailCall(mv(importReq));
+	});
+}
+
 Own<ObjectDBEntry> FolderInterface::locateWriteDir(kj::PathPtr path, bool create) {
 	auto& db = object -> getDb();
 	KJ_REQUIRE(db.conn -> inTransaction(), "INTERNAL ERROR: locateWriteDir must be called inside transaction");
@@ -2253,8 +2607,6 @@ Promise<void> DataRefInterface::metaAndCapTable(MetaAndCapTableContext ctx) {
 		
 		results.setMetadata(ref.getMetadata());
 		results.setTable(ref.getCapTable());
-		
-		// KJ_DBG(ref.getMetadata());
 	});
 }
 

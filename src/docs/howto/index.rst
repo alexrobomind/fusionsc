@@ -15,3 +15,4 @@ This section contains various demonstration examples.
   Client
   Mapping
   CalculateIota
+  SphereField

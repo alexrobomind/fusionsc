@@ -143,6 +143,17 @@ interface FieldCalculator $Cxx.allowCancellation {
 		flux @1;
 	}
 	
+	enum FourierConvention {
+		regular @0;
+		vmec @1;
+	}
+	
+	enum FourierNormalization {
+		unnormalized @0;
+		l2Preserving @1;
+		normalized @2;
+	}
+	
 	calculateRadialModes @5 (
 		field : MagneticField, background : MagneticField,
 		surfaces : FourierSurfaces,
@@ -150,7 +161,9 @@ interface FieldCalculator $Cxx.allowCancellation {
 		nPhi : UInt32, nTheta : UInt32,
 		nSym : UInt32 = 1,
 		useFFT : Bool = true,
-		quantity : RadialModeQuantity = field
+		quantity : RadialModeQuantity = field,
+		fourierConvention : FourierConvention = vmec,
+		fourierNormalization : FourierNormalization = normalized
 	) -> (
 		cosCoeffs : Float64Tensor, sinCoeffs : Float64Tensor,
 		mPol : List(Float64), nTor : List(Float64),
@@ -180,13 +193,15 @@ interface FieldCalculator $Cxx.allowCancellation {
 		merged : DataRef(G.MergedGeometry)
 	);
 		
-	
-	# Fourier-mode evaluation
-	#calculatePerturbation @4 (
-	#	field : MagneticField, surfaces : FourierSurfaces,
-	#	nMax : UInt32, mMax : UInt32, toroidalSymmetry : UInt32,
-	#	nTor : UInt32, mPol : UInt32
-	#) -> (components : Float64Tensor, mPol : Float64Tensor, nTor : Float64Tensor);
+	surfaceToFourier @7 (
+		surfaces : FourierSurfaces
+	) -> (
+		rReal : Float64Tensor,
+		rImag : Float64Tensor,
+		
+		zReal : Float64Tensor,
+		zImag : Float64Tensor
+	);
 }
 
 struct BiotSavartSettings {

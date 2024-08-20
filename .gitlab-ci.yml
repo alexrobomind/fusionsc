@@ -1,5 +1,7 @@
 variables:
   PIPELINE_NAME: 'Pipeline'  # A default is not required.
+  CONTAINER_REGISTRY: 'jugit-registry.fz-juelich.de'
+  CONTAINER_IMAGE_PREFIX: 'jugit-registry.fz-juelich.de/a.knieps/fsc'
 
 workflow:
   name: '$PIPELINE_NAME'
@@ -98,6 +100,29 @@ build:clang:
 build:msvc:
   <<: *build-windows
   <<: *msvc
+  
+# Docker build
+
+build:docker:
+  <<: *job
+  
+  image: docker:20.10.16
+  services:
+    - name: docker:20.10.16-dind
+      alias: docker
+  stage: build
+
+  cache:
+    key: build-cache
+    paths:
+      - /cache
+
+  script:
+    - docker login ${CONTAINER_REGISTRY} -u ${CONTAINER_REGISTRY_USER} -p ${CONTAINER_REGISTRY_TOKEN}
+    - mkdir -p /cache
+    - DOCKER_BUILDKIT=1 docker build --build-arg="CACHE_DIR=/cache/build" -t ${CONTAINER_IMAGE_PREFIX}/full:nightly .
+    - docker run ${CONTAINER_IMAGE_PREFIX}/full:nightly /usr/local/bin/fusionsc-tests
+    - docker push ${CONTAINER_IMAGE_PREFIX}/full:nightly
 
 # Test stage
 

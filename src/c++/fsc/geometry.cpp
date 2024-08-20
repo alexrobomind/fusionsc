@@ -74,7 +74,10 @@ Promise<void> GeometryResolverBase::processGeometry(Geometry::Reader input, Geom
 			}).attach(mv(tmp), thisCap());
 		}
 		case Geometry::NESTED: {
-			return processGeometry(input.getNested(), output, context);
+			if(input.getTags().size() == 0)
+				return processGeometry(input.getNested(), output, context);
+			else
+				return processGeometry(input.getNested(), output.initNested(), context);
 		}
 		case Geometry::MESH: {
 			output.setMesh(input.getMesh());
@@ -759,7 +762,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader inp
 
 Promise<void> GeometryLibImpl::index(IndexContext context) {
 	Geometry::Reader geometry = context.getParams().getGeometry();
-	while(geometry.isNested()) {
+	while(geometry.isNested() && geometry.getTags().size() == 0) {
 		geometry = geometry.getNested();
 	}
 	
@@ -930,7 +933,7 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 Promise<void> GeometryLibImpl::merge(MergeContext context) {
 	// Check if already merged
 	Geometry::Reader geometry = context.getParams();
-	while(geometry.isNested()) {
+	while(geometry.isNested() && geometry.getTags().size() == 0) {
 		geometry = geometry.getNested();
 	}
 		
@@ -991,7 +994,7 @@ Promise<void> GeometryLibImpl::reduce(ReduceContext context) {
 	
 	// Check if already merged
 	Geometry::Reader geometry = params.getGeometry();
-	while(geometry.isNested()) {
+	while(geometry.isNested() && geometry.getTags().size() == 0) {
 		geometry = geometry.getNested();
 	}
 	

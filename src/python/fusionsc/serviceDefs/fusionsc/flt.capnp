@@ -67,6 +67,9 @@ struct ReversibleFieldlineMapping {
 	# correct derivative values.
 	nPad @2 : UInt64;
 	
+	# Toroidal symmetry of the mapping
+	nSym @3 : UInt64 = 1;
+	
 	struct State {
 		u @0 : Float64;
 		v @1 : Float64;
@@ -305,6 +308,8 @@ struct RFLMRequest {
 	
 	u0 @8 : List(Float64) = [0.5];
 	v0 @9 : List(Float64) = [0.5];
+	
+	nSym @10 : UInt64 = 1;
 }
 
 interface Mapper {	

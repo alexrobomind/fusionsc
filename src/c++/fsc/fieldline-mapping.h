@@ -47,6 +47,10 @@ struct RFLM {
 	uint64_t nPhi;
 	uint64_t nZ;
 	uint64_t nR;
+	
+	// WARNING: These are not identical to mapping.sections[activeSections].phiStart or phiEnd
+	// This is because for symmetric mappings, these need to be adjusted to the symmetry block
+	// we are in.
 	double phi1;
 	double phi2;
 	
@@ -142,7 +146,8 @@ double RFLM::unwrap(double dphi) {
 }
 
 EIGEN_DEVICE_FUNC void RFLM::activateSection(uint64_t iSection) {
-	currentSection = iSection;
+	uint64_t nSurf = mapping.getSurfaces().size();
+	currentSection = iSection % nSurf;
 	
 	auto section = mapping.getSections()[currentSection];
 	auto shape = section.getR().getShape();
@@ -150,17 +155,23 @@ EIGEN_DEVICE_FUNC void RFLM::activateSection(uint64_t iSection) {
 	nZ = shape[1];
 	nR = shape[2];
 	
-	if(mapping.getSections().size() == 1) {
-		phi1 = mapping.getSurfaces()[0];
-		phi2 = phi1 + 2 * pi;
+	if(currentSection + 1 == nSurf) {
+		// Last section needs to get wrapped around
+		phi1 = mapping.getSurfaces()[currentSection];
+		phi2 = mapping.getSurfaces()[0] + 2 * pi / mapping.getNSym();
 	} else {	
 		phi1 = mapping.getSurfaces()[iSection];
-		phi2 = mapping.getSurfaces()[(iSection + 1) % mapping.getSurfaces().size()];
+		phi2 = mapping.getSurfaces()[(iSection + 1) % nSurf];
 		
 		phi2 = phi1 + unwrap(phi2 - phi1);
 	}
 	
-	// KJ_DBG("Activated section", iSection, phi1, phi2, nPhi, nZ, nR);
+	// Shift sections
+	uint64_t iSym = iSection / nSurf; // Flooring division
+	double dPhi = 2 * fsc::pi * iSym / mapping.getNSym();
+	phi1 += dPhi;
+	phi2 += dPhi;
+	// KJ_DBG(iSection, iSym, dPhi, phi1, phi2);
 }
 
 EIGEN_DEVICE_FUNC cu::ReversibleFieldlineMapping::Section::Reader RFLM::activeSection() {
@@ -227,16 +238,29 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 	
 	auto phiPlanes = mapping.getSurfaces();
 	
+	size_t nPlanes = phiPlanes.size();
+	size_t nSym = mapping.getNSym();
+	
 	// KJ_DBG("Selecting section");
 	size_t iSection;
-	for(iSection = 0; iSection < phiPlanes.size(); ++iSection) {
+	for(iSection = 0; iSection < nPlanes * nSym; ++iSection) {
 		// We shift our sections slightly against the direction we are
 		// travelling towards, and shrinking it in the other. This guarantees that
 		// right on the mapping planes, we always map into the adequate section
 		// for the direction we are going towards.
 		double dirShift = ccw ? -SECTION_TOL : SECTION_TOL;
-		double phiStart = phiPlanes[iSection] + dirShift;
-		double phiEnd = phiPlanes[(iSection + 1) % phiPlanes.size()] + dirShift;
+		double phiStart = phiPlanes[iSection % nPlanes] + dirShift;
+		double phiEnd = phiPlanes[(iSection + 1) % nPlanes] + dirShift;
+		
+		uint64_t iSym = iSection / nPlanes; // Flooring division
+		
+		double dPhi = 2 * fsc::pi * iSym / nSym;
+		phiStart += dPhi;
+		phiEnd += dPhi;
+		
+		if((iSection % nPlanes) + 1 == nPlanes) {
+			phiEnd += 2 * fsc::pi / nSym;
+		}
 		
 		double d1 = unwrap(phi - phiStart);
 		double d2 = unwrap(phiEnd - phiStart);
@@ -244,9 +268,11 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 		// If we have only a single section, that one spans the entire range.
 		// In this case, d2 is 0 and we would not select any section.
 		
-		if(d1 < d2 || phiPlanes.size() == 1)
+		if(d1 < d2 || nPlanes * nSym == 1)
 			break;
 	}
+	
+	// KJ_DBG(phi, iSection);
 		
 	// KJ_DBG(iSection);
 	activateSection(iSection);

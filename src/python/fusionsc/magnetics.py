@@ -109,6 +109,15 @@ class SurfaceArray(wrappers.structWrapper(service.FourierSurfaces)):
 		pipeline = _calculator().surfaceToMesh(self.data, nPhi, nTheta, radialShift).pipeline
 		
 		return geometry.Geometry({"merged" : pipeline.merged})
+	
+	@asyncFunction
+	async def asFourier(self):
+		response = await _calculator().surfaceToFourier(self.data)
+		
+		return {
+			"r" : np.asarray(response.rReal) + 1j * np.asarray(response.rImag),
+			"z" : np.asarray(response.zReal) + 1j * np.asarray(response.zImag)
+		}
 
 class CoilFilament(wrappers.structWrapper(service.Filament)):
 	"""
@@ -341,7 +350,9 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		normalizeAgainst : "Optional[MagneticConfig]" = None,
 		nMax = 5, mMax = 5, nPhi = 0, nTheta = 0, nSym = 1,
 		useFFT = True,
-		quantity: Literal["field", "flux"] = "field"
+		quantity: Literal["field", "flux"] = "field",
+		fourierConvention: Literal["regular", "vmec"] = "vmec",
+		fourierNormalization: Literal["normalized", "l2Preserving", "unnormalized"] = "normalized"
 	):
 		"""
 		Calculates the radial Fourier modes of this field (or the ratio to the given
@@ -357,6 +368,14 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			- nSym: Toroidal symmetry
 			- useFFT: Whether to use the fast FFT-based Fourier path (as opposed to a slower cosine fit)
 			- quantity: Whether to calculate the radial field or the radial flux (field * (dx/dPhi x dx/dTheta))
+			- fourierConvention: What type of Fourier modes to expand in. Also affects the DFT expansion Possible values are:
+			  - regular: Usual Fourier modes of type exp(2 *pi * i * (n * phi + m * theta))
+			  - vmec: VMEC-style Fourier expansion of type exp(2 * pi * i * (m * theta - n * phi))
+			- fourierNormalization: How to normalize the Fourier modes. Available normalizations are:
+			  - unnormalized: Performs no normalization of the Fourier transform.
+			  - l2Preserving: Divide by sqrt(nPhi * nTheta), which produces identical L2 norm of input values and Fourier coefficients
+			  - normalized: Divide by nPhi * nTheta, so that the modes are the actual mode expansion coefficients (so the inverse DFT requires
+			    no normalization)
 		
 		Returns:
 			A dict with the following entries:
@@ -389,7 +408,9 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			nPhi, nTheta,
 			nSym,
 			useFFT,
-			quantity
+			quantity,
+			fourierConvention,
+			fourierNormalization
 		)
 		
 		return {

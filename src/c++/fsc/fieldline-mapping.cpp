@@ -107,6 +107,9 @@ namespace {
 		}
 		
 		Promise<void> processTraces(Float64Tensor::Reader fwdTensorR, Float64Tensor::Reader bwdTensorR) {
+			output.setPhiStart(phi1);
+			output.setPhiEnd(phi2);
+			
 			int64_t nPhiTot = numPlanesTot();
 			// Tensor<double, 3> rOut(rVals.size(), zVals.size(), nPhiTot);
 			// Tensor<double, 3> zOut(rVals.size(), zVals.size(), nPhiTot);
@@ -252,6 +255,7 @@ struct MapperImpl : public Mapper::Server {
 		Temporary<ReversibleFieldlineMapping> result;
 		result.setSurfaces(planes);
 		result.setNPad(params.getNumPaddingPlanes());
+		result.setNSym(params.getNSym());
 		
 		auto promiseBuilder = kj::heapArrayBuilder<Promise<void>>(planes.size());
 		// Promise<void> computationPromise = READY_NOW;
@@ -261,7 +265,7 @@ struct MapperImpl : public Mapper::Server {
 		auto u0 = params.getU0();
 		auto v0 = params.getV0();
 		
-		KJ_REQUIRE(hasMaximumOrdinal(params, 9), "You are trying to use features that this server version does not support");
+		KJ_REQUIRE(hasMaximumOrdinal(params, 10), "You are trying to use features that this server version does not support");
 		
 		KJ_REQUIRE(u0.size() == 1 || u0.size() == planes.size(), "Size of u0 must be 1 or no. of planes", u0.size(), planes.size());
 		KJ_REQUIRE(v0.size() == 1 || v0.size() == planes.size(), "Size of v0 must be 1 or no. of planes", v0.size(), planes.size());
@@ -285,6 +289,13 @@ struct MapperImpl : public Mapper::Server {
 			trace -> rVals = params.getGridR();
 			trace -> zVals = params.getGridZ();
 			
+			// Adjust if mapping has higher symmetry
+			if(i2 == 0 && params.getNSym() > 1) {
+				trace -> phi2 += 2 * fsc::pi / params.getNSym();
+			}
+			
+			// KJ_DBG(trace -> phi1, trace -> phi2);
+			
 			totalWidth += trace -> computeWidth();
 			
 			/*computationPromise = computationPromise.then([trace]() mutable {
@@ -293,7 +304,7 @@ struct MapperImpl : public Mapper::Server {
 			promiseBuilder.add(trace -> run().attach(trace.x()));
 		}
 		
-		KJ_REQUIRE(std::abs(totalWidth - 2 * pi) < pi, "Sections must be of non-zero width, and angles must be specified in counter-clockwise direction");
+		KJ_REQUIRE(std::abs(totalWidth - 2 * pi / params.getNSym()) < pi, "Sections must be of non-zero width, and angles must be specified in counter-clockwise direction");
 				
 		auto computationPromise = kj::joinPromises(promiseBuilder.finish());
 		return computationPromise.then([ctx = mv(ctx), result = mv(result)]() mutable {

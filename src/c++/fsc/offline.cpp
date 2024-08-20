@@ -126,6 +126,7 @@ struct OfflineGeometryResolver : public GeometryResolverBase {
 			ID asId = asKey(input);
 			
 			KJ_IF_MAYBE(pField, geometries.find(asId)) {
+				output.setTags(input.getTags());
 				output.setNested(*pField);
 				return READY_NOW;
 			}

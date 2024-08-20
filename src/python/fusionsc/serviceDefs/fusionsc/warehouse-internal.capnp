@@ -5,7 +5,7 @@ $Cxx.namespace("fsc::internal");
 
 using Rpc = import "/capnp/rpc.capnp";
 
-using Data = import "data.capnp";
+using D = import "data.capnp";
 
 # This class is used for internal storage inside the warehouse. Do not use.
 struct ObjectInfo {	
@@ -23,7 +23,7 @@ struct ObjectInfo {
 				downloading @4 : Void;
 				finished @5 : Void;
 			}
-			metadata @6 : Data.DataRefMetadata;
+			metadata @6 : D.DataRefMetadata;
 			capTable @7 : List(Capability);
 		}
 		folder @8 : Void; # Folder links are implemented in the database for indexing

@@ -64,8 +64,11 @@ struct WarehouseTool {
 	kj::String url;
 	kj::String localFile;
 	
+	kj::String dstUrl;
+	
 	bool writeAccess = false;
 	bool truncate = false;
+	bool merge = false;
 	
 	WarehouseTool(kj::ProcessContext& context):
 		context(context), tablePrefix(kj::heapString("warehouse")), rootPath(kj::heapString(""))
@@ -91,6 +94,11 @@ struct WarehouseTool {
 		return true;
 	}
 	
+	bool setMerge() {
+		merge = true;
+		return true;
+	}
+	
 	bool setDb(kj::StringPtr file) {
 		dbFile = kj::heapString(file);
 		return true;
@@ -113,6 +121,11 @@ struct WarehouseTool {
 	
 	bool setUrl(kj::StringPtr urlStr) {
 		url = kj::heapString(urlStr);
+		return true;
+	}
+	
+	bool setDstUrl(kj::StringPtr urlStr) {
+		dstUrl = kj::heapString(urlStr);
 		return true;
 	}
 	
@@ -175,6 +188,53 @@ struct WarehouseTool {
 		putReq.setValue(ref);
 		
 		putReq.send().wait(ws);
+		
+		return true;
+	}
+	
+	bool transfer() {
+		auto l = newLibrary();
+		auto lt = l -> newThread();
+		auto& ws = lt->waitScope();
+		
+		LocalResources::Client lr = createLocalResources(LocalConfig::Reader());
+		
+		auto openWarehouse = [&](kj::StringPtr url) {
+			auto whReq = lr.openWarehouseRequest();
+			whReq.setUrl(url);
+			auto response = whReq.send().wait(ws);
+			auto obj = response.getObject();
+			return obj;
+		};
+		
+		KJ_REQUIRE(url.size() > 0);
+		KJ_REQUIRE(dstUrl.size() > 0);
+		
+		size_t srcSlice = url.findFirst('#').orDefault(url.size() - 1);
+		size_t dstSlice = dstUrl.findFirst('#').orDefault(dstUrl.size() - 1);
+		
+		KJ_REQUIRE(dstSlice < dstUrl.size(), "Destination URL must contain a path to store object under, can not be root");
+		
+		auto src = openWarehouse(kj::heapString(url.slice(0, srcSlice)));
+		auto dst = openWarehouse(kj::heapString(url.slice(0, srcSlice)));
+		
+		auto exportRequest = src.exportGraphRequest();
+		exportRequest.setPath(url.slice(srcSlice + 1));
+		
+		KJ_LOG(INFO, "Beginning export...");
+		auto response = exportRequest.send().wait(ws);
+		auto graph = response.getGraph();
+		
+		KJ_LOG(INFO, "Export finished");
+		
+		auto importRequest = dst.importGraphRequest();
+		importRequest.setMerge(merge);
+		exportRequest.setPath(dstUrl.slice(dstSlice + 1));
+		importRequest.setGraph(graph);
+		
+		KJ_LOG(INFO, "Beginning import...");
+		importRequest.send().wait(ws);
+		KJ_LOG(INFO, "Done");
 		
 		return true;
 	}
