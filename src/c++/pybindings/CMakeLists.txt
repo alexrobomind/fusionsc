@@ -45,5 +45,5 @@ if(FSC_WITH_PYTHON)
 	message(STATUS "Python package installation root: ${INSTALL_DIR}")
 	
 	INSTALL(TARGETS fsc-python-bindings LIBRARY DESTINATION ${INSTALL_DIR}/fusionsc)
-	INSTALL(DIRECTORY ${PROJECT_SOURCE_DIR}/src/python/fusionsc/ DESTINATION ${INSTALL_DIR}/fusionsc FILES_MATCHING PATTERN "*.py" PATTERN "*.capnp" PATTERN "*.fsc")
+	INSTALL(DIRECTORY ${PROJECT_SOURCE_DIR}/src/python/fusionsc/ DESTINATION ${INSTALL_DIR}/fusionsc FILES_MATCHING PATTERN "*.py" PATTERN "*.capnp" PATTERN "*.fsc" PATTERN "*.dat")
 endif()
