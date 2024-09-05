@@ -220,7 +220,7 @@ add_vendored_dependency(
 	FIND_ARGS COMPONENTS HL C CXX
 )
 
-if(HDF5_VENDORED OR NOT TARGET hdf5-shared)
+if(HDF5_VENDORED)
 	set(HDF5_LIBS hdf5-static hdf5_hl-static hdf5_cpp-static hdf5_hl_cpp-static)
 elseif(TARGET hdf5-shared)
 	set(HDF5_LIBS hdf5-shared hdf5_hl-shared hdf5_cpp-shared hdf5_hl_cpp-shared)
