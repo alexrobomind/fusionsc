@@ -54,12 +54,17 @@ requirements:
     - scipy
 
 test:
+  requires:
+    - pytest
+  source_files:
+    - src/python/tests/
   imports:
     - fusionsc
   commands:
     - pip check
     - fusionsc-config --help
     - fusionsc --help
+    - python -m pytest src/python/tests
   requires:
     - pip
 
