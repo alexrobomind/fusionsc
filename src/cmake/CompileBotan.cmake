@@ -33,6 +33,7 @@ add_custom_command(
 	"--disable-shared"
 	"--cc-bin" "${CMAKE_CXX_COMPILER}"
 	"--with-build-dir" "${AMALGAMATION_DIR}"
+	"--link-method" "copy"
 	${BOTAN_XARGS}
 	
 	#COMMAND ${CMAKE_COMMAND} -E copy "${Botan_SOURCE_DIR}/botan_all.h" "${Botan_BINARY_DIR}/botan_all.h"
