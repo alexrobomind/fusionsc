@@ -6,12 +6,12 @@ package:
   version: {{ version }}
 
 source:
-#  git_rev: main
-#  git_url: https://github.com/alexrobomind/fusionsc
-#  git_depth: 1
+  git_rev: main
+  git_url: https://github.com/alexrobomind/fusionsc
+  git_depth: 1
 #  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/fusionsc-{{ version }}.tar.gz
 #  sha256: 1aac64b32796a0f7afe5cbce6a56b014637d1ea868eb7297ec955b09c912089b
-  path: ../..
+#  path: ../..
 
 build:
   skip: true  # [py2k]
@@ -25,6 +25,7 @@ requirements:
     - {{compiler('c')}}
     - git
     - cmake >=3.17
+    - ninja
   host:
     - python
     - scikit-build-core
