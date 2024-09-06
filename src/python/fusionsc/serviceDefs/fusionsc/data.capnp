@@ -22,6 +22,7 @@ struct DataRefMetadata {
 	}
 }
 
+#//! [DataRef]
 interface DataRef (T) {
 	interface Receiver {
 		begin @0 (numBytes : UInt64) -> ();
@@ -33,21 +34,22 @@ interface DataRef (T) {
 	rawBytes @1 (start : UInt64, end : UInt64) -> (data : Data);
 	transmit @2 (start : UInt64, end : UInt64, receiver : Receiver);
 }
+#//! [DataRef]
 
 #//! [DataService]
 interface DataService @0xc6d48902ddb7e122 {
-	# Upload a message to the remote data service and have it publish it
 	store @0 [T] (id : Data, data : T, schema : AnyPointer) -> (ref : DataRef(T));
+	# Upload a message to the remote data service and have it publish it
 	
-	# Have the remote data service download a DataRef and re-publish it
 	clone @1 [T] (source : DataRef(T)) -> (ref : DataRef(T));
+	# Have the remote data service download a DataRef and re-publish it
 	
+	hash @2 [T] (source : DataRef(T)) -> (hash : Data);
 	# Have the remote service inspect the linked tree of refs and their content tables and
 	# compute a hash based on the received information.
-	hash @2 [T] (source : DataRef(T)) -> (hash : Data);
 	
-	# Have the remote data service download a complete copy
 	cloneAllIntoMemory @3 [T] (source : DataRef(T)) -> (ref : DataRef(T));
+	# Have the remote data service download a complete copy
 }
 #//! [DataService]
 

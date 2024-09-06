@@ -7,6 +7,28 @@
 
 #include <fsc/geometry.capnp.h>
 
+/**
+ * \defgroup Geometry
+ *
+ * Several subfunctions of FusionSC require the specification of machine geometries. To support rich geometry
+ * representations, FusionSC offers a high-level geometry representation based on both meshes, declarative
+ * operations (2D -> 3D extrusions, geometric operations on other geometries), and labeling support.
+ *
+ *
+ * ### Geometry processing
+ *
+ * Geometry processing is primarily handled through the fsc::GeometryLib service interface. An instance of this
+ * interface can be obtained through fsc::newGeometryLib.
+ *
+ * \snippet geometry.capnp GeoLib
+ *
+ * ### Geometry representation
+ *
+ * Geometries are fully represented using Cap'n'proto types. 
+ *
+ * \snippet geometry.capnp Geometry
+*/
+
 namespace fsc {
 
 bool isBuiltin(Geometry::Reader);

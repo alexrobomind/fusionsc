@@ -17,6 +17,7 @@ interface GeometryResolver {
 	resolveGeometry @0 (geometry : Geometry, followRefs : Bool = false) -> Geometry;
 }
 
+#//! [GeoLib]
 interface GeometryLib $Cxx.allowCancellation {
 	struct IntersectRequest {
 		geometry @0 : IndexedGeometry;
@@ -45,8 +46,24 @@ interface GeometryLib $Cxx.allowCancellation {
 	
 	intersect @5 IntersectRequest -> IntersectResponse;
 }
+#//! [GeoLib]
+
+struct Plane {
+	orientation : union {
+		# Indicates that this plane is a phi-oriented toroidal HALF-plane
+		phi @0 : Float64;
+		
+		# Indicates that this plane is a usual plane normal to the given direction
+		normal @1 : List(Float64);
+	}
+	
+	center @2 : List(Float64);
+}
+
+#//! [Geometry]
 
 struct TagValue {
+	# Multi-type value object for tag values
 	union {
 		notSet @0 : Void;
 		uInt64 @1 : UInt64;
@@ -55,11 +72,14 @@ struct TagValue {
 }
 
 struct Tag {
+	# Name-Value pair for mesh tagging
 	name @0 : Text;
 	value @1 : TagValue;
 }
 
 struct CartesianGrid {
+	# Cartesian grid (primarily used for geometry indexing)
+	
 	xMin @0 : Float64;
 	xMax @1 : Float64;
 	
@@ -75,7 +95,7 @@ struct CartesianGrid {
 }
 
 struct Angle {
-	# Angle specified in either degrees or radian.
+	# Multi-unit angle representation
 	
 	union {
 		deg @0 : Float64;
@@ -83,7 +103,27 @@ struct Angle {
 	}
 }
 
+struct Mesh {
+	# Polygon mesh in N-D space.
+	
+	vertices @0 : Float64Tensor;
+	# 2D buffer of vertices. First dimension is vertex count, second is dimension.
+	
+	indices @1 : List(UInt32);
+	# Consecutive list of indices into the vertex buffer making up the polygons
+	
+	union {
+		polyMesh @2 : List(UInt32);
+		# A buffer of length n_polys+1, where the i-th polygon spans the range [ polyMesh[i], polyMesh[i+1] [ of the index buffer.
+		
+		triMesh @3 : Void;
+		# Equivalent to polyMesh = [0, 3, 6, 9, ..., indices.size()]. Only valid if indices has a length which is multiple of 3
+	}
+}
+
 struct Transformed(T) {
+	# Generic transformation that can be applied to objects.
+	
 	union {
 		leaf @0 : T;
 		shifted : group {
@@ -103,36 +143,9 @@ struct Transformed(T) {
 	}
 }
 
-struct Mesh {
-	vertices @0 : Float64Tensor;
-	# 2D buffer of vertices. First dimension is vertex count, second is dimension.
-	
-	indices @1 : List(UInt32);
-	# Consecutive list of indices into the vertex buffer making up the polygons
-	
-	# Description on how to interpret the index buffer
-	union {
-		polyMesh @2 : List(UInt32);
-		# A buffer of length n_polys+1, where the i-th polygon spans the range [ polyMesh[i], polyMesh[i+1] [ of the index buffer.
-		
-		triMesh @3 : Void;
-		# Equivalent to polyMesh = [0, 3, 6, 9, ..., indices.size()]. Only valid if indices has a length which is multiple of 3
-	}
-}
-
-struct Plane {
-	orientation : union {
-		# Indicates that this plane is a phi-oriented toroidal HALF-plane
-		phi @0 : Float64;
-		
-		# Indicates that this plane is a usual plane normal to the given direction
-		normal @1 : List(Float64);
-	}
-	
-	center @2 : List(Float64);
-}
-
 struct GeometryFilter {
+	# Filter expression to extract sub-meshes
+	
 	union {
 		true @0 : Void;
 		and @1 : List(GeometryFilter);
@@ -223,6 +236,20 @@ struct Geometry {
 	}
 }
 
+struct MergedGeometry {
+	# A processed geometry where all meshes are assembled in the same memory space.
+	
+	tagNames @0 : List(Text);
+	entries  @1 : List(Entry);
+	
+	struct Entry {
+		tags @0 : List(TagValue);
+		mesh @1 : Mesh;
+	}
+}
+
+#//! [Geometry]
+
 #const w7xOp12Divertor   : Geometry = ( w7x = ( componentsDbMeshes = [165, 166, 167, 168, 169] ));
 #const w7xOp12Baffles    : Geometry = ( w7x = ( componentsDbMeshes = [320, 321, 322, 323, 324] ));
 #const w7xOp12Covers     : Geometry = ( w7x = ( componentsDbMeshes = [325, 326, 327, 328, 329] ));
@@ -238,16 +265,6 @@ struct Geometry {
 #		.w7xOp12PumpSlits, .w7xSteelPanels, .w7xPlasmaVessel
 #	]
 #);
-
-struct MergedGeometry {
-	tagNames @0 : List(Text);
-	entries  @1 : List(Entry);
-	
-	struct Entry {
-		tags @0 : List(TagValue);
-		mesh @1 : Mesh;
-	}
-}
 
 struct IndexedGeometry {
 	struct ElementRef {

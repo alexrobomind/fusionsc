@@ -13,7 +13,33 @@
 
 /**
  * \defgroup network Distributed data and networking
- * 
+ *
+ * The FusionSC service model is based around using Cap'n'proto capabilities. Large data objects are represented
+ * using a generic service interface called \ref fsc::DataRef "DataRef". Objects of this type are passed by reference - no data are
+ * copied at this stage.
+ *
+ * When backed by local memory, DataRefs are represented as a subclass of DataRef::Client called \ref fsc::LocalDataRef "LocalDataRef".
+ * This class permits access to the stored Cap'n'proto object, underlying raw storage, and referenced DataRef
+ * and/or LocalDataRef objects.
+ *
+ * Converting a DataRef into a LocalDataRef (possibly) requires consulting a local data table for de-duplication,
+ * as well as perhaps downloading and re-hashing the requested data. This process is managed by the
+ * \ref fsc::LocalDataService "LocalDataService" class.
+ *
+ * \code
+ * using namespace fsc;
+ * ...
+ * // Obtain a wait scope so we can use synchronous API
+ * kj::WaitScope& ws = ...;
+ * DataRef<Float64Tensor>::Client ref = ...;
+ *
+ * // Download the reference to local memory
+ * LocalDataService& service = getActiveThread().dataService();
+ * LocalDataRef<Float64Tensor> localRef = service.download(ref).wait(ws);
+ *
+ * // Access data
+ * Float64Tensor::Reader localData = localRef.get();
+ * \endcode
  * For exchanging tensor information, the data module defines the following Cap'n'proto struct types:
  *
  * \snippet data.capnp tensors
@@ -53,6 +79,7 @@ using References = typename internal::References_<T>::Type;
 
 #ifdef DOXYGEN
 
+//! Cap'n'proto interface for data objects.
 /** 
  * \ingroup network
  * \tparam T Type of the root message stored in the data ref.
@@ -63,11 +90,13 @@ using References = typename internal::References_<T>::Type;
  * data are represented by the LocalDataRef class, which subclasses DataRef::Client.
  *
  * The stored data is expected to be in one of the two following formats:
- * - If T is capnp::Data, then the dataref stores a raw binary data array
- * - If T is any other type, it must correspond to a Cap'n'proto struct type. In
+ * - If T is any type except capnp::Data, it must correspond to a Cap'n'proto struct type. In
  *   this case, the DataRef holds a message with the corresponding root type, and
  *   a capability table that tracks any remote objects in use by this message
  *  (including other DataRef instances).
+ * - If T is DataRef::Data, then the corresponding message can either be a raw binary or a
+     Cap'n'proto message with a capnp::Data object as its root (note that the library will
+	 default to raw storage because of the laxer size constraints)
  *
  * Once obtained, DataRefs can be freely passed around as part of RPC calls or data published
  * in other DataRef::Client instances. The fsc runtime will do all it possibly can to protect the integrity
@@ -78,11 +107,13 @@ using References = typename internal::References_<T>::Type;
  * data, they must be converted into LocalDataRef instances using LocalDataService::download() methods.
  *
  * \capnpinterface
+ * \snippet data.capnp DataRef
  *
  */
 template <typename T = ::capnp::AnyPointer>
 struct DataRef {
-	class Client : public virtual ::capnp::Capability::Client {
+	//! Actual interface object class
+	struct Client : public virtual ::capnp::Capability::Client {
 		template <typename T2 = ::capnp::AnyPointer>
 		typename DataRef<T2>::Client asGeneric() {
 			return castAs<DataRef<T2>>();
@@ -96,8 +127,8 @@ struct DataRef {
  *
  * This interface serves as an access point to remotely download 
  *
- * \snippet data.capnp DataService
  * \capnpinterface
+ * \snippet data.capnp DataService
  */
 struct DataService {
 };
@@ -200,7 +231,7 @@ public:
 	template<typename Reader, typename T = capnp::FromAny<Reader>>
 	LocalDataRef<T> publish(Reader reader);
 	
-	//! Publish the contents of an array (no hash neede since the array has to be copied anyway)
+	//! Publish the contents of an array (copies and hashes the array)
 	LocalDataRef<capnp::Data> publish(kj::ArrayPtr<const byte> bytes);
 	
 	//! Take ownership of array and publish it, potentially with precomputed hash
@@ -234,7 +265,7 @@ public:
 	template<typename T>
 	LocalDataRef<T> publishConstant(kj::ArrayPtr<const byte> in);
 	
-	//! Publish the contents of a file as a data ref via mmap or copy
+	//! Publish the raw contents of a file as a data ref via mmap or copy
 	LocalDataRef<capnp::Data> publishFile(const kj::ReadableFile& in, kj::ArrayPtr<const kj::byte> fileHash = nullptr, bool copy = false);
 	
 	//! Shorthand for publishing without hash
