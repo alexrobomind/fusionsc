@@ -359,6 +359,29 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		return np.asarray(response.edges).transpose([2, 0, 1])
 
 	@asyncFunction
+	async def planarClip(self, phi = None, normal = None, center = None):
+		"""Computed a new geometry obtained by clipping the target geometry along the given plane (half space intersection)"""
+		assert phi is not None or normal is not None
+		assert phi is None or normal is None
+		
+		geometry = await self.resolve.asnc()
+		
+		request = service.GeometryLib.methods.planarClip.Params.newMessage()
+		request.geometry = geometry.data
+		
+		plane = request.plane
+		if phi is not None:
+			plane.orientation.phi = phi
+		if normal is not None:
+			plane.orientation.normal = normal
+		
+		if center is not None:
+			plane.center = center
+			
+		ref = geometryLib().planarClip(request).pipeline.ref
+		return Geometry({"merged" : ref})
+
+	@asyncFunction
 	async def plotCut(self, phi = 0, ax = None, plot = True, **kwArgs):
 		"""Plot the phi cut of a given geometry in either the given axes or the current active matplotlib axes"""
 		import matplotlib.pyplot as plt
@@ -417,7 +440,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 					faces.append(end - start)
 					faces.extend(indexArray[start:end])
 			
-			mesh = pv.PolyData(vertexArray, faces)
+			mesh = pv.PolyData(vertexArray, faces) if len(faces) > 0 else pv.PolyData()
 			return mesh
 		
 		def extractTags(entry):
@@ -544,6 +567,14 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		}
 		
 		return result
+	
+	@asyncFunction
+	async def unroll(self, phi1: float, phi2: float, clip: bool = True):
+		resolved = await self.resolve.asnc()
+		
+		unrolledRef = geometryLib().unroll(resolved.data, {"rad" : phi1}, {"rad" : phi2}, clip).pipeline.ref
+		return Geometry({"merged" : unrolledRef})
+		
 
 def asTagValue(x):
 	"""Convert a possible tag value into an instance of fsc.service.TagValue"""

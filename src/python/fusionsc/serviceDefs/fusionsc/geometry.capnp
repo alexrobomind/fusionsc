@@ -39,12 +39,15 @@ interface GeometryLib $Cxx.allowCancellation {
 	merge @0 Geometry -> (ref : DataRef(MergedGeometry));
 	index @1 (geometry : Geometry, grid : CartesianGrid) -> (indexed : IndexedGeometry);
 	planarCut @2 (geometry : Geometry, plane : Plane) -> (edges : Float64Tensor); # edges has shape [3, :, 2]
+	planarClip @7 (geometry : Geometry, plane : Plane) -> (ref : DataRef(MergedGeometry));
 	
 	reduce @3 (geometry : Geometry, maxVertices : UInt32 = 1000000, maxIndices : UInt32 = 1000000) -> (ref : DataRef(MergedGeometry));
 	
 	weightedSample @4 (geometry : Geometry, scale : Float64 = 0.01) -> (centers : Float64Tensor, areas : List(Float64));
 	
 	intersect @5 IntersectRequest -> IntersectResponse;
+	
+	unroll @6 (geometry : Geometry, phi1 : Angle, phi2 : Angle, clip : Bool) -> (ref : DataRef(MergedGeometry));
 }
 #//! [GeoLib]
 

@@ -9,11 +9,11 @@
 
 /**
  * \defgroup Geometry
+ * @{
  *
  * Several subfunctions of FusionSC require the specification of machine geometries. To support rich geometry
  * representations, FusionSC offers a high-level geometry representation based on both meshes, declarative
  * operations (2D -> 3D extrusions, geometric operations on other geometries), and labeling support.
- *
  *
  * ### Geometry processing
  *
@@ -31,6 +31,7 @@
 
 namespace fsc {
 
+//! Checks whether a geometry node is a builtin node that can be directly processed by the geometry resolver.
 bool isBuiltin(Geometry::Reader);
 	
 struct GeometryResolverBase : public GeometryResolver::Server {
@@ -44,6 +45,10 @@ struct GeometryResolverBase : public GeometryResolver::Server {
  * Creates C++ interface to geometry library.
  */
 Own<GeometryLib::Server> newGeometryLib(Own<DeviceBase>);
+
+/**
+ * @}
+*/
 
 Vec3u locationInGrid(Vec3d point, CartesianGrid::Reader reader);
 

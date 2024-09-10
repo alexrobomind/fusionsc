@@ -8,6 +8,7 @@ if(Doxygen_FOUND)
 	get_target_property(FSC_SRC_DIR fsc SOURCE_DIR)
 	
 	get_target_property(GENAPI_SRC_DIR fsc-service-genapi SOURCE_DIR)
+	get_target_property(GENAPI_GENAPI_DIR fsc-service-genapi GENAPI_DIR)
 
 	list(APPEND GENAPI_HEADERS ${FSC_CP_HEADERS})
 	# list(APPEND GENAPI_HEADERS ${FSC_CP_CUHEADERS})
@@ -15,6 +16,7 @@ if(Doxygen_FOUND)
 
 	list(REMOVE_ITEM FSC_SRC ${FSC_CP_HEADERS} ${FSC_CP_SRC} ${FSC_CP_CUHEADERS})
 
+	#set(FSC_RAWSRC "${FSC_SRC_DIR} ${GENAPI_GENAPI_DIR}")
 	set(FSC_RAWSRC "${FSC_SRC_DIR}")
 
 	# Configure documentation files

@@ -26,6 +26,7 @@ the magnetic field as well as the machine geometry.
    license
   
    reference
+   C++ library documentation <https://alexrobomind.github.io/fusionsc/cpp/index.html>
 
 
 

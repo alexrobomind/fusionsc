@@ -290,6 +290,8 @@ struct GeometryLibImpl : public GeometryLib::Server {
 	Promise<void> reduce(ReduceContext) override;
 	Promise<void> weightedSample(WeightedSampleContext) override;
 	Promise<void> intersect(IntersectContext) override;
+	Promise<void> unroll(UnrollContext) override;
+	Promise<void> planarClip(PlanarClipContext) override;
 	
 private:
 	struct GeometryAccumulator {
@@ -1312,6 +1314,44 @@ Promise<void> GeometryLibImpl::weightedSample(WeightedSampleContext context) {
 	});
 }
 
+void interpretPlane(Plane::Reader plane, Vec3d& normal, double& d) {
+	auto orientation = plane.getOrientation();
+	
+	switch(orientation.which()) {
+		case Plane::Orientation::PHI: {
+			double phi = orientation.getPhi();
+			normal[0] = -std::sin(phi);
+			normal[1] = std::cos(phi);
+			normal[2] = 0;
+			break;
+		}
+		
+		case Plane::Orientation::NORMAL: {
+			auto inNormal = orientation.getNormal();
+			KJ_REQUIRE(inNormal.size() == 3, "Can only process 3D planes");
+			
+			for(int i = 0; i < 3; ++i)
+				normal[i] = inNormal[i];
+			
+			break;
+		}
+		
+		default:
+			KJ_FAIL_REQUIRE("Unknown plane orientation type", orientation.which());
+	}
+	
+	Vec3d center(0, 0, 0);
+	if(plane.hasCenter()) {
+		auto inCenter = plane.getCenter();
+		KJ_REQUIRE(inCenter.size() == 3, "Can only process 3D planes");
+		
+		for(int i = 0; i < 3; ++i)
+			center[i] = inCenter[i];
+	}
+	
+	d = -center.dot(normal);
+}
+
 Promise<void> GeometryLibImpl::planarCut(PlanarCutContext context) {
 	auto mergeRequest = thisCap().mergeRequest();
 	mergeRequest.setNested(context.getParams().getGeometry());
@@ -1326,40 +1366,8 @@ Promise<void> GeometryLibImpl::planarCut(PlanarCutContext context) {
 		
 		// Build plane equation
 		Vec3d normal;
-		
-		switch(orientation.which()) {
-			case Plane::Orientation::PHI: {
-				double phi = orientation.getPhi();
-				normal[0] = -std::sin(phi);
-				normal[1] = std::cos(phi);
-				normal[2] = 0;
-				break;
-			}
-			
-			case Plane::Orientation::NORMAL: {
-				auto inNormal = orientation.getNormal();
-				KJ_REQUIRE(inNormal.size() == 3, "Can only process 3D planes");
-				
-				for(int i = 0; i < 3; ++i)
-					normal[i] = inNormal[i];
-				
-				break;
-			}
-			
-			default:
-				KJ_FAIL_REQUIRE("Unknown plane orientation type", orientation.which());
-		}
-		
-		Vec3d center(0, 0, 0);
-		if(plane.hasCenter()) {
-			auto inCenter = plane.getCenter();
-			KJ_REQUIRE(inCenter.size() == 3, "Can only process 3D planes");
-			
-			for(int i = 0; i < 3; ++i)
-				center[i] = inCenter[i];
-		}
-		
-		double d = -center.dot(normal);
+		double d;
+		interpretPlane(context.getParams().getPlane(), normal, d);
 		
 		kj::Vector<kj::Tuple<Vec3d, Vec3d>> lines;
 		
@@ -1578,6 +1586,365 @@ Promise<void> GeometryLibImpl::intersect(IntersectContext ctx) {
 				data.setWithCaveats(iPoint, baseVal.getEntries()[kernelResult[iPoint].iMesh].getTags()[iTag]);
 			}
 		}
+	});
+}
+
+// Unrolls a single mesh into the specified phi range. Can produce a lot of excess polygons.
+void unrollMesh(double phi1, double phi2, Mesh::Reader meshIn, Mesh::Builder meshOut) {	
+	Tensor<double, 2> pointsIn;
+	readTensor(meshIn.getVertices(), pointsIn);
+	
+	kj::Vector<Vec3d> pointsOut;
+	kj::HashMap<uint64_t, uint32_t> lookupTable;
+	
+	kj::Vector<uint32_t> idxBuffer;
+	kj::Vector<uint32_t> polyBuffer;
+	polyBuffer.add(0);
+	
+	auto idxBufferIn = meshIn.getIndices();
+	
+	auto getPoint = [&](size_t idxIn) -> Vec3d {
+		return Vec3d(pointsIn(0, idxIn), pointsIn(1, idxIn), pointsIn(2, idxIn));
+	};
+	
+	// Adds a point to the output mesh unwrapped near a specific angle. Checks
+	// whether the input, output pair already exists
+	auto generatePoint = [&](uint32_t idxIn, double near) -> uint32_t {
+		auto pointIn = getPoint(idxIn);
+		double phi = atan2(pointIn[1], pointIn[0]);
+		
+		int32_t offset = round((near - phi) / (2 * pi));
+		
+		uint64_t key = idxIn;
+		key <<= 32;
+		key |= offset;
+		
+		KJ_IF_MAYBE(pPointIdx, lookupTable.find(key)) {
+			return *pPointIdx;
+		}
+		
+		size_t idxFull = pointsOut.size();
+		uint32_t idx = idxFull;
+		KJ_REQUIRE(idx == idxFull, "Index buffer limit exceeded for a mesh");
+		lookupTable.insert(key, idx);
+		
+		double z = pointIn[2];
+		double r = sqrt(pointIn[0] * pointIn[0] + pointIn[1] * pointIn[1]);
+		
+		phi += offset * 2 * pi;
+		pointsOut.add(Vec3d(phi, z, r));
+		
+		return idx;
+	};
+	
+	// Handles an input polygon as an index buffer range
+	auto handlePoly = [&](uint32_t iStart, uint32_t iEnd) {
+		if(iEnd <= iStart)
+			return;
+		
+		// Extract loop
+		kj::Array<uint32_t> loop = kj::heapArray<uint32_t>(iEnd - iStart);
+		for(auto i : kj::indices(loop)) {
+			loop[i] = idxBufferIn[i + iStart];
+		}
+		
+		// Compute phi of polygon's mean point
+		Vec3d mean;
+		for(auto idx : loop)
+			mean += getPoint(idx);
+		mean /= loop.size();
+		double phiMean = atan2(mean(1), mean(0));
+		
+		kj::HashSet<int> offsets;
+		
+		// Generate a version of this polygon in phi, z, r space near a specific angle
+		auto generateNear = [&](double near) {
+			// Check if we already generated a polygon at this location
+			int offset = round((near - phiMean) / (2 * pi));
+			if(offsets.contains(offset))
+				return;
+			
+			offsets.insert(offset);
+			// Generate (or reuse) corner points near the new center point
+			double newCenterAngle = phiMean + offset * 2 * pi;
+			for(auto idx : loop)
+				idxBuffer.add(generatePoint(idx, newCenterAngle));
+			
+			// Register new polygon
+			polyBuffer.add(idxBuffer.size());
+		};
+		
+		double angle = phi1;
+		while(angle < phi2) {
+			generateNear(angle);
+			angle += 2 * pi;
+		}
+		
+		generateNear(phi2);
+	};
+	
+	if(meshIn.isTriMesh()) {
+		for(uint32_t i = 0; i + 3 <= idxBufferIn.size(); i += 3)
+			handlePoly(i, i + 3);
+	} else if(meshIn.isPolyMesh()) {
+		auto pm = meshIn.getPolyMesh();
+		
+		for(auto i = 0; i + 1 < pm.size(); ++i) {
+			handlePoly(pm[i], pm[i + 1]);
+		}
+	} else {
+		KJ_FAIL_REQUIRE("Unknown mesh type");
+	}
+		
+	{
+		meshOut.getVertices().setShape({pointsOut.size(), 3});
+		auto resultPoints = meshOut.getVertices().initData(3 * pointsOut.size());
+		
+		for(auto i : kj::indices(pointsOut)) {
+			resultPoints.set(3 * i + 0, pointsOut[i][0]);
+			resultPoints.set(3 * i + 1, pointsOut[i][1]);
+			resultPoints.set(3 * i + 2, pointsOut[i][2]);
+		}
+	}
+	
+	meshOut.setIndices(idxBuffer);
+	
+	if(meshIn.isTriMesh())
+		meshOut.setTriMesh();
+	else
+		meshOut.setPolyMesh(polyBuffer);
+}
+
+// Clip mesh on a normal * x + d >= 0 space
+void clipMesh(Vec3d normal, double d, Mesh::Reader meshIn, Mesh::Builder meshOut) {
+	Tensor<double, 2> pointsIn;
+	readTensor(meshIn.getVertices(), pointsIn);
+	
+	auto getPoint = [&](size_t idxIn) -> Vec3d {
+		return Vec3d(pointsIn(0, idxIn), pointsIn(1, idxIn), pointsIn(2, idxIn));
+	};
+	
+	// Compute for all points where they are on the plane
+	kj::Array<const double> planeCoeffs = nullptr;
+	{
+		auto builder = kj::heapArrayBuilder<const double>(pointsIn.dimension(1));
+		
+		for(auto i : kj::range(0, pointsIn.dimension(1))) {
+			double coeff = 0;
+			coeff += pointsIn(0, i) * normal(0);
+			coeff += pointsIn(1, i) * normal(1);
+			coeff += pointsIn(2, i) * normal(2);
+			coeff += d;
+			
+			builder.add(coeff);
+		}
+		planeCoeffs = builder.finish();
+	}
+	
+	// Copy all points on the correct size to the output mesh
+	auto copied = kj::heapArray<Maybe<uint32_t>>(planeCoeffs.size());
+	
+	kj::Vector<Vec3d> pointsOut;
+	for(auto i : kj::indices(planeCoeffs)) {
+		if(planeCoeffs[i] >= 0) {
+			copied[i] = (uint32_t) pointsOut.size();
+			pointsOut.add(getPoint(i));
+		}
+	}
+	
+	// Helper to construct the midpoint of an edge
+	kj::HashMap<uint64_t, uint32_t> midpointMap;
+	auto edgeMidpoint = [&](uint32_t p1, uint32_t p2) -> uint32_t {
+		if(p1 > p2) std::swap(p1, p2);
+		
+		uint64_t key = p1;
+		key <<= 32;
+		key |= p2;
+		
+		KJ_IF_MAYBE(pIdx, midpointMap.find(key)) {
+			return *pIdx;
+		}
+		
+		Vec3d x1 = getPoint(p1);
+		Vec3d x2 = getPoint(p2);
+		double l1 = planeCoeffs[p1];
+		double l2 = planeCoeffs[p2];
+		
+		// We want
+		//      a * l1 + (1 - a) * l2 = 0
+		// <=>  a * (l1 - l2) = -l2
+		// <=>  a = -l2 / (l1 - l2) = l2 / (l2 - l1)
+		
+		double a = l2 / (l2 - l1);
+		Vec3d x = a * x1 + (1 - a) * x2;
+		
+		uint32_t idx = pointsOut.size();
+		pointsOut.add(x);
+		midpointMap.insert(key, idx);
+		return idx;
+	};
+	
+	auto indicesIn = meshIn.getIndices();
+	kj::Vector<uint32_t> indicesOut;
+	kj::Vector<uint32_t> polysOut;
+	polysOut.add(0);
+	auto handlePoly = [&](uint32_t start, uint32_t end) {
+		if(start + 1 >= end)
+			return;
+			
+		uint32_t leaveCounter = 0;
+		uint32_t enterCounter = 0;
+		
+		auto handleEdge = [&](uint32_t p1, uint32_t p2) {
+			double l1 = planeCoeffs[p1];
+			double l2 = planeCoeffs[p2];
+			
+			KJ_IF_MAYBE(p1New, copied[p1]) {
+				KJ_IF_MAYBE(p2New, copied[p2]) {
+					// Interior edge in new space. Just add 2nd point
+					indicesOut.add(*p2New);
+				} else {
+					// Edge leaves space. Add midpoint
+					indicesOut.add(edgeMidpoint(p1, p2));
+				}
+			} else {
+				KJ_IF_MAYBE(p2New, copied[p2]) {
+					// Edge enters space. Add midpoint AND DESTINATION
+					indicesOut.add(edgeMidpoint(p2, p1));
+					indicesOut.add(*p2New);
+				} else {
+					// Edge on wrong side. Ignore.
+				}
+			}
+		};
+		
+		for(auto i = start; i + 1 < end; ++i) {
+			handleEdge(indicesIn[i], indicesIn[i+1]);
+		}
+		handleEdge(indicesIn[end - 1], indicesIn[start]);
+		
+		// Only add if polygon non-empty
+		if(polysOut[polysOut.size()] != indicesOut.size())
+			polysOut.add(indicesOut.size());
+		
+		if(leaveCounter != enterCounter) {
+			KJ_FAIL_REQUIRE("Internal error: Edge operations did not tally up correctle", leaveCounter, enterCounter);
+		}
+		
+		if(enterCounter > 1) {
+			KJ_LOG(WARNING, "Non-convex polygon encountered - loop crosses cut plane more than twice.", enterCounter, leaveCounter);
+		}
+	};
+	
+	if(meshIn.isTriMesh()) {
+		for(uint32_t i = 0; i + 3 <= indicesIn.size(); i += 3)
+			handlePoly(i, i + 3);
+	} else if(meshIn.isPolyMesh()) {
+		auto pm = meshIn.getPolyMesh();
+		
+		for(auto i = 0; i + 1 < pm.size(); ++i) {
+			handlePoly(pm[i], pm[i + 1]);
+		}
+	} else {
+		KJ_FAIL_REQUIRE("Unknown mesh type");
+	}
+		
+	{
+		meshOut.getVertices().setShape({pointsOut.size(), 3});
+		auto resultPoints = meshOut.getVertices().initData(3 * pointsOut.size());
+		
+		for(auto i : kj::indices(pointsOut)) {
+			resultPoints.set(3 * i + 0, pointsOut[i][0]);
+			resultPoints.set(3 * i + 1, pointsOut[i][1]);
+			resultPoints.set(3 * i + 2, pointsOut[i][2]);
+		}
+	}
+	
+	meshOut.setIndices(indicesOut);
+	
+	bool isTriMesh = true;
+	for(auto i : kj::indices(polysOut)) {
+		if(polysOut[i] != 3 * i) {
+			isTriMesh = false;
+			break;
+		}
+	}
+	
+	if(isTriMesh)
+		meshOut.setTriMesh();
+	else
+		meshOut.setPolyMesh(polysOut);
+}
+
+Promise<void> GeometryLibImpl::unroll(UnrollContext ctx) {
+	auto mergeRequest = thisCap().mergeRequest();
+	mergeRequest.setNested(ctx.getParams().getGeometry());
+	
+	auto geoRef = mergeRequest.send().getRef();
+	return getActiveThread().dataService().download(geoRef)
+	.then([ctx](auto localRef) mutable {
+		auto mergedIn = localRef.get();
+		double phi1 = angle(ctx.getParams().getPhi1());
+		double phi2 = angle(ctx.getParams().getPhi2());
+		bool clip = ctx.getParams().getClip();
+		
+		Temporary<MergedGeometry> result;
+		result.setTagNames(mergedIn.getTagNames());
+		
+		auto entriesIn = mergedIn.getEntries();
+		auto entriesOut = result.initEntries(entriesIn.size());
+		
+		for(auto i : kj::indices(entriesOut)) {
+			entriesOut[i].setTags(entriesIn[i].getTags());
+			
+			if(!clip) {
+				auto meshIn = entriesIn[i].getMesh();
+				auto meshOut = entriesOut[i].getMesh();
+			
+				unrollMesh(phi1, phi2, meshIn, meshOut);
+			} else {				
+				Temporary<Mesh> intermediate1;
+				Temporary<Mesh> intermediate2;
+				
+				unrollMesh(phi1, phi2, entriesIn[i].getMesh(), intermediate1);
+				clipMesh(Vec3d(1, 0, 0), -phi1, intermediate1, intermediate2);
+				clipMesh(Vec3d(-1, 0, 0), phi2, intermediate2, entriesOut[i].getMesh());
+			}
+		}
+		
+		ctx.initResults().setRef(getActiveThread().dataService().publish(mv(result)));
+	});
+}
+
+Promise<void> GeometryLibImpl::planarClip(PlanarClipContext ctx) {
+	auto mergeRequest = thisCap().mergeRequest();
+	mergeRequest.setNested(ctx.getParams().getGeometry());
+	
+	auto geoRef = mergeRequest.send().getRef();
+	return getActiveThread().dataService().download(geoRef)
+	.then([ctx](auto localRef) mutable {
+		auto mergedIn = localRef.get();
+		
+		Vec3d normal;
+		double d;
+		interpretPlane(ctx.getParams().getPlane(), normal, d);
+		
+		Temporary<MergedGeometry> result;
+		result.setTagNames(mergedIn.getTagNames());
+		
+		auto entriesIn = mergedIn.getEntries();
+		auto entriesOut = result.initEntries(entriesIn.size());
+		
+		for(auto i : kj::indices(entriesOut)) {
+			entriesOut[i].setTags(entriesIn[i].getTags());
+			
+			auto meshIn = entriesIn[i].getMesh();
+			auto meshOut = entriesOut[i].getMesh();
+			
+			clipMesh(normal, d, meshIn, meshOut);
+		}
+		
+		ctx.initResults().setRef(getActiveThread().dataService().publish(mv(result)));
 	});
 }
 
