@@ -110,7 +110,7 @@ EIGEN_DEVICE_FUNC inline void invertRflmKernel(unsigned int idx, Tensor3Ref rVal
 	vVals(iR, iZ, iPhi) = v;
 }
 
-EIGEN_DEVICE_FUNC inline void mapKernel(unsigned int idx, Tensor2Ref in, cu::RFLMKernelData::Builder out, cu::ReversibleFieldlineMapping::Reader mapping) {
+/*EIGEN_DEVICE_FUNC inline void mapKernel(unsigned int idx, Tensor2Ref in, cu::RFLMKernelData::Builder out, cu::ReversibleFieldlineMapping::Reader mapping) {
 	double x = in(idx, 0);
 	double y = in(idx, 1);
 	double z = in(idx, 2);
@@ -118,9 +118,19 @@ EIGEN_DEVICE_FUNC inline void mapKernel(unsigned int idx, Tensor2Ref in, cu::RFL
 	RFLM m(mapping);
 	m.map(Vec3d(x, y, z), true);
 	m.save(out.mutateStates()[idx]);
+}*/
+
+EIGEN_DEVICE_FUNC inline void mapInSectionKernel(unsigned int idx, uint64_t section, Tensor2Ref in, cu::RFLMKernelData::Builder out, cu::ReversibleFieldlineMapping::Reader mapping) {
+	double phi = in(0, idx);
+	double z = in(1, idx);
+	double r = in(2, idx);
+	
+	RFLM m(mapping);
+	m.mapInSection(section, phi, z, r);
+	m.save(out.mutateStates()[idx]);
 }
 
-EIGEN_DEVICE_FUNC inline void unmapKernel(unsigned int idx, cu::RFLMKernelData::Reader in, Tensor2Ref out, cu::ReversibleFieldlineMapping::Reader mapping) {	
+/*EIGEN_DEVICE_FUNC inline void unmapKernel(unsigned int idx, cu::RFLMKernelData::Reader in, Tensor2Ref out, cu::ReversibleFieldlineMapping::Reader mapping) {	
 	RFLM m(mapping);
 	m.load(in.getStates()[idx]);
 	
@@ -136,6 +146,6 @@ EIGEN_DEVICE_FUNC inline void unmapKernel(unsigned int idx, cu::RFLMKernelData::
 	out(idx, 0) = pos(0);
 	out(idx, 1) = pos(1);
 	out(idx, 2) = pos(2);
-}
+}*/
 
 }

@@ -236,85 +236,259 @@ namespace {
 			});
 		}
 	};
-}
 	
-struct MapperImpl : public Mapper::Server {
-	FLT::Client flt;
-	KDTreeService::Client indexer;
-	
-	Own<DeviceBase> device;
-	
-	MapperImpl(FLT::Client flt, KDTreeService::Client indexer, DeviceBase& dev) : flt(mv(flt)), indexer(mv(indexer)), device(dev.addRef()) {}
-	
-	Promise<void> computeRFLM(ComputeRFLMContext ctx) {
-		auto params = ctx.getParams();
-		auto planes = params.getMappingPlanes();
+	struct MapperImpl : public Mapper::Server {
+		FLT::Client flt;
+		KDTreeService::Client indexer;
+		GeometryLib::Client geoLib;
 		
-		KJ_REQUIRE(params.hasField(), "Must specify magnetic field");
+		Own<DeviceBase> device;
 		
-		Temporary<ReversibleFieldlineMapping> result;
-		result.setSurfaces(planes);
-		result.setNPad(params.getNumPaddingPlanes());
-		result.setNSym(params.getNSym());
+		MapperImpl(FLT::Client flt, KDTreeService::Client indexer, GeometryLib::Client geoLib, DeviceBase& dev) :
+			flt(mv(flt)), indexer(mv(indexer)), geoLib(mv(geoLib)), device(dev.addRef())
+		{}
 		
-		auto promiseBuilder = kj::heapArrayBuilder<Promise<void>>(planes.size());
-		// Promise<void> computationPromise = READY_NOW;
-		
-		auto sections = result.initSections(planes.size());
-		
-		auto u0 = params.getU0();
-		auto v0 = params.getV0();
-		
-		KJ_REQUIRE(hasMaximumOrdinal(params, 10), "You are trying to use features that this server version does not support");
-		
-		KJ_REQUIRE(u0.size() == 1 || u0.size() == planes.size(), "Size of u0 must be 1 or no. of planes", u0.size(), planes.size());
-		KJ_REQUIRE(v0.size() == 1 || v0.size() == planes.size(), "Size of v0 must be 1 or no. of planes", v0.size(), planes.size());
-		KJ_REQUIRE(params.getGridR().size() >= 2, "Must specify at least 2 R values");
-		KJ_REQUIRE(params.getGridZ().size() >= 2, "Must specify at least 2 Z values");
-		
-		double totalWidth = 0;
-		for(size_t i1 : kj::indices(planes)) {
-			auto section = sections[i1];
-			section.setU0(u0.size() == 1 ? u0[0] : u0[i1]);
-			section.setV0(v0.size() == 1 ? v0[0] : v0[i1]);
+		Promise<void> computeRFLM(ComputeRFLMContext ctx) {
+			auto params = ctx.getParams();
+			auto planes = params.getMappingPlanes();
 			
-			size_t i2 = (i1 + 1) % planes.size();
+			KJ_REQUIRE(params.hasField(), "Must specify magnetic field");
 			
-			auto trace = heapHeld<RFLMSectionTrace>(flt, params, section, *device);
+			Temporary<ReversibleFieldlineMapping> result;
+			result.setSurfaces(planes);
+			result.setNPad(params.getNumPaddingPlanes());
+			result.setNSym(params.getNSym());
 			
-			trace -> phi1 = planes[i1];
-			trace -> phi2 = planes[i2];
-			trace -> numTracingPlanes = params.getNumPlanes();
-			trace -> numPaddingPlanes = params.getNumPaddingPlanes();
-			trace -> rVals = params.getGridR();
-			trace -> zVals = params.getGridZ();
+			auto promiseBuilder = kj::heapArrayBuilder<Promise<void>>(planes.size());
+			// Promise<void> computationPromise = READY_NOW;
 			
-			// Adjust if mapping has higher symmetry
-			if(i2 == 0 && params.getNSym() > 1) {
-				trace -> phi2 += 2 * fsc::pi / params.getNSym();
+			auto sections = result.initSections(planes.size());
+			
+			auto u0 = params.getU0();
+			auto v0 = params.getV0();
+			
+			KJ_REQUIRE(hasMaximumOrdinal(params, 10), "You are trying to use features that this server version does not support");
+			
+			KJ_REQUIRE(u0.size() == 1 || u0.size() == planes.size(), "Size of u0 must be 1 or no. of planes", u0.size(), planes.size());
+			KJ_REQUIRE(v0.size() == 1 || v0.size() == planes.size(), "Size of v0 must be 1 or no. of planes", v0.size(), planes.size());
+			KJ_REQUIRE(params.getGridR().size() >= 2, "Must specify at least 2 R values");
+			KJ_REQUIRE(params.getGridZ().size() >= 2, "Must specify at least 2 Z values");
+			
+			double totalWidth = 0;
+			for(size_t i1 : kj::indices(planes)) {
+				auto section = sections[i1];
+				section.setU0(u0.size() == 1 ? u0[0] : u0[i1]);
+				section.setV0(v0.size() == 1 ? v0[0] : v0[i1]);
+				
+				size_t i2 = (i1 + 1) % planes.size();
+				
+				auto trace = heapHeld<RFLMSectionTrace>(flt, params, section, *device);
+				
+				trace -> phi1 = planes[i1];
+				trace -> phi2 = planes[i2];
+				trace -> numTracingPlanes = params.getNumPlanes();
+				trace -> numPaddingPlanes = params.getNumPaddingPlanes();
+				trace -> rVals = params.getGridR();
+				trace -> zVals = params.getGridZ();
+				
+				// Adjust if mapping has higher symmetry
+				if(i2 == 0 && params.getNSym() > 1) {
+					trace -> phi2 += 2 * fsc::pi / params.getNSym();
+				}
+				
+				// KJ_DBG(trace -> phi1, trace -> phi2);
+				
+				totalWidth += trace -> computeWidth();
+				
+				/*computationPromise = computationPromise.then([trace]() mutable {
+					return trace -> run();
+				}).attach(trace.x());*/
+				promiseBuilder.add(trace -> run().attach(trace.x()));
 			}
 			
-			// KJ_DBG(trace -> phi1, trace -> phi2);
-			
-			totalWidth += trace -> computeWidth();
-			
-			/*computationPromise = computationPromise.then([trace]() mutable {
-				return trace -> run();
-			}).attach(trace.x());*/
-			promiseBuilder.add(trace -> run().attach(trace.x()));
+			KJ_REQUIRE(std::abs(totalWidth - 2 * pi / params.getNSym()) < pi, "Sections must be of non-zero width, and angles must be specified in counter-clockwise direction");
+					
+			auto computationPromise = kj::joinPromises(promiseBuilder.finish());
+			return computationPromise.then([ctx = mv(ctx), result = mv(result)]() mutable {
+				ctx.initResults().setMapping(getActiveThread().dataService().publish(mv(result)));
+			});
 		}
 		
-		KJ_REQUIRE(std::abs(totalWidth - 2 * pi / params.getNSym()) < pi, "Sections must be of non-zero width, and angles must be specified in counter-clockwise direction");
+		Promise<void> mapMesh(Mesh::Reader in, Mesh::Builder out, uint64_t section, FSC_READER_MAPPING(::fsc, ReversibleFieldlineMapping)& mapping) {
+			Tensor<double, 2> points;
+			readTensor(in.getVertices(), points);
+			
+			size_t nPoints = points.dimension(1);
+			
+			Temporary<RFLMKernelData> kData;
+			kData.initPhiValues(nPoints);
+			kData.initStates(nPoints);
+			
+			FSC_BUILDER_MAPPING(::fsc, RFLMKernelData) kernelData =
+				FSC_MAP_BUILDER(::fsc, RFLMKernelData, mv(kData), *device, true);
+			
+			Promise<void> kernelTask = FSC_LAUNCH_KERNEL(
+				mapInSectionKernel, *device,
+				points.dimension(1),
 				
-		auto computationPromise = kj::joinPromises(promiseBuilder.finish());
-		return computationPromise.then([ctx = mv(ctx), result = mv(result)]() mutable {
-			ctx.initResults().setMapping(getActiveThread().dataService().publish(mv(result)));
-		});
-	}
-};
+				section, FSC_KARG(mv(points), ALIAS_IN), kernelData, mapping
+			);
+			
+			return kernelTask
+			.then([data = mv(kernelData), in, out, nPoints]() mutable {
+				out.setIndices(in.getIndices());
+				if(in.isTriMesh()) out.setTriMesh();
+				else if(in.isPolyMesh()) out.setPolyMesh(in.getPolyMesh());
+				else { KJ_FAIL_REQUIRE("Unknown mesh type"); }
+				
+				
+				RFLMKernelData::Reader mapResult = data -> getHost();
+				
+				Tensor<double, 2> points(3, nPoints);
+				for(auto i : kj::range(0, nPoints)) {
+					// Analogously to Phi, z, r we store Phi, v, u
+					points(0, i) = mapResult.getPhiValues()[i];
+					points(1, i) = mapResult.getStates()[i].getV();
+					points(2, i) = mapResult.getStates()[i].getU(); 
+				}
+				writeTensor(points, out.getVertices());
+			});
+		}
+		
+		Promise<void> mapForSection(
+			DataRef<MergedGeometry>::Client geoRef, GeometryMapping::SectionData::Builder out,
+			FSC_READER_MAPPING(::fsc, ReversibleFieldlineMapping)& mapping, uint64_t section,
+			uint32_t nPhi, uint32_t nU, uint32_t nV
+		) {
+			auto mappingData = mapping -> getHost();
+			uint32_t nSections = mappingData.getSections().size();
+			auto sectionData = mappingData.getSections()[section % nSections];
+			
+			double phiOffset = 2 * pi / mappingData.getNSym() * (section / nSections); // Rounding division inside bracket
+			
+			double phi1 = sectionData.getPhiStart() + phiOffset;
+			double phi2 = sectionData.getPhiEnd() + phiOffset;
+			
+			// Fill out grid
+			{
+				auto g = out.getGrid();
+				g.setXMin(phi1);
+				g.setXMax(phi2);
+				g.setNX(nPhi);
+				
+				g.setYMin(0);
+				g.setYMax(1);
+				g.setNY(nV);
+				
+				g.setZMin(0);
+				g.setZMax(1);
+				g.setNZ(nU);
+			}
+			
+			// Unroll
+			auto unrollRequest = geoLib.unrollRequest();
+			unrollRequest.getGeometry().setMerged(geoRef);
+			unrollRequest.getPhi1().setRad(phi1);
+			unrollRequest.getPhi2().setRad(phi2);
+			auto unrolledRef = unrollRequest.send().getRef();
+			
+			return getActiveThread().dataService().download(unrolledRef)
+			.then([&mapping, section, out = out.initGeometry(), this](auto mergedGeo) mutable {
+				// Transform individual meshes
+				auto in = mergedGeo.get();
+				out.setTagNames(in.getTagNames());
+				
+				auto inEntries = in.getEntries();
+				auto outEntries = out.initEntries(inEntries.size());
+				
+				auto meshTransforms = kj::heapArrayBuilder<Promise<void>>(inEntries.size());
+				
+				for(auto i : kj::indices(inEntries)) {
+					auto eIn = inEntries[i];
+					auto eOut = outEntries[i];
+					eOut.setTags(eIn.getTags());
+					
+					meshTransforms.add(mapMesh(eIn.getMesh(), eOut.getMesh(), section, mapping));
+				}
+				
+				return kj::joinPromisesFailFast(meshTransforms.finish());
+			}).attach(mapping -> addRef())
+			.then([&mapping, section, merged = out.getGeometry(), grid = out.getGrid(), this]() {		
+				// Index geometry over grid
+				auto indexRequest = geoLib.indexRequest();
+				indexRequest.setGrid(grid);
+				indexRequest.getGeometry().setMerged(getActiveThread().dataService().publish(merged));
+				
+				auto dataRef = indexRequest.send().getIndexed().getData();
+				return getActiveThread().dataService().download(dataRef);
+			}).attach(thisCap())
+			.then([section, out](auto localRef) mutable {
+				out.setIndex(localRef.get());
+			});
+		}
 
-Own<Mapper::Server> newMapper(FLT::Client flt, KDTreeService::Client indexer, DeviceBase& device) {
-	return kj::heap<MapperImpl>(mv(flt), mv(indexer), device);
+		Promise<void> mapGeometry(MapGeometryContext ctx) override {
+			return getActiveThread().dataService().download(ctx.getParams().getMapping())
+			.then([ctx, this](auto mapping) mutable {
+				auto devMapping = FSC_MAP_READER(
+					::fsc, ReversibleFieldlineMapping,
+					mapping, *device, true
+				);
+				devMapping -> updateDevice();
+				
+				auto params = ctx.getParams();
+				
+				// Pre-merge geometry
+				auto mergeRequest = geoLib.mergeRequest();
+				mergeRequest.setNested(params.getGeometry());
+				auto geoRef = mergeRequest.sendForPipeline().getRef();
+				
+				uint32_t nSectionsTot = mapping.get().getNSym() * mapping.get().getSections().size();
+				uint32_t nSectionsCompute = nSectionsTot / params.getNSym();
+				
+				Temporary<GeometryMapping::MappingData> data;
+				data.setNSym(params.getNSym());
+				auto sections = data.initSections(nSectionsCompute);
+				auto subComputations = kj::heapArrayBuilder<Promise<void>>(nSectionsCompute);
+				
+				for(auto i : kj::indices(sections)) {
+					subComputations.add(
+						mapForSection(geoRef, sections[i], devMapping, i, params.getNPhi(), params.getNU(), params.getNV())
+					);
+				}
+				
+				return kj::joinPromisesFailFast(subComputations.finish())
+				.then([data = mv(data), ctx]() mutable {
+					GeometryMapping::Builder result = ctx.getResults().getMapping();
+					
+					result.setData(getActiveThread().dataService().publish(mv(data)));
+					result.setBase(ctx.getParams().getMapping());
+				});
+			});
+		}
+		
+		Promise<void> getSectionGeometry(GetSectionGeometryContext ctx) override {
+			return getActiveThread().dataService().download(ctx.getParams().getMapping().getData())
+			.then([ctx](auto localRef) mutable {
+				auto data = localRef.get();
+				auto iSection = ctx.getParams().getSection();
+				KJ_REQUIRE(iSection < data.getSections().size());
+				
+				auto section = data.getSections()[iSection];
+				
+				auto& ds = getActiveThread().dataService();
+				
+				auto geo = ctx.initResults().getGeometry();
+				geo.setBase(ds.publish(section.getGeometry()));
+				geo.setData(ds.publish(section.getIndex()));
+				geo.setGrid(section.getGrid());
+			});
+		}
+	};
 }
 
+}
+
+kj::Own<fsc::Mapper::Server> fsc::newMapper(FLT::Client flt, KDTreeService::Client indexer, GeometryLib::Client geoLib, DeviceBase& device) {
+	return kj::heap<MapperImpl>(mv(flt), mv(indexer), mv(geoLib), device);
 }

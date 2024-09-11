@@ -252,7 +252,7 @@ struct RootServer : public RootService::Server {
 		auto flt = thisCap().newTracerRequest().sendForPipeline().getService();
 		
 		// Mapper holds token through tracer
-		ctx.initResults().setService(fsc::newMapper(mv(flt), fsc::newKDTreeService(), *device));
+		ctx.initResults().setService(fsc::newMapper(mv(flt), fsc::newKDTreeService(), fsc::newGeometryLib(device -> addRef()), *device));
 		return READY_NOW;
 	}
 	

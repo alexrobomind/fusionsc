@@ -47,7 +47,7 @@ interface GeometryLib $Cxx.allowCancellation {
 	
 	intersect @5 IntersectRequest -> IntersectResponse;
 	
-	unroll @6 (geometry : Geometry, phi1 : Angle, phi2 : Angle, clip : Bool) -> (ref : DataRef(MergedGeometry));
+	unroll @6 (geometry : Geometry, phi1 : Angle, phi2 : Angle, clip : Bool = true) -> (ref : DataRef(MergedGeometry));
 }
 #//! [GeoLib]
 

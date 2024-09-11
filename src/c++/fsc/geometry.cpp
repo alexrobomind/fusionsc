@@ -1824,7 +1824,7 @@ void clipMesh(Vec3d normal, double d, Mesh::Reader meshIn, Mesh::Builder meshOut
 		handleEdge(indicesIn[end - 1], indicesIn[start]);
 		
 		// Only add if polygon non-empty
-		if(polysOut[polysOut.size()] != indicesOut.size())
+		if(polysOut[polysOut.size() - 1] != indicesOut.size())
 			polysOut.add(indicesOut.size());
 		
 		if(leaveCounter != enterCounter) {

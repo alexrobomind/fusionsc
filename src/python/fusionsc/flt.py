@@ -9,6 +9,7 @@ from . import backends
 from . import efit
 from . import magnetics
 from . import wrappers
+from . import geometry
 
 from .asnc import asyncFunction
 from ._api_markers import unstableApi
@@ -24,7 +25,26 @@ class FieldlineMapping(wrappers.RefWrapper):
 	"""
 	A storage container for a mapping offering load / save methods
 	"""
-	pass
+	
+	@asyncFunction
+	async def mapGeometry(self,
+		geometry: geometry.Geometry,
+		nSym: int = 1,
+		nPhi: int = 1, nU: int = 10, nV: int = 10
+	):
+		"""
+		Pre-computes a field-aligned geometry mapping that can be used to enable
+		large step sizes in mapping-based tracing
+		"""
+		resolved = await geometry.resolve.asnc()
+		response = await _mapper().mapGeometry(self.ref, resolved.data, nSym, nPhi, nU, nV)
+		return MappingWithGeometry(response.mapping)
+
+class MappingWithGeometry(wrappers.structWrapper(service.GeometryMapping)):
+	@asyncFunction
+	async def getSection(self, index: int):
+		response = await _mapper().getSectionGeometry(self.data, index)
+		return geometry.Geometry({"indexed" : response.geometry})
 
 def symmetrize(points, nSym = 1, stellaratorSymmetric = False):
 	"""

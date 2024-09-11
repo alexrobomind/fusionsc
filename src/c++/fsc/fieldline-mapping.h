@@ -10,7 +10,7 @@
 
 namespace fsc {
 	
-Own<Mapper::Server> newMapper(FLT::Client flt, KDTreeService::Client indexer, DeviceBase& device);
+Own<Mapper::Server> newMapper(FLT::Client flt, KDTreeService::Client indexer, GeometryLib::Client geoLib, DeviceBase& device);
 
 struct RFLM {
 	//! Computes the real-space coordinates of the last-mapped position projected to the given phi plane
@@ -18,6 +18,9 @@ struct RFLM {
 	
 	//! Captures a position for mapping using the closest mapping filament
 	inline EIGEN_DEVICE_FUNC void map(const Vec3d& x, bool goingCcw);
+	
+	//! Maps using a pre-selected section
+	inline EIGEN_DEVICE_FUNC void mapInSection(uint64_t section, double phi, double z, double r);
 	
 	//! Advances to a new phi position, remapping if neccessary. Returns new real-space position
 	// Note: No guarantees that flm.phi == newPhi
@@ -38,6 +41,7 @@ struct RFLM {
 	cu::ReversibleFieldlineMapping::Reader mapping;
 	Vec2d uv;
 	uint64_t currentSection;
+	uint64_t currentSectionRaw;
 	double phi;
 	double lenOffset;
 	
@@ -99,6 +103,7 @@ EIGEN_DEVICE_FUNC RFLM::RFLM(cu::ReversibleFieldlineMapping::Reader mapping) :
 	mapping(mapping),
 	uv(0.5, 0.5),
 	currentSection(0),
+	currentSectionRaw(0),
 	phi(0), lenOffset(0),
 	
 	nPad(mapping.getNPad()),
@@ -127,7 +132,7 @@ void RFLM::save(ReversibleFieldlineMapping::State::Builder out) {
 	out.setV(uv(1));
 	out.setPhi(phi);
 	out.setLenOffset(lenOffset);
-	out.setSection(currentSection);
+	out.setSection(currentSectionRaw);
 }
 
 void RFLM::load(ReversibleFieldlineMapping::State::Reader in) {
@@ -147,6 +152,7 @@ double RFLM::unwrap(double dphi) {
 
 EIGEN_DEVICE_FUNC void RFLM::activateSection(uint64_t iSection) {
 	uint64_t nSurf = mapping.getSurfaces().size();
+	currentSectionRaw = iSection;
 	currentSection = iSection % nSurf;
 	
 	auto section = mapping.getSections()[currentSection];
@@ -275,6 +281,10 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 	// KJ_DBG(phi, iSection);
 		
 	// KJ_DBG(iSection);
+	mapInSection(iSection, phi, zRef, rRef);
+}
+
+EIGEN_DEVICE_FUNC void RFLM::mapInSection(uint64_t iSection, double phi, double zRef, double rRef) {
 	activateSection(iSection);
 	
 	double phiCoord = unwrap(phi - phi1 + 2 * SECTION_TOL) - 2 * SECTION_TOL;

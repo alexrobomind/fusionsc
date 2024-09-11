@@ -81,6 +81,21 @@ struct ReversibleFieldlineMapping {
 	}
 }
 
+struct GeometryMapping {
+	struct SectionData {
+		geometry @0 : Geometry.MergedGeometry;
+		grid @1 : Geometry.CartesianGrid;
+		index @2 : Geometry.IndexedGeometry.IndexData;
+	}
+	struct MappingData {
+		sections @0 : List(SectionData);
+		nSym @1 : UInt64 = 1;
+	}
+	
+	base @0 : Data.DataRef(ReversibleFieldlineMapping);
+	data @1 : Data.DataRef(MappingData);
+}
+
 struct FLTRequest {
 	struct AdaptiveStepControl {
 		min @0 : Float64 = 0;
@@ -314,6 +329,14 @@ struct RFLMRequest {
 
 interface Mapper {	
 	computeRFLM @0 RFLMRequest -> (mapping : Data.DataRef(ReversibleFieldlineMapping));
+	
+	mapGeometry @1 (
+		mapping : Data.DataRef(ReversibleFieldlineMapping),
+		geometry : Geometry.Geometry, nSym : UInt32 = 1,
+		nPhi : UInt32 = 1, nU : UInt32 = 10, nV : UInt32 = 10
+	) -> (mapping : GeometryMapping);
+	
+	getSectionGeometry @2 (mapping : GeometryMapping, section : UInt64) -> (geometry : Geometry.IndexedGeometry);
 }
 
 # ==================================== FLT configuration ============================
