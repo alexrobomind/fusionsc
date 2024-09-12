@@ -6,7 +6,9 @@ namespace internal {
 	 * over the parameter.
 	 */
 	template<typename Kernel, Kernel f, typename Device, typename... Params, size_t... i>
-	Promise<void> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {		
+	Promise<void> auxKernelLaunch(Device& device, size_t n, Promise<void> prerequisite, Eigen::TensorOpCost cost, std::index_sequence<i...> indices, Params&&... params) {
+		if(n == 0) return READY_NOW;
+		
 		// Create mappers for input
 		auto mappers = heapHeld<kj::Tuple<DeviceMappingType<Params>...>>(kj::tuple(
 			mapToDevice(fwd<Params>(params), device, true)...

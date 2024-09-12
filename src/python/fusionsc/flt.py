@@ -209,7 +209,10 @@ async def trace(
 	errorEstimationDistance = None,
 	
 	# Minimum tracing before processing collisions
-	ignoreCollisionsBefore = 0
+	ignoreCollisionsBefore = 0,
+	
+	# Whether field line reversal is allowed
+	allowReversal = False
 ):
 	"""
 	Performs a tracing request.
@@ -319,6 +322,8 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	request.stepLimit = stepLimit
 	request.collisionLimit = collisionLimit
 	request.turnLimit = turnLimit
+	
+	request.allowReversal = allowReversal
 	
 	request.ignoreCollisionsBefore = ignoreCollisionsBefore
 	
@@ -601,7 +606,15 @@ default values."""
 	return result
 
 @asyncFunction
-async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit = 1e3, padding = 2, numPlanes = 20, stepSize = 0.001, u0 = [0.5], v0 = [0.5], toroidalSymmetry = None):
+async def computeMapping(
+	field, mappingPlanes, r, z,
+	grid = None, distanceLimit = 1e3, padding = 2, numPlanes = 20, stepSize = 0.001,
+	u0 = [0.5], v0 = [0.5],
+	toroidalSymmetry = None,
+	
+	targetError = None, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2,
+	errorEstimationDistance = None,
+):
 	"""
 	Computes a reversible field line mapping. This mapping type divides the device into toroidal
 	sections. Each section is covered by a curved conforming hexahedral grid. The "mapping planes"
@@ -647,6 +660,19 @@ async def computeMapping(field, mappingPlanes, r, z, grid = None, distanceLimit 
 	request.distanceLimit = distanceLimit
 	request.stepSize = stepSize
 	request.nSym = toroidalSymmetry
+	
+	if targetError is not None:
+		assert errorEstimationDistance is not None, "Can only use adaptive integration if a characteristic distance for error estimation is set. This is important because the accuracy of the mapping will carry over into its application."
+		
+		adaptive = request.stepSizeControl.initAdaptive()
+		adaptive.min = minStepSize
+		adaptive.max = maxStepSize
+		adaptive.targetError = targetError
+		
+		if errorEstimationDistance == "step":
+			adaptive.errorUnit = "step"
+		else:
+			adaptive.errorUnit.integratedOver = errorEstimationDistance
 	
 	request.u0 = [u0] if isinstance(u0, numbers.Number) else u0
 	request.v0 = [v0] if isinstance(v0, numbers.Number) else v0

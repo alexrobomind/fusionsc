@@ -272,6 +272,8 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	
 	int8_t forwardDirectionRelField = forwardDirection * fieldOrientation;
 	
+	bool allowReversal = request.getAllowReversal();
+	
 	auto rungeKuttaInput = [&](V3 x, Num t) -> V3 {
 		V3 fieldValue = interpolator(fieldData, x);
 		auto result = fieldValue / fieldValue.norm() * tracingDirection * forwardDirectionRelField;
@@ -554,11 +556,17 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		
 		// KJ_DBG("Step advanced", x[0], x[1], x[2], x2[0], x2[1], x2[2]);
 		// KJ_DBG("|dx|", (x2 - x).norm());
-					
-		// --- Check for plane crossings ---
+		
+		// --- Check for orientation change ---
 		
 		Num phi1 = atan2(x[1], x[0]);
 		Num phi2 = atan2(x2[1], x2[0]);
+		
+		if(!allowReversal && kmath::wrap(phi2 - phi1) * tracingDirection * forwardDirection < 0) {
+			FSC_FLT_RETURN(FIELDLINE_REVERSED);
+		}
+					
+		// --- Check for plane crossings ---
 		
 		/*if(step % 1000000 == 0) {
 			KJ_DBG(step, distance, phi1, z, r);

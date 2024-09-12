@@ -26,6 +26,7 @@ enum FLTStopReason {
 	nanEncountered @6;
 	collisionLimit @7;
 	couldNotStep @8;
+	fieldlineReversed @9;
 }
 
 struct ReversibleFieldlineMapping {
@@ -120,6 +121,8 @@ struct FLTRequest {
 	distanceLimit @5 : Float64;
 	stepLimit @6 : UInt32;
 	collisionLimit @7 : UInt32;
+	
+	allowReversal @40 : Bool;
 	
 	# Minimum distance to traverse before
 	# collisions will be processed
@@ -325,6 +328,11 @@ struct RFLMRequest {
 	v0 @9 : List(Float64) = [0.5];
 	
 	nSym @10 : UInt64 = 1;
+	
+	stepSizeControl : union {
+		fixed @11 : Void;
+		adaptive @12 : FLTRequest.AdaptiveStepControl;
+	}
 }
 
 interface Mapper {	

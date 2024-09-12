@@ -94,6 +94,12 @@ namespace {
 			req.setDistanceLimit(input.getDistanceLimit());
 			req.setStepSize(input.getStepSize());
 			
+			auto sscIn = input.getStepSizeControl();
+			auto sscOut = req.getStepSizeControl();
+			
+			if(sscIn.isAdaptive())
+				sscOut.setAdaptive(sscIn.getAdaptive());
+			
 			// Note that our planes can go past the range of the section. This is because
 			// we have padding planes on both sides used to extend the interpolation region.
 			auto planes = req.initPlanes(numTracingPlanes + numPaddingPlanes);
@@ -267,7 +273,7 @@ namespace {
 			auto u0 = params.getU0();
 			auto v0 = params.getV0();
 			
-			KJ_REQUIRE(hasMaximumOrdinal(params, 10), "You are trying to use features that this server version does not support");
+			KJ_REQUIRE(hasMaximumOrdinal(params, 12), "You are trying to use features that this server version does not support");
 			
 			KJ_REQUIRE(u0.size() == 1 || u0.size() == planes.size(), "Size of u0 must be 1 or no. of planes", u0.size(), planes.size());
 			KJ_REQUIRE(v0.size() == 1 || v0.size() == planes.size(), "Size of v0 must be 1 or no. of planes", v0.size(), planes.size());
@@ -314,7 +320,7 @@ namespace {
 			});
 		}
 		
-		Promise<void> mapMesh(Mesh::Reader in, Mesh::Builder out, uint64_t section, FSC_READER_MAPPING(::fsc, ReversibleFieldlineMapping)& mapping) {
+		Promise<void> mapMesh(Mesh::Reader in, Mesh::Builder out, uint64_t section, FSC_READER_MAPPING(::fsc, ReversibleFieldlineMapping) mapping) {
 			Tensor<double, 2> points;
 			readTensor(in.getVertices(), points);
 			
@@ -326,12 +332,14 @@ namespace {
 			
 			FSC_BUILDER_MAPPING(::fsc, RFLMKernelData) kernelData =
 				FSC_MAP_BUILDER(::fsc, RFLMKernelData, mv(kData), *device, true);
+				
+			kernelData -> updateStructureOnDevice();
 			
 			Promise<void> kernelTask = FSC_LAUNCH_KERNEL(
 				mapInSectionKernel, *device,
-				points.dimension(1),
+				nPoints,
 				
-				section, FSC_KARG(mv(points), ALIAS_IN), kernelData, mapping
+				section, FSC_KARG(mv(points), ALIAS_IN), kernelData, FSC_KARG(mapping, NOCOPY)
 			);
 			
 			return kernelTask
@@ -343,11 +351,12 @@ namespace {
 				
 				
 				RFLMKernelData::Reader mapResult = data -> getHost();
+				// KJ_DBG(mapResult);
 				
 				Tensor<double, 2> points(3, nPoints);
 				for(auto i : kj::range(0, nPoints)) {
 					// Analogously to Phi, z, r we store Phi, v, u
-					points(0, i) = mapResult.getPhiValues()[i];
+					points(0, i) = mapResult.getStates()[i].getPhi();
 					points(1, i) = mapResult.getStates()[i].getV();
 					points(2, i) = mapResult.getStates()[i].getU(); 
 				}
@@ -357,7 +366,7 @@ namespace {
 		
 		Promise<void> mapForSection(
 			DataRef<MergedGeometry>::Client geoRef, GeometryMapping::SectionData::Builder out,
-			FSC_READER_MAPPING(::fsc, ReversibleFieldlineMapping)& mapping, uint64_t section,
+			FSC_READER_MAPPING(::fsc, ReversibleFieldlineMapping) mapping, uint64_t section,
 			uint32_t nPhi, uint32_t nU, uint32_t nV
 		) {
 			auto mappingData = mapping -> getHost();
@@ -368,6 +377,10 @@ namespace {
 			
 			double phi1 = sectionData.getPhiStart() + phiOffset;
 			double phi2 = sectionData.getPhiEnd() + phiOffset;
+			
+			while(phi2 <= phi1) {
+				phi2 += 2 * pi;
+			}
 			
 			// Fill out grid
 			{
@@ -393,7 +406,7 @@ namespace {
 			auto unrolledRef = unrollRequest.send().getRef();
 			
 			return getActiveThread().dataService().download(unrolledRef)
-			.then([&mapping, section, out = out.initGeometry(), this](auto mergedGeo) mutable {
+			.then([mapping = mapping -> addRef(), section, out = out.initGeometry(), this](auto mergedGeo) mutable {
 				// Transform individual meshes
 				auto in = mergedGeo.get();
 				out.setTagNames(in.getTagNames());
@@ -408,12 +421,12 @@ namespace {
 					auto eOut = outEntries[i];
 					eOut.setTags(eIn.getTags());
 					
-					meshTransforms.add(mapMesh(eIn.getMesh(), eOut.getMesh(), section, mapping));
+					meshTransforms.add(mapMesh(eIn.getMesh(), eOut.getMesh(), section, mapping -> addRef()));
 				}
 				
-				return kj::joinPromisesFailFast(meshTransforms.finish());
-			}).attach(mapping -> addRef())
-			.then([&mapping, section, merged = out.getGeometry(), grid = out.getGrid(), this]() {		
+				return kj::joinPromisesFailFast(meshTransforms.finish()).attach(kj::cp(mergedGeo));
+			})
+			.then([section, merged = out.getGeometry(), grid = out.getGrid(), this]() {		
 				// Index geometry over grid
 				auto indexRequest = geoLib.indexRequest();
 				indexRequest.setGrid(grid);
@@ -434,6 +447,7 @@ namespace {
 					::fsc, ReversibleFieldlineMapping,
 					mapping, *device, true
 				);
+				devMapping -> updateStructureOnDevice();
 				devMapping -> updateDevice();
 				
 				auto params = ctx.getParams();
@@ -453,7 +467,7 @@ namespace {
 				
 				for(auto i : kj::indices(sections)) {
 					subComputations.add(
-						mapForSection(geoRef, sections[i], devMapping, i, params.getNPhi(), params.getNU(), params.getNV())
+						mapForSection(geoRef, sections[i], devMapping -> addRef(), i, params.getNPhi(), params.getNU(), params.getNV())
 					);
 				}
 				

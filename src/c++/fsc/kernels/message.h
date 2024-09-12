@@ -125,6 +125,10 @@ struct DeviceMapping<Own<capnp::MessageBuilder>> : public MessageMappingBase {
 	
 	capnp::MessageBuilder& getHost();
 	
+	Own<DeviceMapping<Own<capnp::MessageBuilder>>> addRef() {
+		return kj::addRef(*this);
+	}
+	
 private:
 	void mapSegments() override;
 	
@@ -142,6 +146,10 @@ struct DeviceMapping<Own<capnp::MessageReader>> : public MessageMappingBase {
 	cupnp::Location get();
 	
 	capnp::MessageReader& getHost();
+	
+	Own<DeviceMapping<Own<capnp::MessageReader>>> addRef() {
+		return kj::addRef(*this);
+	}
 	
 private:
 	void mapSegments() override;
@@ -164,6 +172,10 @@ struct DeviceMapping<CuTypedMessageBuilder<HostType, CupnpType>> : public Device
 	
 	capnp::MessageBuilder& getHostUntyped() { return Parent::getHost(); }
 	typename HostType::Builder getHost() { return Parent::getHost().template getRoot<HostType>(); }
+	
+	Own<DeviceMapping<CuTypedMessageBuilder<HostType, CupnpType>>> addRef() {
+		return kj::addRef(*this);
+	}
 };
 
 template<typename HostType, typename CupnpType>
@@ -179,6 +191,10 @@ struct DeviceMapping<CuTypedMessageReader<HostType, CupnpType>> : public DeviceM
 	
 	capnp::MessageReader& getHostUntyped() { return Parent::getHost(); }
 	typename HostType::Reader getHost() { return Parent::getHost().template getRoot<HostType>(); }
+	
+	Own<DeviceMapping<CuTypedMessageReader<HostType, CupnpType>>> addRef() {
+		return kj::addRef(*this);
+	}
 };
 
 template<typename T>

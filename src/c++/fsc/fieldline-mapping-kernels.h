@@ -128,6 +128,8 @@ EIGEN_DEVICE_FUNC inline void mapInSectionKernel(unsigned int idx, uint64_t sect
 	RFLM m(mapping);
 	m.mapInSection(section, phi, z, r);
 	m.save(out.mutateStates()[idx]);
+	
+	// KJ_DBG(out.mutateStates()[idx].getU(), out.mutateStates()[idx].getV(), phi, z, r);
 }
 
 /*EIGEN_DEVICE_FUNC inline void unmapKernel(unsigned int idx, cu::RFLMKernelData::Reader in, Tensor2Ref out, cu::ReversibleFieldlineMapping::Reader mapping) {	

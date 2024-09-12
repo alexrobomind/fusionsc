@@ -229,13 +229,14 @@ EIGEN_DEVICE_FUNC Vec3d RFLM::unmap(double phi) {
 
 EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 	// --- Select active section for inversion ---
-	phi = atan2(x[1], x[0]);
+	double phi = atan2(x[1], x[0]);
 	
 	// Safe handling for "NaN" case
 	if(phi != phi) {
 		activateSection(0);
 		uv(0) = phi;
 		uv(1) = phi;
+		this -> phi = phi;
 		return;
 	}
 	
@@ -284,7 +285,8 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 	mapInSection(iSection, phi, zRef, rRef);
 }
 
-EIGEN_DEVICE_FUNC void RFLM::mapInSection(uint64_t iSection, double phi, double zRef, double rRef) {
+EIGEN_DEVICE_FUNC void RFLM::mapInSection(uint64_t iSection, double phiIn, double zRef, double rRef) {
+	phi = phiIn;
 	activateSection(iSection);
 	
 	double phiCoord = unwrap(phi - phi1 + 2 * SECTION_TOL) - 2 * SECTION_TOL;

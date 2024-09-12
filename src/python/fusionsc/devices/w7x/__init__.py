@@ -349,7 +349,7 @@ async def computeMapping(
 	mappingPlanes = None,
 	r = None, z = None,
 	grid = None,
-	distanceLimit = 7 * 2 * np.pi / 8,
+	distanceLimit = None,
 	padding = 2, numPlanes = 20,
 	stepSize = 0.01,
 	u0 = [0.5], v0 = [0.5],
@@ -371,6 +371,9 @@ async def computeMapping(
 	
 	if toroidalSymmetry is None:
 		toroidalSymmetry = field.data.computedField.grid.nSym
+	
+	if distanceLimit is None:
+		distanceLimit = 7 * 2 * np.pi / toroidalSymmetry / 2 * 1.5
 	
 	if mappingPlanes is None:
 		assert toroidalSymmetry in [1, 5], "Can only auto-deduce mappingPlanes for symmetry 1 and 5"
