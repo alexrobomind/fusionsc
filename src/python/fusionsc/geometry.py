@@ -380,6 +380,13 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 			
 		ref = geometryLib().planarClip(request).pipeline.ref
 		return Geometry({"merged" : ref})
+	
+	@asyncFunction
+	async def triangulate(self, maxEdgeLength: float = 0):
+		geometry = await self.resolve.asnc()
+		
+		ref = geometryLib().triangulate(geometry.data, maxEdgeLength).pipeline.ref
+		return Geometry({"merged" : ref})
 
 	@asyncFunction
 	async def plotCut(self, phi = 0, ax = None, plot = True, **kwArgs):

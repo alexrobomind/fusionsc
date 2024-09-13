@@ -292,6 +292,7 @@ struct GeometryLibImpl : public GeometryLib::Server {
 	Promise<void> intersect(IntersectContext) override;
 	Promise<void> unroll(UnrollContext) override;
 	Promise<void> planarClip(PlanarClipContext) override;
+	Promise<void> triangulate(TriangulateContext) override;
 	
 private:
 	struct GeometryAccumulator {
@@ -610,7 +611,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 					rz(i, 1) = z[i];
 				}
 				
-				Tensor<uint32_t, 2> triangulation = triangulate(rz);
+				Tensor<uint32_t, 2> triangulation = fsc::triangulate(rz);
 				uint32_t numTriangles = triangulation.dimension(0);
 				
 				auto phis = kj::heapArray<double>({phiStart, phiEnd});
@@ -1942,6 +1943,147 @@ Promise<void> GeometryLibImpl::planarClip(PlanarClipContext ctx) {
 			auto meshOut = entriesOut[i].getMesh();
 			
 			clipMesh(normal, d, meshIn, meshOut);
+		}
+		
+		ctx.initResults().setRef(getActiveThread().dataService().publish(mv(result)));
+	});
+}
+
+void triangulateMesh(Mesh::Reader in, Mesh::Builder out, double maxEdgeLength) {
+	kj::Vector<Vec3d> points;
+	
+	{
+		Tensor<double, 2> pointsIn;
+		readTensor(in.getVertices(), pointsIn);
+		KJ_REQUIRE(pointsIn.dimension(0) == 3);
+		
+		points.reserve(pointsIn.dimension(1));
+		for(auto i : kj::range(0, pointsIn.dimension(1))) {
+			points.add(pointsIn(0, i), pointsIn(1, i), pointsIn(2, i));
+		}
+	}
+	
+	kj::HashMap<uint64_t, uint32_t> midpointMap;
+	auto midpoint = [&](uint32_t p1, uint32_t p2) -> uint32_t {
+		if(p1 > p2) std::swap(p1, p2);
+		
+		uint64_t key = p1;
+		key <<= 32;
+		key |= p2;
+		
+		KJ_IF_MAYBE(pIdx, midpointMap.find(key)) {
+			return *pIdx;
+		}
+		
+		const Vec3d x1 = points[p1];
+		const Vec3d x2 = points[p2];
+		
+		uint32_t idx = points.size();
+		points.add(0.5 * (x1 + x2));
+		
+		midpointMap.insert(key, idx);
+		return idx;
+	};
+	
+	auto edgeLength = [&](uint32_t p1, uint32_t p2) -> double {
+		Vec3d& x1 = points[p1];
+		Vec3d& x2 = points[p2];
+		
+		return (x2 - x1).norm();
+	};
+	
+	using Tri = kj::Tuple<uint32_t, uint32_t, uint32_t>;
+	std::list<Tri> queue;
+	
+	// Triangulate input mesh into subdivision queue
+	{
+		auto indices = in.getIndices();
+		auto handlePoly = [&](uint32_t start, uint32_t end) {
+			for(uint32_t i = start + 1; i + 1 < end; ++i) {
+				queue.push_back(kj::tuple(indices[start], indices[i], indices[i + 1]));
+			}
+		};
+		
+		if(in.isPolyMesh()) {
+			auto poly = in.getPolyMesh();
+			KJ_REQUIRE(poly.size() > 0);
+			for(auto i : kj::range(0, poly.size() - 1)) {
+				handlePoly(poly[i], poly[i + 1]);
+			}
+		} else {
+			for(auto i = 0; i + 3 <= indices.size(); ++i) {
+				handlePoly(i, i + 3);
+			}
+		}
+	}
+	
+	kj::Vector<uint32_t> indices;
+	auto handleTri = [&](uint32_t p1, uint32_t p2, uint32_t p3) {
+		double l12 = edgeLength(p1, p2);
+		double l23 = edgeLength(p2, p3);
+		double l31 = edgeLength(p3, p1);
+		
+		if(maxEdgeLength == 0 || kj::max(l12, kj::max(l23, l31)) <= maxEdgeLength) {
+			indices.add(p1);
+			indices.add(p2);
+			indices.add(p3);
+			return;
+		}
+		
+		if(l12 > std::max(l23, l31)) {
+			uint32_t p12 = midpoint(p1, p2);
+			queue.push_back(kj::tuple(p1, p12, p3));
+			queue.push_back(kj::tuple(p12, p2, p3));
+		} else if(l23 > l31) {
+			uint32_t p23 = midpoint(p2, p3);
+			queue.push_back(kj::tuple(p1, p2, p23));
+			queue.push_back(kj::tuple(p23, p3, p1));
+		} else {
+			uint32_t p31 = midpoint(p3, p1);
+			queue.push_back(kj::tuple(p1, p2, p31));
+			queue.push_back(kj::tuple(p31, p2, p3));
+		}
+	};
+	
+	while(!queue.empty()) {
+		Tri back = queue.back();
+		queue.pop_back();
+		kj::apply(handleTri, back);
+	}
+	
+	auto pointsOut = out.initVertices();
+	pointsOut.setShape({points.size(), 3});
+	
+	auto pointsData = pointsOut.initData(3 * points.size());
+	for(auto i : kj::indices(points)) {
+		pointsData.set(3 * i + 0, points[i][0]);
+		pointsData.set(3 * i + 1, points[i][1]);
+		pointsData.set(3 * i + 2, points[i][2]);
+	}
+	
+	out.setIndices(indices);
+	out.setTriMesh();
+}
+
+Promise<void> GeometryLibImpl::triangulate(TriangulateContext ctx) {
+	auto mr = thisCap().mergeRequest();
+	mr.setNested(ctx.getParams().getGeometry());
+	
+	return getActiveThread().dataService().download(mr.send().getRef())
+	.then([ctx](auto localRef) mutable {
+		MergedGeometry::Reader merged = localRef.get();
+		double maxEdgeLength = ctx.getParams().getMaxEdgeLength();
+		
+		Temporary<MergedGeometry> result;
+		result.setTagNames(merged.getTagNames());
+		
+		auto entriesIn = merged.getEntries();
+		auto entriesOut = result.initEntries(entriesIn.size());
+		for(auto i : kj::indices(entriesIn)) {
+			auto eIn = entriesIn[i];
+			auto eOut = entriesOut[i];
+			eOut.setTags(eIn.getTags());
+			triangulateMesh(eIn.getMesh(), eOut.getMesh(), maxEdgeLength);
 		}
 		
 		ctx.initResults().setRef(getActiveThread().dataService().publish(mv(result)));
