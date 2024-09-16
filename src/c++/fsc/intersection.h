@@ -168,16 +168,18 @@ struct IntersectResult {
  */
 inline EIGEN_DEVICE_FUNC uint32_t intersectGeometryAllEvents(
 	const Vec3d p1, const Vec3d p2,
-	cu::MergedGeometry::Reader geometry, cu::IndexedGeometry::Reader index, cu::IndexedGeometry::IndexData::Reader indexData,
+	cu::MergedGeometry::Reader geometry, cu::CartesianGrid::Reader grid, cu::IndexedGeometry::IndexData::Reader indexData,
 	
 	double lMax,
 	
 	cupnp::List<cu::FLTKernelEvent>::Builder eventBuffer, uint32_t eventCount
-) {	
+) {
+	if(indexData.getGridContents().getData().size() == 0)
+		return eventCount;
+	
 	double distanceP1P2 = (p2 - p1).norm();
 	Vec3d dp = (p2 - p1);
 
-	const auto grid = index.getGrid();
 	Vec3u i1 = locationInGrid(p1, grid);
 	Vec3u i2 = locationInGrid(p2, grid);
 	

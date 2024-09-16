@@ -87,6 +87,8 @@ struct GeometryMapping {
 		geometry @0 : Geometry.MergedGeometry;
 		grid @1 : Geometry.CartesianGrid;
 		index @2 : Geometry.IndexedGeometry.IndexData;
+		phi1 @3 : Float64;
+		phi2 @4 : Float64;
 	}
 	struct MappingData {
 		sections @0 : List(SectionData);
@@ -153,6 +155,8 @@ struct FLTRequest {
 	rngSeed @15 : UInt64;
 	
 	mapping @16 : Data.DataRef(ReversibleFieldlineMapping);
+	geometryMapping @41 : GeometryMapping;
+	
 	forward @17 : Bool = true;
 	
 	recordEvery @18 : UInt32;

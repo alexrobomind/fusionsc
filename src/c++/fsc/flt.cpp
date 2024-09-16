@@ -63,13 +63,14 @@ struct TraceCalculation {
 	FSC_READER_MAPPING(::fsc, IndexedGeometry::IndexData) indexData;
 	FSC_READER_MAPPING(::fsc, MergedGeometry) geometryData;
 	FSC_READER_MAPPING(::fsc, ReversibleFieldlineMapping) mappingData;
+	FSC_READER_MAPPING(::fsc, GeometryMapping::MappingData) geoMappingData;
 	
 	uint32_t eventBufferSize = 0;
 		
 	TraceCalculation(DeviceBase& device,
 		Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<const Tensor<double, 4>>> newField, Tensor<double, 2> positions,
 		IndexedGeometry::Reader geometryIndex, Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData, Maybe<LocalDataRef<MergedGeometry>> geometryData,
-		Maybe<LocalDataRef<ReversibleFieldlineMapping>> mappingData,
+		Maybe<LocalDataRef<ReversibleFieldlineMapping>> mappingData, Maybe<LocalDataRef<GeometryMapping::MappingData>> geoMappingData,
 		FLTConfig::Reader config
 	) :
 		device(device.addRef()),
@@ -83,7 +84,9 @@ struct TraceCalculation {
 		
 		indexData(FSC_MAP_READER(::fsc, IndexedGeometry::IndexData, indexData, device, true)),
 		geometryData(FSC_MAP_READER(::fsc, MergedGeometry, geometryData, device, true)),
-		mappingData(FSC_MAP_READER(::fsc, ReversibleFieldlineMapping, mappingData, device, true))
+		
+		mappingData(FSC_MAP_READER(::fsc, ReversibleFieldlineMapping, mappingData, device, true)),
+		geoMappingData(FSC_MAP_READER(::fsc, GeometryMapping::MappingData, geoMappingData, device, true))
 	{		
 		if(request.getServiceRequest().getRngSeed() == 0) {
 			uint64_t seed;
@@ -190,6 +193,7 @@ struct TraceCalculation {
 		indexData -> updateDevice();
 		geometryData -> updateDevice();
 		mappingData -> updateDevice();
+		geoMappingData -> updateDevice();
 		field -> updateDevice();
 		
 		return round;
@@ -267,7 +271,7 @@ struct TraceCalculation {
 			
 			r.kernelData, FSC_KARG(field, NOCOPY), r.kernelRequest,
 			FSC_KARG(geometryData, NOCOPY), FSC_KARG(indexedGeometry, NOCOPY), FSC_KARG(indexData, NOCOPY),
-			FSC_KARG(mappingData, NOCOPY)
+			FSC_KARG(mappingData, NOCOPY), FSC_KARG(geoMappingData, NOCOPY)
 		);
 	}
 	
@@ -374,7 +378,6 @@ struct FLTImpl : public FLT::Server {
 	FLTImpl(Own<DeviceBase> device, FLTConfig::Reader config) : device(mv(device)), config(config) {}
 	
 	Promise<void> trace(TraceContext ctx) override {
-		// ctx.allowCancellation();
 		auto request = ctx.getParams();
 		
 		// Request validation
@@ -402,29 +405,37 @@ struct FLTImpl : public FLT::Server {
 			}
 		}
 		
-		auto& dataService = getActiveThread().dataService();
-		
-		auto isNull = [&](capnp::Capability::Client c) {
-			return capnp::ClientHook::from(mv(c))->isNull();
-		};
-		
-		auto indexDataRef = request.getGeometry().getData();
-		auto geoDataRef = request.getGeometry().getBase();
-		auto mappingDataRef = request.getMapping();
-		
-		KJ_REQUIRE(request.hasField(), "Must specify a magnetic field");
-		
-		Promise<LocalDataRef<Float64Tensor>> downloadField = dataService.download(request.getField().getData()).eagerlyEvaluate(nullptr);
-		Promise<Maybe<LocalDataRef<IndexedGeometry::IndexData>>> downloadIndexData = dataService.downloadIfNotNull(indexDataRef);
-		Promise<Maybe<LocalDataRef<MergedGeometry>>> downloadGeometryData =	dataService.downloadIfNotNull(geoDataRef).eagerlyEvaluate(nullptr);
-		Promise<Maybe<LocalDataRef<ReversibleFieldlineMapping>>> downloadMappingData = dataService.downloadIfNotNull(mappingDataRef).eagerlyEvaluate(nullptr);
-		
-		// I WANT COROUTINES -.-
-		
-		return downloadIndexData.then([ctx, request, downloadGeometryData = mv(downloadGeometryData), downloadField = mv(downloadField), downloadMappingData = mv(downloadMappingData), this](Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData) mutable {
-		return downloadGeometryData.then([ctx, request, indexData = mv(indexData), downloadField = mv(downloadField), downloadMappingData = mv(downloadMappingData), this](Maybe<LocalDataRef<MergedGeometry>> geometryData) mutable {
-		return downloadField.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), downloadMappingData = mv(downloadMappingData), this](LocalDataRef<Float64Tensor> fieldData) mutable {
-		return downloadMappingData.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), fieldData = mv(fieldData), this](Maybe<LocalDataRef<ReversibleFieldlineMapping>> mappingData) mutable {			
+		return kj::startFiber(65536, [this, ctx, request](kj::WaitScope& ws) {
+			auto& dataService = getActiveThread().dataService();
+			
+			auto isNull = [&](capnp::Capability::Client c) {
+				return capnp::ClientHook::from(mv(c))->isNull();
+			};
+			
+			auto indexDataRef = request.getGeometry().getData();
+			auto geoDataRef = request.getGeometry().getBase();
+			auto mappingDataRef = request.getMapping();
+			
+			DataRef<GeometryMapping::MappingData>::Client geoMappingRef = nullptr;
+			if(request.hasGeometryMapping()) {
+				mappingDataRef = request.getGeometryMapping().getBase();
+				geoMappingRef = request.getGeometryMapping().getData();
+			}
+			
+			KJ_REQUIRE(request.hasField(), "Must specify a magnetic field");
+			
+			auto downloadField = dataService.download(request.getField().getData()).eagerlyEvaluate(nullptr);
+			auto downloadIndexData = dataService.downloadIfNotNull(indexDataRef);
+			auto downloadGeometryData =	dataService.downloadIfNotNull(geoDataRef).eagerlyEvaluate(nullptr);
+			auto downloadMappingData = dataService.downloadIfNotNull(mappingDataRef).eagerlyEvaluate(nullptr);
+			auto downloadGeoMapapping = dataService.downloadIfNotNull(geoMappingRef).eagerlyEvaluate(nullptr);
+			
+			auto indexData = downloadIndexData.wait(ws);
+			auto geometryData = downloadGeometryData.wait(ws);
+			auto fieldData = downloadField.wait(ws);
+			auto mappingData = downloadMappingData.wait(ws);
+			auto geoMappingData = downloadGeoMapapping.wait(ws);
+			
 			// Extract kernel request
 			Temporary<FLTKernelRequest> kernelRequest;
 			kernelRequest.setServiceRequest(request);
@@ -454,14 +465,16 @@ struct FLTImpl : public FLT::Server {
 			Tensor<double, 2> positions = mapTensor<Tensor<double, 2>>(reshapedStartPoints.asReader())
 				-> shuffle(Eigen::array<int, 2>{1, 0});
 			
-			auto calc = heapHeld<TraceCalculation>(
+			TraceCalculation calc(
 				*device, mv(kernelRequest), mv(field), mv(positions),
 				request.getGeometry(), mv(indexData), geometryData,
-				mappingData,
+				mappingData, geoMappingData,
 				config
 			);
+			calc.run().wait(ws);	
 			
-			auto postProcessing = [ctx, calc, request, startPointShape, nStartPoints, geometryData = mv(geometryData)]() mutable {
+			// TODO: This function is WAY TOO LONG. It needs to be broken up into pieces.
+			auto postProcessing = [ctx, &calc, request, startPointShape, nStartPoints, geometryData = mv(geometryData)]() mutable {
 				auto applyPointShape = [&](auto builder, kj::ArrayPtr<const int64_t> preShape, kj::ArrayPtr<const int64_t> postShape) {
 					const size_t shapeSize = startPointShape.size() - 1 + preShape.size() + postShape.size();
 					size_t shapeProd = nStartPoints;
@@ -493,7 +506,7 @@ struct FLTImpl : public FLT::Server {
 				
 				auto resultBuilder = kj::heapArrayBuilder<Temporary<FLTKernelData::Entry>>(nStartPoints);
 				for(size_t i = 0; i < nStartPoints; ++i)
-					resultBuilder.add(calc->consolidateRuns(i));
+					resultBuilder.add(calc.consolidateRuns(i));
 				
 				auto kData = resultBuilder.finish();
 								
@@ -907,14 +920,7 @@ struct FLTImpl : public FLT::Server {
 				}
 			};
 			
-			return calc->run()
-			.then([pp = mv(postProcessing)]() mutable {
-				return getActiveThread().worker().executeAsync(mv(pp));
-			})
-			.attach(calc.x());
-		});
-		});
-		});
+			getActiveThread().worker().executeAsync(mv(postProcessing)).wait(ws);
 		}).attach(thisCap());
 	}
 	

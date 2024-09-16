@@ -28,7 +28,9 @@ FSC_DECLARE_KERNEL(
 	cu::IndexedGeometry::Reader,
 	cu::IndexedGeometry::IndexData::Reader,
 	
-	cu::ReversibleFieldlineMapping::Reader
+	cu::ReversibleFieldlineMapping::Reader,
+	
+	cu::GeometryMapping::MappingData::Reader
 );
 	
 namespace kmath {
@@ -157,7 +159,9 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	cu::IndexedGeometry::Reader index,
 	cu::IndexedGeometry::IndexData::Reader indexData,
 	
-	cu::ReversibleFieldlineMapping::Reader flmData
+	cu::ReversibleFieldlineMapping::Reader flmData,
+	
+	cu::GeometryMapping::MappingData::Reader geoMapping
 ) {
 	using Num = double;
 	using V3 = Vec3<Num>;
@@ -320,7 +324,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		rec.setFieldStrength(std::sqrt(fv[0] * fv[0] + fv[1] * fv[1] + fv[2] * fv[2]));
 	};
 	
-	RFLM flm(flmData);
+	RFLM flm(flmData, geoMapping);
 	
 	// Initialize mapped position
 	if(useFLM) {
@@ -436,6 +440,9 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		double stepSize = state.getStepSize();
 		double nextStepSize = stepSize;
 		
+		uint32_t postCollisionEventCount = eventCount;
+		bool checkForCollisions = true;
+		
 		if(displacementStep) {
 			double prevFreePath = parModel.getMeanFreePath() + displacementCount * parModel.getMeanFreePathGrowth();
 			double nextFreePath = parModel.getMeanFreePath() + (1 + displacementCount) * parModel.getMeanFreePathGrowth();
@@ -496,7 +503,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			
 			if(useFLM) {
 				flm.map(x2, tracingDirection * forwardDirection > 0);
-			}				
+			}
 		} else {			
 			auto controlInfo = request.getStepSizeControl();
 			if(controlInfo.hasFixed()) {
@@ -507,7 +514,17 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 				if(useFLM) {
 					flm.setFieldlinePosition(0);
 					double newPhi = flm.phi + forwardDirection * tracingDirection * stepSize / r;
-					x2 = flm.advance(newPhi);
+					
+					auto eventBuffer = myData.mutateEvents();
+					
+					if(geoMapping.getSections().size() > 0) {
+						x2 = flm.advance(newPhi, myData.mutateEvents(), eventCount, postCollisionEventCount);
+						
+						// Collision check is done in mapping
+						checkForCollisions = false;
+					} else {
+						x2 = flm.advance(newPhi);
+					}
 				} else {
 					// Regular tracing step
 					kmath::runge_kutta_4_step(x2, .0, stepSize, rungeKuttaInput);
@@ -552,6 +569,45 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 					}
 				}
 			}
+		}
+		
+		if(checkForCollisions) {
+			postCollisionEventCount = intersectGeometryAllEvents(x, x2, geometry, index.getGrid(), indexData, 1, myData.mutateEvents(), eventCount);
+		}
+		
+		// Post-process collisions
+		
+		uint32_t numCollisions = 0;
+		{
+			auto eventBuffer = myData.mutateEvents();
+			uint32_t newEventCount = postCollisionEventCount;
+			
+			if(newEventCount == eventBuffer.size()) {
+				FSC_FLT_RETURN(EVENT_BUFFER_FULL);
+			}
+			
+			// Delete all collisions that we don't want
+			for(uint32_t iEvt = eventCount; iEvt < newEventCount; /* No ++iEvt here, it's conditional */) {
+				auto event = eventBuffer[iEvt];
+				
+				if(event.getDistance() < request.getIgnoreCollisionsBefore()) {
+					// Swap to end and decrease buffer fill
+					cupnp::swapData(event, eventBuffer[newEventCount - 1]);
+					--newEventCount;
+				} else {
+					++iEvt;
+				}
+			}
+			
+			numCollisions = newEventCount - eventCount;
+			
+			for(auto iEvt = eventCount; iEvt < newEventCount; ++iEvt) {
+				auto curEvt = eventBuffer[iEvt];
+				curEvt.setDistance(distance + curEvt.getDistance());
+				curEvt.setStep(step);
+			}
+			
+			eventCount = newEventCount;
 		}
 		
 		// KJ_DBG("Step advanced", x[0], x[1], x[2], x2[0], x2[1], x2[2]);
@@ -665,44 +721,6 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			
 			++turn;		
 		}
-		
-		// --- Check for collisions ---
-		
-		uint32_t numCollisions = 0;
-		
-		if(indexData.getGridContents().getData().size() > 0) {
-			auto eventBuffer = myData.mutateEvents();
-			uint32_t newEventCount = intersectGeometryAllEvents(x, x2, geometry, index, indexData, 1, eventBuffer, eventCount);
-							
-			if(newEventCount == eventBuffer.size()) {
-				FSC_FLT_RETURN(EVENT_BUFFER_FULL);
-			}
-			
-			// Delete all collisions that we don't want
-			for(uint32_t iEvt = eventCount; iEvt < newEventCount; /* No ++iEvt here, it's conditional */) {
-				auto event = eventBuffer[iEvt];
-				
-				if(event.getDistance() < request.getIgnoreCollisionsBefore()) {
-					// Swap to end and decrease buffer fill
-					cupnp::swapData(event, eventBuffer[newEventCount - 1]);
-					--newEventCount;
-				} else {
-					++iEvt;
-				}
-			}
-			
-			numCollisions = newEventCount - eventCount;
-			
-			for(auto iEvt = eventCount; iEvt < newEventCount; ++iEvt) {
-				auto curEvt = eventBuffer[iEvt];
-				curEvt.setDistance(distance + curEvt.getDistance());
-				curEvt.setStep(step);
-			}
-			
-			eventCount = newEventCount;
-		}
-					
-		// KJ_DBG("Phi cross checks passed");
 		
 		// --- Sort generated events ---
 		{

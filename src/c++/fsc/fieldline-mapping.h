@@ -5,6 +5,7 @@
 #include "interpolation.h"
 #include "index.h"
 #include "kernels/device.h"
+#include "intersection.h"
 
 #include <iostream>
 
@@ -24,12 +25,14 @@ struct RFLM {
 	
 	//! Advances to a new phi position, remapping if neccessary. Returns new real-space position
 	// Note: No guarantees that flm.phi == newPhi
+	inline EIGEN_DEVICE_FUNC Vec3d advance(double newPhi, cupnp::List<cu::FLTKernelEvent>::Builder eventBuffer, uint32_t eventCount, uint32_t& newEventCount);
 	inline EIGEN_DEVICE_FUNC Vec3d advance(double newPhi);
 	
 	inline EIGEN_DEVICE_FUNC double getFieldlinePosition(double phi);
 	inline EIGEN_DEVICE_FUNC void setFieldlinePosition(double newValue);
 	
 	inline EIGEN_DEVICE_FUNC RFLM(cu::ReversibleFieldlineMapping::Reader mapping);
+	inline EIGEN_DEVICE_FUNC RFLM(cu::ReversibleFieldlineMapping::Reader mapping, cu::GeometryMapping::MappingData::Reader);
 	inline EIGEN_DEVICE_FUNC RFLM(const RFLM& other) = default;
 	
 	inline EIGEN_DEVICE_FUNC void save(cu::ReversibleFieldlineMapping::State::Builder);
@@ -39,6 +42,8 @@ struct RFLM {
 	inline void load(ReversibleFieldlineMapping::State::Reader);
 	
 	cu::ReversibleFieldlineMapping::Reader mapping;
+	cu::GeometryMapping::MappingData::Reader geoMapping;
+	
 	Vec2d uv;
 	uint64_t currentSection;
 	uint64_t currentSectionRaw;
@@ -85,22 +90,27 @@ struct RFLM {
 			return reader.getData()[iLinear];
 		}
 	};
+	
+	static constexpr double SECTION_TOL = 0.001;
 
 private:
 	inline void activateSection(uint64_t iSection);
 	inline cu::ReversibleFieldlineMapping::Section::Reader activeSection();
+	inline cu::GeometryMapping::SectionData::Reader activeGeoSection();
 	
 	inline EIGEN_DEVICE_FUNC void interpolate(double phi, Vec2d& rz, Mat2d& jacobian);
 	
 	inline static double unwrap(double phiWrapped);
-	
-	static constexpr double SECTION_TOL = 0.001;
 };
 
 // === class RFLM ===
 
 EIGEN_DEVICE_FUNC RFLM::RFLM(cu::ReversibleFieldlineMapping::Reader mapping) :
-	mapping(mapping),
+	RFLM(mapping, nullptr)
+{}
+
+EIGEN_DEVICE_FUNC RFLM::RFLM(cu::ReversibleFieldlineMapping::Reader mapping, cu::GeometryMapping::MappingData::Reader geoMapping) :
+	mapping(mapping), geoMapping(geoMapping),
 	uv(0.5, 0.5),
 	currentSection(0),
 	currentSectionRaw(0),
@@ -182,6 +192,15 @@ EIGEN_DEVICE_FUNC void RFLM::activateSection(uint64_t iSection) {
 
 EIGEN_DEVICE_FUNC cu::ReversibleFieldlineMapping::Section::Reader RFLM::activeSection() {
 	return mapping.getSections()[currentSection];
+}
+
+EIGEN_DEVICE_FUNC cu::GeometryMapping::SectionData::Reader RFLM::activeGeoSection() {
+	auto sections = geoMapping.getSections();
+	
+	uint64_t nSurf = sections.size();
+	CUPNP_REQUIRE(nSurf > 0) { return nullptr; }
+	
+	return sections[currentSectionRaw % nSurf];
 }
 
 EIGEN_DEVICE_FUNC double RFLM::getFieldlinePosition(double phi) {
@@ -393,7 +412,18 @@ EIGEN_DEVICE_FUNC void RFLM::mapInSection(uint64_t iSection, double phiIn, doubl
 }
 
 EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi) {
+	uint32_t tmp;
+	return advance(newPhi, cupnp::List<cu::FLTKernelEvent>::Builder(0, nullptr), 0, tmp);
+}
+
+EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi, cupnp::List<cu::FLTKernelEvent>::Builder eventBuffer, const uint32_t eventCount, uint32_t& newEventCount) {
 	bool fwd = newPhi > phi;
+	
+	bool processCollisions = true;
+	if(eventBuffer.size() <= eventCount) processCollisions = false;
+	if(geoMapping.getSections().size() == 0) processCollisions = false;
+	
+	newEventCount = eventCount;
 	
 	while(true) {		
 		double phiClamped = newPhi;
@@ -423,6 +453,32 @@ EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi) {
 			}
 		}
 		
+		if(processCollisions) {
+			// Transform coordinates into section space
+			// For collision purposes, we have to adjust into the section-internal phi
+			// coordinate, that might be different from the actual phi due to section
+			// re-usage across different symmetries.
+			double phiCoord = unwrap(phi - phi1 + 2 * SECTION_TOL) - 2 * SECTION_TOL + activeGeoSection().getPhi1();
+			double raycastPhiEnd = phiCoord + (phiClamped - phi);
+			
+			double u = uv(0);
+			double v = uv(1);
+			
+			Vec3d p1(phiCoord, v, u);
+			Vec3d p2(raycastPhiEnd, v, u);
+			
+			auto geoSection = activeGeoSection();
+			auto geometry = geoSection.getGeometry();
+			auto indexData = geoSection.getIndex();
+			
+			newEventCount = intersectGeometryAllEvents(
+				p1, p2,
+				geoSection.getGeometry(), geoSection.getGrid(), geoSection.getIndex(),
+				1,
+				eventBuffer, newEventCount
+			);
+		}
+		
 		if(remap) {
 			// KJ_DBG("Remapping", phi, newPhi, phiClamped);
 			Vec3d tmp = unmap(phiClamped);
@@ -430,6 +486,11 @@ EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi) {
 			map(tmp, fwd);
 			phi = phiClamped;
 			setFieldlinePosition(len);
+			
+			// We need to terminate early
+			if(processCollisions && newEventCount >= eventBuffer.size()) {
+				return tmp;
+			}
 		} else {
 			phi = newPhi;
 			// KJ_DBG(phi);

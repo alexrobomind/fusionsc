@@ -382,6 +382,9 @@ namespace {
 				phi2 += 2 * pi;
 			}
 			
+			out.setPhi1(phi1);
+			out.setPhi2(phi2);
+			
 			// Fill out grid
 			{
 				auto g = out.getGrid();
@@ -401,8 +404,8 @@ namespace {
 			// Unroll
 			auto unrollRequest = geoLib.unrollRequest();
 			unrollRequest.getGeometry().setMerged(geoRef);
-			unrollRequest.getPhi1().setRad(phi1);
-			unrollRequest.getPhi2().setRad(phi2);
+			unrollRequest.getPhi1().setRad(phi1 - 1.5 * RFLM::SECTION_TOL);
+			unrollRequest.getPhi2().setRad(phi2 + 1.5 * RFLM::SECTION_TOL);
 			auto unrolledRef = unrollRequest.send().getRef();
 			
 			return getActiveThread().dataService().download(unrolledRef)

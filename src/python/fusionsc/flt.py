@@ -375,7 +375,12 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 		request.geometry = indexedGeometry
 	
 	if mapping is not None:
-		request.mapping = mapping.ref
+		if isinstance(mapping, wrappers.RefWrapper):
+			request.mapping = mapping.ref
+		elif isinstance(mapping, MappingWithGeometry):
+			request.geometryMapping = mapping.data
+		else:
+			raise ValueError("Invalid type of mapping")
 	
 	if targetError is not None:		
 		# Try to estimate error estimation distance
