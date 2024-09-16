@@ -9,6 +9,7 @@
 #include "kernels/launch.h"
 
 #include <random>
+#include <list>
 
 #include <kj/map.h>
 

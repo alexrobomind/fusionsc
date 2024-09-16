@@ -405,7 +405,7 @@ struct FLTImpl : public FLT::Server {
 			}
 		}
 		
-		return kj::startFiber(65536, [this, ctx, request](kj::WaitScope& ws) {
+		return kj::startFiber(65536, [this, ctx, request](kj::WaitScope& ws) mutable {
 			auto& dataService = getActiveThread().dataService();
 			
 			auto isNull = [&](capnp::Capability::Client c) {
