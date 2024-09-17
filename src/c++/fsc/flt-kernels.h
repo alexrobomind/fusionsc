@@ -618,7 +618,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		Num phi1 = atan2(x[1], x[0]);
 		Num phi2 = atan2(x2[1], x2[0]);
 		
-		if(!allowReversal && kmath::wrap(phi2 - phi1) * tracingDirection * forwardDirection < 0) {
+		if(!allowReversal && !displacementStep && kmath::wrap(phi2 - phi1) * tracingDirection * forwardDirection < 0) {
 			FSC_FLT_RETURN(FIELDLINE_REVERSED);
 		}
 					
