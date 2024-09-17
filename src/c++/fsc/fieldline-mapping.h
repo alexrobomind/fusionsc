@@ -471,21 +471,21 @@ EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi, cupnp::List<cu::FLTKernelEv
 			auto geometry = geoSection.getGeometry();
 			auto indexData = geoSection.getIndex();
 			
-			newEventCount = intersectGeometryAllEvents(
+			uint32_t nextEventCount = intersectGeometryAllEvents(
 				p1, p2,
 				geoSection.getGeometry(), geoSection.getGrid(), geoSection.getIndex(),
 				1,
 				eventBuffer, newEventCount
 			);
 						
-			for(auto i = eventCount; i < newEventCount; ++i) {
+			for(auto i = newEventCount; i < nextEventCount; ++i) {
 				// Extract collision phi
-				auto phiEventRaw = eventBuffer[i].getX();
+				auto event = eventBuffer[i];
+				auto phiEventRaw = event.getX();
 				auto phiEvent = phiEventRaw + phi1 - activeGeoSection().getPhi1();
 				
 				Vec3d xReal = unmap(phiEvent);
 				
-				auto event = eventBuffer[i];
 				event.setX(xReal[0]);
 				event.setY(xReal[1]);
 				event.setZ(xReal[2]);
@@ -493,6 +493,8 @@ EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi, cupnp::List<cu::FLTKernelEv
 				double flPos = getFieldlinePosition(phiEvent);
 				event.setDistance(flPos);
 			}
+			
+			newEventCount = nextEventCount;
 		}
 		
 		if(remap) {
