@@ -962,6 +962,9 @@ struct FLTImpl : public FLT::Server {
 			if(params.hasMapping())
 				req.setMapping(params.getMapping());
 			
+			if(params.hasGeometryMapping())
+				req.setGeometryMapping(params.getGeometryMapping());
+			
 			if(params.getStepSizeControl().isAdaptive())
 				req.getStepSizeControl().setAdaptive(params.getStepSizeControl().getAdaptive());
 			
@@ -1138,6 +1141,9 @@ struct FLTImpl : public FLT::Server {
 				
 				if(params.hasMapping())
 					request.setMapping(params.getMapping());
+				
+				if(params.hasGeometryMapping())
+					request.setGeometryMapping(params.getGeometryMapping());
 			
 				if(params.getStepSizeControl().isAdaptive())
 					request.getStepSizeControl().setAdaptive(params.getStepSizeControl().getAdaptive());

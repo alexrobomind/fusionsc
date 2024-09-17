@@ -476,7 +476,12 @@ async def findAxis(
 	request.islandM = islandM
 	
 	if mapping is not None:
-		request.mapping = mapping.ref
+		if isinstance(mapping, wrappers.RefWrapper):
+			request.mapping = mapping.ref
+		elif isinstance(mapping, MappingWithGeometry):
+			request.geometryMapping = mapping.data
+		else:
+			raise ValueError("Invalid type of mapping")
 	
 	if targetError is not None:		
 		adaptive = request.stepSizeControl.initAdaptive()
@@ -544,7 +549,12 @@ async def findLCFS(
 		adaptive.errorUnit.integratedOver = distanceLimit
 	
 	if mapping is not None:
-		request.mapping = mapping.ref
+		if isinstance(mapping, wrappers.RefWrapper):
+			request.mapping = mapping.ref
+		elif isinstance(mapping, MappingWithGeometry):
+			request.geometryMapping = mapping.data
+		else:
+			raise ValueError("Invalid type of mapping")
 	
 	response = await _tracer().findLcfs(request)
 	

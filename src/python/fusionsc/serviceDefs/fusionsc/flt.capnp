@@ -278,6 +278,7 @@ struct FindAxisRequest {
 	nPhi @5 : UInt64 = 20;
 	
 	mapping @6 : Data.DataRef(ReversibleFieldlineMapping);
+	geometryMapping @10 : GeometryMapping;
 	
 	stepSizeControl : union {
 		fixed @7 : Void;
@@ -301,6 +302,7 @@ struct FindLcfsRequest {
 	geometry @7 : Geometry.IndexedGeometry;
 	
 	mapping @8 : Data.DataRef(ReversibleFieldlineMapping);
+	geometryMapping @11 : GeometryMapping;
 	
 	stepSizeControl : union {
 		fixed @9 : Void;
