@@ -29,7 +29,7 @@ class FieldlineMapping(wrappers.RefWrapper):
 	@asyncFunction
 	async def mapGeometry(self,
 		geometry: geometry.Geometry,
-		nSym: int = 1,
+		toroidalSymmetry: int = 1,
 		nPhi: int = 1, nU: int = 10, nV: int = 10
 	):
 		"""
@@ -37,7 +37,7 @@ class FieldlineMapping(wrappers.RefWrapper):
 		large step sizes in mapping-based tracing
 		"""
 		resolved = await geometry.resolve.asnc()
-		response = await _mapper().mapGeometry(self.ref, resolved.data, nSym, nPhi, nU, nV)
+		response = await _mapper().mapGeometry(self.ref, resolved.data, toroidalSymmetry, nPhi, nU, nV)
 		return MappingWithGeometry(response.mapping)
 
 class MappingWithGeometry(wrappers.structWrapper(service.GeometryMapping)):

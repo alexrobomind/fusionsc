@@ -590,6 +590,9 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			for(uint32_t iEvt = eventCount; iEvt < newEventCount; /* No ++iEvt here, it's conditional */) {
 				auto event = eventBuffer[iEvt];
 				
+				if(event.getDistance() < 0)
+					event.setDistance(abs(event.getDistance()));
+				
 				if(event.getDistance() < request.getIgnoreCollisionsBefore()) {
 					// Swap to end and decrease buffer fill
 					cupnp::swapData(event, eventBuffer[newEventCount - 1]);
@@ -603,7 +606,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			
 			for(auto iEvt = eventCount; iEvt < newEventCount; ++iEvt) {
 				auto curEvt = eventBuffer[iEvt];
-				curEvt.setDistance(distance + abs(curEvt.getDistance()));
+				curEvt.setDistance(distance + curEvt.getDistance());
 				curEvt.setStep(step);
 			}
 			
