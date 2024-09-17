@@ -477,9 +477,7 @@ EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi, cupnp::List<cu::FLTKernelEv
 				1,
 				eventBuffer, newEventCount
 			);
-			
-			RFLM copy(*this);
-			
+						
 			for(auto i = eventCount; i < newEventCount; ++i) {
 				// Extract collision phi
 				auto phiEventRaw = eventBuffer[i].getX();
