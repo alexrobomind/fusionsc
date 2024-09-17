@@ -603,7 +603,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			
 			for(auto iEvt = eventCount; iEvt < newEventCount; ++iEvt) {
 				auto curEvt = eventBuffer[iEvt];
-				curEvt.setDistance(distance + curEvt.getDistance());
+				curEvt.setDistance(distance + abs(curEvt.getDistance()));
 				curEvt.setStep(step);
 			}
 			
