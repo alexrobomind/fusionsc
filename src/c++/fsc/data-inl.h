@@ -101,6 +101,9 @@ struct LocalDataRefBackend : kj::Refcounted {
 	
 	//! Obtain a reference for external access
 	inline Own<LocalDataRefBackend> addRefExternal();
+	
+	//! Creates a deep fork of the backend
+	Own<LocalDataRefBackend> deepFork(LocalDataRefGroup&);
 
 private:
 	CapTableEntry processCapTableEntry(capnp::Capability::Client);
@@ -315,6 +318,8 @@ struct LocalDataRefImplV2 : public DataRef<capnp::AnyPointer>::Server, public kj
 	
 	inline ArrayPtr<const byte> getRaw() { return backend -> getData(); }
 	inline Array<const byte> forkRaw() { return backend -> forkData(); }
+	
+	Own<LocalDataRefImplV2> deepFork();
 	
 	Promise<void> metaAndCapTable(MetaAndCapTableContext) override ;
 	Promise<void> rawBytes(RawBytesContext) override ;
@@ -604,6 +609,12 @@ DataRefMetadata::Format::Reader LocalDataRef<T>::getFormat() {
 template<typename T>
 typename DataRefMetadata::Reader LocalDataRef<T>::getMetadata() {
 	return backend -> getMetadata();
+}
+
+template<typename T>
+LocalDataRef<T> LocalDataRef<T>::deepFork() {
+	auto newBackend = backend -> deepFork();
+	return LocalDataRef<T>(newBackend -> addRef(), newBackend -> addRef());
 }
 
 // === function attachToClient ===
