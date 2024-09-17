@@ -2025,7 +2025,7 @@ void triangulateMesh(Mesh::Reader in, Mesh::Builder out, double maxEdgeLength) {
 				handlePoly(poly[i], poly[i + 1]);
 			}
 		} else {
-			for(auto i = 0; i + 3 <= indices.size(); ++i) {
+			for(auto i = 0; i + 3 <= indices.size(); i += 3) {
 				handlePoly(i, i + 3);
 			}
 		}
