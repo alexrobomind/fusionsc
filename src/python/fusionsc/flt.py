@@ -154,8 +154,9 @@ async def connectionLength(points, config, geometry, **kwargs):
 	Returns:
 		An array of shape `points.shape[1:]` indicating the forward connection length of the given point.
 	""" 
-	result = await trace.asnc(points, config, geometry = geometry, collisionLimit = 1, **kwargs)
-	return result["endPoints"][3]
+	result = await trace.asnc(points, config, geometry = geometry, collisionLimit = 1, resultFormat = 'raw', **kwargs)
+	endPoints = np.asarray(result.endPoints)
+	return endPoints[3]
 
 @asyncFunction
 async def followFieldlines(points, config, recordEvery = 1, **kwargs):
