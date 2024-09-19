@@ -130,6 +130,10 @@ namespace kmath {
 		x += fifthOrder;
 		return (fifthOrder - fourthOrder).norm();
 	}
+	
+	inline EIGEN_DEVICE_FUNC unsigned int modPlus(int i, int n) {
+		return ((i % n) + n) % n;
+	}
 }
 
 
@@ -206,28 +210,60 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	SlabFieldInterpolator<InterpolationStrategy> interpolator(InterpolationStrategy(), grid);
 	
 	// Set up the magnetic axis
-	cupnp::List<double>::Reader rAxis(0, nullptr);
-	cupnp::List<double>::Reader zAxis(0, nullptr);
-	auto rAxisAt = [&](int i) {
-		// WARNING: This is neccessary, since the size_t type takes precedence over
-		// int in integer conversion, causing i to be converted to size_t (which
-		// is unsigned) before the modulo operation.
-		const int s = rAxis.size();
-		i %= s;
-		i += s;
-		i %= s;
-		return rAxis[i];
+	auto fla = request.getFieldLineAnalysis();
+	auto rAxisAt = [&](int i) -> double {
+		if(!fla.isCalculateIota())
+			return 0;
+		
+		auto ax = fla.getCalculateIota().getAxis();
+		
+		if(ax.isShared()) {
+			auto r = ax.getShared().getR();
+			return r[kmath::modPlus(i, r.size())];
+		} else if(ax.isIndividual()) {
+			auto r = ax.getIndividual().getR();
+			
+			auto shape = r.getShape();
+			size_t nPhi = shape[shape.size() - 1];
+			
+			size_t iPhi = kmath::modPlus(i, nPhi);
+			return r.getData()[idx * nPhi + iPhi];
+		}
+		
+		return 0;
 	};
-	auto zAxisAt = [&](int i) {
-		// WARNING: This is neccessary, since the size_t type takes precedence over
-		// int in integer conversion, causing i to be converted to size_t (which
-		// is unsigned) before the modulo operation.
-		const int s = zAxis.size();
-		i %= s;
-		i += s;
-		i %= s;
-		return zAxis[i];
+	auto zAxisAt = [&](int i) -> double {
+		if(!fla.isCalculateIota())
+			return 0;
+		
+		auto ax = fla.getCalculateIota().getAxis();
+		
+		if(ax.isShared()) {
+			auto z = ax.getShared().getZ();
+			return z[kmath::modPlus(i, z.size())];
+		} else if(ax.isIndividual()) {
+			auto z = ax.getIndividual().getZ();
+			
+			auto shape = z.getShape();
+			size_t nPhi = shape[shape.size() - 1];
+			
+			size_t iPhi = kmath::modPlus(i, nPhi);
+			return z.getData()[idx * nPhi + iPhi];
+		}
+		
+		return 0;
 	};
+	
+	size_t axisSize = 0;
+	if(fla.isCalculateIota()) {
+		auto ax = fla.getCalculateIota().getAxis();
+		if(ax.isShared()) {
+			axisSize = ax.getShared().getR().size();
+		} else if(ax.isIndividual()) {
+			auto r = ax.getIndividual().getR();
+			axisSize = r.getShape()[1];
+		}
+	}
 	
 	// Set up unwrapping configuration
 	double theta = state.getTheta();
@@ -237,21 +273,16 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 	uint32_t islandM = 1;
 		
 	{
-		auto fla = request.getFieldLineAnalysis();
 		if(fla.isCalculateIota()) {
-			rAxis = fla.getCalculateIota().getRAxis();
-			zAxis = fla.getCalculateIota().getZAxis();
 			unwrapEvery = fla.getCalculateIota().getUnwrapEvery();
 			islandM = fla.getCalculateIota().getIslandM();
 		} else if(fla.isCalculateFourierModes()) {
-			//rAxis = fla.getCalculateFourierModes().getRAxis();
-			//zAxis = fla.getCalculateFourierModes().getZAxis();
 			recFourierEvery = fla.getCalculateFourierModes().getRecordEvery();
 		}
 	}
 	
 	using AxisInterpolator = NDInterpolator<1, C1CubicInterpolation<double>>;
-	AxisInterpolator axisInterpolator(C1CubicInterpolation<double>(), { AxisInterpolator::Axis(0, 2 * pi * islandM, rAxis.size()) });
+	AxisInterpolator axisInterpolator(C1CubicInterpolation<double>(), { AxisInterpolator::Axis(0, 2 * pi * islandM, axisSize) });
 	
 	bool processDisplacements = perpModel.hasIsotropicDiffusionCoefficient() || perpModel.hasRzDiffusionCoefficient();
 	

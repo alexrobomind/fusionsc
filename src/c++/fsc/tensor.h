@@ -46,17 +46,21 @@ void readTensor(T2 reader, Tensor<T, rank, options, Index>& out) {
 }
 
 template<typename T, int rank, int options, typename Index, typename T2>
-void readVardimTensor(T2 reader, size_t variableDim, Tensor<T, rank, options, Index>& out) {
+kj::Array<size_t> readVardimTensor(T2 reader, size_t variableDim, Tensor<T, rank, options, Index>& out) {
 	using TensorType = Tensor<T, rank, options, Index>;
 	
+	auto shape = reader.getShape();
+	auto vsBuilder = kj::heapArrayBuilder<size_t>(1 + shape.size() - rank);
+	
 	{
-		auto shape = reader.getShape();
 		KJ_REQUIRE(rank <= shape.size() + 1);
 		KJ_REQUIRE(variableDim < rank);
 		
 		size_t variableDimSize = 1;
-		for(auto iDim : kj::range(variableDim, variableDim + 1 + shape.size() - rank))
+		for(auto iDim : kj::range(variableDim, variableDim + 1 + shape.size() - rank)) {
 			variableDimSize *= shape[iDim];
+			vsBuilder.add(shape[iDim]);
+		}
 	
 		typename TensorType::Dimensions dims;
 		for(size_t i = 0; i < rank; ++i) {
@@ -85,6 +89,8 @@ void readVardimTensor(T2 reader, size_t variableDim, Tensor<T, rank, options, In
 	auto dataOut = out.data();
 	for(size_t i = 0; i < out.size(); ++i)
 		dataOut[i] = (T) data[i];
+	
+	return vsBuilder.finish();
 }
 
 template<typename T, typename T2>
@@ -159,6 +165,51 @@ void writeTensor(const TensorType& in, T2 builder) {
 				shape.set(rank - i - 1, dims[i]);
 			}
 		}
+	}
+	
+	auto dataOut = builder.initData(in.size());
+	auto data = in.data();
+	
+	KJ_REQUIRE(in.size() == dataOut.size());
+	
+	for(size_t i = 0; i < in.size(); ++i)
+		dataOut.set(i, data[i]);
+}
+	
+// template<typename T, int rank, int options, typename Index, typename T2>
+template<typename TensorType, typename T2>
+void writeVardimTensor(const TensorType& in, size_t variableDim, kj::ArrayPtr<size_t> vardimShape, T2 builder) {
+	// using TensorType = Tensor<T, rank, options, Index>;
+	constexpr int rank = TensorType::NumIndices;
+	
+	{
+		auto protoShape = kj::heapArray<uint32_t>(rank);
+	
+		auto dims = in.dimensions();
+		size_t size = 1;
+		for(int i = 0; i < rank; ++i) {
+			if(TensorType::Options & Eigen::RowMajor) {
+				protoShape[i] = dims[i];
+			} else {
+				protoShape[rank - i - 1] = dims[i];
+			}
+		}
+		
+		auto shape = builder.initShape(rank + vardimShape.size() - 1);
+		
+		for(auto i : kj::range(0, variableDim))
+			shape.set(i, protoShape[i]);
+		
+		size_t prod = 1;
+		for(auto i : kj::indices(vardimShape)) {
+			auto el = vardimShape[i];
+			prod *= el;
+		
+			shape.set(variableDim + i, el);
+		}
+		
+		for(auto i = variableDim + 1; i <  protoShape.size(); ++i)
+			shape.set(i - 1 + vardimShape.size(), protoShape[i]);
 	}
 	
 	auto dataOut = builder.initData(in.size());

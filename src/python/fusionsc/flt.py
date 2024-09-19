@@ -467,14 +467,22 @@ async def findAxis(
 			0, 0.5 * (fieldGrid.zMax + fieldGrid.zMin)
 		]
 	
+	startPoint = np.asarray(startPoint)
+	
+	batch = False
+	if len(startPoint.shape) > 1:
+		batch = True
+	
 	request = service.FindAxisRequest.newMessage()
-	request.startPoint = startPoint
 	request.field = computed
 	request.stepSize = stepSize
 	request.nTurns = nTurns
 	request.nIterations = nIterations
 	request.nPhi = nPhi
 	request.islandM = islandM
+	
+	if not batch:
+		request.startPoint = startPoint
 	
 	if mapping is not None:
 		if isinstance(mapping, wrappers.RefWrapper):
@@ -490,15 +498,19 @@ async def findAxis(
 		adaptive.relativeTolerance = relativeErrorTolerance
 		adaptive.min = minStepSize
 		adaptive.max = maxStepSize
-		adaptive.errorUnit.integratedOver = 2 * np.pi * np.sqrt(startPoint[0]**2 + startPoint[1]**2)
+		adaptive.errorUnit.integratedOver = 2 * np.pi * np.amax(np.sqrt(startPoint[0]**2 + startPoint[1]**2))
 	
-	response = await _tracer().findAxis(request)
+	if batch:
+		response = await _tracer().findAxisBatch(startPoint, request)
+	else:
+		response = await _tracer().findAxis(request)
 	
 	axis = np.asarray(response.axis)
 	x, y, z = axis
 	phiVals = np.arctan2(y, x)
 	dPhi = phiVals[1] - phiVals[0]
 	dPhi = ((dPhi + np.pi) % (2 * np.pi)) - np.pi
+	dPhi = np.mean(dPhi)
 	
 	swap = False
 	
@@ -710,8 +722,8 @@ async def calculateIota(
 	
 	# Determine axis shape (required for phase unwrapping)
 	if axis is None:
-		startPoint = startPoints.reshape([3, -1]).mean(axis = 1)
-		_, axis = await findAxis.asnc(field, nTurns = 10 * islandM, startPoint = startPoint, islandM = islandM, targetError = targetError, relativeErrorTolerance = relativeErrorTolerance, minStepSize = minStepSize, maxStepSize = maxStepSize)
+		# startPoint = startPoints.reshape([3, -1]).mean(axis = 1)
+		p, axis = await findAxis.asnc(field, nTurns = 10 * islandM, startPoint = startPoints, islandM = islandM, targetError = targetError, relativeErrorTolerance = relativeErrorTolerance, minStepSize = minStepSize, maxStepSize = maxStepSize)
 	
 	xAx, yAx, zAx = axis
 	rAx = np.sqrt(xAx**2 + yAx**2)
@@ -726,9 +738,18 @@ async def calculateIota(
 	
 	calcIota = request.fieldLineAnalysis.initCalculateIota()
 	calcIota.unwrapEvery = unwrapEvery
-	calcIota.rAxis = rAx
-	calcIota.zAxis = zAx
 	calcIota.islandM = islandM
+	
+	if len(rAx.shape) == 1:
+		calcIota.axis.shared = {
+			'r' : rAx,
+			'z' : zAx
+		}
+	else:
+		calcIota.axis.individual = {
+			'r' : rAx,
+			'z' : zAx
+		}
 	
 	adaptive = request.stepSizeControl.initAdaptive()
 	adaptive.targetError = targetError

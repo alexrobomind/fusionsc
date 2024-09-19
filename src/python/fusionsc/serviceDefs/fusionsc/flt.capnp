@@ -165,8 +165,18 @@ struct FLTRequest {
 		noTask @19 : Void;
 		calculateIota : group {
 			unwrapEvery @20 : UInt32;
-			rAxis @21 : List(Float64);
-			zAxis @22 : List(Float64);
+			
+			axis : union {
+				shared : group {
+					r @21 : List(Float64);
+					z @22 : List(Float64);
+				}
+				individual : group {
+					r @42 : Data.Float64Tensor;
+					z @43 : Data.Float64Tensor;
+				}
+			}
+			
 			islandM @37 : UInt32 = 1;
 		}
 		calculateFourierModes : group {			
@@ -313,7 +323,14 @@ struct FindLcfsRequest {
 interface FLT $Cxx.allowCancellation {
 	trace @0 FLTRequest -> FLTResponse;
 	findAxis @1 FindAxisRequest -> (pos : List(Float64), axis : Data.Float64Tensor, meanField : Float64);
+	# Method to find a magnetic axis for a single starting point.
+	#
+	# Note: It is recommended to use the tensor-based method findAxisBatch instead. This method mostly remains
+	# for network protocol compatibility.
+	
 	findLcfs @2 FindLcfsRequest -> (pos : List(Float64));
+	
+	findAxisBatch @3 (points : Data.Float64Tensor, request : FindAxisRequest) -> (pos : Data.Float64Tensor, axis : Data.Float64Tensor, meanField : Data.Float64Tensor);
 }
 
 struct RFLMRequest {
