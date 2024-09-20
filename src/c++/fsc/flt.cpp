@@ -1130,7 +1130,7 @@ struct FLTImpl : public FLT::Server {
 				nIterResult = nIterResult.then(cp(performIteration));
 			}
 			
-			jobs.add(nIterResult.then(mv(traceAxis), [](kj::Exception&&) {}));
+			jobs.add(nIterResult.then(mv(traceAxis)).catch_([iPoint](kj::Exception&& e) {}));
 		}
 		
 		return kj::joinPromisesFailFast(jobs.finish())
@@ -1139,7 +1139,7 @@ struct FLTImpl : public FLT::Server {
 			
 			writeVardimTensor(*axis, 1, vs, res.getAxis());
 			writeVardimTensor(*pos, 1, vs, res.getPos());
-			writeVardimTensor(*fields, 1, vs, res.getMeanField());
+			writeVardimTensor(*fields, 0, vs, res.getMeanField());
 		})
 		.attach(axis.x(), pos.x(), fields.x(), points.x(), mv(field));
 	}

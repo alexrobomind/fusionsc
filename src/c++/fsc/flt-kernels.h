@@ -261,7 +261,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			axisSize = ax.getShared().getR().size();
 		} else if(ax.isIndividual()) {
 			auto r = ax.getIndividual().getR();
-			axisSize = r.getShape()[1];
+			axisSize = r.getShape()[r.getShape().size() - 1];
 		}
 	}
 	

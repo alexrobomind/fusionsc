@@ -498,7 +498,7 @@ async def findAxis(
 		adaptive.relativeTolerance = relativeErrorTolerance
 		adaptive.min = minStepSize
 		adaptive.max = maxStepSize
-		adaptive.errorUnit.integratedOver = 2 * np.pi * np.amax(np.sqrt(startPoint[0]**2 + startPoint[1]**2))
+		adaptive.errorUnit.integratedOver = 2 * np.pi * np.amax(np.sqrt(startPoint[0]**2 + startPoint[1]**2)) * nTurns
 	
 	if batch:
 		response = await _tracer().findAxisBatch(startPoint, request)
@@ -508,7 +508,7 @@ async def findAxis(
 	axis = np.asarray(response.axis)
 	x, y, z = axis
 	phiVals = np.arctan2(y, x)
-	dPhi = phiVals[1] - phiVals[0]
+	dPhi = phiVals[...,1] - phiVals[...,0]
 	dPhi = ((dPhi + np.pi) % (2 * np.pi)) - np.pi
 	dPhi = np.mean(dPhi)
 	
@@ -524,7 +524,7 @@ async def findAxis(
 		swap = True
 	
 	if swap:
-		axis = axis[:, ::-1]
+		axis = axis[..., ::-1]
 	
 	return np.asarray(response.pos), axis
 
