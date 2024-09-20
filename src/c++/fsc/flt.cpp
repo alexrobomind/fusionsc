@@ -1130,7 +1130,7 @@ struct FLTImpl : public FLT::Server {
 				nIterResult = nIterResult.then(cp(performIteration));
 			}
 			
-			jobs.add(nIterResult.then(mv(traceAxis), [](kj::Exception&) {}));
+			jobs.add(nIterResult.then(mv(traceAxis), [](kj::Exception&&) {}));
 		}
 		
 		return kj::joinPromisesFailFast(jobs.finish())
