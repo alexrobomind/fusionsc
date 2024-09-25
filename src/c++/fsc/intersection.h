@@ -97,7 +97,7 @@ inline EIGEN_DEVICE_FUNC double intersectGridElement(const Vec3d& p1, const Vec3
 
 inline EIGEN_DEVICE_FUNC double rayCastTriangle(const Vec3d point, const Vec3d direction, const Vec3d triangle[3]) {
 	using Eigen::seq;
-	using Eigen::all;
+	using Eigen::indexing::all;
 	
 	Vec3d v = point - triangle[0];
 	

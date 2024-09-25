@@ -197,6 +197,8 @@ endif()
 
 # ----------- Eigen3 -----------
 
+set(EIGEN_BUILD_CMAKE_PACKAGE On)
+
 add_vendored_dependency(
 	PREFIX vendor/eigen3
 	NAME Eigen3

@@ -23,7 +23,7 @@ Temporary<HFCamProjection> createProjection(
 	double invScaling, double projectivity, // Projection scaling formula. w = scaling + projectivity * <target - origin, x> / |target - origin|
 	HFCamProjection::Builder result
 ) {
-	using Eigen::all;
+	using Eigen::indexing::all;
 	using Eigen::seq;
 	auto xyz = seq(0, 2);
 	
@@ -112,7 +112,7 @@ struct HFProjectionStruct {
 };
 
 Vec3d applyProjection(const HFProjectionStruct& projection, Vec3d position) {
-	using Eigen::all;
+	using Eigen::indexing::all;
 	using Eigen::seq;
 	auto xyz = seq(0, 2);
 	
@@ -133,7 +133,7 @@ Vec3d applyProjection(const HFProjectionStruct& projection, Vec3d position) {
 }
 
 Mat3d projectionDerivative(const HFProjectionStruct& projection, Vec3d position) {
-	using Eigen::all;
+	using Eigen::indexing::all;
 	using Eigen::seq;
 	auto xyz = seq(0, 2);
 	
@@ -165,7 +165,7 @@ Mat3d projectionDerivative(const HFProjectionStruct& projection, Vec3d position)
 }
 
 void rasterizeTriangle(const HFProjectionStruct& projection, Eigen::MatrixXd& depthBuffer, Eigen::MatrixXd& determinantBuffer, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3, double edgeTolerance, double depthTolerance) {
-	using Eigen::all;
+	using Eigen::indexing::all;
 	using Eigen::seq;
 	auto xyz = seq(0, 2);
 	
