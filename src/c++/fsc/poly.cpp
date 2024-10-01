@@ -19,7 +19,7 @@ struct PolyNode {
 };
 
 Maybe<Vec2d> locateInTriangle(Vec2d p1, Vec2d p2, Vec2d p3, Vec2d x) {
-	using Eigen::all;
+	using Eigen::indexing::all;
 	Mat2d m;
 	m(all, 0) = p2 - p1;
 	m(all, 1) = p3 - p1;
@@ -34,7 +34,7 @@ Maybe<Vec2d> locateInTriangle(Vec2d p1, Vec2d p2, Vec2d p3, Vec2d x) {
 }
 
 double doubleArea(Vec2d p1, Vec2d p2, Vec2d p3) {
-	using Eigen::all;
+	using Eigen::indexing::all;
 	Mat2d m;
 	m(all, 0) = p2 - p1;
 	m(all, 1) = p3 - p1;

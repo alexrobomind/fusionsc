@@ -185,8 +185,9 @@ TEST_CASE("calc-surf") {
 		auto ci = iotaReq.getFieldLineAnalysis().initCalculateIota();
 		ci.setUnwrapEvery(1);
 		
-		auto rAx = ci.initRAxis(nAxis);
-		auto zAx = ci.initZAxis(nAxis);
+		auto ax = ci.getAxis().initShared();
+		auto rAx = ax.initR(nAxis);
+		auto zAx = ax.initZ(nAxis);
 		
 		for(auto i : kj::range(0, nAxis)) {
 			double x = axis[i];

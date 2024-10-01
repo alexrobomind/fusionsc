@@ -400,6 +400,12 @@ public:
 	
 	// Move assignment operator
 	LocalDataRef<T>& operator=(LocalDataRef<T>&& other);
+	
+	/**
+	 * Creates a copy of this DataRef (sharing the data) that can be safely
+	 * passed to other threads.
+	 */
+	LocalDataRef<T> deepFork();
 
 	LocalDataRef() = delete;
 	

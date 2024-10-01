@@ -1,0 +1,1 @@
+gpg --output /decrypted/w7xdb.sqlite --passphrase "${W7X_KEY}" --batch --yes --decrypt /encrypted/w7xdb.sqlite.gpg

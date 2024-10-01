@@ -11,6 +11,7 @@
 #include "nudft.h"
 
 #include <algorithm>
+#include <limits>
 
 #include <kj/vector.h>
 // #include <capnp/serialize-text.h>
@@ -63,13 +64,14 @@ struct TraceCalculation {
 	FSC_READER_MAPPING(::fsc, IndexedGeometry::IndexData) indexData;
 	FSC_READER_MAPPING(::fsc, MergedGeometry) geometryData;
 	FSC_READER_MAPPING(::fsc, ReversibleFieldlineMapping) mappingData;
+	FSC_READER_MAPPING(::fsc, GeometryMapping::MappingData) geoMappingData;
 	
 	uint32_t eventBufferSize = 0;
 		
 	TraceCalculation(DeviceBase& device,
 		Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<const Tensor<double, 4>>> newField, Tensor<double, 2> positions,
 		IndexedGeometry::Reader geometryIndex, Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData, Maybe<LocalDataRef<MergedGeometry>> geometryData,
-		Maybe<LocalDataRef<ReversibleFieldlineMapping>> mappingData,
+		Maybe<LocalDataRef<ReversibleFieldlineMapping>> mappingData, Maybe<LocalDataRef<GeometryMapping::MappingData>> geoMappingData,
 		FLTConfig::Reader config
 	) :
 		device(device.addRef()),
@@ -83,7 +85,9 @@ struct TraceCalculation {
 		
 		indexData(FSC_MAP_READER(::fsc, IndexedGeometry::IndexData, indexData, device, true)),
 		geometryData(FSC_MAP_READER(::fsc, MergedGeometry, geometryData, device, true)),
-		mappingData(FSC_MAP_READER(::fsc, ReversibleFieldlineMapping, mappingData, device, true))
+		
+		mappingData(FSC_MAP_READER(::fsc, ReversibleFieldlineMapping, mappingData, device, true)),
+		geoMappingData(FSC_MAP_READER(::fsc, GeometryMapping::MappingData, geoMappingData, device, true))
 	{		
 		if(request.getServiceRequest().getRngSeed() == 0) {
 			uint64_t seed;
@@ -190,6 +194,7 @@ struct TraceCalculation {
 		indexData -> updateDevice();
 		geometryData -> updateDevice();
 		mappingData -> updateDevice();
+		geoMappingData -> updateDevice();
 		field -> updateDevice();
 		
 		return round;
@@ -267,7 +272,7 @@ struct TraceCalculation {
 			
 			r.kernelData, FSC_KARG(field, NOCOPY), r.kernelRequest,
 			FSC_KARG(geometryData, NOCOPY), FSC_KARG(indexedGeometry, NOCOPY), FSC_KARG(indexData, NOCOPY),
-			FSC_KARG(mappingData, NOCOPY)
+			FSC_KARG(mappingData, NOCOPY), FSC_KARG(geoMappingData, NOCOPY)
 		);
 	}
 	
@@ -374,7 +379,6 @@ struct FLTImpl : public FLT::Server {
 	FLTImpl(Own<DeviceBase> device, FLTConfig::Reader config) : device(mv(device)), config(config) {}
 	
 	Promise<void> trace(TraceContext ctx) override {
-		// ctx.allowCancellation();
 		auto request = ctx.getParams();
 		
 		// Request validation
@@ -402,29 +406,37 @@ struct FLTImpl : public FLT::Server {
 			}
 		}
 		
-		auto& dataService = getActiveThread().dataService();
-		
-		auto isNull = [&](capnp::Capability::Client c) {
-			return capnp::ClientHook::from(mv(c))->isNull();
-		};
-		
-		auto indexDataRef = request.getGeometry().getData();
-		auto geoDataRef = request.getGeometry().getBase();
-		auto mappingDataRef = request.getMapping();
-		
-		KJ_REQUIRE(request.hasField(), "Must specify a magnetic field");
-		
-		Promise<LocalDataRef<Float64Tensor>> downloadField = dataService.download(request.getField().getData()).eagerlyEvaluate(nullptr);
-		Promise<Maybe<LocalDataRef<IndexedGeometry::IndexData>>> downloadIndexData = dataService.downloadIfNotNull(indexDataRef);
-		Promise<Maybe<LocalDataRef<MergedGeometry>>> downloadGeometryData =	dataService.downloadIfNotNull(geoDataRef).eagerlyEvaluate(nullptr);
-		Promise<Maybe<LocalDataRef<ReversibleFieldlineMapping>>> downloadMappingData = dataService.downloadIfNotNull(mappingDataRef).eagerlyEvaluate(nullptr);
-		
-		// I WANT COROUTINES -.-
-		
-		return downloadIndexData.then([ctx, request, downloadGeometryData = mv(downloadGeometryData), downloadField = mv(downloadField), downloadMappingData = mv(downloadMappingData), this](Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData) mutable {
-		return downloadGeometryData.then([ctx, request, indexData = mv(indexData), downloadField = mv(downloadField), downloadMappingData = mv(downloadMappingData), this](Maybe<LocalDataRef<MergedGeometry>> geometryData) mutable {
-		return downloadField.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), downloadMappingData = mv(downloadMappingData), this](LocalDataRef<Float64Tensor> fieldData) mutable {
-		return downloadMappingData.then([ctx, request, indexData = mv(indexData), geometryData = mv(geometryData), fieldData = mv(fieldData), this](Maybe<LocalDataRef<ReversibleFieldlineMapping>> mappingData) mutable {			
+		return kj::startFiber(65536, [this, ctx, request](kj::WaitScope& ws) mutable {
+			auto& dataService = getActiveThread().dataService();
+			
+			auto isNull = [&](capnp::Capability::Client c) {
+				return capnp::ClientHook::from(mv(c))->isNull();
+			};
+			
+			auto indexDataRef = request.getGeometry().getData();
+			auto geoDataRef = request.getGeometry().getBase();
+			auto mappingDataRef = request.getMapping();
+			
+			DataRef<GeometryMapping::MappingData>::Client geoMappingRef = nullptr;
+			if(request.hasGeometryMapping()) {
+				mappingDataRef = request.getGeometryMapping().getBase();
+				geoMappingRef = request.getGeometryMapping().getData();
+			}
+			
+			KJ_REQUIRE(request.hasField(), "Must specify a magnetic field");
+			
+			auto downloadField = dataService.download(request.getField().getData()).eagerlyEvaluate(nullptr);
+			auto downloadIndexData = dataService.downloadIfNotNull(indexDataRef);
+			auto downloadGeometryData =	dataService.downloadIfNotNull(geoDataRef).eagerlyEvaluate(nullptr);
+			auto downloadMappingData = dataService.downloadIfNotNull(mappingDataRef).eagerlyEvaluate(nullptr);
+			auto downloadGeoMapapping = dataService.downloadIfNotNull(geoMappingRef).eagerlyEvaluate(nullptr);
+			
+			auto indexData = downloadIndexData.wait(ws);
+			auto geometryData = downloadGeometryData.wait(ws);
+			auto fieldData = downloadField.wait(ws);
+			auto mappingData = downloadMappingData.wait(ws);
+			auto geoMappingData = downloadGeoMapapping.wait(ws);
+			
 			// Extract kernel request
 			Temporary<FLTKernelRequest> kernelRequest;
 			kernelRequest.setServiceRequest(request);
@@ -454,14 +466,16 @@ struct FLTImpl : public FLT::Server {
 			Tensor<double, 2> positions = mapTensor<Tensor<double, 2>>(reshapedStartPoints.asReader())
 				-> shuffle(Eigen::array<int, 2>{1, 0});
 			
-			auto calc = heapHeld<TraceCalculation>(
+			TraceCalculation calc(
 				*device, mv(kernelRequest), mv(field), mv(positions),
 				request.getGeometry(), mv(indexData), geometryData,
-				mappingData,
+				mappingData, geoMappingData,
 				config
 			);
+			calc.run().wait(ws);	
 			
-			auto postProcessing = [ctx, calc, request, startPointShape, nStartPoints, geometryData = mv(geometryData)]() mutable {
+			// TODO: This function is WAY TOO LONG. It needs to be broken up into pieces.
+			auto postProcessing = [ctx, &calc, request, startPointShape, nStartPoints, geometryData = mv(geometryData)]() mutable {
 				auto applyPointShape = [&](auto builder, kj::ArrayPtr<const int64_t> preShape, kj::ArrayPtr<const int64_t> postShape) {
 					const size_t shapeSize = startPointShape.size() - 1 + preShape.size() + postShape.size();
 					size_t shapeProd = nStartPoints;
@@ -493,7 +507,7 @@ struct FLTImpl : public FLT::Server {
 				
 				auto resultBuilder = kj::heapArrayBuilder<Temporary<FLTKernelData::Entry>>(nStartPoints);
 				for(size_t i = 0; i < nStartPoints; ++i)
-					resultBuilder.add(calc->consolidateRuns(i));
+					resultBuilder.add(calc.consolidateRuns(i));
 				
 				auto kData = resultBuilder.finish();
 								
@@ -907,179 +921,227 @@ struct FLTImpl : public FLT::Server {
 				}
 			};
 			
-			return calc->run()
-			.then([pp = mv(postProcessing)]() mutable {
-				return getActiveThread().worker().executeAsync(mv(pp));
-			})
-			.attach(calc.x());
-		});
-		});
-		});
+			getActiveThread().worker().executeAsync(mv(postProcessing)).wait(ws);
 		}).attach(thisCap());
 	}
 	
 	Promise<void> findAxis(FindAxisContext ctx) override {
+		auto req = thisCap().findAxisBatchRequest();
+		
+		auto points = req.initPoints();
+		points.setShape({3});
+		points.setData(ctx.getParams().getStartPoint());
+		
+		req.setRequest(ctx.getParams());
+		
+		return req.send()
+		.then([ctx](auto response) mutable {
+			auto results = ctx.initResults();
+			results.setPos(response.getPos().getData());
+			results.setAxis(response.getAxis());
+			results.setMeanField(response.getMeanField().getData()[0]);
+		});
+	}
+		
+	Promise<void> findAxisBatch(FindAxisBatchContext ctx) override {
+		auto points = heapHeld<Tensor<double, 2>>();
+		auto vardimShape = readVardimTensor(ctx.getParams().getPoints(), 1, *points);
+		size_t nPoints = points -> dimension(0);
+		
 		struct IterResult {
 			double r;
 			double z;
 		};
 		
-		auto params = ctx.getParams();
-		auto xyz = params.getStartPoint();
+		auto params = ctx.getParams().getRequest();
+		auto nPhi = params.getNPhi();
+		auto islandM = params.getIslandM();
 		
-		KJ_REQUIRE(xyz.size() == 3);
+		auto axis = heapHeld<Tensor<double, 3>>(nPhi * islandM, nPoints, 3);
+		auto fields = heapHeld<Tensor<double, 1>>(nPoints);
+		auto pos = heapHeld<Tensor<double, 2>>(nPoints, 3);
 		
-		double phi = atan2(xyz[1], xyz[0]);
-		
-		auto performIteration = [this, params, phi](IterResult iter) mutable {
-			double r = iter.r;
-			double z = iter.z;
-			
-			KJ_LOG(INFO,"FLT::findAxis iteration", r, z);
-			
-			bool isNan = false;
-			if(r != r) isNan = true;
-			if(z != z) isNan = true;
-			
-			KJ_REQUIRE(!isNan, "The magnetic axis search failed to converge. This likely means the starting point lies outside the magnetic surface domains. Please specify a different starting point.");
-			
-			// Trace from starting position
-			auto req = thisCap().traceRequest();
-			auto sp = req.initStartPoints();
-			
-			sp.setShape({3});
-			sp.setData({r * cos(phi), r * sin(phi), z});
-			req.setTurnLimit(params.getNTurns());
-			req.setStepSize(params.getStepSize());
-			req.setField(params.getField());
-			
-			if(params.hasMapping())
-				req.setMapping(params.getMapping());
-			
-			if(params.getStepSizeControl().isAdaptive())
-				req.getStepSizeControl().setAdaptive(params.getStepSizeControl().getAdaptive());
-			
-			size_t nSym = params.getField().getGrid().getNSym();
-			auto islandM = params.getIslandM();
-			auto planes = req.initPlanes(nSym);
-			for(auto i : kj::indices(planes)) {
-				planes[i].getOrientation().setPhi(phi + (i + 1) * 2 * pi / nSym);
-			}
-			
-			return req.send()
-			.then([phi, nSym, islandM](capnp::Response<FLTResponse> response) mutable {
-				// After tracing, take mean of points
-				Tensor<double, 3> result;
-				readTensor(response.getPoincareHits(), result);
-				KJ_REQUIRE(result.dimension(1) == nSym);
-				KJ_REQUIRE(result.dimension(2) == 5);
-				
-				uint32_t n = 0;
-				double r = 0;
-				double z = 0;
-				
-				size_t iPoint = 0;
-				for(auto iTurn : kj::range(0, result.dimension(0))) {
-					for(auto iPlane : kj::range(0, result.dimension(1))) {
-						if(++iPoint % islandM == 0) {
-							double x = result(iTurn, iPlane, 0);
-							double y = result(iTurn, iPlane, 1);
-							
-							double rContrib = sqrt(x * x + y * y);
-							double zContrib = result(iTurn, iPlane, 2);
-							
-							r += rContrib;
-							z += zContrib;
-							++n;
-							
-							// KJ_DBG(iPlane, iTurn, iPoint, rContrib, zContrib);
-						}
-					}
-				}
-				
-				return IterResult { r / n, z / n };
-			});
-		};
-		
-		auto traceAxis = [this, ctx, params, phi](IterResult iter) mutable {
-			double r = iter.r;
-			double z = iter.z;
-			
-			auto islandM = params.getIslandM();
-			
-			auto req = thisCap().traceRequest();
-			auto sp = req.initStartPoints();
-			sp.setShape({3});
-			sp.setData({r * cos(phi), r * sin(phi), z});
-			
-			// Copy position into output
-			ctx.getResults().setPos(sp.getData());
-			
-			req.setTurnLimit(islandM);
-			req.setStepSize(params.getStepSize());
-			req.setField(params.getField());
-			
-			if(params.hasMapping())
-				req.setMapping(params.getMapping());
-			
-			if(params.getStepSizeControl().isAdaptive())
-				req.getStepSizeControl().setAdaptive(params.getStepSizeControl().getAdaptive());
-			
-			// req.setRecordEvery(1);
-			auto nPhi = params.getNPhi();
-			auto planes = req.initPlanes(nPhi);
-			for(auto i : kj::indices(planes))
-				planes[i].getOrientation().setPhi(2 * i * pi / nPhi);
-			
-			return req.send()
-			.then([ctx, nPhi, islandM, phi](capnp::Response<FLTResponse> response) mutable {
-				// Extract field line
-				Tensor<double, 3> pcHits;
-				readTensor(response.getPoincareHits(), pcHits);
-				KJ_REQUIRE(pcHits.dimension(0) == islandM);    // nTurns
-				KJ_REQUIRE(pcHits.dimension(1) == nPhi); // nPlanes
-				KJ_REQUIRE(pcHits.dimension(2) == 5);    // x, y, z, lc_fwd, lc_bwd
-				
-				Tensor<double, 2> result(nPhi * islandM, 3);
-				
-				double phiStartPositive = fmod(phi + 2 * pi, 2 * pi);
-				
-				for(auto iTurn : kj::range(0, islandM)) {
-					for(auto iPlane : kj::range(0, nPhi)) {
-						double planePhi = 2 * iPlane * pi / nPhi;
-						
-						// Planes that are before phiStart need to be extracted from
-						// the previous turn. This includes the starting plane.
-						size_t iTurnActual = planePhi > phiStartPositive ? iTurn : iTurn + (islandM - 1);
-						iTurnActual %= islandM;
-						
-						result(iPlane + iTurn * nPhi, 0) = pcHits(iTurnActual, iPlane, 0);
-						result(iPlane + iTurn * nPhi, 1) = pcHits(iTurnActual, iPlane, 1);
-						result(iPlane + iTurn * nPhi, 2) = pcHits(iTurnActual, iPlane, 2);
-					}
-				}
-				
-				writeTensor(result, ctx.getResults().getAxis());
-				
-				// Compute mean field along axis
-				double accum = 0;
-				for(double fs : response.getFieldStrengths().getData()) {
-					accum += fs;
-				}
-				ctx.getResults().setMeanField(accum / response.getFieldStrengths().getData().size());
-			});
-		};
-		
-		double r = sqrt(xyz[0] * xyz[0] + xyz[1] * xyz[1]);
-		double z = xyz[2];
-		
-		Promise<IterResult> nIterResult = IterResult { r, z };
-		
-		for(auto iteration : kj::range(0, params.getNIterations())) {
-			nIterResult = nIterResult.then(cp(performIteration));
+		{
+			constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+			axis -> setConstant(nan);
+			fields -> setConstant(nan);
+			pos -> setConstant(nan);
 		}
 		
-		return nIterResult.then(mv(traceAxis));
+		Temporary<ComputedField> field =  params.getField();
+		field.setData(
+			getActiveThread().dataService().download(field.getData())
+			.then([](auto ref) -> DataRef<Float64Tensor>::Client { return ref; })
+		);
+						
+		auto jobs = kj::heapArrayBuilder<Promise<void>>(nPoints);
+		for(auto iPoint : kj::range(0, nPoints)) {
+			double x = (*points)(iPoint, 0);
+			double y = (*points)(iPoint, 1);
+			double z = (*points)(iPoint, 2);
+			
+			double phi = atan2(y, x);
+			
+			auto performIteration = [this, params, phi, field = field.asReader()](IterResult iter) mutable {
+				double r = iter.r;
+				double z = iter.z;
+				
+				KJ_LOG(INFO,"FLT::findAxis iteration", r, z);
+				
+				bool isNan = false;
+				if(r != r) isNan = true;
+				if(z != z) isNan = true;
+				
+				KJ_REQUIRE(!isNan, "The magnetic axis search failed to converge. This likely means the starting point lies outside the magnetic surface domains. Please specify a different starting point.");
+				
+				// Trace from starting position
+				auto req = thisCap().traceRequest();
+				auto sp = req.initStartPoints();
+				
+				sp.setShape({3});
+				sp.setData({r * cos(phi), r * sin(phi), z});
+				req.setTurnLimit(params.getNTurns());
+				req.setStepSize(params.getStepSize());
+				req.setField(field);
+				
+				if(params.hasMapping())
+					req.setMapping(params.getMapping());
+				
+				if(params.hasGeometryMapping())
+					req.setGeometryMapping(params.getGeometryMapping());
+				
+				if(params.getStepSizeControl().isAdaptive())
+					req.getStepSizeControl().setAdaptive(params.getStepSizeControl().getAdaptive());
+				
+				size_t nSym = params.getField().getGrid().getNSym();
+				auto islandM = params.getIslandM();
+				auto planes = req.initPlanes(nSym);
+				for(auto i : kj::indices(planes)) {
+					planes[i].getOrientation().setPhi(phi + (i + 1) * 2 * pi / nSym);
+				}
+				
+				return req.send()
+				.then([phi, nSym, islandM](capnp::Response<FLTResponse> response) mutable {
+					// After tracing, take mean of points
+					Tensor<double, 3> result;
+					readTensor(response.getPoincareHits(), result);
+					KJ_REQUIRE(result.dimension(1) == nSym);
+					KJ_REQUIRE(result.dimension(2) == 5);
+					
+					uint32_t n = 0;
+					double r = 0;
+					double z = 0;
+					
+					size_t iPoint = 0;
+					for(auto iTurn : kj::range(0, result.dimension(0))) {
+						for(auto iPlane : kj::range(0, result.dimension(1))) {
+							if(++iPoint % islandM == 0) {
+								double x = result(iTurn, iPlane, 0);
+								double y = result(iTurn, iPlane, 1);
+								
+								double rContrib = sqrt(x * x + y * y);
+								double zContrib = result(iTurn, iPlane, 2);
+								
+								if(rContrib == rContrib) {								
+									r += rContrib;
+									z += zContrib;
+									++n;
+								}
+							}
+						}
+					}
+					
+					return IterResult { r / n, z / n };
+				});
+			};
+			
+			auto traceAxis = [this, params, phi, iPoint, field = field.asReader(), &axis = *axis, &fields = *fields, &pos = *pos](IterResult iter) mutable {
+				double r = iter.r;
+				double z = iter.z;
+				
+				auto islandM = params.getIslandM();
+				
+				auto req = thisCap().traceRequest();
+				auto sp = req.initStartPoints();
+				sp.setShape({3});
+				sp.setData({r * cos(phi), r * sin(phi), z});
+				
+				// Copy position into output
+				pos(iPoint, 0) = r * cos(phi);
+				pos(iPoint, 1) = r * sin(phi);
+				pos(iPoint, 2) = z;
+				
+				req.setTurnLimit(islandM);
+				req.setStepSize(params.getStepSize());
+				req.setField(field);
+				
+				if(params.hasMapping())
+					req.setMapping(params.getMapping());
+				
+				if(params.getStepSizeControl().isAdaptive())
+					req.getStepSizeControl().setAdaptive(params.getStepSizeControl().getAdaptive());
+				
+				// req.setRecordEvery(1);
+				auto nPhi = params.getNPhi();
+				auto planes = req.initPlanes(nPhi);
+				for(auto i : kj::indices(planes))
+					planes[i].getOrientation().setPhi(2 * i * pi / nPhi);
+				
+				return req.send()
+				.then([nPhi, islandM, phi, &axis, &fields, iPoint](capnp::Response<FLTResponse> response) mutable {
+					// Extract field line
+					Tensor<double, 3> pcHits;
+					readTensor(response.getPoincareHits(), pcHits);
+					KJ_REQUIRE(pcHits.dimension(0) == islandM);    // nTurns
+					KJ_REQUIRE(pcHits.dimension(1) == nPhi); // nPlanes
+					KJ_REQUIRE(pcHits.dimension(2) == 5);    // x, y, z, lc_fwd, lc_bwd
+					
+					double phiStartPositive = fmod(phi + 2 * pi, 2 * pi);
+					
+					for(auto iTurn : kj::range(0, islandM)) {
+						for(auto iPlane : kj::range(0, nPhi)) {
+							double planePhi = 2 * iPlane * pi / nPhi;
+							
+							// Planes that are before phiStart need to be extracted from
+							// the previous turn. This includes the starting plane.
+							size_t iTurnActual = planePhi > phiStartPositive ? iTurn : iTurn + (islandM - 1);
+							iTurnActual %= islandM;
+							
+							axis(iPlane + iTurn * nPhi, iPoint, 0) = pcHits(iTurnActual, iPlane, 0);
+							axis(iPlane + iTurn * nPhi, iPoint, 1) = pcHits(iTurnActual, iPlane, 1);
+							axis(iPlane + iTurn * nPhi, iPoint, 2) = pcHits(iTurnActual, iPlane, 2);
+						}
+					}
+															
+					// Compute mean field along axis
+					double accum = 0;
+					for(double fs : response.getFieldStrengths().getData()) {
+						accum += fs;
+					}
+					fields(iPoint) = accum / response.getFieldStrengths().getData().size();
+				});
+			};
+						
+			double r = sqrt(x * x + y * y);
+			
+			Promise<IterResult> nIterResult = IterResult { r, z };
+			
+			for(auto iteration : kj::range(0, params.getNIterations())) {
+				nIterResult = nIterResult.then(cp(performIteration));
+			}
+			
+			jobs.add(nIterResult.then(mv(traceAxis)).catch_([iPoint](kj::Exception&& e) {}));
+		}
+		
+		return kj::joinPromisesFailFast(jobs.finish())
+		.then([ctx, axis, fields, pos, vs = mv(vardimShape)]() mutable {
+			auto res = ctx.initResults();
+			
+			writeVardimTensor(*axis, 1, vs, res.getAxis());
+			writeVardimTensor(*pos, 1, vs, res.getPos());
+			writeVardimTensor(*fields, 0, vs, res.getMeanField());
+		})
+		.attach(axis.x(), pos.x(), fields.x(), points.x(), mv(field));
 	}
 	
 	Promise<void> findLcfs(FindLcfsContext ctx) override {
@@ -1132,6 +1194,9 @@ struct FLTImpl : public FLT::Server {
 				
 				if(params.hasMapping())
 					request.setMapping(params.getMapping());
+				
+				if(params.hasGeometryMapping())
+					request.setGeometryMapping(params.getGeometryMapping());
 			
 				if(params.getStepSizeControl().isAdaptive())
 					request.getStepSizeControl().setAdaptive(params.getStepSizeControl().getAdaptive());

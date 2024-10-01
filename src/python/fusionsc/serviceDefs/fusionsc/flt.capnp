@@ -87,6 +87,8 @@ struct GeometryMapping {
 		geometry @0 : Geometry.MergedGeometry;
 		grid @1 : Geometry.CartesianGrid;
 		index @2 : Geometry.IndexedGeometry.IndexData;
+		phi1 @3 : Float64;
+		phi2 @4 : Float64;
 	}
 	struct MappingData {
 		sections @0 : List(SectionData);
@@ -153,6 +155,8 @@ struct FLTRequest {
 	rngSeed @15 : UInt64;
 	
 	mapping @16 : Data.DataRef(ReversibleFieldlineMapping);
+	geometryMapping @41 : GeometryMapping;
+	
 	forward @17 : Bool = true;
 	
 	recordEvery @18 : UInt32;
@@ -161,8 +165,18 @@ struct FLTRequest {
 		noTask @19 : Void;
 		calculateIota : group {
 			unwrapEvery @20 : UInt32;
-			rAxis @21 : List(Float64);
-			zAxis @22 : List(Float64);
+			
+			axis : union {
+				shared : group {
+					r @21 : List(Float64);
+					z @22 : List(Float64);
+				}
+				individual : group {
+					r @42 : Data.Float64Tensor;
+					z @43 : Data.Float64Tensor;
+				}
+			}
+			
 			islandM @37 : UInt32 = 1;
 		}
 		calculateFourierModes : group {			
@@ -274,6 +288,7 @@ struct FindAxisRequest {
 	nPhi @5 : UInt64 = 20;
 	
 	mapping @6 : Data.DataRef(ReversibleFieldlineMapping);
+	geometryMapping @10 : GeometryMapping;
 	
 	stepSizeControl : union {
 		fixed @7 : Void;
@@ -297,6 +312,7 @@ struct FindLcfsRequest {
 	geometry @7 : Geometry.IndexedGeometry;
 	
 	mapping @8 : Data.DataRef(ReversibleFieldlineMapping);
+	geometryMapping @11 : GeometryMapping;
 	
 	stepSizeControl : union {
 		fixed @9 : Void;
@@ -307,7 +323,14 @@ struct FindLcfsRequest {
 interface FLT $Cxx.allowCancellation {
 	trace @0 FLTRequest -> FLTResponse;
 	findAxis @1 FindAxisRequest -> (pos : List(Float64), axis : Data.Float64Tensor, meanField : Float64);
+	# Method to find a magnetic axis for a single starting point.
+	#
+	# Note: It is recommended to use the tensor-based method findAxisBatch instead. This method mostly remains
+	# for network protocol compatibility.
+	
 	findLcfs @2 FindLcfsRequest -> (pos : List(Float64));
+	
+	findAxisBatch @3 (points : Data.Float64Tensor, request : FindAxisRequest) -> (pos : Data.Float64Tensor, axis : Data.Float64Tensor, meanField : Data.Float64Tensor);
 }
 
 struct RFLMRequest {

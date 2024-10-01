@@ -73,7 +73,7 @@ struct MainCls {
 			ArrayPtr<const byte> fuzzerData(buf, len);
 			
 			// Start fusionsc
-			auto l = newLibrary(true);
+			auto l = newLibrary();
 			auto lt = l -> newThread();
 			auto& ws = lt->waitScope();
 			

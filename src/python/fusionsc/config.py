@@ -92,11 +92,19 @@ defaults = {
 		"siteName" : "ipp-hgw",
 		"backend" : "http://fusionsc-site:8888/load-balancer",
 		"resolve" : [
-			{"warehouse" : "remote:w7xdb"}
+			{ "warehouse" : "remote:w7xdb" }
 		],
 		"w7x" : {
 			"defaultCoilsUrl" : "remote:w7xdb#precomputedCoils/cadCoils"
 		}
+	},
+	
+	"fzj" : {
+		"siteName" : "fzj",
+		"backend" : "http://ipp551.ipp.kfa-juelich.de/fusionsc",
+		"resolve" : [
+			{ "warehouse" : "remote:w7xdb" }
+		]
 	}
 }
 

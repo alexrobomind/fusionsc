@@ -9,6 +9,7 @@
 #include "kernels/launch.h"
 
 #include <random>
+#include <list>
 
 #include <kj/map.h>
 
@@ -799,137 +800,140 @@ Promise<void> GeometryLibImpl::index(IndexContext context) {
 	// First we need to download the geometry we want to index
 	return getActiveThread().dataService().download(merged)
 	.then([this, context](LocalDataRef<MergedGeometry> inputRef) mutable {
-		KJ_LOG(INFO, "Beginning indexing operation");
-		
-		// Create output temporary and read information about input
-		auto output = context.getResults().initIndexed();
-		MergedGeometry::Reader input = inputRef.get();
-			
 		auto grid = context.getParams().getGrid();
-		// auto gridSize = grid.getSize();
-		Vec3u gridSize { grid.getNX(), grid.getNY(), grid.getNZ() };
 		
-		size_t totalSize = gridSize[0] * gridSize[1] * gridSize[2];
-		KJ_REQUIRE(totalSize <= MAX_GRID_SIZE, "Maximum indexing grid size exceeded");
-		
-		struct ElRefStruct {
-			uint64_t meshIdx;
-			uint64_t elementIdx;
-		};
-		
-		// Allocate temporary un-aligned storage for grid refs
-		kj::Vector<kj::Vector<ElRefStruct>> tmpRefs(totalSize);
-		tmpRefs.resize(totalSize);
-		
-		// Iterate through all components of geometry
-		for(size_t iEntry = 0; iEntry < input.getEntries().size(); ++iEntry) {
-			// Retrieve mesh
-			auto entry = input.getEntries()[iEntry];
-			auto mesh = entry.getMesh();
-			auto pointData = mesh.getVertices().getData();
-			auto indices = mesh.getIndices();
+		return getActiveThread().worker().executeAsync([inputRef = inputRef.deepFork(), grid]() mutable {
+			MergedGeometry::Reader input = inputRef.get();
+			Vec3u gridSize { grid.getNX(), grid.getNY(), grid.getNZ() };
 			
-			// Iterate over all polygons in mesh to assign them to grid boxes
-			// ... Step 1: Count
-			size_t nPolygons;
-			switch(mesh.which()) {
-				case Mesh::POLY_MESH:
-					nPolygons = mesh.getPolyMesh().size() - 1;
-					break;
-				case Mesh::TRI_MESH:
-					nPolygons = mesh.getIndices().size() / 3;
-					break;
-				default:
-					KJ_FAIL_REQUIRE("Unknown mesh type", mesh.which());
-			}
+			size_t totalSize = gridSize[0] * gridSize[1] * gridSize[2];
+			KJ_REQUIRE(totalSize <= MAX_GRID_SIZE, "Maximum indexing grid size exceeded");
 			
-			// ... Step 2: Iterate
-			for(size_t iPoly = 0; iPoly < nPolygons; ++iPoly) {
-				// Locate polygon in index buffer
-				size_t iStart; size_t iEnd;
+			struct ElRefStruct {
+				uint64_t meshIdx;
+				uint64_t elementIdx;
+			};
+			
+			// Allocate temporary un-aligned storage for grid refs
+			kj::Vector<kj::Vector<ElRefStruct>> tmpRefs(totalSize);
+			tmpRefs.resize(totalSize);
+			
+			// Iterate through all components of geometry
+			for(size_t iEntry = 0; iEntry < input.getEntries().size(); ++iEntry) {
+				// Retrieve mesh
+				auto entry = input.getEntries()[iEntry];
+				auto mesh = entry.getMesh();
+				auto pointData = mesh.getVertices().getData();
+				auto indices = mesh.getIndices();
 				
+				// Iterate over all polygons in mesh to assign them to grid boxes
+				// ... Step 1: Count
+				size_t nPolygons;
 				switch(mesh.which()) {
-					case Mesh::POLY_MESH: {
-						auto pm = mesh.getPolyMesh();
-						iStart = pm[iPoly];
-						iEnd   = pm[iPoly + 1];
+					case Mesh::POLY_MESH:
+						nPolygons = mesh.getPolyMesh().size() - 1;
 						break;
-					}
 					case Mesh::TRI_MESH:
-						iStart = 3 * iPoly;
-						iEnd   = 3 * (iPoly + 1);
+						nPolygons = mesh.getIndices().size() / 3;
 						break;
 					default:
 						KJ_FAIL_REQUIRE("Unknown mesh type", mesh.which());
 				}
-			
-				// Find bounding box for polygon
-				double inf = std::numeric_limits<double>::infinity();
 				
-				Vec3d max { -inf, -inf, -inf };
-				Vec3d min { inf, inf, inf };
-				
-				for(size_t iPoint = iStart; iPoint < iEnd; ++iPoint) {
-					uint32_t index = indices[iPoint];
-					Vec3d point;
-					for(size_t i = 0; i < 3; ++i)
-						point[i] = pointData[3 * index + i];
+				// ... Step 2: Iterate
+				for(size_t iPoly = 0; iPoly < nPolygons; ++iPoly) {
+					// Locate polygon in index buffer
+					size_t iStart; size_t iEnd;
 					
-					max = max.cwiseMax(point);
-					min = min.cwiseMin(point);
+					switch(mesh.which()) {
+						case Mesh::POLY_MESH: {
+							auto pm = mesh.getPolyMesh();
+							iStart = pm[iPoly];
+							iEnd   = pm[iPoly + 1];
+							break;
+						}
+						case Mesh::TRI_MESH:
+							iStart = 3 * iPoly;
+							iEnd   = 3 * (iPoly + 1);
+							break;
+						default:
+							KJ_FAIL_REQUIRE("Unknown mesh type", mesh.which());
+					}
+				
+					// Find bounding box for polygon
+					double inf = std::numeric_limits<double>::infinity();
+					
+					Vec3d max { -inf, -inf, -inf };
+					Vec3d min { inf, inf, inf };
+					
+					for(size_t iPoint = iStart; iPoint < iEnd; ++iPoint) {
+						uint32_t index = indices[iPoint];
+						Vec3d point;
+						for(size_t i = 0; i < 3; ++i)
+							point[i] = pointData[3 * index + i];
+						
+						max = max.cwiseMax(point);
+						min = min.cwiseMin(point);
+					}
+				
+					// Locate bounding box points in grid
+					Vec3u minCell = locationInGrid(min, grid);
+					Vec3u maxCell = locationInGrid(max, grid);
+					
+					// For all points in-between ...
+					for(size_t iX = minCell[0]; iX <= maxCell[0]; ++iX) {
+					for(size_t iY = minCell[1]; iY <= maxCell[1]; ++iY) {
+					for(size_t iZ = minCell[2]; iZ <= maxCell[2]; ++iZ) {
+						// ... add a new ref in the corresponding cell
+						size_t globalIdx = (iX * gridSize[1] + iY) * gridSize[2] + iZ;
+						
+						ElRefStruct& newRef = tmpRefs[globalIdx].add();
+						newRef.meshIdx = iEntry;
+						newRef.elementIdx = iPoly;
+					}}}
 				}
-			
-				// Locate bounding box points in grid
-				Vec3u minCell = locationInGrid(min, grid);
-				Vec3u maxCell = locationInGrid(max, grid);
 				
-				// For all points in-between ...
-				for(size_t iX = minCell[0]; iX <= maxCell[0]; ++iX) {
-				for(size_t iY = minCell[1]; iY <= maxCell[1]; ++iY) {
-				for(size_t iZ = minCell[2]; iZ <= maxCell[2]; ++iZ) {
-					// ... add a new ref in the corresponding cell
-					size_t globalIdx = (iX * gridSize[1] + iY) * gridSize[2] + iZ;
-					
-					ElRefStruct& newRef = tmpRefs[globalIdx].add();
-					newRef.meshIdx = iEntry;
-					newRef.elementIdx = iPoly;
-				}}}
+				// KJ_LOG(INFO, "Processed mesh", iEntry, input.getEntries().size());
 			}
 			
-			// KJ_LOG(INFO, "Processed mesh", iEntry, input.getEntries().size());
-		}
-		
-		// Set up output data. This creates a packed representation of the index
-		
-		// Set up output (including shape)
-		Temporary<IndexedGeometry::IndexData> indexData;
-		auto shapedRefs = indexData.initGridContents();
-		auto shapedRefsShape = shapedRefs.initShape(3);
-		for(size_t i = 0; i < 3; ++i)
-			shapedRefsShape.set(i, gridSize[i]);
-		
-		auto refs = shapedRefs.initData(totalSize);
-		
-		// Copy data into output
-		for(size_t i = 0; i < totalSize; ++i) {
-			auto& in = tmpRefs[i];
-			auto out = refs.init(i, in.size());
+			// Set up output data. This creates a packed representation of the index
 			
-			for(size_t iInner = 0; iInner < in.size(); ++iInner) {
-				auto outRef = out[iInner];
-				outRef.setMeshIndex(in[iInner].meshIdx);
-				outRef.setElementIndex(in[iInner].elementIdx);
+			// Set up output (including shape)
+			Temporary<IndexedGeometry::IndexData> indexData;
+			auto shapedRefs = indexData.initGridContents();
+			auto shapedRefsShape = shapedRefs.initShape(3);
+			for(size_t i = 0; i < 3; ++i)
+				shapedRefsShape.set(i, gridSize[i]);
+			
+			auto refs = shapedRefs.initData(totalSize);
+			
+			// Copy data into output
+			for(size_t i = 0; i < totalSize; ++i) {
+				auto& in = tmpRefs[i];
+				auto out = refs.init(i, in.size());
+				
+				for(size_t iInner = 0; iInner < in.size(); ++iInner) {
+					auto outRef = out[iInner];
+					outRef.setMeshIndex(in[iInner].meshIdx);
+					outRef.setElementIndex(in[iInner].elementIdx);
+				}
+				
+				in.clear();
 			}
 			
-			in.clear();
-		}
-		
-		LocalDataRef<IndexedGeometry::IndexData> indexDataRef = getActiveThread().dataService().publish(indexData.asReader());
-		indexData = nullptr;
-		
-		output.setGrid(grid);
-		output.setBase(inputRef);
-		output.setData(mv(indexDataRef));
+			return indexData;
+		})
+		.then([context, grid, inputRef](auto indexData) mutable {
+			// Create output temporary and read information about input
+			auto output = context.getResults().initIndexed();
+			
+			LocalDataRef<IndexedGeometry::IndexData> indexDataRef = getActiveThread().dataService().publish(indexData.asReader());
+			indexData = nullptr;
+			
+			output.setGrid(grid);
+			output.setBase(inputRef);
+			output.setData(mv(indexDataRef));
+		});
 	});
 }
 
@@ -1021,131 +1025,131 @@ Promise<void> GeometryLibImpl::reduce(ReduceContext context) {
 	
 	return getActiveThread().dataService().download(ref)
 	.then([context, params](LocalDataRef<MergedGeometry> localRef) mutable {
-		KJ_LOG(INFO, "Beginning reduce operation");
-		auto geometry = localRef.get();
-		
-		auto entries = geometry.getEntries();
-		kj::Vector<Temporary<Mesh>> meshesOut;
-		
-		uint32_t iEntry = 0;
-		
-		while(iEntry < entries.size()) {
-			kj::Vector<Mesh::Reader> meshes;
+		return getActiveThread().worker().executeAsync([localRef = localRef.deepFork(), params]() mutable {
+			auto geometry = localRef.get();
+			auto entries = geometry.getEntries();
+			kj::Vector<Temporary<Mesh>> meshesOut;
 			
-			uint32_t nVertTot = 0;
-			uint32_t nIndTot = 0;
+			uint32_t iEntry = 0;
 			
 			while(iEntry < entries.size()) {
-				auto mesh = entries[iEntry].getMesh();
+				kj::Vector<Mesh::Reader> meshes;
 				
-				uint32_t nVert = mesh.getVertices().getShape()[0];
-				uint32_t nInd = mesh.getIndices().size();
+				uint32_t nVertTot = 0;
+				uint32_t nIndTot = 0;
 				
-				if(meshes.size() > 0) {
-					if(nVertTot + nVert > params.getMaxVertices())
-						break;
+				while(iEntry < entries.size()) {
+					auto mesh = entries[iEntry].getMesh();
 					
-					if(nIndTot + nInd > params.getMaxIndices())
-						break;
-				}
-				
-				meshes.add(mesh);
-				nVertTot += nVert;
-				nIndTot  += nInd;
-				++iEntry;
-			}
-			
-			Temporary<Mesh> newMesh;
-			newMesh.initVertices().setShape({nVertTot, 3});
-			auto vertData = newMesh.getVertices().initData(3 * nVertTot);
-			auto indData = newMesh.initIndices(nIndTot);
-			{
-				uint32_t iVert = 0;
-				uint32_t iInd = 0;
-				
-				for(auto mesh : meshes) {
-					auto indIn = mesh.getIndices();
-					auto vertIn = mesh.getVertices().getData();
+					uint32_t nVert = mesh.getVertices().getShape()[0];
+					uint32_t nInd = mesh.getIndices().size();
 					
-					// Copy indices with appropriate shift
-					for(auto i : kj::indices(mesh.getIndices())) {
-						indData.set(i + iInd, indIn[i] + iVert);
-					}
-					
-					// Copy vertices
-					for(auto i : kj::indices(vertIn)) {
-						vertData.set(i + 3 * iVert, vertIn[i]);
-					}
-					
-					uint32_t nInd = indIn.size();
-					uint32_t nVert = vertIn.size() / 3;
-					
-					iInd += nInd;
-					iVert += nVert;
-				}
-			}
-			
-			// Copy polygon information
-			bool allTri = true;
-			for(auto mesh : meshes) {
-				if(!mesh.isTriMesh()) {
-					allTri = false;
-					break;
-				}
-			}
-			
-			if(allTri) {
-				newMesh.setTriMesh();
-			} else {
-				// Meh, we need to copy all the polygon data
-				uint32_t polyCount = 0;
-				for(auto mesh : meshes) {
-					switch(mesh.which()) {
-						case Mesh::TRI_MESH:
-							polyCount += mesh.getIndices().size() / 3;
+					if(meshes.size() > 0) {
+						if(nVertTot + nVert > params.getMaxVertices())
 							break;
-						case Mesh::POLY_MESH:
-							polyCount += mesh.getPolyMesh().size();
+						
+						if(nIndTot + nInd > params.getMaxIndices())
 							break;
-						default:
-							KJ_FAIL_REQUIRE("Unknown mesh type encountered in reduce operation");
 					}
+					
+					meshes.add(mesh);
+					nVertTot += nVert;
+					nIndTot  += nInd;
+					++iEntry;
 				}
 				
-				auto polys = newMesh.initPolyMesh(polyCount);
-				uint32_t iPoly = 0;
-				uint32_t indexOffset = 0;
-				
-				for(auto mesh : meshes) {
-					if(mesh.isTriMesh()) {
-						for(auto i : kj::range(0, mesh.getIndices().size() / 3)) {
-							polys.set(iPoly++, 3 * i + indexOffset);
+				Temporary<Mesh> newMesh;
+				newMesh.initVertices().setShape({nVertTot, 3});
+				auto vertData = newMesh.getVertices().initData(3 * nVertTot);
+				auto indData = newMesh.initIndices(nIndTot);
+				{
+					uint32_t iVert = 0;
+					uint32_t iInd = 0;
+					
+					for(auto mesh : meshes) {
+						auto indIn = mesh.getIndices();
+						auto vertIn = mesh.getVertices().getData();
+						
+						// Copy indices with appropriate shift
+						for(auto i : kj::indices(mesh.getIndices())) {
+							indData.set(i + iInd, indIn[i] + iVert);
 						}
-					} else {
-						for(uint32_t poly : mesh.getPolyMesh()) {
-							polys.set(iPoly++, poly + indexOffset);
+						
+						// Copy vertices
+						for(auto i : kj::indices(vertIn)) {
+							vertData.set(i + 3 * iVert, vertIn[i]);
+						}
+						
+						uint32_t nInd = indIn.size();
+						uint32_t nVert = vertIn.size() / 3;
+						
+						iInd += nInd;
+						iVert += nVert;
+					}
+				}
+				
+				// Copy polygon information
+				bool allTri = true;
+				for(auto mesh : meshes) {
+					if(!mesh.isTriMesh()) {
+						allTri = false;
+						break;
+					}
+				}
+				
+				if(allTri) {
+					newMesh.setTriMesh();
+				} else {
+					// Meh, we need to copy all the polygon data
+					uint32_t polyCount = 0;
+					for(auto mesh : meshes) {
+						switch(mesh.which()) {
+							case Mesh::TRI_MESH:
+								polyCount += mesh.getIndices().size() / 3;
+								break;
+							case Mesh::POLY_MESH:
+								polyCount += mesh.getPolyMesh().size();
+								break;
+							default:
+								KJ_FAIL_REQUIRE("Unknown mesh type encountered in reduce operation");
 						}
 					}
 					
-					indexOffset += mesh.getIndices().size();
+					auto polys = newMesh.initPolyMesh(polyCount);
+					uint32_t iPoly = 0;
+					uint32_t indexOffset = 0;
+					
+					for(auto mesh : meshes) {
+						if(mesh.isTriMesh()) {
+							for(auto i : kj::range(0, mesh.getIndices().size() / 3)) {
+								polys.set(iPoly++, 3 * i + indexOffset);
+							}
+						} else {
+							for(uint32_t poly : mesh.getPolyMesh()) {
+								polys.set(iPoly++, poly + indexOffset);
+							}
+						}
+						
+						indexOffset += mesh.getIndices().size();
+					}
 				}
+				
+				meshesOut.add(mv(newMesh));
+			}
+							
+			Temporary<MergedGeometry> merged;
+			auto outEntries = merged.initEntries(meshesOut.size());
+			
+			for(auto i : kj::indices(outEntries)) {
+				outEntries[i].setMesh(meshesOut[i]);
+				meshesOut[i] = nullptr;
 			}
 			
-			meshesOut.add(mv(newMesh));
-		}
-		
-		KJ_LOG(INFO, "Reduction complete, publishing results", entries.size(), meshesOut.size());
-		
-		Temporary<MergedGeometry> merged;
-		auto outEntries = merged.initEntries(meshesOut.size());
-		
-		for(auto i : kj::indices(outEntries)) {
-			outEntries[i].setMesh(meshesOut[i]);
-			meshesOut[i] = nullptr;
-		}
-		
-		context.initResults().setRef(getActiveThread().dataService().publish(mv(merged)));
-		KJ_LOG(INFO, "Reduction published");
+			return merged;
+		})
+		.then([context](auto merged) mutable {
+			context.initResults().setRef(getActiveThread().dataService().publish(mv(merged)));
+		});
 	});
 }
 
@@ -1156,162 +1160,166 @@ Promise<void> GeometryLibImpl::weightedSample(WeightedSampleContext context) {
 	auto geoRef = mergeRequest.send().getRef();
 	return getActiveThread().dataService().download(geoRef)
 	.then([context](LocalDataRef<MergedGeometry> geoRef) mutable {
-		auto geo = geoRef.get();
-		
-		struct IndexKey {
-			int ix; int iy; int iz;
-			
-			IndexKey(Vec3d x, double scale) :
-				ix(x(0) / scale), iy(x(1) / scale), iz(x(2) / scale)
-			{}
-			
-			bool operator==(const IndexKey& o) {
-				if(ix != o.ix) return false;
-				if(iy != o.iy) return false;
-				if(iz != o.iz) return false;
-				return true;
-			}
-			
-			bool operator<(const IndexKey& other) {
-				if(ix < other.ix) return true;
-				if(iy < other.iy) return true;
-				return iz < other.iz;
-			}
-			
-			unsigned int hashCode() {
-				return kj::hashCode(ix, iy, iz);
-			}
-		};
-		
-		struct CellData {
-			double totalArea;
-			Vec3d weightedCenter;
-						
-			CellData(double area, Vec3d center) :
-				totalArea(area), weightedCenter(center)
-			{}
-			
-			CellData& operator+=(const CellData& o) {
-				totalArea += o.totalArea;
-				weightedCenter += o.weightedCenter;
-				return *this;
-			}
-		};
-		
-		using MapType = kj::TreeMap<IndexKey, CellData>;
-		MapType data;
-		
 		double scale = context.getParams().getScale();
-		
-		uint_fast32_t rngSeed;
-		getActiveThread().rng().randomize(kj::ArrayPtr<byte>(reinterpret_cast<byte*>(&rngSeed), sizeof(uint_fast32_t)));
-		
-		std::mt19937 rng(rngSeed);
-		std::uniform_real_distribution<double> pDist(0, 1);
-		
-		auto processTriangle = [&](Vec3d x1, Vec3d x2, Vec3d x3) {
-			double d12 = (x2 - x1).norm();
-			double d13 = (x3 - x1).norm();
-			double d23 = (x3 - x2).norm();
+		return getActiveThread().worker().executeAsync([geoRef = geoRef.deepFork(), scale]() mutable {
+			auto geo = geoRef.get();
 			
-			double length = std::max({d12, d23, d13});
-			double area = (x2 - x1).cross(x3 - x1).norm();
-			
-			size_t nPoints = std::max(length / scale, area / (scale * scale));
-			nPoints = std::max(nPoints, (size_t) 1);
-			
-			for(auto i : kj::range(0, nPoints)) {
-				double tx = pDist(rng);
-				double ty = pDist(rng);
+			struct IndexKey {
+				int ix; int iy; int iz;
 				
-				if(ty > tx)
-					std::swap(tx, ty);
+				IndexKey(Vec3d x, double scale) :
+					ix(x(0) / scale), iy(x(1) / scale), iz(x(2) / scale)
+				{}
 				
-				Vec3d x = x1 + (x2 - x1) * tx + (x3 - x2) * ty;
+				bool operator==(const IndexKey& o) {
+					if(ix != o.ix) return false;
+					if(iy != o.iy) return false;
+					if(iz != o.iz) return false;
+					return true;
+				}
 				
-				IndexKey key(x, scale);
-				CellData value(area / nPoints, area / nPoints * x);
+				bool operator<(const IndexKey& other) {
+					if(ix < other.ix) return true;
+					if(iy < other.iy) return true;
+					return iz < other.iz;
+				}
 				
-				data.upsert(
-					key, value,
-					[](CellData& existing, CellData&& update) {
-						existing += update;
-					}
-				);
-			}
-		};
-		
-		for(auto e : geo.getEntries()) {
-			auto mesh = e.getMesh();
-			
-			auto vertexData = mesh.getVertices().getData();
-			auto indices = mesh.getIndices();
-			
-			size_t nPoints = vertexData.size() / 3;
-		
-			auto loadPoint = [&](size_t offset) {
-				size_t i = indices[offset];
-				
-				double x = vertexData[3 * i + 0];
-				double y = vertexData[3 * i + 1];
-				double z = vertexData[3 * i + 2];
-				
-				return Vec3d(x, y, z);
+				unsigned int hashCode() {
+					return kj::hashCode(ix, iy, iz);
+				}
 			};
 			
-			if(mesh.isTriMesh()) {
-				for(auto i : kj::range(0, indices.size() / 3)) {
-					processTriangle(
-						loadPoint(3 * i + 0),
-						loadPoint(3 * i + 1),
-						loadPoint(3 * i + 2)
+			struct CellData {
+				double totalArea;
+				Vec3d weightedCenter;
+							
+				CellData(double area, Vec3d center) :
+					totalArea(area), weightedCenter(center)
+				{}
+				
+				CellData& operator+=(const CellData& o) {
+					totalArea += o.totalArea;
+					weightedCenter += o.weightedCenter;
+					return *this;
+				}
+			};
+			
+			using MapType = kj::TreeMap<IndexKey, CellData>;
+			MapType data;
+			
+			uint_fast32_t rngSeed;
+			getActiveThread().rng().randomize(kj::ArrayPtr<byte>(reinterpret_cast<byte*>(&rngSeed), sizeof(uint_fast32_t)));
+			
+			std::mt19937 rng(rngSeed);
+			std::uniform_real_distribution<double> pDist(0, 1);
+			
+			auto processTriangle = [&](Vec3d x1, Vec3d x2, Vec3d x3) {
+				double d12 = (x2 - x1).norm();
+				double d13 = (x3 - x1).norm();
+				double d23 = (x3 - x2).norm();
+				
+				double length = std::max({d12, d23, d13});
+				double area = (x2 - x1).cross(x3 - x1).norm();
+				
+				size_t nPoints = std::max(length / scale, area / (scale * scale));
+				nPoints = std::max(nPoints, (size_t) 1);
+				
+				for(auto i : kj::range(0, nPoints)) {
+					double tx = pDist(rng);
+					double ty = pDist(rng);
+					
+					if(ty > tx)
+						std::swap(tx, ty);
+					
+					Vec3d x = x1 + (x2 - x1) * tx + (x3 - x2) * ty;
+					
+					IndexKey key(x, scale);
+					CellData value(area / nPoints, area / nPoints * x);
+					
+					data.upsert(
+						key, value,
+						[](CellData& existing, CellData&& update) {
+							existing += update;
+						}
 					);
 				}
-			} else if(mesh.isPolyMesh()) {
-				auto polys = mesh.getPolyMesh();
-				KJ_REQUIRE(polys.size() > 0);
+			};
+			
+			for(auto e : geo.getEntries()) {
+				auto mesh = e.getMesh();
 				
-				for(auto iPoly : kj::range(0, polys.size() - 1)) {
-					size_t polyStart = polys[iPoly];
-					size_t polyEnd = polys[iPoly + 1];
+				auto vertexData = mesh.getVertices().getData();
+				auto indices = mesh.getIndices();
+				
+				size_t nPoints = vertexData.size() / 3;
+			
+				auto loadPoint = [&](size_t offset) {
+					size_t i = indices[offset];
 					
-					if(polyEnd - polyStart < 3)
-						continue;
+					double x = vertexData[3 * i + 0];
+					double y = vertexData[3 * i + 1];
+					double z = vertexData[3 * i + 2];
 					
-					Vec3d x1 = loadPoint(polyStart);
-					Vec3d x2 = loadPoint(polyEnd);
-					
-					for(auto i3 : kj::range(polyStart + 2, polyEnd)) {
-						Vec3d x3 = loadPoint(i3);
-						processTriangle(x1, x2, x3);
+					return Vec3d(x, y, z);
+				};
+				
+				if(mesh.isTriMesh()) {
+					for(auto i : kj::range(0, indices.size() / 3)) {
+						processTriangle(
+							loadPoint(3 * i + 0),
+							loadPoint(3 * i + 1),
+							loadPoint(3 * i + 2)
+						);
 					}
+				} else if(mesh.isPolyMesh()) {
+					auto polys = mesh.getPolyMesh();
+					KJ_REQUIRE(polys.size() > 0);
+					
+					for(auto iPoly : kj::range(0, polys.size() - 1)) {
+						size_t polyStart = polys[iPoly];
+						size_t polyEnd = polys[iPoly + 1];
+						
+						if(polyEnd - polyStart < 3)
+							continue;
+						
+						Vec3d x1 = loadPoint(polyStart);
+						Vec3d x2 = loadPoint(polyEnd);
+						
+						for(auto i3 : kj::range(polyStart + 2, polyEnd)) {
+							Vec3d x3 = loadPoint(i3);
+							processTriangle(x1, x2, x3);
+						}
+					}
+				} else {
+					KJ_FAIL_REQUIRE("Unknown mesh type");
 				}
-			} else {
-				KJ_FAIL_REQUIRE("Unknown mesh type");
 			}
-		}
-		
-		auto result = context.initResults();
-		
-		Eigen::Tensor<double, 2> centers(data.size(), 3);
-		auto areas = result.initAreas(data.size());
-		
-		{
-			size_t i = 0;
-			for(auto& row : data) {
-				CellData& resultData = row.value;
-				
-				double area = resultData.totalArea;
-				areas.set(i, area);
-				centers(i, 0) = resultData.weightedCenter[0] / area;
-				centers(i, 1) = resultData.weightedCenter[1] / area;
-				centers(i, 2) = resultData.weightedCenter[2] / area;
-				
-				++i;
+			
+			return data;
+		})
+		.then([context](auto data) mutable {
+			auto result = context.initResults();
+			
+			Eigen::Tensor<double, 2> centers(data.size(), 3);
+			auto areas = result.initAreas(data.size());
+			
+			{
+				size_t i = 0;
+				for(auto& row : data) {
+					auto& resultData = row.value;
+					
+					double area = resultData.totalArea;
+					areas.set(i, area);
+					centers(i, 0) = resultData.weightedCenter[0] / area;
+					centers(i, 1) = resultData.weightedCenter[1] / area;
+					centers(i, 2) = resultData.weightedCenter[2] / area;
+					
+					++i;
+				}
 			}
-		}
-		
-		writeTensor(centers, result.initCenters());
+			
+			writeTensor(centers, result.initCenters());
+		});
 	});
 }
 
@@ -1884,35 +1892,41 @@ Promise<void> GeometryLibImpl::unroll(UnrollContext ctx) {
 	auto geoRef = mergeRequest.send().getRef();
 	return getActiveThread().dataService().download(geoRef)
 	.then([ctx](auto localRef) mutable {
-		auto mergedIn = localRef.get();
 		double phi1 = angle(ctx.getParams().getPhi1());
 		double phi2 = angle(ctx.getParams().getPhi2());
 		bool clip = ctx.getParams().getClip();
 		
-		Temporary<MergedGeometry> result;
-		result.setTagNames(mergedIn.getTagNames());
-		
-		auto entriesIn = mergedIn.getEntries();
-		auto entriesOut = result.initEntries(entriesIn.size());
-		
-		for(auto i : kj::indices(entriesOut)) {
-			entriesOut[i].setTags(entriesIn[i].getTags());
+		return getActiveThread().worker().executeAsync([localRef = localRef.deepFork(), phi1, phi2, clip]() mutable {
+			auto mergedIn = localRef.get();
 			
-			if(!clip) {
-				auto meshIn = entriesIn[i].getMesh();
-				auto meshOut = entriesOut[i].getMesh();
+			Temporary<MergedGeometry> result;
+			result.setTagNames(mergedIn.getTagNames());
 			
-				unrollMesh(phi1, phi2, meshIn, meshOut);
-			} else {				
-				Temporary<Mesh> intermediate1;
-				Temporary<Mesh> intermediate2;
+			auto entriesIn = mergedIn.getEntries();
+			auto entriesOut = result.initEntries(entriesIn.size());
+			
+			for(auto i : kj::indices(entriesOut)) {
+				entriesOut[i].setTags(entriesIn[i].getTags());
 				
-				unrollMesh(phi1, phi2, entriesIn[i].getMesh(), intermediate1);
-				clipMesh(Vec3d(1, 0, 0), -phi1, intermediate1, intermediate2);
-				clipMesh(Vec3d(-1, 0, 0), phi2, intermediate2, entriesOut[i].getMesh());
+				if(!clip) {
+					auto meshIn = entriesIn[i].getMesh();
+					auto meshOut = entriesOut[i].getMesh();
+				
+					unrollMesh(phi1, phi2, meshIn, meshOut);
+				} else {				
+					Temporary<Mesh> intermediate1;
+					Temporary<Mesh> intermediate2;
+					
+					unrollMesh(phi1, phi2, entriesIn[i].getMesh(), intermediate1);
+					clipMesh(Vec3d(1, 0, 0), -phi1, intermediate1, intermediate2);
+					clipMesh(Vec3d(-1, 0, 0), phi2, intermediate2, entriesOut[i].getMesh());
+				}
 			}
-		}
-		
+			
+			return result;
+		});
+	})
+	.then([ctx](auto result) mutable {
 		ctx.initResults().setRef(getActiveThread().dataService().publish(mv(result)));
 	});
 }
@@ -2011,7 +2025,7 @@ void triangulateMesh(Mesh::Reader in, Mesh::Builder out, double maxEdgeLength) {
 				handlePoly(poly[i], poly[i + 1]);
 			}
 		} else {
-			for(auto i = 0; i + 3 <= indices.size(); ++i) {
+			for(auto i = 0; i + 3 <= indices.size(); i += 3) {
 				handlePoly(i, i + 3);
 			}
 		}
@@ -2071,22 +2085,27 @@ Promise<void> GeometryLibImpl::triangulate(TriangulateContext ctx) {
 	
 	return getActiveThread().dataService().download(mr.send().getRef())
 	.then([ctx](auto localRef) mutable {
-		MergedGeometry::Reader merged = localRef.get();
 		double maxEdgeLength = ctx.getParams().getMaxEdgeLength();
 		
-		Temporary<MergedGeometry> result;
-		result.setTagNames(merged.getTagNames());
-		
-		auto entriesIn = merged.getEntries();
-		auto entriesOut = result.initEntries(entriesIn.size());
-		for(auto i : kj::indices(entriesIn)) {
-			auto eIn = entriesIn[i];
-			auto eOut = entriesOut[i];
-			eOut.setTags(eIn.getTags());
-			triangulateMesh(eIn.getMesh(), eOut.getMesh(), maxEdgeLength);
-		}
-		
-		ctx.initResults().setRef(getActiveThread().dataService().publish(mv(result)));
+		return getActiveThread().worker().executeAsync([maxEdgeLength, localRef = localRef.deepFork()]() mutable {
+			MergedGeometry::Reader merged = localRef.get();
+			
+			Temporary<MergedGeometry> result;
+			result.setTagNames(merged.getTagNames());
+			
+			auto entriesIn = merged.getEntries();
+			auto entriesOut = result.initEntries(entriesIn.size());
+			for(auto i : kj::indices(entriesIn)) {
+				auto eIn = entriesIn[i];
+				auto eOut = entriesOut[i];
+				eOut.setTags(eIn.getTags());
+				triangulateMesh(eIn.getMesh(), eOut.getMesh(), maxEdgeLength);
+			}
+			
+			return result;
+		}).then([ctx](auto result) mutable {
+			ctx.initResults().setRef(getActiveThread().dataService().publish(mv(result)));
+		});
 	});
 }
 

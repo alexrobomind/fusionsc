@@ -202,6 +202,14 @@ internal::LocalDataRefBackend::~LocalDataRefBackend() {
 		group.entries.remove(*this);
 }
 
+Own<internal::LocalDataRefBackend> internal::LocalDataRefBackend::deepFork(LocalDataRefGroup& group) {
+	KJ_REQUIRE(capTable.size() == 0, "Can only fork DataRefs with empty capability table");
+	
+	Temporary<DataRefMetadata> newMd(metadata.asReader());
+	
+	return kj::refcounted<LocalDataRefBackend>(group, storeEntry, mv(newMd), nullptr);
+}
+
 Array<capnp::Capability::Client> internal::LocalDataRefBackend::getCapTable() {
 	KJ_REQUIRE(groupLink.isLinked(), "Internal error: getCapTable() called from non-external reference");
 
@@ -288,6 +296,12 @@ internal::LocalDataRefGroup::~LocalDataRefGroup() {
 internal::LocalDataRefImplV2::LocalDataRefImplV2(LocalDataRefBackend& b) :
 	backend(b.addRefExternal())
 {}
+
+Own<internal::LocalDataRefImplV2> internal::LocalDataRefImplV2::deepFork() {
+	auto newGroup = kj::refcounted<LocalDataRefGroup>();
+	auto newBackend = backend -> deepFork(*newGroup);
+	return kj::refcounted<LocalDataRefImplV2>(*newBackend).attach(mv(newGroup));
+}
 
 kj::ArrayPtr<capnp::Capability::Client> internal::LocalDataRefImplV2::getCapTable() {
 	KJ_IF_MAYBE(pTbl, cachedCapTable) {
