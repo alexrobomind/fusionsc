@@ -23,7 +23,7 @@ from typing import Optional, List
 
 class FieldlineMapping(wrappers.RefWrapper):
 	"""
-	A storage container for a mapping offering load / save methods
+	Interface class for field line mappings.
 	"""
 	
 	@asyncFunction
@@ -34,7 +34,16 @@ class FieldlineMapping(wrappers.RefWrapper):
 	):
 		"""
 		Pre-computes a field-aligned geometry mapping that can be used to enable
-		large step sizes in mapping-based tracing
+		large step sizes in mapping-based tracing.
+		
+		Note: Straight line geometry might acquire curved shape during this configuration.
+		If your geometry is coarse, consider refining the mesh with Geometry.triangulate(...).
+		
+		Parameters:
+			- geometry: Input geometry to be transformed .
+			- nSym: Toroidal symmetry of the geometry.
+			- nPhi, nU, nV: Number of cells (per axis) in the collision grid index. U and V
+			  are the mapping coordinates.
 		"""
 		resolved = await geometry.resolve.asnc()
 		response = await _mapper().mapGeometry(self.ref, resolved.data, nSym, nPhi, nU, nV)
@@ -43,6 +52,9 @@ class FieldlineMapping(wrappers.RefWrapper):
 class MappingWithGeometry(wrappers.structWrapper(service.GeometryMapping)):
 	@asyncFunction
 	async def getSection(self, index: int):
+		"""
+		Extract and download the mapping geometry for a geometry section.
+		"""
 		response = await _mapper().getSectionGeometry(self.data, index)
 		return geometry.Geometry({"indexed" : response.geometry})
 
@@ -259,6 +271,9 @@ async def trace(
 		
 		- ignoreCollisionsBefore: Minimum distance to trace before collisions will be actively processed. Useful when starting a trace on / very close to a mesh and
 		  not wanting to immediately have this mesh terminate the trace.
+		
+		- allowReversal: If this is set to false (default), a reversal of toroidal magnetic field orientation along the field line will terminate the
+		  tracing process. This prevents long traces on field lines encircling coils.
 	
 	Returns:
 		The format of the result depends on the `resultFormat` parameter.
@@ -413,6 +428,16 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 def decodeTraceResponse(response: service.FLTResponse.ReaderOrBuilder, resultFormat: str = 'dict'):
 	"""
 	Decodes an FLT response according to the requested format.
+	
+	Parameters:
+		- response: A raw field line tracer response.
+		- resultFormat: Either "raw" or "dict".
+	
+	Returns (depending on resultFormat parameter):
+		- 'raw': An instance of fusionsc.service.FLTResponse.ReaderOrBuilder containing the raw
+		  response of the field line tracer (basically the input arguments).
+		- 'dict': A dict of numpy arrays containing pythonic view on the response data. See the
+		  documentation of trace() for the full contents.
 	"""
 	if resultFormat == 'raw':
 		return response
@@ -443,6 +468,24 @@ async def findAxis(
 ):
 	"""
 	Computes the magnetic axis by repeatedly tracing a Poincaré map and averaging the points.
+	
+	Parameters:
+		- field: The magnetic field.
+		- grid: Optional grid to compute the magnetic field on. If not specified, the field must
+		  already be computed.
+		- startPoint: Start point for the magnetic axis search. If unspecified, defaults to the
+		  midpoint of the phi = 0 cross section.
+		- stepSize: Step size for tracing of (if using the adaptive error estimator) for the inital
+		  step size guess.
+		- nTurns: Number of points to average per iteration for the magnetic axis computation.
+		- nIterations: Number of axis search iterations.
+		- nPhi: Number of phi points to calculate the final magnetic axis trace on.
+		- direction: Direction to calculate the axis in.
+		- mapping: Field line mapping to use for accelerating the trace.
+		- targetError: Enables adaptive stepping by specifying a maximum error tolerance.
+		- relativeErrorTolerance, minStepSize, maxStepSize: See trace() for more information.
+		- islandM: When set, this routine will identify the O cycle of the island the starting
+		  point is in (which can still be the axis).
 	
 	Returns:
 		A tuple holding the xyz-position of the axis starting point and a numpy array holding the field line
