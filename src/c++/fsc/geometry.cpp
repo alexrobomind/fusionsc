@@ -276,6 +276,57 @@ namespace {
 			}
 		}
 	};
+	
+	struct GeometryAccumulator {
+		kj::Vector<Temporary<MergedGeometry::Entry>> entries;
+		
+		inline void finish(MergedGeometry::Builder output) {
+			auto outEntries = output.initEntries(entries.size());
+			for(size_t i = 0; i < entries.size(); ++i) {
+				outEntries.setWithCaveats(i, entries[i]);
+				entries[i] = nullptr;
+			}
+		}			
+	};
+	
+	struct MergeScope : kj::Refcounted {
+		kj::HashSet<kj::String>& tagTable;
+		GeometryAccumulator& output;
+		
+		Temporary<capnp::List<TagValue>> tagValues;
+		Maybe<Mat4d> transform;
+		Own<FilterContext> filterContext;
+		
+		MergeScope(kj::HashSet<kj::String>& tbl, GeometryAccumulator& out) :
+			tagTable(tbl), output(out),
+			
+			tagValues(tbl.size()),
+			transform(nullptr), filterContext(kj::refcounted<FilterContext>())
+		{}
+		
+		MergeScope(MergeScope& in) :
+			tagTable(in.tagTable), output(in.output),
+			
+			tagValues(in.tagValues.asReader()),
+			transform(in.transform), filterContext(in.filterContext -> addRef())
+		{}
+		
+		Own<MergeScope> clone() { return kj::refcounted<MergeScope>(*this); }
+		Own<MergeScope> addRef() { return kj::addRef(*this); }
+		
+		bool matches() { return filterContext -> matches(tagTable, tagValues); }
+		
+		void setTag(kj::StringPtr tagName, TagValue::Reader value) {
+			KJ_IF_MAYBE(rowPtr, tagTable.find(tagName)) {
+				size_t tagIdx = rowPtr - tagTable.begin();
+				
+				if(tagValues[tagIdx].isNotSet())
+					tagValues.setWithCaveats(tagIdx, value);
+			} else {
+				KJ_FAIL_REQUIRE("Internal error, tag not found in tag table", tagName);
+			}
+		}
+	};
 }
 
 // Class GeometryLibImpl
@@ -296,20 +347,9 @@ struct GeometryLibImpl : public GeometryLib::Server {
 	Promise<void> triangulate(TriangulateContext) override;
 	
 private:
-	struct GeometryAccumulator {
-		kj::Vector<Temporary<MergedGeometry::Entry>> entries;
-		
-		inline void finish(MergedGeometry::Builder output) {
-			auto outEntries = output.initEntries(entries.size());
-			for(size_t i = 0; i < entries.size(); ++i) {
-				outEntries.setWithCaveats(i, entries[i]);
-				entries[i] = nullptr;
-			}
-		}			
-	};
 	
-	Promise<void> mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, FilterContext& filterCtx, GeometryAccumulator& output);
-	Promise<void> mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, FilterContext& filterCtx, GeometryAccumulator& output);
+	Promise<void> mergeGeometries(Geometry::Reader input, Own<MergeScope> scope);
+	Promise<void> mergeGeometries(Transformed<Geometry>::Reader input, Own<MergeScope> scope);
 	
 	Promise<void> collectTagNames(Geometry::Reader input, kj::HashSet<kj::String>& output);
 	Promise<void> collectTagNames(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& output);
@@ -389,35 +429,29 @@ Promise<void> GeometryLibImpl::collectTagNames(Transformed<Geometry>::Reader inp
 
 using Mat4d = Eigen::Matrix<double, 4, 4>;
 
-Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, FilterContext& ctx, GeometryAccumulator& output) {
-	// KJ_CONTEXT("Merge Operation", input);
-	
-	Temporary<capnp::List<TagValue>> tagValues(tagScope);
+Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, Own<MergeScope> scope) {	
+	if(input.getTags().size() > 0 && scope -> isShared())
+		scope = scope -> clone();
 	
 	for(auto tag : input.getTags()) {
 		const kj::StringPtr tagName = tag.getName();
-		
-		KJ_IF_MAYBE(rowPtr, tagTable.find(tag.getName())) {
-			size_t tagIdx = rowPtr - tagTable.begin();
-			tagValues.setWithCaveats(tagIdx, tag.getValue());
-		} else {
-			KJ_FAIL_REQUIRE("Internal error, tag not found in tag table", tag.getName());
-		}
+		scope -> setTag(tag.getName(), tag.getValue());
 	}
 	
-	auto handleMesh = [&tagTable, transform, &output](Mesh::Reader inputMesh, capnp::List<TagValue>::Reader tagValues) {
+	auto handleMesh = [](Mesh::Reader inputMesh, MergeScope& scope, bool matchChecked = false) {
+		if(!matchChecked && !scope.matches()) return;
+		
 		auto vertexShape = inputMesh.getVertices().getShape();
 		KJ_REQUIRE(vertexShape.size() == 2);
 		KJ_REQUIRE(vertexShape[1] == 3);
 		
 		Temporary<MergedGeometry::Entry> newEntry;
-		
-		newEntry.setTags(tagValues);
+		newEntry.setTags(scope.tagValues);
 		
 		// Copy mesh and make in-place adjustments
 		newEntry.setMesh(inputMesh);
 		
-		KJ_IF_MAYBE(pTransform, transform) {
+		KJ_IF_MAYBE(pTransform, scope.transform) {
 			auto mesh = newEntry.getMesh();
 			auto vertexData = inputMesh.getVertices().getData();
 			KJ_REQUIRE(vertexData.size() == vertexShape[0] * vertexShape[1]);
@@ -445,16 +479,16 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 			// No adjustments needed if transform not specified
 		}
 		
-		output.entries.add(mv(newEntry));
+		scope.output.entries.add(mv(newEntry));
 	};
 	
-	auto handleMerged = [&output, &tagTable, handleMesh, &ctx](DataRef<MergedGeometry>::Client ref, capnp::List<TagValue>::Reader tagScope) {
+	auto handleMerged = [handleMesh](DataRef<MergedGeometry>::Client ref, MergeScope& scope) -> Promise<void> {
 		return getActiveThread().dataService().download(ref)
-		.then([&output, &tagTable, tagScope, handleMesh = mv(handleMesh), ctx = ctx.addRef()](LocalDataRef<MergedGeometry> localRef) {
+		.then([handleMesh = mv(handleMesh), scope = scope.addRef()](LocalDataRef<MergedGeometry> localRef) mutable {
 			auto merged = localRef.get();
 			
 			for(auto entry : merged.getEntries()) {
-				Temporary<capnp::List<TagValue>> tagValues(tagScope);
+				Own<MergeScope> meshScope = scope -> clone();
 				
 				auto tagNames = merged.getTagNames();
 				auto eTagVals = entry.getTags();
@@ -463,21 +497,10 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 					auto tagName = tagNames[iTag];
 					auto tagVal  = eTagVals[iTag];
 					
-					if(tagVal.isNotSet())
-						continue;
-		
-					KJ_IF_MAYBE(rowPtr, tagTable.find(tagName)) {
-						size_t tagIdx = rowPtr - tagTable.begin();
-						tagValues.setWithCaveats(tagIdx, tagVal);
-					} else {
-						KJ_FAIL_REQUIRE("Internal error, tag not found in tag table", tagName);
-					}
+					meshScope -> setTag(tagName, tagVal);
 				}
 				
-				if(!ctx -> matches(tagTable, tagValues))
-					continue;
-				
-				handleMesh(entry.getMesh(), tagValues);
+				handleMesh(entry.getMesh(), *meshScope);
 			}
 		});
 	};
@@ -487,46 +510,48 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 			auto promises = kj::heapArrayBuilder<Promise<void>>(input.getCombined().size());
 			
 			for(auto child : input.getCombined()) {
-				promises.add(mergeGeometries(child, tagTable, tagValues, transform, ctx, output));
+				promises.add(mergeGeometries(child, scope -> addRef()));
 			}
 				
 			return joinPromises(promises.finish());
 		}
 		case Geometry::TRANSFORMED:
-			return mergeGeometries(input.getTransformed(), tagTable, tagValues, transform, ctx, output);
+			return mergeGeometries(input.getTransformed(), mv(scope));
 			
 		case Geometry::REF:
 			return getActiveThread().dataService().download(input.getRef())
-			.then([input, &tagTable, tagValues = mv(tagValues), ctx = ctx.addRef(), transform, &output, this](LocalDataRef<Geometry> geo) mutable {
-				return mergeGeometries(geo.get(), tagTable, tagValues, transform, *ctx, output);
+			.then([scope = mv(scope), this](LocalDataRef<Geometry> geo) mutable {
+				return mergeGeometries(geo.get(), mv(scope));
 			});
 		case Geometry::NESTED:
-			return mergeGeometries(input.getNested(), tagTable, tagValues, transform, ctx, output);
+			return mergeGeometries(input.getNested(), mv(scope));
 			
 		case Geometry::MESH:
-			if(!ctx.matches(tagTable, tagValues))
-				return READY_NOW;
+			if(!scope -> matches()) return READY_NOW;
 			
 			return getActiveThread().dataService().download(input.getMesh())
-			.then([&tagTable, tagValues = mv(tagValues), handleMesh](LocalDataRef<Mesh> inputMeshRef) {
-				handleMesh(inputMeshRef.get(), tagValues);
+			.then([scope = mv(scope), handleMesh](LocalDataRef<Mesh> inputMeshRef) mutable {
+				handleMesh(inputMeshRef.get(), *scope, /* matchChecked = */ true);
 			});
 		
 		case Geometry::MERGED:
-			return handleMerged(input.getMerged(), tagValues.asReader()).attach(mv(tagValues));
+			return handleMerged(input.getMerged(), *scope);
 		
 		case Geometry::INDEXED:
-			return handleMerged(input.getIndexed().getBase(), tagValues.asReader()).attach(mv(tagValues));
+			return handleMerged(input.getIndexed().getBase(), *scope);
 		
 		case Geometry::FILTER: {
-			auto f = input.getFilter();
-			auto newCtx = kj::refcounted<FilterContext>(ctx, f.getFilter());
-			return mergeGeometries(f.getGeometry(), tagTable, tagValues, transform, *newCtx, output);
+			if(scope -> isShared()) scope = scope -> clone();
+			scope -> filterContext = kj::refcounted<FilterContext>(
+				*(scope -> filterContext),
+				input.getFilter().getFilter()
+			);
+			
+			return mergeGeometries(input.getFilter().getGeometry(), mv(scope));
 		}
 		
 		case Geometry::WRAP_TOROIDALLY: {
-			if(!ctx.matches(tagTable, tagValues))
-				return READY_NOW;
+			if(!scope -> matches()) return READY_NOW;
 			
 			auto wt = input.getWrapToroidally();
 			
@@ -601,7 +626,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 					indices.set(i, triangles.data()[i]);
 				
 				tmpMesh.setTriMesh();
-				handleMesh(tmpMesh, tagValues);
+				handleMesh(tmpMesh, *scope, /* matchChecked = */ true);
 			}
 			
 			// Generate end caps
@@ -634,14 +659,14 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 					}
 				
 					tmpMesh.setTriMesh();
-					handleMesh(tmpMesh, tagValues);
+					handleMesh(tmpMesh, *scope, /* matchChecked = */ true);
 				}
 			}
 			return READY_NOW;
 		}
 		
 		case Geometry::QUAD_MESH: {
-			if(!ctx.matches(tagTable, tagValues))
+			if(!scope -> matches())
 				return READY_NOW;
 			
 			auto qm = input.getQuadMesh();
@@ -651,7 +676,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 			bool wrapV = qm.getWrapV();
 			
 			return getActiveThread().dataService().download(data)
-			.then([&tagTable, tagValues = mv(tagValues), handleMesh, wrapU, wrapV](auto localRef) mutable {
+			.then([scope = mv(scope), handleMesh, wrapU, wrapV](auto localRef) mutable {
 				auto input = localRef.get();
 				auto shape = input.getShape();
 				KJ_REQUIRE(shape.size() == 3);
@@ -691,7 +716,7 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 				mesh.setIndices(indices);
 				mesh.setPolyMesh(polys);
 				
-				handleMesh(mesh, tagValues);
+				handleMesh(mesh, *scope, /* matchChecked = */ true);
 			});
 		}
 			
@@ -700,13 +725,13 @@ Promise<void> GeometryLibImpl::mergeGeometries(Geometry::Reader input, kj::HashS
 	}
 }
 
-Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader input, kj::HashSet<kj::String>& tagTable, const capnp::List<TagValue>::Reader tagScope, Maybe<Mat4d> transform, FilterContext& ctx, GeometryAccumulator& output) {
+Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader input, Own<MergeScope> scope) {
 	Mat4d transformBase;
 	Transformed<Geometry>::Reader node;
 	
 	switch(input.which()) {
 		case Transformed<Geometry>::LEAF:
-			return mergeGeometries(input.getLeaf(), tagTable, tagScope, transform, ctx, output);
+			return mergeGeometries(input.getLeaf(), mv(scope));
 			
 		case Transformed<Geometry>::SHIFTED: {
 			node = input.getShifted().getNode();
@@ -756,12 +781,18 @@ Promise<void> GeometryLibImpl::mergeGeometries(Transformed<Geometry>::Reader inp
 		default:
 			KJ_FAIL_REQUIRE("Unknown transform type", input.which());
 	}
-			
-	KJ_IF_MAYBE(pTransform, transform) {
-		return mergeGeometries(node, tagTable, tagScope, (Mat4d)((*pTransform) * transformBase), ctx, output);
+	
+	// Modify shallow copy of scope
+	if(scope -> isShared())
+		scope = scope -> clone();
+	
+	KJ_IF_MAYBE(pTransform, scope -> transform) {
+		scope -> transform = (Mat4d)((*pTransform) * transformBase);
 	} else {
-		return mergeGeometries(node, tagTable, tagScope, transformBase, ctx, output);
-	}
+		scope -> transform = transformBase;
+	};
+	
+	return mergeGeometries(node, mv(scope));
 }
 
 Promise<void> GeometryLibImpl::index(IndexContext context) {
@@ -968,11 +999,10 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 	// Then call "mergeGeometries" on the root node with an identity transform and empty tag scope
 	//   This will collect temporary built meshes in geomAccum
 	.then([context, geomAccum, tagNameTable, this]() mutable {
-		Temporary<capnp::List<TagValue>> tagScope(tagNameTable->size());
+		auto mergeScope = kj::refcounted<MergeScope>(*tagNameTable, *geomAccum);
 		
 		KJ_LOG(INFO, "Beginning merge operation");
-		auto rootCtx = kj::refcounted<FilterContext>();
-		return mergeGeometries(context.getParams(), *tagNameTable, tagScope, nullptr, *rootCtx, *geomAccum);
+		return mergeGeometries(context.getParams(), mv(mergeScope));
 	})
 	
 	// Finally, copy the data from the accumulator into the output
