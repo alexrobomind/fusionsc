@@ -885,9 +885,9 @@ public:
 		CUPNP_FUNCTION ListIterator(const ListType& list, unsigned int i) : list(list), i(i) {}
 		
 		CUPNP_FUNCTION ListIterator& operator++() { ++i; return *this; }
-		CUPNP_FUNCTION ListIterator operator++(int) { auto other = *this; ++this; return other; }
+		CUPNP_FUNCTION ListIterator operator++(int) { auto other = *this; ++i; return other; }
 		CUPNP_FUNCTION ListIterator& operator--() { --i; return *this; }
-		CUPNP_FUNCTION ListIterator operator--(int) { auto other = *this; --this; return other; }
+		CUPNP_FUNCTION ListIterator operator--(int) { auto other = *this; --i; return other; }
 		
 		CUPNP_FUNCTION ListIterator& operator+=(unsigned int i2) { i += i2; return *this; }
 		CUPNP_FUNCTION ListIterator& operator-=(unsigned int i2) { i -= i2; return *this; }

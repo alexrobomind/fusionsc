@@ -192,7 +192,7 @@ void setDataTensor(DynamicStruct::Builder dsb, py::buffer_info& bufinfo) {
 	
 	// If we get a default ordering, check if we are on little endian CPU
 	if(actualFormat[0] != '<' && actualFormat[0] != '>') {
-		#if __BYTE_ORDERING__ == __LITTLE_ENDIAN__
+		#if __BYTE_ORDER__ == __LITTLE_ENDIAN__
 			actualFormat = str("<", actualFormat);
 		#else
 			actualFormat = str(">", actualFormat);

@@ -2164,7 +2164,7 @@ Promise<void> FolderInterface::exportGraph(ExportGraphContext ctx) {
 		
 		KJ_REQUIRE(ids.size() <= ((uint64_t) 1) << 48, "Graph size too large for storage");
 		
-		constexpr uint64_t MAX_LIST_SIZE = 1 << 29 - 1;
+		constexpr uint64_t MAX_LIST_SIZE = (1 << 29) - 1;
 		const uint64_t nLists = ids.size() / MAX_LIST_SIZE + 1;
 		
 		Temporary<Warehouse::ObjectGraph> result;
