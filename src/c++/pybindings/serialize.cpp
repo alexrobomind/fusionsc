@@ -15,7 +15,9 @@ namespace fscpy {
 		auto shapeIn = structArray.getShape();
 		
 		kj::Vector<npy_intp> npyShape;
-		for(auto e : shapeIn) npyShape.add(e);
+		size_t shapeProd = 1;
+		for(auto e : shapeIn) { npyShape.add(e); shapeProd *= e; }
+		KJ_REQUIRE(dataIn.size() == shapeProd);
 		
 		PyObject* npyArray = PyArray_SimpleNew(npyShape.size(), npyShape.begin(), NPY_OBJECT);
 		if(npyArray == nullptr)
@@ -26,9 +28,7 @@ namespace fscpy {
 			auto asStruct = dataIn[i].getTarget().as<capnp::DynamicStruct>(structSchema);
 			auto asObject = py::cast(DynamicStructReader(shareMessage(structArray), asStruct));
 			
-			PyObject*& output = *(npyData + i);
-			output = asObject.ptr();
-			Py_INCREF(output);
+			npyData[i] = asObject.release().ptr();
 		}
 		
 		return py::reinterpret_steal<py::object>(npyArray);
@@ -38,11 +38,35 @@ namespace fscpy {
 		auto typeReader = structArray.getSchema().as<capnp::schema::Type>();
 		auto enumSchema = defaultLoader.capnpLoader.getType(typeReader).asEnum();
 		
-		auto dataIn = structArray.getData();
+		capnp::List<uint16_t>::Reader dataIn = structArray.getData();
 		auto shapeIn = structArray.getShape();
 		
+		auto enumerants = enumSchema.getEnumerants();
+		auto knownEnumerants = [&]() {
+			auto builder = kj::heapArrayBuilder<py::object>(enumerants.size());
+			for(auto& e : enumerants) builder.add(py::cast(EnumInterface(e)));
+			return builder.finish();
+		}();
+		
+		kj::HashMap<uint64_t, py::object> unknownEnumerants;
+		
+		auto getEnumerant = [&](uint16_t raw) -> py::object {
+			if(raw < knownEnumerants.size())
+				return knownEnumerants[raw];
+			
+			KJ_IF_MAYBE(pEntry, unknownEnumerants.find(raw)) {
+				return *pEntry;
+			}
+			
+			py::object newVal = py::cast(EnumInterface(enumSchema, raw));
+			unknownEnumerants.insert(raw, newVal);
+			return newVal;
+		};
+		
 		kj::Vector<npy_intp> npyShape;
-		for(auto e : shapeIn) npyShape.add(e);
+		size_t shapeProd = 1;
+		for(auto e : shapeIn) { npyShape.add(e); shapeProd *= e; }
+		KJ_REQUIRE(dataIn.size() == shapeProd);
 		
 		PyObject* npyArray = PyArray_SimpleNew(npyShape.size(), npyShape.begin(), NPY_OBJECT);
 		if(npyArray == nullptr)
@@ -50,12 +74,7 @@ namespace fscpy {
 		
 		PyObject** npyData = reinterpret_cast<PyObject**>(PyArray_DATA(reinterpret_cast<PyArrayObject*>(npyArray)));
 		for(auto i : kj::indices(dataIn)) {
-			auto asEnum = EnumInterface(enumSchema, dataIn[i]);
-			auto asObject = py::cast(asEnum);
-			
-			PyObject*& output = *(npyData + i);
-			output = asObject.ptr();
-			Py_INCREF(output);
+			npyData[i] = getEnumerant(dataIn[i]).release().ptr();
 		}
 		
 		return py::reinterpret_steal<py::object>(npyArray);

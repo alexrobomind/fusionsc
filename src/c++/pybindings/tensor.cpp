@@ -65,7 +65,54 @@ py::buffer_info getObjectTensor(T tensor) {
 	}
 	
 	py::buffer asPyBuffer = py::cast(mv(resultHolder));
+	return asPyBuffer.request(true);
+}
+
+template<typename T>
+py::buffer_info getEnumTensor(T tensor) {
+	// Optimized accessor for enum tensor loading
+	// Pre-allocates enum values and only increases refcounts
+	// Therefore bypasses lots of object allocation and casting logic	
 	
+	// Extract shape and data
+	auto shape = tensor.get("shape").asList().template as<capnp::List<uint64_t>>();
+	auto data  = tensor.get("data").asList();
+	
+	// Pre-allocate enums
+	auto enumSchema = data.getSchema().getElementType().asEnum();
+	auto enumerants = enumSchema.getEnumerants();
+	auto knownEnumerants = [&]() {
+		auto builder = kj::heapArrayBuilder<py::object>(enumerants.size());
+		for(auto& e : enumerants) builder.add(py::cast(EnumInterface(e)));
+		return builder.finish();
+	}();
+	
+	kj::HashMap<uint64_t, py::object> unknownEnumerants;
+	
+	// Type-erased list for faster processing
+	capnp::List<uint16_t>::Reader rawData = data.as<AnyList>().as<capnp::List<uint16_t>>();
+	
+	auto resultHolder = ContiguousCArray::alloc<PyObject*>(shape, "O");
+	auto outData = resultHolder.template as<PyObject*>();
+	
+	auto getEnumerant = [&](uint16_t raw) -> py::object {
+		if(raw < knownEnumerants.size())
+			return knownEnumerants[raw];
+		
+		KJ_IF_MAYBE(pEntry, unknownEnumerants.find(raw)) {
+			return *pEntry;
+		}
+		
+		py::object newVal = py::cast(EnumInterface(enumSchema, raw));
+		unknownEnumerants.insert(raw, newVal);
+		return newVal;
+	};
+	
+	for(auto i : kj::indices(rawData)) {
+		outData[i] = getEnumerant(rawData[i]).release().ptr();
+	}
+	
+	py::buffer asPyBuffer = py::cast(mv(resultHolder));
 	return asPyBuffer.request(true);
 }
 
@@ -120,7 +167,6 @@ py::buffer_info getDataTensor(T tensor) {
 	
 	return py::buffer_info((byte*) nullptr, 0);
 }
-
 
 void setObjectTensor(DynamicStruct::Builder dsb, py::buffer_info& bufinfo) {
 	// Check whether array is contiguous
@@ -422,6 +468,9 @@ py::buffer_info getTensorImpl(T tensor) {
 	try {
 		auto schema = tensor.getSchema();
 		auto scalarType = schema.getFieldByName("data").getType().asList().getElementType();
+		
+		if(scalarType.which() == capnp::schema::Type::ENUM)
+			return getEnumTensor(tensor);
 		
 		if(isObjectType(scalarType)) {
 			return getObjectTensor(tensor);

@@ -90,7 +90,8 @@ def test_serialize_simple():
 		np.asarray([
 			fsc.service.FLTStopReason.get(0),
 			fsc.service.FLTStopReason.get(1),
-			fsc.service.FLTStopReason.get(2)
+			fsc.service.FLTStopReason.get(2),
+			fsc.service.FLTStopReason.get(200)
 		]),
 		
 		[4, 4, 4]
