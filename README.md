@@ -1,6 +1,6 @@
 # Fusion Scientific Computations
 
-This library contains computation mechanisms to support scientific computation.
+This library contains computation mechanisms to support scientific computation tasks in magnetic confinement fusion projects, particularly the processing of magnetic fields and machine geometries, field line tracing, and heat load calculation. It's designed to run both offline on a laptop and in multi-machine compute clouds. 
 
 For more information see the documentation at <https://alexrobomind.github.io/fusionsc>
 
@@ -63,3 +63,7 @@ the fusionsc package. The util/dev-install.py script will set one up for you:
 ```
 python util/dev-install.py
 ```
+
+### Docker containers
+
+We maintain docker containers bundling VMEC and FusionSC here: https://jugit.fz-juelich.de/a.knieps/fsc/container_registry
