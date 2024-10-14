@@ -1,0 +1,68 @@
+fusionsc.flt
+============
+
+.. automodule:: fusionsc.flt
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autosummary::
+
+	axisCurrent
+	calculateFourierModes
+	calculateIota
+	computeMapping
+	connectionLength
+	decodeTraceResponse
+	fieldValues
+	findAxis
+	findLCFS
+	followFieldlines
+	poincareInPhiPlanes
+	symmetrize
+	trace
+
+
+
+
+
+.. rubric:: Classes
+
+.. autosummary::
+  :toctree:
+  :template: summary-class.rst
+
+    FieldlineMapping
+    MappingWithGeometry
+
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autofunction:: axisCurrent
+.. autofunction:: calculateFourierModes
+.. autofunction:: calculateIota
+.. autofunction:: computeMapping
+.. autofunction:: connectionLength
+.. autofunction:: decodeTraceResponse
+.. autofunction:: fieldValues
+.. autofunction:: findAxis
+.. autofunction:: findLCFS
+.. autofunction:: followFieldlines
+.. autofunction:: poincareInPhiPlanes
+.. autofunction:: symmetrize
+.. autofunction:: trace
+
+
+
+

@@ -1,0 +1,36 @@
+fusionsc.capnp.Builder
+======================
+
+.. currentmodule:: fusionsc
+
+.. autoclass:: capnp.Builder
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~capnp.Builder.__init__
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: capnp.Builder.__init__
+
+
+
+
+

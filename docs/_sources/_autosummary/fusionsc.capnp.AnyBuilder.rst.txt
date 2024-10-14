@@ -1,0 +1,46 @@
+fusionsc.capnp.AnyBuilder
+=========================
+
+.. currentmodule:: fusionsc
+
+.. autoclass:: capnp.AnyBuilder
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~capnp.AnyBuilder.__init__
+  ~capnp.AnyBuilder.castAs
+  ~capnp.AnyBuilder.clone
+  ~capnp.AnyBuilder.initAs
+  ~capnp.AnyBuilder.set
+  ~capnp.AnyBuilder.setAs
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: capnp.AnyBuilder.__init__
+.. automethod:: capnp.AnyBuilder.castAs
+.. automethod:: capnp.AnyBuilder.clone
+.. automethod:: capnp.AnyBuilder.initAs
+.. automethod:: capnp.AnyBuilder.set
+.. automethod:: capnp.AnyBuilder.setAs
+
+
+
+
+

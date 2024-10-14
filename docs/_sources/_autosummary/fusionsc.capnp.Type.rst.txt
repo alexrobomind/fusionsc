@@ -1,0 +1,55 @@
+fusionsc.capnp.Type
+===================
+
+.. currentmodule:: fusionsc
+
+.. autoclass:: capnp.Type
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~capnp.Type.__init__
+  ~capnp.Type.fromProto
+  ~capnp.Type.interpret
+  ~capnp.Type.listOf
+  ~capnp.Type.toProto
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~capnp.Type.Builder
+	~capnp.Type.Reader
+	~capnp.Type.ReaderOrBuilder
+	~capnp.Type.jsonSchema
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: capnp.Type.__init__
+.. automethod:: capnp.Type.fromProto
+.. automethod:: capnp.Type.interpret
+.. automethod:: capnp.Type.listOf
+.. automethod:: capnp.Type.toProto
+
+
+
+
+

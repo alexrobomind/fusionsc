@@ -1,0 +1,39 @@
+fusionsc.vmec
+=============
+
+.. automodule:: fusionsc.vmec
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autosummary::
+
+	phizrToSphitheta
+	sphithetaToPhizr
+	writeMGrid
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autofunction:: phizrToSphitheta
+.. autofunction:: sphithetaToPhizr
+.. autofunction:: writeMGrid
+
+
+
+

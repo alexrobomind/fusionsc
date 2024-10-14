@@ -1,0 +1,66 @@
+fusionsc.magnetics.SurfaceArray
+===============================
+
+.. currentmodule:: fusionsc.magnetics
+
+.. autoclass:: SurfaceArray
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~SurfaceArray.__init__
+  ~SurfaceArray.apply
+  ~SurfaceArray.asFourier
+  ~SurfaceArray.asGeometry
+  ~SurfaceArray.cache
+  ~SurfaceArray.evaluate
+  ~SurfaceArray.graph
+  ~SurfaceArray.load
+  ~SurfaceArray.ptree
+  ~SurfaceArray.save
+  ~SurfaceArray.toYaml
+  ~SurfaceArray.upload
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~SurfaceArray.data
+	~SurfaceArray.shape
+	~SurfaceArray.type
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: SurfaceArray.__init__
+.. automethod:: SurfaceArray.apply
+.. automethod:: SurfaceArray.asFourier
+.. automethod:: SurfaceArray.asGeometry
+.. automethod:: SurfaceArray.cache
+.. automethod:: SurfaceArray.evaluate
+.. automethod:: SurfaceArray.graph
+.. automethod:: SurfaceArray.load
+.. automethod:: SurfaceArray.ptree
+.. automethod:: SurfaceArray.save
+.. automethod:: SurfaceArray.toYaml
+.. automethod:: SurfaceArray.upload
+
+
+
+
+

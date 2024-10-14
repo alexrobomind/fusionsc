@@ -1,0 +1,55 @@
+fusionsc.backends
+=================
+
+.. automodule:: fusionsc.backends
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autosummary::
+
+	activeBackend
+	alwaysUseBackend
+	backendInfo
+	connectLocal
+	disconnectLocal
+	isLocalConnected
+	localBackend
+	localResources
+	namedEndpoint
+	reconfigureLocalBackend
+	useBackend
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autofunction:: activeBackend
+.. autofunction:: alwaysUseBackend
+.. autofunction:: backendInfo
+.. autofunction:: connectLocal
+.. autofunction:: disconnectLocal
+.. autofunction:: isLocalConnected
+.. autofunction:: localBackend
+.. autofunction:: localResources
+.. autofunction:: namedEndpoint
+.. autofunction:: reconfigureLocalBackend
+.. autofunction:: useBackend
+
+
+
+
