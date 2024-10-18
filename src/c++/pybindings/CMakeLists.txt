@@ -1,4 +1,21 @@
 if(FSC_WITH_PYTHON)
+	add_library(
+		fsc-servepy
+		PRIVATE
+		fsc-servepy.cpp
+	)
+	
+	target_link_libraries(
+		fsc-servepy PUBLIC fsc
+	)
+	
+	target_include_directories(
+		fsc-servepy
+		INTERFACE
+		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+	)
+	
 	pybind11_add_module(
 		fsc-python-bindings
 		
@@ -31,10 +48,13 @@ if(FSC_WITH_PYTHON)
 	target_link_libraries(
 		fsc-python-bindings
 		PRIVATE
-		fsc
+		fsc-servepy
 	)
 
 	set_target_properties(fsc-python-bindings PROPERTIES OUTPUT_NAME "native")
+	
+	INSTALL(TARGETS fsc-servepy EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+	INSTALL(FILES fsc-servepy.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 	
 	if(DEFINED FSC_PYLIB_DIR)
 		set(INSTALL_DIR ${FSC_PYLIB_DIR})

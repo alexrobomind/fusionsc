@@ -119,6 +119,31 @@ namespace {
 		auto fsPath = fs.getCurrentPath().evalNative(fileName);
 		return writeMGridFile(fsPath, cf);
 	}
+	
+	py::capsule getStoreHelper() {
+		auto storeDestructor = [](void* rawPtr) {
+			auto ptr = static_cast<fsc_DataStore*>(rawPtr);
+			delete ptr;
+		};
+		
+		auto& ctx = PythonContext::getInstance();
+		auto& store = ctx.librayThread().store();
+		
+		return py::capsule(store.incRef(), "fsc_DataStore", storeDestructor);
+	}
+	
+	struct LocalServer {
+		py::capsule backend;
+		
+		LocalServer(py::capsule c) : backend(mv(c)) {}
+		
+		capnp::Capability::Client connect() {
+			KJ_REQUIRE(kj::StringPtr(backend.name()) == "fusionsc_LvnHub*");
+			fsc_LvnHub** ppHub = backend;
+			
+			return connectLocal(*ppHub);
+		}
+	}		
 }
 
 void initHelpers(py::module_& m) {
@@ -157,6 +182,14 @@ void initHelpers(py::module_& m) {
 	py::module_ serializeModule = m.def_submodule("serialize");
 	serializeModule.def("loadEnumArray", &loadEnumArray);
 	serializeModule.def("loadStructArray", &loadStructArray);
+	
+	py::module_ localModule = m.def_submodule("local");
+	localModule.def("getStore", &getStoreHelper);
+	
+	py::class_<LocalServer>(m, "LocalServer")
+		.def(py::init<py::capsule>())
+		.def("connect", &LocalServer::connect)
+	;
 }
 
 }

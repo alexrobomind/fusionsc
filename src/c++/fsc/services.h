@@ -6,16 +6,24 @@
 
 namespace fsc {
 
-kj::Function<capnp::Capability::Client()> newInProcessServer(kj::Function<capnp::Capability::Client()> serviceFactory);
-
-template<typename T>
-kj::Function<typename T::Client()> newInProcessServer(kj::Function<typename T::Client()> factory) {
-	auto backend = newInProcessServer([factory = mv(factory)]() mutable -> capnp::Capability::Client { return factory(); });
+struct InProcessServer {
+	virtual LocalVatHub getHub() const = 0;
 	
-	return [backend = mv(backend)]() mutable {
-		return backend().template castAs<T>();
-	};
-}
+	virtual Own<const InProcessServer> addRef() const = 0;
+	
+	template<typename T>
+	typename T::Client connect() const {
+		return connectBase.castAs<T>();
+	}
+	
+	inline capnp::Capability::Client connectBase() const {
+		return connectInProcess(getHub());
+	}
+};
+
+capnp::Capability::Client connectInProcess(LocalVatHub, uint64_t address = 0);
+
+Own<const InProcessServer> newInProcessServer(kj::Function<capnp::Capability::Client()> serviceFactory, Library contextLibrary = getActiveThread().library()->addRef());
 
 Own<RootService::Server> createRoot(LocalConfig::Reader config);
 Own<LocalResources::Server> createLocalResources(LocalConfig::Reader config);

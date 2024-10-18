@@ -43,11 +43,11 @@ LocalResources::Client connectSameThread2() {
 }
 
 struct LocalRootServer {
-	kj::Function<capnp::Capability::Client()> clientFactory;
+	Own<InProcessServer> backend;
 	
 	LocalRootServer() :
-		clientFactory(
-			newInProcessServer<LocalResources>([]() mutable {
+		backend(
+			newInProcessServer([]() {
 				Temporary<LocalConfig> rootConfig;
 				return createLocalResources(rootConfig);
 			})
@@ -55,8 +55,7 @@ struct LocalRootServer {
 	{}
 	
 	LocalResources::Client connect() {
-		auto result = clientFactory().castAs<LocalResources>();
-		return result;
+		return backend -> connect<LocalResources>();
 	}
 };
 

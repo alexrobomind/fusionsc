@@ -418,7 +418,7 @@ class DefaultErrorHandler : public kj::TaskSet::ErrorHandler {
 	}
 };
 
-struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::BootstrapFactory<lvn::VatId> {
+struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::BootstrapFactory<lvn::VatId>, public InProcessServer {
 	using Service = capnp::Capability;
 	using Factory = kj::Function<Service::Client()>;
 	using VatId = fsc::lvn::VatId;
@@ -426,8 +426,7 @@ struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::Bootstra
 	Library library;
 	mutable Factory factory;
 	
-	Own<LocalVatHub> vatHub;
-	Own<LocalVatNetwork> vatNetwork;
+	LocalVatHub vatHub;
 	
 	kj::MutexGuarded<bool> ready;
 		
@@ -438,12 +437,11 @@ struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::Bootstra
 	// Own<const kj::Executor> executor;
 	Own<CrossThreadPromiseFulfiller<void>> doneFulfiller;
 		
-	InProcessServerImpl(kj::Function<capnp::Capability::Client()> factory) :
-		library(getActiveThread().library()->addRef()),
+	InProcessServerImpl(kj::Function<capnp::Capability::Client()> factory, Library library) :
+		library(mv(library)),
 		factory(mv(factory)),
 		
-		vatHub(kj::heap<LocalVatHub>()),
-		vatNetwork(vatHub -> join()),
+		vatHub(),
 		
 		ready(false),
 		thread(KJ_BIND_METHOD(*this, run))
@@ -457,33 +455,11 @@ struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::Bootstra
 		doneFulfiller->fulfill();
 	}
 	
-	Own<const InProcessServerImpl> addRef() const { return kj::atomicAddRef(*this); }
+	Own<const InProcessServerImpl> addRef() const override { return kj::atomicAddRef(*this); }
 	
 	capnp::Capability::Client createFor(VatId::Reader clientId) {
 		return factory();
 	}
-	
-	//! Keep-alive membrane that maintains the connection as long as at least one instance is there
-	struct KeepaliveMembrane : public capnp::MembranePolicy, kj::Refcounted {
-		ForkedPromise<void> lifetime;
-		KeepaliveMembrane(Promise<void> lifetime) :
-			lifetime(lifetime.fork())
-		{}
-		
-		Own<MembranePolicy> addRef() override { return kj::addRef(*this); }
-		
-		kj::Maybe<capnp::Capability::Client> inboundCall(uint64_t interfaceId, uint16_t methodId, capnp::Capability::Client target) override {
-			return nullptr;
-		}
-		
-		kj::Maybe<capnp::Capability::Client> outboundCall(uint64_t interfaceId, uint16_t methodId, capnp::Capability::Client target) override {
-			return nullptr;
-		}
-		
-		kj::Maybe<Promise<void>> onRevoked() override {
-			return lifetime.addBranch();
-		}
-	};
 	
 	void run() {
 		// Initialize event loop
@@ -496,7 +472,7 @@ struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::Bootstra
 		using fsc::lvn::VatId;
 		
 		// Move vat network into local scope and shadow it
-		Own<LocalVatNetwork> vatNetwork = mv(this -> vatNetwork);
+		Own<LocalVatNetwork> vatNetwork = vatHub.join();
 		capnp::RpcSystem<VatId> rpcSystem(*vatNetwork, *this);
 		
 		Promise<void> donePromise = READY_NOW;
@@ -515,16 +491,8 @@ struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::Bootstra
 		donePromise.wait(ws);
 	}
 	
-	Service::Client connect() const {
-		using capnp::RpcSystem;
-		
-		auto vatNetwork = ownHeld(vatHub -> join());
-		auto rpcClient  = heapHeld<capnp::RpcSystem<VatId>>(*vatNetwork, nullptr);
-		auto client     = rpcClient -> bootstrap(LocalVatNetwork::INITIAL_VAT_ID);
-		
-		Own<void> attachments = kj::attachRef(client, vatNetwork.x(), rpcClient.x());
-		Promise<void> lifetimeScope = getActiveThread().lifetimeScope().wrap(Promise<void>(NEVER_DONE)).attach(mv(attachments));
-		return capnp::membrane(mv(client), kj::refcounted<KeepaliveMembrane>(mv(lifetimeScope)));
+	LocalVatHub getHub() const override {
+		return vatHub;
 	}
 };
 
@@ -604,12 +572,46 @@ kj::ArrayPtr<uint64_t> fsc::protectedInterfaces() {
 	return result.asPtr();
 }
 
-kj::Function<capnp::Capability::Client()> fsc::newInProcessServer(kj::Function<capnp::Capability::Client()> serviceFactory) {
-	auto server = kj::atomicRefcounted<InProcessServerImpl>(mv(serviceFactory));
-	
-	return [server = mv(server)]() mutable {
-		return server->connect();
+capnp::Capability::Client connectInProcess(const LocalVatHub& hub, uint64_t address) {
+	//! Keep-alive membrane that maintains the connection as long as at least one instance is there
+	struct KeepaliveMembrane : public capnp::MembranePolicy, kj::Refcounted {
+		ForkedPromise<void> lifetime;
+		KeepaliveMembrane(Promise<void> lifetime) :
+			lifetime(lifetime.fork())
+		{}
+		
+		Own<MembranePolicy> addRef() override { return kj::addRef(*this); }
+		
+		kj::Maybe<capnp::Capability::Client> inboundCall(uint64_t interfaceId, uint16_t methodId, capnp::Capability::Client target) override {
+			return nullptr;
+		}
+		
+		kj::Maybe<capnp::Capability::Client> outboundCall(uint64_t interfaceId, uint16_t methodId, capnp::Capability::Client target) override {
+			return nullptr;
+		}
+		
+		kj::Maybe<Promise<void>> onRevoked() override {
+			return lifetime.addBranch();
+		}
 	};
+	
+	using capnp::RpcSystem;
+	
+	auto vatNetwork = ownHeld(hub.join());
+	auto rpcClient  = heapHeld<capnp::RpcSystem<VatId>>(*vatNetwork, nullptr);
+	
+	Temporary<LocalVatNetwork::VatId> vatId;
+	vatId.setId(address);
+	
+	auto client = rpcClient -> bootstrap(vatId);
+	
+	Own<void> attachments = kj::attachRef(client, vatNetwork.x(), rpcClient.x());
+	Promise<void> lifetimeScope = getActiveThread().lifetimeScope().wrap(Promise<void>(NEVER_DONE)).attach(mv(attachments));
+	return capnp::membrane(mv(client), kj::refcounted<KeepaliveMembrane>(mv(lifetimeScope)));
+}
+
+Own<const InProcessServer> fsc::newInProcessServer(kj::Function<capnp::Capability::Client()> serviceFactory, Library lib) {
+	return kj::atomicRefcounted<InProcessServerImpl>(mv(serviceFactory), mv(lib));
 }
 
 Own<LocalResources::Server> fsc::createLocalResources(LocalConfig::Reader config) {

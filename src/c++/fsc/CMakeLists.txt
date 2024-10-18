@@ -248,7 +248,7 @@ if(MSVC)
 endif()
 
 # Built in src/c++/fsc
-INSTALL(TARGETS deps EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+INSTALL(TARGETS deps fsc EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # FSC headers
 # - Source headers
