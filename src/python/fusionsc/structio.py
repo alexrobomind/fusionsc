@@ -85,7 +85,7 @@ async def recursiveDump(data, file, lang='json', compact=False):
 	fd = file.fileno()
 	await native.structio.dumpAllToFd(data, fd, _checkLang(lang), compact)
 
-def load(src, dst=None, lang='json'):
+def load(src, dst: Union[NoneType, dict, list, capnp.Builder] = None, lang: str ='json'):
 	"""
 	Load the formatted data. Can either deserialize the input as a nested structure of
 	bytes, str, dict, and list, or alternatively deserialize INTO a target object (returning

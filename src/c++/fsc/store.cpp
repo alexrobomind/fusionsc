@@ -272,7 +272,12 @@ fusionsc_DataStoreEntry* StoreEntry::release() {
 
 DataStore::DataStore(fusionsc_DataStore* newBackend) :
 	raw(newBackend)
-{}
+{
+	if(raw == nullptr)
+		raw = new DataStoreImpl();
+	else
+		raw -> incRef(raw);
+}
 
 DataStore::~DataStore()
 {
@@ -360,7 +365,7 @@ void DataStore::gc() {
 }
 
 DataStore createStore() {
-	return DataStore(new DataStoreImpl());
+	return DataStore(nullptr);
 }
 
 }

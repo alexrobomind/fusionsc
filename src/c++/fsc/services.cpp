@@ -455,7 +455,7 @@ struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::Bootstra
 		doneFulfiller->fulfill();
 	}
 	
-	Own<const InProcessServerImpl> addRef() const override { return kj::atomicAddRef(*this); }
+	Own<const InProcessServer> addRef() const override { return kj::atomicAddRef(*this); }
 	
 	capnp::Capability::Client createFor(VatId::Reader clientId) {
 		return factory();
@@ -572,7 +572,7 @@ kj::ArrayPtr<uint64_t> fsc::protectedInterfaces() {
 	return result.asPtr();
 }
 
-capnp::Capability::Client connectInProcess(const LocalVatHub& hub, uint64_t address) {
+capnp::Capability::Client fsc::connectInProcess(const LocalVatHub& hub, uint64_t address) {
 	//! Keep-alive membrane that maintains the connection as long as at least one instance is there
 	struct KeepaliveMembrane : public capnp::MembranePolicy, kj::Refcounted {
 		ForkedPromise<void> lifetime;
@@ -598,10 +598,10 @@ capnp::Capability::Client connectInProcess(const LocalVatHub& hub, uint64_t addr
 	using capnp::RpcSystem;
 	
 	auto vatNetwork = ownHeld(hub.join());
-	auto rpcClient  = heapHeld<capnp::RpcSystem<VatId>>(*vatNetwork, nullptr);
+	auto rpcClient  = heapHeld<capnp::RpcSystem<lvn::VatId>>(*vatNetwork, nullptr);
 	
-	Temporary<LocalVatNetwork::VatId> vatId;
-	vatId.setId(address);
+	Temporary<lvn::VatId> vatId;
+	vatId.setKey(address);
 	
 	auto client = rpcClient -> bootstrap(vatId);
 	
@@ -622,7 +622,7 @@ Own<RootService::Server> fsc::createRoot(LocalConfig::Reader config) {
 	return kj::heap<RootServer>(config);
 }
 
-RootService::Client fsc::connectRemote(kj::StringPtr address, unsigned int portHint) {
+/*RootService::Client fsc::connectRemote(kj::StringPtr address, unsigned int portHint) {
 	return getActiveThread().network().parseAddress(address, portHint)
 	.then([](Own<kj::NetworkAddress> addr) {
 		return addr->connect();
@@ -663,4 +663,4 @@ Promise<Own<fsc::Server>> fsc::startServer(unsigned int portHint, kj::StringPtr 
 	.then([rootInterface](auto address) mutable -> Own<fsc::Server> {
 		return kj::heap<ServerImpl>(*address, rootInterface);
 	});
-}
+}*/

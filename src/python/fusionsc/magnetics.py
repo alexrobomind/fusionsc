@@ -199,12 +199,12 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 	"""
 	
 	@asyncFunction
-	async def resolve(self):
+	async def resolve(self) -> MagneticConfig:
 		"""Resolves contained coils and magnetic configurations contained in this object (returned in a new instance)"""
 		return MagneticConfig(await resolve.resolveField.asnc(self.data))
 	
 	@asyncFunction
-	async def compute(self, grid):
+	async def compute(self, grid) -> MagneticConfig:
 		"""
 		Computes the magnetic field on the specified grid. Doesn't download the field to the local machine.
 		

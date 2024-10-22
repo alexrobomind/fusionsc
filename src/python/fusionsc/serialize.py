@@ -36,6 +36,7 @@ if 'FUSIONSC_BLOCK_PICKLE' in os.environ and os.environ['FUSIONSC_BLOCK_PICKLE']
 	_pickleBlocked = True
 
 def blockPickle():
+	"""Globally disables the usage of pickle for deserialization programatically"""
 	_pickleBlocked = True
 
 class UnknownObject(structWrapper(service.DynamicObject)):
@@ -43,10 +44,22 @@ class UnknownObject(structWrapper(service.DynamicObject)):
 
 @contextlib.contextmanager
 def allowPickle():
+	"""
+	Temporarily enables pickling and unpickling in the serialization engine.
+	
+	Serialization and deserialization are available as a fallback path for the serialization engine
+	in case it encounters objects it can not process. However, this path is disabled by default
+	because pickle allows arbitrary code to be called during deserialization. This is
+	unexpected for data files, and can pose serious security issues if these files are loaded
+	from untrusted sources.
+	
+	If blockPickle() was called or the environment variable FUSIONSC_BLOCK_PICKLE is set
+	to another value than 0, this function will fail to enable pickling.
+	"""
 	if _pickleBlocked:
 		import warnings
 		warning.warn("""
-			An attempt to enable pickling while pickling was blocked because either fsc.serialize.blockPickle()
+			An attempt to enable pickling while pickling was without effect because either fsc.serialize.blockPickle()
 			was called or because the environment variable FUSIONSC_BLOCK_PICKLE was set to a value
 			other than '0'.
 		""")
@@ -59,7 +72,7 @@ def pickleEnabled():
 	"""Returns whether pickling is allowed in the current context"""
 	return _pickleEnabled.get() and not _pickleBlocked
 
-def wrap(obj: Any):
+def wrap(obj: Any) -> capnp.Object:
 	"""Converts python objects into a service.DynamicObject.Builder but returns native messages as-is"""
 	if isinstance(obj, capnp.Object):
 		return obj
@@ -67,7 +80,7 @@ def wrap(obj: Any):
 	return dump(obj)
 
 @asyncFunction
-async def unwrap(obj):
+async def unwrap(obj: capnp.Object) -> Any:
 	"""Unfolds service.DynamicObject instances into python objects and returns others as-is"""
 	if isinstance(obj, service.DynamicObject.Reader):
 		return await load.asnc(obj)
@@ -77,7 +90,7 @@ async def unwrap(obj):
 	
 	return obj
 
-def dump(obj: Any):
+def dump(obj: Any) -> service.DynamicObject.Builder:
 	"""
 	Converts python objects into nested structures of service.DynamicObject
 	"""
@@ -377,13 +390,13 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 	return builder
 
 @asyncFunction
-async def load(reader: service.DynamicObject.Reader):
+async def load(reader: service.DynamicObject.ReaderOrBuilder) -> Any:
 	"""
 	Loads a service.DynamicObject as a python object
 	"""
 	return await _load(reader, dict())
 
-async def _load(reader: service.DynamicObject.Reader, memoDict: dict):
+async def _load(reader: service.DynamicObject.ReaderOrBuilder, memoDict: dict):
 	result = await _interpret(reader, memoDict)
 	
 	if reader.memoKey != 0 and reader.memoKey not in memoDict:
@@ -391,7 +404,7 @@ async def _load(reader: service.DynamicObject.Reader, memoDict: dict):
 	
 	return result
 
-async def _interpret(reader: service.DynamicObject.Reader, memoDict: dict):
+async def _interpret(reader: service.DynamicObject.ReaderOrBuilder, memoDict: dict):
 	which = reader.which_()
 	
 	if which == "memoized":

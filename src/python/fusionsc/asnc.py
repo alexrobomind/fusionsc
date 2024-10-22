@@ -114,6 +114,20 @@ def asyncFunction(f: Callable[P, Awaitable[T]]) -> Callable[P, T]:
 	return functools.wraps(f)(AsyncMethodDescriptor(f))
 
 class EventLoopLocal:
+	"""
+	Event-loop tied value storage
+	
+	This class can store a thread local value, except that the stored value is
+	guaranteed to be destroyed before the local thread's C++ (kj) event loop.
+	If for some reason that event loop is reset or dissociated, this value will
+	be cleared beforehand.
+	
+	This allows to store objects that internally rely on the C++ event loop without
+	encountering exceptions upon their destruction.
+	
+	Access the stored object via the *.value* property.
+	"""
+	
 	def __init__(self, default = None):
 		self.default = default
 	
@@ -130,4 +144,5 @@ class EventLoopLocal:
 		del eventLoopDict()[id(self)]
 	
 	def isSet(self):
+		"""Checks whether the value is already set."""
 		return id(self) in eventLoopDict()

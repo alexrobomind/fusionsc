@@ -11,6 +11,9 @@
 
 #include <fsc/vmec.capnp.h>
 
+#include <fsc/capi-lvn.h>
+#include <fsc/services.h>
+
 #include <pybind11/numpy.h>
 
 
@@ -121,29 +124,30 @@ namespace {
 	}
 	
 	py::capsule getStoreHelper() {
-		auto storeDestructor = [](void* rawPtr) {
-			auto ptr = static_cast<fsc_DataStore*>(rawPtr);
-			delete ptr;
+		auto storeDestructor = [](PyObject* capsulePtr) {
+			void* rawPtr = PyCapsule_GetPointer(capsulePtr, "fusionsc_DataStore");
+			auto ptr = static_cast<fusionsc_DataStore*>(rawPtr);
+			ptr -> decRef(ptr);
 		};
 		
-		auto& ctx = PythonContext::getInstance();
-		auto& store = ctx.librayThread().store();
+		auto& store = PythonContext::libraryThread() -> store();
 		
-		return py::capsule(store.incRef(), "fsc_DataStore", storeDestructor);
+		return py::capsule(store.incRef(), "fusionsc_DataStore", storeDestructor);
 	}
 	
 	struct LocalServer {
 		py::capsule backend;
+		capnp::InterfaceSchema schema;
 		
-		LocalServer(py::capsule c) : backend(mv(c)) {}
+		LocalServer(py::capsule c, capnp::InterfaceSchema is) : backend(mv(c)), schema(mv(is)) {}
 		
-		capnp::Capability::Client connect() {
+		capnp::DynamicCapability::Client connect() {
 			KJ_REQUIRE(kj::StringPtr(backend.name()) == "fusionsc_LvnHub*");
-			fsc_LvnHub** ppHub = backend;
+			fusionsc_LvnHub** ppHub = backend;
 			
-			return connectLocal(*ppHub);
+			return connectInProcess(*ppHub).castAs<capnp::DynamicCapability>(schema);
 		}
-	}		
+	};		
 }
 
 void initHelpers(py::module_& m) {
@@ -186,8 +190,8 @@ void initHelpers(py::module_& m) {
 	py::module_ localModule = m.def_submodule("local");
 	localModule.def("getStore", &getStoreHelper);
 	
-	py::class_<LocalServer>(m, "LocalServer")
-		.def(py::init<py::capsule>())
+	py::class_<LocalServer>(localModule, "LocalServer")
+		.def(py::init<py::capsule, capnp::InterfaceSchema>(), py::attr("lvnCapsule"), py::attr("schema"))
 		.def("connect", &LocalServer::connect)
 	;
 }

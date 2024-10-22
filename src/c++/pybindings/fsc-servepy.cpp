@@ -1,4 +1,13 @@
-#include "servepy.h"
+#include "fsc-servepy.h"
+
+#include <fsc/capi-lvn.h>
+#include <fsc/capi-store.h>
+#include <fsc/services.h>
+#include <fsc/local.h>
+
+namespace py = pybind11;
+
+using kj::Own;
 
 namespace fsc {
 
@@ -6,7 +15,7 @@ namespace {
 
 // The upstream connector will interpret this just as a lvn pointer.
 struct ExternLayout {
-	fusionsc_LVNHub* lvn = nullptr;
+	fusionsc_LvnHub* lvn = nullptr;
 	
 	Own<const InProcessServer> server;
 	
@@ -21,33 +30,39 @@ struct ExternLayout {
 
 static_assert(std::is_standard_layout<ExternLayout>::value);
 
-void serviceDestructor(void* rawPtr) {
-	delete static_cast<ExternLayout*>(rawPtr);
+void serviceDestructor(PyObject* objectPtr) {
+	void* contentPtr = PyCapsule_GetPointer(objectPtr, "fusionsc_LvnHub*");
+	delete static_cast<ExternLayout*>(contentPtr);
 }
 
 }
 
-py::object pybindings::createLocalServer(kj::Function<capnp::Capability::Client()> serviceFactory) {
-	auto localModule = py::import_("fusionsc.local");
+Library pybindings::newPythonBoundLibrary() {
+	auto localModule = py::module_::import("fusionsc.local");
 	
 	// Retrieve data store
-	py::capsule_ dataStoreCapsule = py::reinterpret_borrow<py__capsule>(localModule.attr("getStore")());
-	fsc_DataStore* storePtr = dataStoreCapsule;
+	py::capsule dataStoreCapsule = py::reinterpret_borrow<py::capsule>(localModule.attr("getStore")());
+	fusionsc_DataStore* storePtr = dataStoreCapsule;
 	
 	// Create new FusionSC instance with the correct data store
-	fsc::StartOptions opts;
+	fsc::StartupParameters opts;
 	opts.dataStore.emplace(storePtr);
 	
-	auto newLib = fsc::newLibrary(opts);
+	return fsc::newLibrary(opts);
+}
+
+py::object pybindings::createLocalServer(kj::Function<capnp::Capability::Client()> serviceFactory, capnp::InterfaceSchema schema) {
+	KJ_REQUIRE(!schema.isBranded(), "Only unbranded schemas can currently be served as local servers. This restriction might be relaxed in future.");
 	
 	// Create interface
-	ExternLayout* externLayout = new ExternLayout(newInProcessServer(mv(serviceFactory), mv(newLib)));
+	ExternLayout* externLayout = new ExternLayout(newInProcessServer(mv(serviceFactory), newPythonBoundLibrary()));
 	
 	// Put interface into capsule
 	py::capsule interfaceCapsule(externLayout, "fusionsc_LvnHub*", &serviceDestructor);
 	
 	// Use upstream library to connect to capsule
-	return localModule.attr("LocalServer")(mv(interfaceCapsule));
+	auto localModule = py::module_::import("fusionsc.local");
+	return localModule.attr("LocalServer")(mv(interfaceCapsule), schema.getProto().getId());
 }
 
 }

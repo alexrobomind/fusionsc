@@ -44,7 +44,7 @@ namespace fscpy {
 		auto enumerants = enumSchema.getEnumerants();
 		auto knownEnumerants = [&]() {
 			auto builder = kj::heapArrayBuilder<py::object>(enumerants.size());
-			for(auto& e : enumerants) builder.add(py::cast(EnumInterface(e)));
+			for(auto e : enumerants) builder.add(py::cast(EnumInterface(e)));
 			return builder.finish();
 		}();
 		

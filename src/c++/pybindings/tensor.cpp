@@ -83,14 +83,14 @@ py::buffer_info getEnumTensor(T tensor) {
 	auto enumerants = enumSchema.getEnumerants();
 	auto knownEnumerants = [&]() {
 		auto builder = kj::heapArrayBuilder<py::object>(enumerants.size());
-		for(auto& e : enumerants) builder.add(py::cast(EnumInterface(e)));
+		for(auto e : enumerants) builder.add(py::cast(EnumInterface(e)));
 		return builder.finish();
 	}();
 	
 	kj::HashMap<uint64_t, py::object> unknownEnumerants;
 	
 	// Type-erased list for faster processing
-	capnp::List<uint16_t>::Reader rawData = data.as<AnyList>().as<capnp::List<uint16_t>>();
+	capnp::List<uint16_t>::Reader rawData = data.template as<capnp::AnyList>().template as<capnp::List<uint16_t>>();
 	
 	auto resultHolder = ContiguousCArray::alloc<PyObject*>(shape, "O");
 	auto outData = resultHolder.template as<PyObject*>();

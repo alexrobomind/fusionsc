@@ -5,6 +5,8 @@
 
 #include <capnp/capability.h>
 
+#include <fsc/local.h>
+
 namespace fsc { namespace pybindings {	
 	/**
 	 * Starts a new worker thread, and creates a python object that
@@ -20,5 +22,11 @@ namespace fsc { namespace pybindings {
 	 * ABI, therefore the versions between the main fusionsc plugin and the version
 	 * linked against this library can vary independently
 	 */
-	py::object createLocalServer(kj::Function<capnp::Capability::Client()> service);
+	pybind11::object createLocalServer(kj::Function<capnp::Capability::Client()> service, capnp::InterfaceSchema = capnp::Schema::from<capnp::Capability>());
+	
+	/**
+	 * Creates a FusionSC library instance sharing its data store with the main
+	 * FusionSC library registered in the python plugin.
+	 */
+	Library newPythonBoundLibrary();
 }}

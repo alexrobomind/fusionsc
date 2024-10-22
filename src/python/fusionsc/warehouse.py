@@ -26,19 +26,19 @@ Storable = Union[
 ]
 
 @asyncFunction
-async def lsRemote():
+async def lsRemote() -> list[str]:
 	"""Lists the warehouses available through the current (possibly remote) backend"""
 	response = await backends.activeBackend().listWarehouses()
 	return [str(name) for name in response.names]
 
 @asyncFunction
-async def openRemote(name: str):
+async def openRemote(name: str) -> Folder:
 	"""Opens the named warehouse exposed by the current backend"""
 	response = await backends.activeBackend().getWarehouse(name)
 	return Folder(response.warehouse)
 
 @asyncFunction
-async def open(url: str):
+async def open(url: str) -> Storable:
 	"""
 	Opens a warehouse via a URL.
 	
@@ -73,6 +73,9 @@ async def open(url: str):
 	response = await backends.localResources().openWarehouse(url)
 	return _decode(response.storedObject)
 
+class ObjectGraph(wrappers.RefWrapper):
+	pass
+
 class Folder(Object):
 	"""
 	A mutable folder inside a warehouse
@@ -82,7 +85,7 @@ class Folder(Object):
 		super().__init__(backend)
 	
 	@asyncFunction
-	async def ls(self, path: str = ""):
+	async def ls(self, path: str = "") -> list[str]:
 		"""
 		Lists all entries currently present in this folder
 		"""
@@ -91,7 +94,7 @@ class Folder(Object):
 		return [str(x) for x in response.entries]
 	
 	@asyncFunction
-	async def getAll(self, path: str = ""):
+	async def getAll(self, path: str = "") -> dict:
 		"""
 		Returns a key-value mapping of all present entries
 		"""
@@ -100,7 +103,7 @@ class Folder(Object):
 		return { str(entry.key) : _decode(entry.value) for entry in response.entries }
 	
 	@asyncFunction
-	async def get(self, path: str):
+	async def get(self, path: str) -> Storable:
 		"""
 		Returns the object placed under the specified path
 		"""
@@ -109,7 +112,7 @@ class Folder(Object):
 		return _decode(response)
 	
 	@asyncFunction
-	async def put(self, path: str, val: Storable):
+	async def put(self, path: str, val: Storable) -> Storable:
 		"""
 		Places an object under the specified path. Creates parent directories as needed
 		"""
@@ -126,7 +129,7 @@ class Folder(Object):
 		await self.backend.rm(path)
 	
 	@asyncFunction
-	async def createFile(self, path: str = ""):
+	async def createFile(self, path: str = "") -> File:
 		"""
 		Creates a new database file at the given path.
 		
@@ -137,7 +140,7 @@ class Folder(Object):
 		response = await self.backend.createFile(path)
 		return File(response.file)
 	
-	def freeze(self, path: str = ""):
+	def freeze(self, path: str = "") -> wrappers.RefWrapper:
 		"""
 		Returns a frozen version of the directory structure contained inside this folder
 		tree. The structure returns a snapshot of all directories and files. Actual stored
@@ -151,17 +154,17 @@ class Folder(Object):
 		return wrappers.RefWrapper(pipeline.ref)
 	
 	@asyncFunction
-	async def exportGraph(self, path: str = ""):
+	async def exportGraph(self, path: str = "") -> ObjectGraph:
 		"""
 		Saves the subgraph of objects reachable from the given path. The graph mirrors the
 		exact stored data in the warehouse, and can hold mutable objects referenced by
 		immutable data structures.
 		"""
 		response = await self.backend.exportGraph(path)
-		return wrappers.RefWrapper(response.graph)
+		return ObjectGraph(response.graph)
 	
 	@asyncFunction
-	async def importGraph(self, graph, path, root = 0):
+	async def importGraph(self, graph: ObjectGraph, path: str, root = 0) -> Storable:
 		"""
 		Restored a full graph of reachable objects to the given path. A 1:1 copy of this graph
 		will be created in the database, preserving referential identity of all mutable nodes.
@@ -172,7 +175,7 @@ class Folder(Object):
 		return _decode(response)
 	
 	@asyncFunction
-	async def deepCopy(self, srcPath: str, dstPath: str):
+	async def deepCopy(self, srcPath: str, dstPath: str) -> Storable:
 		"""
 		Creates a deep copy of all objects from one path to another.
 		
@@ -188,7 +191,7 @@ class File(Object):
 		super().__init__(backend)
 	
 	@asyncFunction
-	async def get(self):
+	async def get(self) -> Storable:
 		"""
 		Accesses the contents of the target file (by reference)
 		"""
@@ -197,7 +200,7 @@ class File(Object):
 		return _decode(response)
 	
 	@asyncFunction
-	async def read(file):
+	async def read(file) -> capnp.StructReader:
 		"""
 		Downloads the contents of the target file (assuming it's
 		a DataRef)
@@ -205,7 +208,7 @@ class File(Object):
 		return await data.download.asnc(self.backend.get().ref)
 	
 	@asyncFunction
-	async def put(self, val: Storable):
+	async def put(self, val: Storable) -> Storable:
 		response = await self.backend.put.asnc(_encode(val))
 		return _decode(response)
 
@@ -230,7 +233,7 @@ def _encode(obj: Storable) -> capnp.CapabilityClient:
 		
 	return data.publish(obj)
 
-def _decode(obj: service.Warehouse.StoredObject.ReaderOrBuilder):
+def _decode(obj: service.Warehouse.StoredObject.ReaderOrBuilder) -> Storable:
 	which = obj.which_()
 	
 	# Cases where the object type is already known

@@ -436,6 +436,7 @@ void bindType() {
 	schema.def("__dir__", [](capnp::Schema& self) {
 		py::list result;
 		result.append("__getitem__");
+		result.append("id_");
 		
 		auto proto = self.getProto();
 		

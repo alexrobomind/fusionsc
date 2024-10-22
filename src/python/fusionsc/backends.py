@@ -12,7 +12,7 @@ import threading
 asnc.startEventLoop()
 
 # Create a new in-process worker living in a separate thread
-inProcessWorker = native.LocalRootServer()
+inProcessWorker = native.connectLocal() #native.LocalRootServer()
 
 #_localResources = contextvars.ContextVar("fusionsc.backends._localResources", default = (None, None))
 _localResources = asnc.EventLoopLocal(default = None)
@@ -24,7 +24,7 @@ def _threadId():
 def connectLocal():
 	"""Connects a thread to the in-process worker. Automatically called for main thread."""
 	asnc.startEventLoop()
-	_localResources.value = inProcessWorker.connect()
+	_localResources.value = inProcessWorker.connect().castAs_(service.LocalResources)
 	
 def disconnectLocal():
 	"""Disconnects a thread from the in-process worker"""

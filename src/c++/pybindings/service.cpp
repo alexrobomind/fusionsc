@@ -18,6 +18,8 @@
 #include <fsc/hint.capnp.h>
 #include <fsc/dynamic.capnp.h>
 
+#include "fsc-servepy.h"
+
 using capnp::DynamicValue;
 using capnp::DynamicList;
 using capnp::DynamicStruct;
@@ -42,8 +44,8 @@ LocalResources::Client connectSameThread2() {
 	return connectSameThread1(config);
 }
 
-struct LocalRootServer {
-	Own<InProcessServer> backend;
+/*struct LocalRootServer {
+	Own<const InProcessServer> backend;
 	
 	LocalRootServer() :
 		backend(
@@ -57,7 +59,14 @@ struct LocalRootServer {
 	LocalResources::Client connect() {
 		return backend -> connect<LocalResources>();
 	}
-};
+};*/
+
+py::object connectLocal() {
+	return fsc::pybindings::createLocalServer([]{
+		Temporary<LocalConfig> rootConfig;
+		return createLocalResources(rootConfig);
+	});
+}
 
 }
 
@@ -65,10 +74,11 @@ namespace fscpy {
 	void initService(py::module_& m) {	
 		m.def("connectSameThread", &connectSameThread1);
 		m.def("connectSameThread", &connectSameThread2);
+		m.def("connectLocal", &connectLocal);
 		
-		py::class_<LocalRootServer>(m, "LocalRootServer")
+		/*py::class_<LocalRootServer>(m, "LocalRootServer")
 			.def(py::init<>())
 			.def("connect", &LocalRootServer::connect)
-		;
+		;*/
 	}
 }

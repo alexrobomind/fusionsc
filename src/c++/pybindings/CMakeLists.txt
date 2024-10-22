@@ -1,7 +1,7 @@
 if(FSC_WITH_PYTHON)
 	add_library(
 		fsc-servepy
-		PRIVATE
+		
 		fsc-servepy.cpp
 	)
 	

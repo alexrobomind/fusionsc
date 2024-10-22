@@ -284,7 +284,9 @@ endif()
 # ----------- Jsonscons -----------
 
 add_library(fusionsc_jsonscons INTERFACE)
-target_include_directories(fusionsc_jsonscons INTERFACE vendor/jsonscons/include)
+target_include_directories(fusionsc_jsonscons INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/jsonscons/include>)
+install(TARGETS fusionsc_jsonscons EXPORT FSCTargets)
+
 
 # ----------- Happly -----------
 
@@ -293,7 +295,8 @@ add_subdirectory(vendor/happly)
 # ----------- Poissongen -----------
 
 add_library(fusionsc_poissongen INTERFACE)
-target_include_directories(fusionsc_poissongen INTERFACE vendor/pdg)
+target_include_directories(fusionsc_poissongen INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/pdg>)
+install(TARGETS fusionsc_poissongen EXPORT FSCTargets)
 
 # ----------- Capfuzz (internal) -----------
 

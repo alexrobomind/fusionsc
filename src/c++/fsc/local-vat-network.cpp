@@ -480,6 +480,8 @@ LocalVatHub::LocalVatHub(fusionsc_LvnHub* nBackend) :
 {
 	if(backend == nullptr)
 		backend = new LocalVatHubImpl();
+	else
+		backend -> incRef(backend);
 }
 
 LocalVatHub::~LocalVatHub() {
