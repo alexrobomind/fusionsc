@@ -8,7 +8,7 @@
 #include <fsc/local.h>
 #include <capnp/schema.h>
 
-namespace fsc { namespace pybindings {	
+namespace fsc { namespace pybindings {
 	/**
 	 * Starts a new worker thread, and creates a python object that
 	 * can be used to connect to the capability return by this service.
@@ -23,7 +23,23 @@ namespace fsc { namespace pybindings {
 	 * ABI, therefore the versions between the main fusionsc plugin and the version
 	 * linked against this library can vary independently
 	 */
-	pybind11::object createLocalServer(kj::Function<capnp::Capability::Client()> service, capnp::InterfaceSchema = capnp::Schema::from<capnp::Capability>());
+	template<typename Factory>
+	pybind11::object createLocalServer(Factory factory) {
+		using ClientType = decltype(factory());
+		using BaseType = capnp::FromClient<ClientType>;
+		
+		auto nestedFactory = [f = mv(factory)]() mutable -> capnp::Capability::Client {
+			return f();
+		};
+		
+		
+		return createLocalServer(mv(nestedFactory), capnp::Schema::from<BaseType>());
+	}
+	
+	/**
+	 * Dynamically typed version of createLocalServer(...)
+	 */
+	pybind11::object createLocalServer(kj::Function<capnp::Capability::Client()> service, capnp::InterfaceSchema);
 	
 	/**
 	 * Creates a FusionSC library instance sharing its data store with the main

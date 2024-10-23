@@ -63,7 +63,6 @@ py::object pybindings::createLocalServer(kj::Function<capnp::Capability::Client(
 	// Get server type
 	auto loaderModule = py::module_::import("fusionsc").attr("loader");
 	auto pyType = loaderModule.attr("getType")(schema.getProto().getId());
-	py::print("Server type: ", pyType);
 	
 	// Use upstream library to connect to capsule
 	auto localModule = py::module_::import("fusionsc.local");

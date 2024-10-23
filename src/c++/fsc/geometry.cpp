@@ -369,7 +369,8 @@ Promise<void> GeometryLibImpl::collectTagNames(Geometry::Reader input, kj::HashS
 			auto merged = localRef.get();
 			
 			for(auto tagName : merged.getTagNames()) {
-				output.insert(kj::heapString(tagName));
+				if(output.find(tagName) == nullptr)
+					output.insert(kj::heapString(tagName));
 			}
 		});
 	};

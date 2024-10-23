@@ -62,7 +62,7 @@ LocalResources::Client connectSameThread2() {
 };*/
 
 py::object connectLocal() {
-	return fsc::pybindings::createLocalServer([]{
+	return fsc::pybindings::createLocalServer([]() -> LocalResources::Client {
 		Temporary<LocalConfig> rootConfig;
 		return createLocalResources(rootConfig);
 	});

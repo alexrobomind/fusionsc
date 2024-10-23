@@ -24,7 +24,7 @@ def _threadId():
 def connectLocal():
 	"""Connects a thread to the in-process worker. Automatically called for main thread."""
 	asnc.startEventLoop()
-	_localResources.value = inProcessWorker.connect().castAs_(service.LocalResources)
+	_localResources.value = inProcessWorker.connect()
 	
 def disconnectLocal():
 	"""Disconnects a thread from the in-process worker"""
