@@ -16,7 +16,7 @@
 
 using namespace fscpy;
 
-kj::Own<py::dict> globalClasses;
+// kj::Own<py::dict> globalClasses;
 kj::Own<py::type> baseType;
 kj::Own<py::type> baseMetaType;
 
@@ -41,7 +41,6 @@ struct MethodDescriptor {
 };
 
 void atExitFunction() {
-	globalClasses = nullptr;
 	baseType = nullptr;
 	baseMetaType = nullptr;
 }
@@ -151,10 +150,7 @@ PYBIND11_MODULE(native, m) {
 	if(envVal != nullptr && std::strcmp(envVal, "0") != 0) {
 		kj::_::Debug::setLogLevel(kj::LogSeverity::INFO);
 	}
-	
-	// Perform run-time initialization of python-related globals
-	globalClasses = kj::heap<py::dict>();
-	
+		
 	// Create global meta class
 	baseType = kj::heap<py::type>(py::eval("type('FSCPyObject', (object,), {})"));
 	py::type standardMeta    = py::reinterpret_borrow<py::type>(reinterpret_cast<PyObject*>(&PyType_Type));

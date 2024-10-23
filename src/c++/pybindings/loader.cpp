@@ -434,12 +434,10 @@ void fscpy::initLoader(py::module_& m) {
 		"getType",
 		
 		[](uint64_t id) {
-			return globalClasses -> attr("get")(id, py::none());
+			return defaultLoader.capnpLoader.get(id);
 		}
 	);
-	
-	globalClasses = kj::heap<py::dict>();
-	
+		
 	loader.attr("roots") = py::dict();
 	loader.def(
 		"parseSchema",

@@ -18,9 +18,9 @@ TEST_CASE("in-process-server") {
 		return createLocalResources(config);
 	};
 	
-	auto server = newInProcessServer<LocalResources>(mv(localFactory));
+	auto server = newInProcessServer(mv(localFactory));
 	
-	auto connected = server();
+	auto connected = server -> connect<LocalResources>();
 	connected.whenResolved().wait(thread -> waitScope());
 }
 

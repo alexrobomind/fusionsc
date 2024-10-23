@@ -191,7 +191,7 @@ void initHelpers(py::module_& m) {
 	localModule.def("getStore", &getStoreHelper);
 	
 	py::class_<LocalServer>(localModule, "LocalServer")
-		.def(py::init<py::capsule, capnp::InterfaceSchema>(), py::attr("lvnCapsule"), py::attr("schema"))
+		.def(py::init<py::capsule, capnp::InterfaceSchema>(), py::arg("lvnCapsule"), py::arg("schema"))
 		.def("connect", &LocalServer::connect)
 	;
 }

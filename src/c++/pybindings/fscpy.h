@@ -61,7 +61,7 @@ namespace fscpy {
 	py::object simpleObject();
 }
 
-extern kj::Own<py::dict> globalClasses;
+// extern kj::Own<py::dict> globalClasses;
 extern kj::Own<py::type> baseType;
 extern kj::Own<py::type> baseMetaType;
 

@@ -6,6 +6,7 @@
 #include <capnp/capability.h>
 
 #include <fsc/local.h>
+#include <capnp/schema.h>
 
 namespace fsc { namespace pybindings {	
 	/**

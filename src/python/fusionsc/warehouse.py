@@ -32,7 +32,7 @@ async def lsRemote() -> list[str]:
 	return [str(name) for name in response.names]
 
 @asyncFunction
-async def openRemote(name: str) -> Folder:
+async def openRemote(name: str) -> "Folder":
 	"""Opens the named warehouse exposed by the current backend"""
 	response = await backends.activeBackend().getWarehouse(name)
 	return Folder(response.warehouse)
@@ -129,7 +129,7 @@ class Folder(Object):
 		await self.backend.rm(path)
 	
 	@asyncFunction
-	async def createFile(self, path: str = "") -> File:
+	async def createFile(self, path: str = "") -> "File":
 		"""
 		Creates a new database file at the given path.
 		

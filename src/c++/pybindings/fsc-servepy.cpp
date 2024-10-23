@@ -60,9 +60,14 @@ py::object pybindings::createLocalServer(kj::Function<capnp::Capability::Client(
 	// Put interface into capsule
 	py::capsule interfaceCapsule(externLayout, "fusionsc_LvnHub*", &serviceDestructor);
 	
+	// Get server type
+	auto loaderModule = py::module_::import("fusionsc").attr("loader");
+	auto pyType = loaderModule.attr("getType")(schema.getProto().getId());
+	py::print("Server type: ", pyType);
+	
 	// Use upstream library to connect to capsule
 	auto localModule = py::module_::import("fusionsc.local");
-	return localModule.attr("LocalServer")(mv(interfaceCapsule), schema.getProto().getId());
+	return localModule.attr("LocalServer")(mv(interfaceCapsule), mv(pyType));
 }
 
 }

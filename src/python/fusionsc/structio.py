@@ -4,7 +4,7 @@ This module can be used to perform import and export operations between python o
 formats (currently JSON, YAML, CBOR, BSON, MSGPACK, and UBJSON).
 """
 
-from . import native
+from . import native, capnp
 from .asnc import asyncFunction
 
 from typing import Union
@@ -85,7 +85,7 @@ async def recursiveDump(data, file, lang='json', compact=False):
 	fd = file.fileno()
 	await native.structio.dumpAllToFd(data, fd, _checkLang(lang), compact)
 
-def load(src, dst: Union[NoneType, dict, list, capnp.Builder] = None, lang: str ='json'):
+def load(src, dst: Union[None, dict, list, capnp.Builder] = None, lang: str ='json'):
 	"""
 	Load the formatted data. Can either deserialize the input as a nested structure of
 	bytes, str, dict, and list, or alternatively deserialize INTO a target object (returning

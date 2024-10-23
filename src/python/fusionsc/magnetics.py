@@ -199,12 +199,12 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 	"""
 	
 	@asyncFunction
-	async def resolve(self) -> MagneticConfig:
+	async def resolve(self) -> "MagneticConfig":
 		"""Resolves contained coils and magnetic configurations contained in this object (returned in a new instance)"""
 		return MagneticConfig(await resolve.resolveField.asnc(self.data))
 	
 	@asyncFunction
-	async def compute(self, grid) -> MagneticConfig:
+	async def compute(self, grid) -> "MagneticConfig":
 		"""
 		Computes the magnetic field on the specified grid. Doesn't download the field to the local machine.
 		
@@ -228,7 +228,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		return result
 	
 	@asyncFunction
-	async def computeCached(self, grid):
+	async def computeCached(self, grid) -> "MagneticConfig":
 		"""
 		Attaches a cached computed version of this field. In future computations, this field will be interpolated
 		as long as all points of the compute request lie inside its grid definition.
@@ -246,7 +246,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		assert self.data.which_() == 'computedField', 'Can only await computed fields'
 		return self.data.computedField.data.__await__()
 	
-	def translate(self, dx):
+	def translate(self, dx) -> "MagneticConfig":
 		"""Returns a new field shifted by the given vector"""
 		result = MagneticConfig()
 		
@@ -261,7 +261,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		
 		return result
 	
-	def rotate(self, angle, axis, center = [0, 0, 0]):
+	def rotate(self, angle, axis, center = [0, 0, 0]) -> "MagneticConfig":
 		"""Returns a new field rotated around the prescribed axis and center point"""
 		result = MagneticConfig()
 		
@@ -279,7 +279,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		return result
 	
 	@asyncFunction
-	async def interpolateXyz(self, points, grid = None):
+	async def interpolateXyz(self, points, grid = None) -> np.array:
 		"""
 		Evaluates the magnetic field at target positions by first computing the magnetic field
 		at the target points (if not yet done), and then 
@@ -297,7 +297,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		return np.asarray(response.values)
 	
 	@asyncFunction
-	async def evaluateXyz(self, points):
+	async def evaluateXyz(self, points) -> np.array:
 		"""
 		Evaluates the magnetic field in the given coordinates. Unlike interpolateXyz, this function
 		does NOT compute the field on a grid and then interpolate, but instead evaluates the field
@@ -314,7 +314,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		return np.asarray(response.values)
 	
 	@asyncFunction
-	async def evaluatePhizr(self, points):
+	async def evaluatePhizr(self, points) -> np.array:
 		"""
 		Evaluates the magnetic field in the given coordinates. 
 		
@@ -329,7 +329,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		return np.asarray(response.values)
 	
 	@asyncFunction
-	async def getComputed(self, grid = None):
+	async def getComputed(self, grid = None) -> tuple[service.ToroidalGrid.Builder, np.array]:
 		"""
 		For a field of type "computed", returns the grid and the downloaded field tensor on the grid.
 		
@@ -425,7 +425,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			"theta" : np.asarray(response.theta)
 		}
 	
-	def __neg__(self):
+	def __neg__(self) -> "MagneticConfig":
 		result = MagneticConfig()
 		
 		# Remove double inversion
@@ -436,7 +436,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		result.data.invert = self.data
 		return result
 	
-	def __add__(self, other):
+	def __add__(self, other) -> "MagneticConfig":
 		if isinstance(other, int) and other == 0:
 			return self
 		
@@ -460,13 +460,13 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		
 		return result
 	
-	def __radd__(self, other):
+	def __radd__(self, other) -> "MagneticConfig":
 		return self.__add__(other)
 		
-	def __sub__(self, other):
+	def __sub__(self, other) -> "MagneticConfig":
 		return self + (-other)
 	
-	def __mul__(self, factor):
+	def __mul__(self, factor) -> "MagneticConfig":
 		import numbers
 		
 		if not isinstance(factor, numbers.Number):
@@ -484,14 +484,14 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		
 		return result
 	
-	def __rmul__(self, factor):
+	def __rmul__(self, factor) -> "MagneticConfig":
 		return self.__mul__(factor)
 	
-	def __truediv__(self, divisor):
+	def __truediv__(self, divisor) -> "MagneticConfig":
 		return self * (1 / divisor)
 	
 	@staticmethod
-	def fromEFit(contents: Optional[str] = None, filename: Optional[str] = None):
+	def fromEFit(contents: Optional[str] = None, filename: Optional[str] = None) -> "MagneticConfig":
 		"""Creates a magnetic equilibrium field form an EFit file"""
 		assert contents or filename, "Must provide either GEqdsk file contents or filename"
 		
@@ -502,7 +502,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		return MagneticConfig({'axisymmetricEquilibrium' : efit.eqFromGFile(contents)})
 	
 	@staticmethod
-	def fromComputed(grid, field):
+	def fromComputed(grid, field) -> "MagneticConfig":
 		"""
 		Creates a field by loading a computed field.
 		
@@ -521,7 +521,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		}})
 	
 	@staticmethod
-	def fromDipoles(positions, moments, radii):
+	def fromDipoles(positions, moments, radii) -> "MagneticConfig":
 		positions = np.asarray(positions)
 		moments = np.asarray(moments)
 		radii = np.asarray(radii)
