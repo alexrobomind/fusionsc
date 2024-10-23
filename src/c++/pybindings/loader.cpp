@@ -80,17 +80,6 @@ namespace pybind11 { namespace detail {
 
 namespace {
 
-enum class FSCPyClassType {
-	BUILDER, READER, PIPELINE
-};
-
-kj::String qualName(py::object scope, kj::StringPtr name) {
-	if(py::hasattr(scope, "__qualname__"))
-		return kj::str(scope.attr("__qualname__").cast<kj::StringPtr>(), ".", name);
-	else
-		return kj::heapString(name);
-}
-
 kj::String sanitizedStructName(kj::StringPtr input) {
 	KJ_IF_MAYBE(pLoc, input.findFirst('$')) {
 		// Method-local structs have a method$What name, this needs to be renamed
@@ -102,6 +91,21 @@ kj::String sanitizedStructName(kj::StringPtr input) {
 	}
 	
 	return str(input);
+}
+
+}
+
+/* namespace {
+
+enum class FSCPyClassType {
+	BUILDER, READER, PIPELINE
+};
+
+kj::String qualName(py::object scope, kj::StringPtr name) {
+	if(py::hasattr(scope, "__qualname__"))
+		return kj::str(scope.attr("__qualname__").cast<kj::StringPtr>(), ".", name);
+	else
+		return kj::heapString(name);
 }
 
 // Declaration for recursive calls
@@ -289,34 +293,6 @@ py::object interpretStructSchema(fscpy::Loader& loader, capnp::StructSchema sche
 	}
 	
 	// Create Promise class
-	
-
-	// Note: The mixing of Promise and Pipeline had to be removed because of conflicts between the generated and the asyncio.Future interface.
-	/*
-	{
-		py::dict attributes;
-		
-		py::type promiseBase = futureType();
-		py::type pipelineBase = output.attr("Pipeline");
-		
-		attributes["__init__"] = fscpy::methodDescriptor(py::cpp_function(
-			[promiseBase, pipelineBase](py::object self, py::object future, py::object pipeline) {
-				promiseBase.attr("__init__")(self, future);
-				pipelineBase.attr("__init__")(self, pipeline);
-			}
-		));
-		
-		kj::String suffix = kj::str("Promise");
-		attributes["__qualname__"] = qualName(output, suffix);
-		attributes["__module__"] = moduleName;
-		
-		//py::type metaClass = py::type::of(promiseBase);
-		py::type metaClass = py::reinterpret_borrow<py::type>(reinterpret_cast<PyObject*>(&PyType_Type));
-		
-		// py::object newCls = (*baseMetaType)(kj::str(structName, ".", suffix).cStr(), py::make_tuple(promiseBase, pipelineBase), attributes);
-		output.attr(suffix.cStr()) = newCls;
-	}
-	*/
 		
 	output.attr("newMessage") = py::cpp_function(
 		[schema](py::object copyFrom, size_t initialSize) mutable {
@@ -338,45 +314,6 @@ py::object interpretStructSchema(fscpy::Loader& loader, capnp::StructSchema sche
 		py::arg("copyFrom") = py::none(),
 		py::arg("initialSize") = 1024
 	);
-	
-	/*output.attr("castAs") = py::cpp_function(
-		[schema](py::object input) -> py::object {
-			py::detail::make_caster<capnp::DynamicStruct::Reader> readerCaster;
-			py::detail::make_caster<capnp::DynamicStruct::Builder> builderCaster;
-			
-			py::object result;
-			
-			if(builderCaster.load(input, false)) {
-				capnp::AnyStruct::Builder asBuilder = builderCaster.operator capnp::DynamicStruct::Builder&();
-				result = py::cast(asBuilder.as<capnp::DynamicStruct>(schema));
-			} else if(readerCaster.load(input, false)) {
-				capnp::AnyStruct::Reader asReader = readerCaster.operator capnp::DynamicStruct::Reader&();
-				result = py::cast(asReader.as<capnp::DynamicStruct>(schema));
-			} else {
-				KJ_FAIL_REQUIRE("Object is not a struct reader or builder");
-			}
-			
-			result.attr("_castFrom") = input;
-			return result;
-		}
-	);
-		
-	output.attr("_initRootAs") = py::cpp_function(
-		[schema](py::object src) mutable {
-			auto& msg = py::cast<capnp::MessageBuilder&>(src);
-			
-			// We use DynamicValue instead of DynamicStruct to engage our type-dependent dispatch
-			capnp::DynamicValue::Builder builder = msg.initRoot<capnp::DynamicStruct>(schema);			
-			py::object result = py::cast(builder);
-			
-			result.attr("_msg") = src;
-			
-			return result;
-		},
-		py::name("newMessage"),
-		py::scope(output),
-		py::arg("messageBuilder")
-	);*/
 	
 	for(StructSchema::Field field : schema.getFields()) {
 		kj::StringPtr rawName = field.getProto().getName();
@@ -453,12 +390,9 @@ py::object interpretInterfaceSchema(fscpy::Loader& loader, capnp::InterfaceSchem
 	
 	// We need dynamic resolution to get our base capability client
 	// Static resolution fails as we have overridden the type caster
-	/*py::object baseObject = py::cast(DynamicCapability::Client());
-	py::object baseClass = py::type::of(baseObject);*/
 	py::object baseClass = py::type::of<DynamicCapabilityClient>();
 	
 	py::type metaClass = py::reinterpret_borrow<py::type>(reinterpret_cast<PyObject*>(&PyType_Type));
-	//py::type metaClass = py::type::of(baseClass);
 	
 	py::dict outerAttrs;
 	py::dict clientAttrs;
@@ -660,7 +594,7 @@ py::object interpretSchema(fscpy::Loader& loader, uint64_t id, py::object rootSc
 	return output;
 }
 
-}
+} */
 
 // ================== Implementation of typeName ==========================
 
