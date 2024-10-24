@@ -3,6 +3,7 @@
 #include <kj/array.h>
 
 #include "services.h"
+#include "in-process-server.h"
 #include "local.h"
 #include "magnetics.h"
 #include "geometry.h"

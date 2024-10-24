@@ -9,24 +9,43 @@
 #include <fsc/typing.h>
 
 namespace fscpy {
-	struct Loader {		
-		bool importNode(uint64_t nodeID, py::module scope);
-		bool importNodeIfRoot(uint64_t nodeID, py::module scope);
+	struct Loader {
+		/** Adds the contents of a Cap'n'proto schema node to a module.
+		 *
+		 * If the schema node is a struct / interface / enum / const, it will
+		 * be added as an appropriately typed object to the module.
+		 *
+		 * If it is a file, all contained nodes will be added to the module.
+		 */	
+		bool addToModule(uint64_t nodeID, py::module scope);
 		
-		void add(capnp::schema::Node::Reader reader);
-		void addSource(capnp::schema::Node::SourceInfo::Reader reader);
+		/**
+		 * Adds the contents of the schema node if it isn't a nested struct or
+		 * a generated method parameter / result struct.
+		 */
+		bool addToModuleIfAppropriate(uint64_t nodeID, py::module scope);
 		
+		void load(capnp::schema::Node::Reader reader);
+		void loadSource(capnp::schema::Node::SourceInfo::Reader reader);
+		
+		/** Load a C++ type description
+		 *
+		 * This loads the schema node bundled with the associated Cap'n'proto C++
+		 * interface class. It uses capnp::loadCompiledTypeAndDependencies,
+		 * so it also correctly sets up the associations to mark dynamic types
+		 * as castable to this class
+		 */
 		template<typename... T>
-		void addBuiltin();
+		void loadBuiltin();
 		
-		capnp::Schema import(capnp::Schema input);
+		//! Rebuilds the input schema from types registered in here (incl. brands)
+		capnp::Schema equivalentSchema(capnp::Schema input);
 		
 		template<typename T>
-		capnp::Schema importBuiltin();
+		capnp::Schema schemaFor();
 		
 		capnp::SchemaLoader capnpLoader;
 		
-		kj::HashMap<capnp::Schema, capnp::Schema> imported;
 		kj::HashMap<uint64_t, fsc::Temporary<capnp::schema::Node::SourceInfo>> sourceInfo;
 		kj::HashMap<uint64_t, kj::String> rootModules;
 		
@@ -50,6 +69,8 @@ namespace fscpy {
 		py::object makeInterfaceMethod(capnp::InterfaceSchema::Method);
 	
 	private:
+		kj::HashMap<capnp::Schema, capnp::Schema> rebuiltSchemas;
+		
 		kj::HashMap<capnp::Type, py::type> builderTypes;
 		kj::HashMap<capnp::Type, py::type> readerTypes;
 		kj::HashMap<capnp::Type, py::type> commonTypes;
@@ -94,16 +115,26 @@ namespace fscpy {
 	}
 	
 	template<typename... T>
-	void Loader::addBuiltin() {
+	void Loader::loadBuiltin() {
 		using arrType = int [];
 		(void) arrType { 0, (capnpLoader.loadCompiledTypeAndDependencies<T>(), 0)... };
 	}
 	
 	template<typename T>
-	capnp::Schema Loader::importBuiltin() {
-		return import(capnp::Schema::from<T>());
+	capnp::Schema Loader::schemaFor() {
+		return equivalentSchema(capnp::Schema::from<T>());
 	}
 	
+	/** Parses schema files available through importlib-resources.
+	 *
+	 * @param anchor An import-lib resources object representing the current dir
+	   for initial relative path resolution. May be None if the root path is
+	   absolute.
+	   
+	   @param path Root schema path (folder or file)
+	   @param target Destination scope (module) to add the data to.
+	   @param roots Dict to look up root paths (str -> importlib resource objects)
+	 */ 
 	void parseSchema(py::object anchor, kj::StringPtr path, py::object target, py::dict roots);
 	
 	//! Returns a python-safe name equivalent for the input name

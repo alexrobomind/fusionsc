@@ -115,7 +115,8 @@ py::type Loader::makeCommonType(capnp::Type type) {
 	attributes["__qualname__"] = kj::str(kj::get<1>(qn).flatten(), ".ReaderOrBuilder").cStr();
 	attributes["__module__"] = kj::get<0>(qn).cStr();
 	
-	py::type cls = (*baseMetaType)("ReaderOrBuilder", bases, attributes);
+	py::type metaClass = py::type::of(py::type::of<DynamicStructReader>());
+	py::type cls = metaClass("ReaderOrBuilder", bases, attributes);
 	return cls;
 }
 
@@ -204,7 +205,9 @@ namespace {
 		// Disable additional attributes
 		attributes["__slots__"] = py::make_tuple();
 		
-		py::type newCls = (*baseMetaType)(kind.cStr(), bases, attributes);
+		py::type metaClass = py::type::of(bases[0]);
+		py::type newCls = metaClass(kind.cStr(), bases, attributes);
+		
 		return newCls;
 	}
 
@@ -227,7 +230,8 @@ namespace {
 		// Disable additional attributes
 		attributes["__slots__"] = py::make_tuple();
 		
-		py::type newCls = (*baseMetaType)(kind.cStr(), py::make_tuple(base), attributes);
+		py::type metaClass = py::type::of(base);
+		py::type newCls = metaClass(kind.cStr(), py::make_tuple(base), attributes);
 		return newCls;
 	}
 

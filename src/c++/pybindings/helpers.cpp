@@ -6,13 +6,14 @@
 #include <fsc/offline.h>
 #include <fsc/vmec.h>
 #include <fsc/geometry.h>
+#include <fsc/magnetics.h>
 
 #include <fsc/data.h>
 
 #include <fsc/vmec.capnp.h>
 
 #include <fsc/capi-lvn.h>
-#include <fsc/services.h>
+#include <fsc/in-process-server.h>
 
 #include <pybind11/numpy.h>
 
@@ -22,6 +23,8 @@ namespace fscpy {
 	
 namespace {
 
+	// --- timer ---
+	
 	Promise<void> delay(double seconds) {
 		uint64_t timeInNS = static_cast<uint64_t>(seconds * 1e9);
 		auto targetPoint = kj::systemPreciseMonotonicClock().now() + timeInNS * kj::NANOSECONDS;
@@ -29,20 +32,33 @@ namespace {
 		return getActiveThread().timer().atTime(targetPoint);
 	}
 	
+	// --- efit ---
+	
 	Temporary<AxisymmetricEquilibrium> parseGFile(kj::StringPtr str) {
 		Temporary<AxisymmetricEquilibrium> result;
 		parseGeqdsk(result, str);
 		return result;
 	}
-
-	void updateDataHelper(WithMessage<OfflineData::Builder> b, WithMessage<OfflineData::Reader> r) {
-		updateOfflineData(b, r);
-	}
+	
+	// --- vmec ---
 	
 	Temporary<VmecResult> loadVmecOutput(kj::StringPtr pathName) {
 		Temporary<VmecResult> result;
 		interpretOutputFile(getActiveThread().filesystem().getCurrentPath().evalNative(pathName), result.asBuilder());
 		return result;
+	}
+	
+	Promise<void> writeMgridHelper(ComputedField::Reader cf, kj::StringPtr fileName) {
+		auto& fs = getActiveThread().filesystem();
+		
+		auto fsPath = fs.getCurrentPath().evalNative(fileName);
+		return writeMGridFile(fsPath, cf);
+	}
+	
+	// --- offline ---
+
+	void updateDataHelper(WithMessage<OfflineData::Builder> b, WithMessage<OfflineData::Reader> r) {
+		updateOfflineData(b, r);
 	}
 	
 	FieldResolver::Client fieldResolver(DynamicCapabilityClient ref) {
@@ -52,6 +68,8 @@ namespace {
 	GeometryResolver::Client geometryResolver(DynamicCapabilityClient ref) {
 		return newOfflineGeometryResolver(ref.castAs<DataRef<OfflineData>>());
 	}
+	
+	// --- geometry ---
 	
 	void writePlyHelper(WithMessage<MergedGeometry::Reader> geo, kj::StringPtr filename, bool binary) {
 		return writePly(geo, filename, binary);
@@ -116,12 +134,7 @@ namespace {
 		return result;
 	}
 	
-	Promise<void> writeMgridHelper(ComputedField::Reader cf, kj::StringPtr fileName) {
-		auto& fs = getActiveThread().filesystem();
-		
-		auto fsPath = fs.getCurrentPath().evalNative(fileName);
-		return writeMGridFile(fsPath, cf);
-	}
+	// --- local ---
 	
 	py::capsule getStoreHelper() {
 		auto storeDestructor = [](PyObject* capsulePtr) {
@@ -147,7 +160,15 @@ namespace {
 			
 			return connectInProcess(*ppHub).castAs<capnp::DynamicCapability>(schema);
 		}
-	};		
+	};
+	
+	// --- fields ---
+
+	Temporary<MagneticField> simpleTokamakHelper(double rMaj, double rMin, unsigned int nCoils, double Ip) {
+		Temporary<MagneticField> result;
+		simpleTokamak(result, rMaj, rMin, nCoils, Ip);
+		return result;
+	}
 }
 
 void initHelpers(py::module_& m) {
@@ -194,6 +215,9 @@ void initHelpers(py::module_& m) {
 		.def(py::init<py::capsule, capnp::InterfaceSchema>(), py::arg("lvnCapsule"), py::arg("schema"))
 		.def("connect", &LocalServer::connect)
 	;
+	
+	py::module_ fieldsModule = m.def_submodule("fields");
+	fieldsModule.def("simpleTokamak", &simpleTokamakHelper, py::arg("rMaj") = 5.5, py::arg("rMin") = 1.5, py::arg("nCoils") = 25, py::arg("iP") = 0.2);
 }
 
 }

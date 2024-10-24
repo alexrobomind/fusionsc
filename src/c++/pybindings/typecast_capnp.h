@@ -217,7 +217,7 @@ namespace pybind11 { namespace detail {
 			
 			try {
 				DSB dynamic = static_cast<DSB&>(subCaster);
-				capnp::StructSchema staticSchema = fscpy::defaultLoader.importBuiltin<Builds>().asStruct();
+				capnp::StructSchema staticSchema = fscpy::defaultLoader.schemaFor<Builds>().asStruct();
 				
 				//KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
 				::fscpy::checkSame(staticSchema, dynamic.getSchema());
@@ -233,7 +233,7 @@ namespace pybind11 { namespace detail {
 		}
 		
 		static handle cast(fscpy::WithMessage<Builder> src, return_value_policy policy, handle parent) {
-			capnp::StructSchema schema = fscpy::defaultLoader.importBuiltin<Builds>().asStruct();
+			capnp::StructSchema schema = fscpy::defaultLoader.schemaFor<Builds>().asStruct();
 			
 			ASB any = capnp::toAny(src.wrapped());
 			DSB dynamic(fscpy::shareMessage(src), any.as<capnp::DynamicStruct>(schema));
@@ -273,7 +273,7 @@ namespace pybind11 { namespace detail {
 			
 			try {
 				DSR dynamic = static_cast<DSR&>(subCaster);
-				capnp::StructSchema staticSchema = fscpy::defaultLoader.importBuiltin<Reads>().asStruct();
+				capnp::StructSchema staticSchema = fscpy::defaultLoader.schemaFor<Reads>().asStruct();
 				
 				// KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
 				::fscpy::checkSame(staticSchema, dynamic.getSchema());
@@ -289,7 +289,7 @@ namespace pybind11 { namespace detail {
 		}
 		
 		static handle cast(fscpy::WithMessage<Reader> src, return_value_policy policy, handle parent) {
-			capnp::StructSchema schema = fscpy::defaultLoader.importBuiltin<Reads>().asStruct();
+			capnp::StructSchema schema = fscpy::defaultLoader.schemaFor<Reads>().asStruct();
 			
 			ASR any = capnp::toAny(src.wrapped());
 			DSR dynamic(fscpy::shareMessage(src), any.as<capnp::DynamicStruct>(schema));
@@ -350,7 +350,7 @@ namespace pybind11 { namespace detail {
 			
 			try {
 				capnp::DynamicCapability::Client dynamic = (capnp::DynamicCapability::Client&) subCaster;
-				capnp::InterfaceSchema staticSchema = fscpy::defaultLoader.importBuiltin<ClientFor>().asInterface();
+				capnp::InterfaceSchema staticSchema = fscpy::defaultLoader.schemaFor<ClientFor>().asInterface();
 				
 				// KJ_REQUIRE(dynamic.getSchema() == staticSchema, "Incompatible types");
 				::fscpy::checkSame(staticSchema, dynamic.getSchema());
@@ -366,7 +366,7 @@ namespace pybind11 { namespace detail {
 		}
 		
 		static handle cast(Client src, return_value_policy policy, handle parent) {
-			capnp::InterfaceSchema schema = fscpy::defaultLoader.importBuiltin<ClientFor>().asInterface();
+			capnp::InterfaceSchema schema = fscpy::defaultLoader.schemaFor<ClientFor>().asInterface();
 			
 			capnp::Capability::Client anyCap = src;
 			capnp::DynamicCapability::Client dynamic = src.template castAs<capnp::DynamicCapability>(schema);

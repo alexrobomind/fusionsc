@@ -84,6 +84,9 @@ add_library(
 	local-vat-network.h
 	local-vat-network.cpp
 	
+	in-process-server.h
+	in-process-server.cpp
+	
 	index.h
 	index.cpp
 	

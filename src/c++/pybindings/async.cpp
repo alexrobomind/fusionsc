@@ -842,7 +842,7 @@ void initAsync(py::module_& m) {
 	
 	py::class_<AsyncioFutureLike> futureCls(
 		asyncModule, "Future",
-		py::multiple_inheritance(), py::metaclass(*baseMetaType),
+		py::multiple_inheritance(),
 		"AsyncIO-style future"
 	);
 	
@@ -854,11 +854,7 @@ void initAsync(py::module_& m) {
 	futureCls
 		.def_static("__class_getitem__", [pyGeneric](py::object key) {
 			return py::type::of<AsyncioFutureLike>();
-			//return pyGeneric.attr("__dict__")["__class_getitem__"].attr("__get__")(py::none(), py::type::of<AsyncioFutureLike>())(key);
 		})
-		/*.def_property_readonly_static("__parameters__", [promiseParam](py::object cls) {
-			return py::make_tuple(promiseParam);
-		})*/
 	;
 	
 	futureCls

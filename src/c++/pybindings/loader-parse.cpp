@@ -179,17 +179,17 @@ void parseSchema(py::object anchor, kj::StringPtr path, py::object target, py::d
 	std::list<capnp::ParsedSchema> allParsed;
 	allParsed.push_back(parsed);
 	for(auto& node : allParsed) {
-		defaultLoader.addSource(node.getSourceInfo());
+		defaultLoader.loadSource(node.getSourceInfo());
 		
 		for(auto nested : node.getAllNested())
 			allParsed.push_back(mv(nested));
 	}
 	
 	for(auto& schema : loader -> getAllLoaded()) {
-		defaultLoader.add(schema.getProto());
+		defaultLoader.load(schema.getProto());
 	}
 		
-	defaultLoader.importNodeIfRoot(parsed.getProto().getId(), target);
+	defaultLoader.addToModuleIfAppropriate(parsed.getProto().getId(), target);
 }
 
 }

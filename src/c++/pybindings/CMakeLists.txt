@@ -20,7 +20,6 @@ if(FSC_WITH_PYTHON)
 		fsc-python-bindings
 		
 		assign.cpp
-		graphviz.cpp
 		tensor.cpp		
 		
 		capnp-impl.cpp

@@ -2,7 +2,7 @@
 
 #include <fsc/capi-lvn.h>
 #include <fsc/capi-store.h>
-#include <fsc/services.h>
+#include <fsc/in-process-server.h>
 #include <fsc/local.h>
 
 namespace py = pybind11;

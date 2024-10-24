@@ -25,7 +25,7 @@ namespace {
 	auto adjust(capnp::Type type, T&& target) {
 		// Fields of constrained AnyPointer type need to be adjusted
 		if(type.isAnyPointer() && type.whichAnyPointerKind() == capnp::schema::Type::AnyPointer::Unconstrained::CAPABILITY) {
-			auto schema = defaultLoader.importBuiltin<capnp::Capability>();
+			auto schema = defaultLoader.schemaFor<capnp::Capability>();
 			
 			auto asAny = target.template as<capnp::AnyPointer>();
 			target = asAny.template getAs<capnp::DynamicCapability>(schema.asInterface());
@@ -468,7 +468,7 @@ DynamicValuePipeline DynamicStructPipeline::getCapnp(capnp::StructSchema::Field 
 		// AnyStruct fields are not accessible
 		KJ_REQUIRE(fieldType.whichAnyPointerKind() == capnp::schema::Type::AnyPointer::Unconstrained::CAPABILITY);
 		
-		auto schema = defaultLoader.importBuiltin<capnp::Capability>().asInterface();
+		auto schema = defaultLoader.schemaFor<capnp::Capability>().asInterface();
 		return DynamicValuePipeline(
 			mv(typelessValue), mv(schema)
 		);

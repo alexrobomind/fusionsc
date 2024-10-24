@@ -245,8 +245,8 @@ void bindCapClasses() {
 	using S = DynamicCapabilityServer;
 	using CC = DynamicCallContext;
 	
-	ClassBinding<C, O> client("CapabilityClient", py::multiple_inheritance(), py::metaclass(*baseMetaType));
-	ClassBinding<S> server("CapabilityServer", py::multiple_inheritance(), py::metaclass(*baseMetaType));
+	ClassBinding<C, O> client("CapabilityClient", py::multiple_inheritance());
+	ClassBinding<S> server("CapabilityServer", py::multiple_inheritance());
 	
 	client
 		.def(py::init([](C src) { return src; }))
@@ -287,6 +287,12 @@ void bindFieldDescriptors() {
 		.def("__del__", &FD::del)
 		
 		.def_property_readonly("__doc__", &FD::doc)
+		
+		.def_property_readonly("type", &FD::getType)
+		.def_property_readonly("index", &FD::getIndex)
+		.def_property_readonly("proto", [](FD& fd) -> DynamicStructReader {
+			return noMessage(fd.getProto());
+		})
 	;
 }
 
@@ -570,6 +576,36 @@ void bindType() {
 		.def_property_readonly("Pipeline", [](capnp::StructSchema& schema) {
 			return defaultLoader.pipelineType(schema);
 		})
+		.def_property_readonly("fields", [](capnp::StructSchema& schema) {
+			auto fields = schema.getFields();
+			py::dict result;
+			
+			for(auto field : fields) {
+				result[field.getProto().getName().cStr()] = py::cast(new FieldDescriptor(field, nullptr));
+			}
+			
+			return result;
+		})
+		.def_property_readonly("unionFields", [](capnp::StructSchema& schema) {
+			auto fields = schema.getUnionFields();
+			py::dict result;
+			
+			for(auto field : fields) {
+				result[field.getProto().getName().cStr()] = py::cast(new FieldDescriptor(field, nullptr));
+			}
+			
+			return result;
+		})
+		.def_property_readonly("nonUnionFields", [](capnp::StructSchema& schema) {
+			auto fields = schema.getNonUnionFields();
+			py::dict result;
+			
+			for(auto field : fields) {
+				result[field.getProto().getName().cStr()] = py::cast(new FieldDescriptor(field, nullptr));
+			}
+			
+			return result;
+		})
 	;
 	
 	ClassBinding<capnp::InterfaceSchema, capnp::Schema> interfaceSchema("InterfaceSchema");
@@ -580,8 +616,6 @@ void bindType() {
 		.def_property_readonly("Client", [](capnp::InterfaceSchema& schema) {
 			return defaultLoader.clientType(schema);
 		})
-		.def("toProto", &toProto)
-		.def("listOf", &listOf)
 	;
 	
 	ClassBinding<capnp::ListSchema> listSchema("ListSchema");
@@ -618,13 +652,12 @@ void bindType() {
 			}
 			return vals;
 		})
-		.def("toProto", &toProto)
-		.def("listOf", &listOf)
 	;
 	
 	typeLike(structSchema);
 	typeLike(interfaceSchema);
 	typeLike(listSchema);
+	typeLike(enumSchema);
 	
 	ClassBinding<MethodDict>("_MethodDict")
 		.def("__getitem__", &MethodDict::getItem)
@@ -662,7 +695,8 @@ void initCapnp(py::module_& m) {
 		throw py::error_already_set();
 	}
 	
-	defaultLoader.addBuiltin<capnp::Capability>();
+	// Make sure that the default loader links the base capability type
+	defaultLoader.loadBuiltin<capnp::Capability>();
 	
 	// Static global defined above
 	capnpModule = m.def_submodule("capnp", "Python bindings for Cap'n'proto classes (excluding KJ library)");

@@ -44,23 +44,6 @@ LocalResources::Client connectSameThread2() {
 	return connectSameThread1(config);
 }
 
-/*struct LocalRootServer {
-	Own<const InProcessServer> backend;
-	
-	LocalRootServer() :
-		backend(
-			newInProcessServer([]() {
-				Temporary<LocalConfig> rootConfig;
-				return createLocalResources(rootConfig);
-			})
-		)
-	{}
-	
-	LocalResources::Client connect() {
-		return backend -> connect<LocalResources>();
-	}
-};*/
-
 py::object connectLocal() {
 	return fsc::pybindings::createLocalServer([]() -> LocalResources::Client {
 		Temporary<LocalConfig> rootConfig;
@@ -75,10 +58,5 @@ namespace fscpy {
 		m.def("connectSameThread", &connectSameThread1);
 		m.def("connectSameThread", &connectSameThread2);
 		m.def("connectLocal", &connectLocal);
-		
-		/*py::class_<LocalRootServer>(m, "LocalRootServer")
-			.def(py::init<>())
-			.def("connect", &LocalRootServer::connect)
-		;*/
 	}
 }

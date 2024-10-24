@@ -1,7 +1,6 @@
 #include "fscpy.h"
 
 #include <fsc/store.h>
-#include <fsc/magnetics.h>
 
 #include <pybind11/pybind11.h>
 #include <kj/common.h>
@@ -15,10 +14,6 @@
 #endif
 
 using namespace fscpy;
-
-// kj::Own<py::dict> globalClasses;
-kj::Own<py::type> baseType;
-kj::Own<py::type> baseMetaType;
 
 // ============================= Helper classes ===========================
 
@@ -40,23 +35,6 @@ struct MethodDescriptor {
 	py::object get(py::object self, py::object objtype) { if(self.is_none()) return target; return py::cast(BoundMethod(target, self)); }
 };
 
-void atExitFunction() {
-	baseType = nullptr;
-	baseMetaType = nullptr;
-}
-
-auto pySimpleTokamak(double rMaj, double rMin, unsigned int nCoils, double Ip) {
-	Temporary<MagneticField> result;
-	simpleTokamak(result, rMaj, rMin, nCoils, Ip);
-	return result;
-}
-
-void helperFunctions(py::module_& m) {
-	m.def("simpleTokamak", &pySimpleTokamak, py::arg("rMaj") = 5.5, py::arg("rMin") = 1.5, py::arg("nCoils") = 25, py::arg("iP") = 0.2);
-}
-
-struct Simple {};
-
 void bindHelperClasses(py::module_& m) {
 	auto helpersModule = m.def_submodule("_helpers", "Internal helper classes");
 	
@@ -69,11 +47,6 @@ void bindHelperClasses(py::module_& m) {
 	py::class_<MethodDescriptor>(helpersModule, "MethodDescriptor", py::dynamic_attr())
 		.def("__get__", &MethodDescriptor::get)
 		.def("__repr__", [](py::object self) { return "Method"; })
-	;
-	
-	py::class_<Simple>(helpersModule, "Simple", py::dynamic_attr())
-		//.def("__str__", [](py::object self) { return py::hasattr(self, "desc") ? (py::str) self.attr("desc") : "<Unknown simple object>" ; })
-		.def("__repr__", [](py::object self) { return py::hasattr(self, "desc") ? (py::str) self.attr("desc") : "<Unknown simple object>" ; })
 	;
 	
 	py::class_<ContiguousCArray>(helpersModule, "ContiguousCArray", py::buffer_protocol())
@@ -103,10 +76,6 @@ py::buffer_info ContiguousCArray::getBuffer() {
 
 py::object methodDescriptor(py::object method) {
 	return py::cast(MethodDescriptor(method));
-}
-
-py::object simpleObject() {
-	return py::cast(Simple());
 }
 
 }
@@ -150,27 +119,9 @@ PYBIND11_MODULE(native, m) {
 	if(envVal != nullptr && std::strcmp(envVal, "0") != 0) {
 		kj::_::Debug::setLogLevel(kj::LogSeverity::INFO);
 	}
-		
-	// Create global meta class
-	baseType = kj::heap<py::type>(py::eval("type('FSCPyObject', (object,), {})"));
-	py::type standardMeta    = py::reinterpret_borrow<py::type>(reinterpret_cast<PyObject*>(&PyType_Type));
-	/* py::type collectionsMeta = py::type::of(py::module_::import("collections.abc").attr("Mapping"));
-	
-	py::dict metaAttributes;
-	metaAttributes["__module__"] = "fscpy";
-	
-	baseMetaType = kj::heap<py::type>(standardMeta(
-		"MetaClass", py::make_tuple(collectionsMeta, standardMeta), metaAttributes
-	));*/
 	
 	// Helper classes (we need these to define the standard metaclass)
-	bindHelperClasses(m);
-	helperFunctions(m);
-	
-	// baseMetaType = kj::heap<py::type>(standardMeta, py::type::of(py::type::of<Simple>()));
-	
-	// Retrieve the pybind11 metaclass
-	baseMetaType  = kj::heap<py::type>(py::type::of(py::type::of<Simple>()));
+	bindHelperClasses(m);	
 	
 	// Initialize bindings for all components
 	initKj(m);
@@ -182,7 +133,4 @@ PYBIND11_MODULE(native, m) {
 	initService(m);
 	initHelpers(m);
 	initStructio(m);
-	
-	auto atexitModule = py::module_::import("atexit");
-	atexitModule.attr("register")(py::cpp_function(&atExitFunction));
 }

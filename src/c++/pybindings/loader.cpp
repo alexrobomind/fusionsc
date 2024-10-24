@@ -32,7 +32,6 @@ using namespace fscpy;
 
 using kj::str;
 
-	
 kj::String fscpy::memberName(kj::StringPtr name) {
 	auto newName = kj::str(name);
 	
@@ -48,35 +47,6 @@ kj::String fscpy::memberName(kj::StringPtr name) {
 	
 	return newName;
 }
-
-namespace {
-
-/**
- * \internal
- * Handle for a py::object whose name shows up as "PromiseForResult" in signatures
- */
-struct PromiseHandle {
-	py::object pyPromise;
-};
-
-
-
-}
-
-namespace pybind11 { namespace detail {
-	template<>
-	struct type_caster<PromiseHandle> {		
-		PYBIND11_TYPE_CASTER(PromiseHandle, const_name("PromiseForResult"));
-		
-		bool load(handle src, bool convert) {
-			return false;		
-		}
-		
-		static handle cast(PromiseHandle src, return_value_policy policy, handle parent) {
-			return src.pyPromise.inc_ref();
-		}
-	};
-}}
 
 namespace {
 
@@ -294,7 +264,7 @@ kj::String fscpy::Loader::fullName(capnp::Type t) {
 	return kj::str(kj::get<0>(qn), ".", kj::get<1>(qn));
 }
 
-bool fscpy::Loader::importNode(uint64_t nodeID, py::module scope) {		
+bool fscpy::Loader::addToModule(uint64_t nodeID, py::module scope) {		
 	kj::Function<void(capnp::Schema)> handleSchema = [&](capnp::Schema schema) {
 		const uint64_t nodeID = schema.getProto().getId();
 		
@@ -369,7 +339,7 @@ bool fscpy::Loader::importNode(uint64_t nodeID, py::module scope) {
 	return true;
 }
 
-bool fscpy::Loader::importNodeIfRoot(uint64_t nodeID, py::module scope) {
+bool fscpy::Loader::addToModuleIfAppropriate(uint64_t nodeID, py::module scope) {
 	auto schema = capnpLoader.get(nodeID);
 	
 	// A '$' in the name indicates generated a generated parameter type for methods
@@ -386,14 +356,14 @@ bool fscpy::Loader::importNodeIfRoot(uint64_t nodeID, py::module scope) {
 			return false;
 	}
 	
-	return importNode(nodeID, scope);
+	return addToModule(nodeID, scope);
 }
 
-void fscpy::Loader::add(capnp::schema::Node::Reader reader) {
+void fscpy::Loader::load(capnp::schema::Node::Reader reader) {
 	capnpLoader.loadOnce(reader);
 }
 
-void fscpy::Loader::addSource(capnp::schema::Node::SourceInfo::Reader reader) {
+void fscpy::Loader::loadSource(capnp::schema::Node::SourceInfo::Reader reader) {
 	KJ_IF_MAYBE(pSrc, sourceInfo.find(reader.getId())) {
 		return;
 	}
@@ -401,18 +371,18 @@ void fscpy::Loader::addSource(capnp::schema::Node::SourceInfo::Reader reader) {
 	sourceInfo.insert(reader.getId(), reader);
 }
 
-capnp::Schema fscpy::Loader::import(capnp::Schema input) {
-	KJ_IF_MAYBE(pSchema, imported.find(input)) {
+capnp::Schema fscpy::Loader::equivalentSchema(capnp::Schema input) {
+	KJ_IF_MAYBE(pSchema, rebuiltSchemas.find(input)) {
 		return *pSchema;
 	}
 	
 	fsc::Temporary<capnp::schema::Brand> brand;
 	extractBrand(input, brand);
 	
-	capnp::Schema importedSchema = capnpLoader.get(input.getProto().getId(), brand);
-	imported.insert(input, importedSchema);
+	capnp::Schema result = capnpLoader.get(input.getProto().getId(), brand);
+	rebuiltSchemas.insert(input, result);
 	
-	return importedSchema;
+	return result;
 }
 
 fscpy::Loader fscpy::defaultLoader;

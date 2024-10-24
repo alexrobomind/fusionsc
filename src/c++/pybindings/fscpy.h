@@ -54,16 +54,9 @@ namespace fscpy {
 	void initService(py::module_& m);
 	void initHelpers(py::module_& m);
 	void initStructio(py::module_& m);
-	
-	// constexpr inline kj::StringPtr INTERNAL_ACCESS_KEY = "9821736419873251235"_kj;
-	
+		
 	py::object methodDescriptor(py::object method);
-	py::object simpleObject();
 }
-
-// extern kj::Own<py::dict> globalClasses;
-extern kj::Own<py::type> baseType;
-extern kj::Own<py::type> baseMetaType;
 
 #include "fscpy-inl.h"
 
