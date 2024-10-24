@@ -620,7 +620,7 @@ void bindType() {
 	
 	ClassBinding<capnp::ListSchema> listSchema("ListSchema");
 	listSchema
-		.def_property_readonly("elementType", [](capnp::ListSchema& self) {
+		.def_property_readonly("elementType", [](capnp::ListSchema& self) -> capnp::Type {
 			return self.getElementType();
 		})
 	;

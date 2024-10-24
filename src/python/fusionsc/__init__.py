@@ -8,8 +8,10 @@ from . import native
 # Add sub-packages from native library
 from .native import kj
 from .native import capnp
-from .native import loader
 from .native import efit
+
+# Add loader
+from . import loader
 
 # Load service definitions
 from . import service

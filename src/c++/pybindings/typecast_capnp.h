@@ -129,22 +129,22 @@ namespace pybind11 { namespace detail {
 		PYBIND11_TYPE_CASTER(capnp::Type, const_name("fusionsc.capnp.Type"));	
 		static handle cast(capnp::Type type, return_value_policy policy, handle parent) {
 			if(type.isStruct()) {
-				return type_caster<capnp::StructSchema>::cast(type.asStruct(), policy, parent);
+				return type_caster<capnp::StructSchema>::cast(type.asStruct(), return_value_policy::move, parent);
 			}
 			
 			if(type.isInterface()) {
-				return type_caster<capnp::InterfaceSchema>::cast(type.asInterface(), policy, parent);
+				return type_caster<capnp::InterfaceSchema>::cast(type.asInterface(), return_value_policy::move, parent);
 			}
 			
 			if(type.isEnum()) {
-				return type_caster<capnp::EnumSchema>::cast(type.asEnum(), policy, parent);
+				return type_caster<capnp::EnumSchema>::cast(type.asEnum(), return_value_policy::move, parent);
 			}
 			
 			if(type.isList()) {
-				return type_caster<capnp::ListSchema>::cast(type.asList(), policy, parent);
+				return type_caster<capnp::ListSchema>::cast(type.asList(), return_value_policy::move, parent);
 			}
 			
-			return type_caster_base<capnp::Type>::cast(type, policy, parent);
+			return type_caster_base<capnp::Type>::cast(type, return_value_policy::move, parent);
 		}
 		
 		bool load(py::handle src, bool convert) {
@@ -180,18 +180,18 @@ namespace pybind11 { namespace detail {
 			auto proto = schema.getProto();
 			switch(proto.which()) {
 				case Node::STRUCT:
-					return type_caster<capnp::StructSchema>::cast(schema.asStruct(), policy, parent);
+					return type_caster<capnp::StructSchema>::cast(schema.asStruct(), return_value_policy::move, parent);
 				case Node::ENUM:
-					return type_caster<capnp::EnumSchema>::cast(schema.asEnum(), policy, parent);
+					return type_caster<capnp::EnumSchema>::cast(schema.asEnum(), return_value_policy::move, parent);
 				case Node::INTERFACE:
-					return type_caster<capnp::InterfaceSchema>::cast(schema.asInterface(), policy, parent);
+					return type_caster<capnp::InterfaceSchema>::cast(schema.asInterface(), return_value_policy::move, parent);
 				case Node::CONST:
-					return type_caster<capnp::ConstSchema>::cast(schema.asConst(), policy, parent);
+					return type_caster<capnp::ConstSchema>::cast(schema.asConst(), return_value_policy::move, parent);
 				default:
 					break;
 			}
 			
-			return type_caster_base<capnp::Schema>::cast(schema, policy, parent);
+			return type_caster_base<capnp::Schema>::cast(schema, return_value_policy::move, parent);
 		}
 	};
 	
@@ -238,7 +238,7 @@ namespace pybind11 { namespace detail {
 			ASB any = capnp::toAny(src.wrapped());
 			DSB dynamic(fscpy::shareMessage(src), any.as<capnp::DynamicStruct>(schema));
 			
-			return type_caster<DSB>::cast(dynamic, policy, parent);
+			return type_caster<DSB>::cast(dynamic, return_value_policy::move, parent);
 		}		
 	};
 	
@@ -294,7 +294,7 @@ namespace pybind11 { namespace detail {
 			ASR any = capnp::toAny(src.wrapped());
 			DSR dynamic(fscpy::shareMessage(src), any.as<capnp::DynamicStruct>(schema));
 			
-			return type_caster<DSR>::cast(dynamic, policy, parent);
+			return type_caster<DSR>::cast(dynamic, return_value_policy::move, parent);
 		}		
 	};
 	
@@ -371,7 +371,7 @@ namespace pybind11 { namespace detail {
 			capnp::Capability::Client anyCap = src;
 			capnp::DynamicCapability::Client dynamic = src.template castAs<capnp::DynamicCapability>(schema);
 			
-			return type_caster<fscpy::DynamicCapabilityClient>::cast(dynamic, policy, parent);
+			return type_caster<fscpy::DynamicCapabilityClient>::cast(dynamic, return_value_policy::move, parent);
 		}		
 	};
 	
