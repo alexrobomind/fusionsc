@@ -54,6 +54,7 @@ from . import devices
 from typing import Optional
 
 from . import export
+from . import graphviz
 
 import threading
 
