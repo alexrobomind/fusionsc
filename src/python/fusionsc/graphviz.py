@@ -1,3 +1,7 @@
+"""
+Helper module to build representation graphs for data visualization
+"""
+
 from . import capnp
 
 class GraphBuilder:
@@ -12,23 +16,23 @@ class GraphBuilder:
 		else:
 			self.graph = graph
 	
-	def uuid(self) -> str:
+	def _uuiud(self) -> str:
 		tmp = self._uuidCounter
 		self._uuidCounter += 1
 		
 		return str(tmp)
 	
-	def shouldSeparate(self, t) -> bool:		
+	def _shouldSeparate(self, t) -> bool:		
 		if isinstance(t, capnp.ListSchema):
 			t = t.elementType
 		
 		return isinstance(t, (capnp.ListSchema, capnp.StructSchema, capnp.InterfaceSchema))
 	
-	def addStruct(self, reader) -> str:
+	def _addStruct(self, reader) -> str:
 		schema = reader.type_
 		caption = str(schema)
 		
-		nodeId = self.uuid()
+		nodeId = self._uuiud()
 		
 		caption = str(schema)
 		
@@ -43,7 +47,7 @@ class GraphBuilder:
 			
 			val = reader[fieldName]
 			
-			if self.shouldSeparate(field.type):
+			if self._shouldSeparate(field.type):
 				children = self.addMany(val)
 				
 				for child in children:
@@ -94,8 +98,8 @@ class GraphBuilder:
 		self.graph.node(nodeId, caption)
 		return nodeId
 	
-	def addInterface(self, client) -> str:
-		nodeId = self.uuid()
+	def _addInterface(self, client) -> str:
+		nodeId = self._uuiud()
 		self.graph.node(nodeId, str(client.type_))
 		return nodeId
 		
@@ -106,14 +110,14 @@ class GraphBuilder:
 		t = val.type_
 		
 		if isinstance(t, capnp.StructSchema):
-			return self.addStruct(val)
+			return self._addStruct(val)
 		if isinstance(t, capnp.InterfaceSchema):
-			return self.addInterface(val)
+			return self._addInterface(val)
 			
 		assert isinstance(t, capnp.ListSchema), "Can only add structs, list, and interfaces to the graph"
 		elType = t.elementType
 		
-		nodeId = self.uuid()
+		nodeId = self._uuiud()
 		
 		# List of compound objects get a root node, then we add all the entries
 		if isinstance(elType, (capnp.StructSchema, capnp.InterfaceSchema, capnp.ListSchema)):	
@@ -132,13 +136,19 @@ class GraphBuilder:
 		t = val.type_
 		
 		if isinstance(t, capnp.StructSchema):
-			return [self.addStruct(val)]
+			return [self._addStruct(val)]
 		if isinstance(t, capnp.InterfaceSchema):
-			return [self.addInterface(val)]
+			return [self._addInterface(val)]
 		
 		assert isinstance(t, capnp.ListSchema), "Can only add structs, list, and interfaces to the graph"
 		
-		return [self.addOne(item) for item in val]
+		elType = t.elementType
 		
+		if isinstance(elType, (capnp.StructSchema, capnp.InterfaceSchema, capnp.ListSchema)):
+			return [self.addOne(item) for item in val]
+		
+		# If the element type is something that can not be added to the graph, we need
+		# to fall back to addOne which can process all kinds of lists
+		return [self.addOne(val)]		
 	
 		
