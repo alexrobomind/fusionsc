@@ -100,16 +100,6 @@ T PythonWaitScope::wait(Promise<T>&& promise) {
 	activeScope = nullptr;
 	KJ_DEFER({activeScope = restoreTo;});
 	
-	if(restoreTo -> isFiber) {
-		KJ_REQUIRE(PyThreadState_Get() == restoreTo -> threadState);
-		
-		// Swap back to main thread (and back upon leaving this block)
-		PyThreadState_Swap(restoreTo -> mainThreadState);
-		KJ_DEFER({ PyThreadState_Swap(restoreTo -> threadState); });
-		
-		return promise.wait(restoreTo -> waitScope);
-	}
-	
 	auto eventLoop = py::module_::import("asyncio").attr("get_event_loop")();
 	AsyncioEventPort::adjustEventLoop(eventLoop);
 	
@@ -129,7 +119,6 @@ T PythonWaitScope::wait(Promise<T>&& promise) {
 template<typename P>
 bool PythonWaitScope::poll(P&& promise) {
 	KJ_REQUIRE(canWait(), "Can not wait inside promises inside continuations or coroutines, and not in threads where no event loop was started.");
-	KJ_REQUIRE(!activeScope->isFiber, "Can not poll promises inside fibers");
 	KJ_REQUIRE(PyGILState_Check(), "Can only wait inside GIL");
 	
 	auto restoreTo = activeScope;

@@ -23,24 +23,6 @@ namespace {
 	void atExitFunction() {
 	}
 	
-	Promise<py::object> startFiber(kj::FiberPool& fiberPool, py::object callable) {
-		auto func = [callable = mv(callable)](kj::WaitScope& ws) mutable -> py::object {
-			// Since we run the event loop inside the GIL now, we do not need to
-			// acquire the GIL again for waiting.
-			// py::gil_scoped_acquire withGIL;		
-			
-			// Override default wait scope
-			PythonWaitScope overrideWS(ws, true);
-			
-			// Delete object while in GIL scope
-			KJ_DEFER({callable = py::object();});
-			
-			return callable();
-		};
-		
-		return fiberPool.startFiber(mv(func));
-	}
-	
 	py::object runInExecutor(const kj::Executor& e, py::object callable) {
 		if(&e == &(kj::getCurrentThreadExecutor())) {
 			return PythonWaitScope::wait(adaptAsyncioFuture(callable()));
@@ -83,7 +65,7 @@ namespace fscpy {
 
 // class PythonWaitScope
 
-PythonWaitScope::PythonWaitScope(kj::WaitScope& ws, bool fiber) : waitScope(ws), isFiber(fiber) {
+PythonWaitScope::PythonWaitScope(kj::WaitScope& ws) : waitScope(ws) {
 	KJ_REQUIRE(
 		activeScope == nullptr,
 		"Trying to allocate a new PyWaitScope while another one is active."
@@ -91,37 +73,14 @@ PythonWaitScope::PythonWaitScope(kj::WaitScope& ws, bool fiber) : waitScope(ws),
 		" on an event loop promise without releasing the active python scope"
 	);
 	activeScope = this;
-	
-	if(isFiber) {
-		// Copy current context
-		py::object ctx = py::reinterpret_steal<py::object>(PyContext_CopyCurrent());
-		threadState = PyThreadState_New(PyThreadState_Get() -> interp);
-		mainThreadState = PyThreadState_Swap(threadState);
-		
-		if(PyContext_Enter(ctx.ptr()) != 0)
-			throw py::error_already_set();
-	}
 }
 
-PythonWaitScope::~PythonWaitScope() {
-	if(isFiber) {
-		PyThreadState_Swap(mainThreadState);
-		PyThreadState_Clear(threadState);
-		PyThreadState_Delete(threadState);
-	}
-	
+PythonWaitScope::~PythonWaitScope() {	
 	activeScope = nullptr;
 }
 
 void PythonWaitScope::turnLoop() {	
 	KJ_REQUIRE(activeScope != nullptr, "No WaitScope active");
-	KJ_REQUIRE(
-		!activeScope->isFiber,
-		"Calling the asyncio event loop from a fiber is not safe, because"
-		" the fiber needs to yield, which would likely leave the asyncio event"
-		" loop in an invalid state. In a fiber, use the fsc.asnc.wait() method"
-		" instead, which handles this case properly"
-	);
 	
 	auto restoreTo = activeScope;
 	activeScope = nullptr;
@@ -836,8 +795,6 @@ void initAsync(py::module_& m) {
 		perform other tasks while fiber is active (which eliminates the need for locking between fibers).
 	)")
 		.def(py::init<unsigned int>())
-		//.def("startFiber", &startFiber, py::keep_alive<0, 1>())
-		.def("startFiber", [](kj::FiberPool&, py::object) { throw std::runtime_error("Fibers currently not available"); })
 	;
 	
 	py::class_<AsyncioFutureLike> futureCls(

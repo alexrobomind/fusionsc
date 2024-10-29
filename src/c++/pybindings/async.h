@@ -14,7 +14,7 @@ class AsyncioEventPort;
 
 //! Manages the active wait scope to be used by the asyncio event loop.
 struct PythonWaitScope {
-	PythonWaitScope(kj::WaitScope& ws, bool fiber = false);
+	PythonWaitScope(kj::WaitScope& ws);
 	~PythonWaitScope();
 	
 	template<typename T>
@@ -28,9 +28,6 @@ struct PythonWaitScope {
 	
 private:
 	kj::WaitScope& waitScope;
-	bool isFiber;
-	PyThreadState* threadState = nullptr;
-	PyThreadState* mainThreadState = nullptr;
 	
 	static inline thread_local PythonWaitScope* activeScope = nullptr;
 	

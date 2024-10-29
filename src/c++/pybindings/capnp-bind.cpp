@@ -180,6 +180,7 @@ void bindListClasses() {
 	
 	ClassBinding<ListPrototype>("_ListPrototype")
 		.def("__getitem__", &ListPrototype::getitem)
+		.def("__repr__", [](ListPrototype&) { return "<Unbound list experssion, bind with [...]>"; })
 	;
 	capnpModule.add_object("List", py::cast(new ListPrototype()));
 }

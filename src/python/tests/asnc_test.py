@@ -3,11 +3,6 @@ import time
 
 from pytest import approx, fixture
 
-
-@fixture
-def fiberPool():
-	return fsc.asnc.FiberPool(1024 * 1024)
-
 # Timer currently unsupported
 """
 @fsc.asnc.asyncFunction
@@ -32,10 +27,3 @@ async def test_nested():
 	await nestedAF.asnc()
 	
 	return None
-
-# Fibers are currently not available
-"""
-@fsc.asnc.asyncFunction
-async def test_fiberPool(fiberPool):
-	await fiberPool.startFiber(test_nested)
-"""

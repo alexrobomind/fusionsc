@@ -29,7 +29,8 @@ struct DataStoreEntryImpl : public fusionsc_DataStoreEntry {
 	//  1 -> not in use by clients
 	//  0 -> not in use anywhere and can be deleted
 	mutable std::atomic<uint64_t> refcount;
-	mutable std::atomic<fusionsc_DataHandle*> backend;
+	// mutable std::atomic<fusionsc_DataHandle*> backend;
+	mutable fusionsc_DataHandle* backend;
 	
 	DataStoreEntryImpl(DataStoreImpl& parent, ArrayPtr<const byte> data);
 	
@@ -54,6 +55,10 @@ struct DataStoreImpl : public fusionsc_DataStore {
 	fusionsc_DataStoreEntry* publishImpl(Key k, fusionsc_DataHandle* hdl);
 	fusionsc_DataStoreEntry* queryImpl(Key k);
 	void gcImpl();
+	
+	uint64_t cacheMin = 100000000;
+	uint64_t cacheMax = 500000000;
+	
 };
 	
 DataStoreEntryImpl::DataStoreEntryImpl(DataStoreImpl& parent, ArrayPtr<const byte> keyData) :
@@ -84,33 +89,78 @@ void DataStoreEntryImpl::incRefImpl() const {
 void DataStoreEntryImpl::decRefImpl() const {
 	auto& savedParent = parent;
 	
-	if(--refcount == 1) {
-		auto val = backend.load();
-		if(backend.compare_exchange_strong(val, nullptr)) {
-			val -> free(val);
-		}
-		--refcount;
-		// DO NOT ACCESS "this" from here on
-		savedParent.decRefImpl();
+	// Check if we are the last reference
+	if(--refcount > 1)
+		return;
+	// object is now locked
+		
+	// Refcount should now be 1
+	if(refcount != 1) {
+		KJ_DBG("Inconsistent reference count in store");
+		std::abort();
 	}
+	
+	if(backend == nullptr) {
+		KJ_DBG("Data store entry active with qnullptr content");
+		std::abort();
+	}
+	
+	// 
+	auto val = backend;
+	backend = nullptr;
+	
+	// Mark object for deletion
+	// We can not access *this* after setting refcount to 0.
+	refcount = 0;
+	// object is now unlocked
+	
+	// Cleanup former references held by this object
+	savedParent.decRefImpl(); // Note: < This can cause the parent (and therefore this) to get deleted.
+	val -> free(val);
 }
 
-// Only safe under lock of global table (can otherwise race with itself or
-// the cleanup procedures).
+// Only safe under read lock of global table, so that it doesn't
+// race with the cleanup procedure.
 void DataStoreEntryImpl::adopt(fusionsc_DataHandle* newHandle) {
-	if(refcount++ < 2) {
-		parent.incRefImpl();
-		++refcount;
+	auto rcVal = refcount.load();
+	
+	while(true) {
+		// refcount == 1 indicates that there are other
+		// adopt / decRefImpl calls concurrently modifying
+		// this object.
+		while(rcVal == 1) {
+			rcVal = refcount.load();
+		}
 		
+		// Branch for already active handle
+		if(rcVal > 0) {
+			// Register new reference
+			if(!refcount.compare_exchange_weak(rcVal, rcVal + 1))
+				continue;
+				
+			newHandle -> free(newHandle);
+			return;
+		}
+		
+		// Handle is actually not in use, steal it for modification
+		if(!refcount.compare_exchange_weak(rcVal, 1))
+			continue;
+		
+		// object is now locked
+		parent.incRefImpl();
+		
+		if(backend != nullptr) {
+			KJ_DBG("Data store entry inactive with non-null handle");
+			std::abort();
+		}
+		
+		backend = newHandle;
 		dataPtr = newHandle -> dataPtr;
 		dataSize = newHandle -> dataSize;
 		
-		auto previous = backend.exchange(newHandle);
-		if(previous != nullptr) {
-			previous -> free(previous);
-		}
-	} else {
-		newHandle -> free(newHandle);
+		refcount = 2;
+		// object is now unlocked
+		return;
 	}
 }
 
@@ -162,15 +212,34 @@ void DataStoreImpl::decRefImpl() {
 }
 
 fusionsc_DataStoreEntry* DataStoreImpl::publishImpl(Key k, fusionsc_DataHandle* hdl) {
-	auto locked = table.lockExclusive();
-	Row& row = locked -> findOrCreate(
-		k,
-		[this, k]() {
-			return kj::heap<DataStoreEntryImpl>(*this, k);
+	// First try to adopt existing row
+	{
+		auto locked = table.lockShared();
+		
+		KJ_IF_MAYBE(pRow, locked -> find(k)) {
+			
+			// We know we can const-cast this away because the table itself is mutable,
+			// and the per-row access synchronization is handled through the refCount guard
+			const DataStoreEntryImpl* dstReadonly = pRow -> get();
+			DataStoreEntryImpl* dst = const_cast<DataStoreEntryImpl*>(dstReadonly);
+			
+			dst -> adopt(hdl); // This also calls incRef
+			return dst;
 		}
-	);
-	row -> adopt(hdl);
-	return row.get();
+	}
+	
+	// Now try again with locked table
+	{
+		auto locked = table.lockExclusive();
+		Row& row = locked -> findOrCreate(
+			k,
+			[this, k]() {
+				return kj::heap<DataStoreEntryImpl>(*this, k);
+			}
+		);
+		row -> adopt(hdl);
+		return row.get();
+	}
 }
 
 fusionsc_DataStoreEntry* DataStoreImpl::queryImpl(Key k) {

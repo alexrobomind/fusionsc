@@ -100,18 +100,21 @@ Promise<void> W7XGeometryResolver::processGeometry(Geometry::Reader input, Geome
 			auto ref = getActiveThread().dataService().publishConstant<Geometry>(W7X_OP21_DIVERTOR.get());
 			auto geometry = ref.get();
 			output.setNested(geometry);
+			output.setTags(input.getTags());
 			return READY_NOW;
 		}
 		case W7X::OP21_BAFFLES: {
 			auto ref = getActiveThread().dataService().publishConstant<Geometry>(W7X_OP21_BAFFLES_NO_HOLES.get());
 			auto geometry = ref.get();
 			output.setNested(geometry);
+			output.setTags(input.getTags());
 			return READY_NOW;
 		}
 		case W7X::OP21_HEAT_SHIELD: {
 			auto ref = getActiveThread().dataService().publishConstant<Geometry>(W7X_OP21_HEAT_SHIELD_NO_HOLES.get());
 			auto geometry = ref.get();
 			output.setNested(geometry);
+			output.setTags(input.getTags());
 			return READY_NOW;
 		}
 		default:
