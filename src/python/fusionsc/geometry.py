@@ -11,6 +11,12 @@ from .asnc import asyncFunction
 from ._api_markers import unstableApi
 
 import numpy as np
+import contextvars
+
+_defaultGrid = contextvars.ContextVar("fusionsc.magnetics._defaultGrid", default = None)
+
+def setDefaultGrid(grid):
+	return _defaultGrid.set(grid)
 
 class Geometry(wrappers.structWrapper(service.Geometry)):	
 	@asyncFunction
@@ -49,11 +55,16 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		return await data.download.asnc(merged.data.merged)
 	
 	@asyncFunction
-	async def index(self, geometryGrid):
+	async def index(self, geometryGrid = None):
 		"""Computes an indexed geometry for accelerated intersection tests"""
 		if geometryGrid is None:
-			assert self.data.which_() == 'indexed', 'Must specify geometry grid or use pre-indexed geometry'
-			return Geometry(self.data)
+			geometryGrid = _defaultGrid.get()
+		
+		if self.data.which_() == 'indexed':
+			if geometryGrid is None or self.data.indexed.grid.canonicalize_() == geometryGrid.canonicalize_():
+				return Geometry(self.data)
+		
+		assert geometryGrid is not None, 'Must specify geometry grid or use pre-indexed geometry'
 		
 		resolved = await self.resolve.asnc()
 		

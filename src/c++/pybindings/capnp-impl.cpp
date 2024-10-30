@@ -389,6 +389,15 @@ py::buffer_info DynamicStructInterface<StructType>::buffer() {
 }
 
 template<typename StructType>
+py::bytes DynamicStructInterface<StructType>::canonicalize() {
+	capnp::AnyStruct::Reader asReader = this -> wrapped().template as<capnp::AnyStruct>();
+	
+	kj::Array<const char> result = wordsToBytes(asReader.canonicalize()).releaseAsChars();
+	
+	return py::bytes(result.begin(), result.size());
+}
+
+template<typename StructType>
 DynamicStructBuilder DynamicStructInterface<StructType>::clone() {
 	return DynamicStructBuilder::cloneFrom(toReader(this -> wrapped()));
 }

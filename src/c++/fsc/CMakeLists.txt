@@ -109,6 +109,7 @@ add_library(
 	magnetics-cache-impl.cpp
 	magnetics-calc-field.cpp
 	magnetics-calc-fourier.cpp
+	magnetics-calc-flux.cpp
 	
 	offline.h
 	offline.cpp

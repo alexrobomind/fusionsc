@@ -202,6 +202,15 @@ interface FieldCalculator $Cxx.allowCancellation {
 		zReal : Float64Tensor,
 		zImag : Float64Tensor
 	);
+	
+	calculateTotalFlux @8 (
+		surfaces : FourierSurfaces,
+		field : MagneticField,
+		nTheta: UInt32 = 100, nR : UInt32 = 100,
+		phi : Float64 = 0
+	) -> (
+		flux : Float64Tensor
+	);
 }
 
 struct BiotSavartSettings {

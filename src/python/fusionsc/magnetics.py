@@ -13,8 +13,14 @@ from ._api_markers import unstableApi
 
 import numpy as np
 import copy
+import contextvars
 
 from typing import Optional, Sequence, Literal
+
+_defaultGrid = contextvars.ContextVar("fusionsc.magnetics._defaultGrid", default = None)
+
+def setDefaultGrid(grid):
+	return _defaultGrid.set(grid)
 
 def _calculator():
 	return backends.activeBackend().newFieldCalculator().pipeline.service
@@ -204,7 +210,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		return MagneticConfig(await resolve.resolveField.asnc(self.data))
 	
 	@asyncFunction
-	async def compute(self, grid) -> "MagneticConfig":
+	async def compute(self, grid = None) -> "MagneticConfig":
 		"""
 		Computes the magnetic field on the specified grid. Doesn't download the field to the local machine.
 		
@@ -214,8 +220,13 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		
 		"""
 		if grid is None:
-			assert self.data.which_() == 'computedField', 'Must specify grid or use pre-computed field'
-			return MagneticConfig(self.data)
+			grid = _defaultGrid.get()
+		
+		if self.data.which_() == 'computedField':
+			if grid is None or grid.canonicalize_() == self.data.computedField.grid.canonicalize_():
+				return MagneticConfig(self.data)
+		
+		assert grid is not None, 'Must specify grid or use pre-computed field'
 		
 		result = MagneticConfig()
 		
@@ -342,6 +353,24 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		cf = computed.data.computedField
 		
 		return copy.copy(cf.grid), np.asarray(await data.download.asnc(cf.data))
+	
+	@asyncFunction
+	async def toroidalFlux(
+		self, surfaces: SurfaceArray,
+		phi = 0, nTheta = 100, nR = 100
+	):
+		"""
+		Calculates the integrated toroidal flux of the magnetic surface
+		"""
+		resolved = await self.resolve.asnc()
+		result = await _calculator().calculateTotalFlux(
+			surfaces = surfaces.data,
+			field = resolved.data,
+			nR = nR, nTheta = nTheta,
+			phi = phi
+		)
+		
+		return np.asarray(result.flux)
 		
 	@asyncFunction
 	@unstableApi

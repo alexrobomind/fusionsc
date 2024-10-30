@@ -243,6 +243,14 @@ TEST_CASE("calc-surf") {
 	auto geo = geoReq.send().wait(ws);
 	auto merged = getActiveThread().dataService().download(geo.getMerged()).wait(ws);
 	KJ_DBG(merged.get());
+	
+	auto fluxReq = root.newFieldCalculatorRequest().send().getService().calculateTotalFluxRequest();
+	fluxReq.getField().setComputedField(field);
+	fluxReq.setSurfaces(modes.getSurfaces());
+	fluxReq.setNTheta(5);
+	fluxReq.setNR(3);
+	auto fluxResponse = fluxReq.send().wait(ws);
+	KJ_DBG(fluxResponse);
 }
 
 #ifdef FSC_WITH_CUDA

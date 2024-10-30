@@ -3,17 +3,6 @@ import time
 
 from pytest import approx, fixture
 
-# Timer currently unsupported
-"""
-@fsc.asnc.asyncFunction
-async def test_timer():
-	t1 = time.time()
-	await fsc.asnc.delay(0.1)
-	t2 = time.time()
-	
-	assert (t2 - t1) == approx(0.1, abs=0.1)
-	"""
-
 @fsc.asnc.asyncFunction
 async def test_nested():	
 	async def nested():

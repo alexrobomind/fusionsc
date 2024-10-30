@@ -368,6 +368,8 @@ struct DynamicStructInterface : public WithMessage<StructType>, public DynamicSt
 	
 	py::buffer_info buffer();
 	
+	py::bytes canonicalize();
+	
 	DynamicStructBuilder clone();
 	
 	struct Iterator {
