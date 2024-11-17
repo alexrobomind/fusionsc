@@ -8,7 +8,7 @@ from . import capnp
 from .asnc import asyncFunction
 from ._api_markers import unstableApi, untested
 
-from typing import Optional, Any
+from typing import Optional, Any, Union
 
 class OpenPort:
 	"""
@@ -63,7 +63,7 @@ async def sshPublicKey(host, user, port = 21, pubKeyFile = None, privKeyFile = N
 	return connection
 
 @asyncFunction
-async def connect(url: str, tunnel: Optional[service.NetworkInterface] = None, ServiceType = service.RootService) -> Any:
+async def connect(url: str, tunnel: "Optional[None, service.NetworkInterface]" = None, ServiceType = service.RootService) -> Any:
 	"""
 	Connects to the given URL, optionally using a network tunnel (e.g. an SSH connection)
 	"""
@@ -79,7 +79,7 @@ async def connect(url: str, tunnel: Optional[service.NetworkInterface] = None, S
 
 @asyncFunction
 @untested
-async def serve(target: capnp.Capability.Client, host: str = "0.0.0.0", port: Optional[int] = None, tunnel: Optional[service.NetworkInterface] = None) -> OpenPort:
+async def serve(target: capnp.Capability.Client, host: str = "0.0.0.0", port: Optional[int] = None, tunnel: "Optional[service.NetworkInterface]" = None) -> OpenPort:
 	"""
 	Serves the given object (or the active backend) on the given host and port, optionally over the specified connection
 	"""
