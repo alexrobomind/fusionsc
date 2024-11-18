@@ -479,7 +479,7 @@ struct DynamicListInterface : public WithMessage<ListType>, DynamicListCommon {
 	
 	capnp::Type getType() override;
 	
-	DynamicValueType<ListType> get(uint32_t idx);
+	DynamicValueType<ListType> get(int64_t idx);
 	py::buffer_info buffer();
 	DynamicListBuilder clone();
 	
@@ -501,7 +501,9 @@ struct DynamicListInterface : public WithMessage<ListType>, DynamicListCommon {
 	};
 	
 	inline Iterator begin() { return Iterator(*this, 0); }
-	inline Iterator end() { return Iterator(*this, ListType::size()); }
+	inline Iterator end() { return Iterator(*this, ListType::size()); };
+	
+	uint32_t preprocessIndex(int64_t);
 };
 
 struct DynamicListReader : public DynamicListInterface<capnp::DynamicList::Reader>, CapnpReader {
@@ -514,8 +516,8 @@ struct DynamicListBuilder : public DynamicListInterface<capnp::DynamicList::Buil
 	using DynamicListInterface::DynamicListInterface;
 	
 	// Builder interface
-	void set(uint32_t, py::object value);
-	DynamicListBuilder initList(uint32_t idx, uint32_t size);
+	void set(int64_t, py::object value);
+	DynamicListBuilder initList(int64_t idx, uint32_t size);
 	
 	static DynamicListBuilder cloneFrom(capnp::DynamicList::Reader reader);
 };

@@ -495,8 +495,8 @@ capnp::Type DynamicListInterface<ListType>::getType() {
 }
 
 template<typename ListType>
-DynamicValueType<ListType> DynamicListInterface<ListType>::get(uint32_t idx) {	
-	return DynamicValueType<ListType>(shareMessage(*this), adjust(this -> getSchema().getElementType(), this -> wrapped()[idx]));
+DynamicValueType<ListType> DynamicListInterface<ListType>::get(int64_t idx) {
+	return DynamicValueType<ListType>(shareMessage(*this), adjust(this -> getSchema().getElementType(), this -> wrapped()[preprocessIndex(idx)]));
 }
 
 template<typename ListType>
@@ -565,6 +565,15 @@ kj::String DynamicListInterface<ListType>::toYaml(bool flow) {
 	return kj::String(stringData.attach(mv(emitter)));
 }
 
+template<typename ListType>
+uint32_t DynamicListInterface<ListType>::preprocessIndex(int64_t idx) {
+	if(idx >= 0)
+		return (uint32_t) idx;
+	
+	int64_t actualIdx = this -> size() + idx;
+	return (uint32_t) actualIdx;
+}
+
 template class DynamicListInterface<capnp::DynamicList::Reader>;
 template class DynamicListInterface<capnp::DynamicList::Builder>;
 
@@ -576,12 +585,12 @@ DynamicListReader::DynamicListReader(DynamicListBuilder other) :
 
 // DynamicListBuilder
 
-void DynamicListBuilder::set(uint32_t idx, py::object value) {
-	assign(*this, idx, mv(value));
+void DynamicListBuilder::set(int64_t idx, py::object value) {
+	assign(*this, preprocessIndex(idx), mv(value));
 }
 
-DynamicListBuilder DynamicListBuilder::initList(uint32_t idx, uint32_t size) {
-	return DynamicListBuilder(shareMessage(*this), wrapped().init(idx, size).as<capnp::DynamicList>());
+DynamicListBuilder DynamicListBuilder::initList(int64_t idx, uint32_t size) {
+	return DynamicListBuilder(shareMessage(*this), wrapped().init(preprocessIndex(idx), size).as<capnp::DynamicList>());
 }
 
 DynamicListBuilder DynamicListBuilder::cloneFrom(capnp::DynamicList::Reader reader) {
