@@ -181,6 +181,8 @@ struct ServerTool {
 	struct ReadFromStdin {};
 	OneOf<decltype(nullptr), LocalConfig::Reader, kj::Path, ReadFromStdin> config = nullptr;
 	
+	Maybe<size_t> ramObjectLimit = nullptr;
+	
 	ServerTool(kj::ProcessContext& context):
 		context(context)
 	{}
@@ -220,6 +222,11 @@ struct ServerTool {
 		return true;
 	}
 	
+	bool setRamObjectLimit(kj::StringPtr val) {
+		ramObjectLimit = val.parseAs<size_t>();
+		return true;
+	}
+	
 	kj::String readFromStdin() {
 		std::cout << "Reading YAML configuration from stdin (console). Please end your configuration with either ... or --- (YAML document termination markers)" << std::endl << std::endl;
 		
@@ -250,6 +257,12 @@ struct ServerTool {
 		auto l = newLibrary();
 		auto lt = l -> newThread();
 		auto& ws = lt->waitScope();
+		
+		KJ_IF_MAYBE(pLimit, ramObjectLimit) {
+			LocalDataService::Limits limitsStruct;
+			limitsStruct.maxRAMObjectSize = *pLimit;
+			lt -> dataService().setLimits(limitsStruct);
+		}
 
 		// Prepare schema loader
 		schemaLoader.loadCompiledTypeAndDependencies<MagneticField>();
@@ -335,6 +348,7 @@ struct ServerTool {
 			.addOptionWithArg({'a', "address"}, KJ_BIND_METHOD(*this, setAddress), "<address>", "Address to listen on, defaults to 0.0.0.0")
 			.addOptionWithArg({'p', "port"}, KJ_BIND_METHOD(*this, setPort), "<port>", "Port to listen on, defaults to system-assigned")
 			.addOptionWithArg({'b', "builtin"}, KJ_BIND_METHOD(*this, setBuiltin), "<built-in>", "Name of built-in profile, either 'computeNode' or 'loginNode'")
+			.addOptionWithArg({"ramObjectLimit"}, KJ_BIND_METHOD(*this, setBuiltin), "<built-in>", "Name of built-in profile, either 'computeNode' or 'loginNode'")
 			.addOption({"stdin"}, KJ_BIND_METHOD(*this, setReadStdin), "Read configuration from stdin")
 			.expectOptionalArg("<settings file>", KJ_BIND_METHOD(*this, setFile))
 			.callAfterParsing(KJ_BIND_METHOD(*this, run))

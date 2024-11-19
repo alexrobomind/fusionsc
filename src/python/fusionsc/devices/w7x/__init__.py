@@ -208,7 +208,7 @@ def controlCoils(i_cc = [0, 0], coils: Optional[CoilPack] = None) -> MagneticCon
 	return config
 
 def standard(bAx = 2.52, coils: Optional[CoilPack] = None) -> MagneticConfig:
-	return mainField([15000 * bAx / 2.52] * 5, [0] * 2, coils = coils)
+	return mainField([15000 * bAx / 2.72] * 5, [0] * 2, coils = coils)
 
 def highMirror(bAx = 2.72, coils: Optional[CoilPack] = None) -> MagneticConfig:
 	a = bAx / 2.3

@@ -30,49 +30,13 @@ FSC_DECLARE_TENSOR(double,  Float64Tensor);
 
 #undef FSC_DECLARE_TENSOR
 
-struct MMapTemporary {
-	int64_t dedicatedObjectSize = 1024 * 1024;
-	int64_t fileSize = 1024 * 1024 * 20;
-	
-	inline kj::Array<byte> request(size_t size) {
-		KJ_REQUIRE(fileSize >= dedicatedObjectSize);
-		
-		if(size >= dedicatedObjectSize) {
-			// Otherwise, if the object is big, give it is own file
-			auto mapping = dir->createTemporary()->mmapWritable(0, size);
-			
-			auto ptr = mapping->get();
-			return ptr.attach(mv(mapping));
-		} 
-		
-		// Check if we can stuff the object into the remainder of this file
-		if(offset + size >= fileSize) {
-			reset();
-		}
-		
-		return alloc(size);
-	};
+struct MMapTemporary {	
+	kj::Array<byte> request(size_t size) ;
 	
 	inline MMapTemporary(Own<const kj::Directory> dir) : dir(mv(dir)) {
-		reset();
 	}
 	
 private:
-	inline void reset() {
-		offset = 0;
-		file = dir->createTemporary();
-	}
-	
-	inline kj::Array<byte> alloc(uint64_t size) {
-		auto mapping = file->mmapWritable(offset, size);
-		offset += size;
-		
-		auto ptr = mapping->get();
-		return ptr.attach(mv(mapping));
-	}		
-	
-	uint64_t offset = 0;
-	Own<const kj::File> file;
 	Own<const kj::Directory> dir;
 };
 
@@ -293,6 +257,8 @@ public:
 	inline void setLimits(LocalDataService::Limits newLimits);
 	
 	void setChunkDebugMode();
+	
+	kj::Array<byte> allocate(size_t bytes);
 	
 	Promise<Maybe<LocalDataRef<capnp::AnyPointer>>> unwrap(DataRef<capnp::AnyPointer>::Client ref);
 	

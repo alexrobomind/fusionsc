@@ -298,7 +298,7 @@ public:
 	///@{
 		
 	struct Limits {
-		uint64_t maxRAMObjectSize = 100000000; // Store up to 100MB in Ram
+		uint64_t maxRAMObjectSize = 500000000; // Store up to 100MB in Ram
 		Maybe<uint64_t> ramRemaining = nullptr; // Sets the remaining RAM budget. After this amount of RAM is requested, switch to file-backed allocation
 	};
 	

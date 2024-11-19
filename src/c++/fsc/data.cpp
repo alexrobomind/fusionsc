@@ -8,6 +8,7 @@
 #include <botan/hash.h>
 
 #include <functional>
+#include <cstdlib>
 
 #include <fsc/data-archive.capnp.h>
 #include <capnp/rpc.capnp.h>
@@ -93,6 +94,22 @@ namespace {
 	};
 	
 	static LocalRefServerSet LOCAL_REF_SERVER_SET = LocalRefServerSet();
+	
+	size_t getDefaultRamObjectLimit() {
+		try {
+			char* envValueRaw = getenv("FUSIONSC_RAM_OBJECT_LIMIT");
+			
+			if(envValueRaw != nullptr) {
+				return kj::StringPtr(envValueRaw).parseAs<size_t>();
+			}
+		} catch(kj::Exception& e) {
+			KJ_LOG(WARNING, "Failed to parse FUSIONSC_RAM_OBJECT_LIMIT env variable as size_t, defaulting to 500MB");
+		}
+		
+		return 500000000;
+	}
+	
+	static const size_t RAM_OBJECT_LIMIT = getDefaultRamObjectLimit();
 }
 	
 Promise<bool> isDataRef(capnp::Capability::Client clt) {
@@ -114,8 +131,18 @@ Promise<bool> isDataRef(capnp::Capability::Client clt) {
 		}
 	);
 }
+
+// === class MMapTemporary ===
+kj::Array<byte> internal::MMapTemporary::request(size_t size) {			
+	// Otherwise, if the object is big, give it is own file
+	auto tmpFile = dir -> createTemporary();
+	tmpFile -> truncate(size);
+	auto mapping = tmpFile -> mmapWritable(0, size);
 	
-	
+	auto ptr = mapping->get();
+	return ptr.attach(mv(mapping), mv(tmpFile));
+};
+
 // === class LocalDataService ===
 
 LocalDataService::LocalDataService(const LibraryHandle& hdl) :
@@ -463,7 +490,9 @@ internal::LocalDataServiceImpl::LocalDataServiceImpl(const LibraryHandle& hdl) :
 	backingStore(hdl.store()),
 	fileBackedMemory(kj::newDiskFilesystem()->getCurrent().clone()),
 	dbCache(createSqliteTempCache())
-{}
+{
+	limits.maxRAMObjectSize = RAM_OBJECT_LIMIT;
+}
 
 Own<internal::LocalDataServiceImpl> internal::LocalDataServiceImpl::addRef() {
 	return kj::addRef(*this);
@@ -473,6 +502,12 @@ void internal::LocalDataServiceImpl::setLimits(LocalDataService::Limits newLimit
 	limits = newLimits;
 }
 
+kj::Array<byte> internal::LocalDataServiceImpl::allocate(size_t size) {
+	if(size <= limits.maxRAMObjectSize)
+		return kj::heapArray<byte>(size);
+	else
+		return fileBackedMemory.request(size);
+}
 
 void internal::LocalDataServiceImpl::setChunkDebugMode() {
 	debugChunks = true;
@@ -540,7 +575,7 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 	}
 	
 	Promise<void> beginDownload() override {
-		downloadBuffer = kj::heapArray<kj::byte>(metadata.getDataSize());
+		downloadBuffer = service -> allocate(metadata.getDataSize());
 		downloadOffset = 0;
 		return READY_NOW;
 	}
@@ -1252,7 +1287,10 @@ Promise<void> internal::LocalDataServiceImpl::store(StoreContext context) {
 		KJ_REQUIRE(asList.getElementSize() == ElementSize::BYTE);
 		
 		// Copy into memory
-		data = kj::heapArray<byte>(inData.getAs<capnp::Data>());
+		capnp::Data::Reader inAsData = inData.getAs<capnp::Data>();
+		
+		data = allocate(inAsData.size());
+		memcpy(data.begin(), inAsData.begin(), inAsData.size());
 	} else {
 		// typeID != 0 indicates struct or capability
 		
@@ -1265,7 +1303,11 @@ Promise<void> internal::LocalDataServiceImpl::store(StoreContext context) {
 		AnyPointer::Builder root = capTable.imbue(mb.initRoot<AnyPointer>());
 		root.set(inData);
 		
-		data = wordsToBytes(capnp::messageToFlatArray(mb));
+		size_t dataSize = capnp::computeSerializedSizeInWords(mb) * sizeof(capnp::word);
+		data = allocate(dataSize);
+		
+		kj::ArrayOutputStream os(data);
+		capnp::writeMessage(os, mb);
 	}
 		
 	Temporary<DataRefMetadata> metaData;
