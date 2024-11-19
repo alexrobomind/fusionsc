@@ -164,7 +164,7 @@ struct Pool : public Backend {
 	}
 	
 	Maybe<capnp::Capability::Client> getTarget(uint64_t schemaId, uint16_t methodId) override {
-		for(auto retries : kj::indices(backends)) {				
+		for(auto retries : kj::range(0, 2 * backends.size())) {				
 			// Adjust counter
 			if(counter > backends.size()) {
 				counter = 0;

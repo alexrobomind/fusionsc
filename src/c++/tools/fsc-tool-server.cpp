@@ -348,7 +348,7 @@ struct ServerTool {
 			.addOptionWithArg({'a', "address"}, KJ_BIND_METHOD(*this, setAddress), "<address>", "Address to listen on, defaults to 0.0.0.0")
 			.addOptionWithArg({'p', "port"}, KJ_BIND_METHOD(*this, setPort), "<port>", "Port to listen on, defaults to system-assigned")
 			.addOptionWithArg({'b', "builtin"}, KJ_BIND_METHOD(*this, setBuiltin), "<built-in>", "Name of built-in profile, either 'computeNode' or 'loginNode'")
-			.addOptionWithArg({"ramObjectLimit"}, KJ_BIND_METHOD(*this, setBuiltin), "<built-in>", "Name of built-in profile, either 'computeNode' or 'loginNode'")
+			.addOptionWithArg({"ramObjectLimit"}, KJ_BIND_METHOD(*this, setRamObjectLimit), "<RAM object size limit>", "Object size limit above which objects are allocated in memory-mapped files")
 			.addOption({"stdin"}, KJ_BIND_METHOD(*this, setReadStdin), "Read configuration from stdin")
 			.expectOptionalArg("<settings file>", KJ_BIND_METHOD(*this, setFile))
 			.callAfterParsing(KJ_BIND_METHOD(*this, run))
