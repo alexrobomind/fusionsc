@@ -8,33 +8,29 @@ from fusionsc.serialize import dump, load
 import time
 import pytest
 
+@fsc.serialize.cls()
 class PickleDummy:
 	data: str
 	msg: fsc.service.Float64Tensor.Builder
 
 def test_serialize_pickle():
 	testString = 'test string'
-	dummy = PickleDummy()
-	dummy.data = testString
-	dummy.msg = fsc.service.Float64Tensor.newMessage([1, 2, 3])
+	dummy1 = PickleDummy()
+	dummy1.data = testString
+	dummy1.msg = fsc.service.Float64Tensor.newMessage([1, 2, 3])
+	
+	dummy2 = PickleDummy()
+	dummy2.data = "ABC"
+	dummy2.msg = dummy2
 	
 	assert not fsc.serialize.pickleEnabled()
 	
-	# By default, pickling should not work
-	with pytest.raises(AssertionError):
-		fsc.serialize.dump(dummy)
+	dumped = fsc.serialize.dump((dummy1, dummy2))
+	print(dumped)
+	print(dumped.totalBytes_())
+	print(dumped.canonicalize_())
 	
-	# When enabling pickle, it should work
-	with fsc.serialize.allowPickle():
-		dumped = fsc.serialize.dump(dummy)
-	
-	# Unpickling should not work
-	with pytest.raises(RuntimeError):
-		fsc.serialize.load(dumped)
-	
-	# With enabling pickle it should
-	with fsc.serialize.allowPickle():
-		loaded = fsc.serialize.load(dumped)
+	loaded, _ = fsc.serialize.load(dumped)
 	
 	assert loaded.data == testString
 	

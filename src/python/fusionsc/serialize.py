@@ -31,6 +31,37 @@ _maxLen = 2**29 # Maximum size for inline data
 _pickleEnabled = contextvars.ContextVar('fusionsc.serialize._pickleEnabled', default = False)
 _pickleBlocked = False
 
+_globalsDict = {}
+_globalInfo = {}
+
+def register(mod = None, name = None, mayCall = False):
+	def f(x):
+		global _globalsDict, _globalInfo
+		
+		modActual = mod if mod else x.__module__
+		nameActual = name if name else x.__name__
+		
+		key = (modActual, nameActual)
+		_globalsDict[key] = x
+		_globalInfo[id(x)] = x, modActual, nameActual, mayCall
+		
+		return x
+	
+	return f
+
+def cls(mod = None, name = None):
+	"""Register a class that may be used for serialization and deserialization"""
+	return register(mod, name, True)
+
+def func(mod = None, name = None):
+	"""Register a function to be used during deserialization (e.g. as a state setter)"""
+	return register(mod, name, True)
+
+def val(mod  = None, name = None):
+	"""Register a non-callable data object usable during deserialization"""
+	return register(mod, name, False)
+		
+
 import os
 if 'FUSIONSC_BLOCK_PICKLE' in os.environ and os.environ['FUSIONSC_BLOCK_PICKLE'] != '0':
 	_pickleBlocked = True
@@ -38,6 +69,15 @@ if 'FUSIONSC_BLOCK_PICKLE' in os.environ and os.environ['FUSIONSC_BLOCK_PICKLE']
 def blockPickle():
 	"""Globally disables the usage of pickle for deserialization programatically"""
 	_pickleBlocked = True
+
+def _checkCallable(o):
+	if(pickleEnabled()):
+		return
+	assert id(o) in _globalInfo, "Serialization / deserialization attempted to call an unregistered object. Try enabling pickling to make this work nonetheless."
+	
+	obj, mod, name, mayCall = _globalInfo[id(o)]
+	
+	assert mayCall, "Deserialization attempted to call an object not registered as callable. Try enabling pickling to make this work nonetheless."		
 
 class UnknownObject(structWrapper(service.DynamicObject)):
 	pass
@@ -95,8 +135,74 @@ def dump(obj: Any) -> service.DynamicObject.Builder:
 	Converts python objects into nested structures of service.DynamicObject
 	"""
 	return _dump(obj, service.DynamicObject.newMessage(), set(), set())
+	
+def _dumpReduced(obj: Any, po: service.DynamicObject.PythonObject.Builder, memoSet: set, recMemoSet: set, func, args, state = None, listItems = None, dictItems = None, stateSetter = None):
+	"""
+	Helper method to dump a result of __reduce__ or __reduce_ex__
+	"""
+	# During initial state serialization, do not register this object yet
+	recMemoSet.remove(id(obj))
+	
+	newobj = None
+	
+	if func.__name__ == "__newobj__":
+		cls = args[0]
+		newArgs = args[1:]
+		kwargs = {}
+		newobj = (cls, newArgs, {})
+	elif func.__name == "__newobj_ex__":
+		newobj = args
+	
+	if newobj is not None:
+		cls, newArgs, newKwargs = newobj
+		
+		no = po.createBy.initNewobj()
+		_dump(cls, no.cls, memoSet, recMemoSet)
+		
+		if newArgs:
+			argsOut = no.initArgs(len(newArgs))
+			for i, v in enumerate(newArgs):
+				_dump(v, argsOut[i], memoSet, recMemoSet)
+		
+		if newKwargs:
+			kwargsOut = no.initKwargs(len(newKwargs))
+			for i, (k, v) in enumerate(newKwargs.items()):
+				_dump(k, kwargsOut[i].key, memoSet, recMemoSet)
+				_dump(k, kwargsOut[i].value, memoSet, recMemoSet)
+	else:
+		c = po.createBy.initCall()
+		_dump(func, c.func, memoSet, recMemoSet)
+		
+		argsOut = c.initArgs(len(args))
+		for i, v in enumerate(args):
+			_dump(v, argsOut[i], memoSet, recMemoSet)
+	
+	# Object is created here during deserialization, so we can add the rec key back in
+	recMemoSet.add(id(obj))
+	
+	if listItems:
+		listItemsOut = po.initListItems(len(listItems))
+		for i, v in enumerate(listItems):
+			_dump(v, listItemsOut[i], memoSet, recMemoSet)
+	
+	if dictItems:
+		dictItemsOut = po.initDictItems(len(dictItems))
+		for i, (k, v) in enumerate(dictItems.items()):
+			o = dictItemsOut[i]
+			_dump(k, o.key, memoSet, recMemoSet)
+			_dump(k, o.value, memoSet, recMemoSet)
+	
+	if state is not None:
+		if stateSetter is None:
+			_dump(state, po.state.initSetState(), memoSet, recMemoSet)
+		else:
+			ws = po.state.initWithSetter()
+			_dump(stateSetter, ws.setter, memoSet, recMemoSet)
+			_dump(state, ws.value, memoSet, recMemoSet)
 
-def _dumpDType(dtype, odt: service.DynamicObject.DType.Builder):
+def _dumpDType(dtype: np.dtype, odt: service.DynamicObject.DType.Builder):
+	"""Helper method to dump a numpy dtype object"""
+	
 	assert dtype.kind != "O", "Can not export objects in primitive arrays (e.g. as struct fields)"
 	
 	if dtype.subdtype is not None:
@@ -163,7 +269,10 @@ def _dumpDType(dtype, odt: service.DynamicObject.DType.Builder):
 	else:
 		struct = odt.init
 
-def _loadDType(dtype):	
+def _loadDType(dtype):
+	"""
+	Helper method to load a serialized DType object as an array dtype descriptor
+	"""
 	whichType = dtype.which_()
 
 	if whichType == "bool":
@@ -218,7 +327,7 @@ def _loadDType(dtype):
 	else:
 		assert False, "Unknown DType for array"
 
-def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: set, recMemoSet: set):
+def _dump(obj: Any, builder: service.DynamicObject.Builder, memoSet: set, recMemoSet: set):
 	key = id(obj)
 	builder.memoKey = key
 	
@@ -230,9 +339,21 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 		builder.memoizedParent = None
 		return builder
 	
-	recMemoSet.add(key)
+	if not isinstance(obj, tuple):
+		recMemoSet.add(key)
 	
-	if isinstance(obj, UnknownObject):
+	# Registered globals are stored by name
+	
+	if obj is None:
+		builder.pythonNone = None
+		
+	elif id(obj) in _globalInfo:
+		_, mod, name, _ = _globalInfo[id(obj)]
+		g = builder.initPythonGlobal()
+		g.mod = mod
+		g.name = name
+	
+	elif isinstance(obj, UnknownObject):
 		builder.nested = obj.data
 	
 	elif isinstance(obj, str):
@@ -244,9 +365,9 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 		else:
 			builder.bigData = data.publish(obj)
 	
-	elif isinstance(obj, wrappers.RefWrapper):
-		builder.initRef().target = obj.ref.castAs_(service.DataRef)
-		builder.ref.wrapped = True
+	#elif isinstance(obj, wrappers.RefWrapper):
+	#	builder.initRef().target = obj.ref.castAs_(service.DataRef)
+	#	builder.ref.wrapped = True
 	
 	elif isinstance(obj, service.DataRef.Client):
 		builder.initRef().target = obj.ref.castAs_(service.DataRef)
@@ -349,9 +470,16 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 		
 		handleObjectArray()
 		
-	elif isinstance(obj, collections.abc.Sequence):
-		out = builder.initSequence(len(obj))
+	elif isinstance(obj, (collections.abc.Sequence, list, set, tuple)):
+		parent = builder.initSequence()
 		
+		# Record types
+		if isinstance(obj, tuple):
+			parent.kind = "tuple"
+		elif isinstance(obj, set):
+			parent.kind = "set"
+			
+		out = parent.initContents(len(obj))
 		for i, el in enumerate(obj):
 			_dump(el, out[i], memoSet, recMemoSet)
 	
@@ -362,28 +490,43 @@ def _dump(obj: Any, builder: Optional[service.DynamicObject.Builder], memoSet: s
 			_dump(k, out[i].key, memoSet, recMemoSet)
 			_dump(v, out[i].value, memoSet, recMemoSet)
 	
-	elif hasattr(obj, "_fusionsc_wraps"):
-		_dump(obj._fusionsc_wraps, builder, memoSet, recMemoSet)
+	#elif hasattr(obj, "_fusionsc_wraps"):
+	#	_dump(obj._fusionsc_wraps, builder, memoSet, recMemoSet)
 	
+	elif hasattr(obj, "__module__") and hasattr(obj, "__qualname__") and pickleEnabled():
+		g = builder.initPythonGlobal()
+		g.mod = obj.__module__
+		g.name = obj.__qualname__
+	
+	elif isinstance(obj, type) and not pickleEnabled():
+		assert False, f"Types can not be serialized by default for safety reasons. Please register class {obj.__module__}.{obj.__name__} with the serialization engine or enable pickling for unsafe paths"
+		
 	else:
-		assert pickleEnabled(), """
-			Writing arbitrary objects requires pickling to be enabled explicitly. This is neccessary
-			because pickle is an arbitrary execution format that poses substantial security
-			risks. Please consider requesting the serialization format to be extended to
-			meet your needs. ONLY ALLOW UNPICKLING ON DATA YOU TRUST.
-			
-			You can	enable pickling by running inside a "with fusionsc.serialize.allowPickle()"
-			statement. You will also have to do this for deserialization.
-			"""
-		
-		import pickle
-		data = pickle.dumps(obj)
-		
-		pickled = builder.initPythonPickle()
-		if len(data) < _maxLen:
-			pickled.data = data
+		if hasattr(obj, "__reduce_ex__"):
+			reduced = obj.__reduce_ex__(4)
 		else:
-			pickled.bigData = data.publish(pickled)
+			reduced = obj.__reduce__()
+		_dumpReduced(obj, builder.initPythonObject(), memoSet, recMemoSet, *reduced)
+		
+#	else:
+#		assert pickleEnabled(), """
+#			Writing arbitrary objects requires pickling to be enabled explicitly. This is neccessary
+#			because pickle is an arbitrary execution format that poses substantial security
+#			risks. Please consider requesting the serialization format to be extended to
+#			meet your needs. ONLY ALLOW UNPICKLING ON DATA YOU TRUST.
+#			
+#			You can	enable pickling by running inside a "with fusionsc.serialize.allowPickle()"
+#			statement. You will also have to do this for deserialization.
+#			"""
+#		
+#		import pickle
+#		data = pickle.dumps(obj)
+#		
+#		pickled = builder.initPythonPickle()
+#		if len(data) < _maxLen:
+#			pickled.data = data
+#		else:
+#			pickled.bigData = data.publish(pickled)
 	
 	memoSet.add(key)
 
@@ -429,14 +572,32 @@ async def _interpret(reader: service.DynamicObject.ReaderOrBuilder, memoDict: di
 		return await data.download.asnc(reader.bigData)
 	
 	if which == "sequence":
-		result = [None] * len(reader.sequence)
+		seqInfo = reader.sequence
+		contents = seqInfo.contents
 		
-		if reader.memoKey != 0:
-			assert reader.memoKey not in memoDict
-			memoDict[reader.memoKey] = result
+		if seqInfo.kind.which_() == "list":
+			result = [None] * len(contents)
 		
-		for i, x in enumerate(reader.sequence):
-			result[i] = await _load(x, memoDict)
+			if reader.memoKey != 0:
+				assert reader.memoKey not in memoDict
+				memoDict[reader.memoKey] = result
+			
+			for i, x in enumerate(contents):
+				result[i] = await _load(x, memoDict)
+		elif seqInfo.kind.which_() == "set":
+			result = set()
+		
+			if reader.memoKey != 0:
+				assert reader.memoKey not in memoDict
+				memoDict[reader.memoKey] = result
+				
+			for x in contents:
+				result.add(await _load(x, memoDict))
+		elif seqInfo.kind.which_() == "tuple":
+			result = tuple([
+				await _load(x, memoDict)
+				for x in contents
+			])
 		
 		return result
 	
@@ -556,6 +717,117 @@ async def _interpret(reader: service.DynamicObject.ReaderOrBuilder, memoDict: di
 	
 	if which == "nested":
 		return await _interpret(reader.nested, memoDict)
+	
+	if which == "pythonNone":
+		return None
+	
+	if which == "pythonGlobal":
+		globalInfo = reader.pythonGlobal
+				
+		key = (str(globalInfo.mod), str(globalInfo.name))
+		if key not in _globalsDict:
+			assert pickleEnabled(), f"The global object {globalInfo.mod}.{globalInfo.name} was not registered with FusionSC for deserialization. Enable unsafe pickling to allow using it."
+			
+			mod, name = key
+			
+			import importlib
+			mod = importlib.__import__(mod)
+			
+			result = mod
+			for n in name.split("."):
+				result = getattr(result, n)
+			
+			return result
+		
+		return _globalsDict[key]
+		
+	if which == "pythonObject":
+		objInfo = reader.pythonObject
+	 	
+		cb = objInfo.createBy
+		if cb.which_() == "call":
+			func = await _load(cb.call.func, memoDict)
+			_checkCallable(func)
+			
+			args = [await _load(x, memoDict) for x in cb.call.args]
+			
+			obj = func(*args)
+		elif cb.which_() == "newobj":
+			cls = await _load(cb.newobj.cls, memoDict)
+			_checkCallable(cls)
+			
+			args = [await _load(x, memoDict) for x in cb.newobj.args]
+			
+			kwargs = {}
+			
+			for e in cb.newobj.kwargs:
+				k = await _load(e.key, memoDict)
+				v = await _load(e.value, memoDict)
+				
+				kwargs[k] = v
+			
+			obj = cls.__new__(cls, *args, **kwargs)
+		else:
+			assert False, "Unknown object creation mode"
+
+		# From here on object may contain itself
+		if reader.memoKey != 0:
+			assert reader.memoKey not in memoDict
+			memoDict[reader.memoKey] = obj
+		
+		for e in objInfo.listItems:
+			obj.append(await _load(e, memoDict))
+
+		for e in objInfo.dictItems:
+			k = await _load(e.key, memoDict)
+			v = await _load(e.value, memoDict)
+			
+			obj[k] = v
+
+		s = objInfo.state
+
+		if s.which_() == "setState":
+			state = await _load(s.setState, memoDict)
+			
+			if hasattr(obj, "__setstate__"):
+				obj.__setstate__(await _load(s.simple, memoDict))
+			else:
+				# Default route for state restoration
+				
+				# State can be either a dict or a tuple(dict, dict)
+				# In the later case, the latter is for __slots__
+				if isinstance(state, tuple) and len(state) == 2:
+					state, slotState = state
+				else:
+					slotState = None
+				
+				# Restore state dict
+				if state:
+					instanceDict = obj.__dict__
+					for k, v in state.items():
+						obj.__dict__[k] = v
+				
+				# Restore slot state
+				if slotState:
+					for k, v in slotState.items():
+						setattr(obj, k, v)
+			
+		elif s.which_() == "withSetter":
+			ws = s.withSetter
+			
+			setter = await _load(ws.setter, memoDict)
+			_checkCallable(setter)
+			
+			val = await _load(ws.value, memoDict)
+			setter(obj, val)
+		elif w.which_() == "noState":
+			pass
+		else:
+			assert False, "Unknown state setting method"
+		
+		return obj
+		
+	 		
 			
 	import warnings
 	warnings.warn(

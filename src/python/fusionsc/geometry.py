@@ -6,6 +6,7 @@ from . import service
 from . import backends
 from . import wrappers
 from . import native
+from . import serialize
 
 from .asnc import asyncFunction
 from ._api_markers import unstableApi
@@ -18,6 +19,7 @@ _defaultGrid = contextvars.ContextVar("fusionsc.magnetics._defaultGrid", default
 def setDefaultGrid(grid):
 	return _defaultGrid.set(grid)
 
+@serialize.cls()
 class Geometry(wrappers.structWrapper(service.Geometry)):	
 	@asyncFunction
 	async def resolve(self):

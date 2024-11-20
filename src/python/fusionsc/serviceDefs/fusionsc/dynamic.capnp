@@ -55,6 +55,31 @@ struct DynamicObject {
 	struct StructPointer {
 		target @0 : AnyStruct;
 	}
+		
+	struct PythonObject {
+		createBy : union {
+			call : group {
+			    func @0 : DynamicObject;
+			    args @1 : List(DynamicObject);
+			}
+			newobj : group {
+				cls @2 : DynamicObject;
+				args @3 : List(DynamicObject);
+			   	kwargs @4 : List(MappingEntry);
+			}
+		}
+		listItems @5 : List(DynamicObject);
+		dictItems @6 : List(MappingEntry);
+		
+		state : union {
+			noState @7 : Void;
+			setState @8 : DynamicObject;
+			withSetter : group {
+				setter @9 : DynamicObject;
+				value @10 : DynamicObject;
+			}
+		}
+	}
 	
 	memoKey @28 : UInt64;
 	
@@ -63,7 +88,15 @@ struct DynamicObject {
 		data @1 : Data;
 		bigData @2 : DataRef(Data);
 		
-		sequence @3 : List(DynamicObject);
+		sequence : group {
+			contents @3 : List(DynamicObject);
+			kind : union {
+				list @39 : Void;
+				tuple @40 : Void;
+				set @41 : Void;
+			}
+		}
+		
 		mapping  @4 : List(MappingEntry);
 		
 		ref : group {
@@ -133,5 +166,14 @@ struct DynamicObject {
 		# Indicates that the object is a PARENT
 		# object under the given memo key
 		memoizedParent @34 : Void;
+		
+		pythonObject @35 : PythonObject;
+		
+		pythonNone @36 : Void;
+		
+		pythonGlobal : group {
+			mod @37 : Text;
+			name @38 : Text;
+		}
 	}
 }

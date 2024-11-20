@@ -16,6 +16,7 @@
 #include <jsoncons_ext/ubjson/ubjson_cursor.hpp>
 
 #include <kj/function.h>
+#include <kj/encoding.h>
 
 using capnp::DynamicList;
 using capnp::DynamicValue;
@@ -311,15 +312,17 @@ namespace {
 		Encoder& enc;
 		bool allowGenericKeys = false;
 		bool isDone = false;
+		bool allowBinary = false;
 		
 		enum State {
 			VALUE, MAP_KEY, MAP_VALUE
 		};
 		kj::Vector<State> states;
 		
-		JsonVisitor(Encoder& e, bool genericKeys) :
+		JsonVisitor(Encoder& e, bool genericKeys, bool allowBinary) :
 			enc(e),
-			allowGenericKeys(genericKeys)
+			allowGenericKeys(genericKeys),
+			allowBinary(allowBinary)
 		{
 			states.add(VALUE);
 			this -> supportsIntegerKeys = genericKeys;
@@ -413,6 +416,11 @@ namespace {
 		}
 		
 		void acceptData(kj::ArrayPtr<const byte> data) override {
+			if(!allowBinary) {
+				auto encoded = kj::encodeBase64(data);
+				acceptString(kj::str("!base64:", encoded));
+				return;
+			}
 			advanceMap(false);
 			enc.byte_string_value(jsoncons::byte_string_view(data.begin(), data.size()));
 			checkDone();
@@ -525,7 +533,7 @@ namespace {
 namespace internal {
 	Own<Visitor> createJsonconsWriter(kj::BufferedOutputStream& stream, const Dialect& dialect) {
 		auto encoder = makeEncoder(stream, dialect);
-		auto writer = kj::heap<JsonVisitor>(*encoder, /*dialect.language == Dialect::CBOR*/false);
+		auto writer = kj::heap<JsonVisitor>(*encoder, /*dialect.language == Dialect::CBOR*/false, dialect.language != Dialect::JSON);
 		return writer.attach(mv(encoder));
 	}
 

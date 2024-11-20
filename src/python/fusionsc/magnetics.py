@@ -7,6 +7,7 @@ from . import resolve
 from . import backends
 from . import efit
 from . import wrappers
+from . import serialize
 
 from .asnc import asyncFunction
 from ._api_markers import unstableApi
@@ -25,6 +26,7 @@ def setDefaultGrid(grid):
 def _calculator():
 	return backends.activeBackend().newFieldCalculator().pipeline.service
 
+@serialize.cls()
 class SurfaceArray(wrappers.structWrapper(service.FourierSurfaces)):
 	"""A wrapper around service.FourierSurfaces.Builder that exposes array-like behavior"""
 	
@@ -125,6 +127,7 @@ class SurfaceArray(wrappers.structWrapper(service.FourierSurfaces)):
 			"z" : np.asarray(response.zReal) + 1j * np.asarray(response.zImag)
 		}
 
+@serialize.cls()
 class CoilFilament(wrappers.structWrapper(service.Filament)):
 	"""
 	Set of coils that can be associated with a current to compute magnetic fields.
@@ -198,6 +201,7 @@ class CoilFilament(wrappers.structWrapper(service.Filament)):
 		
 		return result
 
+@serialize.cls()
 class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 	"""
 	Magnetic configuration class. Wraps an instance of fusionsc.service.MagneticField.Builder

@@ -10,6 +10,7 @@ from . import efit
 from . import magnetics
 from . import wrappers
 from . import geometry
+from . import serialize
 
 from .asnc import asyncFunction
 from ._api_markers import unstableApi
@@ -21,6 +22,7 @@ from types import SimpleNamespace
 
 from typing import Optional, List
 
+@serialize.cls()
 class FieldlineMapping(wrappers.RefWrapper):
 	"""
 	Interface class for field line mappings.

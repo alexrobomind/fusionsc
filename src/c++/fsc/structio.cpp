@@ -470,6 +470,13 @@ namespace {
 				return; \
 			}}
 		
+		auto decodeBase64(kj::StringPtr s) {
+			if(s.startsWith("!base64:"))
+				s = s.slice(8);
+			
+			return kj::decodeBase64(s);
+		}
+		
 		void beginObject(Maybe<size_t> s) override {
 			ACCEPT_FWD(beginObject(s))
 			
@@ -601,18 +608,18 @@ namespace {
 			
 			switch(type.which()) {
 				case ST::DATA: {
-					auto decoded = kj::decodeBase64(s);					
+					auto decoded = decodeBase64(s);					
 					backend.accept(capnp::Data::Reader(decoded));
-					return;
+					break;
 				}
 					
 				case ST::ANY_POINTER: {
-					auto decoded = kj::decodeBase64(s);
+					auto decoded = decodeBase64(s);
 					kj::ArrayInputStream inputStream(decoded);
 
 					capnp::PackedMessageReader messageReader(inputStream);
 					backend.accept(messageReader.getRoot<capnp::AnyPointer>());
-					return;
+					break;
 				}
 					
 				case ST::LIST:
@@ -633,10 +640,18 @@ namespace {
 				}
 				
 				case ST::STRUCT: {
-					backend.beginObject();
-					backend.accept(capnp::Text::Reader(s));
-					backend.accept(capnp::Void());
-					backend.finish();
+					if(s.startsWith("!base64:")) {
+						auto decoded = decodeBase64(s);		
+						
+						kj::ArrayInputStream inputStream(decoded);
+						capnp::PackedMessageReader messageReader(inputStream);
+						backend.accept(messageReader.getRoot<capnp::DynamicStruct>(type.asStruct()));
+					} else {
+						backend.beginObject();
+						backend.accept(capnp::Text::Reader(s));
+						backend.accept(capnp::Void());
+						backend.finish();
+					}
 					break;
 				}
 				
@@ -758,8 +773,14 @@ namespace {
 					KJ_FAIL_REQUIRE("Can not read raw data as text");		
 				case ST::ENUM:
 					KJ_FAIL_REQUIRE("Can not read raw data as enum");
-				case ST::STRUCT:
-					KJ_FAIL_REQUIRE("Can not read raw data as struct");
+				case ST::STRUCT: {			
+					// Check alignment
+					kj::ArrayInputStream inputStream(d);
+
+					capnp::PackedMessageReader messageReader(inputStream);
+					backend.accept(messageReader.getRoot<capnp::DynamicStruct>(type.asStruct()));
+					return;
+				}
 				case ST::FLOAT32:
 					KJ_FAIL_REQUIRE("Can not read raw data as float32");
 				case ST::FLOAT64:
