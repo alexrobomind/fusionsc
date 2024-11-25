@@ -175,5 +175,10 @@ struct DynamicObject {
 			mod @37 : Text;
 			name @38 : Text;
 		}
+		
+		unknownObject @42 : PythonObject;
+		# Object that could previously not be resolved during deserialization
+		# and is being re-entered. Should be deserialized with its own memo
+		# dict as the previous values are likely invalid.
 	}
 }

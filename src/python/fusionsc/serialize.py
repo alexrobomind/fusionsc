@@ -34,7 +34,7 @@ _pickleBlocked = False
 _globalsDict = {}
 _globalInfo = {}
 
-def register(mod = None, name = None, mayCall = False):
+def register(x = None, mod = None, name = None, mayCall = False):
 	def f(x):
 		global _globalsDict, _globalInfo
 		
@@ -47,17 +47,17 @@ def register(mod = None, name = None, mayCall = False):
 		
 		return x
 	
-	return f
+	return f(x) if x is not None else f
 
-def cls(mod = None, name = None):
+def cls(x = None, mod = None, name = None):
 	"""Register a class that may be used for serialization and deserialization"""
-	return register(mod, name, True)
+	return register(x, mod, name, True)
 
-def func(mod = None, name = None):
+def func(x = None, mod = None, name = None):
 	"""Register a function to be used during deserialization (e.g. as a state setter)"""
 	return register(mod, name, True)
 
-def val(mod  = None, name = None):
+def val(x = None, mod  = None, name = None):
 	"""Register a non-callable data object usable during deserialization"""
 	return register(mod, name, False)
 		
@@ -354,7 +354,7 @@ def _dump(obj: Any, builder: service.DynamicObject.Builder, memoSet: set, recMem
 		g.name = name
 	
 	elif isinstance(obj, UnknownObject):
-		builder.nested = obj.data
+		builder.unknownObject = obj.data
 	
 	elif isinstance(obj, str):
 		builder.text = obj
@@ -501,12 +501,40 @@ def _dump(obj: Any, builder: service.DynamicObject.Builder, memoSet: set, recMem
 	elif isinstance(obj, type) and not pickleEnabled():
 		assert False, f"Types can not be serialized by default for safety reasons. Please register class {obj.__module__}.{obj.__name__} with the serialization engine or enable pickling for unsafe paths"
 		
-	else:
+	elif hasattr(obj, "__reduce_ex__") or hasattr(obj, "__reduce__"):
 		if hasattr(obj, "__reduce_ex__"):
 			reduced = obj.__reduce_ex__(4)
 		else:
 			reduced = obj.__reduce__()
 		_dumpReduced(obj, builder.initPythonObject(), memoSet, recMemoSet, *reduced)
+	elif hasattr(obj, "__module__") and hasattr(obj, "__name__"):
+		name = obj.__name__
+		mod  = obj.__module__
+		
+		assert pickleEnabled(), f"""
+			Serialization of this object requires the storage of the global object {mod}.{name}.
+			This object has not been registered with FusionSC's serialization engine, therefore
+			the object you are writing can only be read and written when full pickle compatibility
+			is enabled.
+			
+			ENABLING THAT MODE IS A SECURITY RISK AS FILES CAN REQUEST ARBITRARY CODE DO BE EXECUTED.
+			
+			Preferably, please register {mod}.{name} with the serialization engine using the functions
+			"cls", "var", or "func" in this module. This will whitelist them for deserialization as well.
+			
+			If this is not possible, you can enable full pickle compatibility by running inside a
+			"with fusionsc.serialize.allowPickle():" statement.
+			
+			Please keep in mind that no matter which path you take, the person reading this object needs
+			to take a similar path as well"""
+			
+		g = builder.initPythonGlobal()
+		g.mod = mod
+		g.name = name
+		
+	else:
+		tp = type(obj)
+		raise ValueError(f"No suitable method was found to serialize object of class {tp}")
 		
 #	else:
 #		assert pickleEnabled(), """
@@ -550,16 +578,21 @@ async def _load(reader: service.DynamicObject.ReaderOrBuilder, memoDict: dict):
 async def _interpret(reader: service.DynamicObject.ReaderOrBuilder, memoDict: dict):
 	which = reader.which_()
 	
-	if which == "memoized":
-		key = reader.memoKey
+	def handleMemoized(key):
 		
-		assert key in memoDict, "Could not locate memoized object. This implies an incorrect store/load ordering"
-		return memoDict[key]
 	
-	if which == "memoizedParent":
+	if which == "memoized"  or which == "memoizedParent":
 		key = reader.memoKey
 		
-		assert key in memoDict, "Could not locate memoized parent object. This implies an incorrect store/load ordering"
+		if key not in memoDict and "unknown" in memoDict:
+			import warnings
+			warnings.warn("The deserialized object contains references that could not be resolved. " +
+			"This is likely caused by a previous failure to deserialize the object properly, invalidating " +
+			"the reference keys")
+			
+			return UnknownObject(reader)
+		
+		assert key in memoDict, "Could not locate memoized object. This implies an incorrect serialization or load ordering"
 		return memoDict[key]
 		
 	if which == "text":
@@ -624,8 +657,6 @@ async def _interpret(reader: service.DynamicObject.ReaderOrBuilder, memoDict: di
 	
 	if which == "dynamicStruct":
 		ds = reader.dynamicStruct
-		print("Schema: ", ds.schema)
-		print("Schema type: ", type(ds.schema))
 		return ds.data.castAs(capnp.Type.fromProto(ds.schema))
 	
 	if which == "uint64":
@@ -726,7 +757,22 @@ async def _interpret(reader: service.DynamicObject.ReaderOrBuilder, memoDict: di
 				
 		key = (str(globalInfo.mod), str(globalInfo.name))
 		if key not in _globalsDict:
-			assert pickleEnabled(), f"The global object {globalInfo.mod}.{globalInfo.name} was not registered with FusionSC for deserialization. Enable unsafe pickling to allow using it."
+			assert pickleEnabled(), f"""
+			Loading of this object requires the usage of the global python object {mod}.{name}.
+			This object has not been registered with FusionSC's serialization engine, therefore
+			the object you are writing can only be read when full pickle compatibility
+			is enabled.
+			
+			ENABLING THAT MODE IS A SECURITY RISK AS FILES CAN REQUEST ARBITRARY CODE DO BE EXECUTED.
+			
+			Preferably, please register {mod}.{name} with the serialization engine using the functions
+			"cls", "var", or "func" in this module. This will whitelist them for deserialization as well.
+			
+			If this is not possible, you can enable full pickle compatibility by running inside a
+			"with fusionsc.serialize.allowPickle():" statement.
+			
+			Please keep in mind that no matter which path you take, the person reading this object needs
+			to take a similar path as well"""
 			
 			mod, name = key
 			
@@ -826,8 +872,9 @@ async def _interpret(reader: service.DynamicObject.ReaderOrBuilder, memoDict: di
 			assert False, "Unknown state setting method"
 		
 		return obj
-		
-	 		
+	
+	if which == "unknownObject":
+		return await _load(reader.unknownObject, {})
 			
 	import warnings
 	warnings.warn(

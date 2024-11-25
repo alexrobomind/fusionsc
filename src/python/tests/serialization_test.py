@@ -7,6 +7,7 @@ from fusionsc.serialize import dump, load
 
 import time
 import pytest
+import pickle
 
 @fsc.serialize.cls()
 class PickleDummy:
@@ -28,7 +29,15 @@ def test_serialize_pickle():
 	dumped = fsc.serialize.dump((dummy1, dummy2))
 	print(dumped)
 	print(dumped.totalBytes_())
+	
+	b = dumped.canonicalize_()
+	
+	import zlib
+	print(len(b), len(zlib.compress(b)))
 	print(dumped.canonicalize_())
+	
+	b2 = pickle.dumps((dummy1, dummy2))
+	print(len(b2), len(zlib.compress(b2)))
 	
 	loaded, _ = fsc.serialize.load(dumped)
 	
