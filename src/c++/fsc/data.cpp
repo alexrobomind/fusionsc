@@ -140,7 +140,7 @@ kj::Array<byte> internal::MMapTemporary::request(size_t size) {
 	auto mapping = tmpFile -> mmapWritable(0, size);
 	
 	auto ptr = mapping->get();
-	return ptr.attach(mv(mapping), mv(tmpFile));
+	return ptr.attach(mv(mapping));
 };
 
 // === class LocalDataService ===

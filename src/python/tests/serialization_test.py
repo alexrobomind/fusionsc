@@ -54,7 +54,10 @@ def test_serialize_complex():
 	values = [
 		np.asarray([fsc.service.MagneticField.newMessage(), fsc.service.MagneticField.newMessage({"invert" : None})], dtype = object),
 		recursiveList,
-		recursiveDict
+		recursiveDict,
+		
+		pickle.PickleBuffer(b"ABCDE"),
+		pickle.PickleBuffer(bytearray(b"ABCDE"))
 	]
 	
 	for val in values:
@@ -80,6 +83,11 @@ def test_serialize_simple():
 		'EDCBA',
 		1.0,
 		complex(1, 2),
+		True,
+		False,
+		None,
+		NotImplemented,
+		...,
 		np.asarray([3]),
 		np.asarray([complex(3, 3)]),
 		np.asarray([3, 5.0]),

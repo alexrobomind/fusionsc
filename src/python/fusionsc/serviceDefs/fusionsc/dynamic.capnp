@@ -85,6 +85,7 @@ struct DynamicObject {
 	
 	union {
 		text @0 : Text;
+		
 		data @1 : Data;
 		bigData @2 : DataRef(Data);
 		
@@ -111,6 +112,8 @@ struct DynamicObject {
 		
 		uint64 @9 : UInt64;
 		int64 @10 : Int64;
+		
+		bool @50 : Bool;
 		
 		double @11 : Float64;
 		
@@ -176,9 +179,23 @@ struct DynamicObject {
 			name @38 : Text;
 		}
 		
-		unknownObject @42 : PythonObject;
+		unknownObject @42 : DynamicObject;
 		# Object that could previously not be resolved during deserialization
 		# and is being re-entered. Should be deserialized with its own memo
 		# dict as the previous values are likely invalid.
+		
+		pythonWrapper : group {
+			wrapped @43 : DynamicObject;
+			
+			union {
+				bytes @44 : Void;
+				bytearray @45 : Void;
+				mutableArray @46 : Void;
+				pickleBuffer @47 : Void;
+			}
+		}
+		
+		pythonNotImplemented @48 : Void;
+		pythonEllipsis @49 : Void;
 	}
 }

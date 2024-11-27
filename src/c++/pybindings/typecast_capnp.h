@@ -446,15 +446,21 @@ namespace pybind11 { namespace detail {
 				return true;
 			}
 			
-			if(py::isinstance<py::bytes>(src)) {
-				char *buffer = nullptr;
-				ssize_t length = 0;
-				auto asBytes = py::reinterpret_borrow<py::bytes>(src);
+			if(py::isinstance<py::bytes>(src) || py::isinstance<py::memoryview>(src) || py::isinstance<py::bytearray>(src)) {
+				Py_buffer view;
 				
-				if(PyBytes_AsStringAndSize(asBytes.ptr(), &buffer, &length) != 0)
+				if(PyObject_GetBuffer(src.ptr(), &view, PyBUF_SIMPLE) != 0)
 					throw py::error_already_set();
 				
-				value = fscpy::DataReader(kj::heap(asBytes), kj::ArrayPtr<const kj::byte>((const kj::byte*) buffer, (size_t) length));
+				KJ_DEFER({ PyBuffer_Release(&view); });
+				
+				value = fscpy::DataReader(
+					kj::heap(py::reinterpret_borrow<py::object>(src)),
+					kj::ArrayPtr<const kj::byte>(
+						(const kj::byte*) view.buf,
+						(size_t) view.len
+					)
+				);
 				return true;
 			}
 						
