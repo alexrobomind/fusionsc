@@ -33,6 +33,13 @@ const defaultGrid : Magnetics.ToroidalGrid = (
 	nZ = 128,
 	nPhi = 64,
 	nSym = 5
+	
+# Potential new grid parameters after discussions
+# with Michael Endler:
+#	
+#	nR = 45,
+#	nZ = 45,
+#	nPhi = 24,
 );
 
 const defaultGeoGrid : Geometry.CartesianGrid = (
