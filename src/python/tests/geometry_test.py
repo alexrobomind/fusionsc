@@ -4,6 +4,12 @@ from fusionsc.devices import jtext
 import pytest
 import numpy as np
 
+try:
+	import meshio
+	meshioAvailable = True
+except:
+	meshioAvailable = False
+
 def test_simpleGeo():
 	geo = fsc.geometry.cuboid([0, 0, 0], [1, 1, 1], {"A" : 1, "B" : "Hello"})
 	
@@ -11,17 +17,16 @@ def test_simpleGeo():
 	geo = geo.merge()
 	fsc.asnc.wait(geo)
 
+@pytest.mark.skipif(not meshioAvailable, reason = "meshio not installed")
+def test_jtextGeoOff():
+	geo = jtext.pfcs(0.24)
+	geo = geo.reduce()
+	geo.exportTo(str(tmp_path / "test.off"))
+
 def test_jtextGeo(tmp_path):
 	geo = jtext.pfcs(0.24)
 	geo = geo.reduce()
 	geo.exportTo(str(tmp_path / "test.ply"))
-	
-	try:
-		import meshio
-	except:
-		return
-	
-	geo.exportTo(str(tmp_path / "test.off"))
 
 def test_poly():
 	points = [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]]
