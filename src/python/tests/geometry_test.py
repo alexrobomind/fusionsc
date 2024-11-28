@@ -15,6 +15,12 @@ def test_jtextGeo(tmp_path):
 	geo = jtext.pfcs(0.24)
 	geo = geo.reduce()
 	geo.exportTo(str(tmp_path / "test.ply"))
+	
+	try:
+		import meshio
+	except:
+		return
+	
 	geo.exportTo(str(tmp_path / "test.off"))
 
 def test_poly():
