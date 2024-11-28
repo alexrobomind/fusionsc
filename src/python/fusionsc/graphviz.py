@@ -4,6 +4,8 @@ Helper module to build representation graphs for data visualization
 
 from . import capnp
 
+from typing import List
+
 class GraphBuilder:
 	_uuidCounter: int = 0
 	graph: "graphviz.Digraph"
