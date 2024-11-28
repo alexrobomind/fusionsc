@@ -10,7 +10,7 @@ from . import data
 
 from .wrappers import asyncFunction
 
-from typing import Union
+from typing import Union, List
 
 class Object:
 	def __init__(self, backend):
@@ -26,7 +26,7 @@ Storable = Union[
 ]
 
 @asyncFunction
-async def lsRemote() -> list[str]:
+async def lsRemote() -> List[str]:
 	"""Lists the warehouses available through the current (possibly remote) backend"""
 	response = await backends.activeBackend().listWarehouses()
 	return [str(name) for name in response.names]
