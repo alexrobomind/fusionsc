@@ -18,7 +18,7 @@ def test_simpleGeo():
 	fsc.asnc.wait(geo)
 
 @pytest.mark.skipif(not meshioAvailable, reason = "meshio not installed")
-def test_jtextGeoOff():
+def test_jtextGeoOff(tmp_path):
 	geo = jtext.pfcs(0.24)
 	geo = geo.reduce()
 	geo.exportTo(str(tmp_path / "test.off"))
