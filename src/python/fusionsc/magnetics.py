@@ -16,7 +16,7 @@ import numpy as np
 import copy
 import contextvars
 
-from typing import Optional, Sequence, Literal
+from typing import Optional, Sequence, Literal, Tuple
 
 _defaultGrid = contextvars.ContextVar("fusionsc.magnetics._defaultGrid", default = None)
 
