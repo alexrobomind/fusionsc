@@ -578,7 +578,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 			raise ValueError("Unknown tag value type")
 				
 		result = {
-			tagName : {
+			str(tagName) : {
 				asValue(e.tags[iTag])
 				for e in merged.entries
 			}
