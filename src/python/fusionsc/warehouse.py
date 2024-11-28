@@ -85,7 +85,7 @@ class Folder(Object):
 		super().__init__(backend)
 	
 	@asyncFunction
-	async def ls(self, path: str = "") -> list[str]:
+	async def ls(self, path: str = "") -> List[str]:
 		"""
 		Lists all entries currently present in this folder
 		"""
