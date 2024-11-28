@@ -57,7 +57,7 @@ stages:
     paths:
       - build/tests/*.xml
     reports:
-      junit: 
+      junit:
         - build/tests/*.xml
 
 
@@ -70,7 +70,7 @@ stages:
 .msvc: &msvc
   tags:
     - msvc2017
-  
+
   # Currently we only have windows builds available only for protected branches
   rules:
     - if: '$CI_COMMIT_REF_PROTECTED == "true"'
@@ -100,12 +100,12 @@ build:clang:
 build:msvc:
   <<: *build-windows
   <<: *msvc
-  
+
 # Docker build
 
 build:docker:
   <<: *job
-  
+
   image: docker:20.10.16
   services:
     - name: docker:20.10.16-dind
@@ -126,40 +126,40 @@ build:docker:
 
 # Test stage
 
-test:gcc: 
+test:gcc:
   <<: *test
   <<: *gcc
   needs:
     - build:gcc
 
-test:clang: 
+test:clang:
   <<: *test
   <<: *clang
   needs:
     - build:clang
 
-test:msvc: 
+test:msvc:
   <<: *test
   <<: *msvc
   needs:
     - build:msvc
-    
+
 # Python build
 
 pybuild:pybuild-manylinux:
   <<: *job
-  
+
   stage: pybuild
   needs: []
-  
+
   image: quay.io/pypa/manylinux2014_x86_64
   parallel:
     matrix:
-      - PYTHON: [cp38-cp38, cp39-cp39, cp310-cp310, cp311-cp311, cp312-cp312]
-  
+      - PYTHON: [cp38-cp38, cp39-cp39, cp310-cp310, cp311-cp311, cp312-cp312, cp313-cp313]
+
   rules:
     - when: manual
-  
+
   before_script:
     - yum install -y openssl-static
   script:
@@ -172,7 +172,7 @@ pybuild:pybuild-manylinux:
         auditwheel repair $FILE
       done
     - /opt/python/$PYTHON/bin/python -m twine upload -u __token__ -p $PYPI_TOKEN --non-interactive --verbose wheelhouse/*.whl
-  
+
   artifacts:
     paths:
       - wheelhouse/*
@@ -181,18 +181,18 @@ pybuild:pybuild-manylinux:
 pybuild:pybuild-windows:
   <<: *job
   <<: *msvc
-  
+
   stage: pybuild
   needs: []
-  
+
   parallel:
     matrix:
       - PYVERSION: ["7", "8", "9", "10", "11"]
-  
+
   script:
     - py -3.$env:PYVERSION -m build -w
     - twine upload -u __token__ -p $PYPI_TOKEN --non-interactive --verbose wheelhouse/*.whl
-  
+
   artifacts:
     paths:
       - dist/*.whl
