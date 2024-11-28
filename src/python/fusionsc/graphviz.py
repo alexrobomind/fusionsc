@@ -129,7 +129,7 @@ class GraphBuilder:
 			
 		return nodeId
 	
-	def addMany(self, val) -> list[str]:
+	def addMany(self, val) -> List[str]:
 		while hasattr(val, "_fusionsc_wraps"):
 			val = val._fusionsc_wraps
 			
