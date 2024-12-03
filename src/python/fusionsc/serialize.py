@@ -150,13 +150,13 @@ def wrap(obj: Any) -> capnp.Object:
 	return dump(obj)
 
 @asyncFunction
-async def unwrap(obj: capnp.Object) -> Any:
+async def unwrap(obj: capnp.Object, mode: Literal["strict", "fast"] = "fast") -> Any:
 	"""Unfolds service.DynamicObject instances into python objects and returns others as-is"""
 	if isinstance(obj, service.DynamicObject.Reader):
-		return await load.asnc(obj)
+		return await load.asnc(obj, mode)
 	
 	if isinstance(obj, service.DynamicObject.Builder):
-		return await load.asnc(obj)
+		return await load.asnc(obj, mode)
 	
 	return obj
 		
