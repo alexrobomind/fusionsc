@@ -1,4 +1,19 @@
-"""Gives access to native resources of the fusionsc library"""
+"""
+Allows cross-thread sharing of FusionSC objects.
+
+Usage:
+  # This object is bound to the original thread
+  obj = ...
+  
+  # This object can be freely passed between threads
+  handle = fusionsc.xthread.export(obj)
+  
+  ...
+  
+  # This object is bound to the thread in which get() was called
+  objInNewThread = handle.get()
+"""
+
 import typing
 import asyncio
 
@@ -8,12 +23,16 @@ from .wrappers import asyncFunction
 
 @asyncFunction
 async def export(val: typing.Any, download: bool = False):
+	"""
+	Creates a representation of the target object that can be shared across
+	python threads.
+	"""
 	ref = data.publish(val)
 	putResponse = await backends.localResources().put(ref, download)
 	
 	return XThreadHandle(putResponse.id)
 
-class XThreadHandle:
+class XThreadHandle:	
 	_id: int
 	
 	def __init__(self, id):
