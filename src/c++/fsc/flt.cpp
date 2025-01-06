@@ -845,6 +845,8 @@ struct FLTImpl : public FLT::Server {
 								mode.coeffs[0] = n;
 								mode.coeffs[1] = m;
 								modes.add(mode);
+								
+								// KJ_DBG(iStartPoint, n, m);
 							}
 						}
 							

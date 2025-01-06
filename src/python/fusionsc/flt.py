@@ -514,6 +514,16 @@ async def findAxis(
 	
 	startPoint = np.asarray(startPoint)
 	
+	# The FLT service object has 2 methods for axis location. The original "findAxis"
+	# method can only serve a single start point. In the past, this would be circumvented
+	# by averaging the start points together. This was unintuitive behavior.
+	# Therefore, a new method "findAxisBatch" was implemented that would perform axis
+	# search for multiple start points (without requiring a single function call per start
+	# point and allowing direct return of all axis traces as tensor).
+	#
+	# For compatibility with old servers, in case only 1 point is needed the call is
+	# routed through the old function call (batch == False).
+	
 	batch = False
 	if len(startPoint.shape) > 1:
 		batch = True
