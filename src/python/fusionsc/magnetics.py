@@ -184,8 +184,7 @@ class CoilFilament(wrappers.structWrapper(service.Filament)):
 		Creates a coil from numpy array of shape [3, nPoints]
 		
 		Parameters:
-		  - coilsData: A [3, nPoints] shape array of XYZ coil coordinates (the loop
-		    does not have to be closed at input, it will be closed by the BiotSavart calculator)
+		  - coilsData: A [3, nPoints] shape array of XYZ coil coordinates
 		  - inline: If True, the coil data will be embedded directly in the source structure. Other
 		    wise (default), they will be indirectly referenced. Use this for very small coils only.
 		"""
