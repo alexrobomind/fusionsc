@@ -385,7 +385,7 @@ template<uint32_t offset>
 CUPNP_FUNCTION bool getBoolField(uint32_t dataSectionSize, Location data, bool defaultValue) {
 	constexpr uint32_t byteOffset = offset >> 3;
 	constexpr uint8_t  bitOffset  = offset & 7u;
-	constexpr uint8_t  bitMask    = 1u >> bitOffset;
+	constexpr uint8_t  bitMask    = 1u << bitOffset;
 	
 	// uint16_t dataSectionSizeInWords = structure >> 32;
 	
