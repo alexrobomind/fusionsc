@@ -227,7 +227,10 @@ async def trace(
 	ignoreCollisionsBefore = 0,
 	
 	# Whether field line reversal is allowed
-	allowReversal = False
+	allowReversal = False,
+	
+	# Record mode for plane hits ("lastInTurn" or "everyHit")
+	planeRecordMode = "lastInTurn"
 ):
 	"""
 	Performs a tracing request.
@@ -245,7 +248,9 @@ async def trace(
 		- stepSize: Step size for each tracing step (in meters).
 		- collisionLimit: Maximum number of collisions a field line may perform (e.g. 1 = termination at first collision. 2 at second collision etc.). Must not be negative.
 		  0 interpreted as infinity.
-		- phiPlanes (list(float)): Phi values (in radians) at which to record field line intersections (usually for the purpose of Poincaré maps).
+		  
+		- phiPlanes (list): List of planes to perform intersections with. Objects can be either phi values in radians, or objects castable
+		  to service.Plane (readers / builders for this type, or YAML strings, or dictionaries filled with the appropriate structure). 
 	
 		- isotropicDiffusionCoefficient: If set, enables diffusive tracing and specifies the isotropic / perpendicular diffusion coefficient to use in the
 		  underlying diffusive tracing model. If set, either parallelConvectionVelocity or parallelDiffusionCoefficient must also be specified.
@@ -277,6 +282,10 @@ async def trace(
 		
 		- allowReversal: If this is set to false (default), a reversal of toroidal magnetic field orientation along the field line will terminate the
 		  tracing process. This prevents long traces on field lines encircling coils.
+		
+		- planeRecordMode: Recording style to use for Poincare hits. Possible values:
+		  - "lastInTurn" (default): Indexes the hits per turn while "everyHit" records all hits of the plane.
+		  - "everyHit": Returns all hits in order of trace direction of field line.
 	
 	Returns:
 		The format of the result depends on the `resultFormat` parameter.
@@ -288,12 +297,12 @@ async def trace(
 			- *endPoints*: A numpy array of shape `[4] + startPoints.shape[1:]`. The first 3 components are the x, y, and z positions of
 			  the field lines' end points. The 4th component is the total length of the field line.
 			- *poincareHits*: A numpy array of shape `[5, len(phiPlanes)] + startPoints.shape[1:] + [maxTurns]` with maxTurns being a number <=
-			  turnLimit indicating the maximum turn count of any field line. The first 3 components of the first dimension are the x, y, and z
-			  coordinates of the phi plane intersections (commonly used for Poincaré maps). The next two components indicate the forward and backward
-			  connection lengths respectively to the next geometry collision along the field line. If the field line ends in that direction without
-			  a collision (e.g. closed field line, or no geometry specified), a negative number is returned whose absolute value corresponds to the
-			  remaining length in that direction. Non-existing points (due to field lines not all having same turn counts) have their values set to
-			  NaN.
+			  turnLimit indicating the maximum turn count of any field line, or - if planeRecordMode is "everyHit" - arbitrary. The first 3 components
+			  of the first dimension are the x, y, and z coordinates of the phi plane intersections (commonly used for Poincaré maps).
+			  The next two components indicate the forward and backward connection lengths respectively to the next geometry collision along the
+			  field line. If the field line ends in that direction without a collision (e.g. closed field line, or no geometry specified), a negative
+			  number is returned whose absolute value corresponds to the remaining length in that direction. Non-existing points (due to field lines
+			  not all having same turn / hit counts) have their values set to NaN.
 			- *stopReasons*: A numpy array of shape `startPoints.shape[1:]` that indicates for each point the final reason why the trace was stopped.
 			  The dtype of the array is fusionsc.service.FLTStopReason.
 			- *fieldLines*: A numpy array of shape `startPoints.shape + [max. field line length]` containing steps recorded at specified intervals
@@ -345,6 +354,8 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	
 	request.ignoreCollisionsBefore = ignoreCollisionsBefore
 	
+	request.planeIntersectionRecordMode = planeRecordMode
+	
 	assert direction in ["forward", "backward", "cw", "ccw"]
 	
 	if direction == "field":
@@ -380,10 +391,16 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	
 	# Poincare maps
 	if len(phiPlanes) > 0:
-		planes = request.initPlanes(len(phiPlanes))
-		
-		for plane, phi in zip(planes, phiPlanes):
-			plane.orientation.phi = phi
+		def makePlane(x):
+			if isinstance(x, (int, float)):
+				return {"orientation" : {"phi" : x}}
+			
+			return x
+			
+		request.planes = [
+			makePlane(x)
+			for x in phiPlanes
+		]
 	
 	# Field line following
 	if recordEvery > 0:

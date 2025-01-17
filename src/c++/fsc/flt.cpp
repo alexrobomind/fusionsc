@@ -520,10 +520,39 @@ struct FLTImpl : public FLT::Server {
 				
 				int64_t nSurfs = request.getPlanes().size();
 				
+				int64_t nPlaneHits = 0;
+				for(int64_t iStartPoint = 0; iStartPoint < nStartPoints; ++iStartPoint) {
+					auto entry = kData[iStartPoint].asReader();
+					auto state = entry.getState();
+					auto events = entry.getEvents();
+					
+					int64_t nHitsPerPoint = 0;
+					
+					for(auto evt : events) {
+						if(evt.isPhiPlaneIntersection())
+							++nHitsPerPoint;
+					}
+					
+					nPlaneHits = std::max(nPlaneHits, nHitsPerPoint);
+				}
+				
 				auto results = ctx.getResults();
 				results.setNTurns(nTurns);
 				
-				Tensor<double, 4> pcCuts(nTurns, nStartPoints, nSurfs, 5);
+				// Set size of the pcCuts tensor according to the record mode.
+				int64_t pcLimit;
+				switch(request.getPlaneIntersectionRecordMode()) {
+					case FLTRequest::PlaneIntersectionRecordMode::EVERY_HIT:
+						pcLimit = nPlaneHits;
+						break;
+					case FLTRequest::PlaneIntersectionRecordMode::LAST_IN_TURN:
+						pcLimit = nTurns;
+						break;
+					default:
+						KJ_FAIL_REQUIRE("Unknown plane intersection record mode", request.getPlaneIntersectionRecordMode());
+				}
+				
+				Tensor<double, 4> pcCuts(pcLimit, nStartPoints, nSurfs, 5);
 				pcCuts.setConstant(std::numeric_limits<double>::quiet_NaN());
 				
 				Tensor<double, 2> endPoints(nStartPoints, 4);
@@ -595,6 +624,9 @@ struct FLTImpl : public FLT::Server {
 					int64_t iTurn = 0;
 					double lastNewTurnDistance = 0;
 					
+					// This only gets updated if we are recording every plane hit
+					int64_t iHit = 0;
+					
 					for(auto iEvt : kj::indices(events)) {
 						auto evt = events[iEvt];
 						
@@ -606,21 +638,29 @@ struct FLTImpl : public FLT::Server {
 						} else if(evt.isPhiPlaneIntersection()) {
 							int64_t iTurnActual = iTurn;
 							
-							// Due to numerical inaccuracy, it can happen that the event for the new turn
-							// and an event for an almost identical phi crossing get emitted in inconsistent
-							// order. The rule is: If the two planes are (within tolerance) same, the event should
-							// always count from the PREVIOUS turn (so Poincare hits register at the end of the turn,
-							// not the beginning).
-							
-							if(evt.getDistance() - lastNewTurnDistance < 1e-8) {
-								if(iTurn == 0) continue;
-								iTurnActual = iTurn - 1;
+							if(request.getPlaneIntersectionRecordMode() == FLTRequest::PlaneIntersectionRecordMode::LAST_IN_TURN) {
+								// Adjustments to get consistent behavior for turn recording
+								
+								// Due to numerical inaccuracy, it can happen that the event for the new turn
+								// and an event for an almost identical phi crossing get emitted in inconsistent
+								// order. The rule is: If the two planes are (within tolerance) same, the event should
+								// always count from the PREVIOUS turn (so Poincare hits register at the end of the turn,
+								// not the beginning).
+								
+								if(evt.getDistance() - lastNewTurnDistance < 1e-8) {
+									if(iTurn == 0) continue;
+									iTurnActual = iTurn - 1;
+								}
+								
+								// It can happen that a phi intersection event lying after
+								// the last turn increment is emitted (due to event sorting)
+								// These need to be clipped from the result tensor.
+								if(iTurnActual >= nTurns)
+									continue;
+							} else {
+								// We record every plane hit.
+								iTurnActual = iHit++;
 							}
-							// It can happen that a phi intersection event lying after
-							// the last turn increment is emitted (due to event sorting)
-							// These need to be clipped from the result tensor.
-							if(iTurnActual >= nTurns)
-								continue;
 							
 							auto ppi = evt.getPhiPlaneIntersection();
 							
@@ -672,7 +712,7 @@ struct FLTImpl : public FLT::Server {
 					stepCountData.set(iStartPoint, state.getNumSteps());
 				}
 				writeTensor(pcCuts, results.getPoincareHits());
-				applyPointShape(results.getPoincareHits(), {5, nSurfs}, {nTurns});
+				applyPointShape(results.getPoincareHits(), {5, nSurfs}, {pcLimit});
 				
 				writeTensor(endPoints, results.getEndPoints());
 				applyPointShape(results.getEndPoints(), {4}, {});

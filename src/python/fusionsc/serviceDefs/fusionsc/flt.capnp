@@ -112,12 +112,18 @@ struct FLTRequest {
 		}
 	}
 	
+	enum PlaneIntersectionRecordMode {
+		lastInTurn @0;
+		everyHit @1;
+	}
+	
 	# Tensor of shape [3, ...] indicating tracing start points
 	startPoints @0 : Data.Float64Tensor;
 	field @1 : Magnetics.ComputedField;
 	geometry @2 : Geometry.IndexedGeometry;
 	
 	planes @3 : List(Geometry.Plane);
+	planeIntersectionRecordMode @44 : PlaneIntersectionRecordMode;
 	
 	turnLimit @4 : UInt32;
 	distanceLimit @5 : Float64;

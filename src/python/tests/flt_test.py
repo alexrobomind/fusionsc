@@ -49,14 +49,15 @@ def heatCam():
 	)
 	return cam
 
-def test_poincare(field, geometry):
+@pytest.mark.parametrize("recMode", ['lastInTurn', 'everyHit'])
+def test_poincare(field, geometry, recMode):
 	rStart = np.linspace(1.05, 1.1, 10)
 	zStart = 0 * rStart
 	yStart = 0 * rStart
 	
-	pcPlanes = [0, np.pi]
+	pcPlanes = [0, np.pi, "orientation: {normal: [1, 0, 0]}"]
 	
-	result = fsc.flt.poincareInPhiPlanes([rStart, yStart, zStart], field, pcPlanes, 200, geometry = geometry, targetError = 1e-3)
+	result = fsc.flt.poincareInPhiPlanes([rStart, yStart, zStart], field, pcPlanes, 200, geometry = geometry, targetError = 1e-3, planeRecordMode = recMode)
 
 def test_axis(field):
 	fsc.flt.findAxis(field, startPoint = [1.1, 0, 0], targetError = 1e-3)
