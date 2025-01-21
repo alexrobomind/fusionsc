@@ -3,6 +3,10 @@
 
 namespace fsc { namespace db {
 	
+// class TransactionHook
+
+Connection::TransactionHook::~TransactionHook() {}
+	
 // class PreparedStatement
 	
 PreparedStatement::PreparedStatement(Own<PreparedStatementHook>&& hook) :
@@ -23,7 +27,7 @@ bool PreparedStatement::Query::step() {
 
 // class Savepoint
 	
-Savepoint::Savepoint(Connection& parent) :
+/*Savepoint::Savepoint(Connection& parent) :
 	parent(parent.addRef()), id(parent.savepointCounter++)
 {
 	parent.prepare(kj::str("SAVEPOINT sp_", id))();
@@ -48,10 +52,10 @@ void Savepoint::rollback() {
 	KJ_REQUIRE(active(), "Savepoint must be active to roll back");
 	parent -> prepare(kj::str("ROLLBACK TO sp_", id))();
 	parent = nullptr;
-}
+}*/
 
 // class Transaction
-
+/*
 Transaction::Transaction(Connection& parent) :
 	savepoint(parent)
 {}
@@ -67,6 +71,21 @@ Transaction::~Transaction() noexcept(false) {
 		}
 	} else {
 		commit();
+	}
+}*/
+
+Transaction::Transaction(Connection& parent, TransactionType type) :
+	hook(parent.beginTransaction(type))
+{}
+
+Transaction::~Transaction() noexcept(false) {
+	if(!hook -> active())
+		return;
+	
+	if(ud.isUnwinding()) {
+		hook -> rollback();
+	} else {
+		hook -> commit();
 	}
 }
 

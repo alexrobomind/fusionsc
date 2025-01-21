@@ -119,6 +119,14 @@ struct PreparedStatement::Query {
 	bool step();
 };
 
+enum class TransactionType : uint8_t {
+	UNKNOWN,
+	
+	READ_WRITE, //< Indicates that this transaction will write (may block to acquire exclusive locks)
+	READ_ONLY,  //< Indicates a read-only transaction. Server may reduces write commands inside.
+	READ_ONLY_DEFER //< Indicates that this is a read-only transaction that should be guarded against failure due to serialization anomalies.
+};
+
 struct Connection {
 	virtual Own<Connection> addRef() = 0;
 	virtual Own<Connection> fork(bool readOnly) = 0;
@@ -129,12 +137,50 @@ struct Connection {
 	
 	inline PreparedStatement prepare(kj::StringPtr sql) { return prepareHook(sql); }
 	inline int64_t exec(kj::StringPtr sql) { return prepare(sql)(); }
+	
+	struct TransactionHook {
+		virtual ~TransactionHook();
+		
+		virtual void commit() = 0;
+		virtual bool active() noexcept = 0;
+		virtual void rollback() noexcept = 0;
+	};
+	
+	virtual Own<TransactionHook> beginTransaction(TransactionType) = 0;
+	
+	/** Checks whether connection behaves like an SQLite connection.
+	 *
+	 * If true, the connection has the following traits:
+	 * - Serialization failure happens latest at the first write statement of a
+	     transaction.
+	 * - It is strongly advisable to batch small write transactions into larger ones.
+	 *
+	 * If these traits are true, clients can and should merge multiple write
+	 * statements into super-transactions that will be released before the event
+	 * loop goes to idle. If serialization failure can occur in a delayed fasion,
+	 * this is not safe to perform as earlier successful writes can be invalidated
+	 * by the later failure.
+	 */
+	inline bool isSqliteLike() { return sqliteLike; }
+	
+protected:
+	bool sqliteLike = false;
 
-private:
-	uint64_t savepointCounter = 0;
-	friend class Savepoint;
 };
 
+struct Transaction {
+	Transaction(Connection& parent, TransactionType type = TransactionType::UNKNOWN);
+	~Transaction() noexcept(false) ;
+	
+	inline void commit() { if(hook -> active()) hook -> commit(); }
+	inline void rollback() noexcept { if(hook -> active()) hook -> rollback(); }
+	inline bool active() noexcept { return hook -> active(); }
+	
+private:
+	Own<Connection::TransactionHook> hook;
+	kj::UnwindDetector ud;
+};
+/*
 //! A savepoint that can be acquired and later released (default behavior) or rolled back
 struct Savepoint {
 	Own<Connection> parent;
@@ -159,7 +205,7 @@ struct Transaction {
 	inline void commit() {savepoint.release(); }
 	inline void rollback() { savepoint.rollback(); }
 	bool active() { return savepoint.active(); }
-};
+};*/
 
 }}
 

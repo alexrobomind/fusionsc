@@ -469,10 +469,12 @@ private:
 //! Snapshot to a frozen representation of the database
 struct ObjectDBSnapshot : public ObjectDBBase, kj::Refcounted {
 	ObjectDBSnapshot(ObjectDB& base);
+	~ObjectDBSnapshot();
 	
 	Own<ObjectDBSnapshot> addRef() { return kj::addRef(*this); }
 	
-	db::Savepoint savepoint;
+	// db::Savepoint savepoint;
+	db::Transaction transaction;
 };
 
 
@@ -894,8 +896,12 @@ Own<db::Transaction> ObjectDB::writeTransaction() {
 
 ObjectDBSnapshot::ObjectDBSnapshot(ObjectDB& base) :
 	ObjectDBBase(*base.conn -> fork(true), base.tablePrefix, true),
-	savepoint(*conn)
+	transaction(*conn, db::TransactionType::READ_ONLY)
 {
+}
+
+ObjectDBSnapshot::~ObjectDBSnapshot() {
+	transaction.rollback();
 }
 
 // class ObjectDBEntry
