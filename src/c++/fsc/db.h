@@ -163,10 +163,26 @@ struct Connection {
 	 */
 	inline bool isSqliteLike() { return sqliteLike; }
 	
+	struct BaseTransactionHook;
+	
 protected:
 	bool sqliteLike = false;
+	
+	/**
+	 * Implementation helper for standard SQL transactions.
+	 * - Starts transaction with custom begin statement
+	 * - Uses COMMIT / ROLLBACK to manage the top-level transaction
+	 * - Uses SQL savepoints to manage nested transactions
+	 * - Committing or rolling back the top-level transaction has
+	     the identical effect on all nested savepoints.
+	*/
+	Own<TransactionHook> beginTransactionBase(kj::StringPtr beginStatement);
 
+private:
+	Maybe<Own<BaseTransactionHook>> activeTransaction;
 };
+
+KJ_DECLARE_NON_POLYMORPHIC(Connection::BaseTransactionHook);
 
 struct Transaction {
 	Transaction(Connection& parent, TransactionType type = TransactionType::UNKNOWN);

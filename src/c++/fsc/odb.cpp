@@ -448,19 +448,7 @@ private:
 	kj::Promise<void> syncPromise;
 	// kj::Promise<void> writePromise;
 	
-	struct WriteLock {
-		ObjectDB& parent;
-		
-		inline WriteLock(ObjectDB& db) : parent(db) {
-			parent.conn -> exec("BEGIN IMMEDIATE");
-		}
-		
-		inline ~WriteLock() {
-			parent.conn -> exec("COMMIT");
-		}
-	};
-	
-	Maybe<WriteLock> hasWriteLock = nullptr;
+	Maybe<db::Transaction> hasWriteLock = nullptr;
 	std::list<Own<kj::PromiseFulfiller<void>>> lockWaiters;
 	
 	uint32_t checkpointCounter = 0;
@@ -854,10 +842,13 @@ void ObjectDB::writeLock() {
 	if(hasWriteLock != nullptr)
 		return;
 	
-	hasWriteLock.emplace(*this);
+	hasWriteLock.emplace(*conn, db::TransactionType::READ_WRITE);
 	
 	importTasks.add(kj::evalLast([this]() {
 		KJ_IF_MAYBE(pErr, kj::runCatchingExceptions([this]() {
+			KJ_IF_MAYBE(pTransaction, hasWriteLock) {
+				pTransaction -> commit();
+			}
 			hasWriteLock = nullptr;
 		})) {
 			KJ_LOG(WARNING, "Write op failed", *pErr);

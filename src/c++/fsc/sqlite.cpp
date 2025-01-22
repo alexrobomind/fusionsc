@@ -80,37 +80,6 @@ struct SQLiteStatementHook : public PreparedStatementHook {
 	bool available = false;
 };
 
-struct SQLiteTransactionHook : public Connection::TransactionHook {
-	Own<SQLiteConnection> parent;
-	
-	SQLiteTransactionHook(Own<SQLiteConnection> p) : parent(mv(p)) {}
-	~SQLiteTransactionHook() noexcept {};
-	
-	void begin(TransactionType t) {
-		if(t == TransactionType::READ_WRITE) {
-			parent -> exec("BEGIN IMMEDIATE TRANSACTION");
-		} else {
-			parent -> exec("BEGIN TRANSACTION");
-		}
-	}
-	
-	void commit() {
-		parent -> exec("COMMIT");
-	}
-	
-	void rollback() noexcept {
-		try {
-			parent -> exec("ROLLBACK");
-		} catch(kj::Exception& e) {
-			KJ_LOG(WARNING, "Error during SQLite rollback", e);
-		}
-	}
-	
-	bool active() noexcept {
-		return parent -> inTransaction();
-	}
-};
-
 // class SQLiteConnection
 
 Own<Connection> SQLiteConnection::addRef() {
@@ -130,12 +99,7 @@ Own<PreparedStatementHook> SQLiteConnection::prepareHook(kj::StringPtr sql) {
 }
 
 Own<Connection::TransactionHook> SQLiteConnection::beginTransaction(TransactionType t) {
-	KJ_REQUIRE(!inTransaction(), "Transactions may not be nested");
-	
-	auto result = kj::heap<SQLiteTransactionHook>(kj::addRef(*this));
-	result -> begin(t);
-	
-	return result;
+	return beginTransactionBase(t == TransactionType::READ_WRITE ? "BEGIN IMMEDIATE TRANSACTION" : "BEGIN TRANSACTION");
 }
 
 SQLiteConnection::SQLiteConnection(kj::StringPtr filename, bool readOnly) :
