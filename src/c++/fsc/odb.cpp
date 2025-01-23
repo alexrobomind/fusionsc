@@ -421,6 +421,7 @@ struct ObjectDB : public ObjectDBBase, kj::Refcounted, Warehouse::Server {
 	Promise<void> getRoot(GetRootContext ctx) override;
 	
 	void writeLock();
+	void releaseWriteLock();
 	Promise<void> writeBarrier();
 	
 	Own<db::Transaction> writeTransaction();
@@ -842,14 +843,20 @@ void ObjectDB::writeLock() {
 	if(hasWriteLock != nullptr)
 		return;
 	
+	if(!conn -> isSqliteLike())
+		return;
+	
 	hasWriteLock.emplace(*conn, db::TransactionType::READ_WRITE);
 	
 	importTasks.add(kj::evalLast([this]() {
-		KJ_IF_MAYBE(pErr, kj::runCatchingExceptions([this]() {
-			KJ_IF_MAYBE(pTransaction, hasWriteLock) {
+		releaseWriteLock();
+	}));
+}
+
+void ObjectDB::releaseWriteLock() {
+	KJ_IF_MAYBE(pTransaction, hasWriteLock) {
+		KJ_IF_MAYBE(pErr, kj::runCatchingExceptions([&, this]() {
 				pTransaction -> commit();
-			}
-			hasWriteLock = nullptr;
 		})) {
 			KJ_LOG(WARNING, "Write op failed", *pErr);
 			
@@ -859,13 +866,12 @@ void ObjectDB::writeLock() {
 			for(auto& e : lockWaiters)
 				e -> fulfill();
 		}
-		
-		// Make sure we really are clear (double fail should not happen)
-		hasWriteLock = nullptr;
-		lockWaiters.clear();
-		
-		changed();
-	}));
+	}
+	
+	lockWaiters.clear();
+	hasWriteLock = nullptr;
+	
+	changed();
 }
 
 Promise<void> ObjectDB::writeBarrier() {

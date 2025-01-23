@@ -118,6 +118,9 @@ SQLiteConnection::SQLiteConnection(kj::StringPtr filename, bool readOnly) :
 		sqlite3_close_v2(handle);
 		throw;
 	}
+	
+	// Set flag in superclass that asserts this behaves like an SQLite connection w/ global write locking.
+	sqliteLike = true;
 }
 
 SQLiteConnection::~SQLiteConnection() noexcept {
