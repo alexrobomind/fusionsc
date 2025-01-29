@@ -1244,9 +1244,9 @@ LocalDataRef<capnp::AnyPointer> internal::LocalDataServiceImpl::publishArchive(M
 
 
 Promise<void> internal::LocalDataServiceImpl::writeArchive(DataRef<capnp::AnyPointer>::Client ref, const kj::File& out) {
-	auto writer = heapHeld<ArchiveWriter>(out);
+	Shared<ArchiveWriter> writer(out);
 	
-	return writer -> writeArchive(mv(ref)).attach(writer.x());
+	return writer -> writeArchive(mv(ref)).attach(kj::cp(writer));
 }
 
 
@@ -1877,7 +1877,7 @@ struct FlatData {
 }
 
 Promise<kj::Array<kj::Array<const byte>>> LocalDataServiceImpl::downloadFlat(DataRef<>::Client src) {
-	auto data = heapHeld<FlatData>(*this);
+	Shared<FlatData> data(*this);
 	
 	// Step 1: Download root
 	return data -> processRef(mv(src))
@@ -1921,8 +1921,7 @@ Promise<kj::Array<kj::Array<const byte>>> LocalDataServiceImpl::downloadFlat(Dat
 			result.add(mv(arr));
 		
 		return result.finish();
-	})
-	.attach(data.x());
+	});
 }
 
 LocalDataRef<> LocalDataServiceImpl::publishFlat(kj::Array<kj::Array<const byte>> data) {

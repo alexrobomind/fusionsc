@@ -229,7 +229,7 @@ async def trace(
 	# Whether field line reversal is allowed
 	allowReversal = False,
 	
-	# Record mode for plane hits ("lastInTurn" or "everyHit")
+	# Record mode for plane hits ("auto", "lastInTurn" or "everyHit")
 	planeRecordMode = "lastInTurn"
 ):
 	"""
@@ -284,7 +284,8 @@ async def trace(
 		  tracing process. This prevents long traces on field lines encircling coils.
 		
 		- planeRecordMode: Recording style to use for Poincare hits. Possible values:
-		  - "lastInTurn" (default): Indexes the hits per turn while "everyHit" records all hits of the plane.
+		  - "auto": Uses "lastInTurn" when only using phi-planes, and "everyHit" with a one-time warning notification otherwise.
+		  - "lastInTurn": Indexes the hits per turn while "everyHit" records all hits of the plane.
 		  - "everyHit": Returns all hits in order of trace direction of field line.
 	
 	Returns:
@@ -354,8 +355,6 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	
 	request.ignoreCollisionsBefore = ignoreCollisionsBefore
 	
-	request.planeIntersectionRecordMode = planeRecordMode
-	
 	assert direction in ["forward", "backward", "cw", "ccw"]
 	
 	if direction == "field":
@@ -401,6 +400,24 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 			makePlane(x)
 			for x in phiPlanes
 		]
+	
+	# Adjust planeRecordMode 'auto' argument
+	if planeRecordMode == "auto":
+		planeRecordMode = "lastInTurn"
+		
+		for plane in request.planes:
+			if plane.orientation.which_() != "phi":
+				planeRecordMode = "everyHit"
+				
+				import warnings
+				warnings.warn("Using a plane that is not a phi-plane switches the default intersection "
+				"recording (from 'lastPerTurn' to 'every hit'), which means that the last axis no longer "
+				"indicates the turn count. Manually set the 'planeRecordMode' argument to one of these "
+				"values to suppress this warning")
+				
+				break
+	
+	request.planeIntersectionRecordMode = planeRecordMode
 	
 	# Field line following
 	if recordEvery > 0:

@@ -986,7 +986,7 @@ struct FLTImpl : public FLT::Server {
 	}
 		
 	Promise<void> findAxisBatch(FindAxisBatchContext ctx) override {
-		auto points = heapHeld<Tensor<double, 2>>();
+		Shared<Tensor<double, 2>> points;
 		auto vardimShape = readVardimTensor(ctx.getParams().getPoints(), 1, *points);
 		size_t nPoints = points -> dimension(0);
 		
@@ -999,9 +999,9 @@ struct FLTImpl : public FLT::Server {
 		auto nPhi = params.getNPhi();
 		auto islandM = params.getIslandM();
 		
-		auto axis = heapHeld<Tensor<double, 3>>(nPhi * islandM, nPoints, 3);
-		auto fields = heapHeld<Tensor<double, 1>>(nPoints);
-		auto pos = heapHeld<Tensor<double, 2>>(nPoints, 3);
+		Shared<Tensor<double, 3>> axis(nPhi * islandM, nPoints, 3);
+		Shared<Tensor<double, 1>> fields(nPoints);
+		Shared<Tensor<double, 2>> pos(nPoints, 3);
 		
 		{
 			constexpr double nan = std::numeric_limits<double>::quiet_NaN();
@@ -1183,7 +1183,7 @@ struct FLTImpl : public FLT::Server {
 			writeVardimTensor(*pos, 1, vs, res.getPos());
 			writeVardimTensor(*fields, 0, vs, res.getMeanField());
 		})
-		.attach(axis.x(), pos.x(), fields.x(), points.x(), mv(field));
+		.attach(mv(field));
 	}
 	
 	Promise<void> findLcfs(FindLcfsContext ctx) override {

@@ -194,15 +194,15 @@ struct FieldCalculation {
 }
 	
 //! Processes a root node of a magnetic field (creates calculator)
-Promise<void> FieldCalculatorImpl::processRoot(MagneticField::Reader node, Eigen::Tensor<double, 2>&& points, Float64Tensor::Builder out) {		
-	auto newCalculator = heapHeld<FieldCalculation>(mv(points), *device);
+Promise<void> FieldCalculatorImpl::processRoot(MagneticField::Reader node, Eigen::Tensor<double, 2>&& points, Float64Tensor::Builder out) {
+	Shared<FieldCalculation> newCalculator(mv(points), *device);
 	
 	auto calcDone = processField(*newCalculator, node, newCalculator -> makeContext());
 	
 	return calcDone.then([newCalculator, out, this]() mutable {				
 		return newCalculator -> finish(out).eagerlyEvaluate(nullptr);
 	})
-	.attach(newCalculator.x());
+	.attach(cp(newCalculator));
 }
 	
 Promise<void> FieldCalculatorImpl::processFilament(FieldCalculation& calculator, Filament::Reader node, BiotSavartSettings::Reader settings, const MagKernelContext& ctx) {

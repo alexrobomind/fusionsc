@@ -180,10 +180,11 @@ Promise<void> CachedRef::transmit(TransmitContext ctx) {
 	return withCacheBackoff([this, ctx]() mutable {
 		auto params = ctx.getParams();
 		auto reader = blob -> open();
-		auto transProc = heapHeld<TransmissionProcess>(mv(reader), params.getReceiver(), params.getStart(), params.getEnd());
+		
+		Shared<TransmissionProcess> transProc(mv(reader), params.getReceiver(), params.getStart(), params.getEnd());
 		
 		auto transmission = kj::evalNow([=]() mutable { return transProc -> run(); });
-		return transmission.attach(transProc.x());
+		return transmission;
 	})
 	.attach(thisCap());
 }

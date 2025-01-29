@@ -2649,8 +2649,8 @@ Promise<void> DataRefInterface::transmit(TransmitContext ctx) {
 		Own<BlobReader> reader = blob -> open();
 		
 		// Create transmission process
-		auto transProc = heapHeld<TransmissionProcess>(mv(reader), params.getReceiver(), params.getStart(), params.getEnd());
-		return transProc -> run().attach(transProc.x());
+		Shared<TransmissionProcess> transProc(mv(reader), params.getReceiver(), params.getStart(), params.getEnd());
+		return transProc -> run().attach(kj::cp(transProc));
 	});
 }
 

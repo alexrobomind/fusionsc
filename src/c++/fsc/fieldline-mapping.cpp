@@ -288,7 +288,7 @@ namespace {
 				
 				size_t i2 = (i1 + 1) % planes.size();
 				
-				auto trace = heapHeld<RFLMSectionTrace>(flt, params, section, *device);
+				Shared<RFLMSectionTrace> trace(flt, params, section, *device);
 				
 				trace -> phi1 = planes[i1];
 				trace -> phi2 = planes[i2];
@@ -309,7 +309,7 @@ namespace {
 				/*computationPromise = computationPromise.then([trace]() mutable {
 					return trace -> run();
 				}).attach(trace.x());*/
-				promiseBuilder.add(trace -> run().attach(trace.x()));
+				promiseBuilder.add(trace -> run().attach(cp(trace)));
 			}
 			
 			KJ_REQUIRE(std::abs(totalWidth - 2 * pi / params.getNSym()) < pi, "Sections must be of non-zero width, and angles must be specified in counter-clockwise direction");

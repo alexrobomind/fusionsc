@@ -412,14 +412,14 @@ NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, k
 	settings.entropySource = DefaultEntropySource::INSTANCE;
 	settings.webSocketCompressionMode = allowCompression ? HttpClientSettings::AUTOMATIC_COMPRESSION : HttpClientSettings::NO_COMPRESSION;
 	
-	auto client = ownHeld(kj::newHttpClient(DEFAULT_HEADERS, *stream, settings));
+	Shared<kj::HttpClient> client = kj::newHttpClient(DEFAULT_HEADERS, *stream, settings);
 	client.attach(mv(stream));
 	
 	kj::HttpHeaders headers(DEFAULT_HEADERS);
 	headers.add("Host", host);
 	
 	return client -> openWebSocket(url, headers)
-	.then([client = client.x()](HttpClient::WebSocketResponse response) mutable -> fsc::NetworkInterface::Connection::Client {
+	.then([client](HttpClient::WebSocketResponse response) mutable -> fsc::NetworkInterface::Connection::Client {
 		KJ_REQUIRE(
 			response.webSocketOrBody.is<Own<kj::WebSocket>>(),
 			"Connection did not provide a proper websocket",
