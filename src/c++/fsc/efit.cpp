@@ -110,14 +110,17 @@ void parseGeqdsk(AxisymmetricEquilibrium::Builder out, kj::StringPtr geqdsk) {
 	// Normalized toroidal field
 	auto toroidalField = readFloats(input, nR);
 	
-	readFloats(input, nR); // pressure
+	// Pressure
+	auto pressure = readFloats(input, nR); // pressure
 	
 	readFloats(input, nR); // d/dPsi 0.5 fPol**2
 	readFloats(input, nR); // d/dPsi pressure);
 	
 	// Poloidal flux
 	auto psi = readFloats(input, nR * nZ);
-	readFloats(input, nR);; // q(Psi)
+	
+	// q profile
+	auto qProfile = readFloats(input, nR); // q(Psi)
 	
 	// We ignore the rest of the file, as we don't care about the boundary
 	
@@ -130,6 +133,8 @@ void parseGeqdsk(AxisymmetricEquilibrium::Builder out, kj::StringPtr geqdsk) {
 	out.setFluxBoundary(fluxBoundary);
 	
 	out.setNormalizedToroidalField(toroidalField);
+	out.setPressureProfile(pressure);
+	out.setQProfile(qProfile);
 	
 	auto pFlux = out.initPoloidalFlux();
 	pFlux.setShape({nZ, nR});
