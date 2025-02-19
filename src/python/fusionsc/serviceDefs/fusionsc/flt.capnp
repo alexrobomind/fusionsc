@@ -370,7 +370,8 @@ interface Mapper {
 	mapGeometry @1 (
 		mapping : Data.DataRef(ReversibleFieldlineMapping),
 		geometry : Geometry.Geometry, nSym : UInt32 = 1,
-		nPhi : UInt32 = 1, nU : UInt32 = 10, nV : UInt32 = 10
+		nPhi : UInt32 = 1, nU : UInt32 = 10, nV : UInt32 = 10,
+		errorThreshold : Float64 = 1e-3,
 	) -> (mapping : GeometryMapping);
 	
 	getSectionGeometry @2 (mapping : GeometryMapping, section : UInt64) -> (geometry : Geometry.IndexedGeometry);
@@ -473,4 +474,5 @@ struct FLTKernelRequest {
 struct RFLMKernelData {
 	states @0 : List(ReversibleFieldlineMapping.State);
 	phiValues @1 : List(Float64);
+	reconstructionErrors @2 : List(Float64);
 }

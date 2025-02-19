@@ -126,8 +126,10 @@ EIGEN_DEVICE_FUNC inline void mapInSectionKernel(unsigned int idx, uint64_t sect
 	double r = in(2, idx);
 	
 	RFLM m(mapping);
-	m.mapInSection(section, phi, z, r);
+	double reconstructionError = m.mapInSection(section, phi, z, r);
 	m.save(out.mutateStates()[idx]);
+	
+	out.mutateReconstructionErrors().set(idx, reconstructionError);
 	
 	// KJ_DBG(out.mutateStates()[idx].getU(), out.mutateStates()[idx].getV(), phi, z, r);
 }

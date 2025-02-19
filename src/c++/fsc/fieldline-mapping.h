@@ -18,10 +18,10 @@ struct RFLM {
 	inline EIGEN_DEVICE_FUNC Vec3d unmap(double phi);
 	
 	//! Captures a position for mapping using the closest mapping filament
-	inline EIGEN_DEVICE_FUNC void map(const Vec3d& x, bool goingCcw);
+	inline EIGEN_DEVICE_FUNC double map(const Vec3d& x, bool goingCcw);
 	
 	//! Maps using a pre-selected section
-	inline EIGEN_DEVICE_FUNC void mapInSection(uint64_t section, double phi, double z, double r);
+	inline EIGEN_DEVICE_FUNC double mapInSection(uint64_t section, double phi, double z, double r);
 	
 	//! Advances to a new phi position, remapping if neccessary. Returns new real-space position
 	// Note: No guarantees that flm.phi == newPhi
@@ -246,7 +246,7 @@ EIGEN_DEVICE_FUNC Vec3d RFLM::unmap(double phi) {
 	return Vec3d(rVal * cos(phi), rVal * sin(phi), zVal);
 }
 
-EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
+EIGEN_DEVICE_FUNC double RFLM::map(const Vec3d& x, bool ccw) {
 	// --- Select active section for inversion ---
 	double phi = atan2(x[1], x[0]);
 	
@@ -256,7 +256,7 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 		uv(0) = phi;
 		uv(1) = phi;
 		this -> phi = phi;
-		return;
+		return std::numeric_limits<double>::infinity();
 	}
 	
 	const double rRef = sqrt(x[0] * x[0] + x[1] * x[1]);
@@ -301,10 +301,10 @@ EIGEN_DEVICE_FUNC void RFLM::map(const Vec3d& x, bool ccw) {
 	// KJ_DBG(phi, iSection);
 		
 	// KJ_DBG(iSection);
-	mapInSection(iSection, phi, zRef, rRef);
+	return mapInSection(iSection, phi, zRef, rRef);
 }
 
-EIGEN_DEVICE_FUNC void RFLM::mapInSection(uint64_t iSection, double phiIn, double zRef, double rRef) {
+EIGEN_DEVICE_FUNC double RFLM::mapInSection(uint64_t iSection, double phiIn, double zRef, double rRef) {
 	phi = phiIn;
 	activateSection(iSection);
 	
@@ -374,7 +374,7 @@ EIGEN_DEVICE_FUNC void RFLM::mapInSection(uint64_t iSection, double phiIn, doubl
 		{ Interpolator::Axis(0, phi2 - phi1, nPhi - 2 * nPad - 1), Interpolator::Axis(0, 1, nZ - 1), Interpolator::Axis(0, 1, nR - 1) }
 	);
 	
-	for(size_t i = 0; i < 50; ++i) {
+	for(size_t i = 0; true; ++i) {
 		// Calculate values and derivatives for r and z
 		Vec3<ADS> interpCoords(phiCoord, ADS(uv(1), 2, 1), ADS(uv(0), 2, 0));
 		ADS rVal = interpolator(rField, interpCoords);
@@ -402,13 +402,14 @@ EIGEN_DEVICE_FUNC void RFLM::mapInSection(uint64_t iSection, double phiIn, doubl
 		// KJ_DBG(du, dv, dx(0), dx(1), rVal.value(), zVal.value());
 		
 		if(du != du || dv != dv)
-			break;
+			return std::numeric_limits<double>::infinity();
 		
-		if(dx.norm() < 1e-12)
-			break;
+		if(dx.norm() < 1e-12 || i > 50) {			
+			return dx.norm();
+		}
 	}
 	
-	// KJ_DBG("Map completed", rRef, zRef, uv(0), uv(1), phi);
+	KJ_UNREACHABLE;
 }
 
 EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi) {
