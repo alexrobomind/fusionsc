@@ -230,7 +230,7 @@ async def trace(
 	allowReversal = False,
 	
 	# Record mode for plane hits ("auto", "lastInTurn" or "everyHit")
-	planeRecordMode = "lastInTurn"
+	planeRecordMode = "auto"
 ):
 	"""
 	Performs a tracing request.
