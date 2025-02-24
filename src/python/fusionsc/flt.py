@@ -17,6 +17,7 @@ from ._api_markers import unstableApi
 
 import numpy as np
 import functools
+import numbers
 
 from types import SimpleNamespace
 
@@ -391,7 +392,7 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	# Poincare maps
 	if len(phiPlanes) > 0:
 		def makePlane(x):
-			if isinstance(x, (int, float)):
+			if isinstance(x, numbers.Number):
 				return {"orientation" : {"phi" : x}}
 			
 			return x
