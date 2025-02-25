@@ -65,17 +65,19 @@ struct TraceCalculation {
 	FSC_READER_MAPPING(::fsc, MergedGeometry) geometryData;
 	FSC_READER_MAPPING(::fsc, ReversibleFieldlineMapping) mappingData;
 	FSC_READER_MAPPING(::fsc, GeometryMapping::MappingData) geoMappingData;
+
+	Temporary<FLTConfig> config;
 	
 	uint32_t eventBufferSize = 0;
 		
 	TraceCalculation(DeviceBase& device,
-		Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<const Tensor<double, 4>>> newField, Tensor<double, 2> positions,
+		Temporary<FLTKernelRequest>&& newRequest, Own<TensorMap<const Tensor<double, 4>>> newField, Tensor<double, 2> nPositions,
 		IndexedGeometry::Reader geometryIndex, Maybe<LocalDataRef<IndexedGeometry::IndexData>> indexData, Maybe<LocalDataRef<MergedGeometry>> geometryData,
 		Maybe<LocalDataRef<ReversibleFieldlineMapping>> mappingData, Maybe<LocalDataRef<GeometryMapping::MappingData>> geoMappingData,
 		FLTConfig::Reader config
 	) :
 		device(device.addRef()),
-		positions(mv(positions)),
+		positions(mv(nPositions)),
 		
 		field(mapToDevice(mv(newField), device, true)),
 		
@@ -87,7 +89,8 @@ struct TraceCalculation {
 		geometryData(FSC_MAP_READER(::fsc, MergedGeometry, geometryData, device, true)),
 		
 		mappingData(FSC_MAP_READER(::fsc, ReversibleFieldlineMapping, mappingData, device, true)),
-		geoMappingData(FSC_MAP_READER(::fsc, GeometryMapping::MappingData, geoMappingData, device, true))
+		geoMappingData(FSC_MAP_READER(::fsc, GeometryMapping::MappingData, geoMappingData, device, true)),
+		config(config)
 	{		
 		if(request.getServiceRequest().getRngSeed() == 0) {
 			uint64_t seed;
@@ -113,7 +116,9 @@ struct TraceCalculation {
 		auto structInfo = structSchema.getProto().getStruct();
 		uint32_t structSizeInWords = structInfo.getDataWordCount() + structInfo.getPointerCount();
 		
-		uint32_t size = wordBudget / structSizeInWords;
+		uint32_t size = wordBudget / (structSizeInWords * nPoints);
+
+		KJ_LOG(INFO, "Buffer size estimation", nPoints, size, wordBudget, structSizeInWords, config);
 		
 		if(size < config.getMinSize())
 			return config.getMinSize();
@@ -211,9 +216,25 @@ struct TraceCalculation {
 		auto kDataIn = prevRound -> kernelData -> getHost().getData();
 		
 		KJ_REQUIRE(kDataIn.size() == prevRound -> participants.size());
-		
+
+		bool canIncreaseBufferSize = eventBufferSize < config.getEventBuffer().getMaxSize();
+		bool increaseBufferSize = false;
 		for(size_t i = 0; i < kDataIn.size(); ++i) {
+			if(kDataIn[i].getStopReason() == FLTStopReason::COULD_NOT_STEP) {
+				if(canIncreaseBufferSize)
+					increaseBufferSize = true;
+				else
+					continue;
+			}
+
 			if(!isFinished(kDataIn[i])) unfinished.add(i);
+		}
+
+		if(increaseBufferSize) {
+			auto oldBufferSize = eventBufferSize;
+			eventBufferSize = std::min(2 * eventBufferSize, config.getEventBuffer().getMaxSize());
+
+			KJ_LOG(INFO, "Growing event buffer size", oldBufferSize, eventBufferSize);
 		}
 		
 		KJ_LOG(INFO,prevRound -> participants, unfinished);
@@ -224,7 +245,7 @@ struct TraceCalculation {
 		
 		Round& newRound = prepareRound(unfinished.size());
 		prevRound = &(rounds[rounds.size() - 2]);
-		
+
 		auto kDataOut = newRound.kernelData -> getHost().getData();
 		for(size_t i = 0; i < unfinished.size(); ++i) {
 			// KJ_LOG(INFO,i, unfinished[i], prevRound -> participants.size());
@@ -283,7 +304,7 @@ struct TraceCalculation {
 			KJ_FAIL_REQUIRE("Kernel stopped for unknown reason");
 		}
 		
-		if(stopReason == FLTStopReason::EVENT_BUFFER_FULL)
+		if(stopReason == FLTStopReason::EVENT_BUFFER_FULL || stopReason == FLTStopReason::COULD_NOT_STEP)
 			return false;
 		
 		if(stopReason == FLTStopReason::STEP_LIMIT && (request.getServiceRequest().getStepLimit() == 0 || entry.getState().getNumSteps() < request.getServiceRequest().getStepLimit()))
