@@ -110,6 +110,11 @@ struct DynamicObject {
 			data @8 : AnyStruct;
 		}
 		
+		dynamicCapability : group {
+			schema @51 : AnyStruct;
+			raw @52 : Capability;
+		}
+		
 		uint64 @9 : UInt64;
 		int64 @10 : Int64;
 		

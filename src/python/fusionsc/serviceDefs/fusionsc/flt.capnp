@@ -112,12 +112,18 @@ struct FLTRequest {
 		}
 	}
 	
+	enum PlaneIntersectionRecordMode {
+		lastInTurn @0;
+		everyHit @1;
+	}
+	
 	# Tensor of shape [3, ...] indicating tracing start points
 	startPoints @0 : Data.Float64Tensor;
 	field @1 : Magnetics.ComputedField;
 	geometry @2 : Geometry.IndexedGeometry;
 	
 	planes @3 : List(Geometry.Plane);
+	planeIntersectionRecordMode @44 : PlaneIntersectionRecordMode;
 	
 	turnLimit @4 : UInt32;
 	distanceLimit @5 : Float64;
@@ -364,7 +370,8 @@ interface Mapper {
 	mapGeometry @1 (
 		mapping : Data.DataRef(ReversibleFieldlineMapping),
 		geometry : Geometry.Geometry, nSym : UInt32 = 1,
-		nPhi : UInt32 = 1, nU : UInt32 = 10, nV : UInt32 = 10
+		nPhi : UInt32 = 1, nU : UInt32 = 10, nV : UInt32 = 10,
+		errorThreshold : Float64 = 1e-3,
 	) -> (mapping : GeometryMapping);
 	
 	getSectionGeometry @2 (mapping : GeometryMapping, section : UInt64) -> (geometry : Geometry.IndexedGeometry);
@@ -467,4 +474,5 @@ struct FLTKernelRequest {
 struct RFLMKernelData {
 	states @0 : List(ReversibleFieldlineMapping.State);
 	phiValues @1 : List(Float64);
+	reconstructionErrors @2 : List(Float64);
 }

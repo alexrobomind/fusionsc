@@ -160,6 +160,12 @@ const loginNodeProfile : LocalConfig = (enableCompute = false, jobScheduler = (s
 #					so the protocol remains fully compatible in all other aspects.
 const fscProtocolVersion : UInt64 = 2;
 
+interface LocalStore {
+	put @0 [T] (ref : Data.DataRef(T), download : Bool) -> (id : UInt64);
+	get @1 (id : UInt64) -> (ref : Data.DataRef(AnyPointer));
+	erase @2 (id : UInt64) -> ();
+}
+
 
 # Extended local interface to provide access to the local file system and network connections
 #
@@ -174,7 +180,7 @@ const fscProtocolVersion : UInt64 = 2;
 #
 # !!! NEVER EXPOSE THIS INTERFACE EXTERNALLY !!!
 
-interface LocalResources extends(Networking.NetworkInterface) {
+interface LocalResources extends(Networking.NetworkInterface, LocalStore) {
 	root         @0 () -> (root : RootService);
 	
 	openArchive  @1 (filename : Text) -> (ref : Data.DataRef(AnyPointer));

@@ -421,6 +421,7 @@ struct ObjectDB : public ObjectDBBase, kj::Refcounted, Warehouse::Server {
 	Promise<void> getRoot(GetRootContext ctx) override;
 	
 	void writeLock();
+	void releaseWriteLock();
 	Promise<void> writeBarrier();
 	
 	Own<db::Transaction> writeTransaction();
@@ -448,19 +449,7 @@ private:
 	kj::Promise<void> syncPromise;
 	// kj::Promise<void> writePromise;
 	
-	struct WriteLock {
-		ObjectDB& parent;
-		
-		inline WriteLock(ObjectDB& db) : parent(db) {
-			parent.conn -> exec("BEGIN IMMEDIATE");
-		}
-		
-		inline ~WriteLock() {
-			parent.conn -> exec("COMMIT");
-		}
-	};
-	
-	Maybe<WriteLock> hasWriteLock = nullptr;
+	Maybe<db::Transaction> hasWriteLock = nullptr;
 	std::list<Own<kj::PromiseFulfiller<void>>> lockWaiters;
 	
 	uint32_t checkpointCounter = 0;
@@ -469,10 +458,12 @@ private:
 //! Snapshot to a frozen representation of the database
 struct ObjectDBSnapshot : public ObjectDBBase, kj::Refcounted {
 	ObjectDBSnapshot(ObjectDB& base);
+	~ObjectDBSnapshot();
 	
 	Own<ObjectDBSnapshot> addRef() { return kj::addRef(*this); }
 	
-	db::Savepoint savepoint;
+	// db::Savepoint savepoint;
+	db::Transaction transaction;
 };
 
 
@@ -852,11 +843,20 @@ void ObjectDB::writeLock() {
 	if(hasWriteLock != nullptr)
 		return;
 	
-	hasWriteLock.emplace(*this);
+	if(!conn -> isSqliteLike())
+		return;
+	
+	hasWriteLock.emplace(*conn, db::TransactionType::READ_WRITE);
 	
 	importTasks.add(kj::evalLast([this]() {
-		KJ_IF_MAYBE(pErr, kj::runCatchingExceptions([this]() {
-			hasWriteLock = nullptr;
+		releaseWriteLock();
+	}));
+}
+
+void ObjectDB::releaseWriteLock() {
+	KJ_IF_MAYBE(pTransaction, hasWriteLock) {
+		KJ_IF_MAYBE(pErr, kj::runCatchingExceptions([&, this]() {
+				pTransaction -> commit();
 		})) {
 			KJ_LOG(WARNING, "Write op failed", *pErr);
 			
@@ -866,13 +866,12 @@ void ObjectDB::writeLock() {
 			for(auto& e : lockWaiters)
 				e -> fulfill();
 		}
-		
-		// Make sure we really are clear (double fail should not happen)
-		hasWriteLock = nullptr;
-		lockWaiters.clear();
-		
-		changed();
-	}));
+	}
+	
+	lockWaiters.clear();
+	hasWriteLock = nullptr;
+	
+	changed();
 }
 
 Promise<void> ObjectDB::writeBarrier() {
@@ -894,8 +893,12 @@ Own<db::Transaction> ObjectDB::writeTransaction() {
 
 ObjectDBSnapshot::ObjectDBSnapshot(ObjectDB& base) :
 	ObjectDBBase(*base.conn -> fork(true), base.tablePrefix, true),
-	savepoint(*conn)
+	transaction(*conn, db::TransactionType::READ_ONLY)
 {
+}
+
+ObjectDBSnapshot::~ObjectDBSnapshot() {
+	transaction.rollback();
 }
 
 // class ObjectDBEntry
@@ -2646,8 +2649,8 @@ Promise<void> DataRefInterface::transmit(TransmitContext ctx) {
 		Own<BlobReader> reader = blob -> open();
 		
 		// Create transmission process
-		auto transProc = heapHeld<TransmissionProcess>(mv(reader), params.getReceiver(), params.getStart(), params.getEnd());
-		return transProc -> run().attach(transProc.x());
+		Shared<TransmissionProcess> transProc(mv(reader), params.getReceiver(), params.getStart(), params.getEnd());
+		return transProc -> run().attach(kj::cp(transProc));
 	});
 }
 

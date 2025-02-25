@@ -139,12 +139,13 @@ Own<TensorMap<const T>> mapTensor(Reader reader) {
 		}
 	#endif
 	
-	auto tensor = heapHeld<RemoveConst<T>>(dims);
+	auto tensor = kj::heap<RemoveConst<T>>(dims);
 	auto dataOut = tensor->data();
 	for(size_t i = 0; i < data.size(); ++i)
 		dataOut[i] = data[i];
 	
-	return kj::heap<MapType>(*tensor).attach(tensor.x());
+	auto result = kj::heap<MapType>(*tensor);
+	return result.attach(mv(tensor));
 }
 	
 // template<typename T, int rank, int options, typename Index, typename T2>

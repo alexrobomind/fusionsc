@@ -331,14 +331,50 @@ struct RootServer : public RootService::Server {
 
 // Networking implementation
 
-
 struct LocalResourcesImpl : public LocalResources::Server, public LocalNetworkInterface {
 	RootService::Client rootService;
-	// Temporary<LocalConfig> config;
+	
+	kj::HashMap<uint64_t, DataRef<capnp::AnyPointer>::Client> store;
+	uint64_t storeCounter = 0;
 	
 	LocalResourcesImpl(LocalConfig::Reader config) :
 		rootService(createRoot(config))
-	{}	
+	{}
+	
+	// Store implementation
+	
+	Promise<void> put(PutContext ctx) {
+		auto params = ctx.getParams();
+		
+		const uint64_t id = storeCounter++;
+		
+		ctx.initResults().setId(id);
+		
+		if(!params.getDownload()) {
+			store.insert(id, params.getRef());
+			return READY_NOW; 
+		}
+		
+		return getActiveThread().dataService().download(params.getRef(), /* recursive = */ true)
+		.then([id, this](LocalDataRef<capnp::AnyPointer> ref) {
+			store.insert(id, ref);
+		});
+	}
+	
+	Promise<void> get(GetContext ctx) {
+		const uint64_t id = ctx.getParams().getId();
+		KJ_IF_MAYBE(pValue, store.find(id)) {
+			ctx.initResults().setRef(*pValue);
+			return READY_NOW;
+		}
+		
+		KJ_FAIL_REQUIRE("No entry found", id);
+	}
+	
+	Promise<void> erase(EraseContext ctx) {
+		store.erase(ctx.getParams().getId());
+		return READY_NOW;
+	}
 	
 	// Root service
 	
@@ -418,7 +454,8 @@ kj::ArrayPtr<uint64_t> fsc::protectedInterfaces() {
 	static kj::Array<uint64_t> result = kj::heapArray<uint64_t>({
 		capnp::typeId<LocalResources>(),
 		capnp::typeId<NetworkInterface>(),
-		capnp::typeId<SSHConnection>()
+		capnp::typeId<SSHConnection>(),
+		capnp::typeId<LocalStore>()
 	});
 	
 	return result.asPtr();

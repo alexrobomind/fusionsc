@@ -10,9 +10,9 @@ namespace internal {
 		if(n == 0) return READY_NOW;
 		
 		// Create mappers for input
-		auto mappers = heapHeld<kj::Tuple<DeviceMappingType<Params>...>>(kj::tuple(
+		Shared<kj::Tuple<DeviceMappingType<Params>...>> mappers = kj::tuple(
 			mapToDevice(fwd<Params>(params), device, true)...
-		));
+		);
 					
 		using givemeatype = int[];
 		
@@ -35,7 +35,7 @@ namespace internal {
 			(void) (givemeatype { 0, (kj::get<i>(*mappers) -> updateHost(), 0)... });
 			return device.barrier();
 		})
-		.attach(mappers.x(), device.addRef());
+		.attach(kj::cp(mappers), device.addRef());
 		
 		return getActiveThread().uncancelable(mv(result)).attach(mv(paf.fulfiller));
 	}

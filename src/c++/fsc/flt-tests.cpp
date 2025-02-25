@@ -83,6 +83,9 @@ TEST_CASE("flt") {
 			adaptive.getErrorUnit().setIntegratedOver(10 * 2 * 3.141592);
 			adaptive.setTargetError(0.001);
 		}
+		SECTION("altLogMode") {
+			traceReq.setPlaneIntersectionRecordMode(FLTRequest::PlaneIntersectionRecordMode::EVERY_HIT);
+		}
 		
 		auto response = traceReq.send().wait(ws);
 		

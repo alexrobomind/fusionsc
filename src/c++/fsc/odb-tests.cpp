@@ -24,6 +24,13 @@ TEST_CASE("warehouse-stress", "[warehouse][.]") {
 	Library l = newLibrary();
 	ThreadContext ctx(l -> addRef());
 	
+	// Make sure that database exists
+	{
+		auto conn = connectSqlite("stress-test.sqlite");
+		auto wh = openWarehouse(*conn);
+		wh.whenResolved().wait(ctx.waitScope());
+	}
+	
 	auto promiseBuilder = kj::heapArrayBuilder<Promise<void>>(NUM_THREADS);
 	for(auto i : kj::range(0, NUM_THREADS)) {
 		promiseBuilder.add(

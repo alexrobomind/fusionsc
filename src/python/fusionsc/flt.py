@@ -17,6 +17,7 @@ from ._api_markers import unstableApi
 
 import numpy as np
 import functools
+import numbers
 
 from types import SimpleNamespace
 
@@ -227,7 +228,10 @@ async def trace(
 	ignoreCollisionsBefore = 0,
 	
 	# Whether field line reversal is allowed
-	allowReversal = False
+	allowReversal = False,
+	
+	# Record mode for plane hits ("auto", "lastInTurn" or "everyHit")
+	planeRecordMode = "auto"
 ):
 	"""
 	Performs a tracing request.
@@ -245,7 +249,9 @@ async def trace(
 		- stepSize: Step size for each tracing step (in meters).
 		- collisionLimit: Maximum number of collisions a field line may perform (e.g. 1 = termination at first collision. 2 at second collision etc.). Must not be negative.
 		  0 interpreted as infinity.
-		- phiPlanes (list(float)): Phi values (in radians) at which to record field line intersections (usually for the purpose of Poincaré maps).
+		  
+		- phiPlanes (list): List of planes to perform intersections with. Objects can be either phi values in radians, or objects castable
+		  to service.Plane (readers / builders for this type, or YAML strings, or dictionaries filled with the appropriate structure). 
 	
 		- isotropicDiffusionCoefficient: If set, enables diffusive tracing and specifies the isotropic / perpendicular diffusion coefficient to use in the
 		  underlying diffusive tracing model. If set, either parallelConvectionVelocity or parallelDiffusionCoefficient must also be specified.
@@ -277,6 +283,11 @@ async def trace(
 		
 		- allowReversal: If this is set to false (default), a reversal of toroidal magnetic field orientation along the field line will terminate the
 		  tracing process. This prevents long traces on field lines encircling coils.
+		
+		- planeRecordMode: Recording style to use for Poincare hits. Possible values:
+		  - "auto": Uses "lastInTurn" when only using phi-planes, and "everyHit" with a one-time warning notification otherwise.
+		  - "lastInTurn": Indexes the hits per turn while "everyHit" records all hits of the plane.
+		  - "everyHit": Returns all hits in order of trace direction of field line.
 	
 	Returns:
 		The format of the result depends on the `resultFormat` parameter.
@@ -288,12 +299,12 @@ async def trace(
 			- *endPoints*: A numpy array of shape `[4] + startPoints.shape[1:]`. The first 3 components are the x, y, and z positions of
 			  the field lines' end points. The 4th component is the total length of the field line.
 			- *poincareHits*: A numpy array of shape `[5, len(phiPlanes)] + startPoints.shape[1:] + [maxTurns]` with maxTurns being a number <=
-			  turnLimit indicating the maximum turn count of any field line. The first 3 components of the first dimension are the x, y, and z
-			  coordinates of the phi plane intersections (commonly used for Poincaré maps). The next two components indicate the forward and backward
-			  connection lengths respectively to the next geometry collision along the field line. If the field line ends in that direction without
-			  a collision (e.g. closed field line, or no geometry specified), a negative number is returned whose absolute value corresponds to the
-			  remaining length in that direction. Non-existing points (due to field lines not all having same turn counts) have their values set to
-			  NaN.
+			  turnLimit indicating the maximum turn count of any field line, or - if planeRecordMode is "everyHit" - arbitrary. The first 3 components
+			  of the first dimension are the x, y, and z coordinates of the phi plane intersections (commonly used for Poincaré maps).
+			  The next two components indicate the forward and backward connection lengths respectively to the next geometry collision along the
+			  field line. If the field line ends in that direction without a collision (e.g. closed field line, or no geometry specified), a negative
+			  number is returned whose absolute value corresponds to the remaining length in that direction. Non-existing points (due to field lines
+			  not all having same turn / hit counts) have their values set to NaN.
 			- *stopReasons*: A numpy array of shape `startPoints.shape[1:]` that indicates for each point the final reason why the trace was stopped.
 			  The dtype of the array is fusionsc.service.FLTStopReason.
 			- *fieldLines*: A numpy array of shape `startPoints.shape + [max. field line length]` containing steps recorded at specified intervals
@@ -380,10 +391,34 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	
 	# Poincare maps
 	if len(phiPlanes) > 0:
-		planes = request.initPlanes(len(phiPlanes))
+		def makePlane(x):
+			if isinstance(x, numbers.Number):
+				return {"orientation" : {"phi" : x}}
+			
+			return x
+			
+		request.planes = [
+			makePlane(x)
+			for x in phiPlanes
+		]
+	
+	# Adjust planeRecordMode 'auto' argument
+	if planeRecordMode == "auto":
+		planeRecordMode = "lastInTurn"
 		
-		for plane, phi in zip(planes, phiPlanes):
-			plane.orientation.phi = phi
+		for plane in request.planes:
+			if plane.orientation.which_() != "phi":
+				planeRecordMode = "everyHit"
+				
+				import warnings
+				warnings.warn("Using a plane that is not a phi-plane switches the default intersection "
+				"recording (from 'lastPerTurn' to 'every hit'), which means that the last axis no longer "
+				"indicates the turn count. Manually set the 'planeRecordMode' argument to one of these "
+				"values to suppress this warning")
+				
+				break
+	
+	request.planeIntersectionRecordMode = planeRecordMode
 	
 	# Field line following
 	if recordEvery > 0:
@@ -513,6 +548,16 @@ async def findAxis(
 		]
 	
 	startPoint = np.asarray(startPoint)
+	
+	# The FLT service object has 2 methods for axis location. The original "findAxis"
+	# method can only serve a single start point. In the past, this would be circumvented
+	# by averaging the start points together. This was unintuitive behavior.
+	# Therefore, a new method "findAxisBatch" was implemented that would perform axis
+	# search for multiple start points (without requiring a single function call per start
+	# point and allowing direct return of all axis traces as tensor).
+	#
+	# For compatibility with old servers, in case only 1 point is needed the call is
+	# routed through the old function call (batch == False).
 	
 	batch = False
 	if len(startPoint.shape) > 1:

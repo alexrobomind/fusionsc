@@ -636,8 +636,8 @@ namespace internal {
 
 template<typename F>
 kj::PromiseForResult<F, void> withBackoff(kj::Duration min, kj::Duration max, uint64_t growth, F func) {
-	auto runner = heapHeld<internal::BackoffRunner<F>>(min, max, growth, mv(func));
-	return runner -> step().attach(runner.x());
+	Shared<internal::BackoffRunner<F>> runner(min, max, growth, mv(func));
+	return runner -> step().attach(kj::cp(runner));
 }
 
 

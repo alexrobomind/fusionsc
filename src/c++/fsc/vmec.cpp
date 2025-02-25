@@ -430,14 +430,14 @@ struct VmecDriverImpl : public VmecDriver::Server {
 	{}
 	
 	Promise<void> run(RunContext ctx) override {
-		auto run = heapHeld<VmecRun>(ctx.getParams(), ctx.initResults(), launcher -> createDir());
+		Shared<VmecRun> run(ctx.getParams(), ctx.initResults(), launcher -> createDir());
 		
 		// Wrap inside evalLater so that we don't get the bogus "unwind across heapHeld" warning
 		// when the inner part throws.
 		return kj::evalLater([this, run]() mutable {
-			return run -> run(*launcher);
+			return run -> run(*launcher).attach(kj::cp(run));
 		})
-		.attach(run.x(), kj::cp(ctx));
+		.attach(kj::cp(ctx));
 	}
 	
 	Promise<void> computePositions(ComputePositionsContext ctx) override {

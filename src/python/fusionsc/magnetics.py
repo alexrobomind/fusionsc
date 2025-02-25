@@ -179,8 +179,15 @@ class CoilFilament(wrappers.structWrapper(service.Filament)):
 		return result
 	
 	@staticmethod
-	def fromArray(coilData):
-		"""Creates a coil from numpy array of shape [3, nPoints]"""
+	def fromArray(coilData, inline = False):
+		"""
+		Creates a coil from numpy array of shape [3, nPoints]
+		
+		Parameters:
+		  - coilsData: A [3, nPoints] shape array of XYZ coil coordinates
+		  - inline: If True, the coil data will be embedded directly in the source structure. Other
+		    wise (default), they will be indirectly referenced. Use this for very small coils only.
+		"""
 		coilData = np.asarray(coilData)
 		
 		# Validate shape
@@ -193,6 +200,9 @@ class CoilFilament(wrappers.structWrapper(service.Filament)):
 		# Publish data as ref
 		filament = service.Filament.newMessage()
 		filament.inline = coilData
+		
+		if inline:
+			return CoilFilament(filament)
 		
 		ref = data.publish(filament)
 		

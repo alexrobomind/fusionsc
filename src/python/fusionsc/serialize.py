@@ -150,13 +150,13 @@ def wrap(obj: Any) -> capnp.Object:
 	return dump(obj)
 
 @asyncFunction
-async def unwrap(obj: capnp.Object) -> Any:
+async def unwrap(obj: capnp.Object, mode: Literal["strict", "fast"] = "fast") -> Any:
 	"""Unfolds service.DynamicObject instances into python objects and returns others as-is"""
 	if isinstance(obj, service.DynamicObject.Reader):
-		return await load.asnc(obj)
+		return await load.asnc(obj, mode)
 	
 	if isinstance(obj, service.DynamicObject.Builder):
-		return await load.asnc(obj)
+		return await load.asnc(obj, mode)
 	
 	return obj
 		
@@ -427,6 +427,11 @@ def _dump(obj: Any, builder: service.DynamicObject.Builder, memoSet: _MemoSet, r
 	
 	elif isinstance(obj, service.DataRef.Client):
 		builder.initRef().target = obj.ref.castAs_(service.DataRef)
+	
+	elif isinstance(obj, capnp.CapabilityClient):
+		dc = builder.initDynamicCapability()
+		dc.schema = obj.type_.toProto()
+		dc.raw = obj
 	
 	elif isinstance(obj, capnp.Struct):
 		ds = builder.initDynamicStruct()
@@ -784,6 +789,10 @@ async def _interpret(reader: service.DynamicObject.ReaderOrBuilder, memoDict: di
 	if which == "dynamicStruct":
 		ds = reader.dynamicStruct
 		return ds.data.castAs(capnp.Type.fromProto(ds.schema))
+	
+	if which == "dynamicCapability":
+		dc = reader.dynamicCapability
+		return dc.raw.castAs_(capnp.Type.fromProto(dc.schema))
 	
 	if which == "uint64":
 		return reader.uint64

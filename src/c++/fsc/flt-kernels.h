@@ -370,6 +370,29 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 		}*/
 	}
 	
+	// Initialize the perpendicular tracing
+	if(step == 0 && processDisplacements) {
+		double freePath = 0;
+		
+		if(parModel.hasConvectiveVelocity()) {			
+			freePath = rng.exponential() * parModel.getMeanFreePath();
+		} else if(parModel.hasDiffusionCoefficient()) {
+			// Diffusive transport model
+			double normalDistributed[2];
+			rng.normalPair(normalDistributed[0], normalDistributed[1]);
+			
+			freePath = normalDistributed[0] * parModel.getMeanFreePath();
+		}
+		// KJ_DBG(idx, deltaT, freePath);
+		
+		if(freePath >= 0) {
+			nextDisplacementStep += freePath;
+		} else {
+			tracingDirection = -tracingDirection;
+			nextDisplacementStep -= freePath;
+		}
+	}
+	
 	// ... do the work ...
 	
 	while(true) {		

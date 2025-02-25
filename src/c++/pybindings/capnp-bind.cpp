@@ -359,13 +359,13 @@ py::type commonFor(capnp::Type type) {
 }
 
 WithMessage<capnp::schema::Type::Reader> toProto(capnp::Type& t) {
-	auto mb = fsc::heapHeld<capnp::MallocMessageBuilder>(1024);
+	Shared<capnp::MallocMessageBuilder> mb(1024);
 	
 	auto root = mb -> initRoot<capnp::schema::Type>();
 	fsc::extractType(t, root);
 	
 	//return fscpy::AnyReader(mb.x(), mb -> getRoot<capnp::AnyPointer>());
-	return bundleWithMessage(root.asReader(), mb.x());
+	return bundleWithMessage(root.asReader(), mb.asOwn());
 }
 
 capnp::Type listOf(capnp::Type& t, unsigned int depth) {

@@ -283,6 +283,12 @@ struct AxisymmetricEquilibrium {
 	
 	# Normalized toroidal field F (F = rMaj * Bt) as a profile of flux
 	normalizedToroidalField @7 : List(Float64);
+	
+	# Normalized pressure profile as a profile of poloidal flux (only 2.4.3 and above)
+	pressureProfile @8 : List(Float64);
+	
+	# Safety factor profile as a function of poloidal flux (only 2.4.3 and above)
+	qProfile @9 : List(Float64);
 }
 
 # =========================== Device-specifics =============================

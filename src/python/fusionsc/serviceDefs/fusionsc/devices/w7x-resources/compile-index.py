@@ -125,7 +125,7 @@ for row, output in zip(rows.itertuples(), geoList):
 		tags[2].name = 'wszGroupNo'
 		tags[2].value.uInt64 = int(groupNo)
 		tags[3].name = 'tileNo'
-		tags[3].name.uInt64 = int(bafNo)
+		tags[3].value.uInt64 = int(bafNo)
 		
 		entries.add(row.compID)
 	except Exception as e:

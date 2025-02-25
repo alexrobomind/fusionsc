@@ -519,7 +519,17 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 	@asyncFunction
 	@unstableApi
 	async def asPolyMesh(self, triangulate: bool = False):
-		"""Exports as a single merged polygon mesh"""
+		"""
+		Exports as a single merged polygon mesh.
+		
+		Params:
+		  - triangluate: If set to true, polygons will be subdivided into triangles.
+		
+		Returns (as tuple):
+		  - A [nPoints, 3] shaped array of points
+		  - A list[list[int]] holding all the polygon indices.
+		
+		"""
 		merged = await self.merge.asnc()
 		points, polys = await native.geometry.exportRaw(merged.data, triangulate)
 		

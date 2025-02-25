@@ -288,7 +288,7 @@ namespace {
 				
 				size_t i2 = (i1 + 1) % planes.size();
 				
-				auto trace = heapHeld<RFLMSectionTrace>(flt, params, section, *device);
+				Shared<RFLMSectionTrace> trace(flt, params, section, *device);
 				
 				trace -> phi1 = planes[i1];
 				trace -> phi2 = planes[i2];
@@ -309,7 +309,7 @@ namespace {
 				/*computationPromise = computationPromise.then([trace]() mutable {
 					return trace -> run();
 				}).attach(trace.x());*/
-				promiseBuilder.add(trace -> run().attach(trace.x()));
+				promiseBuilder.add(trace -> run().attach(cp(trace)));
 			}
 			
 			KJ_REQUIRE(std::abs(totalWidth - 2 * pi / params.getNSym()) < pi, "Sections must be of non-zero width, and angles must be specified in counter-clockwise direction");
@@ -320,7 +320,7 @@ namespace {
 			});
 		}
 		
-		Promise<void> mapMesh(Mesh::Reader in, Mesh::Builder out, uint64_t section, FSC_READER_MAPPING(::fsc, ReversibleFieldlineMapping) mapping) {
+		Promise<void> mapMesh(Mesh::Reader in, Mesh::Builder out, uint64_t section, FSC_READER_MAPPING(::fsc, ReversibleFieldlineMapping) mapping, double threshold) {
 			Tensor<double, 2> points;
 			readTensor(in.getVertices(), points);
 			
@@ -329,6 +329,7 @@ namespace {
 			Temporary<RFLMKernelData> kData;
 			kData.initPhiValues(nPoints);
 			kData.initStates(nPoints);
+			kData.initReconstructionErrors(nPoints);
 			
 			FSC_BUILDER_MAPPING(::fsc, RFLMKernelData) kernelData =
 				FSC_MAP_BUILDER(::fsc, RFLMKernelData, mv(kData), *device, true);
@@ -343,7 +344,7 @@ namespace {
 			);
 			
 			return kernelTask
-			.then([data = mv(kernelData), in, out, nPoints]() mutable {
+			.then([data = mv(kernelData), in, out, nPoints, threshold]() mutable {
 				out.setIndices(in.getIndices());
 				if(in.isTriMesh()) out.setTriMesh();
 				else if(in.isPolyMesh()) out.setPolyMesh(in.getPolyMesh());
@@ -351,7 +352,43 @@ namespace {
 				
 				
 				RFLMKernelData::Reader mapResult = data -> getHost();
-				// KJ_DBG(mapResult);
+				
+				// Check points for mapping failure
+				auto indicesOut = out.getIndices();
+				auto checkPoly = [&](uint64_t start, uint64_t end) {
+					bool polyOk = true;
+					
+					for(auto iIdx : kj::range(start, end)) {
+						auto idx = indicesOut[iIdx];
+						double recError = mapResult.getReconstructionErrors()[idx];
+						//double u = mapResult.getStates()[idx].getU();
+						//double v = mapResult.getStates()[idx].getV();
+						
+						if(recError > threshold /*|| u < 0 || u > 1 || v < 0 || v > 1*/) {
+							// KJ_DBG(idx, recError, u, v);
+							polyOk = false;
+						}
+					}
+					
+					if(polyOk) return;
+					
+					// If the polygon is bad, turn it into degenerate
+					//KJ_DBG("Clearing poly", start, end);
+					for(auto iIdx : kj::range(start, end)) {
+						// KJ_DBG(iIdx, indicesOut[iIdx]);
+						indicesOut.set(iIdx, 0);
+					}
+				};
+				
+				if(out.isTriMesh()) {
+					for(uint64_t i = 0; i < indicesOut.size(); i += 3)
+						checkPoly(i, i + 3);
+				} else if(out.isPolyMesh()) {
+					auto pm = out.getPolyMesh();
+					for(size_t i = 0; i + 1 < pm.size(); ++i) {
+						checkPoly(pm[i], pm[i+1]);
+					}
+				} else { KJ_FAIL_REQUIRE("Unknown mesh type"); }
 				
 				Tensor<double, 2> points(3, nPoints);
 				for(auto i : kj::range(0, nPoints)) {
@@ -367,7 +404,7 @@ namespace {
 		Promise<void> mapForSection(
 			DataRef<MergedGeometry>::Client geoRef, GeometryMapping::SectionData::Builder out,
 			FSC_READER_MAPPING(::fsc, ReversibleFieldlineMapping) mapping, uint64_t section,
-			uint32_t nPhi, uint32_t nU, uint32_t nV
+			uint32_t nPhi, uint32_t nU, uint32_t nV, double threshold
 		) {
 			auto mappingData = mapping -> getHost();
 			uint32_t nSections = mappingData.getSections().size();
@@ -409,7 +446,7 @@ namespace {
 			auto unrolledRef = unrollRequest.send().getRef();
 			
 			return getActiveThread().dataService().download(unrolledRef)
-			.then([mapping = mapping -> addRef(), section, out = out.initGeometry(), this](auto mergedGeo) mutable {
+			.then([mapping = mapping -> addRef(), section, out = out.initGeometry(), threshold, this](auto mergedGeo) mutable {
 				// Transform individual meshes
 				auto in = mergedGeo.get();
 				out.setTagNames(in.getTagNames());
@@ -424,7 +461,7 @@ namespace {
 					auto eOut = outEntries[i];
 					eOut.setTags(eIn.getTags());
 					
-					meshTransforms.add(mapMesh(eIn.getMesh(), eOut.getMesh(), section, mapping -> addRef()));
+					meshTransforms.add(mapMesh(eIn.getMesh(), eOut.getMesh(), section, mapping -> addRef(), threshold));
 				}
 				
 				return kj::joinPromisesFailFast(meshTransforms.finish()).attach(kj::cp(mergedGeo));
@@ -470,7 +507,7 @@ namespace {
 				
 				for(auto i : kj::indices(sections)) {
 					subComputations.add(
-						mapForSection(geoRef, sections[i], devMapping -> addRef(), i, params.getNPhi(), params.getNU(), params.getNV())
+						mapForSection(geoRef, sections[i], devMapping -> addRef(), i, params.getNPhi(), params.getNU(), params.getNV(), params.getErrorThreshold())
 					);
 				}
 				

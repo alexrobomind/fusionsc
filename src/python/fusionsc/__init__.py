@@ -39,6 +39,7 @@ from . import resolve
 from . import wrappers
 from . import warehouse
 from . import structio
+from . import xthread
 
 # Load core services
 from . import magnetics

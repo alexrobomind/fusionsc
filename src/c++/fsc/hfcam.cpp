@@ -562,9 +562,10 @@ struct CamProvider : public HFCamProvider::Server {;
 		}
 		
 		// Create buffers
-		auto detBuf = heapHeld<Mat>(projection.getHeight(), projection.getWidth());
+		Shared<Mat> detBuf(projection.getHeight(), projection.getWidth());
+		Shared<Mat> dBuf(projection.getHeight(), projection.getWidth());
+		
 		detBuf -> setZero();
-		auto dBuf = heapHeld<Mat>(projection.getHeight(), projection.getWidth());
 		dBuf -> setConstant(std::numeric_limits<double>::infinity());
 		
 		auto mergeResultRef = mergeRequest.send().getRef();
@@ -595,8 +596,7 @@ struct CamProvider : public HFCamProvider::Server {;
 		})
 		.then([detBuf, dBuf, context]() mutable {			
 			context.initResults().setCam(kj::heap<HFCamImpl>(*detBuf, *dBuf, context.getParams().getProjection()));
-		})
-		.attach(detBuf.x(), dBuf.x());
+		});
 	}
 };
 

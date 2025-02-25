@@ -8,7 +8,7 @@ from . import serialize
 
 from .asnc import asyncFunction
 
-from typing import Any, Union
+from typing import Any, Union, Literal
 
 def openArchive(filename: str) -> service.DataRef.Client:
 	"""
@@ -45,7 +45,7 @@ def publish(data: Any) -> service.DataRef.Client:
 	return cloneResult
 
 @asyncFunction
-async def download(ref: service.DataRef.Client) -> asnc.Future[Any]:
+async def download(ref: service.DataRef.Client, unwrapMode: Literal["strict", "fast"] = "fast") -> asnc.Future[Any]:
 	"""
 	Retrieves a local copy of the information stored in 'ref'. If possible, transfer of data will be avoided. The retrieved data
 	are immutable and the backing storage is shared across all users in this process. If 'ref' was obtained from an archive file,
@@ -59,7 +59,7 @@ async def download(ref: service.DataRef.Client) -> asnc.Future[Any]:
 		data, or a subtype of CapabilityClient or StructReader typed to the appropriate Cap'n'proto schema).
 	"""
 	data = await native.data.downloadAsync(ref)
-	return await serialize.unwrap.asnc(data)
+	return await serialize.unwrap.asnc(data, unwrapMode)
 
 @asyncFunction
 def writeArchive(data: Any, filename: str) -> asnc.Future:
@@ -76,7 +76,7 @@ def writeArchive(data: Any, filename: str) -> asnc.Future:
 	return backends.localResources().writeArchive(filename, ref)
 
 @asyncFunction
-def readArchive(filename: str) -> asnc.Future[Any]:
+def readArchive(filename: str, unwrapMode: Literal["strict", "fast"] = "fast") -> asnc.Future[Any]:
 	"""
 	Opens the given archive file, maps the root node into memory and returns a typed view to the memory-mapped data.
 	
@@ -88,7 +88,7 @@ def readArchive(filename: str) -> asnc.Future[Any]:
 		data, or a subtype of CapabilityClient or StructReader typed to the appropriate Cap'n'proto schema).
 	"""
 	archiveRef = openArchive(filename)
-	return download.asnc(archiveRef)
+	return download.asnc(archiveRef, unwrapMode)
 
 def upload(ref: service.DataRef.Client) -> service.DataRef.Client:
 	# Obtain backend data service

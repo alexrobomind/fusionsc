@@ -12,14 +12,14 @@ struct TensorMapping : public DeviceMapping<kj::Array<typename TensorType::Scala
 	TensorMap<TensorType> hostMap;
 	TensorMap<TensorType> deviceMap;
 	
-	TensorMapping(Held<TensorType> tensor, DeviceBase& device, bool allowAlias) :
-		DeviceMapping<kj::Array<Scalar>>(kj::ArrayPtr<Scalar>(tensor -> data(), tensor -> size()).attach(tensor.x()), device, allowAlias),
+	TensorMapping(Shared<TensorType> tensor, DeviceBase& device, bool allowAlias) :
+		DeviceMapping<kj::Array<Scalar>>(kj::ArrayPtr<Scalar>(tensor -> data(), tensor -> size()).attach(tensor), device, allowAlias),
 		hostMap(*tensor),
 		deviceMap(DeviceMapping<kj::Array<typename TensorType::Scalar>>::get().begin(), tensor -> dimensions())
 	{}
 	
-	TensorMapping(Held<TensorMap<TensorType>> tensor, DeviceBase& device, bool allowAlias) :
-		DeviceMapping<kj::Array<Scalar>>(kj::ArrayPtr<Scalar>(tensor -> data(), tensor -> size()).attach(tensor.x()), device, allowAlias),
+	TensorMapping(Shared<TensorMap<TensorType>> tensor, DeviceBase& device, bool allowAlias) :
+		DeviceMapping<kj::Array<Scalar>>(kj::ArrayPtr<Scalar>(tensor -> data(), tensor -> size()).attach(tensor), device, allowAlias),
 		hostMap(*tensor),
 		deviceMap(DeviceMapping<kj::Array<Scalar>>::get(), tensor -> dimensions())
 	{}
@@ -35,8 +35,8 @@ struct ConstTensorMapping : public DeviceMapping<kj::Array<const typename Tensor
 	TensorMap<const TensorType> hostMap;
 	TensorMap<TensorType> deviceMap;
 	
-	ConstTensorMapping(Held<TensorMap<const TensorType>> tensor, DeviceBase& device, bool allowAlias) :
-		DeviceMapping<kj::Array<const Scalar>>(kj::ArrayPtr<const Scalar>(tensor -> data(), tensor -> size()).attach(tensor.x()), device, allowAlias),
+	ConstTensorMapping(Shared<TensorMap<const TensorType>> tensor, DeviceBase& device, bool allowAlias) :
+		DeviceMapping<kj::Array<const Scalar>>(kj::ArrayPtr<const Scalar>(tensor -> data(), tensor -> size()).attach(tensor), device, allowAlias),
 		hostMap(*tensor),
 		deviceMap(DeviceMapping<kj::Array<const Scalar>>::get().begin(), tensor -> dimensions())
 	{}
@@ -51,7 +51,7 @@ struct DeviceMapping<Tensor<TVal, tRank, tOpts, Index>>
 {
 	DeviceMapping(Tensor<TVal, tRank, tOpts, Index> t, DeviceBase& device, bool allowAlias) :
 		TensorMapping<Tensor<TVal, tRank, tOpts, Index>>(
-			heapHeld<Tensor<TVal, tRank, tOpts, Index>>(mv(t)),
+			Shared<Tensor<TVal, tRank, tOpts, Index>>(mv(t)),
 			device,
 			allowAlias
 		)
@@ -64,7 +64,7 @@ struct DeviceMapping<TensorFixedSize<TVal, Dims, options, Index>>
 {
 	DeviceMapping(TensorFixedSize<TVal, Dims, options, Index> t, DeviceBase& device, bool allowAlias) :
 		TensorMapping<TensorFixedSize<TVal, Dims, options, Index>>(
-			heapHeld<TensorFixedSize<TVal, Dims, options, Index>>(mv(t)),
+			Shared<TensorFixedSize<TVal, Dims, options, Index>>(mv(t)),
 			device,
 			allowAlias
 		)
@@ -77,7 +77,7 @@ struct DeviceMapping<Own<TensorMap<T>>>
 {
 	DeviceMapping(Own<TensorMap<T>> t, DeviceBase& device, bool allowAlias) :
 		TensorMapping<T>(
-			ownHeld<TensorMap<T>>(mv(t)),
+			Shared<TensorMap<T>>(mv(t)),
 			device,
 			allowAlias
 		)
@@ -90,7 +90,7 @@ struct DeviceMapping<Own<TensorMap<const T>>>
 {
 	DeviceMapping(Own<TensorMap<const T>> t, DeviceBase& device, bool allowAlias) :
 		ConstTensorMapping<T>(
-			ownHeld<TensorMap<const T>>(mv(t)),
+			Shared<TensorMap<const T>>(mv(t)),
 			device,
 			allowAlias
 		)
@@ -103,7 +103,7 @@ struct DeviceMapping<Own<TensorMap<const TensorFixedSize<TVal, Dims, options, In
 {
 	DeviceMapping(Own<TensorMap<const TensorFixedSize<TVal, Dims, options, Index>>> t, DeviceBase& device, bool allowAlias) :
 		ConstTensorMapping<TensorFixedSize<TVal, Dims, options, Index>>(
-			ownHeld<TensorMap<const TensorFixedSize<TVal, Dims, options, Index>>>(mv(t)),
+			Shared<TensorMap<const TensorFixedSize<TVal, Dims, options, Index>>>(mv(t)),
 			device,
 			allowAlias
 		)

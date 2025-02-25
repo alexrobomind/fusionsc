@@ -991,8 +991,8 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 	}	
 		
 	// Prepare scratch pad structures that will hold intermediate data
-	auto tagNameTable = heapHeld<kj::HashSet<kj::String>>();
-	auto geomAccum = heapHeld<GeometryAccumulator>();
+	Shared<kj::HashSet<kj::String>> tagNameTable;
+	Shared<GeometryAccumulator> geomAccum;
 	
 	// First collect all possible tag names into a table
 	auto promise = collectTagNames(context.getParams(), *tagNameTable)
@@ -1024,7 +1024,7 @@ Promise<void> GeometryLibImpl::merge(MergeContext context) {
 		);
 	});
 	
-	return promise.attach(tagNameTable.x(), geomAccum.x());
+	return promise;
 }
 
 Promise<void> GeometryLibImpl::reduce(ReduceContext context) {

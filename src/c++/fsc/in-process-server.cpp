@@ -112,15 +112,15 @@ capnp::Capability::Client connectInProcess(const LocalVatHub& hub, uint64_t addr
 	
 	using capnp::RpcSystem;
 	
-	auto vatNetwork = ownHeld(hub.join());
-	auto rpcClient  = heapHeld<capnp::RpcSystem<lvn::VatId>>(*vatNetwork, nullptr);
+	Shared<LocalVatNetwork> vatNetwork = hub.join();
+	Shared<capnp::RpcSystem<lvn::VatId>> rpcClient(*vatNetwork, nullptr);
 	
 	Temporary<lvn::VatId> vatId;
 	vatId.setKey(address);
 	
 	auto client = rpcClient -> bootstrap(vatId);
 	
-	Own<void> attachments = kj::attachRef(client, vatNetwork.x(), rpcClient.x());
+	Own<void> attachments = kj::attachRef(client, vatNetwork, rpcClient);
 	Promise<void> lifetimeScope = getActiveThread().lifetimeScope().wrap(Promise<void>(NEVER_DONE)).attach(mv(attachments));
 	return capnp::membrane(mv(client), kj::refcounted<KeepaliveMembrane>(mv(lifetimeScope)));
 }

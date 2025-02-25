@@ -16,9 +16,11 @@ struct SQLiteConnection : public Connection, kj::Refcounted {
 	
 	bool inTransaction() override;
 	
+	Own<TransactionHook> beginTransaction(TransactionType) override;
+	
 	// Implementation
 	SQLiteConnection(kj::StringPtr filename, bool readOnly);
-	~SQLiteConnection();
+	~SQLiteConnection() noexcept;
 	
 	int check(int result);
 	
@@ -96,6 +98,10 @@ Own<PreparedStatementHook> SQLiteConnection::prepareHook(kj::StringPtr sql) {
 	return kj::heap<SQLiteStatementHook>(*this, sql);
 }
 
+Own<Connection::TransactionHook> SQLiteConnection::beginTransaction(TransactionType t) {
+	return beginTransactionBase(t == TransactionType::READ_WRITE ? "BEGIN IMMEDIATE TRANSACTION" : "BEGIN TRANSACTION");
+}
+
 SQLiteConnection::SQLiteConnection(kj::StringPtr filename, bool readOnly) :
 	filename(kj::heapString(filename)),
 	handle(nullptr)
@@ -112,9 +118,12 @@ SQLiteConnection::SQLiteConnection(kj::StringPtr filename, bool readOnly) :
 		sqlite3_close_v2(handle);
 		throw;
 	}
+	
+	// Set flag in superclass that asserts this behaves like an SQLite connection w/ global write locking.
+	sqliteLike = true;
 }
 
-SQLiteConnection::~SQLiteConnection() {
+SQLiteConnection::~SQLiteConnection() noexcept {
 	sqlite3_close_v2(handle);
 }
 
