@@ -549,7 +549,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 					auto eventBuffer = myData.mutateEvents();
 					
 					if(geoMapping.getSections().size() > 0) {
-						x2 = flm.advance(newPhi, myData.mutateEvents(), eventCount, postCollisionEventCount);
+						x2 = flm.advance(newPhi, myData.mutateEvents(), eventCount, postCollisionEventCount, request.getCollisionLimit());
 						
 						// Collision check is done in mapping
 						checkForCollisions = false;

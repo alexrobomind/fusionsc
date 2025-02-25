@@ -25,7 +25,7 @@ struct RFLM {
 	
 	//! Advances to a new phi position, remapping if neccessary. Returns new real-space position
 	// Note: No guarantees that flm.phi == newPhi
-	inline EIGEN_DEVICE_FUNC Vec3d advance(double newPhi, cupnp::List<cu::FLTKernelEvent>::Builder eventBuffer, uint32_t eventCount, uint32_t& newEventCount);
+	inline EIGEN_DEVICE_FUNC Vec3d advance(double newPhi, cupnp::List<cu::FLTKernelEvent>::Builder eventBuffer, uint32_t eventCount, uint32_t& newEventCount, uint32_t collisionLimit);
 	inline EIGEN_DEVICE_FUNC Vec3d advance(double newPhi);
 	
 	inline EIGEN_DEVICE_FUNC double getFieldlinePosition(double phi);
@@ -413,10 +413,10 @@ EIGEN_DEVICE_FUNC void RFLM::mapInSection(uint64_t iSection, double phiIn, doubl
 
 EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi) {
 	uint32_t tmp;
-	return advance(newPhi, cupnp::List<cu::FLTKernelEvent>::Builder(0, nullptr), 0, tmp);
+	return advance(newPhi, cupnp::List<cu::FLTKernelEvent>::Builder(0, nullptr), 0, tmp, 0);
 }
 
-EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi, cupnp::List<cu::FLTKernelEvent>::Builder eventBuffer, const uint32_t eventCount, uint32_t& newEventCount) {
+EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi, cupnp::List<cu::FLTKernelEvent>::Builder eventBuffer, const uint32_t eventCount, uint32_t& newEventCount, uint32_t collisionLimit) {
 	bool fwd = newPhi > phi;
 	
 	bool processCollisions = true;
@@ -506,8 +506,12 @@ EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi, cupnp::List<cu::FLTKernelEv
 			setFieldlinePosition(len);
 			
 			// We need to terminate early
-			if(processCollisions && newEventCount >= eventBuffer.size()) {
-				return tmp;
+			if(processCollisions) {
+				if(newEventCount >= eventBuffer.size())
+					return tmp;
+
+				if(collisionLimit != 0 && newEventCount >= eventCount + collisionLimit)
+					return tmp;
 			}
 		} else {
 			phi = newPhi;
