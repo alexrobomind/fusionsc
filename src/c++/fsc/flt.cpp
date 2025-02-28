@@ -404,7 +404,7 @@ struct FLTImpl : public FLT::Server {
 		
 		// Request validation
 		if(request.getStepSizeControl().isAdaptive()) {
-			KJ_REQUIRE(!request.hasMapping(), "Adaptive step size control can only be used without a mapping");
+			KJ_REQUIRE(!request.hasMapping() && !request.hasGeometryMapping(), "Adaptive step size control can only be used without a mapping");
 			
 			auto adaptive = request.getStepSizeControl().getAdaptive();
 			KJ_REQUIRE(adaptive.getMax() >= adaptive.getMin());
