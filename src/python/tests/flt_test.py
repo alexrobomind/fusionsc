@@ -139,6 +139,14 @@ def test_surf(field):
 	
 	angles = [0, np.pi]
 	surfs.evaluate(phi = angles, theta = angles)
+
+def test_pc_plane(field):
+	points = [1.1, 0, 0]
+	plane = {"orientation" : {"normal" : [0,1,0]}}
+	
+	points = fsc.flt.poincareInPhiPlanes(points, field, [plane], 10)
+	assert points.shape[-1] == 20
+	print(points)
 	
 	
 def test_axcur(field):
