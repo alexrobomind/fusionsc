@@ -723,7 +723,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 				double d1 = (x - center).dot(normal);
 				double d2 = (x2 - center).dot(normal);
 				
-				if(d1 < 0 && d2 >= 0) {
+				if((d1 < 0 && d2 >= 0) || (d1 >= 0 && d2 < 0)) {
 					crossedAt = (0 - d1) / (d2 - d1);
 					crossed = true;
 				}
