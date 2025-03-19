@@ -22,6 +22,23 @@ def _checkLang(lang):
 	assert lang in _langs, f"Language must be one of {list(_langs)}"
 	return _langs[lang]
 
+def _adjustFd(fd):
+	"""
+	On Windows, the C file descriptors are not kernel level objects, but are managed
+	by the user-space C runtime. Unfortunately, multiple versions of this library
+	exist, which have distinct file descriptor spaces.
+	
+	Therefore, we instead convert the C file descriptor into the underlying NT file
+	handle, which the Windows version of the C++ library will be able to handle as well.
+	"""
+	
+	import os
+	if os.name == 'nt':
+		import msvcrt
+		fd = msvcrt.get_osfhandle(fd)
+	
+	return fd
+
 def dumps(data, lang='json', compact=False, binary=None) -> Union[str, bytes]:
 	"""
 	Write the object into a bytes or str representation according to 'lang'.
@@ -59,7 +76,7 @@ def dump(data, file, lang='json', compact=False):
 	"""
 	file.flush()
 	fd = file.fileno()
-	native.structio.dumpToFd(data, fd, _checkLang(lang), compact)
+	native.structio.dumpToFd(data, _adjustFd(fd), _checkLang(lang), compact)
 
 @asyncFunction
 async def recursiveDumps(data, lang='json', compact=False, binary=None) -> Union[str, bytes]:
@@ -83,7 +100,7 @@ async def recursiveDump(data, file, lang='json', compact=False):
 	"""
 	file.flush()
 	fd = file.fileno()
-	await native.structio.dumpAllToFd(data, fd, _checkLang(lang), compact)
+	await native.structio.dumpAllToFd(data, _adjustFd(fd), _checkLang(lang), compact)
 
 def load(src, dst: Union[None, dict, list, capnp.Builder] = None, lang: str ='json'):
 	"""
@@ -107,17 +124,8 @@ def load(src, dst: Union[None, dict, list, capnp.Builder] = None, lang: str ='js
 	cl = _checkLang(lang)
 	
 	if hasattr(src, 'fileno'):
-		fd = src.fileno()
-		
-		# Since the 'native' libary might be linked to a different crt,
-		# the C file descriptors might not be interchangeable
-		# However, the os fhandles are
-		import os
-		if os.name == 'nt':
-			import msvcrt
-			fd = msvcrt.get_osfhandle(fd)
-		
-		return native.structio.readFd(fd, dst, cl)
+		fd = src.fileno()		
+		return native.structio.readFd(_adjustFd(fd), dst, cl)
 	
 	if isinstance(src, str):
 		return native.structio.readBuffer(src.encode(), dst, cl)

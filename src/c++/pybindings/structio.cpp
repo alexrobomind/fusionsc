@@ -543,19 +543,33 @@ namespace structio {
 		return out;
 	}
 	
+	struct ManagedFd {
+		int fd;
+		
+		ManagedFd(intptr_t origin, bool write) :
+			fd(_open_osfhandle((intptr_t) cloneHandle(reinterpret_cast<HANDLE>(origin)), write ? 0 : _O_RDONLY))
+		{}
+		
+		~ManagedFd() {
+			_close(fd);
+		}
+	};
+	
 	#else
 	using StructioFd = int;
+
+	struct ManagedFd {
+		int fd;
+		
+		ManagedFd(int origin, bool write) : fd(origin) {}
+		~ManagedFd() {};
+	};
+
 	#endif
 	
 	py::object readFd(StructioFd inputFd, py::object dst, Language lang) {
-		#ifdef WIN32
-			int fd = _open_osfhandle((intptr_t) cloneHandle(reinterpret_cast<HANDLE>(inputFd)), _O_RDONLY);
-			KJ_REQUIRE(fd != -1, "Failed to open OS handle");
-			KJ_DEFER({ _close(fd); });
-		# else
-			int fd = inputFd;
-		#endif
-		kj::FdInputStream is(fd);
+		ManagedFd mfd(inputFd, false);
+		kj::FdInputStream is(mfd.fd);
 		kj::BufferedInputStreamWrapper buffered(is);
 		
 		return readStream(buffered, dst, lang);
@@ -676,8 +690,9 @@ namespace structio {
 		return py::bytes((const char*) arr.begin(), arr.size());
 	}
 	
-	void dumpToFd(py::object o, int fd, Language lang, bool compact) {
-		kj::FdOutputStream os(fd);
+	void dumpToFd(py::object o, StructioFd fd, Language lang, bool compact) {
+		ManagedFd mfd(fd, true);
+		kj::FdOutputStream os(mfd.fd);
 		kj::BufferedOutputStreamWrapper buffered(os);
 		
 		dumpToStream(o, buffered, lang, compact, nullptr);
@@ -696,9 +711,10 @@ namespace structio {
 		return kj::startFiber(1024 * 1024 * 8, mv(inner));
 	}
 	
-	Promise<void> dumpAllToFd(py::object o, int fd, Language lang, bool compact)  {
+	Promise<void> dumpAllToFd(py::object o, StructioFd fd, Language lang, bool compact)  {
 		auto inner = [=](kj::WaitScope& ws) {
-			kj::FdOutputStream os(fd);
+			ManagedFd mfd(fd, true);
+			kj::FdOutputStream os(mfd.fd);
 			kj::BufferedOutputStreamWrapper buffered(os);
 			
 			dumpToStream(o, buffered, lang, compact, ws);
