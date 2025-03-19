@@ -38,9 +38,8 @@ of time static compilation. The python interface library performs important task
 	state anyway.
 	
 	Therefore, this library creates and manages an implicit execution context, and also instantiates a local service backend to be
-	used as a default by requests. This also includes the management of an event loop. Currently, asyncIO integration is not yet
-	available, but is on the near-term horizon (though this might require a major version bump if the Promise class would be swapped
-	to an asyncio.Future).
+	used as a default by requests. This also includes the management of an event loop. The C++ and asyncio event loops are mutually
+	integrated. However, for this to work properly, we required nested asyncio loops.
 
 Cap'n'proto RPC system (C++, but other implementations exist)
 -------------------------------------------------------------
