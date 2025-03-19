@@ -13,3 +13,7 @@ def test_archive(tmpar):
 def test_archive_ref(tmpar):
 	fsc.data.writeArchive(fsc.data.publish({}), tmpar)
 	fsc.data.readArchive(tmpar)
+
+def test_upload():
+	data = fsc.data.upload(fsc.data.publish({"Hello", ("AB",)}))
+	fsc.data.download(data)
