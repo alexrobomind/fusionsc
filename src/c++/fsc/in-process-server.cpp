@@ -78,6 +78,9 @@ struct InProcessServerImpl : public kj::AtomicRefcounted, public capnp::Bootstra
 		}
 		
 		donePromise.wait(ws);
+		
+		// Clear factory to remove cached stuff
+		factory = []() -> Service::Client { return nullptr; };
 	}
 	
 	LocalVatHub getHub() const override {

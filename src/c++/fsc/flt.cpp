@@ -547,14 +547,18 @@ struct FLTImpl : public FLT::Server {
 					auto state = entry.getState();
 					auto events = entry.getEvents();
 					
-					int64_t nHitsPerPoint = 0;
+					std::vector<int64_t> nHitsPerPlane(nSurfs, 0);
 					
 					for(auto evt : events) {
-						if(evt.isPhiPlaneIntersection())
-							++nHitsPerPoint;
+						if(evt.isPhiPlaneIntersection()) {
+							auto planeNo = evt.getPhiPlaneIntersection().getPlaneNo();
+							KJ_REQUIRE(planeNo < nSurfs);
+							++nHitsPerPlane[planeNo];
+						}
 					}
 					
-					nPlaneHits = std::max(nPlaneHits, nHitsPerPoint);
+					for(int64_t e : nHitsPerPlane)
+						nPlaneHits = std::max(nPlaneHits, e);
 				}
 				
 				auto results = ctx.getResults();
@@ -646,7 +650,7 @@ struct FLTImpl : public FLT::Server {
 					double lastNewTurnDistance = 0;
 					
 					// This only gets updated if we are recording every plane hit
-					int64_t iHit = 0;
+					std::vector<int64_t> iHitPerPlane(nSurfs, 0);
 					
 					for(auto iEvt : kj::indices(events)) {
 						auto evt = events[iEvt];
@@ -657,6 +661,8 @@ struct FLTImpl : public FLT::Server {
 							iTurn = evt.getNewTurn();
 							lastNewTurnDistance = evt.getDistance();
 						} else if(evt.isPhiPlaneIntersection()) {
+							auto ppi = evt.getPhiPlaneIntersection();
+							
 							int64_t iTurnActual = iTurn;
 							
 							if(request.getPlaneIntersectionRecordMode() == FLTRequest::PlaneIntersectionRecordMode::LAST_IN_TURN) {
@@ -680,10 +686,10 @@ struct FLTImpl : public FLT::Server {
 									continue;
 							} else {
 								// We record every plane hit.
-								iTurnActual = iHit++;
+								auto planeNo = ppi.getPlaneNo();
+								KJ_REQUIRE(planeNo < nSurfs);
+								iTurnActual = iHitPerPlane[planeNo]++;
 							}
-							
-							auto ppi = evt.getPhiPlaneIntersection();
 							
 							auto loc = getEventLocation(evt);
 							for(int64_t iDim = 0; iDim < 3; ++iDim) {

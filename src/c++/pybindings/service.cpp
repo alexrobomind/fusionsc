@@ -44,13 +44,25 @@ LocalResources::Client connectSameThread2() {
 	return connectSameThread1(config);
 }
 
-py::object connectLocal() {
-	return fsc::pybindings::createLocalServer([]() -> LocalResources::Client {
-		Temporary<LocalConfig> rootConfig;
-		thread_local LocalResources::Client clt = createLocalResources(rootConfig);
+struct LocalResourcesFactory {
+	Maybe<LocalResources::Client> cached;
+	
+	LocalResources::Client operator()() {
+		KJ_IF_MAYBE(pCached, cached) {
+			return *pCached;
+		}
 		
-		return clt;
-	});
+		Temporary<LocalConfig> rootConfig;
+		LocalResources::Client result = createLocalResources(rootConfig);
+		
+		cached = result;
+		
+		return result;
+	}
+};
+
+py::object connectLocal() {
+	return fsc::pybindings::createLocalServer(LocalResourcesFactory());
 }
 
 }
