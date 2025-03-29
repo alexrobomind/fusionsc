@@ -107,11 +107,14 @@ namespace internal {
 	};
 }
 
+// inline size_t dbgMessageCount = 0;
+
 struct MessageHook : public kj::Refcounted {	
 	inline MessageHook(Own<const void> data) : data(mv(data)) {
-		//KJ_DBG("Message created", this);
+		// KJ_DBG("Message created", this, dbgMessageCount);
+		// ++dbgMessageCount;
 	}
-	inline ~MessageHook() { /*KJ_DBG("Message deleted", this);*/ }
+	inline ~MessageHook() { /* --dbgMessageCount; KJ_DBG("Message deleted", this, dbgMessageCount);*/ }
 	
 	Own<MessageHook> addRef() { return kj::addRef(*this); }
 	

@@ -45,6 +45,15 @@ ContiguousCArray ContiguousCArray::alloc(ShapeContainer& requestedShape, kj::Str
 	result.data = kj::heapArray<unsigned char>(shapeProd * sizeof(T));
 	result.format = kj::heapString(formatCode);
 	
+	// Object arrays need to be zeroed out
+	if(formatCode == "O") {
+		// This is neccessary for the constructor to not error out
+		// KJ_REQUIRE(std::is_same<T, PyObject*>::value, "O arrays must by PyObject*");
+		
+		for(size_t i = 0; i < result.data.size(); ++i)
+			result.data[i] = 0;
+	}
+	
 	return result;
 }
 

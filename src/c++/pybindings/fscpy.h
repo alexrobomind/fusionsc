@@ -5,6 +5,8 @@
 #include <pybind11/pybind11.h>
 #include <fsc/common.h>
 
+#include <Python.h>
+
 PYBIND11_DECLARE_HOLDER_TYPE(T, kj::Own<T>);
 
 #define FSC_NATIVE_MODULE "fusionsc.native"
@@ -42,6 +44,10 @@ namespace fscpy {
 		
 		template<typename T>
 		kj::ArrayPtr<T> as();
+		
+		ContiguousCArray() = default;
+		ContiguousCArray(ContiguousCArray&&) = default;
+		~ContiguousCArray();
 	};
 	
 	// Init methods for various components

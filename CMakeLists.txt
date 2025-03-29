@@ -95,6 +95,7 @@ if(Catch2_VENDORED)
 else()
 	list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
 endif()
+message(STATUS "Module path: ${CMAKE_MODULE_PATH}")
 
 # ----------- ZLib -----------
 
@@ -358,8 +359,10 @@ endif()
 set(BUILD_TESTING ${BUILD_TESTING_TMP} CACHE BOOL "" FORCE)
 set(BUILD_EXAMPLES ${BUILD_EXAMPLES_TMP} CACHE BOOL "" FORCE)
 
-# Set up testing subsystem
-include(Catch)
+if(BUILD_TESTING)
+	# Set up testing subsystem
+	include(Catch)
+endif()
 
 # First build ancillary Cap'n'proto infrastructure
 add_subdirectory(src/c++/cupnp) # Capnproto for CUDA
@@ -482,5 +485,6 @@ message(STATUS "OpenMP support: ${OPENMP_CXX_FOUND}")
 message(STATUS "OpenMP usage: ${FSC_WITH_OPENMP}")
 message(STATUS "Native Arch support: ${FSC_ARCH_NATIVE_RESULT}")
 message(STATUS "Tests: ${BUILD_TESTING}")
+message(STATUS "Module path: ${CMAKE_MODULE_PATH}")
 message(STATUS "")
 message(STATUS "")

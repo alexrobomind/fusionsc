@@ -58,6 +58,17 @@ void bindHelperClasses(py::module_& m) {
 
 namespace fscpy {
 
+ContiguousCArray::~ContiguousCArray() {
+	if(data.size() == 0) return;
+	if(format == "O") {
+		auto ptrView = this -> template as<PyObject*>();
+		
+		for(auto e : ptrView) {
+			Py_XDECREF(e);
+		}
+	}
+}
+
 py::buffer_info ContiguousCArray::getBuffer() {
 	KJ_REQUIRE(format.size() > 0, "Format string must be specified before requesting buffer");
 	
