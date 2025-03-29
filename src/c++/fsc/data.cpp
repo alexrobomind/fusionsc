@@ -971,10 +971,16 @@ struct ArchiveWriter {
 			
 			Promise<void> prereq = READY_NOW;
 			
-			// If we have active downloads for this key, let them finish first
-			KJ_IF_MAYBE(pResult, parent.downloadQueue.find(key)) {
-				prereq = mv(*pResult);
-				*pResult = output().ignoreResult().catch_([](kj::Exception e) {});
+			{
+				Promise<void> toInsert = output().ignoreResult().catch_([](kj::Exception e) {});
+			
+				// If we have active downloads for this key, let them finish first
+				KJ_IF_MAYBE(pResult, parent.downloadQueue.find(key)) {
+					prereq = mv(*pResult);
+					*pResult = mv(toInsert);
+				} else {
+					parent.downloadQueue.insert(key, mv(toInsert));
+				}
 			}
 			
 			return prereq.then([this, key = mv(key)]() mutable -> Promise<Maybe<uint64_t>> {
@@ -1051,7 +1057,12 @@ struct ArchiveWriter {
 				// pBlock -> mapping -> sync(output);
 				parent.file.sync();
 				
-				parent.dataRecordsByHash.insert(ID(metadata.getDataHash()), pBlock -> id);
+				// Check whether we want to use this block
+				ID key(metadata.getDataHash());
+				
+				if(parent.dataRecordsByHash.find(key) == nullptr) {
+					parent.dataRecordsByHash.insert(ID(metadata.getDataHash()), pBlock -> id);
+				}
 				
 				return finalize(pBlock -> id);
 			} else {
