@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import sys
 import time
 from threading import Thread
 
@@ -5,6 +8,7 @@ import pytest
 
 import env  # noqa: F401
 from pybind11_tests import callbacks as m
+from pybind11_tests import detailed_error_messages_enabled
 
 
 def test_callbacks():
@@ -70,11 +74,20 @@ def test_keyword_args_and_generalized_unpacking():
 
     with pytest.raises(RuntimeError) as excinfo:
         m.test_arg_conversion_error1(f)
-    assert "Unable to convert call argument" in str(excinfo.value)
+    assert str(excinfo.value) == "Unable to convert call argument " + (
+        "'1' of type 'UnregisteredType' to Python object"
+        if detailed_error_messages_enabled
+        else "'1' to Python object (#define PYBIND11_DETAILED_ERROR_MESSAGES or compile in debug mode for details)"
+    )
 
     with pytest.raises(RuntimeError) as excinfo:
         m.test_arg_conversion_error2(f)
-    assert "Unable to convert call argument" in str(excinfo.value)
+    assert str(excinfo.value) == "Unable to convert call argument " + (
+        "'expected_name' of type 'UnregisteredType' to Python object"
+        if detailed_error_messages_enabled
+        else "'expected_name' to Python object "
+        "(#define PYBIND11_DETAILED_ERROR_MESSAGES or compile in debug mode for details)"
+    )
 
 
 def test_lambda_closure_cleanup():
@@ -141,6 +154,7 @@ def test_python_builtins():
     assert m.test_sum_builtin(sum, []) == 0
 
 
+@pytest.mark.skipif(sys.platform.startswith("emscripten"), reason="Requires threads")
 def test_async_callbacks():
     # serves as state for async callback
     class Item:
@@ -164,6 +178,7 @@ def test_async_callbacks():
     assert sum(res) == sum(x + 3 for x in work)
 
 
+@pytest.mark.skipif(sys.platform.startswith("emscripten"), reason="Requires threads")
 def test_async_async_callbacks():
     t = Thread(target=test_async_callbacks)
     t.start()
@@ -206,3 +221,10 @@ def test_custom_func():
 def test_custom_func2():
     assert m.custom_function2(3) == 27
     assert m.roundtrip(m.custom_function2)(3) == 27
+
+
+def test_callback_docstring():
+    assert (
+        m.test_tuple_unpacking.__doc__.strip()
+        == "test_tuple_unpacking(arg0: Callable) -> object"
+    )
