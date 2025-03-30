@@ -22,6 +22,7 @@ the magnetic field as well as the machine geometry.
    setup
    howto/index
    architecture
+   modules/index
    dataspec
    license
   

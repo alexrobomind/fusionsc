@@ -9,6 +9,8 @@ from .asnc import asyncFunction
 
 from typing import Union
 
+import numpy as np
+
 _langs = {
 	'json' : native.structio.Language.JSON,
 	'yaml' : native.structio.Language.YAML,
@@ -38,6 +40,22 @@ def _adjustFd(fd):
 		fd = msvcrt.get_osfhandle(fd)
 	
 	return fd
+
+def asarray(x):
+	"""
+	Numpy arrays can have multiple in-file representations. 1-D arrays
+	are stored as lists and deserialize either as lists (if they contain object types)
+	or as 1-D numpy arrays. N-D arrays (N>1) are stored as mappings holding
+	the flattened array and its shape.
+	
+	This function converts all possible numpy array representations back into an
+	appropriate numpy array.
+	"""
+	
+	if isinstance(x, dict):		
+		return np.asarray(x["data"]).reshape(x["shape"])
+	
+	return np.asarray(x)
 
 def dumps(data, lang='json', compact=False, binary=None) -> Union[str, bytes]:
 	"""
