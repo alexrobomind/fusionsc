@@ -36,6 +36,13 @@ interface HFCam $Cxx.allowCancellation {
 	getData @4 () -> HFCamData;
 }
 
+struct DensityKernel {
+	union {
+		gaussian @0 : Void;
+		ball @1 : Void;
+	}
+}
+
 interface HFCamProvider $Cxx.allowCancellation {
 	makeCamera @0 (projection: HFCamProjection, geometry : Geometry.Geometry, edgeTolerance : Float64 = 0.5, depthTolerance : Float64) -> (cam : HFCam);
 	
@@ -47,4 +54,21 @@ interface HFCamProvider $Cxx.allowCancellation {
 		inclination: Float64, horizontalInclination: Float64, distance: Float64,
 		viewportHeight: Float64, fieldOfView: Float64
 	) -> HFCamProjection;
+		
+	estimateDensity @2 (
+		kernelCenters : Data.Float64Tensor,
+		evalAt : Data.Float64Tensor,
+		evalScale : Float64,
+		weights : Data.Float64Tensor,
+		kernel : DensityKernel,
+		diameter : Float64,
+		kernelDim : UInt64,
+
+		tol : Float64
+	) -> (
+		points : Data.Float64Tensor,
+		densities : Data.Float64Tensor
+	);
+		
+		
 }

@@ -7,6 +7,10 @@
 
 #include "eigen.h"
 #include "intervals.h"
+#include "data.h"
+#include "local.h"
+#include "index.h"
+#include "tensor.h"
 
 using namespace fsc;
 using namespace kj;
@@ -291,68 +295,208 @@ namespace {
 	};
 	
 	struct KDServiceImpl : public KDTreeService::Server {
-		Promise<void> build(BuildContext ctx) {
-			kj::Vector<PackNode> nodes;
-			
-			size_t nDims = 0;
-			bool first = true;
-			
-			for(auto chunk : ctx.getParams().getChunks()) {
-				auto tensor = chunk.getBoxes();
-				auto keys = chunk.getKeys();
+		Promise<void> buildImpl(capnp::List<KDTreeService::Chunk>::Reader chunks, uint32_t leafSize, KDTree::Builder out) {
+			return getActiveThread().worker().executeAsync([=]() {
+				kj::Vector<PackNode> nodes;
 				
-				auto shape = tensor.getShape();
+				size_t nDims = 0;
+				bool first = true;
 				
-				KJ_REQUIRE(shape.size() == 3 || shape.size() == 2, shape.size());
-				bool pointMode = shape.size() == 2;
-				
-				size_t n = shape[0];
-				size_t tNDims = shape[1];
-				
-				if(!pointMode) {
-					KJ_REQUIRE(shape[2] == 3);
-				}
-				
-				if(first) {
-					nDims = tNDims;
-				} else {
-					KJ_REQUIRE(tNDims == nDims);
-				}
-				
-				first = false;
-				
-				auto data = tensor.getData();
-				KJ_REQUIRE(data.size() == pointMode ? nDims * n : 3 * nDims * n);
-				KJ_REQUIRE(keys.size() == n);
-				
-				for(auto i : kj::range(0, n)) {
-					auto bounds = kj::heapArrayBuilder<PackNode::Bound>(nDims);
+				for(auto chunk : chunks) {
+					auto tensor = chunk.getBoxes();
+					auto keys = chunk.getKeys();
 					
-					for(auto iDim : kj::range(0, nDims)) {
-						size_t offset = i * nDims + iDim;
-						
-						if(pointMode) {
-							bounds.add(tuple(
-								data[offset], data[offset], data[offset]
-							));
-						} else {
-							offset *= 3;
-							bounds.add(tuple(
-								data[offset], data[offset + 1], data[offset + 2]
-							));
-						}
+					auto shape = tensor.getShape();
+					
+					KJ_REQUIRE(shape.size() == 3 || shape.size() == 2, shape.size());
+					bool pointMode = shape.size() == 2;
+					
+					size_t n = shape[0];
+					size_t tNDims = shape[1];
+					
+					if(!pointMode) {
+						KJ_REQUIRE(shape[2] == 3);
 					}
 					
-					nodes.add(keys[i], bounds.finish());
+					if(first) {
+						nDims = tNDims;
+					} else {
+						KJ_REQUIRE(tNDims == nDims);
+					}
+					
+					first = false;
+					
+					auto data = tensor.getData();
+					KJ_REQUIRE(data.size() == pointMode ? nDims * n : 3 * nDims * n);
+					KJ_REQUIRE(keys.size() == n);
+					
+					for(auto i : kj::range(0, n)) {
+						auto bounds = kj::heapArrayBuilder<PackNode::Bound>(nDims);
+						
+						for(auto iDim : kj::range(0, nDims)) {
+							size_t offset = i * nDims + iDim;
+							
+							if(pointMode) {
+								bounds.add(tuple(
+									data[offset], data[offset], data[offset]
+								));
+							} else {
+								offset *= 3;
+								bounds.add(tuple(
+									data[offset], data[offset + 1], data[offset + 2]
+								));
+							}
+						}
+						
+						nodes.add(keys[i], bounds.finish());
+					}
+				}
+				
+				PackNode packedData = pack(nodes.releaseAsArray(), leafSize);
+				
+				KDTreeWriter().write(packedData, out);
+			});
+		}
+		
+		Promise<void> build(BuildContext ctx) {
+			return buildImpl(ctx.getParams().getChunks(), ctx.getParams().getLeafSize(), ctx.initResults());
+		}
+		
+		Promise<void> buildRef(BuildRefContext ctx) {
+			Temporary<KDTree> tmp;
+			
+			KDTree::Builder out = tmp;
+			
+			return buildImpl(ctx.getParams().getChunks(), ctx.getParams().getLeafSize(), out)
+			.then([tmp = mv(tmp), ctx]() mutable {
+				ctx.initResults().setRef(
+					getActiveThread().dataService().publish(mv(tmp))
+				);
+			});
+		}
+		
+		Promise<void> buildSimple(BuildSimpleContext ctx) {
+			Tensor<double, 2> points;
+			readVardimTensor(ctx.getParams().getPoints(), 1, points);
+			
+			int64_t nPoints = points.dimension(0);
+			int64_t nDims = points.dimension(1);
+			
+			auto req = thisCap().buildRefRequest();
+			
+			auto chunk0 = req.initChunks(1)[0];
+			auto keys = chunk0.initKeys(nPoints);
+			for(auto i : kj::indices(keys)) keys.set(i, i);
+			
+			Tensor<double, 3> bounds(2, nDims, nPoints);
+			for(auto iPoint : kj::range(0, nPoints)) {
+				for(auto iDim : kj::range(0, nDims)) {
+					bounds(0, iDim, iPoint) = points(iPoint, iDim);
+					bounds(1, iDim, iPoint) = points(iPoint, iDim);
 				}
 			}
+			writeTensor(bounds, chunk0.getBoxes());
 			
-			PackNode packedData = pack(nodes.releaseAsArray(), ctx.getParams().getLeafSize());
+			// Submit request
+			return req.send().then([ctx](auto response) mutable {
+				ctx.initResults().setRef(response.getRef());
+			});	
+		}			
+		
+		Promise<void> sample(SampleContext ctx) {
+			return getActiveThread().dataService().download(ctx.getParams().getRef())
+			.then([ctx](auto tree) mutable {
+				return getActiveThread().worker().executeAsync([tree = tree.deepFork(), scale = ctx.getParams().getScale()]() mutable {
+					return ::fsc::sample(tree.get(), scale);
+				})
+				.then([ctx](Tensor<double, 2> data) mutable {
+					writeTensor(data, ctx.initResults().getPoints());
+				});
+			});
+		}
+	};
+	
+	struct SamplingProcess {
+		KDTree::Reader index;
+		UnbalancedIntervalSplit chunkSplit;
+		size_t nDims;
+		
+		double diamSqr;
+		
+		kj::Vector<double> outData;
+		
+		SamplingProcess(KDTree::Reader tree, double diameter) :
+			index(tree), chunkSplit(tree.getNTotal(), tree.getChunkSize()),
+			nDims(tree.getChunks()[0].getBoundingBoxes().getShape()[1]),
 			
-			KDTreeWriter().write(packedData, ctx.initResults());
-			// KJ_DBG(ctx.getResults());
+			diamSqr(diameter * diameter)
+		{}
+		
+		struct NodeInfo {
+			KDTree::Node::Reader node;
+			kj::Vector<kj::Tuple<double, double>> bounds;
+		};
+		
+		NodeInfo getInfo(size_t nodeId) {
+			auto chunkId = chunkSplit.interval(nodeId);
+			auto offset = nodeId - chunkSplit.edge(chunkId);
 			
-			return READY_NOW;
+			auto chunk = index.getChunks()[chunkId];
+			
+			auto bbs = chunk.getBoundingBoxes();
+			auto bbd = bbs.getData();
+			
+			kj::Vector<kj::Tuple<double, double>> bounds;
+			bounds.reserve(nDims);
+			
+			for(auto i : kj::range(0, nDims)) {
+				uint32_t idx = 2 * nDims * offset;
+				bounds.add(kj::tuple(bbd[idx], bbd[idx + 1]));
+			}
+			
+			return NodeInfo {
+				chunk.getNodes()[offset],
+				mv(bounds)
+			};
+		}
+		
+		void processNode(size_t nodeId) {
+			NodeInfo info = getInfo(nodeId);
+			
+			double nodeDiamSqr = 0;
+			for(auto i : kj::range(0, nDims)) {
+				double d = kj::get<0>(info.bounds[i]) - kj::get<1>(info.bounds[i]);
+				nodeDiamSqr += d * d;
+			}
+			
+			if(nodeDiamSqr <= this -> diamSqr || info.node.isLeaf()) {
+				// Node is small enough, use it as point
+				for(auto i : kj::range(0, nDims)) {
+					double x = 0.5 * (
+						kj::get<0>(info.bounds[i]) + kj::get<1>(info.bounds[i])
+					);
+					outData.add(x);
+				}
+				
+				return;
+			}
+			
+			auto interior = info.node.getInterior();
+			for(size_t i : kj::range(interior.getStart(), interior.getEnd()))
+				processNode(i);
+		}
+		
+		Tensor<double, 2> run() {
+			processNode(0);
+			
+			Tensor<double, 2> result(outData.size() / nDims, nDims);
+			
+			double* od = result.data();
+			for(size_t i : kj::indices(outData)) {
+				result(i / nDims, i % nDims) = outData[i];
+			}
+			
+			return result;
 		}
 	};
 }
@@ -360,5 +504,9 @@ namespace {
 namespace fsc {
 	Own<KDTreeService::Server> newKDTreeService() {
 		return kj::heap<KDServiceImpl>();
+	}
+	
+	Tensor<double, 2> sample(KDTree::Reader index, double scale) {
+		return SamplingProcess(index, scale).run();
 	}
 }

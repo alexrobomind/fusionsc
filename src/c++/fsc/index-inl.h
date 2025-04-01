@@ -8,6 +8,38 @@
 
 namespace fsc {
 
+inline CUPNP_FUNCTION KDTreeIndexBase::NodeInfo KDTreeIndexBase::getNode(uint64_t nodeId) {
+	auto chunkId = chunkSplit.interval(nodeId);
+	auto offset = nodeId - chunkSplit.edge(chunkId);
+	
+	auto chunk = tree.getChunks()[chunkId];
+	
+	auto bbs = chunk.getBoundingBoxes();
+	
+	size_t dims = bbs.getShape()[1];
+	
+	return NodeInfo {
+		chunk.getNodes()[offset],
+		chunk.getBoundingBoxes().getData().slice(dims * 2 * offset, dims * 2 * (offset + 1))
+	};
+}
+
+inline CUPNP_FUNCTION double KDTreeIndexBase::NodeInfo::diameterSqr() {
+	size_t nDims = bounds.size() / 2;
+	
+	double result = 0;
+	for(size_t i = 0; i < nDims; ++i) {
+		double d = bounds[i + nDims] - bounds[i];
+		result += d * d;
+	}
+	
+	return result;
+}
+
+inline CUPNP_FUNCTION double KDTreeIndexBase::NodeInfo::diameter() {
+	return sqrt(diameterSqr());
+}
+
 template<int dims>
 inline CUPNP_FUNCTION typename KDTreeIndex<dims>::FindResult KDTreeIndex<dims>::findNearest(const Vec<double, dims>& x) {
 	auto rootNode = tree.getChunks()[0].getNodes()[0];

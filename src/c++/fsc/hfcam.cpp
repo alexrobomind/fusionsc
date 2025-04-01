@@ -1,8 +1,10 @@
 #include "tensor.h"
 #include "data.h"
 #include "geometry.h"
+#include "index.h"
 
 #include "hfcam.h"
+#include "hfcam-kernels.h"
 
 #include <fsc/hfcam.capnp.h>
 #include <fsc/geometry.capnp.h>
@@ -596,6 +598,119 @@ struct CamProvider : public HFCamProvider::Server {;
 		})
 		.then([detBuf, dBuf, context]() mutable {			
 			context.initResults().setCam(kj::heap<HFCamImpl>(*detBuf, *dBuf, context.getParams().getProjection()));
+		});
+	}
+	
+	Promise<void> estimateDensity(EstimateDensityContext ctx) {
+		return kj::startFiber(2 * 1024 * 1024, [this, ctx](kj::WaitScope& ws) mutable {
+			KDTreeService::Client ts = newKDTreeService();
+			
+			auto params = ctx.getParams();
+			
+			// Step 1: Build a KD tree index over the points
+			auto indexReq = ts.buildSimpleRequest();
+			indexReq.setPoints(params.getKernelCenters());
+			
+			auto treeRef = indexReq.send().getRef();
+			
+			// Step 2: Determine what points we want to use for evaluation
+			Tensor<double, 2> evalPoints;
+			kj::Vector<size_t> vardimShape;
+			if(params.getEvalScale() == 0) {
+				// Option 1: Use input verbatim
+				
+				if(params.hasEvalAt()) {
+					vardimShape = readVardimTensor(params.getEvalAt(), 1, evalPoints);
+				} else {
+					vardimShape = readVardimTensor(params.getKernelCenters(), 1, evalPoints);
+				}
+			} else {
+				// Option 2: Down-sample an input
+				
+				DataRef<KDTree>::Client evalTree = nullptr;
+				
+				if(params.hasEvalAt()) {
+					// Create new tree to downsample
+					auto idx2Req = ts.buildSimpleRequest();
+					indexReq.setPoints(params.getEvalAt());
+					
+					evalTree = idx2Req.send().getRef();
+				} else {
+					evalTree = treeRef;
+				}
+				
+				auto sampleReq = ts.sampleRequest();
+				sampleReq.setRef(evalTree);
+				sampleReq.setScale(params.getEvalScale());
+				
+				auto sampleResp = sampleReq.send().wait(ws);
+				readTensor(sampleResp.getPoints(), evalPoints);
+			}
+			
+			// All results use the convention to have xyz as the C-order major dimension, so dim is our last dimension
+			
+			// Step 3: Determine weight distribution array for input points, assume even if none set
+			size_t nPoints = 1;
+			{
+				auto evalShape = params.getKernelCenters().getShape();
+				for(auto i : kj::range(1, evalShape.size()))
+					nPoints *= evalShape[i];
+			}
+			
+			Tensor<double, 1> leafWeights;
+			
+			if(params.hasWeights()) {
+				readVardimTensor(params.getWeights(), 0, leafWeights);
+			} else {
+				leafWeights.resize(nPoints);
+				leafWeights.setConstant(1.0 / nPoints);
+			}
+			
+			// Step 3: Download index and map it to GPU device
+			auto tree = getActiveThread().dataService().download(treeRef).wait(ws);
+			auto treeMapped = FSC_MAP_READER(fsc, KDTree, tree, *device, true);
+			treeMapped -> updateStructureOnDevice();
+			
+			auto treeData = treeMapped -> getHost();
+			
+			// Step 4: Compute weights
+			auto totalWeights = kj::heapArray<double>(treeData.getNTotal());
+			
+			{
+				UnbalancedIntervalSplit split(treeData.getNTotal(), treeData.getChunkSize());
+				auto chunks = treeData.getChunks();
+				
+				kj::Function<void(uint64_t)> computeWeight = [&](uint64_t id) {
+					KJ_REQUIRE(id < totalWeights.size());
+					
+					size_t chunkId = split.interval(id);
+					size_t offset = id - split.edge(chunkId);
+					
+					auto nodeData = chunks[chunkId].getNodes()[offset];
+					
+					if(nodeData.isLeaf()) {
+						auto leafId = nodeData.getLeaf();
+						KJ_REQUIRE(leafId < leafWeights.dimension(0));
+						
+						totalWeights[id] = leafWeights(leafId);
+					} else {
+						double w = 0;
+						
+						auto interior = nodeData.getInterior();
+						for(auto i : kj::range(interior.getStart(), interior.getEnd())) {
+							computeWeight(i);
+							w += totalWeights[i];							
+						}
+						
+						totalWeights[id] = w;
+					}
+				};
+				
+				computeWeight(0);
+			}
+			
+			// Step 4: Launch GPU kernel
+			KJ_FAIL_REQUIRE("GPU density estimator kernel not implemented");
 		});
 	}
 };

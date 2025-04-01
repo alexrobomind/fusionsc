@@ -49,5 +49,11 @@ interface KDTreeService {
 		boxes @0 : Data.Float64Tensor;
 		keys @1 : List(UInt64);
 	}
+	
 	build @0 (chunks : List(Chunk), leafSize : UInt32 = 1) -> KDTree;
+	buildRef @1 (chunks : List(Chunk), leafSize : UInt32 = 1) -> (ref : Data.DataRef(KDTree));
+	
+	buildSimple @2 (points : Data.Float64Tensor, leafSize : UInt32 = 1) -> (ref : Data.DataRef(KDTree));
+	
+	sample @3 (ref : Data.DataRef(KDTree), scale : Float64 = 0) -> (points : Data.Float64Tensor);
 }
