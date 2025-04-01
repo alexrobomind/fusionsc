@@ -58,7 +58,6 @@ interface HFCamProvider $Cxx.allowCancellation {
 	estimateDensity @2 (
 		kernelCenters : Data.Float64Tensor,
 		evalAt : Data.Float64Tensor,
-		evalScale : Float64,
 		weights : Data.Float64Tensor,
 		kernel : DensityKernel,
 		diameter : Float64,
@@ -69,6 +68,11 @@ interface HFCamProvider $Cxx.allowCancellation {
 		points : Data.Float64Tensor,
 		densities : Data.Float64Tensor
 	);
-		
-		
+	
+	reducePointCloud @3 (
+		points : Data.Float64Tensor,
+		scale : Float64
+	) -> (
+		points : Data.Float64Tensor
+	);
 }

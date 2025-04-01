@@ -601,6 +601,27 @@ struct CamProvider : public HFCamProvider::Server {;
 		});
 	}
 	
+	Promise<void> reducePointCloud(ReducePointCloudContext ctx) {
+		KDTreeService::Client ts = newKDTreeService();
+		
+		auto params = ctx.getParams();
+			
+		// Step 1: Build a KD tree index over the points
+		auto indexReq = ts.buildSimpleRequest();
+		indexReq.setPoints(params.getPoints());
+		
+		auto treeRef = indexReq.send().getRef();
+		
+		// Step 2: Sample index and return samples
+		auto sampleReq = ts.sampleRequest();
+		sampleReq.setRef(treeRef);
+		sampleReq.setScale(params.getScale());
+		
+		return sampleReq.send().then([ctx](auto response) mutable {
+			ctx.initResults().setPoints(response.getPoints());
+		});
+	}
+	
 	Promise<void> estimateDensity(EstimateDensityContext ctx) {
 		return kj::startFiber(2 * 1024 * 1024, [this, ctx](kj::WaitScope& ws) mutable {
 			KDTreeService::Client ts = newKDTreeService();
@@ -616,36 +637,7 @@ struct CamProvider : public HFCamProvider::Server {;
 			// Step 2: Determine what points we want to use for evaluation
 			Tensor<double, 2> evalPoints;
 			kj::Vector<size_t> vardimShape;
-			if(params.getEvalScale() == 0) {
-				// Option 1: Use input verbatim
-				
-				if(params.hasEvalAt()) {
-					vardimShape = readVardimTensor(params.getEvalAt(), 1, evalPoints);
-				} else {
-					vardimShape = readVardimTensor(params.getKernelCenters(), 1, evalPoints);
-				}
-			} else {
-				// Option 2: Down-sample an input
-				
-				DataRef<KDTree>::Client evalTree = nullptr;
-				
-				if(params.hasEvalAt()) {
-					// Create new tree to downsample
-					auto idx2Req = ts.buildSimpleRequest();
-					indexReq.setPoints(params.getEvalAt());
-					
-					evalTree = idx2Req.send().getRef();
-				} else {
-					evalTree = treeRef;
-				}
-				
-				auto sampleReq = ts.sampleRequest();
-				sampleReq.setRef(evalTree);
-				sampleReq.setScale(params.getEvalScale());
-				
-				auto sampleResp = sampleReq.send().wait(ws);
-				readTensor(sampleResp.getPoints(), evalPoints);
-			}
+			vardimShape = readVardimTensor(params.getEvalAt(), 1, evalPoints);
 			
 			// All results use the convention to have xyz as the C-order major dimension, so dim is our last dimension
 			
@@ -666,14 +658,14 @@ struct CamProvider : public HFCamProvider::Server {;
 				leafWeights.setConstant(1.0 / nPoints);
 			}
 			
-			// Step 3: Download index and map it to GPU device
+			// Step 4: Download index and map it to GPU device
 			auto tree = getActiveThread().dataService().download(treeRef).wait(ws);
 			auto treeMapped = FSC_MAP_READER(fsc, KDTree, tree, *device, true);
 			treeMapped -> updateStructureOnDevice();
 			
 			auto treeData = treeMapped -> getHost();
 			
-			// Step 4: Compute weights
+			// Step 5: Compute weights for the index tree nodes
 			auto totalWeights = kj::heapArray<double>(treeData.getNTotal());
 			
 			{
@@ -709,7 +701,7 @@ struct CamProvider : public HFCamProvider::Server {;
 				computeWeight(0);
 			}
 			
-			// Step 4: Launch GPU kernel
+			// Step 6: Launch GPU kernel
 			KJ_FAIL_REQUIRE("GPU density estimator kernel not implemented");
 		});
 	}

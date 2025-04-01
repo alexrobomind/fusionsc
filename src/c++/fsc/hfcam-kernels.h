@@ -18,7 +18,7 @@ namespace internal {
 
 struct DensityKernelComputation {
 	KDTreeIndexBase tree;
-	ArrayPtr<double> weights;
+	Eigen::TensorMap<Eigen::Tensor<double, 1>> weights;
 	
 	cu::DensityKernel::Reader kernel;
 	double radius;
@@ -39,7 +39,7 @@ struct DensityKernelComputation {
 	
 	EIGEN_DEVICE_FUNC inline DensityKernelComputation(
 		cu::KDTree::Reader rawTree,
-		ArrayPtr<double> weights,
+		Eigen::TensorMap<Eigen::Tensor<double, 1>> weights,
 		
 		cu::DensityKernel::Reader kernel,
 		double diameter,
@@ -102,7 +102,7 @@ struct DensityKernelComputation {
 		
 		// In normalized computation, tolerance should be normalized against the sum of all leaf
 		// weights (which is the root weight) and the kernel normalization constant.
-		normalizedTol = tol / normalizationConstant / weights[0];
+		normalizedTol = tol / normalizationConstant / weights(0);
 		
 		nDims = tree.getNode(0).bounds.size() / 2;
 	}
@@ -149,7 +149,7 @@ struct DensityKernelComputation {
 		// If we are within tolerance, return estimate
 		// (Technically, this is a check if weight * discrepancy <= weight * tol, but the weight cancels out)
 		if(nodeInfo.node.hasLeaf() || abs(kernelClose - kernelFar) <= tol) {
-			return weights[nodeId] * 0.5 * (kernelClose + kernelFar);
+			return weights(nodeId) * 0.5 * (kernelClose + kernelFar);
 		}
 		
 		// Otherwise, just go through the child nodes
@@ -170,7 +170,7 @@ FSC_DECLARE_KERNEL(
 	unsigned int,
 	
 	cu::KDTree::Reader,
-	ArrayPtr<double>,
+	Eigen::TensorMap<Eigen::Tensor<double, 1>>,
 	
 	Eigen::TensorMap<Eigen::Tensor<double, 2>>,
 	cu::DensityKernel::Reader,
@@ -185,7 +185,7 @@ EIGEN_DEVICE_FUNC void estimateDensityKernel(
 	unsigned int idx,
 	
 	cu::KDTree::Reader tree,
-	ArrayPtr<double> weights,
+	Eigen::TensorMap<Eigen::Tensor<double, 1>> weights,
 	
 	Eigen::TensorMap<Eigen::Tensor<double, 2>> evalPoints,
 	cu::DensityKernel::Reader kernel,
