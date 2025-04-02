@@ -207,6 +207,7 @@ if(BUILD_TESTING)
 		structio-tests.cpp
 		streams-tests.cpp
 		json-schema-tests.cpp
+		index-tests.cpp
 		
 		efit-tests.cpp
 		

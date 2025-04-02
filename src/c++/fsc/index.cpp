@@ -388,14 +388,8 @@ namespace {
 			auto keys = chunk0.initKeys(nPoints);
 			for(auto i : kj::indices(keys)) keys.set(i, i);
 			
-			Tensor<double, 3> bounds(2, nDims, nPoints);
-			for(auto iPoint : kj::range(0, nPoints)) {
-				for(auto iDim : kj::range(0, nDims)) {
-					bounds(0, iDim, iPoint) = points(iPoint, iDim);
-					bounds(1, iDim, iPoint) = points(iPoint, iDim);
-				}
-			}
-			writeTensor(bounds, chunk0.getBoxes());
+			points = points.shuffle(Eigen::array<int, 2>({1, 0}));
+			writeTensor(points, chunk0.getBoxes());
 			
 			// Submit request
 			return req.send().then([ctx](auto response) mutable {
@@ -450,7 +444,7 @@ namespace {
 			bounds.reserve(nDims);
 			
 			for(auto i : kj::range(0, nDims)) {
-				uint32_t idx = 2 * nDims * offset;
+				uint32_t idx = 2 * nDims * offset + 2 * i;
 				bounds.add(kj::tuple(bbd[idx], bbd[idx + 1]));
 			}
 			
@@ -507,6 +501,6 @@ namespace fsc {
 	}
 	
 	Tensor<double, 2> sample(KDTree::Reader index, double scale) {
-		return SamplingProcess(index, scale).run();
+		return SamplingProcess(index, 2 * scale).run();
 	}
 }

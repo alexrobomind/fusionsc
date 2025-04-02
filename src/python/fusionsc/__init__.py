@@ -46,6 +46,7 @@ from . import magnetics
 from . import flt
 from . import geometry
 from . import hfcam
+from . import index
 
 from . import hint
 from . import vmec
