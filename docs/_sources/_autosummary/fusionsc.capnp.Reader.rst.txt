@@ -1,0 +1,36 @@
+fusionsc.capnp.Reader
+=====================
+
+.. currentmodule:: fusionsc
+
+.. autoclass:: capnp.Reader
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~capnp.Reader.__init__
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: capnp.Reader.__init__
+
+
+
+
+

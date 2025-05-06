@@ -1,0 +1,85 @@
+fusionsc.magnetics.MagneticConfig
+=================================
+
+.. currentmodule:: fusionsc.magnetics
+
+.. autoclass:: MagneticConfig
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~MagneticConfig.__init__
+  ~MagneticConfig.cache
+  ~MagneticConfig.calculateRadialModes
+  ~MagneticConfig.compute
+  ~MagneticConfig.computeCached
+  ~MagneticConfig.evaluatePhizr
+  ~MagneticConfig.evaluateXyz
+  ~MagneticConfig.fromComputed
+  ~MagneticConfig.fromDipoles
+  ~MagneticConfig.fromEFit
+  ~MagneticConfig.getComputed
+  ~MagneticConfig.graph
+  ~MagneticConfig.interpolateXyz
+  ~MagneticConfig.load
+  ~MagneticConfig.ptree
+  ~MagneticConfig.resolve
+  ~MagneticConfig.rotate
+  ~MagneticConfig.save
+  ~MagneticConfig.toYaml
+  ~MagneticConfig.toroidalFlux
+  ~MagneticConfig.translate
+  ~MagneticConfig.upload
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~MagneticConfig.data
+	~MagneticConfig.type
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: MagneticConfig.__init__
+.. automethod:: MagneticConfig.cache
+.. automethod:: MagneticConfig.calculateRadialModes
+.. automethod:: MagneticConfig.compute
+.. automethod:: MagneticConfig.computeCached
+.. automethod:: MagneticConfig.evaluatePhizr
+.. automethod:: MagneticConfig.evaluateXyz
+.. automethod:: MagneticConfig.fromComputed
+.. automethod:: MagneticConfig.fromDipoles
+.. automethod:: MagneticConfig.fromEFit
+.. automethod:: MagneticConfig.getComputed
+.. automethod:: MagneticConfig.graph
+.. automethod:: MagneticConfig.interpolateXyz
+.. automethod:: MagneticConfig.load
+.. automethod:: MagneticConfig.ptree
+.. automethod:: MagneticConfig.resolve
+.. automethod:: MagneticConfig.rotate
+.. automethod:: MagneticConfig.save
+.. automethod:: MagneticConfig.toYaml
+.. automethod:: MagneticConfig.toroidalFlux
+.. automethod:: MagneticConfig.translate
+.. automethod:: MagneticConfig.upload
+
+
+
+
+

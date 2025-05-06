@@ -1,0 +1,33 @@
+﻿http
+====
+
+.. automodule:: http
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Classes
+
+.. autosummary::
+  :toctree:
+  :template: summary-class.rst
+
+    HTTPStatus
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,45 @@
+﻿fusionsc.native
+===============
+
+.. automodule:: fusionsc.native
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autosummary::
+
+	connectLocal
+	connectSameThread
+
+
+
+
+
+
+
+
+
+.. rubric:: Exceptions
+
+.. autosummary::
+
+	DisconnectError
+	OverloadError
+	Unimplemented
+
+
+
+
+.. rubric:: Functions
+
+.. autofunction:: connectLocal
+.. autofunction:: connectSameThread
+
+
+
+

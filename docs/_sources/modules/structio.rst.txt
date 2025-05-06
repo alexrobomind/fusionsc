@@ -1,0 +1,91 @@
+StructIO - read/write JSON & similar
+====================================
+
+StructIO is a module to read and write formats based on nested object structures.
+
+StructIO supports the following formats:
+ - JSON (see notes below)
+ - YAML
+ - CBOR
+ - BSON
+ - MSGPACK
+ - UBJSON
+
+Loaded data can be either represented using tree-like data structures, or can be
+stored directly into Cap'n'proto messages. How this is done depends on the language
+interface.
+
+The cross-language representation is based on the following primitives:
+ - Mapping with string keys (Objects)
+ - Arbitrary arrays
+ - Double-precision floats
+ - Signed and unsigned 64bit integers
+ - Strings
+ - Binary data blobs
+
+.. note::
+  JSON does not have the concept of a binary data type. Therefore, we serialize binary
+  data into a base64-encoded string with a "!base64:" prefix.
+
+.. tabs::
+   .. tab:: Python
+      
+      StructIO exposes the idiomatic load/dump loads/dumps method pairs provided
+      by many python libraries. These create a best-effort representation of the
+      stored data built out of dict, list, str, bytes, and NumPy arrays.
+      
+      Special fast paths exist for loading large numeric arrays. Numeric lists will
+      be assembled directly into NumPy arrays before handing them over to the
+      Python interpreter, avoiding the overhead of allocating individual float
+      objects.
+      
+      In addition, structio supports **unifying loads** where the data are loaded
+      into a target object passed in the *dst* argument. This is primarily useful
+      for directly loading into Cap'n'proto builders objects, but can also used to
+      load into a pre-prepared nested structure of dicts, lists, and Cap'n'proto
+      builders.
+      
+      .. warning::
+      
+        **Numpy arrays have a non-standard storage format**
+      
+        Most libraries serialize multi-dimensional NumPy arrays as nested lists.
+        This is terrible for storing large or deeply nested datasets. Instead,
+        we store it in the same way we store tensors in Cap'n'proto data - as a
+        pair of flat data and a shape. This also ensures that we keep uniform
+        array representations with the Cap'n'proto converters.
+        
+        For example, :code:`np.array([[1, 2], [3, 4]])` would serialize as
+        
+        .. code-block:: JSON
+        
+           { "data" : [1, 2, 3, 4], "shape" : [2, 2] }
+        
+        while :code:`np.array([1, 2, 3, 4])` would serialize as
+        
+        .. code-block:: JSON
+        
+           [1, 2, 3, 4]
+        
+        This also means that dictionaries of the above form will be serialized
+        into NumPy arrays.
+
+   .. tab:: C++
+   
+      StructIO can write data from a variety of sources into instances of the
+      abstract interface class fsc::structio::Visitor. Valid sources for data
+      include:
+      
+      - Byte buffers & input streams
+      - Cap'n'proto readers
+      - fsc::structio::Node, which store in-memory trees made out of the
+        primitives mentioned above.
+      
+      While users are free to implement their own stream visitors, StructIO
+      can adapt the following types to write into:
+      
+      - Buffered output streams
+      - Cap'n'proto structs
+      - Cap'n'proto list initializers (a function that takes a size and
+        returns an appropriately sized list builder)
+      - Instances of fsc::structio::Node

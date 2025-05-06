@@ -1,0 +1,45 @@
+fusionsc.devices.hsx
+====================
+
+.. automodule:: fusionsc.devices.hsx
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autosummary::
+
+	auxCoil
+	defaultGeometryGrid
+	defaultGrid
+	mainCoil
+	mainField
+	wall
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autofunction:: auxCoil
+.. autofunction:: defaultGeometryGrid
+.. autofunction:: defaultGrid
+.. autofunction:: mainCoil
+.. autofunction:: mainField
+.. autofunction:: wall
+
+
+
+

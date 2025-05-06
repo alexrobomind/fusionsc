@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StructIO - read/write JSON &amp; similar &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/mystnb.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/togglebutton.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/tabs.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+        <script>let toggleHintShow = 'Click to show';</script>
+        <script>let toggleHintHide = 'Click to hide';</script>
+        <script>let toggleOpenOnPrint = 'true';</script>
+        <script src="../_static/togglebutton.js"></script>
+        <script>var togglebuttonSelector = '.toggle, .admonition.dropdown, .tag_hide_input div.cell_input, .tag_hide-input div.cell_input, .tag_hide_output div.cell_output, .tag_hide-output div.cell_output, .tag_hide_cell.cell, .tag_hide-cell.cell';</script>
+        <script src="../_static/tabs.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Specification of magnetic fields and geometries" href="../dataspec.html" />
+    <link rel="prev" title="Modules" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/index.html">Usage examples (How To …)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Modules</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">StructIO - read/write JSON &amp; similar</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference.html">Reference</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://alexrobomind.github.io/fusionsc/cpp/index.html">C++ library documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="index.html">Modules</a> &raquo;</li>
+      <li>StructIO - read/write JSON &amp; similar</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/modules/structio.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="structio-read-write-json-similar">
+<h1>StructIO - read/write JSON &amp; similar<a class="headerlink" href="#structio-read-write-json-similar" title="Permalink to this heading"></a></h1>
+<p>StructIO is a module to read and write formats based on nested object structures.</p>
+<dl class="simple">
+<dt>StructIO supports the following formats:</dt><dd><ul class="simple">
+<li><p>JSON (see notes below)</p></li>
+<li><p>YAML</p></li>
+<li><p>CBOR</p></li>
+<li><p>BSON</p></li>
+<li><p>MSGPACK</p></li>
+<li><p>UBJSON</p></li>
+</ul>
+</dd>
+</dl>
+<p>Loaded data can be either represented using tree-like data structures, or can be
+stored directly into Cap’n’proto messages. How this is done depends on the language
+interface.</p>
+<dl class="simple">
+<dt>The cross-language representation is based on the following primitives:</dt><dd><ul class="simple">
+<li><p>Mapping with string keys (Objects)</p></li>
+<li><p>Arbitrary arrays</p></li>
+<li><p>Double-precision floats</p></li>
+<li><p>Signed and unsigned 64bit integers</p></li>
+<li><p>Strings</p></li>
+<li><p>Binary data blobs</p></li>
+</ul>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>JSON does not have the concept of a binary data type. Therefore, we serialize binary
+data into a base64-encoded string with a “!base64:” prefix.</p>
+</div>
+<div class="sphinx-tabs docutils container">
+<div aria-label="Tabbed content" class="closeable" role="tablist"><button aria-controls="panel-0-0-0" aria-selected="true" class="sphinx-tabs-tab" id="tab-0-0-0" name="0-0" role="tab" tabindex="0">Python</button><button aria-controls="panel-0-0-1" aria-selected="false" class="sphinx-tabs-tab" id="tab-0-0-1" name="0-1" role="tab" tabindex="-1">C++</button></div><div aria-labelledby="tab-0-0-0" class="sphinx-tabs-panel" id="panel-0-0-0" name="0-0" role="tabpanel" tabindex="0"><p>StructIO exposes the idiomatic load/dump loads/dumps method pairs provided
+by many python libraries. These create a best-effort representation of the
+stored data built out of dict, list, str, bytes, and NumPy arrays.</p>
+<p>Special fast paths exist for loading large numeric arrays. Numeric lists will
+be assembled directly into NumPy arrays before handing them over to the
+Python interpreter, avoiding the overhead of allocating individual float
+objects.</p>
+<p>In addition, structio supports <strong>unifying loads</strong> where the data are loaded
+into a target object passed in the <em>dst</em> argument. This is primarily useful
+for directly loading into Cap’n’proto builders objects, but can also used to
+load into a pre-prepared nested structure of dicts, lists, and Cap’n’proto
+builders.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><strong>Numpy arrays have a non-standard storage format</strong></p>
+<p>Most libraries serialize multi-dimensional NumPy arrays as nested lists.
+This is terrible for storing large or deeply nested datasets. Instead,
+we store it in the same way we store tensors in Cap’n’proto data - as a
+pair of flat data and a shape. This also ensures that we keep uniform
+array representations with the Cap’n’proto converters.</p>
+<p>For example, <code class="code docutils literal notranslate"><span class="pre">np.array([[1,</span> <span class="pre">2],</span> <span class="pre">[3,</span> <span class="pre">4]])</span></code> would serialize as</p>
+<div class="highlight-JSON notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;data&quot;</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;shape&quot;</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+</pre></div>
+</div>
+<p>while <code class="code docutils literal notranslate"><span class="pre">np.array([1,</span> <span class="pre">2,</span> <span class="pre">3,</span> <span class="pre">4])</span></code> would serialize as</p>
+<div class="highlight-JSON notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>This also means that dictionaries of the above form will be serialized
+into NumPy arrays.</p>
+</div>
+</div><div aria-labelledby="tab-0-0-1" class="sphinx-tabs-panel" hidden="true" id="panel-0-0-1" name="0-1" role="tabpanel" tabindex="0"><p>StructIO can write data from a variety of sources into instances of the
+abstract interface class fsc::structio::Visitor. Valid sources for data
+include:</p>
+<ul class="simple">
+<li><p>Byte buffers &amp; input streams</p></li>
+<li><p>Cap’n’proto readers</p></li>
+<li><p>fsc::structio::Node, which store in-memory trees made out of the
+primitives mentioned above.</p></li>
+</ul>
+<p>While users are free to implement their own stream visitors, StructIO
+can adapt the following types to write into:</p>
+<ul class="simple">
+<li><p>Buffered output streams</p></li>
+<li><p>Cap’n’proto structs</p></li>
+<li><p>Cap’n’proto list initializers (a function that takes a size and
+returns an appropriately sized list builder)</p></li>
+<li><p>Instances of fsc::structio::Node</p></li>
+</ul>
+</div></div>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="Modules" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../dataspec.html" class="btn btn-neutral float-right" title="Specification of magnetic fields and geometries" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
