@@ -151,6 +151,152 @@ Promise<void> FieldCalculatorImpl::evalFourierSurface(EvalFourierSurfaceContext 
 	return READY_NOW;
 }
 
+Promise<void> FieldCalculatorImpl::evalFourierSurfaceNoGrid(EvalFourierSurfaceNoGridContext ctx) {
+	auto params = ctx.getParams();
+	
+	auto surfaces = params.getSurfaces();
+	auto surfNMax = surfaces.getNTor();
+	auto surfMMax = surfaces.getMPol();
+	
+	auto surfNumN = 2 * surfNMax + 1;
+	auto surfNumM = surfMMax + 1;
+	
+	uint32_t surfSym = surfaces.getToroidalSymmetry();
+	uint32_t surfNTurns = surfaces.getNTurns();
+	
+	// Compute toroidal mode numbers & evaluation angles
+	auto modeN = kj::heapArray<double>(surfNumN);
+	for(auto iN : kj::indices(modeN)) {
+		double baseN = iN;
+		if(iN > surfNMax)
+			baseN = ((int) iN) - (int) surfNumN;
+		
+		baseN *= surfSym;
+		baseN /= surfNTurns;
+		modeN[iN] = baseN;
+	}
+	
+	Eigen::Tensor<double, 1> phiVals;
+	Eigen::Tensor<double, 1> thetaVals;
+	
+	auto vardimShape = readVardimTensor(params.getPhi(), 0, phiVals);
+	readVardimTensor(params.getTheta(), 0, thetaVals);
+	
+	KJ_REQUIRE(phiVals.dimension(0) == thetaVals.dimension(0), "Phi and Theta tensors must have identical no. of elements");
+	
+	const size_t nPoints = phiVals.dimension(0);
+	
+	// Read symmetric surface basis
+	
+	Eigen::Tensor<double, 3> rCos;
+	Eigen::Tensor<double, 3> zSin;
+	readVardimTensor(surfaces.getRCos(), 0, rCos);
+	readVardimTensor(surfaces.getZSin(), 0, zSin);
+	
+	KJ_REQUIRE(rCos.dimension(0) == surfNumM);
+	KJ_REQUIRE(rCos.dimension(1) == surfNumN);
+	const int64_t nSurfs = rCos.dimension(2);
+	
+	KJ_REQUIRE(zSin.dimension(0) == surfNumM);
+	KJ_REQUIRE(zSin.dimension(1) == surfNumN);
+	KJ_REQUIRE(zSin.dimension(2) == nSurfs);
+	
+	Eigen::Tensor<double, 3> rSin;
+	Eigen::Tensor<double, 3> zCos;
+	
+	// Read non-symmetric surface basis
+	if(surfaces.isNonSymmetric()) {
+		readVardimTensor(surfaces.getNonSymmetric().getZCos(), 0, zCos);
+		readVardimTensor(surfaces.getNonSymmetric().getRSin(), 0, rSin);
+	
+		KJ_REQUIRE(zCos.dimension(0) == surfNumM);
+		KJ_REQUIRE(zCos.dimension(1) == surfNumN);
+		KJ_REQUIRE(zCos.dimension(2) == nSurfs);
+		
+		KJ_REQUIRE(rSin.dimension(0) == surfNumM);
+		KJ_REQUIRE(rSin.dimension(1) == surfNumN);
+		KJ_REQUIRE(rSin.dimension(2) == nSurfs);
+	} else {
+		rSin.resize(surfNumM, surfNumN, nSurfs);
+		zCos.resize(surfNumM, surfNumN, nSurfs);
+		
+		rSin.setZero();
+		zCos.setZero();
+	}
+	
+	// Calculate points and derivatives on all surfaces
+	
+	using ADS = Eigen::AutoDiffScalar<Vec2d>;
+	Eigen::Tensor<ADS, 3> points(nPoints, nSurfs, 3);
+	points.setZero();
+	
+	#pragma omp parallel for
+	for(long int multiIndex = 0; multiIndex < nPoints * nSurfs; ++multiIndex) {
+		unsigned long tmp = multiIndex;
+		
+		const unsigned int iPoint = tmp % nPoints;
+		tmp /= nPoints;
+		
+		const unsigned int iSurf = tmp;
+		
+		ADS phi(phiVals[iPoint], 2, 0);
+		ADS theta(thetaVals[iPoint], 2, 1);
+		
+		for(auto m : kj::range(0, surfNumM)) {
+		for(auto iN : kj::range(0, surfNumN)) {
+			double n = modeN[iN];
+			
+			ADS cosVal = cos(-n * phi + m * theta);
+			ADS sinVal = sin(-n * phi + m * theta);
+			
+			ADS rContrib = rCos(m, iN, iSurf) * cosVal + rSin(m, iN, iSurf) * sinVal;
+			ADS zContrib = zCos(m, iN, iSurf) * cosVal + zSin(m, iN, iSurf) * sinVal;
+			
+			ADS xContrib = cos(phi) * rContrib;
+			ADS yContrib = sin(phi) * rContrib;
+			
+			points(iPoint, iSurf, 0) += xContrib;
+			points(iPoint, iSurf, 1) += yContrib;
+			points(iPoint, iSurf, 2) += zContrib;
+		}
+		}
+	}
+	
+	// Take apart autodiff scalar into elements
+	
+	Eigen::Tensor<double, 3> val(nPoints, nSurfs, 3);
+	Eigen::Tensor<double, 3> ddPhi(nPoints, nSurfs, 3);
+	Eigen::Tensor<double, 3> ddTheta(nPoints, nSurfs, 3);
+	for(auto i : kj::indices(val)) {
+		val.data()[i] = points.data()[i].value();
+		ddPhi.data()[i] = points.data()[i].derivatives()[0];
+		ddTheta.data()[i] = points.data()[i].derivatives()[1];
+	}
+	
+	auto adjustShape = [&](Float64Tensor::Builder b) {
+		auto is = surfaces.getRCos().getShape();
+		auto os = b.initShape(is.size() - 2 + vardimShape.size() + 1);
+		
+		os.set(0, 3);
+		for(auto i : kj::range(0, is.size() - 2))
+			os.set(i + 1, is[i]);
+		for(auto i : kj::range(0, vardimShape.size()))
+			os.set(i + 1 + is.size() - 2, vardimShape[i]);
+	};
+	
+	auto writeAdjusted = [&](Eigen::Tensor<double, 3>& in, Float64Tensor::Builder out) {
+		writeTensor(in, out);
+		adjustShape(out);
+	};
+	
+	auto results = ctx.initResults();
+	writeAdjusted(val, results.initPoints());
+	writeAdjusted(ddPhi, results.initPhiDerivatives());
+	writeAdjusted(ddTheta, results.initThetaDerivatives());
+	
+	return READY_NOW;
+}
+
 Promise<void> FieldCalculatorImpl::surfaceToFourier(SurfaceToFourierContext ctx) {
 	auto surfaces = ctx.getParams().getSurfaces();
 	

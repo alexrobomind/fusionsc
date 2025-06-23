@@ -38,6 +38,10 @@ def test_eval(field):
 	field.interpolateXyz(x)
 	field.evaluatePhizr(x)
 
+def test_surf_eval(surfaces):
+	surfaces.evaluate([0], [0])
+	surfaces.evaluate(0, 0, grid = False)
+
 @pytest.mark.parametrize("quantity", ["field", "flux"])
 @pytest.mark.parametrize("useFFT", [False, True])
 def test_compradmodes(field, surfaces, quantity, useFFT):

@@ -103,8 +103,11 @@ class SurfaceArray(wrappers.structWrapper(service.FourierSurfaces)):
 		return self.__truediv__(l)
 	
 	@asyncFunction
-	async def evaluate(self, phi: Sequence[float], theta: Sequence[float]):
-		response = await _calculator().evalFourierSurface(self.data, phi, theta)
+	async def evaluate(self, phi: "numpy.typing.ArrayLike", theta: "numpy.typing.ArrayLike", grid = True):
+		if grid:
+			response = await _calculator().evalFourierSurface(self.data, phi, theta)
+		else:
+			response = await _calculator().evalFourierSurfaceNoGrid(self.data, np.asarray(phi), np.asarray(theta))
 		
 		return {
 			'points' : np.asarray(response.points),

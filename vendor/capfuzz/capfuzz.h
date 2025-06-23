@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include <kj/common.h>
+#include <kj/memory.h>
 #include <kj/async.h>
 
 #include <capnp/dynamic.h>
@@ -53,7 +54,7 @@ struct ProtocolConfig {
 	uint32_t maxListSize = 128;
 	uint32_t maxBlobSize = 128;
 	
-	kj::Array<Own<InputBuilder>> builders = nullptr;
+	kj::Array<kj::Own<InputBuilder>> builders = nullptr;
 };
 
 /**

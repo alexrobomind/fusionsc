@@ -138,6 +138,19 @@ interface FieldCalculator $Cxx.allowCancellation {
 	# Returns tensors of shape [3, ..., nPhi, nTheta]
 	# with the remainder being the surfaces shape.
 	
+	evalFourierSurfaceNoGrid @9 (
+		surfaces : FourierSurfaces,
+		phi : Float64Tensor,
+		theta : Float64Tensor
+	) -> (
+		points : Float64Tensor,
+		phiDerivatives : Float64Tensor,
+		thetaDerivatives : Float64Tensor
+	);
+	# Evaluate points on Fourier surfaces
+	# Returns tensors of shape [3] + {surface shape} + {batch shape}
+	# with the remainder being the surfaces shape.
+	
 	enum RadialModeQuantity {
 		field @0;
 		flux @1;

@@ -329,7 +329,7 @@ private:
 	kj::Array<InputBuilder*> getBuilders(capnp::Type type) {
 		kj::Vector<InputBuilder*> result;
 		
-		for(auto builder : config.builders) {
+		for(auto& builder : config.builders) {
 			for(auto i : kj::range(0, builder -> getWeight(type)))
 				result.add(builder);
 		}
@@ -670,7 +670,7 @@ private:
 }
 
 kj::Promise<void> runFuzzer(kj::ArrayPtr<const kj::byte> data, kj::ArrayPtr<capnp::DynamicCapability::Client> targets, ProtocolConfig config) {
-	auto protoState = kj::heap<ProtocolState>(data, config);
+	auto protoState = kj::heap<ProtocolState>(data, kj::mv(config));
 	
 	for(auto t : targets)
 		protoState -> addImport(t);
