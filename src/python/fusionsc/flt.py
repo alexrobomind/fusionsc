@@ -803,7 +803,8 @@ async def calculateIota(
 	axis = None, unwrapEvery = 1,
 	distanceLimit = 1e4, 
 	targetError = 1e-4, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2,
-	islandM = 1
+	islandM = 1,
+	mapping = None
 ):
 	# Make sure we have a computed field reference
 	field = await field.compute.asnc(grid)
@@ -826,6 +827,20 @@ async def calculateIota(
 	request.distanceLimit = distanceLimit
 	request.turnLimit = turnCount
 	
+	# Set mapping
+	if mapping is not None:
+		import warnings
+		warnings.warn("Using a mapping in iota and surface calculations is currently experimental." +
+			" Do not use long connection lengths as this will invalidate the Fourier calculations"
+		)
+		
+		if isinstance(mapping, wrappers.RefWrapper):
+			request.mapping = mapping.ref
+		elif isinstance(mapping, MappingWithGeometry):
+			request.geometryMapping = mapping.data
+		else:
+			raise ValueError("Invalid type of mapping")
+	
 	calcIota = request.fieldLineAnalysis.initCalculateIota()
 	calcIota.unwrapEvery = unwrapEvery
 	calcIota.islandM = islandM
@@ -841,11 +856,12 @@ async def calculateIota(
 			'z' : zAx
 		}
 	
-	adaptive = request.stepSizeControl.initAdaptive()
-	adaptive.targetError = targetError
-	adaptive.relativeTolerance = relativeErrorTolerance
-	adaptive.min = minStepSize
-	adaptive.max = maxStepSize
+	if mapping is None:
+		adaptive = request.stepSizeControl.initAdaptive()
+		adaptive.targetError = targetError
+		adaptive.relativeTolerance = relativeErrorTolerance
+		adaptive.min = minStepSize
+		adaptive.max = maxStepSize
 		
 	errorEstimationDistance = min(turnCount * 2 * np.pi * field.data.computedField.grid.rMax, distanceLimit)
 	adaptive.errorUnit.integratedOver = errorEstimationDistance
@@ -861,7 +877,8 @@ async def calculateFourierModes(
 	grid = None, stellaratorSymmetric = False,
 	unwrapEvery = 1, recordEvery = 10, distanceLimit = 0,
 	targetError = 1e-4, relativeErrorTolerance = 1, minStepSize = 0, maxStepSize = 0.2,
-	islandM = 1
+	islandM = 1,
+	mapping = None
 ):
 	if aliasThreshold is None:
 		aliasThreshold = 0.05 / turnCount
@@ -876,7 +893,8 @@ async def calculateFourierModes(
 		grid = None, axis = None, unwrapEvery = unwrapEvery,
 		distanceLimit = distanceLimit,
 		targetError = targetError, relativeErrorTolerance = relativeErrorTolerance, minStepSize = minStepSize, maxStepSize = maxStepSize,
-		islandM = islandM
+		islandM = islandM,
+		mapping = mapping
 	)
 	
 	# Initialize Fourier trace request
@@ -886,6 +904,15 @@ async def calculateFourierModes(
 	request.field = field.data.computedField
 	request.distanceLimit = distanceLimit
 	request.turnLimit = turnCount
+	
+	# Set mapping
+	if mapping is not None:
+		if isinstance(mapping, wrappers.RefWrapper):
+			request.mapping = mapping.ref
+		elif isinstance(mapping, MappingWithGeometry):
+			request.geometryMapping = mapping.data
+		else:
+			raise ValueError("Invalid type of mapping")
 	
 	calcSurf = request.fieldLineAnalysis.initCalculateFourierModes()
 	calcSurf.iota = iotas
@@ -897,11 +924,12 @@ async def calculateFourierModes(
 	calcSurf.stellaratorSymmetric = stellaratorSymmetric
 	calcSurf.islandM = islandM
 	
-	adaptive = request.stepSizeControl.initAdaptive()
-	adaptive.targetError = targetError
-	adaptive.relativeTolerance = relativeErrorTolerance
-	adaptive.min = minStepSize
-	adaptive.max = maxStepSize
+	if mapping is None:
+		adaptive = request.stepSizeControl.initAdaptive()
+		adaptive.targetError = targetError
+		adaptive.relativeTolerance = relativeErrorTolerance
+		adaptive.min = minStepSize
+		adaptive.max = maxStepSize
 	
 	if distanceLimit > 0:
 		errorEstimationDistance = min(turnCount * 2 * np.pi * field.data.computedField.grid.rMax, distanceLimit)
