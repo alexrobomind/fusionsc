@@ -17,6 +17,10 @@
 
 using namespace fsc;
 
+/**
+ * An input builder that creates DataRef<Type> objects by publishing a
+ * corresponding T object into the local DataStore.
+ */
 struct DataPublisher : public capfuzz::InputBuilder {
 	constexpr static uint64_t DR_ID = capnp::typeId<fsc::DataRef<>>();
 	
@@ -86,11 +90,12 @@ struct MainCls {
 			RootService::Client rootService = createRoot(config.asReader());
 			
 			// Customize protocol
-			DataPublisher dp;
-			auto builders = kj::heapArray<capfuzz::InputBuilder*>({&dp});
+			auto builders = kj::heapArray<kj::Own<capfuzz::InputBuilder>>({
+				kj::heap<DataPublisher>()
+			});
 			
 			capfuzz::ProtocolConfig protoConfig;
-			protoConfig.builders = builders.asPtr();
+			protoConfig.builders = mv(builders);
 			
 			// Set up targets
 			auto targets = kj::heapArrayBuilder<capnp::DynamicCapability::Client>(1);

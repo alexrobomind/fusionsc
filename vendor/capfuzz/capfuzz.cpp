@@ -279,7 +279,7 @@ struct ProtocolState : public InputBuilder::Context {
 	Maybe<DynamicStruct::Pipeline> activePipeline = nullptr;
 	
 	ProtocolState(kj::ArrayPtr<const byte> inputData, ProtocolConfig config) :
-		input(inputData), config(config)
+		input(inputData), config(mv(config))
 	{}
 	
 	~ProtocolState() noexcept {}
