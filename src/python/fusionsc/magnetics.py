@@ -390,7 +390,6 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		return np.asarray(result.flux)
 		
 	@asyncFunction
-	@unstableApi
 	async def calculateRadialModes(
 		self, surfaces: SurfaceArray,
 		normalizeAgainst : "Optional[MagneticConfig]" = None,
