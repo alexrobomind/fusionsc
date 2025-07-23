@@ -2,6 +2,61 @@
 
 namespace fsc { namespace internal {
 
+namespace {
+
+double calculateFluxOnMesh(
+	Mesh::Reader mesh,
+	
+
+}
+
+}}
+
+namespace fsc { namespace internal {
+
+Promise<double> FieldCalculatorImpl::calculateFluxOnTriMesh(Mesh::Reader mesh, MagneticField::Reader field) {
+	// Calculate field on all mesh points
+	Tensor<double, 2> points;
+	readTensor(mesh.getVertices());
+	
+	auto computeReq = thisCap().evaluateXyzRequest();
+	writeTensor(points.transpose(), computeReq.getPoints());
+	computeReq.setField(field);
+	
+	return computeReq.send().then([mesh, points = kj::mv(points)](auto response) {
+		Tensor<double, 2> values;
+		readTensor(response.getValues(), values);
+		
+		double result = 0;
+		auto processTri = [&](size_t i1, size_t i2, size_t i3) {
+			#define VEC_VAL(name, var, idx) Vec3d name(var(0, idx), var(1, idx), var(2, idx))
+			
+			VEC_VAL(p1, points, i1);
+			VEC_VAL(p2, points, i2);
+			VEC_VAL(p3, points, i3);
+			
+			VEC_VAL(v1, values, i1);
+			VEC_VAL(v2, values, i2);
+			VEC_VAL(v3, values, i3);
+			
+			#undef VEC_VAL
+			
+			Vec3d orientedArea = (p2 - p1).cross(p1 - p3);
+			Vec3d avgVal = (v1 + v2 + v3) / 3;
+			
+			result += avgVal * orientedArea;
+		};
+		
+		auto indices = mesh.getIndices();
+		if(mesh.isTriMesh()) {
+			
+			for(size_t i = 0; i < indices.size(); i += 3) {
+				processTri(i, i + 1, i + 2);
+			}
+		}
+	});
+}
+
 Promise<void> FieldCalculatorImpl::calculateTotalFlux(CalculateTotalFluxContext ctx) {
 	auto params = ctx.getParams();
 	auto surfaces = params.getSurfaces();

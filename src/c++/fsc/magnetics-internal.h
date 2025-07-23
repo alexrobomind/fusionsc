@@ -45,6 +45,9 @@ private:
 	Promise<void> processField(FieldCalculation& calculator, MagneticField::Reader node, const MagKernelContext& ctx);
 	Promise<void> processTransform(FieldCalculation& calculator, Transformed<MagneticField>::Reader node, const MagKernelContext& ctx);
 	Promise<void> processFilament(FieldCalculation& calculator, Filament::Reader node, BiotSavartSettings::Reader settings, const MagKernelContext& ctx);
+	
+	// These are implemented in magnetics-calc-flux.cpp
+	Promise<void> calculateFluxOnTriMesh(Mesh::Reader mesh, MagneticField::Reader field);
 };
 
 } }

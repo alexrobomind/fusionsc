@@ -1302,22 +1302,22 @@ Promise<void> GeometryLibImpl::weightedSample(WeightedSampleContext context) {
 							loadPoint(3 * i + 2)
 						);
 					}
-				} else if(mesh.isPolyMesh()) {
+				} else if(mesh.isPolyMesh()) {					
 					auto polys = mesh.getPolyMesh();
-					KJ_REQUIRE(polys.size() > 0);
+					if(polys.size() < 2)
+						continue;
 					
-					for(auto iPoly : kj::range(0, polys.size() - 1)) {
-						size_t polyStart = polys[iPoly];
-						size_t polyEnd = polys[iPoly + 1];
-						
-						if(polyEnd - polyStart < 3)
-							continue;
+					uint32_t nPolys = polys.size() - 1;
+					for(auto iPoly : kj::zeroTo(nPolys)) {
+						auto start = polys[iPoly];
+						auto end = polys[iPoly + 1];
 						
 						Vec3d x1 = loadPoint(polyStart);
-						Vec3d x2 = loadPoint(polyEnd);
 						
-						for(auto i3 : kj::range(polyStart + 2, polyEnd)) {
-							Vec3d x3 = loadPoint(i3);
+						for(auto i2 : kj::range(start + 1, end - 1)) {
+							Vec x2 = loadPoint(i2);
+							Vec x3 = loadPoint(i2 + 1);
+							
 							processTriangle(x1, x2, x3);
 						}
 					}
