@@ -62,6 +62,11 @@ from . import graphviz
 
 import threading
 
+from .native.kj import \
+	OverloadError, \
+	DisconnectError, \
+	UnimplementedError
+
 __all__ = [
 	'native',
 	'kj', 'capnp', 'service', 'efit', 'hint', 'vmec',

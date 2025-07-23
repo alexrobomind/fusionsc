@@ -12,24 +12,44 @@ namespace fscpy {
 		}
 	}
 
-	void raiseInPython(const kj::Exception& e) {	
+	void raiseInPython(const kj::Exception& e) {
+		auto description =
+				e.getDescription().startsWith("C++ exception (")
+			?
+				kj::str(e.getDescription())
+			:
+				kj::str(
+					"C++ exception (", e.getType(), ") at ", e.getFile(), " -- line ", e.getLine(), "\n",
+					e.getDescription(), "\n",
+					"Trace: \n",
+					kj::stringifyStackTrace(e.getStackTrace())
+				)
+			;
+			
+		
 		#define HANDLE_CASE(x) case kj::Exception::Type::x
 		
 		switch(e.getType()) {
 			HANDLE_CASE(FAILED):
-				PyErr_SetString(PyExc_RuntimeError, kj::str(e).cStr());
+				PyErr_SetString(PyExc_RuntimeError, description.cStr());
 				return;
+				
+			// Note: Calling py::exception::operator() to set the python exception
+			// is deprecated (and slightly unclear) but I will keep it in here for
+			// now to keep backwards compatibility to older pybind11 versions.
+			//
+			// py::set_error(...) (the replacement) is rather new
 			
 			HANDLE_CASE(OVERLOADED):
-				excOverloaded(e.getDescription().cStr());
+				excOverloaded(description.cStr());
 				return;
 			
 			HANDLE_CASE(DISCONNECTED):
-				excDisconnected(e.getDescription().cStr());
+				excDisconnected(description.cStr());
 				return;
 			
 			HANDLE_CASE(UNIMPLEMENTED):
-				excUnimplemented(e.getDescription().cStr());
+				excUnimplemented(description.cStr());
 				return;
 		}
 		
@@ -47,11 +67,11 @@ namespace fscpy {
 			
 			kj::Exception::Type cppType = kj::Exception::Type::FAILED;
 			
-			if(t.is(excOverloaded)) {
+			if(e.matches(excOverloaded)) {
 				cppType = kj::Exception::Type::OVERLOADED;
-			} else if(t.is(excDisconnected)) {
+			} else if(e.matches(excDisconnected)) {
 				cppType = kj::Exception::Type::DISCONNECTED;
-			} else if(t.is(excUnimplemented)) {
+			} else if(e.matches(excUnimplemented)) {
 				cppType = kj::Exception::Type::UNIMPLEMENTED;
 			}
 			
@@ -76,7 +96,7 @@ namespace fscpy {
 					pythonException = kj::strTree(e.what());
 			}
 			
-			return kj::Exception(::kj::Exception::Type::FAILED, __FILE__, __LINE__, pythonException.flatten());
+			return kj::Exception(/*::kj::Exception::Type::FAILED*/cppType, __FILE__, __LINE__, pythonException.flatten());
 		} catch(std::exception e2) {
 			py::print("Failed to format exception", e.type(), e.value());
 			auto exc = kj::getCaughtExceptionAsKj();
@@ -91,9 +111,9 @@ namespace fscpy {
 	void initKj(py::module_& m) {
 		py::module_ mkj = m.def_submodule("kj", "Python bindings for Cap'n'proto's 'kj' utility library");
 		
-		excOverloaded = py::exception<kj::Exception>(m, "OverloadError");
-		excDisconnected = py::exception<kj::Exception>(m, "DisconnectError");
-		excUnimplemented = py::exception<kj::Exception>(m, "Unimplemented");
+		excOverloaded = py::exception<kj::Exception>(mkj, "OverloadError", PyExc_RuntimeError);
+		excDisconnected = py::exception<kj::Exception>(mkj, "DisconnectError", PyExc_RuntimeError);
+		excUnimplemented = py::exception<kj::Exception>(mkj, "UnimplementedError", PyExc_RuntimeError);
 		
 		py::class_<kj::StringPtr>(mkj, "StringPtr", "C++ string container. Generally not returned, but can be subclassed")
 			.def("__str__", [](kj::StringPtr ptr) { return ptr.cStr(); })
@@ -119,13 +139,14 @@ namespace fscpy {
 			try {
 				if (p) std::rethrow_exception(p);
 			} catch (kj::Exception& e) {
-				auto description = kj::str(
+				/*auto description = kj::str(
 					"C++ exception (", e.getType(), ") at ", e.getFile(), " -- line ", e.getLine(), "\n",
 					e.getDescription(), "\n",
 					"Trace: \n",
 					kj::stringifyStackTrace(e.getStackTrace())
 				);
-				PyErr_SetString(PyExc_RuntimeError, description.cStr());
+				PyErr_SetString(PyExc_RuntimeError, description.cStr());*/
+				raiseInPython(e);
 			}
 		});
 		
