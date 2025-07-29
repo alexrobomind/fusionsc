@@ -134,6 +134,60 @@ EIGEN_DEVICE_FUNC inline void mapInSectionKernel(unsigned int idx, uint64_t sect
 	// KJ_DBG(out.mutateStates()[idx].getU(), out.mutateStates()[idx].getV(), phi, z, r);
 }
 
+EIGEN_DEVICE_FUNC inline void toFieldAlignedKernel(unsigned int idx, double phi0, double r0, cu::ReversibleFieldlineMapping::Reader mapping, Tensor2Ref inOut) {
+	double x = inOut(0, idx);
+	double y = inOut(1, idx);
+	double z = inOut(2, idx);
+	
+	double r = x + r0;
+	
+	double phiTarget = phi0 + y / (2 * fsc::pi * r0);
+	
+	// Create xz-portion of geometry in phi0
+	Vec3d p(r * cos(phi0), r * sin(phi0), z);
+	
+	RFLM m(mapping);
+	m.map(p, /* ccw = */ y > 0);
+	m.advance(phiTarget);
+	
+	Vec3d pNew = m.unmap(phiTarget);
+	
+	inOut(0, idx) = pNew(0);
+	inOut(1, idx) = pNew(1);
+	inOut(2, idx) = pNew(2);
+}
+
+EIGEN_DEVICE_FUNC inline void fromFieldAlignedKernel(unsigned int idx, double phi0, double r0, cu::ReversibleFieldlineMapping::Reader mapping, Tensor2Ref inOut) {
+	double x = inOut(0, idx);
+	double y = inOut(1, idx);
+	double z = inOut(2, idx);
+	
+	double phi = atan2(y, x);
+	double dphi = phi0 - phi;
+	
+	// Normalize dphi to [-pi, pi]
+	dphi += fsc::pi;
+	dphi = fmod(dphi, 2 * fsc::pi);
+	dphi += 2 * fsc::pi;
+	dphi = fmod(dphi, 2 * fsc::pi);
+	dphi -= fsc::pi;
+	
+	// Calculate geometry in phi0 plane
+	Vec3d p(x, y, z);
+	RFLM m(mapping);
+	m.map(p, /* ccw = */ dphi > 0);
+	m.advance(phi + dphi);
+	Vec3d pNew = m.unmap(m.phi);
+	
+	double xNew = sqrt(pNew(0) * pNew(0) + pNew(1) * pNew(1)) - r0;
+	double zNew = pNew(2);
+	double yNew = -dphi * 2 * fsc::pi * r0;
+	
+	inOut(0, idx) = xNew;
+	inOut(1, idx) = yNew;
+	inOut(2, idx) = zNew;
+}
+
 /*EIGEN_DEVICE_FUNC inline void unmapKernel(unsigned int idx, cu::RFLMKernelData::Reader in, Tensor2Ref out, cu::ReversibleFieldlineMapping::Reader mapping) {	
 	RFLM m(mapping);
 	m.load(in.getStates()[idx]);

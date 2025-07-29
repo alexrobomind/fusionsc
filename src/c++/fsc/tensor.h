@@ -168,7 +168,10 @@ void writeTensor(const TensorType& in, T2 builder) {
 		}
 	}
 	
-	auto dataOut = builder.initData(in.size());
+	auto dataOut = builder.getData();
+	if(dataOut.size() != in.size())
+		dataOut = builder.initData(in.size());
+	
 	auto data = in.data();
 	
 	KJ_REQUIRE(in.size() == dataOut.size());
@@ -213,7 +216,10 @@ void writeVardimTensor(const TensorType& in, size_t variableDim, kj::ArrayPtr<si
 			shape.set(i - 1 + vardimShape.size(), protoShape[i]);
 	}
 	
-	auto dataOut = builder.initData(in.size());
+	auto dataOut = builder.getData();
+	if(dataOut.size() != in.size())
+		dataOut = builder.initData(in.size());
+	
 	auto data = in.data();
 	
 	KJ_REQUIRE(in.size() == dataOut.size());

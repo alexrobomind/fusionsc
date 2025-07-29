@@ -1312,11 +1312,11 @@ Promise<void> GeometryLibImpl::weightedSample(WeightedSampleContext context) {
 						auto start = polys[iPoly];
 						auto end = polys[iPoly + 1];
 						
-						Vec3d x1 = loadPoint(polyStart);
+						Vec3d x1 = loadPoint(start);
 						
 						for(auto i2 : kj::range(start + 1, end - 1)) {
-							Vec x2 = loadPoint(i2);
-							Vec x3 = loadPoint(i2 + 1);
+							Vec3d x2 = loadPoint(i2);
+							Vec3d x3 = loadPoint(i2 + 1);
 							
 							processTriangle(x1, x2, x3);
 						}

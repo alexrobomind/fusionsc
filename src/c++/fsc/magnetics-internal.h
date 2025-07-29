@@ -47,7 +47,7 @@ private:
 	Promise<void> processFilament(FieldCalculation& calculator, Filament::Reader node, BiotSavartSettings::Reader settings, const MagKernelContext& ctx);
 	
 	// These are implemented in magnetics-calc-flux.cpp
-	Promise<void> calculateFluxOnTriMesh(Mesh::Reader mesh, MagneticField::Reader field);
+	Promise<double> calculateFluxOnMesh(Mesh::Reader mesh, MagneticField::Reader field);
 };
 
 } }

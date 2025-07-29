@@ -2,28 +2,22 @@
 
 namespace fsc { namespace internal {
 
-namespace {
-
-double calculateFluxOnMesh(
-	Mesh::Reader mesh,
-	
-
-}
-
-}}
-
-namespace fsc { namespace internal {
-
-Promise<double> FieldCalculatorImpl::calculateFluxOnTriMesh(Mesh::Reader mesh, MagneticField::Reader field) {
+Promise<double> FieldCalculatorImpl::calculateFluxOnMesh(Mesh::Reader mesh, MagneticField::Reader field) {
 	// Calculate field on all mesh points
 	Tensor<double, 2> points;
-	readTensor(mesh.getVertices());
+	readTensor(mesh.getVertices(), points);
+		
+	// points is (index, xyz) shape in fortran order
+	// Need to transpose it
+	
+	Eigen::array<int, 2> shuffling({1, 0});
+	points = points.shuffle(shuffling);
 	
 	auto computeReq = thisCap().evaluateXyzRequest();
-	writeTensor(points.transpose(), computeReq.getPoints());
+	writeTensor(points, computeReq.getPoints());
 	computeReq.setField(field);
 	
-	return computeReq.send().then([mesh, points = kj::mv(points)](auto response) {
+	return computeReq.send().then([mesh, points = kj::mv(points)](auto response) -> double {
 		Tensor<double, 2> values;
 		readTensor(response.getValues(), values);
 		
@@ -44,16 +38,33 @@ Promise<double> FieldCalculatorImpl::calculateFluxOnTriMesh(Mesh::Reader mesh, M
 			Vec3d orientedArea = (p2 - p1).cross(p1 - p3);
 			Vec3d avgVal = (v1 + v2 + v3) / 3;
 			
-			result += avgVal * orientedArea;
+			result += avgVal.dot(orientedArea);
 		};
 		
 		auto indices = mesh.getIndices();
 		if(mesh.isTriMesh()) {
-			
 			for(size_t i = 0; i < indices.size(); i += 3) {
 				processTri(i, i + 1, i + 2);
 			}
+		} else if(mesh.isPolyMesh()) {
+			auto polys = mesh.getPolyMesh();
+			if(polys.size() < 2)
+				return 0;
+			
+			uint32_t nPolys = polys.size() - 1;
+			for(auto iPoly : kj::zeroTo(nPolys)) {
+				auto start = polys[iPoly];
+				auto end = polys[iPoly + 1];
+				
+				for(auto i2 : kj::range(start + 1, end - 1)) {
+					processTri(start, i2, i2 + 1);
+				}
+			}
+		} else {
+			KJ_FAIL_REQUIRE("Unknown mesh type");
 		}
+		
+		return result;
 	});
 }
 

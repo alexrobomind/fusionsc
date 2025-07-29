@@ -375,6 +375,18 @@ interface Mapper {
 	) -> (mapping : GeometryMapping);
 	
 	getSectionGeometry @2 (mapping : GeometryMapping, section : UInt64) -> (geometry : Geometry.IndexedGeometry);
+	
+	geometryToFieldAligned @3 (
+		mapping : Data.DataRef(ReversibleFieldlineMapping),
+		geometry : Geometry.Geometry,
+		phi0 : Float64, r0 : Float64
+	) -> (geometry : Data.DataRef(Geometry.MergedGeometry));
+	
+	geometryFromFieldAligned @4 (
+		mapping : Data.DataRef(ReversibleFieldlineMapping),
+		geometry : Geometry.Geometry,
+		phi0 : Float64, r0 : Float64
+	) -> (geometry : Data.DataRef(Geometry.MergedGeometry));
 }
 
 # ==================================== FLT configuration ============================

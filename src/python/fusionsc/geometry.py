@@ -574,6 +574,40 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		output = meshio.Mesh(points = rawPoints, cells = cells)
 		output.write(filename)
 	
+	def _rawMapping(self, m):
+		from . import flt
+		
+		if isinstance(m, wrappers.RefWrapper):
+			return m.ref
+		elif isinstance(mapping, flt.MappingWithGeometry):
+			return m.data.base
+		else:
+			raise ValueError("Invalid type of mapping")
+	
+	@unstableApi
+	def toFieldAligned(self, mapping, r0, phi0):
+		from . import flt
+		
+		merged = flt._mapper().geometryToFieldAligned(
+			mapping = self._rawMapping(mapping),
+			geometry = self.data,
+			phi0 = phi0, r0 = r0
+		).pipeline.geometry
+		
+		return Geometry({"merged" : merged})
+	
+	@unstableApi
+	def fromFieldAligned(self, mapping, r0, phi0):
+		from . import flt
+		
+		merged = flt._mapper().geometryFromFieldAligned(
+			mapping = self._rawMapping(mapping),
+			geometry = self.data,
+			phi0 = phi0, r0 = r0
+		).pipeline.geometry
+		
+		return Geometry({"merged" : merged})
+	
 	@asyncFunction
 	async def getTags(self):
 		merged = await self.getMerged.asnc()

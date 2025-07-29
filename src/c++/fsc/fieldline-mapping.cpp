@@ -538,6 +538,124 @@ namespace {
 				geo.setGrid(section.getGrid());
 			});
 		}
+		
+		Promise<void> geometryToFieldAligned(GeometryToFieldAlignedContext ctx) override {
+			// Pre-merge geometry
+			auto mergeRequest = geoLib.mergeRequest();
+			mergeRequest.setNested(ctx.getParams().getGeometry());
+			auto geoRef = mergeRequest.sendForPipeline().getRef();
+			
+			// Download merged geometry
+			return getActiveThread().dataService().download(geoRef)
+			.then([ctx, this](auto geo) mutable {
+				
+				// Download mapping
+				return getActiveThread().dataService().download(ctx.getParams().getMapping())
+				.then([ctx, this, geo](auto mapping) mutable {
+					// Map mapping onto compute device
+					auto devMapping = FSC_MAP_READER(
+						::fsc, ReversibleFieldlineMapping,
+						mapping, *device, true
+					);
+					devMapping -> updateStructureOnDevice();
+					devMapping -> updateDevice();
+					
+					// Initialize output geometry
+					Temporary<MergedGeometry> outputGeometry(geo.get());
+					
+					auto entries = geo.get().getEntries();
+					auto entriesOut = outputGeometry.getEntries();
+					
+					auto subComputations = kj::heapArrayBuilder<Promise<void>>(entries.size());
+					
+					for(auto i : kj::indices(entries)) {
+						auto eOut = entriesOut[i];
+						auto meshOut = eOut.getMesh();
+						
+						Tensor<double, 2> initialVertexTensor;
+						readTensor(entries[i].getMesh().getVertices(), initialVertexTensor);
+						
+						auto vertices = mapToDevice(kj::mv(initialVertexTensor), *device, true);
+						
+						Promise<void> subComputation = FSC_LAUNCH_KERNEL(
+							toFieldAlignedKernel, *device, vertices -> getHost().dimension(1),
+							
+							ctx.getParams().getPhi0(), ctx.getParams().getR0(),
+							FSC_KARG(devMapping, NOCOPY),
+							vertices
+						).then([keepAlive = vertices -> addRef(), meshOut, vertHost = vertices -> getHost()]() mutable {
+							writeTensor(vertHost, meshOut.getVertices());
+						});
+						
+						subComputations.add(kj::mv(subComputation));
+					}
+					
+					return kj::joinPromisesFailFast(subComputations.finish())
+					.then([ctx, og = kj::mv(outputGeometry)]() mutable {
+						ctx.initResults().setGeometry(getActiveThread().dataService().publish(og.asReader()));
+					});
+				});
+			});
+		}
+		
+		Promise<void> geometryFromFieldAligned(GeometryFromFieldAlignedContext ctx) override {
+			// Pre-merge geometry
+			auto mergeRequest = geoLib.mergeRequest();
+			mergeRequest.setNested(ctx.getParams().getGeometry());
+			auto geoRef = mergeRequest.sendForPipeline().getRef();
+			
+			// Download merged geometry
+			return getActiveThread().dataService().download(geoRef)
+			.then([ctx, this](auto geo) mutable {
+				
+				// Download mapping
+				return getActiveThread().dataService().download(ctx.getParams().getMapping())
+				.then([ctx, this, geo](auto mapping) mutable {
+					// Map mapping onto compute device
+					auto devMapping = FSC_MAP_READER(
+						::fsc, ReversibleFieldlineMapping,
+						mapping, *device, true
+					);
+					devMapping -> updateStructureOnDevice();
+					devMapping -> updateDevice();
+					
+					// Initialize output geometry
+					Temporary<MergedGeometry> outputGeometry(geo.get());
+					
+					auto entries = geo.get().getEntries();
+					auto entriesOut = outputGeometry.getEntries();
+					
+					auto subComputations = kj::heapArrayBuilder<Promise<void>>(entries.size());
+					
+					for(auto i : kj::indices(entries)) {
+						auto eOut = entriesOut[i];
+						auto meshOut = eOut.getMesh();
+						
+						Tensor<double, 2> initialVertexTensor;
+						readTensor(entries[i].getMesh().getVertices(), initialVertexTensor);
+						
+						auto vertices = mapToDevice(kj::mv(initialVertexTensor), *device, true);
+						
+						Promise<void> subComputation = FSC_LAUNCH_KERNEL(
+							fromFieldAlignedKernel, *device, vertices -> getHost().dimension(1),
+							
+							ctx.getParams().getPhi0(), ctx.getParams().getR0(),
+							FSC_KARG(devMapping, NOCOPY),
+							vertices
+						).then([keepAlive = vertices -> addRef(), meshOut, vertHost = vertices -> getHost()]() mutable {
+							writeTensor(vertHost, meshOut.getVertices());
+						});
+						
+						subComputations.add(kj::mv(subComputation));
+					}
+					
+					return kj::joinPromisesFailFast(subComputations.finish())
+					.then([ctx, og = kj::mv(outputGeometry)]() mutable {
+						ctx.initResults().setGeometry(getActiveThread().dataService().publish(og.asReader()));
+					});
+				});
+			});
+		}
 	};
 }
 
