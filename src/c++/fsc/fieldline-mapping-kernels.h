@@ -139,7 +139,7 @@ EIGEN_DEVICE_FUNC inline void toFieldAlignedKernel(unsigned int idx, double phi0
 	double y = inOut(1, idx);
 	double z = inOut(2, idx);
 	
-	double r = x + r0;
+	double r = x;
 	
 	double phiTarget = phi0 + y / (2 * fsc::pi * r0);
 	
@@ -179,7 +179,7 @@ EIGEN_DEVICE_FUNC inline void fromFieldAlignedKernel(unsigned int idx, double ph
 	m.advance(phi + dphi);
 	Vec3d pNew = m.unmap(m.phi);
 	
-	double xNew = sqrt(pNew(0) * pNew(0) + pNew(1) * pNew(1)) - r0;
+	double xNew = sqrt(pNew(0) * pNew(0) + pNew(1) * pNew(1));
 	double zNew = pNew(2);
 	double yNew = -dphi * 2 * fsc::pi * r0;
 	
