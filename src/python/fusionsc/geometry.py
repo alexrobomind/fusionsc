@@ -584,29 +584,73 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		else:
 			raise ValueError("Invalid type of mapping")
 	
+	@asyncFunction
 	@unstableApi
-	def toFieldAligned(self, mapping, r0, phi0):
+	async def toFieldAligned(self, mapping, r0, phi0):
+		"""
+		Transforms the mesh from XYZ (or RPhiZ) real-space to a X'Y'Z' field-aligned coordinate system. The coordinates
+		are chosen by 3 properties:
+		
+		- X'Y' planes correspond to RZ planes, with Y' = 2 * pi * r0 * (Phi - phi0)
+		- If Phi = phi0 then X' = R, Y' = 0, Z' = Z
+		- Magnetic field lines point in Y' direction
+		
+		The transform is the inverse of fromFieldAligned(...).
+		
+		Parameters:
+		- mapping: Field line mapping to be used for the transform
+		- r0: Radius to assume for the angle <-> Y' axis conversion
+		- phi0: Reference plane for the magnetic geometry in RZ direction
+		
+		Returns:
+		- Geometry in field aligned coordinates
+		"""
+		
 		from . import flt
 		
-		merged = flt._mapper().geometryToFieldAligned(
+		merged = await self.merge.asnc()
+		
+		transformed = flt._mapper().geometryToFieldAligned(
 			mapping = self._rawMapping(mapping),
-			geometry = self.data,
+			geometry = merged.data,
 			phi0 = phi0, r0 = r0
 		).pipeline.geometry
 		
-		return Geometry({"merged" : merged})
+		return Geometry({"merged" : transformed})
 	
+	@asyncFunction
 	@unstableApi
-	def fromFieldAligned(self, mapping, r0, phi0):
+	async def fromFieldAligned(self, mapping, r0, phi0):
+		"""
+		Transforms the mesh from a field-aligned coordinate system to real-space. The mesh is assumed to
+		be oriented so that its local XZ plane corresponds to the RZ plane at phi = phi0, Y axis corresponds
+		to angles scaled by 2 * pi * r0, and Y-lines beign warped to conform to magnetic field lines.
+		
+		This function can be used to design components in field-aligned coordinates and then quickly produce
+		a mesh in real-space to check their structure and run magnetic field calculations.
+		
+		The transform is the inverse of toFieldAligned(...).
+		
+		Parameters:
+		- mapping: Field line mapping to be used for the transform
+		- r0: Radius to assume for the angle <-> Y' axis conversion
+		- phi0: Reference plane for the magnetic geometry in RZ direction
+		
+		Returns:
+		- Geometry in real-space coordinates
+		"""
+		
 		from . import flt
 		
-		merged = flt._mapper().geometryFromFieldAligned(
+		merged = await self.merge.asnc()
+		
+		transformed = flt._mapper().geometryFromFieldAligned(
 			mapping = self._rawMapping(mapping),
-			geometry = self.data,
+			geometry = merged.data,
 			phi0 = phi0, r0 = r0
 		).pipeline.geometry
 		
-		return Geometry({"merged" : merged})
+		return Geometry({"merged" : transformed})
 	
 	@asyncFunction
 	async def getTags(self):

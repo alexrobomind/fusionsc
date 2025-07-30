@@ -20,13 +20,15 @@ def test_newThread():
 	t.start()
 	t.join()
 
-def test_backend_switch():	
+def test_backend_switch():
+	ba = fsc.backends.activeBackend()
+	
 	fsc.backends.reconfigureLocalBackend(fsc.service.LocalConfig.newMessage())
 	
 	with fsc.backends.useBackend(fsc.backends.localBackend()):
 		print(fsc.backends.backendInfo())
 	
-	fsc.backends.alwaysUseBackend(None)
+	fsc.backends.alwaysUseBackend(ba)
 
 def test_local_reconnect():
 	fsc.backends.disconnectLocal()

@@ -14,5 +14,6 @@ This section contains various demonstration examples.
   Server
   Client
   Mapping
+  FieldAlign
   CalculateIota
   SphereField

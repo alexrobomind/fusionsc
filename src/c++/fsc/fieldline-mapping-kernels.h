@@ -134,7 +134,7 @@ EIGEN_DEVICE_FUNC inline void mapInSectionKernel(unsigned int idx, uint64_t sect
 	// KJ_DBG(out.mutateStates()[idx].getU(), out.mutateStates()[idx].getV(), phi, z, r);
 }
 
-EIGEN_DEVICE_FUNC inline void toFieldAlignedKernel(unsigned int idx, double phi0, double r0, cu::ReversibleFieldlineMapping::Reader mapping, Tensor2Ref inOut) {
+EIGEN_DEVICE_FUNC inline void fromFieldAlignedKernel(unsigned int idx, double phi0, double r0, cu::ReversibleFieldlineMapping::Reader mapping, Tensor2Ref inOut) {
 	double x = inOut(0, idx);
 	double y = inOut(1, idx);
 	double z = inOut(2, idx);
@@ -157,7 +157,7 @@ EIGEN_DEVICE_FUNC inline void toFieldAlignedKernel(unsigned int idx, double phi0
 	inOut(2, idx) = pNew(2);
 }
 
-EIGEN_DEVICE_FUNC inline void fromFieldAlignedKernel(unsigned int idx, double phi0, double r0, cu::ReversibleFieldlineMapping::Reader mapping, Tensor2Ref inOut) {
+EIGEN_DEVICE_FUNC inline void toFieldAlignedKernel(unsigned int idx, double phi0, double r0, cu::ReversibleFieldlineMapping::Reader mapping, Tensor2Ref inOut) {
 	double x = inOut(0, idx);
 	double y = inOut(1, idx);
 	double z = inOut(2, idx);

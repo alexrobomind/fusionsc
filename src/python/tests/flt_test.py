@@ -23,6 +23,15 @@ def geometry():
 	return jtext.pfcs(0.24).index(jtext.defaultGeometryGrid())
 
 @pytest.fixture(scope="session")
+def mapping(field, grid):
+	return fsc.flt.computeMapping(
+		field,
+		mappingPlanes = [0], toroidalSymmetry = 5,
+		r = np.linspace(grid.rMin, grid.rMax, 32),
+		z = np.linspace(grid.zMin, grid.zMax, 32)
+	)
+
+@pytest.fixture(scope="session")
 def upstreamPoints(field, geometry):
 	# Calculate LCFS position
 	lcfsPosition = fsc.flt.findLCFS(field, geometry, [1.05, 0, 0], [1.4, 0, 0], tolerance = 1e-3, targetError = 1e-3)
@@ -119,6 +128,13 @@ def test_mapping2(field):
 		toroidalSymmetry = 1
 	)
 	fsc.asnc.wait(mapping)
+
+def test_fa_geo(mapping, geometry):
+	fa = geometry.toFieldAligned(mapping, r0 = 1.05, phi0 = np.radians(30))
+	fa.getMerged()
+	geo = fa.fromFieldAligned(mapping, r0 = 1.05, phi0 = np.radians(30))
+	geo.getMerged()
+	
 
 def test_iota(field):
 	fsc.flt.calculateIota(field, [1.1, 0, 0], 200, targetError = 1e-3)
