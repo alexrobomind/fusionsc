@@ -1,0 +1,200 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>fusionsc.capnp.FieldDescriptor &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="fusionsc.capnp.InterfaceSchema" href="fusionsc.capnp.InterfaceSchema.html" />
+    <link rel="prev" title="fusionsc.capnp.EnumSchema" href="fusionsc.capnp.EnumSchema.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/index.html">Usage examples (How To …)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../reference.html">Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="fusionsc.html">fusionsc</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.native.html">fusionsc.native</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.kj.html">fusionsc.kj</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="fusionsc.capnp.html">fusionsc.capnp</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.AnyBuilder.html">fusionsc.capnp.AnyBuilder</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.AnyCommon.html">fusionsc.capnp.AnyCommon</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.AnyReader.html">fusionsc.capnp.AnyReader</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.Builder.html">fusionsc.capnp.Builder</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.CallContext.html">fusionsc.capnp.CallContext</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.CapabilityClient.html">fusionsc.capnp.CapabilityClient</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.CapabilityServer.html">fusionsc.capnp.CapabilityServer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.Constant.html">fusionsc.capnp.Constant</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.DataBuilder.html">fusionsc.capnp.DataBuilder</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.DataReader.html">fusionsc.capnp.DataReader</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.DataReaderOrBuilder.html">fusionsc.capnp.DataReaderOrBuilder</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.Enum.html">fusionsc.capnp.Enum</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.EnumSchema.html">fusionsc.capnp.EnumSchema</a></li>
+<li class="toctree-l4 current"><a class="current reference internal" href="#">fusionsc.capnp.FieldDescriptor</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.InterfaceSchema.html">fusionsc.capnp.InterfaceSchema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.ListBuilder.html">fusionsc.capnp.ListBuilder</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.ListCommon.html">fusionsc.capnp.ListCommon</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.ListReader.html">fusionsc.capnp.ListReader</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.ListSchema.html">fusionsc.capnp.ListSchema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.Object.html">fusionsc.capnp.Object</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.Reader.html">fusionsc.capnp.Reader</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.Schema.html">fusionsc.capnp.Schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.Struct.html">fusionsc.capnp.Struct</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.StructBuilder.html">fusionsc.capnp.StructBuilder</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.StructPipeline.html">fusionsc.capnp.StructPipeline</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.StructReader.html">fusionsc.capnp.StructReader</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.StructSchema.html">fusionsc.capnp.StructSchema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.TextBuilder.html">fusionsc.capnp.TextBuilder</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.TextReader.html">fusionsc.capnp.TextReader</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.TextReaderOrBuilder.html">fusionsc.capnp.TextReaderOrBuilder</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.capnp.Type.html">fusionsc.capnp.Type</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.service.html">fusionsc.service</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.efit.html">fusionsc.efit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.hint.html">fusionsc.hint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.vmec.html">fusionsc.vmec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.asnc.html">fusionsc.asnc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.backends.html">fusionsc.backends</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.data.html">fusionsc.data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.resolve.html">fusionsc.resolve</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.magnetics.html">fusionsc.magnetics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.flt.html">fusionsc.flt</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.hfcam.html">fusionsc.hfcam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.devices.html">fusionsc.devices</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.export.html">fusionsc.export</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.structio.html">fusionsc.structio</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.geometry.html">fusionsc.geometry</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference external" href="https://alexrobomind.github.io/fusionsc/cpp/index.html">C++ library documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../reference.html">Reference</a></li>
+          <li class="breadcrumb-item"><a href="fusionsc.html">fusionsc</a></li>
+          <li class="breadcrumb-item"><a href="fusionsc.capnp.html">fusionsc.capnp</a></li>
+      <li class="breadcrumb-item active">fusionsc.capnp.FieldDescriptor</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/_autosummary/fusionsc.capnp.FieldDescriptor.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="fusionsc-capnp-fielddescriptor">
+<h1>fusionsc.capnp.FieldDescriptor<a class="headerlink" href="#fusionsc-capnp-fielddescriptor" title="Link to this heading"></a></h1>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code>(*args, **kwargs)</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+<p class="rubric">Attributes</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">index</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">proto</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">type</span></code></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+<p class="rubric">Methods</p>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="fusionsc.capnp.EnumSchema.html" class="btn btn-neutral float-left" title="fusionsc.capnp.EnumSchema" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="fusionsc.capnp.InterfaceSchema.html" class="btn btn-neutral float-right" title="fusionsc.capnp.InterfaceSchema" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

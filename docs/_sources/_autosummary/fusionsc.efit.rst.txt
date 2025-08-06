@@ -1,0 +1,35 @@
+fusionsc.efit
+=============
+
+.. automodule:: fusionsc.efit
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autosummary::
+
+	eqFromGFile
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autofunction:: eqFromGFile
+
+
+
+

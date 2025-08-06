@@ -1,0 +1,259 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Poincare plots (Wendelstein 7-X) &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Connection length plots (Wendelstein 7-X)" href="Connection%20Length.html" />
+    <link rel="prev" title="Field line following (J-TEXT)" href="Field%20Line%20Following.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Usage examples (How To …)</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="W7X%20Current%20Scan.html">Current scan (W7-X on-site)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="JText.html">Adding 3D perturbations to a 2D equilibrium (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Field%20Interpolation.html">Magnetic field interpolation (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Field%20Line%20Following.html">Field line following (J-TEXT)</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Poincare plots (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Connection%20Length.html">Connection length plots (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Heat%20Load%20Calculation.html">Heat load calculation (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Server.html">Creating a server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Client.html">Connecting to a remote server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Mapping.html">Accelerating computations with field-line mapping</a></li>
+<li class="toctree-l2"><a class="reference internal" href="FieldAlign.html">Creating field-aligned meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="CalculateIota.html">Iota Calculation, Fourier Surface Extraction, and Perturbations (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="SphereField.html">Dipole fields</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference.html">Reference</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://alexrobomind.github.io/fusionsc/cpp/index.html">C++ library documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Usage examples (How To …)</a></li>
+      <li class="breadcrumb-item active">Poincare plots (Wendelstein 7-X)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/howto/Poincare.ipynb.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="poincare-plots-wendelstein-7-x">
+<h1>Poincare plots (Wendelstein 7-X)<a class="headerlink" href="#poincare-plots-wendelstein-7-x" title="Link to this heading"></a></h1>
+<p>This example shows how to create Poincare plots for Wendelstein 7-X.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">fusionsc</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">fsc</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fusionsc.devices</span><span class="w"> </span><span class="kn">import</span> <span class="n">w7x</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Now we need to setup the geometry and magnetic field configuration.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">field</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">standard</span><span class="p">()</span> <span class="o">+</span> <span class="n">w7x</span><span class="o">.</span><span class="n">controlCoils</span><span class="p">([</span><span class="mi">2000</span><span class="p">,</span> <span class="mi">2000</span><span class="p">])</span>
+<span class="n">geometry</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">op21Geometry</span><span class="p">()</span>
+
+<span class="n">grid</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">defaultGrid</span><span class="p">()</span>
+<span class="n">grid</span><span class="o">.</span><span class="n">nR</span> <span class="o">=</span> <span class="mi">128</span>
+<span class="n">grid</span><span class="o">.</span><span class="n">nZ</span> <span class="o">=</span> <span class="mi">128</span>
+<span class="n">grid</span><span class="o">.</span><span class="n">nPhi</span> <span class="o">=</span> <span class="mi">32</span>
+
+<span class="n">field</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">grid</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Finally, we need to decide in which phi planes we want to evaluate our Poincare plots, and which points to start our traces on.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="n">phiPlanes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">/</span> <span class="mi">5</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="n">endpoint</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span>
+
+<span class="c1"># Put more starting points inside the island</span>
+<span class="n">rStart</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">4.5</span><span class="p">,</span> <span class="mf">4.8</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="n">endpoint</span> <span class="o">=</span> <span class="kc">False</span><span class="p">),</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">4.8</span><span class="p">,</span> <span class="mf">5.4</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+<span class="p">])</span>
+<span class="n">phiStart</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">endpoint</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span>
+
+<span class="c1"># Starting on an r, phi grid allows us to see all 5 islands</span>
+<span class="n">rStartG</span><span class="p">,</span> <span class="n">phiStartG</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">rStart</span><span class="p">,</span> <span class="n">phiStart</span><span class="p">,</span> <span class="n">indexing</span> <span class="o">=</span> <span class="s1">&#39;ij&#39;</span><span class="p">)</span>
+
+<span class="n">xStart</span> <span class="o">=</span> <span class="n">rStartG</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">phiStartG</span><span class="p">)</span>
+<span class="n">yStart</span> <span class="o">=</span> <span class="n">rStartG</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phiStartG</span><span class="p">)</span>
+<span class="n">zStart</span> <span class="o">=</span> <span class="mi">0</span> <span class="o">*</span> <span class="n">rStartG</span>
+
+<span class="n">startPoints</span> <span class="o">=</span> <span class="p">[</span><span class="n">xStart</span><span class="p">,</span> <span class="n">yStart</span><span class="p">,</span> <span class="n">zStart</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Now it’s time to run our calculation.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">pcPoints</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">flt</span><span class="o">.</span><span class="n">poincareInPhiPlanes</span><span class="p">(</span>
+    <span class="n">startPoints</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">phiPlanes</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span>
+    <span class="n">grid</span> <span class="o">=</span> <span class="n">grid</span><span class="p">,</span>
+    <span class="n">geometry</span> <span class="o">=</span> <span class="n">geometry</span><span class="p">,</span> <span class="n">geometryGrid</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">defaultGeometryGrid</span><span class="p">(),</span>
+    <span class="n">distanceLimit</span> <span class="o">=</span> <span class="mf">1e4</span><span class="p">,</span>
+    
+    <span class="n">targetError</span> <span class="o">=</span> <span class="mf">1e-4</span><span class="p">,</span> <span class="n">maxStepSize</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>The calculation returns a numpy array with a specific shape:</p>
+<ul class="simple">
+<li><p>The first dimension of the array is always 5. The first 3 entries are the x, y, z positions of the intersection points, while the other 2 are forward and backward connection-lengths. Negative values indicate, that the respective length (given by the absolute value) is given by something other than a collision event (start point, tracing limit, leaving the grid, etc.)</p></li>
+<li><p>The second dimension corresponds to the selected phi values to do the intersection at.</p></li>
+<li><p>The third dimension on corresponds to the dimensions of the starting point array (excluding its first xyz dimension)</p></li>
+<li><p>Finally, the last dimension corresponds to the turn counter of the field line.</p></li>
+</ul>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Shape is [5, nPlanes] + startsPoints.shape[1:] + [nTurns]</span>
+<span class="n">pcPoints</span><span class="o">.</span><span class="n">shape</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>(5, 6, 20, 5, 200)
+</pre></div>
+</div>
+</div>
+</div>
+<p>We can now plot each series of intersection points. For this, we can also make use of the fsc.geometry.plotCut function, which will compute phi slices of the geometry.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+<span class="n">matplotlib</span><span class="o">.</span><span class="n">rcParams</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s1">&#39;font.size&#39;</span><span class="p">:</span> <span class="mi">22</span><span class="p">})</span>
+
+<span class="k">for</span> <span class="n">iPhi</span><span class="p">,</span> <span class="n">phi</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">phiPlanes</span><span class="p">):</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">cLenF</span><span class="p">,</span> <span class="n">cLenB</span> <span class="o">=</span> <span class="n">pcPoints</span><span class="p">[:,</span> <span class="n">iPhi</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span><span class="o">.</span><span class="n">reshape</span><span class="p">([</span><span class="mi">5</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">x</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">y</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+    
+    <span class="c1"># Negative connection lengths indicate that the line segment going through</span>
+    <span class="c1"># the point in that direction is not terminated by collision (e.g. it left</span>
+    <span class="c1"># the grid or hit the distance limit)</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">logical_and</span><span class="p">(</span><span class="n">cLenF</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="n">cLenB</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">mask2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">logical_and</span><span class="p">(</span><span class="n">cLenF</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">,</span> <span class="n">cLenB</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+    
+    <span class="n">cLen</span> <span class="o">=</span> <span class="n">cLenF</span> <span class="o">+</span> <span class="n">cLenB</span>
+    
+    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span> <span class="o">=</span> <span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">9</span><span class="p">))</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{:.0f}</span><span class="s1"> deg.&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">degrees</span><span class="p">(</span><span class="n">phi</span><span class="p">)))</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="n">mask</span><span class="p">],</span> <span class="n">z</span><span class="p">[</span><span class="n">mask</span><span class="p">],</span> <span class="n">c</span> <span class="o">=</span> <span class="n">cLen</span><span class="p">[</span><span class="n">mask</span><span class="p">],</span> <span class="n">norm</span> <span class="o">=</span> <span class="n">matplotlib</span><span class="o">.</span><span class="n">colors</span><span class="o">.</span><span class="n">LogNorm</span><span class="p">(),</span> <span class="n">s</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">label</span> <span class="o">=</span> <span class="s1">&#39;Connection length [m]&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="n">mask2</span><span class="p">],</span> <span class="n">z</span><span class="p">[</span><span class="n">mask2</span><span class="p">],</span> <span class="n">c</span> <span class="o">=</span> <span class="s1">&#39;k&#39;</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">)</span>
+    
+    <span class="n">geometry</span><span class="o">.</span><span class="n">plotCut</span><span class="p">(</span><span class="n">phi</span><span class="p">,</span> <span class="n">edgecolors</span> <span class="o">=</span> <span class="s1">&#39;k&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../_images/6fceee5bb239bfc19732b86b845db5b8faf92c4ec25da0e87e49714b93925a55.png" src="../_images/6fceee5bb239bfc19732b86b845db5b8faf92c4ec25da0e87e49714b93925a55.png" />
+<img alt="../_images/d67d83b95b150b4f1e0275dbe397854c3ea6909c6e675bd94cffab6dbb62b4e3.png" src="../_images/d67d83b95b150b4f1e0275dbe397854c3ea6909c6e675bd94cffab6dbb62b4e3.png" />
+<img alt="../_images/af1df7f8292ea93c05d5f9c853fcd7bec071d845da3866ba59a470fc5b4003b5.png" src="../_images/af1df7f8292ea93c05d5f9c853fcd7bec071d845da3866ba59a470fc5b4003b5.png" />
+<img alt="../_images/cbc99d1d4508a190863500f98b320e1d356c3d95d2dec9a3dcca5fcecbaa61e1.png" src="../_images/cbc99d1d4508a190863500f98b320e1d356c3d95d2dec9a3dcca5fcecbaa61e1.png" />
+<img alt="../_images/974465cfe84d1a6a427242bfb7bea51b0026323893f4e21d07c63672826d338a.png" src="../_images/974465cfe84d1a6a427242bfb7bea51b0026323893f4e21d07c63672826d338a.png" />
+<img alt="../_images/a248b54cb7f19982f4275670c74ccc4f7b7d6bab6e317d9d1d14525147126644.png" src="../_images/a248b54cb7f19982f4275670c74ccc4f7b7d6bab6e317d9d1d14525147126644.png" />
+</div>
+</div>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="Field%20Line%20Following.html" class="btn btn-neutral float-left" title="Field line following (J-TEXT)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="Connection%20Length.html" class="btn btn-neutral float-right" title="Connection length plots (Wendelstein 7-X)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

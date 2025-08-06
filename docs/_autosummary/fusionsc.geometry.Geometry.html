@@ -1,0 +1,571 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>fusionsc.geometry.Geometry &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="fusionsc.geometry" href="fusionsc.geometry.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/index.html">Usage examples (How To …)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../reference.html">Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="fusionsc.html">fusionsc</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.native.html">fusionsc.native</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.kj.html">fusionsc.kj</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.capnp.html">fusionsc.capnp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.service.html">fusionsc.service</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.efit.html">fusionsc.efit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.hint.html">fusionsc.hint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.vmec.html">fusionsc.vmec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.asnc.html">fusionsc.asnc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.backends.html">fusionsc.backends</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.data.html">fusionsc.data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.resolve.html">fusionsc.resolve</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.magnetics.html">fusionsc.magnetics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.flt.html">fusionsc.flt</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.hfcam.html">fusionsc.hfcam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.devices.html">fusionsc.devices</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.export.html">fusionsc.export</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.structio.html">fusionsc.structio</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="fusionsc.geometry.html">fusionsc.geometry</a><ul class="current">
+<li class="toctree-l4 current"><a class="current reference internal" href="#">fusionsc.geometry.Geometry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.geometry.html#fusionsc.geometry.asTagValue"><code class="docutils literal notranslate"><span class="pre">asTagValue()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.geometry.html#fusionsc.geometry.cuboid"><code class="docutils literal notranslate"><span class="pre">cuboid()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.geometry.html#fusionsc.geometry.geometryLib"><code class="docutils literal notranslate"><span class="pre">geometryLib()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.geometry.html#fusionsc.geometry.setDefaultGrid"><code class="docutils literal notranslate"><span class="pre">setDefaultGrid()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference external" href="https://alexrobomind.github.io/fusionsc/cpp/index.html">C++ library documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../reference.html">Reference</a></li>
+          <li class="breadcrumb-item"><a href="fusionsc.html">fusionsc</a></li>
+          <li class="breadcrumb-item"><a href="fusionsc.geometry.html">fusionsc.geometry</a></li>
+      <li class="breadcrumb-item active">fusionsc.geometry.Geometry</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/_autosummary/fusionsc.geometry.Geometry.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="fusionsc-geometry-geometry">
+<h1>fusionsc.geometry.Geometry<a class="headerlink" href="#fusionsc-geometry-geometry" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusionsc.geometry.</span></span><span class="sig-name descname"><span class="pre">Geometry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">val</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">msgSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1024</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">byReference</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.geometry.Geometry" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.__init__" title="fusionsc.geometry.Geometry.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a>([val, msgSize, byReference])</p></td>
+<td><p>Creates a new instance by either: - Allocating a new message of size msgSize (if val is None) - Storing a reference to the target (if byReference is set) - Copying the message from the given target (accepts Cap'n'proto messages,         YAML strings, lists, dicts, and NumPy arrays)</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.asPolyMesh" title="fusionsc.geometry.Geometry.asPolyMesh"><code class="xref py py-obj docutils literal notranslate"><span class="pre">asPolyMesh</span></code></a>([triangulate])</p></td>
+<td><p>Exports as a single merged polygon mesh.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.asPyvista" title="fusionsc.geometry.Geometry.asPyvista"><code class="xref py py-obj docutils literal notranslate"><span class="pre">asPyvista</span></code></a>([reduce])</p></td>
+<td><p>Convert the given geometry into a PyVista / VTK mesh <em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.cache" title="fusionsc.geometry.Geometry.cache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cache</span></code></a>(filename)</p></td>
+<td><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.download" title="fusionsc.geometry.Geometry.download"><code class="xref py py-obj docutils literal notranslate"><span class="pre">download</span></code></a>()</p></td>
+<td><p>For a geometry of 'ref' type, downloads the contents of the referenced geometry and wraps them in a new Geometry instance <em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.exportTo" title="fusionsc.geometry.Geometry.exportTo"><code class="xref py py-obj docutils literal notranslate"><span class="pre">exportTo</span></code></a>(filename[, binary, triangulate])</p></td>
+<td><p>Saves the geometry to the given filename.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.filter" title="fusionsc.geometry.Geometry.filter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">filter</span></code></a>(filter)</p></td>
+<td><p>Restricts the geometry to meshes where the given tags meet one (or more) specified values</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.from2D" title="fusionsc.geometry.Geometry.from2D"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from2D</span></code></a>(r, z[, nPhi, phi1, phi2, close, tags])</p></td>
+<td><p>Creates a geometry out of a 2D RZ array by wrapping it toroidally</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.fromFieldAligned" title="fusionsc.geometry.Geometry.fromFieldAligned"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromFieldAligned</span></code></a>(mapping, r0, phi0)</p></td>
+<td><p>Transforms the mesh from a field-aligned coordinate system to real-space.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.fromPyvista" title="fusionsc.geometry.Geometry.fromPyvista"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromPyvista</span></code></a>(polyData)</p></td>
+<td><p>Creates a geometry from a pyvista.PolyData object</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.getMerged" title="fusionsc.geometry.Geometry.getMerged"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getMerged</span></code></a>()</p></td>
+<td><p>After merging the geometry, downloads the merged data and returns them <em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.getTags" title="fusionsc.geometry.Geometry.getTags"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getTags</span></code></a>()</p></td>
+<td><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.graph" title="fusionsc.geometry.Geometry.graph"><code class="xref py py-obj docutils literal notranslate"><span class="pre">graph</span></code></a>(**kwargs)</p></td>
+<td><p>Visualizes the contents in a graph structure.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.importFrom" title="fusionsc.geometry.Geometry.importFrom"><code class="xref py py-obj docutils literal notranslate"><span class="pre">importFrom</span></code></a>(filename)</p></td>
+<td><p>Creates a geometry from a file (non-PLY loaded using meshio)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.index" title="fusionsc.geometry.Geometry.index"><code class="xref py py-obj docutils literal notranslate"><span class="pre">index</span></code></a>([geometryGrid])</p></td>
+<td><p>Computes an indexed geometry for accelerated intersection tests <em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.intersect" title="fusionsc.geometry.Geometry.intersect"><code class="xref py py-obj docutils literal notranslate"><span class="pre">intersect</span></code></a>(pStart, pEnd[, grid])</p></td>
+<td><p>Computes a line intersection test <em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.load" title="fusionsc.geometry.Geometry.load"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load</span></code></a>()</p></td>
+<td><p>Loads an instance of this class from a previously written archive file.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.merge" title="fusionsc.geometry.Geometry.merge"><code class="xref py py-obj docutils literal notranslate"><span class="pre">merge</span></code></a>()</p></td>
+<td><p>Creates a merged geometry (all meshes combined into one big message) <em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.planarClip" title="fusionsc.geometry.Geometry.planarClip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">planarClip</span></code></a>([phi, normal, center])</p></td>
+<td><p>Computed a new geometry obtained by clipping the target geometry along the given plane (half space intersection) <em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.planarCut" title="fusionsc.geometry.Geometry.planarCut"><code class="xref py py-obj docutils literal notranslate"><span class="pre">planarCut</span></code></a>([phi, normal, center])</p></td>
+<td><p>Computes a planar cut of the geometry along either a given plane or a given phi plane <em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.plotCut" title="fusionsc.geometry.Geometry.plotCut"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plotCut</span></code></a>([phi, ax, plot])</p></td>
+<td><p>Plot the phi cut of a given geometry in either the given axes or the current active matplotlib axes <em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.polyMesh" title="fusionsc.geometry.Geometry.polyMesh"><code class="xref py py-obj docutils literal notranslate"><span class="pre">polyMesh</span></code></a>(vertices, polyIndices)</p></td>
+<td><p>Creates a polygon mesh from a [N, 3] array-like of vertices and a list of polygins (which is each a list of vertex indices)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.ptree" title="fusionsc.geometry.Geometry.ptree"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ptree</span></code></a>()</p></td>
+<td><p>Prints a tree version of this object.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.quadMesh" title="fusionsc.geometry.Geometry.quadMesh"><code class="xref py py-obj docutils literal notranslate"><span class="pre">quadMesh</span></code></a>(vertices[, wrapU, wrapV])</p></td>
+<td><p>Creates a geometry out of a quad mesh</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.reduce" title="fusionsc.geometry.Geometry.reduce"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reduce</span></code></a>([maxVerts, maxIndices])</p></td>
+<td><p>Creates a new geometry with small meshes combined into a small number of large meshes <em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.resolve" title="fusionsc.geometry.Geometry.resolve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resolve</span></code></a>()</p></td>
+<td><p>Returns a new geometry with all unresolved nodes replaced by their resolved equivalents.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.rotate" title="fusionsc.geometry.Geometry.rotate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotate</span></code></a>(angle, axis[, center])</p></td>
+<td><p>Returns a new geometry rotated around the prescribed axis and center point</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.save" title="fusionsc.geometry.Geometry.save"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save</span></code></a>(filename)</p></td>
+<td><p>Saves the object into an archive file (including all referenced data)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.scale" title="fusionsc.geometry.Geometry.scale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">scale</span></code></a>([by])</p></td>
+<td><p>Returns a geometry scaled by the given factor</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.toFieldAligned" title="fusionsc.geometry.Geometry.toFieldAligned"><code class="xref py py-obj docutils literal notranslate"><span class="pre">toFieldAligned</span></code></a>(mapping, r0, phi0)</p></td>
+<td><p>Transforms the mesh from XYZ (or RPhiZ) real-space to a X'Y'Z' field-aligned coordinate system.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.toYaml" title="fusionsc.geometry.Geometry.toYaml"><code class="xref py py-obj docutils literal notranslate"><span class="pre">toYaml</span></code></a>([flow])</p></td>
+<td><p>Prints the contents as block-structured YAML</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.translate" title="fusionsc.geometry.Geometry.translate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">translate</span></code></a>(dx)</p></td>
+<td><p>Returns a new geometry shifted by the given vector</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.triangulate" title="fusionsc.geometry.Geometry.triangulate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">triangulate</span></code></a>([maxEdgeLength])</p></td>
+<td><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.unroll" title="fusionsc.geometry.Geometry.unroll"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unroll</span></code></a>(phi1, phi2[, clip])</p></td>
+<td><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.upload" title="fusionsc.geometry.Geometry.upload"><code class="xref py py-obj docutils literal notranslate"><span class="pre">upload</span></code></a>()</p></td>
+<td><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.weightedSample" title="fusionsc.geometry.Geometry.weightedSample"><code class="xref py py-obj docutils literal notranslate"><span class="pre">weightedSample</span></code></a>(scale)</p></td>
+<td><p>Converts the geometry into a point cloud <em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.geometry.Geometry.withTags" title="fusionsc.geometry.Geometry.withTags"><code class="xref py py-obj docutils literal notranslate"><span class="pre">withTags</span></code></a>(extraTags)</p></td>
+<td><p>Returns a new geometry with the given tags</p></td>
+</tr>
+</tbody>
+</table>
+<p class="rubric">Attributes</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p>Underlying Cap'n'proto struct (usually a builder type).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">type</span></code></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+<p class="rubric">Methods</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.__init__">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">val</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">msgSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1024</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">byReference</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.geometry.Geometry.__init__" title="Link to this definition"></a></dt>
+<dd><p>Creates a new instance by either:
+- Allocating a new message of size msgSize (if val is None)
+- Storing a reference to the target (if byReference is set)
+- Copying the message from the given target (accepts Cap’n’proto messages,</p>
+<blockquote>
+<div><p>YAML strings, lists, dicts, and NumPy arrays)</p>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.asPolyMesh">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">asPolyMesh</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">triangulate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.asPolyMesh" title="Link to this definition"></a></dt>
+<dd><p>Exports as a single merged polygon mesh.</p>
+<dl class="simple">
+<dt>Params:</dt><dd><ul class="simple">
+<li><p>triangluate: If set to true, polygons will be subdivided into triangles.</p></li>
+</ul>
+</dd>
+<dt>Returns (as tuple):</dt><dd><ul class="simple">
+<li><p>A [nPoints, 3] shaped array of points</p></li>
+<li><p>A list[list[int]] holding all the polygon indices.</p></li>
+</ul>
+</dd>
+</dl>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.asPyvista">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">asPyvista</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">reduce</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.asPyvista" title="Link to this definition"></a></dt>
+<dd><p>Convert the given geometry into a PyVista / VTK mesh
+<em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.cache">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">cache</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.cache" title="Link to this definition"></a></dt>
+<dd><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.download">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">download</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.download" title="Link to this definition"></a></dt>
+<dd><p>For a geometry of ‘ref’ type, downloads the contents of the referenced geometry and wraps them in a new Geometry instance
+<em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.exportTo">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">exportTo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">binary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">triangulate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.exportTo" title="Link to this definition"></a></dt>
+<dd><p>Saves the geometry to the given filename. Supports ‘.ply’, ‘.stl’, and ‘.vtk’ files.
+<em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.filter">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">filter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filter</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.geometry.Geometry.filter" title="Link to this definition"></a></dt>
+<dd><p>Restricts the geometry to meshes where the given tags meet one (or more) specified values</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.from2D">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">from2D</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">r</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">z</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nPhi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phi1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phi2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">close</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tags</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">{}</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.geometry.Geometry.from2D" title="Link to this definition"></a></dt>
+<dd><p>Creates a geometry out of a 2D RZ array by wrapping it toroidally</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.fromFieldAligned">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">fromFieldAligned</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mapping</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phi0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.fromFieldAligned" title="Link to this definition"></a></dt>
+<dd><p>Transforms the mesh from a field-aligned coordinate system to real-space. The mesh is assumed to
+be oriented so that its local XZ plane corresponds to the RZ plane at phi = phi0, Y axis corresponds
+to angles scaled by 2 * pi * r0, and Y-lines beign warped to conform to magnetic field lines.</p>
+<p>This function can be used to design components in field-aligned coordinates and then quickly produce
+a mesh in real-space to check their structure and run magnetic field calculations.</p>
+<p>The transform is the inverse of toFieldAligned(…).</p>
+<p>Parameters:
+- mapping: Field line mapping to be used for the transform
+- r0: Radius to assume for the angle &lt;-&gt; Y’ axis conversion
+- phi0: Reference plane for the magnetic geometry in RZ direction</p>
+<p>Returns:
+- Geometry in real-space coordinates</p>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.fromPyvista">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">fromPyvista</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">polyData</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.geometry.Geometry.fromPyvista" title="Link to this definition"></a></dt>
+<dd><p>Creates a geometry from a pyvista.PolyData object</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.getMerged">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">getMerged</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.getMerged" title="Link to this definition"></a></dt>
+<dd><p>After merging the geometry, downloads the merged data and returns them
+<em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.getTags">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">getTags</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.getTags" title="Link to this definition"></a></dt>
+<dd><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.graph">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.geometry.Geometry.graph" title="Link to this definition"></a></dt>
+<dd><p>Visualizes the contents in a graph structure. Requires graphviz</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.importFrom">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">importFrom</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.geometry.Geometry.importFrom" title="Link to this definition"></a></dt>
+<dd><p>Creates a geometry from a file (non-PLY loaded using meshio)</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.index">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geometryGrid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.index" title="Link to this definition"></a></dt>
+<dd><p>Computes an indexed geometry for accelerated intersection tests
+<em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.intersect">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">intersect</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pStart</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pEnd</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.intersect" title="Link to this definition"></a></dt>
+<dd><p>Computes a line intersection test
+<em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.load">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.load" title="Link to this definition"></a></dt>
+<dd><p>Loads an instance of this class from a previously written archive file.</p>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.merge">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">merge</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.merge" title="Link to this definition"></a></dt>
+<dd><p>Creates a merged geometry (all meshes combined into one big message)
+<em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.planarClip">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">planarClip</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">phi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normal</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.planarClip" title="Link to this definition"></a></dt>
+<dd><p>Computed a new geometry obtained by clipping the target geometry along the given plane (half space intersection)
+<em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.planarCut">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">planarCut</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">phi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normal</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.planarCut" title="Link to this definition"></a></dt>
+<dd><p>Computes a planar cut of the geometry along either a given plane or a given phi plane
+<em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.plotCut">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">plotCut</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">phi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ax</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plot</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwArgs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.plotCut" title="Link to this definition"></a></dt>
+<dd><p>Plot the phi cut of a given geometry in either the given axes or the current active matplotlib axes
+<em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.polyMesh">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">polyMesh</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vertices</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">polyIndices</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.geometry.Geometry.polyMesh" title="Link to this definition"></a></dt>
+<dd><p>Creates a polygon mesh from a [N, 3] array-like of vertices and a list of polygins (which is each a list of vertex indices)</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.ptree">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">ptree</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.geometry.Geometry.ptree" title="Link to this definition"></a></dt>
+<dd><p>Prints a tree version of this object. Requires the printree library.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.quadMesh">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">quadMesh</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vertices</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wrapU</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wrapV</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.geometry.Geometry.quadMesh" title="Link to this definition"></a></dt>
+<dd><p>Creates a geometry out of a quad mesh</p>
+<dl class="simple">
+<dt>params:</dt><dd><ul class="simple">
+<li><p>vertices: A numpy array-like of shape [3, nU, nV] containing the individual vertices</p></li>
+<li><p>wrapU: Whether to link the first and last slice of the “u” dimension</p></li>
+<li><p>wrapV: Whether to link the first and last slice of the “v” dimension</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.reduce">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">reduce</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">maxVerts</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxIndices</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000000</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.reduce" title="Link to this definition"></a></dt>
+<dd><p>Creates a new geometry with small meshes combined into a small number of large meshes
+<em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.resolve">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">resolve</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.resolve" title="Link to this definition"></a></dt>
+<dd><p>Returns a new geometry with all unresolved nodes replaced by their resolved equivalents.
+<em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.rotate">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">rotate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">angle</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">0]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.geometry.Geometry.rotate" title="Link to this definition"></a></dt>
+<dd><p>Returns a new geometry rotated around the prescribed axis and center point</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.save">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.save" title="Link to this definition"></a></dt>
+<dd><p>Saves the object into an archive file (including all referenced data)</p>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.scale">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">scale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">by</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.geometry.Geometry.scale" title="Link to this definition"></a></dt>
+<dd><p>Returns a geometry scaled by the given factor</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.toFieldAligned">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">toFieldAligned</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mapping</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phi0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.toFieldAligned" title="Link to this definition"></a></dt>
+<dd><p>Transforms the mesh from XYZ (or RPhiZ) real-space to a X’Y’Z’ field-aligned coordinate system. The coordinates
+are chosen by 3 properties:</p>
+<ul class="simple">
+<li><p>X’Y’ planes correspond to RZ planes, with Y’ = 2 * pi * r0 * (Phi - phi0)</p></li>
+<li><p>If Phi = phi0 then X’ = R, Y’ = 0, Z’ = Z</p></li>
+<li><p>Magnetic field lines point in Y’ direction</p></li>
+</ul>
+<p>The transform is the inverse of fromFieldAligned(…).</p>
+<p>Parameters:
+- mapping: Field line mapping to be used for the transform
+- r0: Radius to assume for the angle &lt;-&gt; Y’ axis conversion
+- phi0: Reference plane for the magnetic geometry in RZ direction</p>
+<p>Returns:
+- Geometry in field aligned coordinates</p>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.toYaml">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">toYaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flow</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.geometry.Geometry.toYaml" title="Link to this definition"></a></dt>
+<dd><p>Prints the contents as block-structured YAML</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.translate">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">translate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dx</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.geometry.Geometry.translate" title="Link to this definition"></a></dt>
+<dd><p>Returns a new geometry shifted by the given vector</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.triangulate">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">triangulate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">maxEdgeLength</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.triangulate" title="Link to this definition"></a></dt>
+<dd><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.unroll">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">unroll</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">phi1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phi2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clip</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.unroll" title="Link to this definition"></a></dt>
+<dd><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.upload">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">upload</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.upload" title="Link to this definition"></a></dt>
+<dd><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.weightedSample">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">weightedSample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.geometry.Geometry.weightedSample" title="Link to this definition"></a></dt>
+<dd><p>Converts the geometry into a point cloud
+<em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.geometry.Geometry.withTags">
+<span class="sig-prename descclassname"><span class="pre">Geometry.</span></span><span class="sig-name descname"><span class="pre">withTags</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">extraTags</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.geometry.Geometry.withTags" title="Link to this definition"></a></dt>
+<dd><p>Returns a new geometry with the given tags</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="fusionsc.geometry.html" class="btn btn-neutral float-left" title="fusionsc.geometry" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

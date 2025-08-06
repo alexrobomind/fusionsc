@@ -1,0 +1,60 @@
+fusionsc.capnp.InterfaceSchema
+==============================
+
+.. currentmodule:: fusionsc
+
+.. autoclass:: capnp.InterfaceSchema
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~capnp.InterfaceSchema.__init__
+  ~capnp.InterfaceSchema.listOf
+  ~capnp.InterfaceSchema.toProto
+
+
+
+
+This class represents a capability type. To use it, use the type capnp.InterfaceSchema.Client (see below).
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~capnp.InterfaceSchema.Builder
+	~capnp.InterfaceSchema.Client
+	~capnp.InterfaceSchema.Reader
+	~capnp.InterfaceSchema.ReaderOrBuilder
+	~capnp.InterfaceSchema.id_
+	~capnp.InterfaceSchema.jsonSchema
+	~capnp.InterfaceSchema.methods
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: capnp.InterfaceSchema.__init__
+.. automethod:: capnp.InterfaceSchema.listOf
+.. automethod:: capnp.InterfaceSchema.toProto
+
+
+
+
+.. rubric:: Client class
+.. autoclass:: fusionsc::capnp.InterfaceSchema.Client
+	:members:
+
+

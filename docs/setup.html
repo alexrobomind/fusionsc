@@ -1,0 +1,286 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Setting up FusionSC &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f4302432"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Usage examples (How To …)" href="howto/index.html" />
+    <link rel="prev" title="Installation" href="installation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Setting up FusionSC</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#setting-up-component-lookup-version-2-2-and-above">Setting up component lookup (version 2.2 and above)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#wendelstein-7-x-inside-ipp-network">Wendelstein 7-X inside IPP network</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#j-text">J-TEXT</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#others">Others</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#setting-up-component-lookup-with-python-methods-version-2-0-and-above">Setting up component lookup with python methods (version 2.0 and above)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Wendelstein 7-X inside IPP network</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#w7-x-only-pre-calculating-fields-for-biot-savart-calculation">(W7-X only) Pre-calculating fields for Biot-Savart calculation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#re-configuring-the-local-backend">(Re-)Configuring the local backend</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#using-verbose-logging">Using verbose logging</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="howto/index.html">Usage examples (How To …)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">Licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference.html">Reference</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://alexrobomind.github.io/fusionsc/cpp/index.html">C++ library documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Setting up FusionSC</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/setup.ipynb.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="setting-up-fusionsc">
+<h1>Setting up FusionSC<a class="headerlink" href="#setting-up-fusionsc" title="Link to this heading"></a></h1>
+<section id="setting-up-component-lookup-version-2-2-and-above">
+<h2>Setting up component lookup (version 2.2 and above)<a class="headerlink" href="#setting-up-component-lookup-version-2-2-and-above" title="Link to this heading"></a></h2>
+<p>While FusionSC can be used out of the box (<code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">fusionsc</span> <span class="pre">as</span> <span class="pre">fsc</span></code>), it doesn’t bundle the part and coil geometries (partly due to size, partly to comply with data access policies). In order to run FusionSC with pre-defined geometries, the resolution subsystem needs to be hooked up with lookup tables / storage for these devices.</p>
+<p>The recommended way (available from version 2.2 onwards) is to use the user configuration file in “~/.fusionsc.yaml” (an alternative path can be specified by setting the FUSIONSC_CONFIG_PATH environment variable). The “fusionsc-config” command line (alternatively usable via “python -m fusionsc.config”) can be used to manage this configuration file.</p>
+<section id="wendelstein-7-x-inside-ipp-network">
+<h3>Wendelstein 7-X inside IPP network<a class="headerlink" href="#wendelstein-7-x-inside-ipp-network" title="Link to this heading"></a></h3>
+<p>Use the “ipp-hgw” default profile, which will connect to a compute server and rely on the resolution database stored there.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">fusionsc</span><span class="o">-</span><span class="n">config</span> <span class="n">default</span> <span class="n">ipp</span><span class="o">-</span><span class="n">hgw</span>
+</pre></div>
+</div>
+</section>
+<section id="j-text">
+<h3>J-TEXT<a class="headerlink" href="#j-text" title="Link to this heading"></a></h3>
+<p>Simplified J-TEXT geometries are bundled with FusionSC. No further configuration is required to use them.</p>
+</section>
+<section id="others">
+<h3>Others<a class="headerlink" href="#others" title="Link to this heading"></a></h3>
+<p>You will have to manually add the neccessary resolution files. Usually this entails adding them with the  config tool</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">fusionsc</span><span class="o">-</span><span class="n">config</span> <span class="n">resolve</span> <span class="n">add</span> <span class="p">{</span><span class="n">file</span> <span class="ow">or</span> <span class="n">url</span><span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="setting-up-component-lookup-with-python-methods-version-2-0-and-above">
+<h2>Setting up component lookup with python methods (version 2.0 and above)<a class="headerlink" href="#setting-up-component-lookup-with-python-methods-version-2-0-and-above" title="Link to this heading"></a></h2>
+<p>For version 2.1 and below, and if you don’t want to rely on the user configuration, you can always use the methods <code class="docutils literal notranslate"><span class="pre">fusionsc.resolve.importOfflineData</span></code> and <code class="docutils literal notranslate"><span class="pre">fusionsc.resolve.connectWarehouse</span></code>. Keep in mind that the changes by these methods are local to the current context.</p>
+<section id="id1">
+<h3>Wendelstein 7-X inside IPP network<a class="headerlink" href="#id1" title="Link to this heading"></a></h3>
+<p>On version 2.1 and above, you can use the <code class="docutils literal notranslate"><span class="pre">fusionsc.devices.w7x.connectIppSite</span></code> method to configure the computing server and resolution database, similar to the “ipp-hgw” configuration default profile.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fusionsc.devices</span><span class="w"> </span><span class="kn">import</span> <span class="n">w7x</span>
+<span class="n">w7x</span><span class="o">.</span><span class="n">connectIppSite</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="w7-x-only-pre-calculating-fields-for-biot-savart-calculation">
+<h2>(W7-X only) Pre-calculating fields for Biot-Savart calculation<a class="headerlink" href="#w7-x-only-pre-calculating-fields-for-biot-savart-calculation" title="Link to this heading"></a></h2>
+<p>A generally expensive calculation is the Biot-Savart rule to obtain the magnetic field from the coil geometries. For W7-X
+, there is a high-level support to precompute the coil fields. These fields can then be saved and loaded later for
+usage. When using precomputed coil fields, the offline data files are not required (unless required for other reasons, such
+as geometry data or other field information). W7-X has special support to pre-compute all coils so that they can be re-used
+later.</p>
+<p>The precomputation is performed through the <code class="docutils literal notranslate"><span class="pre">devices.w7x.CoilPack</span></code> class, which can be used as a handle to override the coils
+used in the generation of W7-X configurations.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fusionsc.devices</span><span class="w"> </span><span class="kn">import</span> <span class="n">w7x</span>
+
+<span class="c1"># Obtain default coils</span>
+<span class="n">coils</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">cadCoils</span><span class="p">()</span>
+
+<span class="c1"># Compute</span>
+<span class="n">coils</span> <span class="o">=</span> <span class="n">coils</span><span class="o">.</span><span class="n">computeFields</span><span class="p">(</span><span class="n">w7x</span><span class="o">.</span><span class="n">defaultGrid</span><span class="p">())</span>
+
+<span class="c1"># Use in configuration</span>
+<span class="n">config1</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">standard</span><span class="p">(</span><span class="n">coils</span> <span class="o">=</span> <span class="n">coils</span><span class="p">)</span>
+<span class="n">config2</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">highIota</span><span class="p">(</span><span class="n">coils</span> <span class="o">=</span> <span class="n">coils</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>The precalculated fields can be saved and loaded like other field or geometry classes.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Save</span>
+<span class="n">coils</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">&quot;coils.fsc&quot;</span><span class="p">)</span>
+
+<span class="c1"># Restore</span>
+<span class="n">coils</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">CoilPack</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;coils.fsc&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="re-configuring-the-local-backend">
+<h2>(Re-)Configuring the local backend<a class="headerlink" href="#re-configuring-the-local-backend" title="Link to this heading"></a></h2>
+<p>While fusionsc is capable of connecting to remote servers for execution and data management, by default it uses a local backend started at import time. The backend is started with a default configuration (all services enabled, CPU execution, auto-detected no. of computation threads). Sometimes it is desirable to override this default behavior. You can use the <code class="docutils literal notranslate"><span class="pre">backends.reconfigureLocalBackend</span></code> function for this purpose.</p>
+<p><em>Note</em>: This function creates a <strong>new</strong> backend to be used by all future calls. The old backend will be closed once all references to it coming from previous pending calls are dropped. If the local backend has been exposed (e.g. as a network service or by storing the result of backends.activeBackend) it will not shut down until these external references are dropped as well.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Get default configuration</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">service</span><span class="o">.</span><span class="n">LocalConfig</span><span class="o">.</span><span class="n">newMessage</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39; --- Default configuration --- &#39;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">()</span>
+
+<span class="c1"># Adjust configuration</span>
+<span class="n">config</span><span class="o">.</span><span class="n">cpuBackend</span><span class="o">.</span><span class="n">numThreads</span><span class="o">.</span><span class="n">fixed</span> <span class="o">=</span> <span class="mi">2</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39; --- Adjusted configuration --- &#39;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">()</span>
+
+<span class="c1"># Apply adjusted configuration</span>
+<span class="n">fsc</span><span class="o">.</span><span class="n">backends</span><span class="o">.</span><span class="n">reconfigureLocalBackend</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span> --- Default configuration --- 
+
+preferredDeviceType: cpu
+enableCompute: true
+enableStorage: true
+jobScheduler: system
+flt:
+  eventBuffer:
+    minSize: 100
+    maxSize: 2500
+    targetTotalMb: 500
+cpuBackend:
+  numThreads: autoDetect
+
+ --- Adjusted configuration --- 
+
+preferredDeviceType: cpu
+enableCompute: true
+enableStorage: true
+jobScheduler: system
+flt:
+  eventBuffer:
+    minSize: 100
+    maxSize: 2500
+    targetTotalMb: 500
+cpuBackend:
+  numThreads:
+    fixed: 2
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="using-verbose-logging">
+<h2>Using verbose logging<a class="headerlink" href="#using-verbose-logging" title="Link to this heading"></a></h2>
+<p>Sometimes it is desirable to enable the internal log output to see progress on the calculation. This can be achieved by setting the <code class="docutils literal notranslate"><span class="pre">FUSIONSC_VERBOSE</span></code> environment variable to any other value than <code class="docutils literal notranslate"><span class="pre">0</span></code>. This has to be done <strong>before</strong> importing the package.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;FUSIONSC_VERBOSE&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;1&#39;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">fusionsc</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">fsc</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>When using the standalone server, verbose logging can be activated through the <code class="docutils literal notranslate"><span class="pre">--verbose</span></code> command-line switch.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="howto/index.html" class="btn btn-neutral float-right" title="Usage examples (How To …)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

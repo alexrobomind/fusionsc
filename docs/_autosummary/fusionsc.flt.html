@@ -1,0 +1,514 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>fusionsc.flt &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="fusionsc.flt.FieldlineMapping" href="fusionsc.flt.FieldlineMapping.html" />
+    <link rel="prev" title="fusionsc.magnetics.SurfaceArray" href="fusionsc.magnetics.SurfaceArray.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/index.html">Usage examples (How To …)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../reference.html">Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="fusionsc.html">fusionsc</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.native.html">fusionsc.native</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.kj.html">fusionsc.kj</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.capnp.html">fusionsc.capnp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.service.html">fusionsc.service</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.efit.html">fusionsc.efit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.hint.html">fusionsc.hint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.vmec.html">fusionsc.vmec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.asnc.html">fusionsc.asnc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.backends.html">fusionsc.backends</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.data.html">fusionsc.data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.resolve.html">fusionsc.resolve</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.magnetics.html">fusionsc.magnetics</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">fusionsc.flt</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.flt.FieldlineMapping.html">fusionsc.flt.FieldlineMapping</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.flt.MappingWithGeometry.html">fusionsc.flt.MappingWithGeometry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fusionsc.flt.axisCurrent"><code class="docutils literal notranslate"><span class="pre">axisCurrent()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fusionsc.flt.calculateFourierModes"><code class="docutils literal notranslate"><span class="pre">calculateFourierModes()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fusionsc.flt.calculateIota"><code class="docutils literal notranslate"><span class="pre">calculateIota()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fusionsc.flt.computeMapping"><code class="docutils literal notranslate"><span class="pre">computeMapping()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fusionsc.flt.connectionLength"><code class="docutils literal notranslate"><span class="pre">connectionLength()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fusionsc.flt.decodeTraceResponse"><code class="docutils literal notranslate"><span class="pre">decodeTraceResponse()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fusionsc.flt.fieldValues"><code class="docutils literal notranslate"><span class="pre">fieldValues()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fusionsc.flt.findAxis"><code class="docutils literal notranslate"><span class="pre">findAxis()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fusionsc.flt.findLCFS"><code class="docutils literal notranslate"><span class="pre">findLCFS()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fusionsc.flt.followFieldlines"><code class="docutils literal notranslate"><span class="pre">followFieldlines()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fusionsc.flt.poincareInPhiPlanes"><code class="docutils literal notranslate"><span class="pre">poincareInPhiPlanes()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fusionsc.flt.symmetrize"><code class="docutils literal notranslate"><span class="pre">symmetrize()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fusionsc.flt.trace"><code class="docutils literal notranslate"><span class="pre">trace()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.hfcam.html">fusionsc.hfcam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.devices.html">fusionsc.devices</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.export.html">fusionsc.export</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.structio.html">fusionsc.structio</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.geometry.html">fusionsc.geometry</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference external" href="https://alexrobomind.github.io/fusionsc/cpp/index.html">C++ library documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../reference.html">Reference</a></li>
+          <li class="breadcrumb-item"><a href="fusionsc.html">fusionsc</a></li>
+      <li class="breadcrumb-item active">fusionsc.flt</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/_autosummary/fusionsc.flt.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-fusionsc.flt">
+<span id="fusionsc-flt"></span><h1>fusionsc.flt<a class="headerlink" href="#module-fusionsc.flt" title="Link to this heading"></a></h1>
+<p>Functions for field-line tracing and interpretation of traces.</p>
+<p class="rubric">Functions</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.flt.axisCurrent" title="fusionsc.flt.axisCurrent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">axisCurrent</span></code></a>(field, current[, grid, ...])</p></td>
+<td><p>Configuration that places a current on the axis of a given magnetic configuration.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.flt.calculateFourierModes" title="fusionsc.flt.calculateFourierModes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">calculateFourierModes</span></code></a>(field, startPoints, ...)</p></td>
+<td><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.flt.calculateIota" title="fusionsc.flt.calculateIota"><code class="xref py py-obj docutils literal notranslate"><span class="pre">calculateIota</span></code></a>(field, startPoints, turnCount)</p></td>
+<td><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.flt.computeMapping" title="fusionsc.flt.computeMapping"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeMapping</span></code></a>(field, mappingPlanes, r, z[, ...])</p></td>
+<td><p>Computes a reversible field line mapping.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.flt.connectionLength" title="fusionsc.flt.connectionLength"><code class="xref py py-obj docutils literal notranslate"><span class="pre">connectionLength</span></code></a>(points, config, geometry, ...)</p></td>
+<td><p>Computes the connection-length of the given points in a certain geometry.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.flt.decodeTraceResponse" title="fusionsc.flt.decodeTraceResponse"><code class="xref py py-obj docutils literal notranslate"><span class="pre">decodeTraceResponse</span></code></a>(response[, resultFormat])</p></td>
+<td><p>Decodes an FLT response according to the requested format.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.flt.fieldValues" title="fusionsc.flt.fieldValues"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fieldValues</span></code></a>(config, grid)</p></td>
+<td><p>DEPRECATED &amp; SLATED FOR REMOVAL IN 3.0</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.flt.findAxis" title="fusionsc.flt.findAxis"><code class="xref py py-obj docutils literal notranslate"><span class="pre">findAxis</span></code></a>(field[, grid, startPoint, ...])</p></td>
+<td><p>Computes the magnetic axis by repeatedly tracing a Poincaré map and averaging the points.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.flt.findLCFS" title="fusionsc.flt.findLCFS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">findLCFS</span></code></a>(field, geometry, p1, p2[, grid, ...])</p></td>
+<td><p>Compute the position of the last closed flux surface</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.flt.followFieldlines" title="fusionsc.flt.followFieldlines"><code class="xref py py-obj docutils literal notranslate"><span class="pre">followFieldlines</span></code></a>(points, config[, recordEvery])</p></td>
+<td><p>Follows magnetic field lines.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.flt.poincareInPhiPlanes" title="fusionsc.flt.poincareInPhiPlanes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">poincareInPhiPlanes</span></code></a>(points, config, ...)</p></td>
+<td><p>Computes the Poincaré map starting from a given set of points on a config.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.flt.symmetrize" title="fusionsc.flt.symmetrize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">symmetrize</span></code></a>(points[, nSym, stellaratorSymmetric])</p></td>
+<td><p>Takes a point-cloud and creates a new point cloud obeying the prescribed discrete symmetry by applying all corresponding discrete transformations (phi-shifts and flips).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.flt.trace" title="fusionsc.flt.trace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">trace</span></code></a>(points, config[, geometry, grid, ...])</p></td>
+<td><p>Performs a tracing request.</p></td>
+</tr>
+</tbody>
+</table>
+<p class="rubric">Classes</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="fusionsc.flt.FieldlineMapping.html#fusionsc.flt.FieldlineMapping" title="fusionsc.flt.FieldlineMapping"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FieldlineMapping</span></code></a>(dataOrRef)</p></td>
+<td><p>Interface class for field line mappings.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="fusionsc.flt.MappingWithGeometry.html#fusionsc.flt.MappingWithGeometry" title="fusionsc.flt.MappingWithGeometry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MappingWithGeometry</span></code></a>([val, msgSize, byReference])</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+<p class="rubric">Functions</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="fusionsc.flt.axisCurrent">
+<span class="sig-prename descclassname"><span class="pre">fusionsc.flt.</span></span><span class="sig-name descname"><span class="pre">axisCurrent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">field</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">startPoint</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nTurns</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nIterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nPhi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">direction</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mapping</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targetError</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relativeErrorTolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minStepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxStepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.2</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.flt.axisCurrent" title="Link to this definition"></a></dt>
+<dd><p>Configuration that places a current on the axis of a given magnetic configuration.</p>
+<p>This function computes the magnetic axis of a magnetic configuration, interprets it as a coil, and
+creates a magnetic configuration with a given current specified on this axis.</p>
+<dl class="simple">
+<dt>Parameters:</dt><dd><p>field: Magnetic field configuration
+current: On-axis current to apply
+grid: Grid to use for magnetic field calculation if the field is not yet computed</p>
+</dd>
+<dt>Returns:</dt><dd><p>The magnetic configuration corresponding to the on-axis current’s field.</p>
+</dd>
+</dl>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fusionsc.flt.calculateFourierModes">
+<span class="sig-prename descclassname"><span class="pre">fusionsc.flt.</span></span><span class="sig-name descname"><span class="pre">calculateFourierModes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">field</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">startPoints</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">turnCount</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nMax</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mMax</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">toroidalSymmetry</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aliasThreshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stellaratorSymmetric</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unwrapEvery</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recordEvery</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distanceLimit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targetError</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relativeErrorTolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minStepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxStepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">islandM</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mapping</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.flt.calculateFourierModes" title="Link to this definition"></a></dt>
+<dd><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fusionsc.flt.calculateIota">
+<span class="sig-prename descclassname"><span class="pre">fusionsc.flt.</span></span><span class="sig-name descname"><span class="pre">calculateIota</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">field</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">startPoints</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">turnCount</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unwrapEvery</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distanceLimit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targetError</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relativeErrorTolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minStepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxStepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">islandM</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mapping</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.flt.calculateIota" title="Link to this definition"></a></dt>
+<dd><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fusionsc.flt.computeMapping">
+<span class="sig-prename descclassname"><span class="pre">fusionsc.flt.</span></span><span class="sig-name descname"><span class="pre">computeMapping</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">field</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mappingPlanes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">z</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distanceLimit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">padding</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">numPlanes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u0</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[0.5]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">v0</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[0.5]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">toroidalSymmetry</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targetError</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relativeErrorTolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minStepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxStepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">errorEstimationDistance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.flt.computeMapping" title="Link to this definition"></a></dt>
+<dd><p>Computes a reversible field line mapping. This mapping type divides the device into toroidal
+sections. Each section is covered by a curved conforming hexahedral grid. The “mapping planes”
+define the toroidal sections at which the different sections meet. Within a sections, field lines
+can be interpolated in the r-z plane using phi-independent u,v coordinates on the grid. When crossing
+into other sections, the field line mapping must be inverted to construct new grid coordinates.</p>
+<p>The tracing of the sections is started from planes lying in-between the mapping planes.</p>
+<dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>field: A magnetic field to create the mapping over.</p></li>
+<li><p>mappingPlanes: An array-like of radial angles. Must be in counterclockwise order (but can start and stop anywhere)</p></li>
+<li><p>r: Major radius values of the starting points to trace the grid from</p></li>
+<li><p>z: Z coordinate values of the starting points to trace the grid from</p></li>
+<li><p>grid: Grid to use for field computation (if field is not computed yet)</p></li>
+<li><p>distanceLimit: Maximum field line length to trace. Can often be reduced aggressively.</p></li>
+<li><p>padding: Number of planes to add beyond the mapping planes on each section. Currently must be at least 2.</p></li>
+<li><p>numPlanes: Number of planes to record for each half-section trace.</p></li>
+<li><p>stepSize: Step size to use for tracing.</p></li>
+<li><p>u0 (number or sequence of numbers, ranging from 0 to 1): Per-section starting grid coordinates for mapping, radial component</p></li>
+<li><p>v0 (number or sequence of numbers, ranging from 0 to 1): Per-section starting grid coordinates for mapping, vertical component</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><p>A DataRef pointing to a to-be-initialized field line mapping.</p>
+</dd>
+</dl>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fusionsc.flt.connectionLength">
+<span class="sig-prename descclassname"><span class="pre">fusionsc.flt.</span></span><span class="sig-name descname"><span class="pre">connectionLength</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">geometry</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.flt.connectionLength" title="Link to this definition"></a></dt>
+<dd><p>Computes the connection-length of the given points in a certain geometry.</p>
+<p>Mostly equivalent to <code class="code docutils literal notranslate"><span class="pre">trace(points,</span> <span class="pre">config,</span> <span class="pre">geometry</span> <span class="pre">=</span> <span class="pre">geometry,</span> <span class="pre">collisionLimit</span> <span class="pre">=</span> <span class="pre">1,</span> <span class="pre">**kwargs)[&quot;endPoints&quot;][3]</span></code>.</p>
+<dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>points: Starting points for the trace. Can be any shape, but the first dimension must have a size of 3 (x, y, z).</p></li>
+<li><p>config: Magnetic configuration. If this is not yet computed, you also need to specify the ‘grid’ parameter.</p></li>
+<li><p>geometry: Device geometry. If this is not yet indexed, you need to specify the ‘geometryGrid’ parameter (see the documentation of trace).</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><p>An array of shape <cite>points.shape[1:]</cite> indicating the forward connection length of the given point.</p>
+</dd>
+</dl>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fusionsc.flt.decodeTraceResponse">
+<span class="sig-prename descclassname"><span class="pre">fusionsc.flt.</span></span><span class="sig-name descname"><span class="pre">decodeTraceResponse</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">response</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ReaderOrBuilder</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resultFormat</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'dict'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.flt.decodeTraceResponse" title="Link to this definition"></a></dt>
+<dd><p>Decodes an FLT response according to the requested format.</p>
+<dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>response: A raw field line tracer response.</p></li>
+<li><p>resultFormat: Either “raw” or “dict”.</p></li>
+</ul>
+</dd>
+<dt>Returns (depending on resultFormat parameter):</dt><dd><ul class="simple">
+<li><p>‘raw’: An instance of fusionsc.service.FLTResponse.ReaderOrBuilder containing the raw
+response of the field line tracer (basically the input arguments).</p></li>
+<li><p>‘dict’: A dict of numpy arrays containing pythonic view on the response data. See the
+documentation of trace() for the full contents.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fusionsc.flt.fieldValues">
+<span class="sig-prename descclassname"><span class="pre">fusionsc.flt.</span></span><span class="sig-name descname"><span class="pre">fieldValues</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.flt.fieldValues" title="Link to this definition"></a></dt>
+<dd><p>DEPRECATED &amp; SLATED FOR REMOVAL IN 3.0</p>
+<p>Use fusionsc.magnetics.MagneticConfig.getComputed(…) instead, which uses the fusionsc field
+convention of [grid.nPhi, grid.nZ, grid.nR, 3].</p>
+<p>Obtains the magnetic field of a configuration on a specific grid.</p>
+<dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>config: Description of the magnetic field</p></li>
+<li><p>grid: Grid to compute the field on.</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><p>An array of shape [3, grid.nPhi, grid.nZ, grid.nR] containing the magnetic field.
+The directions along the first coordinate are phi, z, r.</p>
+</dd>
+</dl>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fusionsc.flt.findAxis">
+<span class="sig-prename descclassname"><span class="pre">fusionsc.flt.</span></span><span class="sig-name descname"><span class="pre">findAxis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">field</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">startPoint</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nTurns</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nIterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nPhi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">direction</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'ccw'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mapping</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targetError</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relativeErrorTolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minStepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxStepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">islandM</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.flt.findAxis" title="Link to this definition"></a></dt>
+<dd><p>Computes the magnetic axis by repeatedly tracing a Poincaré map and averaging the points.</p>
+<dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>field: The magnetic field.</p></li>
+<li><p>grid: Optional grid to compute the magnetic field on. If not specified, the field must
+already be computed.</p></li>
+<li><p>startPoint: Start point for the magnetic axis search. If unspecified, defaults to the
+midpoint of the phi = 0 cross section.</p></li>
+<li><p>stepSize: Step size for tracing of (if using the adaptive error estimator) for the inital
+step size guess.</p></li>
+<li><p>nTurns: Number of points to average per iteration for the magnetic axis computation.</p></li>
+<li><p>nIterations: Number of axis search iterations.</p></li>
+<li><p>nPhi: Number of phi points to calculate the final magnetic axis trace on.</p></li>
+<li><p>direction: Direction to calculate the axis in.</p></li>
+<li><p>mapping: Field line mapping to use for accelerating the trace.</p></li>
+<li><p>targetError: Enables adaptive stepping by specifying a maximum error tolerance.</p></li>
+<li><p>relativeErrorTolerance, minStepSize, maxStepSize: See trace() for more information.</p></li>
+<li><p>islandM: When set, this routine will identify the O cycle of the island the starting
+point is in (which can still be the axis).</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><p>A tuple holding the xyz-position of the axis starting point and a numpy array holding the field line
+corresponding to the magnetic axis.</p>
+</dd>
+</dl>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fusionsc.flt.findLCFS">
+<span class="sig-prename descclassname"><span class="pre">fusionsc.flt.</span></span><span class="sig-name descname"><span class="pre">findLCFS</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">field</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">geometry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">geometryGrid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.01</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nScan</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distanceLimit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mapping</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targetError</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relativeErrorTolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minStepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxStepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.2</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.flt.findLCFS" title="Link to this definition"></a></dt>
+<dd><p>Compute the position of the last closed flux surface</p>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fusionsc.flt.followFieldlines">
+<span class="sig-prename descclassname"><span class="pre">fusionsc.flt.</span></span><span class="sig-name descname"><span class="pre">followFieldlines</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recordEvery</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.flt.followFieldlines" title="Link to this definition"></a></dt>
+<dd><p>Follows magnetic field lines.</p>
+<p>Mostly equivalent to <code class="code docutils literal notranslate"><span class="pre">(lambda</span> <span class="pre">x:</span> <span class="pre">return</span> <span class="pre">x[&quot;fieldLines&quot;],</span> <span class="pre">x[&quot;fieldStrengths&quot;])(trace(points,</span> <span class="pre">config,</span> <span class="pre">recordEvery,</span> <span class="pre">**kwargs))</span></code>.</p>
+<dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>points: Starting points for the trace. Can be any shape, but the first dimension must have a size of 3 (x, y, z).</p></li>
+<li><p>config: Magnetic configuration. If this is not yet computed, you also need to specify the ‘grid’ parameter.</p></li>
+<li><p>recordEvery: Number of tracing steps between each recorded point.</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><p>A tuple holding:
+- An array of shape <cite>points.shape     + [max. field line length]</cite> indicating the field line point locations
+- An array of shape <cite>points.shape[1:] + [max. field line length]</cite> indicating the field strength at those points</p>
+</dd>
+</dl>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fusionsc.flt.poincareInPhiPlanes">
+<span class="sig-prename descclassname"><span class="pre">fusionsc.flt.</span></span><span class="sig-name descname"><span class="pre">poincareInPhiPlanes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phiPlanes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">turnLimit</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwArgs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.flt.poincareInPhiPlanes" title="Link to this definition"></a></dt>
+<dd><p>Computes the Poincaré map starting from a given set of points on a config.</p>
+<p>Mostly equivalent to <code class="code docutils literal notranslate"><span class="pre">trace(points,</span> <span class="pre">config,</span> <span class="pre">phiPlanes</span> <span class="pre">=</span> <span class="pre">phiPlanes,</span> <span class="pre">turnLimit</span> <span class="pre">=</span> <span class="pre">turnLimit,</span> <span class="pre">**kwArgs)[&quot;poincareHits&quot;]</span></code>.</p>
+<dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>points: Starting points for the trace. Can be any shape, but the first dimension must have a size of 3 (x, y, z).</p></li>
+<li><p>phiPlanes: 1D list of intersection plane angles (in radian)</p></li>
+<li><p>config: Magnetic configuration. If this is not yet computed, you also need to specify the ‘grid’ parameter (see the documentation of trace).</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><p>An array of shape [5, len(phiPlanes)] + points.shape[1:] + [turnLimit].
+The entries in dimension 1 are [x, y, z, forward connection length, backward connection length].
+If the forward- or backward-going field lines from this point hit no geometry, the returned length will be negative
+and its absolute magnitude will indicate the remaining field line length in that direction.</p>
+</dd>
+</dl>
+<p>For the extra arguments, see the parameters to trace().</p>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fusionsc.flt.symmetrize">
+<span class="sig-prename descclassname"><span class="pre">fusionsc.flt.</span></span><span class="sig-name descname"><span class="pre">symmetrize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nSym</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stellaratorSymmetric</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.flt.symmetrize" title="Link to this definition"></a></dt>
+<dd><p>Takes a point-cloud and creates a new point cloud obeying the prescribed discrete
+symmetry by applying all corresponding discrete transformations (phi-shifts and flips).</p>
+<dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>points: A numpy-array of shape [3, …] (at least 1D) with the points in x, y, z coordinates.</p></li>
+<li><p>nSym: Toroidal symmetry to be applied to the cloud.</p></li>
+<li><p>stellaratorSymmetric: Whether to apply the Stellarator symmetry (phi -&gt; -phi, z -&gt; -z, r -&gt; r) as well.</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><p>An array of shape [3, nTotalSym] + points.shape[1:] containing the new point cloud
+with nTotalSym = 2 * nSym if stellaratorSymmetric else nSym</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fusionsc.flt.trace">
+<span class="sig-prename descclassname"><span class="pre">fusionsc.flt.</span></span><span class="sig-name descname"><span class="pre">trace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">geometry</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">geometryGrid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mapping</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distanceLimit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">turnLimit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stepLimit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">collisionLimit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phiPlanes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">isotropicDiffusionCoefficient</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rzDiffusionCoefficient</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parallelConvectionVelocity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parallelDiffusionCoefficient</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">meanFreePath</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">meanFreePathGrowth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">direction</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'forward'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recordEvery</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resultFormat</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'dict'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targetError</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relativeErrorTolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minStepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxStepSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">errorEstimationDistance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignoreCollisionsBefore</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allowReversal</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">planeRecordMode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.flt.trace" title="Link to this definition"></a></dt>
+<dd><p>Performs a tracing request.</p>
+<dl>
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>points: Starting points. Array-like of shape [3, …] (must be at least 1D, first dimension is x, y, z).</p></li>
+<li><p>config (magnetics.MagneticConfig): Magnetic configuration. If this is not yet computed, you must specify the ‘grid’ parameter.</p></li>
+<li><p>geometry (geometry.Geometry): Geometry to use for intersection tests of field lines. If this is not yet indexed, you must specify the ‘geometryGrid’ parameters.</p></li>
+<li><p>grid (service.ToroidalGrid.Reader or service.ToroidalGrid.Builder): Toroidal grid to compute the magnetic field on prior to tracing.</p></li>
+<li><p>geometryGrid (service.CartesiaGrid.Reader or service.CartesianGrid.Builder): Cartesian grid to index the geometry triangles on (used to accelerate intersection computations).</p></li>
+<li><p>distanceLimit: Maximum field line tracing length. 0 or negative interpreted as infinity.</p></li>
+<li><p>turnLimit: Maximum number of device turn to trace field line for. 0 or negative interpreted as infinity.</p></li>
+<li><p>stepLimit: Maximum number of steps to trace for. 0 interpreted as infinity. May not be negative.</p></li>
+<li><p>stepSize: Step size for each tracing step (in meters).</p></li>
+<li><p>collisionLimit: Maximum number of collisions a field line may perform (e.g. 1 = termination at first collision. 2 at second collision etc.). Must not be negative.
+0 interpreted as infinity.</p></li>
+<li><p>phiPlanes (list): List of planes to perform intersections with. Objects can be either phi values in radians, or objects castable
+to service.Plane (readers / builders for this type, or YAML strings, or dictionaries filled with the appropriate structure).</p></li>
+<li><p>isotropicDiffusionCoefficient: If set, enables diffusive tracing and specifies the isotropic / perpendicular diffusion coefficient to use in the
+underlying diffusive tracing model. If set, either parallelConvectionVelocity or parallelDiffusionCoefficient must also be specified.</p></li>
+<li><p>rzDiffusionCoefficient: Similar to isotropicDiffusionCoefficient, but displacements are only done in the rz plane</p></li>
+<li><p>parallelConvectionVelocity: Parallel streaming velocity to assume for a single-directional diffusive tracing model.</p></li>
+<li><p>parallelDiffusionCoefficient: Parallel diffusion coefficient to assume for a fully bidireactional doubly-diffusive tracing model.</p></li>
+<li><p>meanFreePath: Mean (not fixed!) free path to use to sample the tracing distance between diffusive displacement steps.</p></li>
+<li><p>meanFreePathGrowth: Amount by which to increase the mean free path after every displacement step. This parameter prevents
+extreme growths of computing costs at low perpendicular diffusion coefficients.</p></li>
+<li><p>mapping: Field line mapping to accelerate tracing.</p></li>
+<li><p>direction: Indicates the tracing direction. One of “forward” (field direction), “backward” (against field), “cw” (clockwise), or “ccw” (counter-clockwise)</p></li>
+<li><p>recordEvery: When set to &gt; 0, instructs the tracer to record the fieldline every “recordEvery”-th step.</p></li>
+<li><p>targetError: Step size to adjust steps towards.</p></li>
+<li><p>relativeErrorTolerance: If the error estimator indicates that the error is more than targetError * (1 + relativeErrorTolerance), the step will be repeated
+with adjusted step size. Otherwise, the adjusted step size will be used for the next step.</p></li>
+<li><p>minStepSize: Minimum step size for adaptive controller</p></li>
+<li><p>maxStepSize: Maximum step size for adaptive controller</p></li>
+<li><p>errorEstimationDistance: Maximum trace length to be assumed for the purpose of error estimation. If this is not set, the service will try to estimate it
+from the limits. Can be set to “step” to indicate per-step error targets.</p></li>
+<li><p>ignoreCollisionsBefore: Minimum distance to trace before collisions will be actively processed. Useful when starting a trace on / very close to a mesh and
+not wanting to immediately have this mesh terminate the trace.</p></li>
+<li><p>allowReversal: If this is set to false (default), a reversal of toroidal magnetic field orientation along the field line will terminate the
+tracing process. This prevents long traces on field lines encircling coils.</p></li>
+<li><p>planeRecordMode: Recording style to use for Poincare hits. Possible values:
+- “auto”: Uses “lastInTurn” when only using phi-planes, and “everyHit” with a one-time warning notification otherwise.
+- “lastInTurn”: Indexes the hits per turn while “everyHit” records all hits of the plane.
+- “everyHit”: Returns all hits in order of trace direction of field line.</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><p>The format of the result depends on the <cite>resultFormat</cite> parameter.</p>
+<ul>
+<li><p>If <cite>resultFormat == ‘dict’</cite>:</p>
+<p>A dictionary holding the following entries (more can be added in future versions)</p>
+<ul class="simple">
+<li><p><em>endPoints</em>: A numpy array of shape <cite>[4] + startPoints.shape[1:]</cite>. The first 3 components are the x, y, and z positions of
+the field lines’ end points. The 4th component is the total length of the field line.</p></li>
+<li><p><em>poincareHits</em>: A numpy array of shape <cite>[5, len(phiPlanes)] + startPoints.shape[1:] + [maxTurns]</cite> with maxTurns being a number &lt;=
+turnLimit indicating the maximum turn count of any field line, or - if planeRecordMode is “everyHit” - arbitrary. The first 3 components
+of the first dimension are the x, y, and z coordinates of the phi plane intersections (commonly used for Poincaré maps).
+The next two components indicate the forward and backward connection lengths respectively to the next geometry collision along the
+field line. If the field line ends in that direction without a collision (e.g. closed field line, or no geometry specified), a negative
+number is returned whose absolute value corresponds to the remaining length in that direction. Non-existing points (due to field lines
+not all having same turn / hit counts) have their values set to NaN.</p></li>
+<li><p><em>stopReasons</em>: A numpy array of shape <cite>startPoints.shape[1:]</cite> that indicates for each point the final reason why the trace was stopped.
+The dtype of the array is fusionsc.service.FLTStopReason.</p></li>
+<li><p><em>fieldLines</em>: A numpy array of shape <cite>startPoints.shape + [max. field line length]</cite> containing steps recorded at specified intervals
+(see parameter <a href="#id1"><span class="problematic" id="id2">`</span></a>recordEvery. Padded with NaN.</p></li>
+<li><p><em>fieldStrengths</em>: A numpy array of shape <cite>startPoints.shape[1:] + [max. field line length]</cite> holding the absolute magnetic field
+strength at the recorded field line points. Padded with 0.</p></li>
+<li><p><em>endTags</em>: A dict containing a numpy array of type fusionsc.service.TagValue for each tag name present in the geometry. Each array is
+of shape <cite>startPoints.shape[1:]</cite>, and its values indicate the tags associated with the final geometry hit. This gives information
+about the meshes impacted by the field lines.</p></li>
+<li><p><em>responseSize</em>: The total size of the response size in bytes (mainly for profiling purposes).</p></li>
+</ul>
+</li>
+<li><p>If <cite>resultFormat == ‘raw’</cite>:</p>
+<p>An instance of fusionsc.service.FLTResponse.Reader (for more efficient storage and later decoding).</p>
+</li>
+</ul>
+</dd>
+</dl>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="fusionsc.magnetics.SurfaceArray.html" class="btn btn-neutral float-left" title="fusionsc.magnetics.SurfaceArray" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="fusionsc.flt.FieldlineMapping.html" class="btn btn-neutral float-right" title="fusionsc.flt.FieldlineMapping" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

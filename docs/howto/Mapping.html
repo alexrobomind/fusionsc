@@ -1,0 +1,563 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Accelerating computations with field-line mapping &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Creating field-aligned meshes" href="FieldAlign.html" />
+    <link rel="prev" title="Connecting to a remote server" href="Client.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Usage examples (How To …)</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="W7X%20Current%20Scan.html">Current scan (W7-X on-site)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="JText.html">Adding 3D perturbations to a 2D equilibrium (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Field%20Interpolation.html">Magnetic field interpolation (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Field%20Line%20Following.html">Field line following (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Poincare.html">Poincare plots (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Connection%20Length.html">Connection length plots (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Heat%20Load%20Calculation.html">Heat load calculation (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Server.html">Creating a server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Client.html">Connecting to a remote server</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Accelerating computations with field-line mapping</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#preparing-the-mapping">Preparing the mapping</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#inspecting-the-mapping">Inspecting the mapping</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#employing-the-mapping-to-accelerate-computations">Employing the mapping to accelerate computations</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#poincare-maps-with-high-turn-counts">Poincare maps with high turn counts</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#high-resolution-connection-length-distributions">High-resolution connection length distributions</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="FieldAlign.html">Creating field-aligned meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="CalculateIota.html">Iota Calculation, Fourier Surface Extraction, and Perturbations (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="SphereField.html">Dipole fields</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference.html">Reference</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://alexrobomind.github.io/fusionsc/cpp/index.html">C++ library documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Usage examples (How To …)</a></li>
+      <li class="breadcrumb-item active">Accelerating computations with field-line mapping</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/howto/Mapping.ipynb.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="accelerating-computations-with-field-line-mapping">
+<h1>Accelerating computations with field-line mapping<a class="headerlink" href="#accelerating-computations-with-field-line-mapping" title="Link to this heading"></a></h1>
+<p>This examples highlights some ways to accelerate your calculations with field line mapping. We will use a W7-X case.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">fusionsc</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">fsc</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fusionsc.devices</span><span class="w"> </span><span class="kn">import</span> <span class="n">w7x</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">grid</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">defaultGrid</span><span class="p">()</span>
+<span class="n">grid</span><span class="o">.</span><span class="n">nPhi</span> <span class="o">=</span> <span class="mi">32</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">grid</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>rMin: 4
+rMax: 7
+zMin: -1.5
+zMax: 1.5
+nSym: 5
+nR: 128
+nZ: 128
+nPhi: 32
+</pre></div>
+</div>
+</div>
+</div>
+<p>Note: There are two functions to perform axis-current computations, the <code class="docutils literal notranslate"><span class="pre">fsc.flt.axisCurrent</span></code> and the <code class="docutils literal notranslate"><span class="pre">fsc.devices.w7x.axisCurrent</span></code> function. They take exactly the same arguments, but <code class="docutils literal notranslate"><span class="pre">fsc.flt.axisCurrent</span></code> has default behavior tailored towards generic devices, while <code class="docutils literal notranslate"><span class="pre">fsc.devices.w7x.axisCurrent</span></code> has default parameters more suited for Wendelstein 7-X calculations (current direction, default grid, starting points).</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">field</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">standard</span><span class="p">()</span>
+<span class="c1">#field = field + w7x.axisCurrent(field, 2000, grid = grid)</span>
+
+<span class="c1"># Note: The above is equivalent to</span>
+<span class="c1"># field = field + fsc.flt.axisCurrent(field, 10000, grid = w7x.defaultGrid, direction = &quot;cw&quot;, startingPoint = [6, 0, 0])</span>
+
+<span class="n">field</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">grid</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<section id="preparing-the-mapping">
+<h2>Preparing the mapping<a class="headerlink" href="#preparing-the-mapping" title="Link to this heading"></a></h2>
+<p>To prepare the mapping, we need to (in principle) specify the planes in which we want the remapping to occur. For W7-X, a function with recommended defaults is provided in the w7x device-specific module (same arguments, but different default values).</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">mapping</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">computeMapping</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">toroidalSymmetry</span> <span class="o">=</span> <span class="mi">5</span><span class="p">)</span>
+
+<span class="c1"># Note: The above is equivalent to</span>
+<span class="c1"># mapping = fsc.flt.computeMapping(</span>
+<span class="c1">#    field,</span>
+<span class="c1">#    mappingPlanes = [0],</span>
+<span class="c1">#    r = np.linspace(4, 7, 200),</span>
+<span class="c1">#    z = np.linspace(-1.5, 1.5, 200),</span>
+<span class="c1">#    stepSize = 0.01,</span>
+<span class="c1">#    distanceLimit = 7 * 2 * np.pi / 8,</span>
+<span class="c1">#    toroidalSymmetry = 5</span>
+<span class="c1"># )</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">geoGrid</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">defaultGeometryGrid</span><span class="p">()</span>
+<span class="n">geometry</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">op21Geometry</span><span class="p">()</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">geoGrid</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">geoMapping</span> <span class="o">=</span> <span class="n">mapping</span><span class="o">.</span><span class="n">mapGeometry</span><span class="p">(</span><span class="n">geometry</span><span class="o">.</span><span class="n">triangulate</span><span class="p">(</span><span class="mf">0.03</span><span class="p">),</span> <span class="n">nPhi</span> <span class="o">=</span> <span class="mi">32</span><span class="p">,</span> <span class="n">nU</span> <span class="o">=</span> <span class="mi">128</span><span class="p">,</span> <span class="n">nV</span> <span class="o">=</span> <span class="mi">128</span><span class="p">,</span> <span class="n">toroidalSymmetry</span> <span class="o">=</span> <span class="mi">5</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="inspecting-the-mapping">
+<h2>Inspecting the mapping<a class="headerlink" href="#inspecting-the-mapping" title="Link to this heading"></a></h2>
+<p>After calculating the mapping, we can take a look at the structure of the generated mapping planes. Note: The huge number of NaN values stems from the fact that the corners of the mapping grid extend beyoung the magnetic surface region of W7-X and therefore diverge fast.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="n">mapping</span><span class="o">.</span><span class="n">download</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">lines</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">:</span>
+    <span class="k">if</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">line</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">50</span><span class="p">):</span>
+        <span class="n">line</span> <span class="o">=</span> <span class="n">line</span><span class="p">[:</span><span class="mi">50</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39; ...&#39;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>surfaces: [0]
+sections:
+  - r:
+      shape: [45, 200, 200]
+      data: [.nan, .nan, .nan, .nan, .nan, .nan, . ...
+    z:
+      shape: [45, 200, 200]
+      data: [.nan, .nan, .nan, .nan, .nan, .nan, . ...
+    traceLen:
+      shape: [45, 200, 200]
+      data: [.nan, .nan, .nan, .nan, .nan, .nan, . ...
+    phiEnd: 1.2566370614359172
+    u0: 0.5
+    v0: 0.5
+    inverse:
+      rMin: 3.9961634051526662
+      rMax: 7.0066760126216465
+      zMin: -1.5066654891827389
+      zMax: 1.5067486254418976
+      u:
+        shape: [45, 200, 200]
+        data: [.nan, .nan, .nan, .nan, .nan, .nan, ...
+      v:
+        shape: [45, 200, 200]
+        data: [.nan, .nan, .nan, .nan, .nan, .nan, ...
+nPad: 2
+nSym: 5
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">section1</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">sections</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">section1</span><span class="o">.</span><span class="n">r</span><span class="p">)</span>
+<span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">section1</span><span class="o">.</span><span class="n">z</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_grid</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">y</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">LineCollection</span>
+    
+    <span class="n">ax</span> <span class="o">=</span> <span class="n">ax</span> <span class="ow">or</span> <span class="n">plt</span><span class="o">.</span><span class="n">gca</span><span class="p">()</span>
+    <span class="n">segs1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">((</span><span class="n">x</span><span class="p">,</span><span class="n">y</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">segs2</span> <span class="o">=</span> <span class="n">segs1</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">add_collection</span><span class="p">(</span><span class="n">LineCollection</span><span class="p">(</span><span class="n">segs1</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">add_collection</span><span class="p">(</span><span class="n">LineCollection</span><span class="p">(</span><span class="n">segs2</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">autoscale</span><span class="p">()</span>
+
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">[(</span><span class="nb">len</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span> <span class="o">=</span> <span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="mi">12</span><span class="p">))</span>
+    <span class="n">plot_grid</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">z</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Plane </span><span class="si">{}</span><span class="s2"> (mapping plane)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Plane </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../_images/296d001539c1ae52e807bfbef2467a6d1c1202d13fcdd29b9bf8dde0b2757eba.png" src="../_images/296d001539c1ae52e807bfbef2467a6d1c1202d13fcdd29b9bf8dde0b2757eba.png" />
+<img alt="../_images/ce6b162f8a7c595cbd9926181e0c889fd68d010f3cd4bf5ededb2f817de95a49.png" src="../_images/ce6b162f8a7c595cbd9926181e0c889fd68d010f3cd4bf5ededb2f817de95a49.png" />
+<img alt="../_images/53ba4edf6fd586a822abf046811f45e29f85228fd6e1117d7c0f91cd36d7d3b6.png" src="../_images/53ba4edf6fd586a822abf046811f45e29f85228fd6e1117d7c0f91cd36d7d3b6.png" />
+<img alt="../_images/fbde35f267b6299954a1016b810fa1474d272aeb1fe77c6e8a1549ff3490ad43.png" src="../_images/fbde35f267b6299954a1016b810fa1474d272aeb1fe77c6e8a1549ff3490ad43.png" />
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">section1</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">sections</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="n">u</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">section1</span><span class="o">.</span><span class="n">inverse</span><span class="o">.</span><span class="n">u</span><span class="p">)</span><span class="c1"># - 0.5</span>
+<span class="n">v</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">section1</span><span class="o">.</span><span class="n">inverse</span><span class="o">.</span><span class="n">v</span><span class="p">)</span><span class="c1"># - 0.5</span>
+
+<span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">((</span><span class="n">u</span><span class="o">-</span><span class="mf">0.5</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="p">(</span><span class="n">v</span><span class="o">-</span><span class="mf">0.5</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">theta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arctan2</span><span class="p">(</span><span class="n">v</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">u</span><span class="o">-</span><span class="mf">0.5</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">[(</span><span class="nb">len</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span> <span class="o">=</span> <span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="mi">12</span><span class="p">))</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">121</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">u</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">)</span>
+    
+    <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">122</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">)</span>
+    
+    <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Plane ID </span><span class="si">{}</span><span class="s2"> (mapping plane)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Plane ID </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">))</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../_images/e7db6928983517aca54bf1245d7a15988dba948a2a28361b2f0392721a2247f1.png" src="../_images/e7db6928983517aca54bf1245d7a15988dba948a2a28361b2f0392721a2247f1.png" />
+<img alt="../_images/0169d03a92f8010454438ba323749a38f00069c18960889c069a9f70c4ccdf3a.png" src="../_images/0169d03a92f8010454438ba323749a38f00069c18960889c069a9f70c4ccdf3a.png" />
+<img alt="../_images/6b61a4bd15267f2ee95d97d269dcf6daa66fa8e2f12ad866361bb9a768d0f2e4.png" src="../_images/6b61a4bd15267f2ee95d97d269dcf6daa66fa8e2f12ad866361bb9a768d0f2e4.png" />
+<img alt="../_images/7e73805fc450ff8c4d2e74f82bef6aefdb6b6e734005f33afa0bd355adab4f2e.png" src="../_images/7e73805fc450ff8c4d2e74f82bef6aefdb6b6e734005f33afa0bd355adab4f2e.png" />
+</div>
+</div>
+<p>Let’s have a look what the geometry that got translated into field-line coordinate space looks like.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">geoMapping</span><span class="o">.</span><span class="n">getSection</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">asPyvista</span><span class="p">()</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">jupyter_backend</span> <span class="o">=</span> <span class="s2">&quot;static&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../_images/522bb2d40b09f312557778e85a38d30a622bf3e121f617ec2372a2ca22df6730.png" src="../_images/522bb2d40b09f312557778e85a38d30a622bf3e121f617ec2372a2ca22df6730.png" />
+</div>
+</div>
+</section>
+<section id="employing-the-mapping-to-accelerate-computations">
+<h2>Employing the mapping to accelerate computations<a class="headerlink" href="#employing-the-mapping-to-accelerate-computations" title="Link to this heading"></a></h2>
+<section id="poincare-maps-with-high-turn-counts">
+<h3>Poincare maps with high turn counts<a class="headerlink" href="#poincare-maps-with-high-turn-counts" title="Link to this heading"></a></h3>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">rStart</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">4.4</span><span class="p">,</span> <span class="mf">4.7</span><span class="p">,</span> <span class="mi">20</span><span class="p">)</span>
+<span class="n">phi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="mi">72</span> <span class="o">*</span> <span class="mi">0</span> <span class="o">+</span> <span class="mi">36</span><span class="p">)</span>
+<span class="n">xStart</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">phi</span><span class="p">)</span> <span class="o">*</span> <span class="n">rStart</span>
+<span class="n">yStart</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phi</span><span class="p">)</span> <span class="o">*</span> <span class="n">rStart</span>
+<span class="n">zStart</span> <span class="o">=</span> <span class="mi">0</span> <span class="o">*</span> <span class="n">rStart</span>
+
+<span class="n">pStart</span> <span class="o">=</span> <span class="p">[</span><span class="n">xStart</span><span class="p">,</span> <span class="n">yStart</span><span class="p">,</span> <span class="n">zStart</span><span class="p">]</span>
+<span class="c1">#xStart = np.linspace([5.5, 0, 0], [5.8, 0, 0], 40, axis = 1)</span>
+
+<span class="n">pc</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">flt</span><span class="o">.</span><span class="n">poincareInPhiPlanes</span><span class="p">(</span><span class="n">pStart</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="mf">200.8</span><span class="p">)],</span> <span class="mi">2000</span><span class="p">,</span> <span class="n">distanceLimit</span> <span class="o">=</span> <span class="mf">1e7</span><span class="p">,</span> <span class="n">stepSize</span> <span class="o">=</span> <span class="mi">13</span><span class="p">,</span> <span class="n">mapping</span> <span class="o">=</span> <span class="n">geoMapping</span><span class="p">,</span> <span class="n">geometry</span> <span class="o">=</span> <span class="n">geometry</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">fsc</span><span class="o">.</span><span class="n">flt</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="n">pStart</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">turnLimit</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span> <span class="n">stepSize</span> <span class="o">=</span> <span class="mf">0.25</span><span class="p">,</span> <span class="n">mapping</span> <span class="o">=</span> <span class="n">mapping</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{&#39;endPoints&#39;: array([[            nan,             nan,  3.50666860e+00,
+          3.53382769e+00,  3.66317276e+00,  4.29309156e+00,
+          4.84894922e+00,  4.85245282e+00,  3.67946908e+00,
+          3.66018429e+00,  3.66449440e+00,  3.61698542e+00,
+          3.60734262e+00,  3.59279260e+00,  3.70441472e+00,
+          4.23972572e+00,  4.60137545e+00,  4.62596600e+00,
+          4.40231399e+00,  4.25069815e+00],
+        [            nan,             nan,  2.67656661e+00,
+          2.72258151e+00,  2.93659464e+00,  3.13883633e+00,
+          3.65460052e+00,  3.59608176e+00,  2.81685841e+00,
+          2.75852686e+00,  2.72098448e+00,  2.80472941e+00,
+          2.84222353e+00,  2.88586468e+00,  2.74811552e+00,
+          3.14616266e+00,  3.58792946e+00,  3.65961025e+00,
+          3.47451925e+00,  3.16519039e+00],
+        [            nan,             nan, -9.80648023e-02,
+          1.52510911e-01,  5.36120663e-01,  4.53859564e-01,
+          1.73727837e-01, -1.33308105e-01, -1.32290696e-02,
+          1.43821965e-01,  4.15576592e-02, -4.84073322e-02,
+         -1.03235805e-01, -1.95849852e-01, -2.51308064e-01,
+          3.81462025e-01,  1.38671629e-01, -2.57872859e-02,
+         -2.28434567e-01, -3.44969887e-01],
+        [            nan,             nan,  3.65241453e+02,
+          3.63739873e+02,  3.63588381e+02,  3.63304331e+02,
+          3.63095407e+02,  3.62573910e+02,  3.62826437e+02,
+          3.62683451e+02,  3.62558260e+02,  3.62627691e+02,
+          3.62673314e+02,  3.62755905e+02,  3.62622598e+02,
+          3.63097560e+02,  3.63201610e+02,  3.63152857e+02,
+          3.63088168e+02,  3.63003853e+02]]),
+ &#39;poincareHits&#39;: array([], shape=(5, 0, 20, 10), dtype=float64),
+ &#39;stopReasons&#39;: array([nanEncountered, nanEncountered, turnLimit, turnLimit, turnLimit,
+        turnLimit, turnLimit, turnLimit, turnLimit, turnLimit, turnLimit,
+        turnLimit, turnLimit, turnLimit, turnLimit, turnLimit, turnLimit,
+        turnLimit, turnLimit, turnLimit], dtype=object),
+ &#39;fieldLines&#39;: array([], shape=(3, 20, 0), dtype=float64),
+ &#39;fieldStrengths&#39;: array([], shape=(20, 0), dtype=float64),
+ &#39;endTags&#39;: {},
+ &#39;numSteps&#39;: array([ 639,  885, 1365, 1368, 1371, 1372, 1373, 1372, 1378, 1378, 1377,
+        1377, 1377, 1377, 1376, 1382, 1383, 1383, 1383, 1383], dtype=uint64),
+ &#39;responseSize&#39;: 1184}
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Let&#39;s count the number of Poincare points</span>
+<span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">pc</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>102088
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.colors</span><span class="w"> </span><span class="kn">import</span> <span class="n">LogNorm</span>
+
+<span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">lF</span><span class="p">,</span> <span class="n">lB</span> <span class="o">=</span> <span class="n">pc</span>
+<span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">x</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">y</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)):</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span> <span class="o">=</span> <span class="p">(</span><span class="mi">24</span><span class="p">,</span> <span class="mi">18</span><span class="p">))</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">z</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">c</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">lF</span> <span class="o">+</span> <span class="n">lB</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">)[</span><span class="n">i</span><span class="p">],</span> <span class="n">marker</span> <span class="o">=</span> <span class="s1">&#39;.&#39;</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">norm</span> <span class="o">=</span> <span class="n">LogNorm</span><span class="p">())</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">)</span>
+<span class="c1">#plt.xlim(4.5, 4.75)</span>
+<span class="c1">#plt.ylim(-0.4, 0.4lB</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../_images/55cc60fe967d87ef6b97bd42d2941966de05f74d4999d5e5b1f8ac34f3de4ead.png" src="../_images/55cc60fe967d87ef6b97bd42d2941966de05f74d4999d5e5b1f8ac34f3de4ead.png" />
+<img alt="../_images/94d62207cbebb8b3f8f4cc2f008b726ed81f74fe640a3e8b131393dee2511c8f.png" src="../_images/94d62207cbebb8b3f8f4cc2f008b726ed81f74fe640a3e8b131393dee2511c8f.png" />
+<img alt="../_images/81cf43e5e79bb34969d8b8d0ab30c1711f91cdc85b6d482344a444e548b0802a.png" src="../_images/81cf43e5e79bb34969d8b8d0ab30c1711f91cdc85b6d482344a444e548b0802a.png" />
+</div>
+</div>
+</section>
+<section id="high-resolution-connection-length-distributions">
+<h3>High-resolution connection length distributions<a class="headerlink" href="#high-resolution-connection-length-distributions" title="Link to this heading"></a></h3>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fusionsc</span><span class="w"> </span><span class="kn">import</span> <span class="n">backends</span>
+
+<span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">4.5</span><span class="p">,</span> <span class="mf">4.75</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span>
+<span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mf">0.4</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">,</span> <span class="mi">320</span><span class="p">)</span>
+
+<span class="n">rg</span><span class="p">,</span> <span class="n">zg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">indexing</span> <span class="o">=</span> <span class="s1">&#39;ij&#39;</span><span class="p">)</span>
+<span class="n">xg</span> <span class="o">=</span> <span class="o">-</span><span class="n">rg</span>
+<span class="n">yg</span> <span class="o">=</span> <span class="mi">0</span> <span class="o">*</span> <span class="n">rg</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">calc_len</span><span class="p">(</span><span class="n">d</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">fsc</span><span class="o">.</span><span class="n">flt</span><span class="o">.</span><span class="n">connectionLength</span><span class="p">([</span><span class="n">xg</span><span class="p">,</span> <span class="n">yg</span><span class="p">,</span> <span class="n">zg</span><span class="p">],</span> <span class="n">field</span><span class="p">,</span> <span class="n">geometry</span><span class="p">,</span> <span class="n">mapping</span> <span class="o">=</span> <span class="n">geoMapping</span><span class="p">,</span> <span class="n">distanceLimit</span> <span class="o">=</span> <span class="mf">1e3</span><span class="p">,</span> <span class="n">stepSize</span> <span class="o">=</span> <span class="mi">13</span><span class="p">,</span> <span class="n">direction</span> <span class="o">=</span> <span class="n">d</span><span class="p">)</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+<span class="n">lc</span> <span class="o">=</span> <span class="n">calc_len</span><span class="p">(</span><span class="s1">&#39;forward&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="n">calc_len</span><span class="p">(</span><span class="s1">&#39;backward&#39;</span><span class="p">)</span>
+<span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>32.38329029083252
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.colors</span><span class="w"> </span><span class="kn">import</span> <span class="n">LogNorm</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span> <span class="o">=</span> <span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">9</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">lc</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">norm</span> <span class="o">=</span> <span class="n">LogNorm</span><span class="p">())</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&lt;matplotlib.colorbar.Colorbar at 0x1f709656890&gt;
+</pre></div>
+</div>
+<img alt="../_images/73660a569617d54851cda7aa81fe642e4caa74dcae74428c242ebc14b06f5ddb.png" src="../_images/73660a569617d54851cda7aa81fe642e4caa74dcae74428c242ebc14b06f5ddb.png" />
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">5.95</span><span class="p">,</span> <span class="mf">6.1</span><span class="p">,</span> <span class="mi">240</span><span class="p">)</span>
+<span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mf">0.25</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.1</span><span class="p">,</span> <span class="mi">240</span><span class="p">)</span>
+<span class="n">phi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="mf">200.8</span><span class="p">)</span>
+
+<span class="n">rg</span><span class="p">,</span> <span class="n">zg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">indexing</span> <span class="o">=</span> <span class="s1">&#39;ij&#39;</span><span class="p">)</span>
+<span class="n">xg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">phi</span><span class="p">)</span> <span class="o">*</span> <span class="n">rg</span>
+<span class="n">yg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phi</span><span class="p">)</span> <span class="o">*</span> <span class="n">rg</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">calc_len</span><span class="p">(</span><span class="n">d</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">fsc</span><span class="o">.</span><span class="n">flt</span><span class="o">.</span><span class="n">connectionLength</span><span class="p">([</span><span class="n">xg</span><span class="p">,</span> <span class="n">yg</span><span class="p">,</span> <span class="n">zg</span><span class="p">],</span> <span class="n">field</span><span class="p">,</span> <span class="n">geometry</span><span class="p">,</span> <span class="n">grid</span> <span class="o">=</span> <span class="n">grid</span><span class="p">,</span> <span class="n">mapping</span> <span class="o">=</span> <span class="n">geoMapping</span><span class="p">,</span> <span class="n">distanceLimit</span> <span class="o">=</span> <span class="mf">1e3</span><span class="p">,</span> <span class="n">stepSize</span> <span class="o">=</span> <span class="mi">13</span><span class="p">,</span> <span class="n">direction</span> <span class="o">=</span> <span class="n">d</span><span class="p">)</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+<span class="n">lc</span> <span class="o">=</span> <span class="n">calc_len</span><span class="p">(</span><span class="s1">&#39;cw&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="n">calc_len</span><span class="p">(</span><span class="s1">&#39;ccw&#39;</span><span class="p">)</span>
+<span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>33.065414905548096
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.colors</span><span class="w"> </span><span class="kn">import</span> <span class="n">LogNorm</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span> <span class="o">=</span> <span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">9</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">lc</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">norm</span> <span class="o">=</span> <span class="n">LogNorm</span><span class="p">(),</span> <span class="n">origin</span> <span class="o">=</span> <span class="s2">&quot;lower&quot;</span><span class="p">,</span> <span class="n">extent</span> <span class="o">=</span> <span class="p">[</span><span class="mf">5.9</span><span class="p">,</span> <span class="mf">6.2</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.4</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>(5.9, 6.2, -0.4, 0.0)
+</pre></div>
+</div>
+<img alt="../_images/5ecbc59d769cd6938c9152f9559e6d224fc5a362db122b2b3b90165474abe17a.png" src="../_images/5ecbc59d769cd6938c9152f9559e6d224fc5a362db122b2b3b90165474abe17a.png" />
+</div>
+</div>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="Client.html" class="btn btn-neutral float-left" title="Connecting to a remote server" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="FieldAlign.html" class="btn btn-neutral float-right" title="Creating field-aligned meshes" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

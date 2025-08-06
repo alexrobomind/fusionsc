@@ -1,0 +1,202 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>fusionsc &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="fusionsc.native" href="fusionsc.native.html" />
+    <link rel="prev" title="Reference" href="../reference.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/index.html">Usage examples (How To …)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../reference.html">Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">fusionsc</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.native.html">fusionsc.native</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.kj.html">fusionsc.kj</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.capnp.html">fusionsc.capnp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.service.html">fusionsc.service</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.efit.html">fusionsc.efit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.hint.html">fusionsc.hint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.vmec.html">fusionsc.vmec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.asnc.html">fusionsc.asnc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.backends.html">fusionsc.backends</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.data.html">fusionsc.data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.resolve.html">fusionsc.resolve</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.magnetics.html">fusionsc.magnetics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.flt.html">fusionsc.flt</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.hfcam.html">fusionsc.hfcam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.devices.html">fusionsc.devices</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.export.html">fusionsc.export</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.structio.html">fusionsc.structio</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.geometry.html">fusionsc.geometry</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference external" href="https://alexrobomind.github.io/fusionsc/cpp/index.html">C++ library documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../reference.html">Reference</a></li>
+      <li class="breadcrumb-item active">fusionsc</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/_autosummary/fusionsc.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-fusionsc">
+<span id="fusionsc"></span><h1>fusionsc<a class="headerlink" href="#module-fusionsc" title="Link to this heading"></a></h1>
+<p>The FusionSC package for fusion-related scientific computations.</p>
+<p class="rubric">Modules</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="fusionsc.native.html#module-fusionsc.native" title="fusionsc.native"><code class="xref py py-obj docutils literal notranslate"><span class="pre">native</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="fusionsc.kj.html#module-fusionsc.kj" title="fusionsc.kj"><code class="xref py py-obj docutils literal notranslate"><span class="pre">kj</span></code></a></p></td>
+<td><p>Python bindings for Cap'n'proto's 'kj' utility library</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="fusionsc.capnp.html#module-fusionsc.capnp" title="fusionsc.capnp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">capnp</span></code></a></p></td>
+<td><p>Python bindings for Cap'n'proto classes (excluding KJ library)</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="fusionsc.service.html#module-fusionsc.service" title="fusionsc.service"><code class="xref py py-obj docutils literal notranslate"><span class="pre">service</span></code></a></p></td>
+<td><p>This module parses the Cap'n'proto schema files and exposes them as python classes</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="fusionsc.efit.html#module-fusionsc.efit" title="fusionsc.efit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">efit</span></code></a></p></td>
+<td><p>EFIT processing helpers</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="fusionsc.hint.html#module-fusionsc.hint" title="fusionsc.hint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hint</span></code></a></p></td>
+<td><p>Helpers to describe and load HINT equilibria</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="fusionsc.vmec.html#module-fusionsc.vmec" title="fusionsc.vmec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vmec</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="fusionsc.asnc.html#module-fusionsc.asnc" title="fusionsc.asnc"><code class="xref py py-obj docutils literal notranslate"><span class="pre">asnc</span></code></a></p></td>
+<td><p>Asynchronous processing (promises, coroutines)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="fusionsc.backends.html#module-fusionsc.backends" title="fusionsc.backends"><code class="xref py py-obj docutils literal notranslate"><span class="pre">backends</span></code></a></p></td>
+<td><p>Manages the active backend to use for calculation</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="fusionsc.data.html#module-fusionsc.data" title="fusionsc.data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">data</span></code></a></p></td>
+<td><p>Processing of DataRefs for distributed data (archives, ref publication, ref downloading)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="fusionsc.resolve.html#module-fusionsc.resolve" title="fusionsc.resolve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resolve</span></code></a></p></td>
+<td><p>Resolution helpers to obtain computable fields and geometries from high-level descriptions</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="fusionsc.magnetics.html#module-fusionsc.magnetics" title="fusionsc.magnetics"><code class="xref py py-obj docutils literal notranslate"><span class="pre">magnetics</span></code></a></p></td>
+<td><p>Frontend module for magnetic field calculations</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="fusionsc.flt.html#module-fusionsc.flt" title="fusionsc.flt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">flt</span></code></a></p></td>
+<td><p>Functions for field-line tracing and interpretation of traces.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="fusionsc.hfcam.html#module-fusionsc.hfcam" title="fusionsc.hfcam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hfcam</span></code></a></p></td>
+<td><p>Synthetic camera diagnostic to load distributions from impact point clouds</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="fusionsc.devices.html#module-fusionsc.devices" title="fusionsc.devices"><code class="xref py py-obj docutils literal notranslate"><span class="pre">devices</span></code></a></p></td>
+<td><p>Device-specific functions</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="fusionsc.export.html#module-fusionsc.export" title="fusionsc.export"><code class="xref py py-obj docutils literal notranslate"><span class="pre">export</span></code></a></p></td>
+<td><p>Helpers for exporting calculation results (without requiring reimport)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="fusionsc.structio.html#module-fusionsc.structio" title="fusionsc.structio"><code class="xref py py-obj docutils literal notranslate"><span class="pre">structio</span></code></a></p></td>
+<td><p>This module can be used to perform import and export operations between python objects (dicts, lists, data readers / builders, numpy arrays) and self-describing nested data formats (currently JSON, YAML, CBOR, BSON, MSGPACK, and UBJSON).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="fusionsc.geometry.html#module-fusionsc.geometry" title="fusionsc.geometry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">geometry</span></code></a></p></td>
+<td><p>Geometry processing</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../reference.html" class="btn btn-neutral float-left" title="Reference" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="fusionsc.native.html" class="btn btn-neutral float-right" title="fusionsc.native" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

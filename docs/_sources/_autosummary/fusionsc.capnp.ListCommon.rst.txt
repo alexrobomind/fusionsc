@@ -1,0 +1,42 @@
+fusionsc.capnp.ListCommon
+=========================
+
+.. currentmodule:: fusionsc
+
+.. autoclass:: capnp.ListCommon
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~capnp.ListCommon.__init__
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~capnp.ListCommon.type_
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: capnp.ListCommon.__init__
+
+
+
+
+

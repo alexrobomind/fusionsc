@@ -1,0 +1,15 @@
+fusionsc.capnp.StructSchema.Pipeline
+====================================
+
+This class is an accessor for a Cap'n'proto struct embedded in a message.
+
+
+
+
+
+.. currentmodule:: fusionsc
+
+.. autoclass:: capnp.StructSchema.Pipeline
+
+
+

@@ -1,0 +1,46 @@
+fusionsc.hfcam
+==============
+
+.. automodule:: fusionsc.hfcam
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autosummary::
+
+	make
+	toroidalProjection
+
+
+
+
+
+.. rubric:: Classes
+
+.. autosummary::
+  :toctree:
+  :template: summary-class.rst
+
+    HFCam
+    Projection
+
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autofunction:: make
+.. autofunction:: toroidalProjection
+
+
+
+

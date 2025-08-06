@@ -1,0 +1,474 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>fusionsc.magnetics.MagneticConfig &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="fusionsc.magnetics.SurfaceArray" href="fusionsc.magnetics.SurfaceArray.html" />
+    <link rel="prev" title="fusionsc.magnetics.CoilFilament" href="fusionsc.magnetics.CoilFilament.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/index.html">Usage examples (How To …)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../reference.html">Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="fusionsc.html">fusionsc</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.native.html">fusionsc.native</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.kj.html">fusionsc.kj</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.capnp.html">fusionsc.capnp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.service.html">fusionsc.service</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.efit.html">fusionsc.efit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.hint.html">fusionsc.hint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.vmec.html">fusionsc.vmec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.asnc.html">fusionsc.asnc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.backends.html">fusionsc.backends</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.data.html">fusionsc.data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.resolve.html">fusionsc.resolve</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="fusionsc.magnetics.html">fusionsc.magnetics</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.magnetics.CoilFilament.html">fusionsc.magnetics.CoilFilament</a></li>
+<li class="toctree-l4 current"><a class="current reference internal" href="#">fusionsc.magnetics.MagneticConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.magnetics.SurfaceArray.html">fusionsc.magnetics.SurfaceArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.magnetics.html#fusionsc.magnetics.extractCoils"><code class="docutils literal notranslate"><span class="pre">extractCoils()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.magnetics.html#fusionsc.magnetics.setDefaultGrid"><code class="docutils literal notranslate"><span class="pre">setDefaultGrid()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusionsc.magnetics.html#fusionsc.magnetics.visualizeCoils"><code class="docutils literal notranslate"><span class="pre">visualizeCoils()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.flt.html">fusionsc.flt</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.hfcam.html">fusionsc.hfcam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.devices.html">fusionsc.devices</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.export.html">fusionsc.export</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.structio.html">fusionsc.structio</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusionsc.geometry.html">fusionsc.geometry</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference external" href="https://alexrobomind.github.io/fusionsc/cpp/index.html">C++ library documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../reference.html">Reference</a></li>
+          <li class="breadcrumb-item"><a href="fusionsc.html">fusionsc</a></li>
+          <li class="breadcrumb-item"><a href="fusionsc.magnetics.html">fusionsc.magnetics</a></li>
+      <li class="breadcrumb-item active">fusionsc.magnetics.MagneticConfig</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/_autosummary/fusionsc.magnetics.MagneticConfig.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="fusionsc-magnetics-magneticconfig">
+<h1>fusionsc.magnetics.MagneticConfig<a class="headerlink" href="#fusionsc-magnetics-magneticconfig" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusionsc.magnetics.</span></span><span class="sig-name descname"><span class="pre">MagneticConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">val</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">msgSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1024</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">byReference</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig" title="Link to this definition"></a></dt>
+<dd><p>Magnetic configuration class. Wraps an instance of fusionsc.service.MagneticField.Builder
+and provides access to +, -, <a href="#id1"><span class="problematic" id="id2">*</span></a>, and / operators.</p>
+</dd></dl>
+
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.__init__" title="fusionsc.magnetics.MagneticConfig.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a>([val, msgSize, byReference])</p></td>
+<td><p>Creates a new instance by either: - Allocating a new message of size msgSize (if val is None) - Storing a reference to the target (if byReference is set) - Copying the message from the given target (accepts Cap'n'proto messages,         YAML strings, lists, dicts, and NumPy arrays)</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.cache" title="fusionsc.magnetics.MagneticConfig.cache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cache</span></code></a>(filename)</p></td>
+<td><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.calculateRadialModes" title="fusionsc.magnetics.MagneticConfig.calculateRadialModes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">calculateRadialModes</span></code></a>(surfaces[, ...])</p></td>
+<td><p>Calculates the radial Fourier modes of this field (or the ratio to the given background field) on the given surfaces</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.compute" title="fusionsc.magnetics.MagneticConfig.compute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">compute</span></code></a>([grid])</p></td>
+<td><p>Computes the magnetic field on the specified grid.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.computeCached" title="fusionsc.magnetics.MagneticConfig.computeCached"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeCached</span></code></a>(grid)</p></td>
+<td><p>Attaches a cached computed version of this field.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.evaluatePhizr" title="fusionsc.magnetics.MagneticConfig.evaluatePhizr"><code class="xref py py-obj docutils literal notranslate"><span class="pre">evaluatePhizr</span></code></a>(points)</p></td>
+<td><p>Evaluates the magnetic field in the given coordinates.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.evaluateXyz" title="fusionsc.magnetics.MagneticConfig.evaluateXyz"><code class="xref py py-obj docutils literal notranslate"><span class="pre">evaluateXyz</span></code></a>(points)</p></td>
+<td><p>Evaluates the magnetic field in the given coordinates.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.fromComputed" title="fusionsc.magnetics.MagneticConfig.fromComputed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromComputed</span></code></a>(grid, field)</p></td>
+<td><p>Creates a field by loading a computed field.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.fromDipoles" title="fusionsc.magnetics.MagneticConfig.fromDipoles"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromDipoles</span></code></a>(positions, moments, radii)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.fromEFit" title="fusionsc.magnetics.MagneticConfig.fromEFit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromEFit</span></code></a>([contents, filename])</p></td>
+<td><p>Creates a magnetic equilibrium field form an EFit file</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.getComputed" title="fusionsc.magnetics.MagneticConfig.getComputed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getComputed</span></code></a>([grid])</p></td>
+<td><p>For a field of type &quot;computed&quot;, returns the grid and the downloaded field tensor on the grid.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.graph" title="fusionsc.magnetics.MagneticConfig.graph"><code class="xref py py-obj docutils literal notranslate"><span class="pre">graph</span></code></a>(**kwargs)</p></td>
+<td><p>Visualizes the contents in a graph structure.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.interpolateXyz" title="fusionsc.magnetics.MagneticConfig.interpolateXyz"><code class="xref py py-obj docutils literal notranslate"><span class="pre">interpolateXyz</span></code></a>(points[, grid])</p></td>
+<td><p>Evaluates the magnetic field at target positions by first computing the magnetic field at the target points (if not yet done), and then</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.load" title="fusionsc.magnetics.MagneticConfig.load"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load</span></code></a>()</p></td>
+<td><p>Loads an instance of this class from a previously written archive file.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.ptree" title="fusionsc.magnetics.MagneticConfig.ptree"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ptree</span></code></a>()</p></td>
+<td><p>Prints a tree version of this object.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.resolve" title="fusionsc.magnetics.MagneticConfig.resolve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resolve</span></code></a>()</p></td>
+<td><p>Resolves contained coils and magnetic configurations contained in this object (returned in a new instance) <em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.rotate" title="fusionsc.magnetics.MagneticConfig.rotate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotate</span></code></a>(angle, axis[, center])</p></td>
+<td><p>Returns a new field rotated around the prescribed axis and center point</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.save" title="fusionsc.magnetics.MagneticConfig.save"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save</span></code></a>(filename)</p></td>
+<td><p>Saves the object into an archive file (including all referenced data)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.toYaml" title="fusionsc.magnetics.MagneticConfig.toYaml"><code class="xref py py-obj docutils literal notranslate"><span class="pre">toYaml</span></code></a>([flow])</p></td>
+<td><p>Prints the contents as block-structured YAML</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.toroidalFlux" title="fusionsc.magnetics.MagneticConfig.toroidalFlux"><code class="xref py py-obj docutils literal notranslate"><span class="pre">toroidalFlux</span></code></a>(surfaces[, phi, nTheta, nR])</p></td>
+<td><p>Calculates the integrated toroidal flux of the magnetic surface</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.translate" title="fusionsc.magnetics.MagneticConfig.translate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">translate</span></code></a>(dx)</p></td>
+<td><p>Returns a new field shifted by the given vector</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig.upload" title="fusionsc.magnetics.MagneticConfig.upload"><code class="xref py py-obj docutils literal notranslate"><span class="pre">upload</span></code></a>()</p></td>
+<td><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> '.asnc(...)' that returns Promise[...]</p></td>
+</tr>
+</tbody>
+</table>
+<p class="rubric">Attributes</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p>Underlying Cap'n'proto struct (usually a builder type).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">type</span></code></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+<p class="rubric">Methods</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.__init__">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">val</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">msgSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1024</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">byReference</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.__init__" title="Link to this definition"></a></dt>
+<dd><p>Creates a new instance by either:
+- Allocating a new message of size msgSize (if val is None)
+- Storing a reference to the target (if byReference is set)
+- Copying the message from the given target (accepts Cap’n’proto messages,</p>
+<blockquote>
+<div><p>YAML strings, lists, dicts, and NumPy arrays)</p>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.cache">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">cache</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.cache" title="Link to this definition"></a></dt>
+<dd><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.calculateRadialModes">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">calculateRadialModes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">surfaces</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="fusionsc.magnetics.SurfaceArray.html#fusionsc.magnetics.SurfaceArray" title="fusionsc.magnetics.SurfaceArray"><span class="pre">SurfaceArray</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalizeAgainst</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig" title="fusionsc.magnetics.MagneticConfig"><span class="pre">MagneticConfig</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nMax</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mMax</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nPhi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nTheta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nSym</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">useFFT</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">quantity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'field'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'flux'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'field'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fourierConvention</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'regular'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'vmec'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'vmec'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fourierNormalization</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'normalized'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'l2Preserving'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'unnormalized'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'normalized'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.calculateRadialModes" title="Link to this definition"></a></dt>
+<dd><p>Calculates the radial Fourier modes of this field (or the ratio to the given
+background field) on the given surfaces</p>
+<dl>
+<dt>Parameters:</dt><dd><ul>
+<li><p>surfaces: Description of the magnetic surfaces to evaluate on.</p></li>
+<li><p>normalizeAgainst: Optional field to normalize again</p></li>
+<li><p>nMax: Maximum absolute toroidal mode number to calculate</p></li>
+<li><p>mMax: Maximum poloidal mode number to calcualte</p></li>
+<li><p>nPhi: Number of toroidal points on grid</p></li>
+<li><p>nTheta: Number of poloidal points on grid</p></li>
+<li><p>nSym: Toroidal symmetry</p></li>
+<li><p>useFFT: Whether to use the fast FFT-based Fourier path (as opposed to a slower cosine fit)</p></li>
+<li><p>quantity: Whether to calculate the radial field or the radial flux (field * (dx/dPhi x dx/dTheta))</p></li>
+<li><p>fourierConvention: What type of Fourier modes to expand in. Also affects the DFT expansion Possible values are:
+- regular: Usual Fourier modes of type exp(2 <a href="#id3"><span class="problematic" id="id4">*</span></a>pi * i * (n * phi + m * theta))
+- vmec: VMEC-style Fourier expansion of type exp(2 * pi * i * (m * theta - n * phi))</p></li>
+<li><p>fourierNormalization: How to normalize the Fourier modes. Available normalizations are:
+- unnormalized: Performs no normalization of the Fourier transform.
+- l2Preserving: Divide by sqrt(nPhi * nTheta), which produces identical L2 norm of input values and Fourier coefficients
+- normalized: Divide by nPhi * nTheta, so that the modes are the actual mode expansion coefficients (so the inverse DFT requires</p>
+<blockquote>
+<div><p>no normalization)</p>
+</div></blockquote>
+</li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><p>A dict with the following entries:
+- cosCoeffs: […, 2 * nMax + 1, mMax + 1] array of cosine coefficients of Fourier mode expansion
+- sinCoeffs: […, 2 * nMax + 1, mMax + 1] array of sine coefficients of Fourier mode expansion
+- nTor: [2 * nMax + 1, 1] array of toroidal mode numbers
+- mPol: [1, mMax + 1] array of poloidal mode numbers</p>
+</dd>
+</dl>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.compute">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">compute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig" title="fusionsc.magnetics.MagneticConfig"><span class="pre">MagneticConfig</span></a></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.compute" title="Link to this definition"></a></dt>
+<dd><p>Computes the magnetic field on the specified grid. Doesn’t download the field to the local machine.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>A magnetic field of type ‘computedField’ that holds a reference to the (eventually computed,
+possible remotely held) computed field.</p>
+</dd>
+</dl>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.computeCached">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">computeCached</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grid</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig" title="fusionsc.magnetics.MagneticConfig"><span class="pre">MagneticConfig</span></a></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.computeCached" title="Link to this definition"></a></dt>
+<dd><p>Attaches a cached computed version of this field. In future computations, this field will be interpolated
+as long as all points of the compute request lie inside its grid definition.</p>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.evaluatePhizr">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">evaluatePhizr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">points</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">array</span></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.evaluatePhizr" title="Link to this definition"></a></dt>
+<dd><p>Evaluates the magnetic field in the given coordinates.</p>
+<dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>points: A numpy-array of shape [3, …] (at least 1D) with the points in r, z, phi coordinates.</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><p>A numpy array of shape points.shape with the field as x, y, z field (cartesian).</p>
+</dd>
+</dl>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.evaluateXyz">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">evaluateXyz</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">points</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">array</span></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.evaluateXyz" title="Link to this definition"></a></dt>
+<dd><p>Evaluates the magnetic field in the given coordinates. Unlike interpolateXyz, this function
+does NOT compute the field on a grid and then interpolate, but instead evaluates the field
+directly at the given point.</p>
+<dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>points: A numpy-array of shape [3, …] (at least 1D) with the points in x, y, z coordinates.</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><p>A numpy array of shape points.shape with the field as x, y, z field (cartesian).</p>
+</dd>
+</dl>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.fromComputed">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">fromComputed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">field</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig" title="fusionsc.magnetics.MagneticConfig"><span class="pre">MagneticConfig</span></a></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.fromComputed" title="Link to this definition"></a></dt>
+<dd><p>Creates a field by loading a computed field.</p>
+<dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>grid: An object that can be assigned to a service.MagneticField (e.g. YAML string, service.MagneticField.Reader or .Builder, apprioriate python dict)</p></li>
+<li><p>field: A tensor of shape [nPhi, nZ, nR, 3] holding the magnetic field. The last axis describes
+the magnetic field component. The components are (indices 0 to 2) bPhi, bZ, bR.</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><p>A magnetic field object matching the given grid and the field values at the interpolation points</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.fromDipoles">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">fromDipoles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">positions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">moments</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">radii</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig" title="fusionsc.magnetics.MagneticConfig"><span class="pre">MagneticConfig</span></a></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.fromDipoles" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.fromEFit">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">fromEFit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">contents</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig" title="fusionsc.magnetics.MagneticConfig"><span class="pre">MagneticConfig</span></a></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.fromEFit" title="Link to this definition"></a></dt>
+<dd><p>Creates a magnetic equilibrium field form an EFit file</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.getComputed">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">getComputed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Builder</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">array</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.getComputed" title="Link to this definition"></a></dt>
+<dd><p>For a field of type “computed”, returns the grid and the downloaded field tensor on the grid.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><ul class="simple">
+<li><p>A service.ToroidalGrid.Builder describing the grid.</p></li>
+<li><p>A tensor of shape [nPhi, nZ, nR, 3] holding the magnetic field. The last axis describes
+the magnetic field component. The components are (indices 0 to 2) bPhi, bZ, bR.</p></li>
+</ul>
+</dd>
+</dl>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.graph">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.graph" title="Link to this definition"></a></dt>
+<dd><p>Visualizes the contents in a graph structure. Requires graphviz</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.interpolateXyz">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">interpolateXyz</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">array</span></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.interpolateXyz" title="Link to this definition"></a></dt>
+<dd><p>Evaluates the magnetic field at target positions by first computing the magnetic field
+at the target points (if not yet done), and then</p>
+<dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>points: A numpy-array of shape [3, …] (at least 1D) with the points in x, y, z coordinates.</p></li>
+<li><p>grid: An optional grid parameter required if the field is not yet computed. The grid</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><p>A numpy array of shape points.shape with the field as x, y, z field (cartesian).</p>
+</dd>
+</dl>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.load">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.load" title="Link to this definition"></a></dt>
+<dd><p>Loads an instance of this class from a previously written archive file.</p>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.ptree">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">ptree</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.ptree" title="Link to this definition"></a></dt>
+<dd><p>Prints a tree version of this object. Requires the printree library.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.resolve">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">resolve</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig" title="fusionsc.magnetics.MagneticConfig"><span class="pre">MagneticConfig</span></a></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.resolve" title="Link to this definition"></a></dt>
+<dd><p>Resolves contained coils and magnetic configurations contained in this object (returned in a new instance)
+<em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.rotate">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">rotate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">angle</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">0]</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig" title="fusionsc.magnetics.MagneticConfig"><span class="pre">MagneticConfig</span></a></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.rotate" title="Link to this definition"></a></dt>
+<dd><p>Returns a new field rotated around the prescribed axis and center point</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.save">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.save" title="Link to this definition"></a></dt>
+<dd><p>Saves the object into an archive file (including all referenced data)</p>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.toYaml">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">toYaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flow</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.toYaml" title="Link to this definition"></a></dt>
+<dd><p>Prints the contents as block-structured YAML</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.toroidalFlux">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">toroidalFlux</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">surfaces</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="fusionsc.magnetics.SurfaceArray.html#fusionsc.magnetics.SurfaceArray" title="fusionsc.magnetics.SurfaceArray"><span class="pre">SurfaceArray</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">phi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nTheta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nR</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.toroidalFlux" title="Link to this definition"></a></dt>
+<dd><p>Calculates the integrated toroidal flux of the magnetic surface</p>
+<p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.translate">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">translate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dx</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#fusionsc.magnetics.MagneticConfig" title="fusionsc.magnetics.MagneticConfig"><span class="pre">MagneticConfig</span></a></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.translate" title="Link to this definition"></a></dt>
+<dd><p>Returns a new field shifted by the given vector</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusionsc.magnetics.MagneticConfig.upload">
+<span class="sig-prename descclassname"><span class="pre">MagneticConfig.</span></span><span class="sig-name descname"><span class="pre">upload</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#fusionsc.magnetics.MagneticConfig.upload" title="Link to this definition"></a></dt>
+<dd><p><em>Note</em> Has <span class="xref std std-ref">asynchronous variant</span> ‘.asnc(…)’ that returns Promise[…]</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="fusionsc.magnetics.CoilFilament.html" class="btn btn-neutral float-left" title="fusionsc.magnetics.CoilFilament" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="fusionsc.magnetics.SurfaceArray.html" class="btn btn-neutral float-right" title="fusionsc.magnetics.SurfaceArray" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

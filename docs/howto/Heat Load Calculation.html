@@ -1,0 +1,364 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Heat load calculation (Wendelstein 7-X) &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Creating a server" href="Server.html" />
+    <link rel="prev" title="Connection length plots (Wendelstein 7-X)" href="Connection%20Length.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Usage examples (How To …)</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="W7X%20Current%20Scan.html">Current scan (W7-X on-site)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="JText.html">Adding 3D perturbations to a 2D equilibrium (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Field%20Interpolation.html">Magnetic field interpolation (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Field%20Line%20Following.html">Field line following (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Poincare.html">Poincare plots (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Connection%20Length.html">Connection length plots (Wendelstein 7-X)</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Heat load calculation (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Server.html">Creating a server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Client.html">Connecting to a remote server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Mapping.html">Accelerating computations with field-line mapping</a></li>
+<li class="toctree-l2"><a class="reference internal" href="FieldAlign.html">Creating field-aligned meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="CalculateIota.html">Iota Calculation, Fourier Surface Extraction, and Perturbations (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="SphereField.html">Dipole fields</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference.html">Reference</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://alexrobomind.github.io/fusionsc/cpp/index.html">C++ library documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Usage examples (How To …)</a></li>
+      <li class="breadcrumb-item active">Heat load calculation (Wendelstein 7-X)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/howto/Heat Load Calculation.ipynb.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="heat-load-calculation-wendelstein-7-x">
+<h1>Heat load calculation (Wendelstein 7-X)<a class="headerlink" href="#heat-load-calculation-wendelstein-7-x" title="Link to this heading"></a></h1>
+<p>This example shows how to create heat-load distribution plots for Wendelstein 7-X. First, we need to perform some setup to make sure W7-X data are available.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">fusionsc</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">fsc</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fusionsc.devices</span><span class="w"> </span><span class="kn">import</span> <span class="n">w7x</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Now we need to setup the geometry and magnetic field configuration.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">field</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">standard</span><span class="p">()</span>
+<span class="n">geometry</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">op21Geometry</span><span class="p">()</span>
+
+<span class="n">grid</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">defaultGrid</span><span class="p">()</span>
+<span class="n">grid</span><span class="o">.</span><span class="n">nR</span> <span class="o">=</span> <span class="mi">128</span>
+<span class="n">grid</span><span class="o">.</span><span class="n">nZ</span> <span class="o">=</span> <span class="mi">128</span>
+<span class="n">grid</span><span class="o">.</span><span class="n">nPhi</span> <span class="o">=</span> <span class="mi">32</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">field</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">grid</span><span class="p">)</span>
+<span class="n">geometry</span> <span class="o">=</span> <span class="n">geometry</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">w7x</span><span class="o">.</span><span class="n">defaultGeometryGrid</span><span class="p">())</span>
+
+<span class="k">await</span> <span class="n">field</span>
+<span class="k">await</span> <span class="n">geometry</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>The tracing calculations underlying the anisotropic diffusion process are very expensive and dominate the computation time. To reduce them, we can pre-compute a global mapping of the field lines, which reduces field line tracing to a series of interpolations. Here, we use the triangular planes of W7-X, where both the plasma core and the islands have favorable aspect ratios, as our remapping planes.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">mapping</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">flt</span><span class="o">.</span><span class="n">computeMapping</span><span class="p">(</span>
+    <span class="n">field</span><span class="p">,</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">([</span><span class="mi">72</span><span class="p">]),</span> <span class="c1"># Mapping planes</span>
+    <span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">200</span><span class="p">),</span> <span class="c1"># R values for mapping grid</span>
+    <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">,</span> <span class="mi">200</span><span class="p">),</span> <span class="c1"># Z values for mapping grid</span>
+    <span class="n">stepSize</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span> <span class="c1"># Step size for tracing computation</span>
+    <span class="n">distanceLimit</span> <span class="o">=</span> <span class="mi">7</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">8</span><span class="p">,</span> <span class="c1"># Distance limit for tracing computation (no field line needed to be longer than 1/10th of device)</span>
+    <span class="n">toroidalSymmetry</span> <span class="o">=</span> <span class="mi">5</span>
+<span class="p">)</span>
+<span class="k">await</span> <span class="n">mapping</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>In addition, we also map the geometry into straight field-line coordinates to be able to use extremely long step sizes for the intersection tests.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">geoMapping</span> <span class="o">=</span> <span class="n">mapping</span><span class="o">.</span><span class="n">mapGeometry</span><span class="p">(</span><span class="n">geometry</span><span class="o">.</span><span class="n">triangulate</span><span class="p">(</span><span class="mf">0.03</span><span class="p">),</span> <span class="n">toroidalSymmetry</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">nPhi</span> <span class="o">=</span> <span class="mi">32</span><span class="p">,</span> <span class="n">nU</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span> <span class="n">nV</span> <span class="o">=</span> <span class="mi">100</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>From now on, we can accelerate all computations with the mapping by passing it as an additional argument.
+Before we can run the calculation, we need to determine the seeding points for it. Our strategy here is to find the LCFS, then move a bit inward.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">pInside</span> <span class="o">=</span> <span class="p">[</span><span class="mf">5.5</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+<span class="n">pOutside</span> <span class="o">=</span> <span class="p">[</span><span class="mf">6.5</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+
+<span class="n">lcfs</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">flt</span><span class="o">.</span><span class="n">findLCFS</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">geometry</span><span class="p">,</span> <span class="n">pOutside</span><span class="p">,</span> <span class="n">pInside</span><span class="p">,</span> <span class="n">mapping</span> <span class="o">=</span> <span class="n">geoMapping</span><span class="p">,</span> <span class="n">stepSize</span> <span class="o">=</span> <span class="mi">13</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">pStart</span> <span class="o">=</span> <span class="n">lcfs</span> <span class="o">+</span> <span class="p">[</span><span class="o">-</span><span class="mf">0.0012</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">lcfs</span><span class="p">,</span> <span class="n">pStart</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[6.20675202 0.         0.        ] [6.20555202 0.         0.        ]
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">startPlanes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span> <span class="p">,</span> <span class="mi">2</span> <span class="o">/</span> <span class="mi">5</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="n">endpoint</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span>
+<span class="n">nTurns</span> <span class="o">=</span> <span class="mi">1000</span>
+<span class="n">xSurf</span><span class="p">,</span> <span class="n">ySurf</span><span class="p">,</span> <span class="n">zSurf</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">flt</span><span class="o">.</span><span class="n">poincareInPhiPlanes</span><span class="p">(</span><span class="n">pStart</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">startPlanes</span><span class="p">,</span> <span class="n">nTurns</span><span class="p">,</span> <span class="n">mapping</span> <span class="o">=</span> <span class="n">mapping</span><span class="p">,</span> <span class="n">stepSize</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">distanceLimit</span> <span class="o">=</span> <span class="mf">1e5</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Let’s take a look at our starting surface</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">rSurf</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">xSurf</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">ySurf</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">rSurf</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">zSurf</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">s</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">)</span>
+<span class="n">geometry</span><span class="o">.</span><span class="n">plotCut</span><span class="p">(</span><span class="n">startPlanes</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;k&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s2">&quot;equal&quot;</span><span class="p">)</span>
+<span class="n">xSurf</span><span class="o">.</span><span class="n">shape</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>(100, 1000)
+</pre></div>
+</div>
+<img alt="../_images/51092c5a18dcc97ad99aec07fe544ee637775bc0b9ab0be677c1313b4fbfdfb7.png" src="../_images/51092c5a18dcc97ad99aec07fe544ee637775bc0b9ab0be677c1313b4fbfdfb7.png" />
+</div>
+</div>
+<p>Since the surface looks OK we can now start to do our tracing on the nTurns * nPlanes = 220 * 100 = 22000 points we obtained. Since we want to do diffusive tracing, we enable the parallel diffusion model. Because we use field line mapping for the parallel tracing calculation, the only limitation for our step size is how much we will tolerate the geometry intersection tests (which are based on line-casts between adjacent field line positions) to deviate from the exact field line.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+
+<span class="n">traceResult</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">flt</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">xSurf</span><span class="p">,</span> <span class="n">ySurf</span><span class="p">,</span> <span class="n">zSurf</span><span class="p">],</span> <span class="n">field</span><span class="p">,</span> <span class="n">geometry</span><span class="p">,</span>
+    <span class="n">distanceLimit</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="c1"># Disable distance limit</span>
+    <span class="n">collisionLimit</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="c1"># Terminate field line on first collision</span>
+    <span class="n">meanFreePath</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">meanFreePathGrowth</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">parallelDiffusionCoefficient</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+    <span class="c1"># parallelConvectionVelocity = 1,</span>
+    <span class="n">isotropicDiffusionCoefficient</span> <span class="o">=</span> <span class="mf">1e-7</span><span class="p">,</span>
+    <span class="n">mapping</span> <span class="o">=</span> <span class="n">geoMapping</span><span class="p">,</span> <span class="n">stepSize</span> <span class="o">=</span> <span class="mi">13</span> <span class="c1"># The step size should be about 1/3rd of machine circumference (limiting is errors in angle unwrapping)</span>
+<span class="p">)</span>
+
+<span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>237.8221664428711
+</pre></div>
+</div>
+</div>
+</div>
+<p>The result of flt.trace is a superset of the Poincare and connection-length functions (in fact these functions just call trace and return part of the result). Of interest for us is the dict entry ‘endPoints’, which contains 4 pieces of information about the end points: Their x, y, and z coordinates as well as the length of the field line (which we don’t care about here). Since we know the final distribution to be Stellarator-symmetric, we symmetrize the heat loads between our divertors to get better statistics.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">traceResult</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">traceResult</span><span class="p">[</span><span class="s1">&#39;endPoints&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="n">xyz</span> <span class="o">=</span> <span class="n">traceResult</span><span class="p">[</span><span class="s1">&#39;endPoints&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">:</span><span class="mi">3</span><span class="p">]</span>
+<span class="n">xyz</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">flt</span><span class="o">.</span><span class="n">symmetrize</span><span class="p">(</span><span class="n">xyz</span><span class="p">,</span> <span class="n">nSym</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">stellaratorSymmetric</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">xyz</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">xyz</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>dict_keys([&#39;endPoints&#39;, &#39;poincareHits&#39;, &#39;stopReasons&#39;, &#39;fieldLines&#39;, &#39;fieldStrengths&#39;, &#39;endTags&#39;, &#39;numSteps&#39;, &#39;responseSize&#39;])
+(4, 100, 1000)
+(3, 10, 100, 1000) 1000000
+</pre></div>
+</div>
+</div>
+</div>
+<p>To obtain the heat loads from the point cloud, we use the ‘hfcam’ module. To do that, we need to follow the following steps:</p>
+<ul class="simple">
+<li><p>Define a projection view</p></li>
+<li><p>Build a camera that contains a rasterized geometry mesh and infos about the rasterization.</p></li>
+<li><p>Render the points into the camera image.</p></li>
+</ul>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">camGeo</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">divertor</span><span class="p">(</span><span class="s1">&#39;OP21&#39;</span><span class="p">)</span><span class="c1"># + w7x.baffles(&#39;OP21&#39;)</span>
+<span class="n">camProj</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">hfcam</span><span class="o">.</span><span class="n">toroidalProjection</span><span class="p">(</span>
+    <span class="n">w</span> <span class="o">=</span> <span class="mi">2500</span><span class="p">,</span> <span class="n">h</span> <span class="o">=</span> <span class="mi">1200</span><span class="p">,</span>
+    <span class="c1">#w = 625, h = 300,</span>
+    <span class="n">phi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="mi">7</span><span class="p">),</span> <span class="n">rTarget</span> <span class="o">=</span> <span class="mf">5.8</span><span class="p">,</span> <span class="n">zTarget</span> <span class="o">=</span> <span class="o">-</span><span class="mf">0.5</span><span class="p">,</span>
+    <span class="n">verticalInclination</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="mi">30</span><span class="p">),</span> <span class="n">horizontalInclination</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">distance</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span> <span class="n">viewportHeight</span> <span class="o">=</span> <span class="mf">2.5</span><span class="p">,</span>
+    <span class="n">fieldOfView</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="n">cam</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">hfcam</span><span class="o">.</span><span class="n">make</span><span class="p">(</span><span class="n">camProj</span><span class="p">,</span> <span class="n">camGeo</span><span class="p">,</span> <span class="n">depthTolerance</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">camProj</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>width: 2500
+height: 1200
+transform: [-0.058497284834470767, -0.49627307582066105, -0.85957018174986644, -0, 0.47642215278783445, -0.060934671702573738, -0.10554194733138723, -0, 6.6613381477509375e-18, 0.86602540378443837, -0.49999999999999989, -0, 1.6653345369377344e-18, 3.3330127018922191, 5.2729473419497426, 1.25]
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">matplotlib</span><span class="o">.</span><span class="n">rc</span><span class="p">(</span><span class="s1">&#39;font&#39;</span><span class="p">,</span> <span class="n">size</span> <span class="o">=</span> <span class="mi">22</span><span class="p">)</span>
+
+<span class="n">camData</span> <span class="o">=</span> <span class="n">cam</span><span class="o">.</span><span class="n">getData</span><span class="p">()</span>
+<span class="n">detBuf</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">camData</span><span class="o">.</span><span class="n">determinantBuffer</span><span class="p">)</span>
+<span class="n">cam</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+<span class="n">cam</span><span class="o">.</span><span class="n">addPoints</span><span class="p">(</span><span class="n">xyz</span><span class="p">,</span> <span class="n">r</span> <span class="o">=</span> <span class="mf">0.015</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">cam</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span> <span class="o">=</span> <span class="p">(</span><span class="mi">24</span><span class="p">,</span> <span class="mi">14</span><span class="p">))</span>
+
+<span class="c1"># Show mesh in background</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">detBuf</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">origin</span> <span class="o">=</span><span class="s1">&#39;lower&#39;</span><span class="p">,</span> <span class="n">cmap</span> <span class="o">=</span> <span class="s1">&#39;gray&#39;</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">image</span><span class="p">)</span><span class="o">.</span><span class="n">T</span> <span class="o">/</span> <span class="n">xyz</span><span class="o">.</span><span class="n">size</span> <span class="o">*</span> <span class="mi">3</span><span class="p">,</span> <span class="n">origin</span> <span class="o">=</span> <span class="s1">&#39;lower&#39;</span><span class="p">,</span> <span class="n">cmap</span> <span class="o">=</span> <span class="s1">&#39;magma&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;off&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Normalized divertor heat loads&quot;</span><span class="p">)</span>
+
+<span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">gca</span><span class="p">()</span>
+<span class="n">cax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">gcf</span><span class="p">()</span><span class="o">.</span><span class="n">add_axes</span><span class="p">([</span><span class="n">ax</span><span class="o">.</span><span class="n">get_position</span><span class="p">()</span><span class="o">.</span><span class="n">x1</span><span class="o">+</span><span class="mf">0.01</span><span class="p">,</span><span class="n">ax</span><span class="o">.</span><span class="n">get_position</span><span class="p">()</span><span class="o">.</span><span class="n">y0</span><span class="p">,</span><span class="mf">0.02</span><span class="p">,</span><span class="n">ax</span><span class="o">.</span><span class="n">get_position</span><span class="p">()</span><span class="o">.</span><span class="n">height</span><span class="p">])</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">label</span> <span class="o">=</span> <span class="s2">&quot;Heat-load normalized against total power ($m^{-2}$)&quot;</span><span class="p">,</span> <span class="n">cax</span><span class="o">=</span><span class="n">cax</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&lt;matplotlib.colorbar.Colorbar at 0x13cab4b2950&gt;
+</pre></div>
+</div>
+<img alt="../_images/43c4c215c9c8ba5f48e08d385acafa4eb01172974a1b734f1e79be30983a23d6.png" src="../_images/43c4c215c9c8ba5f48e08d385acafa4eb01172974a1b734f1e79be30983a23d6.png" />
+</div>
+</div>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="Connection%20Length.html" class="btn btn-neutral float-left" title="Connection length plots (Wendelstein 7-X)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="Server.html" class="btn btn-neutral float-right" title="Creating a server" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

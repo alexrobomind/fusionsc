@@ -1,0 +1,320 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Adding 3D perturbations to a 2D equilibrium (J-TEXT) &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Magnetic field interpolation (J-TEXT)" href="Field%20Interpolation.html" />
+    <link rel="prev" title="Current scan (W7-X on-site)" href="W7X%20Current%20Scan.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Usage examples (How To …)</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="W7X%20Current%20Scan.html">Current scan (W7-X on-site)</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Adding 3D perturbations to a 2D equilibrium (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Field%20Interpolation.html">Magnetic field interpolation (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Field%20Line%20Following.html">Field line following (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Poincare.html">Poincare plots (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Connection%20Length.html">Connection length plots (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Heat%20Load%20Calculation.html">Heat load calculation (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Server.html">Creating a server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Client.html">Connecting to a remote server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Mapping.html">Accelerating computations with field-line mapping</a></li>
+<li class="toctree-l2"><a class="reference internal" href="FieldAlign.html">Creating field-aligned meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="CalculateIota.html">Iota Calculation, Fourier Surface Extraction, and Perturbations (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="SphereField.html">Dipole fields</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference.html">Reference</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://alexrobomind.github.io/fusionsc/cpp/index.html">C++ library documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Usage examples (How To …)</a></li>
+      <li class="breadcrumb-item active">Adding 3D perturbations to a 2D equilibrium (J-TEXT)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/howto/JText.ipynb.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="adding-3d-perturbations-to-a-2d-equilibrium-j-text">
+<h1>Adding 3D perturbations to a 2D equilibrium (J-TEXT)<a class="headerlink" href="#adding-3d-perturbations-to-a-2d-equilibrium-j-text" title="Link to this heading"></a></h1>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">fusionsc</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">fsc</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fusionsc.devices</span><span class="w"> </span><span class="kn">import</span> <span class="n">jtext</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>We use J-TEXT as an example for a 3D perturbation applied to a 2D equilibrium. We use an example equilibrium for the J-TEXT Tokamak (which is just the contents of an EFit geqdsk file). On top of that equilibrium, we apply a perturbation field generated by the island coils. The field will then be calculated as <code class="docutils literal notranslate"><span class="pre">field</span> <span class="pre">+</span> <span class="pre">coilCurrent</span> <span class="pre">*</span> <span class="pre">perturbation</span></code>.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">efitExample</span> <span class="o">=</span> <span class="n">jtext</span><span class="o">.</span><span class="n">exampleGeqdsk</span><span class="p">()</span>
+<span class="n">lines</span> <span class="o">=</span> <span class="n">efitExample</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">20</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">lines</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;... </span><span class="si">{}</span><span class="s1"> lines follow ...&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span> <span class="o">-</span> <span class="mi">20</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>  EFID    16/03/13     #     75  400ms             0  65  65
+ 7.000000000e-01 7.000000000e-01 1.050000000e+00 7.000000000e-01 0.000000000e+00
+ 1.063671875e+00 0.000000000e+00 3.229880485e-02 1.512832695e-02 1.400000000e+00
+ 7.500000000e+04 3.229880485e-02 0.000000000e+00 1.063671875e+00 0.000000000e+00
+ 0.000000000e+00 0.000000000e+00 1.512832695e-02 0.000000000e+00 0.000000000e+00
+ 1.480607441e+00 1.480103394e+00 1.479615448e+00 1.479143353e+00 1.478686857e+00
+ 1.478245708e+00 1.477819652e+00 1.477408437e+00 1.477011806e+00 1.476629505e+00
+ 1.476261278e+00 1.475906867e+00 1.475566015e+00 1.475238465e+00 1.474923958e+00
+ 1.474622235e+00 1.474333035e+00 1.474056099e+00 1.473791166e+00 1.473537974e+00
+ 1.473296263e+00 1.473065769e+00 1.472846230e+00 1.472637384e+00 1.472438966e+00
+ 1.472250714e+00 1.472072363e+00 1.471903648e+00 1.471744305e+00 1.471594069e+00
+ 1.471452675e+00 1.471319857e+00 1.471195349e+00 1.471078885e+00 1.470970199e+00
+ 1.470869025e+00 1.470775095e+00 1.470688143e+00 1.470607902e+00 1.470534105e+00
+ 1.470466484e+00 1.470404772e+00 1.470348702e+00 1.470298005e+00 1.470252415e+00
+ 1.470211663e+00 1.470175480e+00 1.470143601e+00 1.470115755e+00 1.470091676e+00
+ 1.470071094e+00 1.470053742e+00 1.470039352e+00 1.470027655e+00 1.470018383e+00
+ 1.470011267e+00 1.470006040e+00 1.470002433e+00 1.470000177e+00 1.469999005e+00
+ 1.469998648e+00 1.469998837e+00 1.469999304e+00 1.469999781e+00 1.470000000e+00
+ 7.804532977e+02 7.596308094e+02 7.389767452e+02 7.184962088e+02 6.981943040e+02
+ 6.780761346e+02 6.581468042e+02 6.384114168e+02 6.188750759e+02 5.995428854e+02
+
+... 967 lines follow ...
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">field</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">magnetics</span><span class="o">.</span><span class="n">MagneticConfig</span><span class="o">.</span><span class="n">fromEFit</span><span class="p">(</span><span class="n">efitExample</span><span class="p">)</span>
+<span class="n">geometry</span> <span class="o">=</span> <span class="n">jtext</span><span class="o">.</span><span class="n">hfsLimiter</span><span class="p">()</span> <span class="o">+</span> <span class="n">jtext</span><span class="o">.</span><span class="n">target</span><span class="p">()</span>
+
+<span class="n">perturbation</span> <span class="o">=</span> <span class="n">jtext</span><span class="o">.</span><span class="n">islandCoils</span><span class="p">([</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="mi">6</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>We pre-calculate the perturbation and the background field separately, so that field + current * perturbation can be efficiently computed.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">grid</span> <span class="o">=</span> <span class="n">jtext</span><span class="o">.</span><span class="n">defaultGrid</span><span class="p">()</span>
+<span class="n">geoGrid</span> <span class="o">=</span> <span class="n">jtext</span><span class="o">.</span><span class="n">defaultGeometryGrid</span><span class="p">()</span>
+
+<span class="n">field</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">grid</span><span class="p">)</span>
+<span class="n">perturbation</span> <span class="o">=</span> <span class="n">perturbation</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">grid</span><span class="p">)</span>
+
+<span class="n">geometry</span> <span class="o">=</span> <span class="n">geometry</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">geoGrid</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Now we run Poincaré plots for a few different cases</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">startPoints</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">([</span><span class="mf">0.8</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mf">1.2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="mi">20</span><span class="p">,</span> <span class="n">axis</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">current</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2000</span><span class="p">,</span> <span class="mi">4000</span><span class="p">]:</span>
+    <span class="n">perturbedField</span> <span class="o">=</span> <span class="n">field</span> <span class="o">+</span> <span class="n">current</span> <span class="o">*</span> <span class="n">perturbation</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Perturbed field:</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">perturbedField</span><span class="o">.</span><span class="n">toYaml</span><span class="p">())</span>
+    
+    <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">lFwd</span><span class="p">,</span> <span class="n">lBwd</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">flt</span><span class="o">.</span><span class="n">poincareInPhiPlanes</span><span class="p">(</span>
+        <span class="n">startPoints</span><span class="p">,</span>
+        <span class="n">perturbedField</span><span class="p">,</span>
+        <span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="mi">500</span><span class="p">,</span>
+        <span class="n">distanceLimit</span> <span class="o">=</span> <span class="mf">1e5</span><span class="p">,</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="n">grid</span> <span class="c1"># A &quot;+&quot; expression is not a computed field, so we need to specify a grid to evaluate on</span>
+    <span class="p">)</span>
+    
+    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;I = </span><span class="si">{}</span><span class="s2">A&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">current</span><span class="p">))</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">marker</span> <span class="o">=</span> <span class="s1">&#39;.&#39;</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Perturbed field:
+ sum:
+  - computedField:
+      grid:
+        rMin: 0.69999999999999996
+        rMax: 1.3999999999999999
+        zMin: -0.34999999999999998
+        zMax: 0.34999999999999998
+        nR: 70
+        nZ: 70
+        nPhi: 128
+      data: &lt;capability&gt;
+  - scaleBy:
+      field:
+        computedField:
+          grid:
+            rMin: 0.69999999999999996
+            rMax: 1.3999999999999999
+            zMin: -0.34999999999999998
+            zMax: 0.34999999999999998
+            nR: 70
+            nZ: 70
+            nPhi: 128
+          data: &lt;capability&gt;
+</pre></div>
+</div>
+<img alt="../_images/e59fa71df53734596cc7ccbad8eacb8bba7d3e0484fafdc7243e449550b46d0d.png" src="../_images/e59fa71df53734596cc7ccbad8eacb8bba7d3e0484fafdc7243e449550b46d0d.png" />
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Perturbed field:
+ sum:
+  - computedField:
+      grid:
+        rMin: 0.69999999999999996
+        rMax: 1.3999999999999999
+        zMin: -0.34999999999999998
+        zMax: 0.34999999999999998
+        nR: 70
+        nZ: 70
+        nPhi: 128
+      data: &lt;capability&gt;
+  - scaleBy:
+      field:
+        computedField:
+          grid:
+            rMin: 0.69999999999999996
+            rMax: 1.3999999999999999
+            zMin: -0.34999999999999998
+            zMax: 0.34999999999999998
+            nR: 70
+            nZ: 70
+            nPhi: 128
+          data: &lt;capability&gt;
+      factor: 2000
+</pre></div>
+</div>
+<img alt="../_images/4042890777a2d63232c6d7e13be6ba085b3e5f6523f8ec002c79792e48231bd3.png" src="../_images/4042890777a2d63232c6d7e13be6ba085b3e5f6523f8ec002c79792e48231bd3.png" />
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Perturbed field:
+ sum:
+  - computedField:
+      grid:
+        rMin: 0.69999999999999996
+        rMax: 1.3999999999999999
+        zMin: -0.34999999999999998
+        zMax: 0.34999999999999998
+        nR: 70
+        nZ: 70
+        nPhi: 128
+      data: &lt;capability&gt;
+  - scaleBy:
+      field:
+        computedField:
+          grid:
+            rMin: 0.69999999999999996
+            rMax: 1.3999999999999999
+            zMin: -0.34999999999999998
+            zMax: 0.34999999999999998
+            nR: 70
+            nZ: 70
+            nPhi: 128
+          data: &lt;capability&gt;
+      factor: 4000
+</pre></div>
+</div>
+<img alt="../_images/95503eaec53baadc927a2096251739432b658ed70ad2eb5bd8771e15368213ae.png" src="../_images/95503eaec53baadc927a2096251739432b658ed70ad2eb5bd8771e15368213ae.png" />
+</div>
+</div>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="W7X%20Current%20Scan.html" class="btn btn-neutral float-left" title="Current scan (W7-X on-site)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="Field%20Interpolation.html" class="btn btn-neutral float-right" title="Magnetic field interpolation (J-TEXT)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

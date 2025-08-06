@@ -1,0 +1,250 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Creating field-aligned meshes &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Iota Calculation, Fourier Surface Extraction, and Perturbations (Wendelstein 7-X)" href="CalculateIota.html" />
+    <link rel="prev" title="Accelerating computations with field-line mapping" href="Mapping.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Usage examples (How To …)</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="W7X%20Current%20Scan.html">Current scan (W7-X on-site)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="JText.html">Adding 3D perturbations to a 2D equilibrium (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Field%20Interpolation.html">Magnetic field interpolation (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Field%20Line%20Following.html">Field line following (J-TEXT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Poincare.html">Poincare plots (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Connection%20Length.html">Connection length plots (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Heat%20Load%20Calculation.html">Heat load calculation (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Server.html">Creating a server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Client.html">Connecting to a remote server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Mapping.html">Accelerating computations with field-line mapping</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Creating field-aligned meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="CalculateIota.html">Iota Calculation, Fourier Surface Extraction, and Perturbations (Wendelstein 7-X)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="SphereField.html">Dipole fields</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference.html">Reference</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://alexrobomind.github.io/fusionsc/cpp/index.html">C++ library documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Usage examples (How To …)</a></li>
+      <li class="breadcrumb-item active">Creating field-aligned meshes</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/howto/FieldAlign.ipynb.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="creating-field-aligned-meshes">
+<h1>Creating field-aligned meshes<a class="headerlink" href="#creating-field-aligned-meshes" title="Link to this heading"></a></h1>
+<p>FusionSC can used its field line maps to transform meshes between field-aligned coordinates and real-space. This examples shows how to move between the different views.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">fusionsc</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">fsc</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fusionsc.devices</span><span class="w"> </span><span class="kn">import</span> <span class="n">w7x</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pyvista</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pv</span>
+<span class="n">pv</span><span class="o">.</span><span class="n">set_jupyter_backend</span><span class="p">(</span><span class="s1">&#39;static&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>For this example, we want to use standard configuration and the lower W7-X divertors in modules 1 and 2</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">geo</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">divertor</span><span class="p">()</span><span class="o">.</span><span class="n">filter</span><span class="p">({</span><span class="s2">&quot;moduleNo&quot;</span> <span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="s2">&quot;upper&quot;</span> <span class="p">:</span> <span class="mi">0</span><span class="p">})</span><span class="o">.</span><span class="n">merge</span><span class="p">()</span>
+<span class="n">mapping</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">computeMapping</span><span class="p">(</span><span class="n">w7x</span><span class="o">.</span><span class="n">standard</span><span class="p">())</span>
+
+<span class="n">geo</span><span class="o">.</span><span class="n">asPyvista</span><span class="p">()</span><span class="o">.</span><span class="n">plot</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../_images/b4215f3af8e81f6034271e7f201546f0a73f83544040e061588255ce0765a6c5.png" src="../_images/b4215f3af8e81f6034271e7f201546f0a73f83544040e061588255ce0765a6c5.png" />
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># TODO: Remove after release</span>
+<span class="n">fsc</span><span class="o">.</span><span class="n">backends</span><span class="o">.</span><span class="n">alwaysUseBackend</span><span class="p">(</span><span class="n">fsc</span><span class="o">.</span><span class="n">backends</span><span class="o">.</span><span class="n">localBackend</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Let’s have a look what the divertor looks like in straight-field coordinates. We expand around the divertor bean plane at phi = 0.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">fa</span> <span class="o">=</span> <span class="n">geo</span><span class="o">.</span><span class="n">triangulate</span><span class="p">(</span><span class="mf">0.01</span><span class="p">)</span><span class="o">.</span><span class="n">toFieldAligned</span><span class="p">(</span><span class="n">mapping</span><span class="p">,</span> <span class="n">r0</span> <span class="o">=</span> <span class="mf">5.5</span><span class="p">,</span> <span class="n">phi0</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span>
+<span class="n">fa</span><span class="o">.</span><span class="n">asPyvista</span><span class="p">()</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">cpos</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">6</span><span class="p">,</span><span class="o">-</span><span class="mi">10</span><span class="p">,</span><span class="o">-</span><span class="mf">0.5</span><span class="p">],[</span><span class="mf">5.5</span><span class="p">,</span><span class="mi">6</span><span class="p">,</span><span class="o">-</span><span class="mf">0.5</span><span class="p">],[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]])</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>C:\Users\Knieps\Documents\repos\fsc\src\python\fusionsc\_api_markers.py:15: UserWarning: The function fusionsc.geometry.Geometry.toFieldAligned is part of the unstable API. It might change or get removed in the near future. While unlikely, it might also not be compatible across client/server versions.
+  warnings.warn(f&quot;The function {f.__module__}.{f.__qualname__} is part of the unstable API. It might change or get removed in the near future. While unlikely, it might also not be compatible across client/server versions.&quot;)
+</pre></div>
+</div>
+<img alt="../_images/79d22966c5df0e7739f32de5c791a9b8d5afcac9651f6d95a4ad8cc8457f16f0.png" src="../_images/79d22966c5df0e7739f32de5c791a9b8d5afcac9651f6d95a4ad8cc8457f16f0.png" />
+</div>
+</div>
+<p>It appears that the divertor is indeed fairly straight when viewed in field-aligned coordinates. However, it can also be seen that the next divertor appears quite deformed in that perspective (which makes sense, as it should be covering a different flux tube).</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">fa</span><span class="o">.</span><span class="n">asPyvista</span><span class="p">()</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">cpos</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">3</span><span class="p">,</span><span class="mi">25</span><span class="p">,</span><span class="mi">0</span><span class="p">],[</span><span class="mf">5.5</span><span class="p">,</span><span class="mi">40</span><span class="p">,</span><span class="mi">0</span><span class="p">],[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]])</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../_images/06cf5d54767149cb2793d83d7b1e20c5b26d7ce438d9723500656f9a499037db.png" src="../_images/06cf5d54767149cb2793d83d7b1e20c5b26d7ce438d9723500656f9a499037db.png" />
+</div>
+</div>
+<p>On the other hand, if we were to try to design our own divertor structure, it helps a lot to create these in field aligned coordinates. In this case, we show that by just setting up two quads in field-aligned space. To do this, we use the “quadMesh” function that creates quad meshes from N by M grids in 2D space. For the fun of it, we will also give the parts a 1 degree pitch angle against the magnetic field.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">z1</span> <span class="o">=</span> <span class="o">-</span><span class="mf">0.5</span>
+<span class="n">z2</span> <span class="o">=</span> <span class="mf">0.5</span>
+
+<span class="n">quad1</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">[[</span><span class="mf">5.5</span><span class="p">,</span> <span class="mf">5.7</span><span class="p">],</span> <span class="p">[</span><span class="mf">5.5</span><span class="p">,</span> <span class="mf">5.7</span><span class="p">]],</span> <span class="c1"># X values of corners on 2x2 grid</span>
+    <span class="p">[[</span><span class="o">-</span><span class="mi">10</span><span class="p">,</span> <span class="o">-</span><span class="mi">10</span><span class="p">],</span> <span class="p">[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">]],</span> <span class="c1"># Y values of cornerss on 2x2 grid</span>
+    <span class="p">[[</span><span class="n">z1</span><span class="p">,</span> <span class="n">z1</span><span class="p">],</span> <span class="p">[</span><span class="n">z1</span><span class="p">,</span> <span class="n">z1</span><span class="p">]]</span> <span class="c1"># Z values of cornerss on 2x2 grid</span>
+<span class="p">]</span>
+
+<span class="n">quad2</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">[[</span><span class="mf">5.5</span><span class="p">,</span> <span class="mf">5.7</span><span class="p">],</span> <span class="p">[</span><span class="mf">5.5</span><span class="p">,</span> <span class="mf">5.7</span><span class="p">]],</span>
+    <span class="p">[[</span><span class="o">-</span><span class="mi">10</span><span class="p">,</span> <span class="o">-</span><span class="mi">10</span><span class="p">],</span> <span class="p">[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">]],</span>
+    <span class="p">[[</span><span class="n">z2</span><span class="p">,</span> <span class="n">z2</span><span class="p">],</span> <span class="p">[</span><span class="n">z2</span><span class="p">,</span> <span class="n">z2</span><span class="p">]]</span>
+<span class="p">]</span>
+
+<span class="n">geo1</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">Geometry</span><span class="o">.</span><span class="n">quadMesh</span><span class="p">(</span><span class="n">quad1</span><span class="p">)</span>
+<span class="n">geo2</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">Geometry</span><span class="o">.</span><span class="n">quadMesh</span><span class="p">(</span><span class="n">quad2</span><span class="p">)</span>
+
+<span class="n">pitchAngle</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="c1"># Pitch angle of 5 degrees</span>
+<span class="c1"># Note: rotate can also rotate around non-origin centers, but we just</span>
+<span class="c1"># want to rotate around [0,0,0] so we omit the &quot;center&quot; argument</span>
+<span class="n">geo1</span> <span class="o">=</span> <span class="n">geo1</span><span class="o">.</span><span class="n">rotate</span><span class="p">(</span><span class="o">-</span><span class="n">pitchAngle</span><span class="p">,</span> <span class="n">axis</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">geo2</span> <span class="o">=</span> <span class="n">geo2</span><span class="o">.</span><span class="n">rotate</span><span class="p">(</span><span class="n">pitchAngle</span><span class="p">,</span> <span class="n">axis</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">])</span>
+
+<span class="n">geoIn</span> <span class="o">=</span> <span class="n">geo1</span> <span class="o">+</span> <span class="n">geo2</span>
+<span class="n">geoIn</span><span class="o">.</span><span class="n">asPyvista</span><span class="p">()</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">jupyter_backend</span><span class="o">=</span><span class="s2">&quot;static&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../_images/5031445559f69be0e2686aedea37fffd2cb74bf9b390a0e03cd43d358331f500.png" src="../_images/5031445559f69be0e2686aedea37fffd2cb74bf9b390a0e03cd43d358331f500.png" />
+</div>
+</div>
+<p>To make sure we follow the curve of the field in the geometry, we first upsample the quads to 1cm edge length, then transform from field space into real-space.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">newGeo</span> <span class="o">=</span> <span class="n">geoIn</span><span class="o">.</span><span class="n">triangulate</span><span class="p">(</span><span class="mf">0.01</span><span class="p">)</span><span class="o">.</span><span class="n">fromFieldAligned</span><span class="p">(</span><span class="n">mapping</span><span class="p">,</span> <span class="mf">5.5</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+<span class="n">newGeo</span><span class="o">.</span><span class="n">asPyvista</span><span class="p">()</span><span class="o">.</span><span class="n">plot</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>C:\Users\Knieps\Documents\repos\fsc\src\python\fusionsc\_api_markers.py:15: UserWarning: The function fusionsc.geometry.Geometry.fromFieldAligned is part of the unstable API. It might change or get removed in the near future. While unlikely, it might also not be compatible across client/server versions.
+  warnings.warn(f&quot;The function {f.__module__}.{f.__qualname__} is part of the unstable API. It might change or get removed in the near future. While unlikely, it might also not be compatible across client/server versions.&quot;)
+</pre></div>
+</div>
+<img alt="../_images/165f9364b5ea87dec6211086bd3380dc6553c276dea2feab8e91abcc6eec06ac.png" src="../_images/165f9364b5ea87dec6211086bd3380dc6553c276dea2feab8e91abcc6eec06ac.png" />
+</div>
+</div>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="Mapping.html" class="btn btn-neutral float-left" title="Accelerating computations with field-line mapping" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="CalculateIota.html" class="btn btn-neutral float-right" title="Iota Calculation, Fourier Surface Extraction, and Perturbations (Wendelstein 7-X)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

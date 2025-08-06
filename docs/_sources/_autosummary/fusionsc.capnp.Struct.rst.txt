@@ -1,0 +1,42 @@
+fusionsc.capnp.Struct
+=====================
+
+.. currentmodule:: fusionsc
+
+.. autoclass:: capnp.Struct
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~capnp.Struct.__init__
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~capnp.Struct.type_
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: capnp.Struct.__init__
+
+
+
+
+

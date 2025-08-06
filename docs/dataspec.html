@@ -1,0 +1,403 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Specification of magnetic fields and geometries &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f4302432"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Licensing" href="license.html" />
+    <link rel="prev" title="Architecture" href="architecture.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="howto/index.html">Usage examples (How To …)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Specification of magnetic fields and geometries</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#magnetic-fields">Magnetic fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#abstract">Abstract</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#resolved">Resolved</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#computed">Computed</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#machine-geometries">Machine geometries</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#abstract-resolved">Abstract &amp; resolved</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#merged">Merged</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#indexed">Indexed</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">Licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference.html">Reference</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://alexrobomind.github.io/fusionsc/cpp/index.html">C++ library documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Specification of magnetic fields and geometries</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/dataspec.ipynb.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="specification-of-magnetic-fields-and-geometries">
+<span id="dataspec"></span><h1>Specification of magnetic fields and geometries<a class="headerlink" href="#specification-of-magnetic-fields-and-geometries" title="Link to this heading"></a></h1>
+<p>Magnetic fields and machine geometry parts form the most important inputs for calculations driven by fusionsc. During
+computation, the descriptions for these information pieces undergo multiple states, which are useful to understand in
+order to sequence calls successfully while conserving computation resources.</p>
+<section id="magnetic-fields">
+<h2>Magnetic fields<a class="headerlink" href="#magnetic-fields" title="Link to this heading"></a></h2>
+<p>The description of a magnetic field can be in one of 3 forms:</p>
+<section id="abstract">
+<h3>Abstract<a class="headerlink" href="#abstract" title="Link to this heading"></a></h3>
+<p>Upon initial specification, the magnetic field will often take the form of a very high-level description. This description
+is minimal and human-readable, but can not be used directly by the underlying calculation machinery, since it references
+device-specific information that is not included in the message tree.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fusionsc.devices</span><span class="w"> </span><span class="kn">import</span> <span class="n">w7x</span>
+<span class="n">w7x</span><span class="o">.</span><span class="n">standard</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>w7x:
+  coilsAndCurrents:
+    nonplanar: [15000, 15000, 15000, 15000, 15000]
+    planar: [0, 0]
+    trim: [0, 0, 0, 0, 0]
+    control: [0, 0]
+    coils:
+      coils:
+        invertMainCoils: true
+        biotSavartSettings:
+          width: 0.01
+          stepSize: 0.01
+        nWindMain: [108, 108, 108, 108, 108, 36, 36]
+        nWindTrim: [48, 72, 48, 48, 48]
+        nWindControl: [8, 8, 8, 8, 8, 8, 8, 8, 8, 8]
+        invertControlCoils: [false, true, false, true, false, true, false, true, false, true]
+        coilsDbSet:
+          mainCoilOffset: 160
+          trimCoilIDs: [350, 241, 351, 352, 353]
+          controlCoilOffset: 230
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="resolved">
+<h3>Resolved<a class="headerlink" href="#resolved" title="Link to this heading"></a></h3>
+<p>A resolved field is a magnetic field structure that has device-specific nodes replaced by their generic equivalents.
+For example, references to coil IDs or high-level field specifications will be replaced with data for the specific
+coils. To minimize data footprint and prevent redundant data transfer, the concrete coil shapes will usually be linked
+into the message tree by reference. Resolved fields hold all required data to compute the field at specific points
+without additional data.</p>
+<p>Once set up with proper data providers, the resolution machinery does not require any further inputs to drive the
+resolution process, since all nodes are completely self-describing without extra context (however, they might link
+to information presently not available).</p>
+<p>The resolution process is invoked by calling the <code class="docutils literal notranslate"><span class="pre">MagneticConfig.resolve</span></code> method to acquire the resolved equivalent
+of a field.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">fusionsc</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">fsc</span>
+<span class="n">fsc</span><span class="o">.</span><span class="n">resolve</span><span class="o">.</span><span class="n">importOfflineData</span><span class="p">(</span><span class="s1">&#39;../w7x-op21.fsc&#39;</span><span class="p">)</span>
+
+<span class="n">lines</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">w7x</span><span class="o">.</span><span class="n">standard</span><span class="p">()</span><span class="o">.</span><span class="n">resolve</span><span class="p">())</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">20</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">lines</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;... </span><span class="si">{}</span><span class="s1"> lines follow ...&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span> <span class="o">-</span> <span class="mi">20</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>sum:
+  - scaleBy:
+      field:
+        sum:
+          - filamentField:
+              current: -1
+              biotSavartSettings:
+                width: 0.01
+                stepSize: 0.01
+              filament:
+                ref: &lt;capability&gt;
+              windingNo: 108
+          - filamentField:
+              current: -1
+              biotSavartSettings:
+                width: 0.01
+                stepSize: 0.01
+              filament:
+                ref: &lt;capability&gt;
+              windingNo: 108
+
+... 736 lines follow ...
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="computed">
+<h3>Computed<a class="headerlink" href="#computed" title="Link to this heading"></a></h3>
+<p>The field line tracer requires the magnetic field to be calculated on a slab grid, so that its values can be quickly interpolated.
+In contrast to the resolution process, the field computation depends on extra information in the form of the grid description.</p>
+<p>The computed field is obtained through the <code class="docutils literal notranslate"><span class="pre">MagneticField.compute(grid)</span></code> method (which will also kick off the resolution process
+if needed). As a convenience feature, most tracing methods will optionally call this method for you if you specify the <code class="docutils literal notranslate"><span class="pre">grid</span> <span class="pre">=</span> <span class="pre">...</span></code>
+keyword argument. However, keep in mind that the intermediate result will not be stored in this case, and you should only do this
+if you do not intend to run multiple calculations on the same field.</p>
+<p><em>Note:</em> For obvious reasons, computed fields are also resolved.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">fusionsc</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">fsc</span>
+<span class="n">fsc</span><span class="o">.</span><span class="n">resolve</span><span class="o">.</span><span class="n">importOfflineData</span><span class="p">(</span><span class="s1">&#39;../w7x-op21.fsc&#39;</span><span class="p">)</span>
+
+<span class="n">grid</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">defaultGrid</span><span class="p">()</span>
+<span class="n">grid</span><span class="o">.</span><span class="n">nZ</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="n">grid</span><span class="o">.</span><span class="n">nR</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="n">grid</span><span class="o">.</span><span class="n">nPhi</span> <span class="o">=</span> <span class="mi">4</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">w7x</span><span class="o">.</span><span class="n">standard</span><span class="p">()</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">grid</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>computedField:
+  grid:
+    rMin: 4
+    rMax: 7
+    zMin: -1.5
+    zMax: 1.5
+    nSym: 5
+    nR: 4
+    nZ: 4
+    nPhi: 4
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="machine-geometries">
+<h2>Machine geometries<a class="headerlink" href="#machine-geometries" title="Link to this heading"></a></h2>
+<section id="abstract-resolved">
+<h3>Abstract &amp; resolved<a class="headerlink" href="#abstract-resolved" title="Link to this heading"></a></h3>
+<p>In a similar way to magnetic field descriptions, geometry descriptions can be either abstract or resolved. In this state, geometries
+contain nested nodes of grouping, transformation, tagging, and reference linking nodes that describe how to place and label meshes
+in the final geometry.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fusionsc.devices</span><span class="w"> </span><span class="kn">import</span> <span class="n">w7x</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">w7x</span><span class="o">.</span><span class="n">divertor</span><span class="p">(</span><span class="s2">&quot;OP21&quot;</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>tags:
+  - name: name
+    value:
+      text: OP2.1 Divertor
+w7x: op21Divertor
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fusionsc.devices</span><span class="w"> </span><span class="kn">import</span> <span class="n">w7x</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">fusionsc</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">fsc</span>
+
+<span class="n">fsc</span><span class="o">.</span><span class="n">resolve</span><span class="o">.</span><span class="n">importOfflineData</span><span class="p">(</span><span class="s1">&#39;../w7x-op21.fsc&#39;</span><span class="p">)</span>
+<span class="n">lines</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">w7x</span><span class="o">.</span><span class="n">divertor</span><span class="p">(</span><span class="s2">&quot;OP21&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">())</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">20</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">lines</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;... </span><span class="si">{}</span><span class="s1"> lines follow ...&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span> <span class="o">-</span> <span class="mi">20</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>tags:
+  []
+combined:
+  - tags:
+      - name: w7x-component-id
+        value:
+          uInt64: 14698
+    mesh: &lt;capability&gt;
+  - tags:
+      - name: w7x-component-id
+        value:
+          uInt64: 14699
+    mesh: &lt;capability&gt;
+  - tags:
+      - name: w7x-component-id
+        value:
+          uInt64: 14700
+    mesh: &lt;capability&gt;
+  - tags:
+      - name: w7x-component-id
+
+... 8083 lines follow ...
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="merged">
+<h3>Merged<a class="headerlink" href="#merged" title="Link to this heading"></a></h3>
+<p>In its initial representation, a geometry description does not just include meshes, but also tagging and transformation operations
+that can allow the same mesh to be placed in multiple locations / orientations at different scales (and to receive different labels).
+Additionally, the mesh data do not have to be co-localized in memory, but can reference distributed data trees (with some nodes even
+representing yet to be loaded or computed information).</p>
+<p>The <em>merging</em> process (accessible through <code class="docutils literal notranslate"><span class="pre">geometry.Geometry.merge()</span></code>) evaluates this initial description and produces a monolithic collection of individual meshes laid out together,
+each with the correct tagging and transformation options applied. This representation is well suited for transfer to computation
+devices (such as GPUs) and for monolithic storage and loading.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fusionsc.devices</span><span class="w"> </span><span class="kn">import</span> <span class="n">w7x</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">fusionsc</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">fsc</span>
+
+<span class="n">fsc</span><span class="o">.</span><span class="n">resolve</span><span class="o">.</span><span class="n">importOfflineData</span><span class="p">(</span><span class="s1">&#39;../w7x-op21.fsc&#39;</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">w7x</span><span class="o">.</span><span class="n">divertor</span><span class="p">(</span><span class="s2">&quot;OP21&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">merge</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>tags:
+  []
+merged: &lt;capability&gt;
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="indexed">
+<h3>Indexed<a class="headerlink" href="#indexed" title="Link to this heading"></a></h3>
+<p>While the merged representation can be accessed efficiently, many routines require further speedups for the frequently performed intersection tests.
+For this purpose, geometry has to be indexed along a cartesian grid. Similarly to the magnetic field computation, this process can be either requested
+ahead of time with the <code class="docutils literal notranslate"><span class="pre">geometry.Geometry.index(grid)</span></code> method, or by passing the <code class="docutils literal notranslate"><span class="pre">geometryGrid</span> <span class="pre">=</span> <span class="pre">...</span></code> keyword argument to the tracing functions.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fusionsc.devices</span><span class="w"> </span><span class="kn">import</span> <span class="n">w7x</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">fusionsc</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">fsc</span>
+
+<span class="n">fsc</span><span class="o">.</span><span class="n">resolve</span><span class="o">.</span><span class="n">importOfflineData</span><span class="p">(</span><span class="s1">&#39;../w7x-op21.fsc&#39;</span><span class="p">)</span>
+
+<span class="n">grid</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">defaultGeometryGrid</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">w7x</span><span class="o">.</span><span class="n">divertor</span><span class="p">(</span><span class="s2">&quot;OP21&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">grid</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>tags:
+  []
+indexed:
+  grid:
+    xMin: -7
+    xMax: 7
+    yMin: -7
+    yMax: 7
+    zMin: -1.5
+    zMax: 1.5
+    nX: 280
+    nY: 280
+    nZ: 60
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="architecture.html" class="btn btn-neutral float-left" title="Architecture" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="license.html" class="btn btn-neutral float-right" title="Licensing" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
