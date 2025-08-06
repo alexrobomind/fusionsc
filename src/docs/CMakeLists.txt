@@ -86,7 +86,7 @@ if(FSC_WITH_PYTHON)
 	
 	add_custom_target(
 		docs
-		COMMAND ${CMAKE_COMMAND} -E env DOC_FSCPATH=${DOC_FSCPATH} sphinx-build -a -d ${DOC_TOCTREE_PATH} ${CMAKE_CURRENT_SOURCE_DIR} ${DOC_SPHINXPATH}
+		COMMAND ${CMAKE_COMMAND} -E env DOC_FSCPATH=${DOC_FSCPATH} $<TARGET_FILE:Python::Interpreter> -m sphinx.cmd.build -a -d ${DOC_TOCTREE_PATH} ${CMAKE_CURRENT_SOURCE_DIR} ${DOC_SPHINXPATH}
 	)
 
 	add_custom_target(
