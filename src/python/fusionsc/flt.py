@@ -465,6 +465,43 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	# Perform the tracing
 	response = await _tracer().trace(request)
 	
+	print(response.stopReasons)
+	
+	# Inspect the response for any step failures
+	for r in response.stopReasons.data:
+		# This is equivalent to
+		# r == 'couldNotStep'
+		# but it's faster
+		# (8 is the raw numerical value of the stop reason enumerate
+		# for "could not step")
+		if r == 8:
+			print("")
+			print("!! WARNING: At least one trace returned with stop reason 'couldNotStep' !!")
+			print("")
+			print("This means that this trace is attempting to emit more events in a single step into the event buffer than it can hold.")
+			print("If you are using the local backend, please reconfigure it with a larger max buffer size.")
+			print("If you are using a remote backend, please contact its associated operator.")
+			print("")
+			print("To configure the local backend, add the following lines to ~/.fusionsc.yaml (requires fusionsc 2.9 or above):")
+			print("")
+			print("localBackend:")
+			print("  flt:")
+			print("    eventBuffer:")
+			print("      maxSize: 25000 # Or a bigger number")
+			print("")
+			print("Alternatively, insert the following lines at the beginning of your code to override the backend configuration")
+			print("This will also work on versions older than 2.9:")
+			print("")
+			print("import fusionsc as fsc")
+			print("...")
+			print("newConfig = fsc.service.LocalConfig.newMessage()")
+			print("newConfig.flt.eventBuffer.maxSize = 25000 # Or a bigger number")
+			print("fsc.backends.reconfigureLocalBackend(newConfig)")
+			print("")
+			print("")
+			
+			break
+	
 	# Decode the response
 	return decodeTraceResponse(response, resultFormat)
 

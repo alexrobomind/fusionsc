@@ -65,6 +65,9 @@ def _apply():
 			if "defaultCoilsUrl" in config["w7x"]:
 				from .devices import w7x
 				w7x._loadDefaultCoils(config["w7x"]["defaultCoilsUrl"])
+		
+		if "localBackend" in config and not backends._localBackendConfigured:
+			backends.reconfigureLocalBackend(config["localBackend"])
 	except:
 		print("!!! --- Failed to apply user configuration --- !!!")
 		print("")

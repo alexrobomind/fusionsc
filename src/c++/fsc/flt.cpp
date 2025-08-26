@@ -221,6 +221,7 @@ struct TraceCalculation {
 		bool increaseBufferSize = false;
 		for(size_t i = 0; i < kDataIn.size(); ++i) {
 			if(kDataIn[i].getStopReason() == FLTStopReason::COULD_NOT_STEP) {
+				KJ_LOG(INFO, "Failed to step", i);
 				if(canIncreaseBufferSize)
 					increaseBufferSize = true;
 				else
@@ -239,7 +240,10 @@ struct TraceCalculation {
 		
 		KJ_LOG(INFO,prevRound -> participants, unfinished);
 		
-		KJ_REQUIRE(unfinished.size() > 0, "Internal error");
+		// Note: This assumption is actually incorrect
+		// If all participants had COULD_NOT_STEP and the buffer size can not increase,
+		// the round size can get modified to 0
+		// KJ_REQUIRE(unfinished.size() > 0, "Internal error");
 		
 		uint32_t maxSteps = 0;
 		
@@ -387,7 +391,7 @@ struct TraceCalculation {
 			}
 		}
 		
-		KJ_REQUIRE(isFinished(result.asReader()));
+		KJ_REQUIRE(isFinished(result.asReader()) || result.getStopReason() == FLTStopReason::COULD_NOT_STEP);
 		
 		return result;
 	}

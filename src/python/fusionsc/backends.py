@@ -18,6 +18,10 @@ inProcessWorker = native.connectLocal() #native.LocalRootServer()
 _localResources = asnc.EventLoopLocal(default = None)
 _currentBackend = contextvars.ContextVar("fusionsc.backends._currentBackend", default = (None, None))
 
+# This exists primarily to prevent the config module from overriding a manually
+# specified backend configuration
+_localBackendConfigured = False
+
 def _threadId():
 	return threading.get_ident()
 
@@ -60,7 +64,9 @@ async def reconfigureLocalBackend(config: service.LocalConfig.ReaderOrBuilder):
 	"""
 	Reconfigues the local backend to the given configuration.
 	"""
-	await localResources().configureRoot(config)
+	_localBackendConfigured = True
+	
+	await localResources().configureRoot(service.LocalConfig.newMessage(config))
 
 def activeBackend() -> service.RootService.Client:
 	"""

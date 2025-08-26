@@ -75,3 +75,7 @@ __all__ = [
 	'geometry'
 ]
 	
+def _devMode():
+	# Make sure config is loaded
+	config.context()
+	backends.alwaysUseBackend(backends.localBackend())
