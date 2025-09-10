@@ -44,7 +44,6 @@ def connectComponentsDB(address: str) -> service.devices.w7x.ComponentsDB.Client
 	
 	return componentsDB
 
-@unstableApi
 def connectLegacyIPPSite():
 	"""Connects the resolve module to standard IPP coils DB and components DB"""
 	connectCoilsDB("http://esb.ipp-hgw.mpg.de:8280/services/CoilsDBRest")
