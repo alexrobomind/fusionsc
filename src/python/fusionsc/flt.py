@@ -465,8 +465,6 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	# Perform the tracing
 	response = await _tracer().trace(request)
 	
-	print(response.stopReasons)
-	
 	# Inspect the response for any step failures
 	for r in response.stopReasons.data:
 		# This is equivalent to
