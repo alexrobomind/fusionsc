@@ -99,6 +99,16 @@ struct TraceCalculation {
 			request.getServiceRequest().setRngSeed(seed);
 		}
 		
+		// Adjust step limit to a reasonable default if users forget to specify it
+		if(request.getServiceRequest().getStepLimit() == 0) {
+			request.getServiceRequest().setStepLimit(config.getDefaultStepLimit());
+		}
+		
+		// Hard clamp the step limit
+		if(config.getMaxStepLimit() != 0 && request.getServiceRequest().getStepLimit() > config.getMaxStepLimit()) {
+			request.getServiceRequest().setStepLimit(config.getMaxStepLimit());
+		}
+		
 		KJ_REQUIRE(request.getServiceRequest().getForwardDirection().which() < 2, "Unknown forward direction type specified. This likely means that this library version is too old to understand your request");
 		
 		eventBufferSize = computeBufferSize(config.getEventBuffer(), positions.dimension(1));

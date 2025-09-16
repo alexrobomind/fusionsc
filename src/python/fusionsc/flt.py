@@ -246,6 +246,8 @@ async def trace(
 		- distanceLimit: Maximum field line tracing length. 0 or negative interpreted as infinity.
 		- turnLimit: Maximum number of device turn to trace field line for. 0 or negative interpreted as infinity.
 		- stepLimit: Maximum number of steps to trace for. 0 interpreted as infinity. May not be negative.
+		  Note: The backend can override the step limit if none is specified and/or it exceeds a server-specific
+		  maximum value.
 		- stepSize: Step size for each tracing step (in meters).
 		- collisionLimit: Maximum number of collisions a field line may perform (e.g. 1 = termination at first collision. 2 at second collision etc.). Must not be negative.
 		  0 interpreted as infinity.

@@ -401,6 +401,10 @@ struct FLTConfig {
 		maxSize @1 : UInt32 = 2500;
 		targetTotalMb @2 : UInt64 = 500;
 	}
+	
+	# Default step size limits
+	defaultStepLimit @3 : UInt64;
+	maxStepLimit @4 : UInt64;
 }
 
 
