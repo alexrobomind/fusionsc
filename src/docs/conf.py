@@ -20,7 +20,7 @@ release = '2.3.3'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = ['myst_nb', 'sphinx.ext.autodoc', 'sphinx.ext.coverage', 'sphinx.ext.autosummary', 'sphinx_tabs.tabs']
+extensions = ['myst_nb', 'sphinx.ext.autodoc', 'sphinx.ext.coverage', 'sphinx.ext.autosummary', 'sphinx_tabs.tabs', 'fusionsc.sphinx-ext.capnp']
 
 templates_path = ['templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']

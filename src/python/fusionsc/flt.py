@@ -527,6 +527,8 @@ def decodeTraceResponse(response: service.FLTResponse.ReaderOrBuilder, resultFor
 		for tagName, tagData in zip(response.tagNames, np.asarray(response.endTags))
 	}
 	
+	endTagsNice = geometry.fromTagValue(endTags)
+	
 	result = {
 		"endPoints" : np.asarray(response.endPoints),
 		"poincareHits" : np.asarray(response.poincareHits),
@@ -534,6 +536,7 @@ def decodeTraceResponse(response: service.FLTResponse.ReaderOrBuilder, resultFor
 		"fieldLines" : np.asarray(response.fieldLines),
 		"fieldStrengths" : np.asarray(response.fieldStrengths),
 		"endTags" : endTags,
+		"endTagsNice" : endTagsNice,
 		"numSteps" : np.asarray(response.numSteps),
 		"responseSize" : response.totalBytes_()
 	}

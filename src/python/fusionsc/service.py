@@ -22,7 +22,12 @@ loader.roots["capnp"] = _capnpFiles
 loader.roots["fusionsc"] = _fscFiles
 
 for _file in _capnpFiles.iterdir():
-	loader.parseSchema(f"/capnp/{_file.name}", "fusionsc.service.capnp")
+	baseName = _file.name[:-6]
+	
+	if baseName == "c++":
+		baseName = "cpp"
+		
+	loader.parseSchema(f"/capnp/{_file.name}", f"fusionsc.service.capnp.{baseName}")
 
 for _file in _fscFiles.iterdir():
 	if "test" in _file.name or "internal" in _file.name:

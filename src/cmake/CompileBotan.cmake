@@ -1,4 +1,4 @@
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
+find_package(Python REQUIRED COMPONENTS Interpreter)
 
 message(STATUS "  Building botan from source")
 if(MSVC)
@@ -25,7 +25,7 @@ add_custom_command(
 	OUTPUT "${AMALGAMATION_DIR}/botan_all.cpp"
 	DEPENDS "${AMALGAMATION_DIR}/configure.py"
 	
-	COMMAND ${Python3_EXECUTABLE}
+	COMMAND "$<TARGET_FILE:Python::Interpreter>"
 	"${AMALGAMATION_DIR}/configure.py"
 	"--minimized-build"
 	"--enable-modules=auto_rng,blake2,sha2_32,sha2_64,system_rng"

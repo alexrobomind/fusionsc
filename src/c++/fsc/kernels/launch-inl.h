@@ -1,3 +1,5 @@
+#include <chrono>
+
 namespace fsc {
 
 namespace internal {					
@@ -80,10 +82,35 @@ struct KernelLauncher<CPUDevice> {
 			if(!ctx -> active.load())
 				return;
 			
-			auto maybeException = kj::runCatchingExceptions([&sharedParams, start, end]() mutable {
-				for(Eigen::Index i = start; i < end; ++i)
+			auto maybeException = kj::runCatchingExceptions([&sharedParams, start, end, ctx]() mutable {
+				if(start >= end)
+					return;
+				
+				// Measure execution time on first run
+				auto t1 = std::chrono::high_resolution_clock::now();
+				kj::apply(f, start, *sharedParams);
+				auto t2 = std::chrono::high_resolution_clock::now();
+				
+				++start;
+				
+				auto runtime = t2 - t1;
+				size_t runtimeNs = runtime / std::chrono::nanoseconds(1);
+				if(runtimeNs == 0) runtimeNs = 1;
+				
+				// Check every 1s
+				size_t blockSize = 1000000000 / runtimeNs;
+				if(blockSize == 0) blockSize = 1;
+				// KJ_DBG(blockSize);
+				
+				for(Eigen::Index i = start; i < end; ++i) {
 					//f(i, params...);
 					kj::apply(f, i, *sharedParams);
+					
+					if(i % blockSize == 0) {
+						if(!ctx -> active.load())
+							return;						
+					}
+				}
 			});
 			
 			// If we failed, transfer exception

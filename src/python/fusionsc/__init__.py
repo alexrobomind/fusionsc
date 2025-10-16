@@ -10,6 +10,12 @@ from .native import kj
 from .native import capnp
 from .native import efit
 
+# Make sure they can also be directly imported
+import sys
+sys.modules["fusionsc.kj"] = kj
+sys.modules["fusionsc.capnp"] = capnp
+sys.modules["fusionsc.efit"] = efit
+
 # Add loader
 from . import loader
 

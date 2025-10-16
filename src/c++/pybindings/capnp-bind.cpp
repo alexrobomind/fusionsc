@@ -295,6 +295,9 @@ void bindFieldDescriptors() {
 		.def_property_readonly("proto", [](FD& fd) -> DynamicStructReader {
 			return noMessage(fd.getProto());
 		})
+		.def_property_readonly("isInUnion", [](FD& fd) -> bool {
+			return fd.getProto().getDiscriminantValue() != 0xffff;
+		})
 	;
 }
 
@@ -607,6 +610,9 @@ void bindType() {
 			}
 			
 			return result;
+		})
+		.def_property_readonly("isGroup", [](capnp::StructSchema& schema) {
+			return schema.getProto().getStruct().getIsGroup();
 		})
 	;
 	

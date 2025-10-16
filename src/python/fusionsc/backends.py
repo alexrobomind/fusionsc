@@ -93,7 +93,7 @@ def useBackend(newBackend: service.RootService.Client):
 	"""
 	Temporarily overrides the active backend to use for calculations.
 	
-	Example usage::
+	Example usage:
 		import fusionsc as fsc
 		...
 		newBackend = ...

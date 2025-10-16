@@ -280,7 +280,8 @@ bool fscpy::Loader::addToModule(uint64_t nodeID, py::module scope) {
 		switch(schema.getProto().which()) {
 			case capnp::schema::Node::STRUCT:
 			case capnp::schema::Node::INTERFACE:
-			case capnp::schema::Node::ENUM: {
+			case capnp::schema::Node::ENUM:
+			case capnp::schema::Node::ANNOTATION: {
 				auto obj = py::cast(schema);
 				
 				if(py::hasattr(scope, name.cStr()))

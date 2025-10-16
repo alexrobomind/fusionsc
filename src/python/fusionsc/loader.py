@@ -45,6 +45,9 @@ def parseSchema(path: str, scope: object, pathRoot: Optional[object] = None):
 			
 			if parent is not None:
 				setattr(parent, components[i-1], mod)
+				
+				if hasattr(parent, "__all__"):
+					parent.__all__.append(components[i-1])
 			
 			parent = mod
 		

@@ -683,21 +683,48 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 		unrolledRef = geometryLib().unroll(resolved.data, {"rad" : phi1}, {"rad" : phi2}, clip).pipeline.ref
 		return Geometry({"merged" : unrolledRef})
 		
-
 def asTagValue(x):
 	"""Convert a possible tag value into an instance of fsc.service.TagValue"""
-	result = service.TagValue.newMessage()
+	if isinstance(x, np.ndarray):
+		return np.vectorize(asTagValue)(x)
 	
+	if isinstance(x, list):
+		return [asTagValue(y) for y in x]
+		
+	result = service.TagValue.newMessage()
 	if x is None:
 		result.notSet = None
 	elif isinstance(x, int) and x >= 0:
 		result.uInt64 = x
 	elif isinstance(x, str):
 		result.text = x
+	elif isinstance(x, dict):
+		return {k : asTagValue(v) for k, v in x.items()}
 	else:
 		raise "Tag values can only be None, unsigned integer or string"
 	
 	return result
+
+def fromTagValue(x):
+	if isinstance(x, dict):
+		return {k : fromTagValue(v) for k, v in x.items()}
+		
+	if isinstance(x, list):
+		return [fromTagValue(y) for y in x]
+	
+	if isinstance(x, np.ndarray):
+		return np.vectorize(fromTagValue)(x)
+		
+	if x.which_() == "notSet":
+		return None
+	
+	if x.which_() == "uInt64":
+		return x.uInt64
+	
+	if x.which_() == "text":
+		return str(x.text)
+	
+	raise "Unknown tag value kind"
 
 def cuboid(x1, x2, tags = {}):
 	"""Creates a cuboid between x1 and x2"""
