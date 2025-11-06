@@ -136,7 +136,16 @@ struct DeviceMapping : public DeviceMappingBase {
 	void doUpdateHost() override {}
 	
 	T get() { return target; }
+	
+	// Own<DeviceMapping<T>> addRef() { return DeviceMappingBase::addRef().downcast<DeviceMapping<T>>(); }
 };
+
+// Helper function to clone mapping without losing a type
+
+template<typename T>
+Own<DeviceMapping<T>> cloneMapping(Own<DeviceMapping<T>>& base) {
+	return base -> addRef().downcast<DeviceMapping<T>>();
+}
 
 template<typename T>
 Own<DeviceMapping<T>> mapToDevice(T t, DeviceBase& device, bool allowAlias) {
@@ -150,7 +159,7 @@ Own<DeviceMapping<T>> mapToDevice(Own<DeviceMapping<T>>&& mapping, DeviceBase& d
 
 template<typename T>
 Own<DeviceMapping<T>> mapToDevice(Own<DeviceMapping<T>>& mapping, DeviceBase& device, bool allowAlias) {
-	return mapping -> addRef().template downcast<DeviceMapping<T>>();
+	return cloneMapping(mapping);
 }
 
 template<typename T>

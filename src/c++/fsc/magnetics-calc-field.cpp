@@ -148,17 +148,33 @@ struct FieldCalculation {
 		for(auto i : kj::indices(radii))
 			radiiNative[i] = radii[i];
 		
-		calculation = calculation.then([this, ctx, nPoints, positions = mv(positions), moments = mv(moments), radiiNative = mv(radiiNative)]() mutable {
-			return FSC_LAUNCH_KERNEL(
-				kernels::dipoleFieldKernel,
-				*_device,
-				field -> getHost().dimension(0),
+		// Map tensors to GPU
+		auto mappedPos = mapToDevice(mv(positions), *_device, true);
+		auto mappedMom = mapToDevice(mv(moments), *_device, true);
+		auto mappedRad = mapToDevice(mv(radiiNative), *_device, true);
+		
+		// We compute the field in batches of 100000 to be somewhat responsive
+		constexpr size_t BATCH_SIZE = 100000;
+		
+		for(size_t start = 0; start < nPoints; start += BATCH_SIZE) {
+			size_t end = std::min(start + BATCH_SIZE, nPoints);
+
+			calculation = calculation.then([this, ctx, nPoints, mappedPos = cloneMapping(mappedPos), mappedMom = cloneMapping(mappedMom), mappedRad = cloneMapping(mappedRad), start, end]() mutable {
+				// KJ_LOG(INFO, "Dipole sphere batch", start, end);
 				
-				mapCtx(ctx),
-				
-				FSC_KARG(mv(positions), ALIAS_IN), FSC_KARG(mv(moments), ALIAS_IN), FSC_KARG(mv(radiiNative), ALIAS_IN)
-			);
-		});
+				return FSC_LAUNCH_KERNEL(
+					kernels::dipoleFieldKernel,
+					*_device,
+					field -> getHost().dimension(0),
+					
+					mapCtx(ctx),
+					
+					mv(mappedPos), mv(mappedMom), mv(mappedRad),
+					
+					start, end
+				);
+			});
+		}
 	}
 	
 	void equilibrium(const MagKernelContext& ctx, AxisymmetricEquilibrium::Reader equilibrium) {		

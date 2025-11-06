@@ -95,7 +95,7 @@ namespace kernels {
 
 FSC_DECLARE_KERNEL(addFieldInterpKernel, MagKernelContext, FieldRef, ToroidalGridStruct);
 FSC_DECLARE_KERNEL(biotSavartKernel, MagKernelContext, FilamentRef, double, double);
-FSC_DECLARE_KERNEL(dipoleFieldKernel, MagKernelContext, FieldValuesRef, FieldValuesRef, kj::ArrayPtr<double>);
+FSC_DECLARE_KERNEL(dipoleFieldKernel, MagKernelContext, FieldValuesRef, FieldValuesRef, kj::ArrayPtr<double>, size_t, size_t);
 FSC_DECLARE_KERNEL(eqFieldKernel, MagKernelContext, cu::AxisymmetricEquilibrium::Reader);
 
 /**
@@ -154,7 +154,7 @@ EIGEN_DEVICE_FUNC inline void biotSavartKernel(unsigned int idx, MagKernelContex
 	ctx.addField(idx, field_cartesian * current);
 }
 
-EIGEN_DEVICE_FUNC inline void dipoleFieldKernel(unsigned int idx, MagKernelContext ctx, FieldValuesRef dipolePoints, FieldValuesRef dipoleMoments, kj::ArrayPtr<double> radii) {
+EIGEN_DEVICE_FUNC inline void dipoleFieldKernel(unsigned int idx, MagKernelContext ctx, FieldValuesRef dipolePoints, FieldValuesRef dipoleMoments, kj::ArrayPtr<double> radii, size_t start, size_t end) {
 	// Based on field of magnetized sphere
 	// https://farside.ph.utexas.edu/teaching/jk1/Electromagnetism/node61.html
 	
@@ -162,7 +162,8 @@ EIGEN_DEVICE_FUNC inline void dipoleFieldKernel(unsigned int idx, MagKernelConte
 	Vec3d x = ctx.getPosition(idx);
 	
 	auto nPoints = dipolePoints.dimension(0);
-	for(int64_t iPoint = 0; iPoint < nPoints; ++iPoint) {
+	// for(int64_t iPoint = 0; iPoint < nPoints; ++iPoint) {
+	for(size_t iPoint = start; iPoint < end; ++iPoint) {
 		Vec3d p(dipolePoints(iPoint, 0), dipolePoints(iPoint, 1), dipolePoints(iPoint, 2));
 		Vec3d m(dipoleMoments(iPoint, 0), dipoleMoments(iPoint, 1), dipoleMoments(iPoint, 2));
 		
