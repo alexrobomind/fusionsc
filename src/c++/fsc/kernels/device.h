@@ -144,7 +144,7 @@ struct DeviceMapping : public DeviceMappingBase {
 
 template<typename T>
 Own<DeviceMapping<T>> cloneMapping(Own<DeviceMapping<T>>& base) {
-	return base -> addRef().downcast<DeviceMapping<T>>();
+	return base -> addRef().template downcast<DeviceMapping<T>>();
 }
 
 template<typename T>
