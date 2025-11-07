@@ -1,3 +1,5 @@
+# Note: This file needs to be built from the root directory
+
 # Build setup
 ARG CACHE_DIR=/tmp/fusionsc-build-cache
 ARG WITH_CACHE=--mount=type=bind,source=${CACHE_DIR},target=/build-cache
@@ -8,7 +10,7 @@ FROM alpine as macproxy
 # Baseline FusionSC dependencies
 RUN apk add g++ cmake ninja python3-dev openssl-dev libc++-dev clang linux-headers libucontext-dev py3-numpy-dev
 
-COPY ../../.. /src
+COPY . /src
 WORKDIR /build
 RUN CC=clang CXX=clang++ cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DFSC_DEP_PREF_VENDORED=Off -DCMAKE_CXX_FLAGS=-stdlib=libc++ /src
 RUN ninja tests fsc-python-bindings
@@ -22,7 +24,7 @@ RUN apt-get install -y g++ cmake ninja-build libssl-dev python3 ccache
 
 FROM base as build
 
-COPY ../../.. /src
+COPY . /src
 WORKDIR /build
 ENV CCACHE_DIR=/build-cache
 RUN ${WITH_CACHE} cmake \
@@ -57,7 +59,7 @@ RUN git clone --depth 1 https://github.com/PrincetonUniversity/STELLOPT /stellop
 ENV STELLOPT_PATH=/stellopt
 
 # Copy fusionsc machine file into container
-COPY ../../make_fusionsc.inc /stellopt/SHARE/make_fusionsc.inc
+COPY util/make_fusionsc.inc /stellopt/SHARE/make_fusionsc.inc
 ENV MACHINE=fusionsc
 
 WORKDIR /stellopt

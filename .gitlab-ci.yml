@@ -120,7 +120,7 @@ build:docker:
   script:
     - docker login ${CONTAINER_REGISTRY} -u ${CONTAINER_REGISTRY_USER} -p ${CONTAINER_REGISTRY_TOKEN}
     - mkdir -p /cache
-    - DOCKER_BUILDKIT=1 docker build --build-arg="CACHE_DIR=/cache/build" -t ${CONTAINER_IMAGE_PREFIX}/full:nightly util/docker-images/bundle
+    - DOCKER_BUILDKIT=1 docker build --build-arg="CACHE_DIR=/cache/build" -t ${CONTAINER_IMAGE_PREFIX}/full:nightly -f util/docker-images/bundle/Dockerfile . 
     - docker run ${CONTAINER_IMAGE_PREFIX}/full:nightly /usr/local/bin/fusionsc-tests
     - docker push ${CONTAINER_IMAGE_PREFIX}/full:nightly
 
