@@ -8,7 +8,7 @@ FROM alpine as macproxy
 # Baseline FusionSC dependencies
 RUN apk add g++ cmake ninja python3-dev openssl-dev libc++-dev clang linux-headers libucontext-dev py3-numpy-dev
 
-COPY . /src
+COPY ../../.. /src
 WORKDIR /build
 RUN CC=clang CXX=clang++ cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DFSC_DEP_PREF_VENDORED=Off -DCMAKE_CXX_FLAGS=-stdlib=libc++ /src
 RUN ninja tests fsc-python-bindings
@@ -22,7 +22,7 @@ RUN apt-get install -y g++ cmake ninja-build libssl-dev python3 ccache
 
 FROM base as build
 
-COPY . /src
+COPY ../../.. /src
 WORKDIR /build
 ENV CCACHE_DIR=/build-cache
 RUN ${WITH_CACHE} cmake \
