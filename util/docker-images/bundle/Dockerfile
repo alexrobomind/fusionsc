@@ -57,7 +57,7 @@ RUN git clone --depth 1 https://github.com/PrincetonUniversity/STELLOPT /stellop
 ENV STELLOPT_PATH=/stellopt
 
 # Copy fusionsc machine file into container
-COPY util/make_fusionsc.inc /stellopt/SHARE/make_fusionsc.inc
+COPY ../../make_fusionsc.inc /stellopt/SHARE/make_fusionsc.inc
 ENV MACHINE=fusionsc
 
 WORKDIR /stellopt
