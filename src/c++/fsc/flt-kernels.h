@@ -519,8 +519,7 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 				
 			} else if(parModel.hasDiffusionCoefficient()) {
 				// Diffusive transport model
-				// TODO: Check prefactor
-				deltaT = prevFreePath * prevFreePath / parModel.getDiffusionCoefficient();
+				deltaT = 0.5 * prevFreePath * prevFreePath / parModel.getDiffusionCoefficient();
 				freePath = normalDistributed[3] * nextFreePath;
 			}
 			// KJ_DBG(idx, deltaT, freePath);
@@ -535,14 +534,14 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			// Perform displacement
 			
 			if(perpModel.hasIsotropicDiffusionCoefficient()) {
-				double isoDisplacement = std::sqrt(deltaT * perpModel.getIsotropicDiffusionCoefficient());
-				// KJ_DBG(idx, isoDisplacement);
+				double isoDisplacement = std::sqrt(2 * deltaT * perpModel.getIsotropicDiffusionCoefficient());
+				// KJ_DBG(idx, isoDisplacement, isoDisplacement * isoDisplacement);
 								
 				for(int i = 0; i < 3; ++i) {
 					x2[i] += isoDisplacement * normalDistributed[i];
 				}
 			} else if(perpModel.hasRzDiffusionCoefficient()) {
-				double rzDisplacement = std::sqrt(deltaT * perpModel.getRzDiffusionCoefficient());
+				double rzDisplacement = std::sqrt(2 * deltaT * perpModel.getRzDiffusionCoefficient());
 				
 				double dr = rzDisplacement * normalDistributed[0];
 				double dz = rzDisplacement * normalDistributed[1];
@@ -843,7 +842,10 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 				distance += stepSize;
 			}
 		} else {
-			distance += (x2 - x).norm();
+			double extraDist = (x2 - x).norm();
+			
+			distance += extraDist;
+			nextDisplacementStep += extraDist;
 		}
 		
 		x = x2;
