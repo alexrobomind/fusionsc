@@ -347,10 +347,10 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		Evaluates the magnetic field in the given coordinates. 
 		
 		Parameters:
-			- points: A numpy-array of shape [3, ...] (at least 1D) with the points in r, z, phi coordinates.
+			- points: A numpy-array of shape [3, ...] (at least 1D) with the points in phi, z, r coordinates.
 		
 		Returns:
-			A numpy array of shape points.shape with the field as x, y, z field (cartesian).
+			A numpy array of shape points.shape with the field as Bphi, Bz, Br field (toroidal).
 		"""
 		resolved = await self.resolve.asnc()
 		response = await _calculator().evaluatePhizr(resolved.data, points)
