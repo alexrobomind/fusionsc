@@ -45,8 +45,8 @@ def loadNetcdfFile(filename):
 				axis = -1
 			)
 			
-			v_field = np.zeros(b_field   .shape, dtype = np.float32)
-			p_field = np.zeros(b_field[0].shape, dtype = np.float32)
+			v_field = np.zeros(b_field       .shape, dtype = np.float32)
+			p_field = np.zeros(b_field[...,0].shape, dtype = np.float32)
 			
 		else:
 			b_field = np.stack(
