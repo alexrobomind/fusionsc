@@ -1,3 +1,9 @@
+# NOTE
+#
+# To use this script, please download a dump of the ComponentsDB metadata from
+#    http://esb.ipp-hgw.mpg.de:8280/services/ComponentsDbRest/components
+# and store it as "components.json" next to the runtime of this script.
+
 import json
 import pandas as pd
 import numpy as np
