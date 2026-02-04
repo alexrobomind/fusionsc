@@ -694,14 +694,15 @@ def asTagValue(x):
 	result = service.TagValue.newMessage()
 	if x is None:
 		result.notSet = None
-	elif isinstance(x, int) and x >= 0:
-		result.uInt64 = x
+	elif np.issubdtype(type(x), np.integer) and x >= 0:
+		# Always cross-convert through int for type erasure
+		result.uInt64 = int(x)
 	elif isinstance(x, str):
 		result.text = x
 	elif isinstance(x, dict):
 		return {k : asTagValue(v) for k, v in x.items()}
 	else:
-		raise "Tag values can only be None, unsigned integer or string"
+		raise ValueError("Tag values can only be None, unsigned integer or string")
 	
 	return result
 
