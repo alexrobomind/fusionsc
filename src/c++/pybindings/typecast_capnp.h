@@ -398,6 +398,10 @@ namespace pybind11 { namespace detail {
 			FSCPY_TRY_CAST(fscpy::EnumInterface)
 			FSCPY_TRY_CAST(fscpy::DynamicCapabilityClient)
 			
+			// Blob types
+			FSCPY_TRY_CAST(fscpy::TextBuilder)
+			FSCPY_TRY_CAST(fscpy::DataBuilder)
+			
 			#undef FSCPY_TRY_CAST
 			return false;
 		}
