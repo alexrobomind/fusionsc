@@ -725,7 +725,7 @@ def fromTagValue(x):
 	if x.which_() == "text":
 		return str(x.text)
 	
-	raise "Unknown tag value kind"
+	raise ValueError("Unknown tag value kind")
 
 def cuboid(x1, x2, tags = {}):
 	"""Creates a cuboid between x1 and x2"""
