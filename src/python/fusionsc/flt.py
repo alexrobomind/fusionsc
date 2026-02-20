@@ -321,6 +321,11 @@ async def trace(
 		-	If `resultFormat == 'raw'`:
 			
 			An instance of fusionsc.service.FLTResponse.Reader (for more efficient storage and later decoding).
+		
+		-	If `resultFormat == 'rawRequest':
+		
+			An instance of fusionsc.service.FLTRequest.Reader, contaning the pre-assembled request to be shipped to the tracer backend (without
+			actually executing it).
 	"""
 	
 	if stepSize < 0.05 and mapping is not None:
@@ -463,6 +468,9 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 		
 		if errorEstimationDistance != "step":
 			adaptive.errorUnit.integratedOver = errorEstimationDistance
+	
+	if resultFormat == "rawRequest":
+		return request
 	
 	# Perform the tracing
 	response = await _tracer().trace(request)

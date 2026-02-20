@@ -177,3 +177,14 @@ def test_directions(field):
 
 def test_field_values(field, grid):
 	fsc.flt.fieldValues(field, grid)
+
+def test_tags_decode():
+	result = fsc.service.FLTResponse.newMessage({
+	"tagNames" : ["testTags"],
+		"endTags" : {
+			"shape" : [1, 3],
+			"data" : [{"uInt64" : 3}, {"text" : "Hello"}, "notSet"]
+		}
+	})
+	
+	dec = fsc.flt.decodeTraceResponse(result)

@@ -686,7 +686,7 @@ class Geometry(wrappers.structWrapper(service.Geometry)):
 def asTagValue(x):
 	"""Convert a possible tag value into an instance of fsc.service.TagValue"""
 	if isinstance(x, np.ndarray):
-		return np.vectorize(asTagValue)(x)
+		return np.vectorize(asTagValue, otypes = "O")(x)
 	
 	if isinstance(x, list):
 		return [asTagValue(y) for y in x]
@@ -714,7 +714,7 @@ def fromTagValue(x):
 		return [fromTagValue(y) for y in x]
 	
 	if isinstance(x, np.ndarray):
-		return np.vectorize(fromTagValue)(x)
+		return np.vectorize(fromTagValue, otypes = "O")(x)
 		
 	if x.which_() == "notSet":
 		return None
