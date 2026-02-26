@@ -340,7 +340,7 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	if isotropicDiffusionCoefficient is not None or rzDiffusionCoefficient is not None: 
 		assert parallelConvectionVelocity is not None or parallelDiffusionCoefficient is not None
 	
-	assert resultFormat in ['dict', 'raw'], "resultFormat parameter must be 'dict' or 'raw'"
+	assert resultFormat in ['dict', 'raw', 'rawRequest'], "resultFormat parameter must be 'dict', 'raw', or 'rawRequest'"
 	
 	config = await config.compute.asnc(grid)
 	computedField = config.data.computedField
