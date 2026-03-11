@@ -546,7 +546,8 @@ def decodeTraceResponse(response: service.FLTResponse.ReaderOrBuilder, resultFor
 		"endTags" : endTags,
 		"endTagsNice" : endTagsNice,
 		"numSteps" : np.asarray(response.numSteps),
-		"responseSize" : response.totalBytes_()
+		"responseSize" : response.totalBytes_(),
+		"normals" : np.asarray(response.normals)
 	}
 	return result
 

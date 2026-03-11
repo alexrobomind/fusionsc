@@ -595,6 +595,10 @@ struct FLTImpl : public FLT::Server {
 				pcCuts.setConstant(std::numeric_limits<double>::quiet_NaN());
 				
 				Tensor<double, 2> endPoints(nStartPoints, 4);
+				Tensor<double, 2> normals(nStartPoints, 3);
+				
+				normals.setConstant(std::numeric_limits<double>::quiet_NaN());
+				
 				applyPointShape(results.getStopReasons(), {}, {});
 				applyPointShape(results.getNumSteps(), {}, {});
 				
@@ -734,6 +738,7 @@ struct FLTImpl : public FLT::Server {
 							auto& lastCollision = *pLastCollision;
 							
 							uint32_t meshIdx = lastCollision.getGeometryHit().getMeshIndex();
+							uint32_t elementIdx = lastCollision.getGeometryHit().getElementIndex();
 							
 							KJ_IF_MAYBE(pGeometryData, geometryData) {
 								auto geometry = pGeometryData->get();
@@ -742,6 +747,46 @@ struct FLTImpl : public FLT::Server {
 								for(auto iTag : kj::indices(tagValues)) {
 									endTagData.setWithCaveats(iTag * nStartPoints + iStartPoint, tagValues[iTag]);
 								}
+								
+								auto mesh = geometry.getEntries()[meshIdx].getMesh();
+								
+								uint32_t offset = 0;
+								bool skip = false;
+								switch(mesh.which()) {
+									case Mesh::TRI_MESH:
+										offset = 3 * elementIdx;
+										break;
+									case Mesh::POLY_MESH: {
+										offset = mesh.getPolyMesh()[elementIdx];
+										auto next = mesh.getPolyMesh()[elementIdx + 1];
+										
+										// Skip elements with less than 3 points
+										if(next < offset + 3)
+											skip = true;
+										
+										break;
+									}
+									
+									default:
+										KJ_FAIL_REQUIRE("Unknown mesh type", mesh.which());
+								}
+								
+								if(!skip) {
+									auto data = mesh.getVertices().getData();
+									Eigen::Vector3d vertices[3];
+									for(int i = 0; i < 3; ++i) {
+										uint32_t index = mesh.getIndices()[offset + i];
+										
+										vertices[i] = Eigen::Vector3d(
+											data[3 * index], data[3 * index + 1], data[3 * index + 2]
+										);
+									}
+									
+									Eigen::Vector3d normal = (vertices[1] - vertices[0]).cross(vertices[2] - vertices[1]);
+									for(int i = 0; i < 3; ++i) {
+										normals(iStartPoint, i) = normal(i);
+									}
+								} 
 							} else {
 								KJ_FAIL_REQUIRE("Internal error: Stop reason was COLLISION_LIMIT but geometry not set");
 							}
@@ -757,6 +802,9 @@ struct FLTImpl : public FLT::Server {
 				
 				writeTensor(endPoints, results.getEndPoints());
 				applyPointShape(results.getEndPoints(), {4}, {});
+				
+				writeTensor(normals, results.getNormals());
+				applyPointShape(results.getNormals(), {3}, {});
 				
 				if(nRecorded > 0) {
 					KJ_REQUIRE(

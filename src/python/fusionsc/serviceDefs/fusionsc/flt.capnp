@@ -247,6 +247,9 @@ struct FLTResponse {
 	# Tensor of shape startPoints.shape[1:] + [max. field line length]
 	fieldStrengths @8 : Data.Float64Tensor;
 	
+	# Tensor of shape startPoints.shape
+	normals @16 : Data.Float64Tensor;
+	
 	fieldLineAnalysis : union {
 		noTask @10 : Void;
 		
