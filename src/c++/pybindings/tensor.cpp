@@ -138,6 +138,11 @@ py::buffer_info getDataTensor(T tensor) {
 		// Sanity checks
 		KJ_REQUIRE(elementSize * data.size() == rawBytes.size());
 		
+		// Check if tensor is empty tensor, initialize with reasonable default
+		if(shape.size() == 0 && data.size() == 0) {
+			return py::buffer_info((byte*) nullptr, 0);
+		}
+		
 		{
 			size_t shapeProd = 1;
 			for(uint64_t e : shape) shapeProd *= e;
