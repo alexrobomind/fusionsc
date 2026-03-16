@@ -6,6 +6,7 @@
 
 namespace fsc { namespace db {
 
+//! Backend implementation class for prepared statements.
 struct PreparedStatementHook {
 	virtual void reset() = 0;
 	virtual bool step() = 0;
@@ -30,6 +31,7 @@ struct PreparedStatementHook {
 	virtual size_t size() = 0;
 };
 
+//! Prepared statement object.
 struct PreparedStatement {
 	PreparedStatement() = default;
 	PreparedStatement(Own<PreparedStatementHook>&& hook);
@@ -41,6 +43,7 @@ struct PreparedStatement {
 	struct Column;
 	struct Query;
 	
+	//! Set a statement parameter.
 	template<typename P>
 	void setParameter(size_t, P);
 	
@@ -48,8 +51,10 @@ struct PreparedStatement {
 	template<typename... Params>
 	Query bind(Params... params);
 	
+	//! Reset the statement.
 	inline void reset() { hook -> reset(); }
 	
+	//! Execute the statement directly (bind + step + reset). Returns no. of rows modified.
 	template<typename... Params>
 	size_t operator()(Params... params) {
 		bind(params...);
@@ -60,6 +65,7 @@ struct PreparedStatement {
 		return hook -> nRowsModified();
 	}
 	
+	//! Execute the statement directly (bind + step + reset). Returns last inserted rowid.
 	template<typename... Params>
 	int64_t insert(Params... params) {
 		bind(params...);
@@ -78,6 +84,7 @@ private:
 	Own<PreparedStatementHook> hook;
 };
 
+//! Column of a statement row.
 struct PreparedStatement::Column {
 	PreparedStatement& parent;
 	size_t idx;
@@ -107,6 +114,7 @@ struct PreparedStatement::Column {
 	inline Column& operator  *() { return *this; }
 };
 
+//! Query object returned by bind() that can step through result rows and access columns.
 struct PreparedStatement::Query {
 	PreparedStatement& parent;
 	

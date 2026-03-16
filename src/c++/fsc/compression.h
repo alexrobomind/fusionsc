@@ -6,7 +6,7 @@
 
 namespace fsc {
 
-/** Helper class for implementing ZLib-based compression and decompression */
+//! Helper class for implementing ZLib-based compression and decompression
 struct ZLib {
 	enum State {
 		NO_PROGRESS, //! Indicates that no progress could be made because input or output buffer is full

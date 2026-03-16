@@ -6,6 +6,8 @@ namespace fsc {
 
 // The following value is extracted - if possible - by the build system using
 // a git command. The corresponding source file commit-hash is auto-generated.
+
+//! Git commit hash extracted by the build system. May include a trailing "+" if modified.
 extern kj::StringPtr commitHash;
 
 }

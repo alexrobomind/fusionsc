@@ -10,6 +10,14 @@
 #include <iostream>
 
 namespace fsc {
+
+/**
+ * \defgroup rflm Field line mapping
+ * @{
+ * 
+ * \snippet flt.capnp rflm
+ * \snippet flt.capnp rflm2
+ */
 	
 Own<Mapper::Server> newMapper(FLT::Client flt, KDTreeService::Client indexer, GeometryLib::Client geoLib, DeviceBase& device);
 
@@ -102,6 +110,8 @@ private:
 	
 	inline static double unwrap(double phiWrapped);
 };
+
+ /** @} */
 
 // === class RFLM ===
 

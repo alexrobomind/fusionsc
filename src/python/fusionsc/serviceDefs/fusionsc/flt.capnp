@@ -29,6 +29,8 @@ enum FLTStopReason {
 	fieldlineReversed @9;
 }
 
+# BEGIN [rflm]
+
 struct ReversibleFieldlineMapping {
 	struct Section {
 		# Tensors of identical shape [nPhi, nZMap, nRMap] which contain R, Z,
@@ -98,6 +100,8 @@ struct GeometryMapping {
 	base @0 : Data.DataRef(ReversibleFieldlineMapping);
 	data @1 : Data.DataRef(MappingData);
 }
+
+# END [rflm]
 
 struct FLTRequest {
 	struct AdaptiveStepControl {
@@ -342,6 +346,8 @@ interface FLT $Cxx.allowCancellation {
 	findAxisBatch @3 (points : Data.Float64Tensor, request : FindAxisRequest) -> (pos : Data.Float64Tensor, axis : Data.Float64Tensor, meanField : Data.Float64Tensor);
 }
 
+# begin [rflm2]
+
 struct RFLMRequest {
 	mappingPlanes @0 : List(Float64);
 	
@@ -391,6 +397,8 @@ interface Mapper {
 		phi0 : Float64, r0 : Float64
 	) -> (geometry : Data.DataRef(Geometry.MergedGeometry));
 }
+
+#end [rflm2]
 
 # ==================================== FLT configuration ============================
 
