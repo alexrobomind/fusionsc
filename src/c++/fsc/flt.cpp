@@ -783,6 +783,8 @@ struct FLTImpl : public FLT::Server {
 									}
 									
 									Eigen::Vector3d normal = (vertices[1] - vertices[0]).cross(vertices[2] - vertices[1]);
+									normal /= normal.norm();
+									
 									for(int i = 0; i < 3; ++i) {
 										normals(iStartPoint, i) = normal(i);
 									}
