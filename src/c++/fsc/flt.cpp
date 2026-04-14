@@ -510,7 +510,7 @@ struct FLTImpl : public FLT::Server {
 			calc.run().wait(ws);	
 			
 			// TODO: This function is WAY TOO LONG. It needs to be broken up into pieces.
-			auto postProcessing = [ctx, &calc, request, startPointShape, nStartPoints, geometryData = mv(geometryData)]() mutable {
+			auto postProcessing = [ctx, &calc, request, startPointShape, nStartPoints, geometryData = mv(geometryData), geoMappingData = mv(geoMappingData)]() mutable {
 				auto applyPointShape = [&](auto builder, kj::ArrayPtr<const int64_t> preShape, kj::ArrayPtr<const int64_t> postShape) {
 					const size_t shapeSize = startPointShape.size() - 1 + preShape.size() + postShape.size();
 					size_t shapeProd = nStartPoints;
@@ -737,61 +737,97 @@ struct FLTImpl : public FLT::Server {
 						KJ_IF_MAYBE(pLastCollision, lastCollision) {
 							auto& lastCollision = *pLastCollision;
 							
+							// Determine appropriate geometry to use for the mesh analysis
+							
+							// This function only returns a mesh reference, so it assumes that the
+							// references to downloaded geometry are kept alive appropriately.
+							auto getGeometrySource = [&]() -> MergedGeometry::Reader {
+								auto geoSource = lastCollision.getGeometryHit().getGeometrySource();
+								
+								if(geoSource.isBaseGeometry()) {
+									KJ_IF_MAYBE(pGeometryData, geometryData) {
+										return pGeometryData -> get();
+									}
+									KJ_FAIL_REQUIRE("Internal error: Base geometry not present despite collision with it");
+								} else if(geoSource.isMappingSection()) {
+									KJ_IF_MAYBE(pGeoMappingData, geoMappingData) {
+										return pGeoMappingData -> get().getSections()[geoSource.getMappingSection()].getGeometry();
+									}
+									KJ_FAIL_REQUIRE("Internal error: Mapping geometry not present despite collision with it");
+								} else {
+									KJ_FAIL_REQUIRE("Unknown collision geometry source");
+								}
+							};
+							
+							MergedGeometry::Reader geometry = getGeometrySource();
+							
 							uint32_t meshIdx = lastCollision.getGeometryHit().getMeshIndex();
 							uint32_t elementIdx = lastCollision.getGeometryHit().getElementIndex();
 							
-							KJ_IF_MAYBE(pGeometryData, geometryData) {
-								auto geometry = pGeometryData->get();
-								auto tagValues = geometry.getEntries()[meshIdx].getTags();
-								
-								for(auto iTag : kj::indices(tagValues)) {
-									endTagData.setWithCaveats(iTag * nStartPoints + iStartPoint, tagValues[iTag]);
-								}
-								
-								auto mesh = geometry.getEntries()[meshIdx].getMesh();
-								
-								uint32_t offset = 0;
-								bool skip = false;
-								switch(mesh.which()) {
-									case Mesh::TRI_MESH:
-										offset = 3 * elementIdx;
-										break;
-									case Mesh::POLY_MESH: {
-										offset = mesh.getPolyMesh()[elementIdx];
-										auto next = mesh.getPolyMesh()[elementIdx + 1];
-										
-										// Skip elements with less than 3 points
-										if(next < offset + 3)
-											skip = true;
-										
-										break;
-									}
-									
-									default:
-										KJ_FAIL_REQUIRE("Unknown mesh type", mesh.which());
-								}
-								
-								if(!skip) {
-									auto data = mesh.getVertices().getData();
-									Eigen::Vector3d vertices[3];
-									for(int i = 0; i < 3; ++i) {
-										uint32_t index = mesh.getIndices()[offset + i];
-										
-										vertices[i] = Eigen::Vector3d(
-											data[3 * index], data[3 * index + 1], data[3 * index + 2]
-										);
-									}
-									
-									Eigen::Vector3d normal = (vertices[1] - vertices[0]).cross(vertices[2] - vertices[1]);
-									normal /= normal.norm();
-									
-									for(int i = 0; i < 3; ++i) {
-										normals(iStartPoint, i) = normal(i);
-									}
-								} 
-							} else {
-								KJ_FAIL_REQUIRE("Internal error: Stop reason was COLLISION_LIMIT but geometry not set");
+							auto tagValues = geometry.getEntries()[meshIdx].getTags();
+							
+							for(auto iTag : kj::indices(tagValues)) {
+								endTagData.setWithCaveats(iTag * nStartPoints + iStartPoint, tagValues[iTag]);
 							}
+							
+							auto mesh = geometry.getEntries()[meshIdx].getMesh();
+							
+							uint32_t offset = 0;
+							bool skip = false;
+							switch(mesh.which()) {
+								case Mesh::TRI_MESH:
+									offset = 3 * elementIdx;
+									break;
+								case Mesh::POLY_MESH: {
+									offset = mesh.getPolyMesh()[elementIdx];
+									auto next = mesh.getPolyMesh()[elementIdx + 1];
+									
+									// Skip elements with less than 3 points
+									if(next < offset + 3)
+										skip = true;
+									
+									break;
+								}
+								
+								default:
+									KJ_FAIL_REQUIRE("Unknown mesh type", mesh.which());
+							}
+							
+							if(!skip) {
+								auto data = mesh.getVertices().getData();
+								Eigen::Vector3d vertices[3];
+								for(int i = 0; i < 3; ++i) {
+									uint32_t index = mesh.getIndices()[offset + i];
+									
+									vertices[i] = Eigen::Vector3d(
+										data[3 * index], data[3 * index + 1], data[3 * index + 2]
+									);
+								}
+								
+								// If the geometry source is a section, we need to transform the triangle
+								// back to regular mapping space.
+								
+								if(lastCollision.getGeometryHit().getGeometrySource().isMappingSection()) {
+									auto sectionNo = lastCollision.getGeometryHit().getGeometrySource().getMappingSection();
+									
+									// Load the mapping data
+									auto mappingData = calc.mappingData -> getHostRoot<cu::ReversibleFieldlineMapping::Reader>();
+									RFLM rflm(mappingData);
+									rflm.activateSection(sectionNo);
+									
+									for(int i = 0; i < 3; ++i) {
+										auto& v = vertices[i];
+										v = rflm.unmap(v(0), v(1), v(2));
+									}
+								}
+								
+								Eigen::Vector3d normal = (vertices[1] - vertices[0]).cross(vertices[2] - vertices[1]);
+								normal /= normal.norm();
+								
+								for(int i = 0; i < 3; ++i) {
+									normals(iStartPoint, i) = normal(i);
+								}
+							} 
 						} else {
 							KJ_FAIL_REQUIRE("Internal error: Stop reason was COLLISION_LIMIT but no collision recorded in event buffer", iStartPoint);
 						}

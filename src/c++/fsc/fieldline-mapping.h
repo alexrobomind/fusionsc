@@ -25,6 +25,9 @@ struct RFLM {
 	//! Computes the real-space coordinates of the last-mapped position projected to the given phi plane
 	inline EIGEN_DEVICE_FUNC Vec3d unmap(double phi);
 	
+	//! Computes the real-space coordinates of a phi-u-v coordinate in the current section
+	inline EIGEN_DEVICE_FUNC Vec3d unmap(double phi, double u, double v);
+	
 	//! Captures a position for mapping using the closest mapping filament
 	inline EIGEN_DEVICE_FUNC double map(const Vec3d& x, bool goingCcw);
 	
@@ -100,9 +103,10 @@ struct RFLM {
 	};
 	
 	static constexpr double SECTION_TOL = 0.001;
+	
+	inline void activateSection(uint64_t iSection);
 
 private:
-	inline void activateSection(uint64_t iSection);
 	inline cu::ReversibleFieldlineMapping::Section::Reader activeSection();
 	inline cu::GeometryMapping::SectionData::Reader activeGeoSection();
 	
@@ -234,6 +238,10 @@ EIGEN_DEVICE_FUNC void RFLM::setFieldlinePosition(double newVal) {
 }
 
 EIGEN_DEVICE_FUNC Vec3d RFLM::unmap(double phi) {
+	return unmap(phi, uv(0), uv(1));
+}
+
+EIGEN_DEVICE_FUNC Vec3d RFLM::unmap(double phi, double u, double v) {
 	using Strategy = C1CubicInterpolation<double>;
 	using Interpolator = NDInterpolator<3, Strategy>;
 	
@@ -247,11 +255,9 @@ EIGEN_DEVICE_FUNC Vec3d RFLM::unmap(double phi) {
 	
 	double phiCoord = unwrap(phi - phi1 + 2 * SECTION_TOL) - 2 * SECTION_TOL;
 	
-	Vec3d interpCoords(phiCoord, uv(1), uv(0));
+	Vec3d interpCoords(phiCoord, v, u);
 	double rVal = interpolator(rField, interpCoords);
 	double zVal = interpolator(zField, interpCoords);
-	
-	// KJ_DBG("Unmapping", phi, uv(0), uv(1), rVal, zVal);
 	
 	return Vec3d(rVal * cos(phi), rVal * sin(phi), zVal);
 }
@@ -503,6 +509,8 @@ EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi, cupnp::List<cu::FLTKernelEv
 				
 				double flPos = getFieldlinePosition(phiEvent);
 				event.setDistance(flPos);
+				
+				event.mutateGeometryHit().mutateGeometrySource().setMappingSection(currentSection);
 			}
 			
 			newEventCount = nextEventCount;

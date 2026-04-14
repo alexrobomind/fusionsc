@@ -463,6 +463,17 @@ struct FLTKernelEvent {
 		geometryHit : group {
 			meshIndex @8 : UInt64;
 			elementIndex @9 : UInt64;
+			
+			# Indicates which geometry source caused this
+			# collision event.
+			# In case a geometry mapping is used, the geometry
+			# referenced must be taken from the mapping section,
+			# and the normal must be modified accordingly.
+			
+			geometrySource : union {
+				baseGeometry @12 : Void;
+				mappingSection @13 : UInt32;
+			}
 		}
 		record : group {
 			fieldStrength @10 : Float64;
