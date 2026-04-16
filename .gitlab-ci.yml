@@ -16,6 +16,7 @@ stages:
   - build
   - test
   - pybuild
+  - docs
 
 # Build stage
 
@@ -196,3 +197,29 @@ pybuild:pybuild-windows:
   artifacts:
     paths:
       - dist/*.whl
+
+# Documentation stage
+
+docs:build:
+  <<: *job
+  <<: *linux
+  stage: docs
+  needs:
+    - build:gcc
+  before_script:
+    - apt-get update --yes
+    - apt-get install --yes cmake python3 python3-pip python3-virtualenv libssl-dev clang-14 doxygen graphviz
+    - pip3 install breathe myst-nb sphinx-rtd-theme sphinx-tabs
+  script:
+    - mkdir -p build && cd build
+    - cmake -DCMAKE_BUILD_TYPE=Release ..
+    - cmake --build . --target copy-docs --config Release
+    - cd ..
+    - echo "No Jekyll" > docs/.nojekyll
+  artifacts:
+    paths:
+      - docs/
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+    - when: manual
