@@ -117,6 +117,10 @@ add_library(
 	flt.h
 	flt-kernels.h
 	flt.cpp
+	fieldline-tracer.h
+	fieldline-tracer.cpp
+	fieldline-postprocessing.h
+	fieldline-postprocessing.cpp
 	
 	hfcam.h
 	hfcam.cpp
