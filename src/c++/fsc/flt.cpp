@@ -751,7 +751,8 @@ struct FLTImpl : public FLT::Server {
 									KJ_FAIL_REQUIRE("Internal error: Base geometry not present despite collision with it");
 								} else if(geoSource.isMappingSection()) {
 									KJ_IF_MAYBE(pGeoMappingData, geoMappingData) {
-										return pGeoMappingData -> get().getSections()[geoSource.getMappingSection()].getGeometry();
+										auto sections = pGeoMappingData -> get().getSections();
+										return sections[geoSource.getMappingSection() % sections.size()].getGeometry();
 									}
 									KJ_FAIL_REQUIRE("Internal error: Mapping geometry not present despite collision with it");
 								} else {
@@ -812,12 +813,22 @@ struct FLTImpl : public FLT::Server {
 									
 									// Load the mapping data
 									auto mappingData = calc.mappingData -> getHostRoot<cu::ReversibleFieldlineMapping::Reader>();
-									RFLM rflm(mappingData);
+									auto geoMappingData = calc.geoMappingData -> getHostRoot<cu::GeometryMapping::MappingData::Reader>();
+									
+									RFLM rflm(mappingData, geoMappingData);
 									rflm.activateSection(sectionNo);
 									
 									for(int i = 0; i < 3; ++i) {
 										auto& v = vertices[i];
-										v = rflm.unmap(v(0), v(1), v(2));
+										
+										// Geometries are specified w.r.t. the "geometry" section phi range (usually global).
+										// If the geometry has a global symmetry, this will actually move back to the correct
+										// phi range.
+										double phi = v(0);
+										phi += rflm.phi1 - rflm.activeGeoSection().getPhi1();
+										
+										// We store geometry as phi, v, u and not phi, u, v (equivalent to phi, z, r)
+										v = rflm.unmap(phi, v(2), v(1));
 									}
 								}
 								

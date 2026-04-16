@@ -105,11 +105,11 @@ struct RFLM {
 	static constexpr double SECTION_TOL = 0.001;
 	
 	inline void activateSection(uint64_t iSection);
-
-private:
+	
 	inline cu::ReversibleFieldlineMapping::Section::Reader activeSection();
 	inline cu::GeometryMapping::SectionData::Reader activeGeoSection();
-	
+
+private:
 	inline EIGEN_DEVICE_FUNC void interpolate(double phi, Vec2d& rz, Mat2d& jacobian);
 	
 	inline static double unwrap(double phiWrapped);
@@ -510,7 +510,7 @@ EIGEN_DEVICE_FUNC Vec3d RFLM::advance(double newPhi, cupnp::List<cu::FLTKernelEv
 				double flPos = getFieldlinePosition(phiEvent);
 				event.setDistance(flPos);
 				
-				event.mutateGeometryHit().mutateGeometrySource().setMappingSection(currentSection);
+				event.mutateGeometryHit().mutateGeometrySource().setMappingSection(currentSectionRaw);
 			}
 			
 			newEventCount = nextEventCount;

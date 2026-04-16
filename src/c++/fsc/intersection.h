@@ -220,6 +220,7 @@ inline EIGEN_DEVICE_FUNC uint32_t intersectGeometryAllEvents(
 			auto geoHit = event.mutateGeometryHit(); \
 			geoHit.setMeshIndex(meshIdx); \
 			geoHit.setElementIndex(elementIdx); \
+			geoHit.mutateGeometrySource().setBaseGeometry(); \
 			\
 			FSC_NEXT_EVENT() \
 		} \
