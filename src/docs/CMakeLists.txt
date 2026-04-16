@@ -1,4 +1,5 @@
-# Look for documentation generator
+# ===================== Doxygen (C++ docs) =====================
+
 find_package(Doxygen)
 
 if(Doxygen_FOUND)
@@ -50,6 +51,7 @@ if(Doxygen_FOUND)
 		DEPENDS main.doxytag
 	)
 	
+	# Legacy standalone Doxygen HTML copy (kept for offline use)
 	add_custom_target(
 		copy-doxy-docs
 		COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_BINARY_DIR}/main/html ${PROJECT_SOURCE_DIR}/docs/cpp
@@ -57,6 +59,8 @@ if(Doxygen_FOUND)
 	
 	add_dependencies(copy-doxy-docs doxy-docs)
 endif()
+
+# ===================== Sphinx (Python + C++ via Breathe) =====================
 
 if(FSC_WITH_PYTHON)
 	set(DOC_FSCPATH ${CMAKE_CURRENT_BINARY_DIR}/docfsc)
@@ -84,9 +88,22 @@ if(FSC_WITH_PYTHON)
 		DEPENDS java-classes
 	)
 	
+	# --- Environment variables passed to Sphinx ---
+	set(DOC_ENV_VARS
+		DOC_FSCPATH=${DOC_FSCPATH}
+	)
+
+	# If Doxygen is available, add its XML output path for Breathe
+	if(Doxygen_FOUND)
+		list(APPEND DOC_ENV_VARS FSC_DOXYGEN_XML_DIR=${CMAKE_CURRENT_BINARY_DIR}/main/xml)
+		list(APPEND DOC_ENV_VARS FSC_GENAPI_XML_DIR=${CMAKE_CURRENT_BINARY_DIR}/capnp/xml)
+	endif()
+
 	add_custom_target(
 		docs
-		COMMAND ${CMAKE_COMMAND} -E env DOC_FSCPATH=${DOC_FSCPATH} $<TARGET_FILE:Python::Interpreter> -m sphinx.cmd.build -a -d ${DOC_TOCTREE_PATH} ${CMAKE_CURRENT_SOURCE_DIR} ${DOC_SPHINXPATH}
+		COMMAND ${CMAKE_COMMAND} -E env ${DOC_ENV_VARS}
+			$<TARGET_FILE:Python::Interpreter> -m sphinx.cmd.build -a -d ${DOC_TOCTREE_PATH}
+			${CMAKE_CURRENT_SOURCE_DIR} ${DOC_SPHINXPATH}
 	)
 
 	add_custom_target(
@@ -96,5 +113,11 @@ if(FSC_WITH_PYTHON)
 
 	add_dependencies(docs-setup2 docs-setup1)
 	add_dependencies(docs docs-setup1 docs-setup2)
+
+	# If Doxygen is available, Sphinx depends on Doxygen XML being built first
+	if(Doxygen_FOUND)
+		add_dependencies(docs doxy-docs genapi-docs)
+	endif()
+
 	add_dependencies(copy-docs docs)
 endif()
