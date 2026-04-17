@@ -26,7 +26,7 @@ extensions = [
 	'sphinx.ext.coverage',
 	'sphinx.ext.autosummary',
 	'sphinx_tabs.tabs',
-	'fusionsc.sphinx-ext.capnp',
+	#'fusionsc.sphinx-ext.capnp',
 	'breathe',
 ]
 
