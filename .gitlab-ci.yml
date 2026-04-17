@@ -66,7 +66,7 @@ stages:
   image: debian:trixie
   before_script:
     - apt-get update --yes
-    - apt-get install --yes cmake python3 python3-pip python3-virtualenv libssl-dev clang-14
+    - apt-get install --yes cmake python3 python3-pip python3-virtualenv libssl-dev clang-19
 
 .msvc: &msvc
   tags:
@@ -87,8 +87,8 @@ stages:
 .clang: &clang
   <<: *linux
   variables:
-    CC: clang-14
-    CXX: clang++-14
+    CC: clang-19
+    CXX: clang++-19
 
 build:gcc:
   <<: *build-linux
@@ -208,7 +208,7 @@ docs:build:
     - build:gcc
   before_script:
     - apt-get update --yes
-    - apt-get install --yes cmake python3 python3-pip python3-virtualenv libssl-dev clang-14 doxygen graphviz python3-breathe python3-myst-nb python3-sphinx-rtd-theme python3-sphinx-tabs
+    - apt-get install --yes cmake python3 python3-pip python3-virtualenv libssl-dev clang-19 doxygen graphviz python3-breathe python3-myst-nb python3-sphinx-rtd-theme python3-sphinx-tabs
   script:
     - mkdir -p build && cd build
     - cmake -DCMAKE_BUILD_TYPE=Release ..
