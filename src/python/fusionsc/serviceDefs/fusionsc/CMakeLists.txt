@@ -101,8 +101,8 @@ target_include_directories(fsc-service-genapi PUBLIC $<INSTALL_INTERFACE:${CMAKE
 install(TARGETS fsc-service-genapi EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/genapi/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
 
-set_property(TARGET fsc-service-genapi	PROPERTY CP_HEADERS ${FSC_CP_HEADERS})
-set_property(TARGET fsc-service-genapi	PROPERTY CP_SRC ${FSC_CP_SRC})
+set_property(TARGET fsc-service-genapi PROPERTY CP_HEADERS ${FSC_CP_HEADERS})
+set_property(TARGET fsc-service-genapi PROPERTY CP_SRC ${FSC_CP_SRC})
 set_property(TARGET fsc-service-genapi PROPERTY CP_CUHEADERS ${FSC_CP_CUHEADERS})
 set_property(TARGET fsc-service-genapi PROPERTY SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set_property(TARGET fsc-service-genapi PROPERTY GENAPI_DIR "${CMAKE_CURRENT_BINARY_DIR}/genapi")

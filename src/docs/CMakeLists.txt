@@ -3,9 +3,9 @@
 find_package(Doxygen)
 
 if(Doxygen_FOUND)
-	get_target_property(FSC_CP_HEADERS fsc CP_HEADERS)
-	get_target_property(FSC_CP_CUHEADERS fsc CP_CUHEADERS)
-	get_target_property(FSC_CP_SRC fsc CP_SRC)
+	get_target_property(FSC_CP_HEADERS fsc-service-genapi CP_HEADERS)
+	get_target_property(FSC_CP_CUHEADERS fsc-service-genapi CP_CUHEADERS)
+	get_target_property(FSC_CP_SRC fsc-service-genapi CP_SRC)
 	get_target_property(FSC_SRC_DIR fsc SOURCE_DIR)
 	
 	get_target_property(GENAPI_SRC_DIR fsc-service-genapi SOURCE_DIR)
