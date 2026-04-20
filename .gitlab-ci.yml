@@ -204,6 +204,7 @@ docs:build:
   <<: *job
   <<: *linux
   stage: docs
+  needs: []
   before_script:
     - apt-get update --yes
     - apt-get install --yes cmake python3 python3-pip python3-virtualenv libssl-dev clang-19 doxygen graphviz python3-breathe python3-myst-nb python3-sphinx-rtd-theme python3-sphinx-tabs
