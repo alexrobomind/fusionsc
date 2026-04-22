@@ -9,5 +9,10 @@ These classes are automatically generated from the Cap'n'Proto schema definition
    how to deal with such classes, please consult the `Cap'n'Proto C++ examples
    <https://capnproto.org>`_ or the generated API documentation.
 
-.. doxygenindex::
+.. doxygennamespace:: fsc
    :project: fsc-genapi
+   :members:
+
+.. doxygennamespace:: fsc::cu
+   :project: fsc-genapi
+   :members:
