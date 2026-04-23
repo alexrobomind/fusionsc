@@ -12,7 +12,7 @@ Usage:
 import argparse
 import re
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict
 from dataclasses import dataclass
 
 from capnp_parser import parse_schema, parse_schema_file, Schema, Struct, Interface, Enum, Field, Method
@@ -27,7 +27,21 @@ def escape_rst(text: str) -> str:
     return text
 
 
-def format_type(type_str: str) -> str:
+def create_qualified_name_map(structs: List[Struct]) -> Dict[str, str]:
+    """
+    Create a mapping from struct names to their fully qualified names.
+    For nested structs, this includes parent names (e.g., 'Section' -> 'ReversibleFieldlineMapping.Section')
+    """
+    name_map = {}
+    
+    for struct in structs:
+        qualified = build_qualified_name(struct, structs)
+        name_map[struct.name] = qualified
+    
+    return name_map
+
+
+def format_type(type_str: str, qualified_name_map: Dict[str, str] = None) -> str:
     """Format a Cap'n'Proto type for documentation."""
     # Replace common Cap'n'Proto types with their Python equivalents
     replacements = {
@@ -50,7 +64,16 @@ def format_type(type_str: str) -> str:
     result = type_str
     for capnp_type, py_type in replacements.items():
         # Use word boundaries to avoid partial matches
-        result = re.sub(r'\b' + capnp_type + r'\b', py_type, result)
+        result = re.sub(r'\\b' + capnp_type + r'\\b', py_type, result)
+    
+    # Replace struct names with their qualified versions if available
+    if qualified_name_map:
+        # Sort by length (longest first) to avoid partial replacement issues
+        # But only replace if not preceded by a dot (already part of qualified name)
+        for struct_name, qualified_name in sorted(qualified_name_map.items(), key=lambda x: -len(x[0])):
+            # Match word boundary but NOT preceded by dot (using fixed-width negative lookbehind)
+            pattern = r'(?<!\.)\b' + re.escape(struct_name) + r'\b'
+            result = re.sub(pattern, qualified_name, result)
     
     return result
 
@@ -144,6 +167,118 @@ def generate_enum_doc(schema: Schema, enum: Enum) -> str:
     return '\n'.join(lines)
 
 
+def get_nested_structs_by_ancestors(structs: List[Struct]) -> Dict[str, Dict]:
+    """
+    Build a tree structure of nested structs based on parent relationships.
+    Returns a dict mapping parent name to nested struct info including their own children.
+    """
+    nested = {}
+    
+    # First pass: group by direct parent
+    for struct in structs:
+        if struct.parent:
+            if struct.parent not in nested:
+                nested[struct.parent] = {}
+            nested[struct.parent][struct.name] = struct
+    
+    # Second pass: attach children to their respective parents recursively
+    def build_tree(parent_name: str, parent_structs: Dict, all_structs: List[Struct]) -> Dict:
+        """Recursively build the nested tree structure."""
+        result = {}
+        for name, struct in parent_structs.items():
+            # Find children of this struct
+            children = {}
+            for s in all_structs:
+                if s.parent == name:
+                    children[s.name] = s
+            
+            result[name] = {
+                'struct': struct,
+                'children': build_tree(name, children, all_structs) if children else {}
+            }
+        return result
+    
+    # Build the tree for each top-level parent
+    final_tree = {}
+    for parent_name, parent_structs in nested.items():
+        final_tree[parent_name] = build_tree(parent_name, parent_structs, structs)
+    
+    return final_tree
+
+
+def build_qualified_name(struct: Struct, structs: List[Struct]) -> str:
+    """Build the qualified name for a struct including all ancestor names."""
+    parts = [struct.name]
+    current = struct
+    visited = set()
+    while current.parent and current.name not in visited:
+        visited.add(current.name)
+        parts.insert(0, current.parent)
+        # Find the parent struct
+        for s in structs:
+            if s.name == current.parent:
+                current = s
+                break
+        else:
+            break
+    return ".".join(parts)
+
+
+def generate_struct_with_nested_doc(schema: Schema, struct: Struct, 
+                                    nesting_level: int = 0) -> str:
+    """Generate documentation for a struct with nested children, using RST section levels."""
+    lines = []
+    
+    # Build qualified name
+    qualified_name = build_qualified_name(struct, schema.structs)
+    
+    # Build qualified name map for all structs
+    name_map = create_qualified_name_map(schema.structs)
+    
+    # RST header characters based on nesting level
+    # Level 0: =, Level 1: -, Level 2: ^, Level 3: ", Level 4: '
+    header_chars = ['=', '-', '^', '"', "'"]
+    
+    # Determine which header char to use
+    if nesting_level < len(header_chars):
+        header_char = header_chars[nesting_level]
+    else:
+        header_char = header_chars[-1]
+    
+    # Header
+    lines.append(qualified_name)
+    lines.append(header_char * len(qualified_name))
+    lines.append("")
+    
+    # Add comment if present
+    if struct.comment:
+        lines.append(struct.comment)
+        lines.append("")
+    
+    # Fields section
+    if struct.fields:
+        lines.append("**Fields:**")
+        lines.append("")
+        for field in struct.fields:
+            default = f" = {field.default}" if field.default else ""
+            lines.append(f"- ``{field.name}`` (:class:`{format_type(field.type_, name_map)}`){default}")
+        lines.append("")
+    
+    # Process nested structs (children)
+    nested_tree = get_nested_structs_by_ancestors(schema.structs)
+    if struct.name in nested_tree:
+        for child_name, child_info in nested_tree[struct.name].items():
+            child_struct = child_info['struct']
+            # Append the entire doc string, not individual characters
+            child_doc = generate_struct_with_nested_doc(schema, child_struct, 
+                                                        nesting_level + 1)
+            lines.append(child_doc)
+    
+    return '\n'.join(lines)
+
+
+
+
 def generate_schema_doc(schema: Schema, namespace: str = "fsc") -> str:
     """Generate complete documentation for a schema."""
     lines = []
@@ -176,11 +311,11 @@ def generate_schema_doc(schema: Schema, namespace: str = "fsc") -> str:
     
     # Structs section
     if schema.structs:
-        lines.append("Structs")
-        lines.append("-" * 7)
-        lines.append("")
+        # Find top-level structs (those without parents)
+        nested_tree = get_nested_structs_by_ancestors(schema.structs)
         for struct in schema.structs:
-            lines.append(generate_struct_doc(schema, struct))
+            if not struct.parent:
+                lines.append(generate_struct_with_nested_doc(schema, struct))
     
     # Interfaces section
     if schema.interfaces:
