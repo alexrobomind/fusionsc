@@ -1,2 +1,6 @@
 javadocs
 _autosummary
+
+# Doxygen output
+_capnp
+*.doxytag

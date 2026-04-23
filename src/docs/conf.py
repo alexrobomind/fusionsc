@@ -64,9 +64,9 @@ else:
 	breathe_projects["fsc"] = os.environ.get('FSC_DOXYGEN_XML_DIR', '_doxygen/xml')
 
 # Cap'n'Proto generated API documentation
-_genapi_xml = os.environ.get('FSC_GENAPI_XML_DIR')
-if _genapi_xml and os.path.isdir(_genapi_xml):
-	breathe_projects["fsc-genapi"] = _genapi_xml
+#_genapi_xml = os.environ.get('FSC_GENAPI_XML_DIR')
+#if _genapi_xml and os.path.isdir(_genapi_xml):
+#	breathe_projects["fsc-genapi"] = _genapi_xml
 
 breathe_default_project = "fsc"
 breathe_default_members = ('members', 'undoc-members')

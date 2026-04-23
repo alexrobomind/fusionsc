@@ -20,7 +20,7 @@ wrap.
    :maxdepth: 1
    :caption: Generated API Reference:
 
-   genapi
+   generated-capnp-structs
 
 Quick Start
 ------------

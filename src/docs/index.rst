@@ -28,6 +28,7 @@ the magnetic field as well as the machine geometry.
   
    reference
    cpp/index
+   _capnp/index
 
 
 

@@ -28,22 +28,10 @@ if(Doxygen_FOUND)
 	file(GLOB_RECURSE FSC_DOCSOURCES "${FSC_SRC_DIR}/*")
 
 	add_custom_command(
-		OUTPUT genapi.doxytag
-		DEPENDS ${FSC_CP_HEADERS} ${FSC_CH_CUHEADERS} Doxygen::doxygen gendocs-doxyfile fsc
-		COMMAND Doxygen::doxygen
-		ARGS gendocs-doxyfile
-	)
-
-	add_custom_command(
 		OUTPUT main.doxytag
 		DEPENDS ${FSC_DOCSOURCES} Doxygen::doxygen fsc-doxyfile
 		COMMAND Doxygen::doxygen
 		ARGS fsc-doxyfile
-	)
-
-	add_custom_target(
-		genapi-docs
-		DEPENDS genapi.doxytag
 	)
 
 	add_custom_target(
@@ -59,6 +47,23 @@ if(Doxygen_FOUND)
 	
 	add_dependencies(copy-doxy-docs doxy-docs)
 endif()
+
+# ===================== Cap'n'Proto Documentation Generation =====================
+
+set(CAPNP_SCHEMA_DIR ${PROJECT_SOURCE_DIR}/src/python/fusionsc/serviceDefs/fusionsc)
+set(CAPNP_OUTPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/_capnp)
+file(MAKE_DIRECTORY ${CAPNP_OUTPUT_DIR})
+
+# Find all schema files
+file(GLOB CAPNP_SCHEMA_FILES "${CAPNP_SCHEMA_DIR}/*.capnp")
+
+add_custom_target(
+	capnp-docs
+	COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+		$<TARGET_FILE:Python::Interpreter> capnp_docs.py --input ${CAPNP_SCHEMA_FILES} --output ${CAPNP_OUTPUT_DIR}
+	DEPENDS ${CAPNP_SCHEMA_FILES} capnp_docs.py capnp_parser.py
+	WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
 
 # ===================== Sphinx (Python + C++ via Breathe) =====================
 
@@ -112,11 +117,11 @@ if(FSC_WITH_PYTHON)
 	)
 
 	add_dependencies(docs-setup2 docs-setup1)
-	add_dependencies(docs docs-setup1 docs-setup2)
+	add_dependencies(docs docs-setup1 docs-setup2 capnp-docs)
 
 	# If Doxygen is available, Sphinx depends on Doxygen XML being built first
 	if(Doxygen_FOUND)
-		add_dependencies(docs doxy-docs genapi-docs)
+		add_dependencies(docs doxy-docs)
 	endif()
 
 	add_dependencies(copy-docs docs)
