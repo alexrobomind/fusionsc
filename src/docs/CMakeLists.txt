@@ -52,13 +52,14 @@ endif()
 
 set(CAPNP_SCHEMA_DIR ${PROJECT_SOURCE_DIR}/src/python/fusionsc/serviceDefs/fusionsc)
 set(CAPNP_OUTPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/_capnp)
-file(MAKE_DIRECTORY ${CAPNP_OUTPUT_DIR})
 
 # Find all schema files
 file(GLOB CAPNP_SCHEMA_FILES "${CAPNP_SCHEMA_DIR}/*.capnp")
 
 add_custom_target(
 	capnp-docs
+	COMMAND ${CMAKE_COMMAND} -E remove_directory ${CAPNP_OUTPUT_DIR}
+	COMMAND ${CMAKE_COMMAND} -E make_directory ${CAPNP_OUTPUT_DIR}
 	COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
 		$<TARGET_FILE:Python::Interpreter> capnp_docs.py --input ${CAPNP_SCHEMA_FILES} --output ${CAPNP_OUTPUT_DIR}
 	DEPENDS ${CAPNP_SCHEMA_FILES} capnp_docs.py capnp_parser.py
