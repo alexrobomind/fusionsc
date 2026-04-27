@@ -34,6 +34,15 @@ class Method:
 
 
 @dataclass
+class UnionField:
+    """Represents a union or group field with its nested fields."""
+    name: str
+    type_: str  # 'union' or 'group'
+    fields: List[Field] = field(default_factory=list)
+    index: int = 0
+
+
+@dataclass
 class Struct:
     """Represents a Cap'n'Proto struct."""
     name: str
@@ -41,7 +50,7 @@ class Struct:
     parent: Optional[str] = None  # Name of parent struct if nested
     fields: List[Field] = field(default_factory=list)
     comment: Optional[str] = None
-    union_fields: List[Field] = field(default_factory=list)
+    union_fields: List[UnionField] = field(default_factory=list)
 
 
 @dataclass
@@ -100,6 +109,97 @@ def extract_comment(lines: List[str], start_idx: int) -> Optional[str]:
     if comment_lines:
         return '\n'.join(comment_lines)
     return None
+
+
+def _parse_struct_body(struct: Struct, body: str):
+    """Parse fields and union/group definitions from struct body."""
+    lines = body.split('\n')
+    i = 0
+    
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        
+        # Skip empty lines and comments
+        if not stripped or stripped.startswith('#'):
+            i += 1
+            continue
+        
+        # Skip struct/interface/enum definitions (nested definitions, not fields)
+        if stripped.startswith('struct ') or stripped.startswith('interface ') or stripped.startswith('enum '):
+            # Skip nested struct definitions entirely
+            brace_count = 0
+            start_found = False
+            while i < len(lines):
+                if '{' in lines[i]:
+                    start_found = True
+                    brace_count += lines[i].count('{')
+                if '}' in lines[i]:
+                    brace_count -= lines[i].count('}')
+                i += 1
+                if start_found and brace_count == 0:
+                    break
+            continue
+        
+        # Check for union or group field definition: name : union { ... }
+        union_match = re.match(r'^\s*(\w+)\s+:\s+(union|group)\s*{', stripped)
+        if union_match:
+            field_name = union_match.group(1)
+            field_type = union_match.group(2)
+            
+            # Find the end of the union/group by counting braces
+            brace_count = stripped.count('{') - stripped.count('}')
+            j = i + 1
+            union_body_lines = []
+            
+            while j < len(lines) and brace_count > 0:
+                union_body_lines.append(lines[j])
+                brace_count += lines[j].count('{') - lines[j].count('}')
+                j += 1
+            
+            # Parse nested fields from union/group body
+            nested_fields = []
+            for union_line in union_body_lines:
+                union_stripped = union_line.strip()
+                if not union_stripped or union_stripped.startswith('#'):
+                    continue
+                
+                # Parse nested field: name @index : type [= default];
+                nested_field_match = re.match(
+                    r'^(\w+)\s+@(\d+)\s*:\s*([^=;]+?)(?:\s*=\s*(.+?))?\s*;\s*$', 
+                    union_stripped
+                )
+                if nested_field_match:
+                    nested_fields.append(Field(
+                        name=nested_field_match.group(1),
+                        index=int(nested_field_match.group(2)),
+                        type_=nested_field_match.group(3).strip(),
+                        default=nested_field_match.group(4).strip() if nested_field_match.group(4) else None
+                    ))
+            
+            # Create UnionField
+            union_field = UnionField(
+                name=field_name,
+                type_=field_type,
+                fields=nested_fields,
+                index=0  # Union/group fields do not have a direct index in Cap'n'Proto
+            )
+            struct.union_fields.append(union_field)
+            
+            i = j
+            continue
+        
+        # Regular field definition: name @index : type [= default];
+        field_match = re.match(r'^(\w+)\s+@(\d+)\s*:\s*([^=;]+?)(?:\s*=\s*(.+?))?\s*;\s*$', stripped)
+        if field_match:
+            struct.fields.append(Field(
+                name=field_match.group(1),
+                index=int(field_match.group(2)),
+                type_=field_match.group(3).strip(),
+                default=field_match.group(4).strip() if field_match.group(4) else None
+            ))
+        
+        i += 1
 
 
 def parse_schema(content: str, filename: str = "<string>") -> Schema:
@@ -186,32 +286,8 @@ def parse_schema(content: str, filename: str = "<string>") -> Schema:
         # Create the struct
         struct = Struct(name=name, namespace=schema.namespace, parent=parent)
         
-        # Parse fields from the struct body
-        # Skip nested struct definitions and parse direct fields
-        for line in struct_body.split('\n'):
-            stripped = line.strip()
-            
-            # Skip empty lines, comments, and nested struct/interface/enum definitions
-            if not stripped or stripped.startswith('#'):
-                continue
-            if stripped.startswith('struct ') or stripped.startswith('interface ') or stripped.startswith('enum '):
-                continue
-            
-            # Parse field definition: name @index : type [= default];
-            # Pattern: identifier @number : type-expression [= default-value];
-            field_match = re.match(r'^(\w+)\s+@(\d+)\s*:\s*([^=;]+?)(?:\s*=\s*(.+?))?\s*;\s*$', stripped)
-            if field_match:
-                field_name = field_match.group(1)
-                field_idx = int(field_match.group(2))
-                field_type = field_match.group(3).strip()
-                field_default = field_match.group(4).strip() if field_match.group(4) else None
-                
-                struct.fields.append(Field(
-                    name=field_name,
-                    index=field_idx,
-                    type_=field_type,
-                    default=field_default
-                ))
+        # Parse fields and union/group definitions from the struct body
+        _parse_struct_body(struct, struct_body)
         
         schema.structs.append(struct)
     

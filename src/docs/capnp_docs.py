@@ -105,7 +105,7 @@ def generate_struct_doc(schema: Schema, struct: Struct) -> str:
         lines.append("**Union Fields:**")
         lines.append("")
         for field in struct.union_fields:
-            lines.append(f"- ``{field.name}`` (:class:`{escape_rst(field.type_)}`)")
+            lines.append(f"- ``{field.name}`` ({field.type_}): {len(field.fields)} nested field(s)")
         lines.append("")
     
     return '\n'.join(lines)
@@ -263,7 +263,15 @@ def generate_struct_with_nested_doc(schema: Schema, struct: Struct,
             default = f" = {field.default}" if field.default else ""
             lines.append(f"- ``{field.name}`` (:class:`{format_type(field.type_, name_map)}`){default}")
         lines.append("")
-    
+
+    # Union and Group fields if any
+    if struct.union_fields:
+        lines.append("**Union and Group Fields:**")
+        lines.append("")
+        for field in struct.union_fields:
+            lines.append(f"- ``{field.name}`` ({field.type_}): {len(field.fields)} nested field(s)")
+        lines.append("")
+
     # Process nested structs (children)
     nested_tree = get_nested_structs_by_ancestors(schema.structs)
     if struct.name in nested_tree:
@@ -468,7 +476,7 @@ def generate_complete_docs(input_files: List[str], output_dir: str,
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
-    # Process each schema file
+    # Process each schema file - store tuples of (schema_name, schema_doc)
     all_schema_docs = []
     all_api_examples = []
     
@@ -478,7 +486,7 @@ def generate_complete_docs(input_files: List[str], output_dir: str,
         
         # Generate schema documentation
         schema_doc = generate_schema_doc(schema, namespace)
-        all_schema_docs.append(schema_doc)
+        all_schema_docs.append((schema_name, schema_doc))
         
         # Save schema documentation
         output_file = output_path / f"{schema_name}.rst"
@@ -501,32 +509,35 @@ def generate_complete_docs(input_files: List[str], output_dir: str,
     return output_path
 
 
-def generate_index(schema_docs: List[str], namespace: str = "fsc") -> str:
-    """Generate an index RST file linking all documentation."""
-    lines = []
+def generate_index(schema_docs: List[tuple], namespace: str = "fsc") -> str:
+    """Generate an index RST file linking all documentation.
     
+    Args:
+        schema_docs: List of tuples (schema_name, schema_doc_string)
+    """
+    lines = []
+
     lines.append("Cap'n'Proto API Documentation")
     lines.append("=" * 28)
     lines.append("")
-    
+
     lines.append("Overview")
     lines.append("-" * 8)
     lines.append("")
     lines.append(f"This documentation covers the Cap'n'Proto schemas used in the ``{namespace}``")
     lines.append("project, including data structures and RPC interfaces.")
     lines.append("")
-    
+
     lines.append("Contents")
     lines.append("-" * 8)
     lines.append("")
     lines.append(".. toctree::")
     lines.append("   :maxdepth: 2")
     lines.append("")
-    
-    # Add TOC entries
-    for doc in schema_docs:
-        # Extract schema name from doc
-        lines.append("   <schema_name>")
+
+    # Add TOC entries - use schema filenames without extension
+    for schema_name, _ in schema_docs:
+        lines.append(f"   {schema_name}")
     
     lines.append("")
     lines.append("API Examples")
