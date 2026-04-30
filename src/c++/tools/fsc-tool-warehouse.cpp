@@ -11,6 +11,7 @@
 #include <fsc/magnetics.capnp.h>
 #include <fsc/geometry.capnp.h>
 #include <fsc/offline.capnp.h>
+#include <fsc/flt.capnp.h>
 
 #include <capnp/rpc-twoparty.h>
 #include <capnp/schema-parser.h>
@@ -253,6 +254,15 @@ struct WarehouseTool {
 		schemaLoader.loadCompiledTypeAndDependencies<OfflineData>();
 		schemaLoader.loadCompiledTypeAndDependencies<Mesh>();
 		schemaLoader.loadCompiledTypeAndDependencies<MergedGeometry>();
+		
+		schemaLoader.loadCompiledTypeAndDependencies<FLTRequest>();
+		schemaLoader.loadCompiledTypeAndDependencies<FLTResponse>();
+		schemaLoader.loadCompiledTypeAndDependencies<FindAxisRequest>();
+		schemaLoader.loadCompiledTypeAndDependencies<FLT::FindAxisResults>();
+		schemaLoader.loadCompiledTypeAndDependencies<FindLcfsRequest>();
+		schemaLoader.loadCompiledTypeAndDependencies<FLT::FindLcfsResults>();
+		schemaLoader.loadCompiledTypeAndDependencies<FLT::FindAxisBatchParams>();
+		schemaLoader.loadCompiledTypeAndDependencies<FLT::FindAxisBatchResults>();
 				
 		// Open database
 		

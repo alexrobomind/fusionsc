@@ -141,6 +141,15 @@ def configCli():
 	resolveRemove = resolveSubparsers.add_parser("remove")
 	resolveRemove.add_argument("expression")
 	
+	loggingParser = subparsers.add_parser("logging")
+	loggingSubparsers = loggingParser.add_subparsers(dest="loggingCommand")
+	
+	loggingEnable = loggingSubparsers.add_parser("enable")
+	loggingEnable.add_argument("destination")
+	loggingEnable.add_argument("modules", nargs = "*", default = ["flt"])
+	
+	loggingDisable = loggingSubparsers.add_parser("disable")
+	
 	args = parser.parse_args()
 	
 	if args.command == "default":
@@ -166,6 +175,28 @@ def configCli():
 	
 	if args.command == "reset-backend":
 		del config["backend"]
+	
+	if args.command == "logging":
+		if args.loggingCommand == "disable":
+			config["logging"] = {}
+		
+		if args.loggingCommand == "enable":
+			logDst = args.destination
+			
+			# Convert path into URL format
+			import urllib.parse
+			parsed = urllib.parse.urlparse(logDst, scheme = "sqlite")
+			
+			if parsed.scheme == "sqlite":
+				path = pathlib.Path(parsed.path)
+				parsed = parsed._replace(path = str(path.absolute()).replace("\\", "/"), netloc="abs")
+			
+			logDst = urllib.parse.urlunparse(parsed)
+			
+			config["logging"] = {
+				"destination" : logDst,
+				"modules" : args.modules
+			}
 	
 	if args.command == "resolve":
 		if "resolve" not in config:

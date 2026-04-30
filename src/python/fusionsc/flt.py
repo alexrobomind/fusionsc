@@ -11,6 +11,7 @@ from . import magnetics
 from . import wrappers
 from . import geometry
 from . import serialize
+from . import logging
 
 from .asnc import asyncFunction
 from ._api_markers import unstableApi
@@ -472,8 +473,12 @@ for geometry intersection tests, the magnetic field tracing accuracy should not 
 	if resultFormat == "rawRequest":
 		return request
 	
+	ts = logging.timestamp()
+	
 	# Perform the tracing
+	await logging.log.asnc("flt", f"calls/{ts}-trace/request", request)
 	response = await _tracer().trace(request)
+	await logging.log.asnc("flt", f"calls/{ts}-trace/response", response)
 	
 	# Inspect the response for any step failures
 	for r in response.stopReasons.data:
@@ -639,10 +644,16 @@ async def findAxis(
 		adaptive.max = maxStepSize
 		adaptive.errorUnit.integratedOver = 2 * np.pi * np.amax(np.sqrt(startPoint[0]**2 + startPoint[1]**2)) * nTurns
 	
+	ts = logging.timestamp()
+	
 	if batch:
+		await logging.log.asnc("flt", f"calls/{ts}-findAxisBatch/request", request)
 		response = await _tracer().findAxisBatch(startPoint, request)
+		await logging.log.asnc("flt", f"calls/{ts}-findAxisBatch/response", response)
 	else:
+		await logging.log.asnc("flt", f"calls/{ts}-findAxis/request", request)
 		response = await _tracer().findAxis(request)
+		await logging.log.asnc("flt", f"calls/{ts}-findAxis/response", response)
 	
 	axis = np.asarray(response.axis)
 	x, y, z = axis
@@ -707,8 +718,12 @@ async def findLCFS(
 			request.geometryMapping = mapping.data
 		else:
 			raise ValueError("Invalid type of mapping")
+			
 	
+	ts = logging.timestamp()
+	await logging.log.asnc("flt", f"calls/{ts}-findLCFS/request", request)
 	response = await _tracer().findLcfs(request)
+	await logging.log.asnc("flt", f"calls/{ts}-findLCFS/response", response)
 	
 	return np.asarray(response.pos)
 
