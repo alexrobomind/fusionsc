@@ -366,6 +366,7 @@ struct ByteCountingStream : public capnp::MessageStream {
 		return wrapped -> tryReadMessage(fdSpace, options, scratchSpace)
 		.then([this](auto maybeRAD) {
 			KJ_IF_MAYBE(readerAndFds, maybeRAD) {
+				readerAndFds -> reader -> getRoot<capnp::AnyPointer>();
 				bytesReceived += readerAndFds -> reader -> sizeInWords() * 8;
 			}
 			
@@ -487,6 +488,7 @@ NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, k
 		
 		KJ_DBG("Wrapping message stream");
 		msgStream = kj::heap<ByteCountingStream>(mv(msgStream));
+		KJ_DBG("Message stream wrapped");
 		
 		using capnp::rpc::twoparty::Side;
 		return kj::refcounted<StreamNetworkConnection>(mv(msgStream), []() { return Capability::Client(nullptr); }, Side::CLIENT, Side::SERVER);

@@ -560,6 +560,9 @@ struct internal::LocalDataServiceImpl::DataRefDownloadProcess : public DownloadT
 	}
 	
 	virtual Promise<Maybe<ResultType>> useCached() override {
+		//KJ_DBG("Overriding store check");
+		//return Maybe<ResultType>(nullptr);
+		
 		auto dataHash = metadata.getDataHash();
 		if(dataHash.size() > 0) {			
 			KJ_IF_MAYBE(rowPtr, service -> backingStore.query(dataHash)) {

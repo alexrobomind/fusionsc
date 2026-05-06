@@ -23,21 +23,26 @@ struct TreeIndexCallbacks {
 struct DataStoreEntryImpl : public fusionsc_DataStoreEntry {
 	DataStoreImpl& parent;
 	
+	kj::ListLink<DataStoreEntryImpl> cacheLink;
+	
 	const ID key;
 	
 	// This field has 2 special values:
-	//  1 -> not in use by clients
+	//  1 -> not in use by clients, but locked for use by a method here in this file
 	//  0 -> not in use anywhere and can be deleted
 	mutable std::atomic<uint64_t> refcount;
 	// mutable std::atomic<fusionsc_DataHandle*> backend;
-	mutable fusionsc_DataHandle* backend;
+	mutable std::atomic<fusionsc_DataHandle*> backend;
 	
 	DataStoreEntryImpl(DataStoreImpl& parent, ArrayPtr<const byte> data);
+	~DataStoreEntryImpl();
 	
 	void incRefImpl() const;
-	void decRefImpl() const;
+	void decRefImpl();
 	
 	void adopt(fusionsc_DataHandle* newHandle);
+	bool tryRevive();
+	bool tryClear(); // Must be called with an exclusive lock on LRU cache held
 };
 
 struct DataStoreImpl : public fusionsc_DataStore {	
@@ -45,20 +50,25 @@ struct DataStoreImpl : public fusionsc_DataStore {
 	using Table = kj::Table<Row, Index>;
 	
 	std::atomic<size_t> refCount = 1;
+	
+	// LOCK ORDER: table -> object lock (refcount != 0) -> lruCache
 	kj::MutexGuarded<Table> table;
+	kj::MutexGuarded<kj::List<DataStoreEntryImpl, &DataStoreEntryImpl::cacheLink>> lruCache;
 	
 	DataStoreImpl();
+	~DataStoreImpl();
 	
 	void incRefImpl();
-	void decRefImpl();
+	void decRefImpl(); // May lock lruCache
 	
 	fusionsc_DataStoreEntry* publishImpl(Key k, fusionsc_DataHandle* hdl);
 	fusionsc_DataStoreEntry* queryImpl(Key k);
 	void gcImpl();
 	
-	uint64_t cacheMin = 100000000;
+	uint64_t cacheMin = 300000000;
 	uint64_t cacheMax = 500000000;
 	
+	mutable std::atomic<uint64_t> currentSize = 0;
 };
 	
 DataStoreEntryImpl::DataStoreEntryImpl(DataStoreImpl& parent, ArrayPtr<const byte> keyData) :
@@ -78,6 +88,18 @@ DataStoreEntryImpl::DataStoreEntryImpl(DataStoreImpl& parent, ArrayPtr<const byt
 	};
 }
 
+DataStoreEntryImpl::~DataStoreEntryImpl() {
+	if(backend != nullptr) {
+		auto val = backend.load();
+		
+		parent.currentSize -= val -> dataSize;
+		val -> free(val);
+	}
+	if(cacheLink.isLinked()) {
+		parent.lruCache.lockExclusive() -> remove(*this);
+	}
+}
+
 void DataStoreEntryImpl::incRefImpl() const {
 	if(refcount < 2) {
 		KJ_DBG("IncRef called on empty DataStore entry");
@@ -86,7 +108,7 @@ void DataStoreEntryImpl::incRefImpl() const {
 	++refcount;
 }
 
-void DataStoreEntryImpl::decRefImpl() const {
+void DataStoreEntryImpl::decRefImpl() {
 	auto& savedParent = parent;
 	
 	// Check if we are the last reference
@@ -105,18 +127,43 @@ void DataStoreEntryImpl::decRefImpl() const {
 		std::abort();
 	}
 	
-	// 
-	auto val = backend;
-	backend = nullptr;
+	auto val = backend.load();
+	
+	// Make sure we are not in LRU cache
+	if(cacheLink.isLinked()) {
+		auto& lockedCache = savedParent.lruCache.lockExclusive();
+		lockedCache -> remove(*this);
+	}
+	
+	// Decide whether we want to keep the object alive
+	// or delete it
+	if(savedParent.currentSize >= savedParent.cacheMax) {
+		// Delete it
+		backend = nullptr;
+		savedParent.currentSize -= val -> dataSize;
+	} else {
+		// Keep it
+		val = nullptr;
+		
+		KJ_DBG("Keeping object in cache");
+		
+		// Add to LRU cache in case we run low on space
+		auto& lockedCache = savedParent.lruCache.lockExclusive();
+		lockedCache -> add(*this);
+	}
 	
 	// Mark object for deletion
 	// We can not access *this* after setting refcount to 0.
 	refcount = 0;
+	
 	// object is now unlocked
+	
+	if(val != nullptr) {
+		val -> free(val);
+	}
 	
 	// Cleanup former references held by this object
 	savedParent.decRefImpl(); // Note: < This can cause the parent (and therefore this) to get deleted.
-	val -> free(val);
 }
 
 // Only safe under read lock of global table, so that it doesn't
@@ -126,7 +173,7 @@ void DataStoreEntryImpl::adopt(fusionsc_DataHandle* newHandle) {
 	
 	while(true) {
 		// refcount == 1 indicates that there are other
-		// adopt / decRefImpl calls concurrently modifying
+		// adopt / decRefImpl / revive calls concurrently modifying
 		// this object.
 		while(rcVal == 1) {
 			rcVal = refcount.load();
@@ -150,18 +197,113 @@ void DataStoreEntryImpl::adopt(fusionsc_DataHandle* newHandle) {
 		parent.incRefImpl();
 		
 		if(backend != nullptr) {
-			KJ_DBG("Data store entry inactive with non-null handle");
-			std::abort();
+			auto val = backend.load();
+			
+			val -> free(val);
+			parent.currentSize -= val -> dataSize;
+		}
+	
+		// Remove from LRU cache
+		if(cacheLink.isLinked()) {
+			auto& lockedCache = parent.lruCache.lockExclusive();
+			lockedCache -> remove(*this);
 		}
 		
 		backend = newHandle;
 		dataPtr = newHandle -> dataPtr;
 		dataSize = newHandle -> dataSize;
 		
+		parent.currentSize += dataSize;
+		
 		refcount = 2;
 		// object is now unlocked
 		return;
 	}
+}
+
+// Only safe under read lock of global table, so that it doesn't
+// race with the cleanup procedure.
+bool DataStoreEntryImpl::tryRevive() {
+	// Quick check without atomics
+	if(backend == nullptr)
+		return false;
+	
+	auto rcVal = refcount.load();
+	
+	while(true) {
+		// refcount == 1 indicates that there are other
+		// adopt / decRefImpl / revive calls concurrently modifying
+		// this object.
+		while(rcVal == 1) {
+			rcVal = refcount.load();
+		}
+		
+		// Branch for already active handle
+		if(rcVal > 0) {
+			// Register new reference
+			if(!refcount.compare_exchange_weak(rcVal, rcVal + 1))
+				continue;
+				
+			return true;
+		}
+		
+		// Handle is actually not in use, steal it for modification
+		if(!refcount.compare_exchange_weak(rcVal, 1))
+			continue;
+		
+		// object is now locked
+		
+		if(backend != nullptr) {
+			parent.incRefImpl();
+			
+			// Can successfully revive. Remove object from LRU cache
+			if(cacheLink.isLinked()) {
+				auto& lockedCache = parent.lruCache.lockExclusive();
+				lockedCache -> remove(*this);
+			}
+		
+			refcount = 2;
+			// object is now unlocked
+			
+			return true;
+		} else {
+			refcount = 0;
+			// object is now unlocked
+			
+			return false;
+		}
+		
+	}
+}
+
+// Only safe under read lock of global table, so that it doesn't
+// race with the cleanup procedure.
+bool DataStoreEntryImpl::tryClear() {		
+	uint64_t desired = 0;
+	if(!refcount.compare_exchange_weak(desired, 1))
+		return false;
+	
+	// object is now locked
+	
+	// Remove from LRU cache
+	if(cacheLink.isLinked()) {
+		auto& lockedCache = parent.lruCache.getAlreadyLockedExclusive();
+		lockedCache.remove(*this);
+	}
+		
+	if(backend != nullptr) {
+		auto val = backend.load();
+		
+		parent.currentSize -= val -> dataSize;
+		val -> free(val);
+		
+		backend = nullptr;
+	}
+	
+	refcount = 0;
+	// object is now unlocked
+	
+	return true;
 }
 
 inline int compareDSKeys(const Key& k1, const Key& k2) {
@@ -201,6 +343,16 @@ DataStoreImpl::DataStoreImpl() {
 		static_cast<DataStoreImpl*>(self) -> gcImpl();
 	};
 }
+
+DataStoreImpl::~DataStoreImpl() {
+	{
+		auto locked = lruCache.lockExclusive();
+		
+		while(!locked -> empty()) {
+			locked -> remove(locked -> front());
+		}
+	}
+}
 	
 void DataStoreImpl::incRefImpl() {
 	++refCount;
@@ -212,6 +364,8 @@ void DataStoreImpl::decRefImpl() {
 }
 
 fusionsc_DataStoreEntry* DataStoreImpl::publishImpl(Key k, fusionsc_DataHandle* hdl) {
+	fusionsc_DataStoreEntry* result = nullptr;
+	
 	// First try to adopt existing row
 	{
 		auto locked = table.lockShared();
@@ -224,12 +378,12 @@ fusionsc_DataStoreEntry* DataStoreImpl::publishImpl(Key k, fusionsc_DataHandle* 
 			DataStoreEntryImpl* dst = const_cast<DataStoreEntryImpl*>(dstReadonly);
 			
 			dst -> adopt(hdl); // This also calls incRef
-			return dst;
+			result = dst;
 		}
 	}
 	
 	// Now try again with locked table
-	{
+	if(result == nullptr) {
 		auto locked = table.lockExclusive();
 		Row& row = locked -> findOrCreate(
 			k,
@@ -238,8 +392,41 @@ fusionsc_DataStoreEntry* DataStoreImpl::publishImpl(Key k, fusionsc_DataHandle* 
 			}
 		);
 		row -> adopt(hdl);
-		return row.get();
+		result = row.get();
 	}
+	
+	// Downsize the cache if it hits a maximum value
+	if(currentSize > cacheMax) {
+		// This is neccessary to prevent the GC from eating rows while we
+		// are operating on them.
+		auto lockedTable = table.lockShared();
+		
+		// Because we need to iterate the cache and then process objects,
+		// we need to walk it with an inverted lock order. The global lock order
+		// is table -> object -> cache, but we need to proceed table -> cache -> object.
+		//
+		// To deal with this, tryClear "soft-locks" the object, and if it fails to do so,
+		// will return "false". I this case, we need to release the cache lock, because
+		// another thread is currently trying to revive this object, and trying to remove
+		// it from the LRU cache.
+		
+		while(currentSize > cacheMin) {
+			auto lockedCache = lruCache.lockExclusive();
+			
+			if(lockedCache -> empty())
+				break;
+			
+			while(!lockedCache -> empty()) {
+				DataStoreEntryImpl& entry = lockedCache -> front();
+				auto blocked = !entry.tryClear();
+				
+				if(blocked)
+					break;
+			}
+		}
+	}
+	
+	return result;
 }
 
 fusionsc_DataStoreEntry* DataStoreImpl::queryImpl(Key k) {
@@ -249,8 +436,19 @@ fusionsc_DataStoreEntry* DataStoreImpl::queryImpl(Key k) {
 		uint64_t prevCount = row.refcount.load();
 		
 		while(true) {
-			if(prevCount == 0)
+			if(prevCount == 0) {
+				// auto pMutable = const_cast<fusionsc_DataStoreEntry*>(static_cast<const fusionsc_DataStoreEntry*>(&row));
+				auto pMutable = const_cast<DataStoreEntryImpl*>(&row);
+				
+				KJ_DBG("Pre-existing row");
+				
+				if(pMutable -> tryRevive()) {
+					KJ_DBG("Revived from cache");
+					return pMutable;
+				}
+				
 				return nullptr;
+			}
 			
 			if(row.refcount.compare_exchange_weak(prevCount, prevCount + 1))
 				return const_cast<fusionsc_DataStoreEntry*>(static_cast<const fusionsc_DataStoreEntry*>(&row));
@@ -262,7 +460,7 @@ fusionsc_DataStoreEntry* DataStoreImpl::queryImpl(Key k) {
 void DataStoreImpl::gcImpl() {
 	auto locked = table.lockExclusive();
 	locked -> eraseAll([](Row& r) -> bool {
-		return r -> refcount == 0;
+		return r -> refcount == 0 && r -> backend == nullptr;
 	});
 }
 
