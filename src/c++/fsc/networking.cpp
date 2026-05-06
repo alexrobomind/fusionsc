@@ -345,6 +345,61 @@ struct FallbackWrapper : public kj::HttpService {
 	}
 };
 
+struct ByteCountingStream : public capnp::MessageStream {
+	kj::Own<capnp::MessageStream> wrapped;
+	
+	ByteCountingStream(kj::Own<capnp::MessageStream>&& w) : wrapped(kj::mv(w)) {
+		KJ_DBG("Opening message stream", wrapped);
+	}
+	
+	~ByteCountingStream() {
+		KJ_DBG("Closing message stream", bytesSent, bytesReceived);
+	}
+	
+	size_t bytesSent = 0;
+	size_t bytesReceived = 0;
+
+	kj::Promise<kj::Maybe<capnp::MessageReaderAndFds>> tryReadMessage(
+		kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+		capnp::ReaderOptions options, kj::ArrayPtr<capnp::word> scratchSpace
+	) override {
+		return wrapped -> tryReadMessage(fdSpace, options, scratchSpace)
+		.then([this](auto maybeRAD) {
+			KJ_IF_MAYBE(readerAndFds, maybeRAD) {
+				bytesReceived += readerAndFds -> reader -> sizeInWords() * 8;
+			}
+			
+			return maybeRAD;
+		});
+	};
+
+	kj::Promise<void> writeMessage(
+		kj::ArrayPtr<const int> fds,
+		kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>> segments
+	) override {
+		for(const auto& segment : segments) {
+			bytesSent += segment.size() * 8;
+		}
+		
+		return wrapped -> writeMessage(fds, segments);
+	}
+
+	kj::Promise<void> writeMessages(
+		kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const capnp::word>>> messages
+	) override {
+		for(const auto& msg : messages) {
+			for(const auto& segment : msg) {
+				bytesSent += segment.size() * 8;
+			}
+		}
+		
+		return wrapped -> writeMessages(messages);
+	}
+
+	kj::Maybe<int> getSendBufferSize() { return wrapped -> getSendBufferSize(); }
+	kj::Promise<void> end() { return wrapped -> end(); }
+};
+
 struct HttpListener : public kj::HttpService {
 	using Side = capnp::rpc::twoparty::Side;
 	
@@ -427,8 +482,11 @@ NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, k
 		);
 		
 		Own<kj::WebSocket> webSocket = mv(response.webSocketOrBody.get<Own<kj::WebSocket>>());
-		auto msgStream = kj::heap<capnp::WebSocketMessageStream>(*webSocket);
+		Own<capnp::MessageStream> msgStream = kj::heap<capnp::WebSocketMessageStream>(*webSocket);
 		msgStream = msgStream.attach(mv(webSocket), mv(client));
+		
+		KJ_DBG("Wrapping message stream");
+		msgStream = kj::heap<ByteCountingStream>(mv(msgStream));
 		
 		using capnp::rpc::twoparty::Side;
 		return kj::refcounted<StreamNetworkConnection>(mv(msgStream), []() { return Capability::Client(nullptr); }, Side::CLIENT, Side::SERVER);
