@@ -208,6 +208,7 @@ if(BUILD_TESTING)
 		streams-tests.cpp
 		json-schema-tests.cpp
 		index-tests.cpp
+		store-tests.cpp
 		
 		efit-tests.cpp
 		

@@ -188,7 +188,7 @@ void DataStoreEntryImpl::decRefImpl() {
 	// We must remove it from LRU cache before deciding keep/delete.
 	
 	if(backend == nullptr) {
-		KJ_DBG("Data store entry active with qnullptr content");
+		KJ_DBG("Data store entry active with nullptr content");
 		std::abort();
 	}
 	
@@ -209,7 +209,6 @@ void DataStoreEntryImpl::decRefImpl() {
 	} else {
 		// Keep it - add to LRU cache for potential eviction later
 		val = nullptr;  // Release our reference to val
-		KJ_DBG("Keeping object in cache");
 		auto lockedCache = savedParent.lruCache.lockExclusive();
 		lockedCache -> add(*this);
 	}
@@ -549,10 +548,7 @@ fusionsc_DataStoreEntry* DataStoreImpl::queryImpl(Key k) {
 			if(prevCount == 0) {
 				auto pMutable = const_cast<DataStoreEntryImpl*>(&row);
 				
-				KJ_DBG("Pre-existing row");
-				
 				if(pMutable -> tryRevive()) {
-					KJ_DBG("Revived from cache");
 					return pMutable;
 				}
 				
