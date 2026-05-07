@@ -364,9 +364,9 @@ struct ByteCountingStream : public capnp::MessageStream {
 		capnp::ReaderOptions options, kj::ArrayPtr<capnp::word> scratchSpace
 	) override {
 		return wrapped -> tryReadMessage(fdSpace, options, scratchSpace)
-		.then([this](auto maybeRAD) {
+		.then([this](kj::Maybe<capnp::MessageReaderAndFds> maybeRAD) {
 			KJ_IF_MAYBE(readerAndFds, maybeRAD) {
-				readerAndFds -> reader -> getRoot<capnp::AnyPointer>();
+				readerAndFds -> reader -> template getRoot<capnp::AnyPointer>();
 				bytesReceived += readerAndFds -> reader -> sizeInWords() * 8;
 			}
 			
