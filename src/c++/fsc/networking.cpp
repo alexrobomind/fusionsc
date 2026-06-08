@@ -486,9 +486,9 @@ NetworkInterface::Connection::Client connectViaHttp(Own<AsyncIoStream> stream, k
 		Own<capnp::MessageStream> msgStream = kj::heap<capnp::WebSocketMessageStream>(*webSocket);
 		msgStream = msgStream.attach(mv(webSocket), mv(client));
 		
-		KJ_DBG("Wrapping message stream");
+		/*KJ_DBG("Wrapping message stream");
 		msgStream = kj::heap<ByteCountingStream>(mv(msgStream));
-		KJ_DBG("Message stream wrapped");
+		KJ_DBG("Message stream wrapped");*/
 		
 		using capnp::rpc::twoparty::Side;
 		return kj::refcounted<StreamNetworkConnection>(mv(msgStream), []() { return Capability::Client(nullptr); }, Side::CLIENT, Side::SERVER);
