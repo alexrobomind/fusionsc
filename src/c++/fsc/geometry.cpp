@@ -409,7 +409,14 @@ Promise<void> GeometryLibImpl::collectTagNames(Geometry::Reader input, kj::HashS
 			return READY_NOW;
 			
 		default:
-			KJ_FAIL_REQUIRE("Unknown geometry node type encountered during merge operation. Likely an unresolved node", input);
+			KJ_FAIL_REQUIRE(
+				"Unknown geometry node type encountered during merge operation. Likely an unresolved node. "
+				"Note: If you encounter this error, this usually means that you specified an abstract geometry "
+				"that failed to resolve to a proper mesh. This usually happens when your device uses a separate "
+				"component database, and you didn't configure a data source for fusionsc to look up components. "
+				"Please have a look at the set-up section of the manual (https://alexrobomind.github.io/fusionsc/setup.html).",
+				input
+			);
 	}
 }
 

@@ -367,7 +367,14 @@ Promise<void> FieldCalculatorImpl::processField(FieldCalculation& calculator, Ma
 			return processTransform(calculator, node.getTransformed(), ctx);
 		}
 		default:
-			KJ_FAIL_REQUIRE("Unresolved magnetic field node encountered during field calculation.", node);
+			KJ_FAIL_REQUIRE(
+				"Unresolved magnetic field node encountered during field calculation. "
+				"Note: If you encounter this error, this usually means that you specified an abstract field or coil "
+				"that failed to resolve to a proper spec. This usually happens when your device uses a separate "
+				"component database, and you didn't configure a data source for fusionsc to look up components. "
+				"Please have a look at the set-up section of the manual (https://alexrobomind.github.io/fusionsc/setup.html).",
+				node
+			);
 	}
 }
 
