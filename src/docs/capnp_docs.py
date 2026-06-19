@@ -4,7 +4,24 @@ Cap'n'Proto Documentation Generator
 
 Generates reStructuredText documentation from Cap'n'Proto schema files.
 Each struct, interface, and enum gets its own RST page, grouped by source
-schema file. Cross-references link types across pages.
+schema file. Nested types (struct-in-struct, struct-in-interface) have their
+pages nested below their parent's directory. Fully qualified names are used
+as titles and for cross-references.
+
+Directory structure:
+  _capnp/
+    index.rst                         # Root index
+    schema_name/
+      index.rst                       # Schema index (toctree of top-level types)
+      TopLevelStruct.rst              # Top-level struct page
+      TopLevelStruct/
+        NestedStruct.rst              # Nested struct page
+        NestedStruct/
+          DeeperNested.rst            # Multiply-nested struct page
+      TopLevelInterface.rst           # Top-level interface page
+      TopLevelInterface/
+        NestedInInterface.rst         # Nested struct inside interface
+      TopEnum.rst                     # Top-level enum page
 
 Usage:
     python capnp_docs.py --input path/to/schema.capnp --output docs/_capnp
@@ -14,7 +31,7 @@ import argparse
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Dict, Set
+from typing import List, Optional, Dict, Set, Tuple
 
 from capnp_parser import (
     parse_schema, parse_schema_file, Schema, Struct, Interface, Enum,
@@ -23,28 +40,12 @@ from capnp_parser import (
 
 
 def sanitize_rst(text: str) -> str:
-    """Sanitize text from .capnp comments for safe RST rendering.
-    
-    Escapes characters that RST would interpret as markup:
-    - Asterisks (*) used for emphasis/strong
-    - Backticks (`) used for interpreted text
-    - Underscores (_) in the middle of words (e.g. nTurns_2pi)
-    - Pipe (|) used for substitution references
-    - Double dashes (--) at line starts
-    
-    But preserves intentional RST from the schema author if any.
-    """
+    """Sanitize text from .capnp comments for safe RST rendering."""
     if not text:
         return text
-    # Escape asterisks that aren't part of intentional RST emphasis
-    # A simple heuristic: escape all * since capnp comments rarely use RST emphasis
     text = text.replace('*', '\\*')
-    # Escape backticks
     text = text.replace('`', '\\`')
-    # Escape pipes
     text = text.replace('|', '\\|')
-    # Escape underscores within words (e.g. nTurns_2pi -> nTurns\\_2pi)
-    # But not at the end of words which could be intentional RST links
     text = re.sub(r'(\w)_(\w)', r'\1\\_\2', text)
     return text
 
@@ -62,8 +63,11 @@ def render_comment(comment: str, indent: str = "") -> list:
 @dataclass
 class DocContext:
     """Shared context for documentation generation."""
+    # Maps qualified_name or short_name -> (schema_name, doc_path_within_schema)
+    # doc_path_within_schema is like "LoadBalancerConfig/Backend" or "WarehouseConfig"
     all_type_names: Set[str] = field(default_factory=set)
     type_to_schema: Dict[str, str] = field(default_factory=dict)
+    type_to_doc_path: Dict[str, Tuple[str, str]] = field(default_factory=dict)
     import_aliases: Dict[str, str] = field(default_factory=dict)
     type_aliases: Dict[str, str] = field(default_factory=dict)
     current_schema: str = ""
@@ -74,23 +78,13 @@ class DocContext:
 def resolve_import_aliases(type_str: str, import_aliases: Dict[str, str] = None,
                            type_aliases: Dict[str, str] = None,
                            all_type_names: Set[str] = None) -> str:
-    """Resolve import-prefixed type names like D.DataRef -> DataRef.
-    
-    Handles patterns like:
-      D.DataRef(Float64Tensor) -> DataRef(Float64Tensor)
-      G.Transformed           -> Transformed
-      D.Float64Tensor         -> Float64Tensor (resolved via import alias D -> data, then checking all_type_names)
-    
-    type_aliases maps short_name -> prefixed_name (e.g. Float64Tensor -> D.Float64Tensor).
-    This means when we see the prefixed form, we should use the short name instead.
-    """
+    """Resolve import-prefixed type names like D.DataRef -> DataRef."""
     if not import_aliases and not type_aliases:
         return type_str
     
     result = type_str
     
     # Build reverse map: prefixed_name -> short_name from type_aliases
-    # e.g. D.Float64Tensor -> Float64Tensor
     reverse_aliases = {}
     if type_aliases:
         for short, prefixed in type_aliases.items():
@@ -103,22 +97,31 @@ def resolve_import_aliases(type_str: str, import_aliases: Dict[str, str] = None,
     # Resolve import-prefixed names: D.Something -> Something
     if import_aliases:
         for alias, schema_name in import_aliases.items():
-            # Match alias.TypeName (possibly with generic params like DataRef(Foo))
             pattern = re.escape(alias) + r'\.(\w+)'
             def replace_prefix(m, _all_types=all_type_names, _reverse=reverse_aliases):
                 resolved = m.group(1)
-                # If the full prefix.name is in reverse_aliases, use the short name
                 full = m.group(0)
                 if full in _reverse:
                     return _reverse[full]
-                # If the resolved name is a known type, just use it directly
                 if _all_types and resolved in _all_types:
                     return resolved
-                # Otherwise keep the resolved name without the alias prefix
                 return resolved
             result = re.sub(pattern, replace_prefix, result)
     
     return result
+
+
+def _doc_ref_abs(tname: str, ctx: DocContext) -> str:
+    """Compute an absolute :doc: path from Sphinx source root for a type name.
+    
+    Uses the leading / to make it an absolute Sphinx doc reference.
+    The _capnp directory is under the Sphinx source root, so all absolute
+    references must include the _capnp/ prefix.
+    """
+    if tname in ctx.type_to_doc_path:
+        schema_name, doc_path = ctx.type_to_doc_path[tname]
+        return f"/_capnp/{schema_name}/{doc_path}"
+    return tname.replace('.', '/')
 
 
 def format_type(type_str: str, ctx: DocContext = None) -> str:
@@ -126,70 +129,173 @@ def format_type(type_str: str, ctx: DocContext = None) -> str:
     
     Keeps the original Cap'n'Proto type names (no Python mapping).
     Wraps known user-defined types in :doc: cross-references.
-    For types in a different schema, uses the relative path.
+    Uses absolute paths (from _capnp root) so references work from any depth.
     """
     result = type_str.strip()
     
     if ctx is None:
         return result
     
-    # First, resolve import-prefixed type names (D.DataRef -> DataRef, G.Transformed -> Transformed)
+    # First, resolve import-prefixed type names
     result = resolve_import_aliases(result, ctx.import_aliases, ctx.type_aliases, ctx.all_type_names)
     
-    # Handle parameterized types like List(Float64), DataRef(Foo)
-    # We want to cross-ref the inner type if it's a user type
+    # Build a list of type name replacements.
+    # Process longest names first to avoid partial matches.
+    # Track claimed character positions to avoid double-wrapping.
     if ctx.all_type_names:
-        # Find type names inside the string and wrap them
+        matches = []  # list of (start, end, tname, doc_path)
+        claimed = set()
+        
         for tname in sorted(ctx.all_type_names, key=len, reverse=True):
-            # Only match whole words not already preceded by a doc directive
-            pattern = r'(?<!:doc:`)(?<!\w)' + re.escape(tname) + r'(?!\w)(?!`)'
-            if re.search(pattern, result):
-                # Build the :doc: path
-                if ctx.type_to_schema and tname in ctx.type_to_schema:
-                    schema = ctx.type_to_schema[tname]
-                    if schema != ctx.current_schema:
-                        # Cross-schema reference: use relative path
-                        doc_path = f"../{schema}/{tname}"
-                    else:
-                        doc_path = tname
-                else:
-                    doc_path = tname
-                result = re.sub(pattern, f':doc:`{doc_path}`', result)
+            pattern = re.compile(r'(?<!\w)' + re.escape(tname) + r'(?!\w)')
+            for m in pattern.finditer(result):
+                start, end = m.start(), m.end()
+                if any(pos in claimed for pos in range(start, end)):
+                    continue
+                doc_path = _doc_ref_abs(tname, ctx)
+                matches.append((start, end, tname, doc_path))
+                for pos in range(start, end):
+                    claimed.add(pos)
+        
+        # Sort right-to-left so replacement indices stay valid
+        matches.sort(key=lambda x: x[0], reverse=True)
+        
+        for start, end, tname, doc_path in matches:
+            result = result[:start] + f':doc:`{doc_path}`' + result[end:]
     
-    # Fix: RST chokes on :doc:`...`(T) — closing backtick before ( confuses parser.
-    # Insert escaped space \ between ` and ( to separate them.
-    # This only occurs with generic types like Transformed(T) where the
-    # :doc: cross-ref is followed by the generic parameter in parens.
-    result = result.replace('`(', '`\ (')
+    # Fix: RST chokes on :doc:`...`(T) — insert escaped space
+    result = result.replace('`(', '`\\ (')
 
     return result
 
 
+# ---- Doc path computation ----
+
+def _doc_path_for_type(qualified_name: str) -> str:
+    """Convert a qualified name to a doc path within the schema directory.
+    
+    e.g., "LoadBalancerConfig.Backend" -> "LoadBalancerConfig/Backend"
+          "WarehouseConfig" -> "WarehouseConfig"
+          "ReversibleFieldlineMapping.Section.Inverse" -> "ReversibleFieldlineMapping/Section/Inverse"
+    """
+    return qualified_name.replace('.', '/')
+
+
+def _toctree_ref_from_page(child_qname: str, page_qname: str) -> str:
+    """Compute a toctree reference from a parent page to its child.
+    
+    toctree entries resolve relative to the directory of the RST file.
+    
+    For a page at schema_dir/LoadBalancerConfig.rst referencing
+    child LoadBalancerConfig.Backend (at schema_dir/LoadBalancerConfig/Backend.rst):
+      toctree ref = "LoadBalancerConfig/Backend"
+    
+    For a page at schema_dir/LoadBalancerConfig/Rule.rst referencing
+    child LoadBalancerConfig.Rule.MethodSpec (at schema_dir/LoadBalancerConfig/Rule/MethodSpec.rst):
+      toctree ref = "Rule/MethodSpec"
+      (because from the directory schema_dir/LoadBalancerConfig/,
+       the path to MethodSpec.rst is Rule/MethodSpec)
+    
+    The general rule: strip the page's directory path prefix from the child's full path.
+    """
+    child_path = _doc_path_for_type(child_qname)
+    page_path = _doc_path_for_type(page_qname)
+    
+    # page_path might be "LoadBalancerConfig" or "LoadBalancerConfig/Rule"
+    # If the page is a top-level type (no /), the child path starts with page_path/
+    # If the page is nested, we need to compute relative path
+    
+    # The RST file for page_qname is at schema_dir/page_path.rst
+    # Its containing directory is schema_dir/ + everything before the last /
+    # or just schema_dir/ if there's no /
+    
+    if '/' in page_path:
+        # Page is in a subdirectory, e.g., schema_dir/LoadBalancerConfig/Rule.rst
+        # The directory is schema_dir/LoadBalancerConfig/
+        page_dir = page_path.rsplit('/', 1)[0]  # "LoadBalancerConfig"
+        # Child path might be "LoadBalancerConfig/Rule/MethodSpec"
+        if child_path.startswith(page_dir + '/'):
+            return child_path[len(page_dir) + 1:]
+    # Page is at top level, e.g., schema_dir/LoadBalancerConfig.rst
+    # child_path like "LoadBalancerConfig/Backend" is already correct
+    return child_path
+
+
+def _register_all_types(schema: Schema, schema_name: str, ctx: DocContext):
+    """Register all types from a schema (including nested) in the context."""
+    
+    def _register_struct(struct: Struct, ctx: DocContext):
+        qname = struct.qualified_name
+        doc_path = _doc_path_for_type(qname)
+        ctx.all_type_names.add(qname)
+        ctx.type_to_schema[qname] = schema_name
+        ctx.type_to_doc_path[qname] = (schema_name, doc_path)
+        # Also register by short name (field types use short names like "Backend")
+        if struct.name not in ctx.all_type_names:
+            ctx.all_type_names.add(struct.name)
+            ctx.type_to_schema[struct.name] = schema_name
+            ctx.type_to_doc_path[struct.name] = (schema_name, doc_path)
+        for ns in struct.nested_structs:
+            _register_struct(ns, ctx)
+        for ne in struct.nested_enums:
+            _register_enum(ne, ctx)
+    
+    def _register_enum(enum: Enum, ctx: DocContext):
+        qname = enum.qualified_name
+        doc_path = _doc_path_for_type(qname)
+        ctx.all_type_names.add(qname)
+        ctx.type_to_schema[qname] = schema_name
+        ctx.type_to_doc_path[qname] = (schema_name, doc_path)
+        if enum.name not in ctx.all_type_names:
+            ctx.all_type_names.add(enum.name)
+            ctx.type_to_schema[enum.name] = schema_name
+            ctx.type_to_doc_path[enum.name] = (schema_name, doc_path)
+    
+    for s in schema.structs:
+        _register_struct(s, ctx)
+    
+    for i in schema.interfaces:
+        qname = i.qualified_name
+        doc_path = _doc_path_for_type(qname)
+        ctx.all_type_names.add(qname)
+        ctx.type_to_schema[qname] = schema_name
+        ctx.type_to_doc_path[qname] = (schema_name, doc_path)
+        if i.name not in ctx.all_type_names:
+            ctx.all_type_names.add(i.name)
+            ctx.type_to_schema[i.name] = schema_name
+            ctx.type_to_doc_path[i.name] = (schema_name, doc_path)
+        for ns in i.nested_structs:
+            _register_struct(ns, ctx)
+        for ne in i.nested_enums:
+            _register_enum(ne, ctx)
+    
+    for e in schema.enums:
+        _register_enum(e, ctx)
+
+
 # ---- Page generators ----
 
-def generate_struct_page(struct: Struct, schema_name: str, ctx: DocContext,
-                         is_nested: bool = False) -> str:
+def generate_struct_page(struct: Struct, schema_name: str, ctx: DocContext) -> str:
     """Generate an RST page for a single struct.
     
-    Args:
-        struct: The Struct to document
-        schema_name: Name of the source schema file (without extension)
-        ctx: Shared documentation context for type resolution
-        is_nested: Whether this is a nested struct (shown under a parent)
+    Uses the struct's qualified_name as the title.
+    Includes toctree entries for any nested structs/enums.
     """
     lines = []
     
-    # Title
-    lines.append(struct.name)
-    lines.append("=" * len(struct.name))
+    # Title: fully qualified name
+    qname = struct.qualified_name
+    lines.append(qname)
+    lines.append("=" * len(qname))
     lines.append("")
     
-    # Schema source info
+    # Schema source info - use absolute :doc: path
     lines.append(f".. rst-class:: schema-source")
     lines.append("")
-    lines.append(f"Schema: :doc:`{schema_name}/index`")
-    if is_nested and struct.parent:
-        lines.append(f"Parent: :doc:`{struct.parent}`")
+    lines.append(f"Schema: :doc:`/_capnp/{schema_name}/index`")
+    if struct.parent:
+        parent_ref = _doc_ref_abs(struct.parent, ctx)
+        lines.append(f"Parent: :doc:`{parent_ref}`")
     lines.append("")
     
     # Comment if present
@@ -203,31 +309,49 @@ def generate_struct_page(struct: Struct, schema_name: str, ctx: DocContext,
         lines.append("------")
         lines.append("")
         
-        # Regular fields — use definition list style for clean RST
+        # Regular fields
         for f in struct.fields:
             type_display = format_type(f.type_, ctx)
             default_str = f" = {f.default}" if f.default else ""
-            lines.append(f"**{f.name}**")
-            lines.append(f"   {type_display}{default_str}")
+            #lines.append(f"**{f.name}**")
+            #lines.append(f"   {type_display}{default_str}")
+            lines.append(f"- {f.name} - {type_display}{default_str}")
             if f.comment:
-                lines.extend(render_comment(f.comment, "   "))
                 lines.append("")
+                lines.extend(render_comment(f.comment, "  "))
             lines.append("")
         
         # Union groups
         for ug in struct.unions:
             lines.extend(_render_union_group(ug, ctx, indent=0))
     
-    # Nested enums (if any)
-    if hasattr(struct, 'nested_enums') and struct.nested_enums:
+    # Nested structs - toctree uses paths relative to this page's directory
+    if struct.nested_structs:
+        lines.append("")
+        lines.append("Nested Structs")
+        lines.append("--------------")
+        lines.append("")
+        lines.append(".. toctree::")
+        lines.append("   :maxdepth: 1")
+        lines.append("")
+        for ns in struct.nested_structs:
+            ref = _toctree_ref_from_page(ns.qualified_name, qname)
+            lines.append(f"   {ref}")
+        lines.append("")
+    
+    # Nested enums
+    if struct.nested_enums:
         lines.append("")
         lines.append("Nested Enums")
         lines.append("------------")
         lines.append("")
+        lines.append(".. toctree::")
+        lines.append("   :maxdepth: 1")
+        lines.append("")
         for ne in struct.nested_enums:
-            lines.append(f":doc:`{ne.name}`")
-            if ne.comment:
-                lines.extend(render_comment(ne.comment, "   "))
+            ref = _toctree_ref_from_page(ne.qualified_name, qname)
+            lines.append(f"   {ref}")
+        lines.append("")
     
     lines.append("")
     return "\n".join(lines)
@@ -241,17 +365,19 @@ def _render_union_group(ug: UnionGroup, ctx: DocContext, indent: int = 0) -> lis
     kind = "union" if ug.kind == "union" else "group"
     label = ug.name if ug.name else f"anonymous {kind}"
     
-    # Union/group header — bold label, no underline (avoids section title conflicts)
-    lines.append(f"{prefix}**{label}** ({kind})")
+    #lines.append(f"{prefix}**{label}** ({kind})")
+    lines.append(f"{prefix}- {label} - {kind}")
     lines.append("")
     
     for f in ug.fields:
         type_display = format_type(f.type_, ctx)
         default_str = f" = {f.default}" if f.default else ""
-        lines.append(f"{childPrefix}**{f.name}**")
-        lines.append(f"{childPrefix}  {type_display}{default_str}")
+        #lines.append(f"{childPrefix}**{f.name}**")
+        #lines.append(f"{childPrefix}  {type_display}{default_str}")
+        lines.append(f"{childPrefix}- {f.name} - {type_display}{default_str}")
         if f.comment:
-            lines.extend(render_comment(f.comment, f"{prefix}  "))
+            lines.append("")
+            lines.extend(render_comment(f.comment, f"{childPrefix}  "))
         lines.append("")
     
     for nested in ug.nested_groups:
@@ -265,18 +391,22 @@ def generate_interface_page(interface: Interface, schema_name: str,
     """Generate an RST page for a single interface."""
     lines = []
     
-    # Title
-    lines.append(interface.name)
-    lines.append("=" * len(interface.name))
+    # Title: fully qualified name
+    qname = interface.qualified_name
+    lines.append(qname)
+    lines.append("=" * len(qname))
     lines.append("")
     
-    # Schema source info
+    # Schema source info - use absolute :doc: path
     lines.append(f".. rst-class:: schema-source")
     lines.append("")
-    lines.append(f"Schema: :doc:`{schema_name}/index`")
+    lines.append(f"Schema: :doc:`/_capnp/{schema_name}/index`")
     if interface.extends:
         ext_refs = [format_type(e, ctx) for e in interface.extends]
         lines.append(f"Extends: {', '.join(ext_refs)}")
+    if interface.parent:
+        parent_ref = _doc_ref_abs(interface.parent, ctx)
+        lines.append(f"Parent: :doc:`{parent_ref}`")
     lines.append("")
     
     # Comment if present
@@ -291,11 +421,45 @@ def generate_interface_page(interface: Interface, schema_name: str,
         lines.append("")
         
         for m in interface.methods:
-            params_str = ", ".join(f"{p.name}: {format_type(p.type_, ctx)}" for p in m.parameters)
-            ret_str = format_type(m.return_type, ctx)
+            # Format parameters
+            if m.parameters:
+                param_parts = []
+                for p in m.parameters:
+                    if p.is_struct_ref:
+                        # Bare struct reference: show as link to the struct
+                        param_parts.append(format_type(p.type_, ctx))
+                    else:
+                        # Inline field: name: Type
+                        param_parts.append(f"{p.name}: {format_type(p.type_, ctx)}")
+                params_str = ", ".join(param_parts)
+            else:
+                params_str = ""
+            
+            # Format return type
+            if m.return_fields:
+                ret_parts = []
+                for rf in m.return_fields:
+                    if rf.is_struct_ref:
+                        # Bare struct reference: show as link to the struct
+                        ret_parts.append(format_type(rf.type_, ctx))
+                    else:
+                        # Inline field: name : Type
+                        ret_parts.append(f"{rf.name} : {format_type(rf.type_, ctx)}")
+                if len(ret_parts) == 1 and m.return_fields[0].is_struct_ref:
+                    # Single struct ref: no parens needed
+                    ret_str = ret_parts[0]
+                else:
+                    # Multiple fields or inline: use parens
+                    ret_str = "(" + ", ".join(ret_parts) + ")"
+            elif m.return_type and m.return_type != "()":
+                # Fallback to raw return_type string
+                ret_str = format_type(m.return_type, ctx)
+            else:
+                ret_str = "()"
+            
             lines.append(f".. rst-class:: capnp-method")
             lines.append("")
-            lines.append(f"{m.name}({params_str}) -> {ret_str}")
+            lines.append(f"{m.name}: ({params_str}) -> {ret_str}")
             lines.append("")
             if m.comment:
                 lines.extend(render_comment(m.comment, "   "))
@@ -303,25 +467,31 @@ def generate_interface_page(interface: Interface, schema_name: str,
     
     # Nested structs
     if interface.nested_structs:
+        lines.append("")
         lines.append("Nested Structs")
         lines.append("--------------")
         lines.append("")
+        lines.append(".. toctree::")
+        lines.append("   :maxdepth: 1")
+        lines.append("")
         for ns in interface.nested_structs:
-            lines.append(f":doc:`{ns.name}`")
-            if ns.comment:
-                lines.extend(render_comment(ns.comment, "   "))
-            lines.append("")
+            ref = _toctree_ref_from_page(ns.qualified_name, qname)
+            lines.append(f"   {ref}")
+        lines.append("")
     
     # Nested enums
     if interface.nested_enums:
+        lines.append("")
         lines.append("Nested Enums")
         lines.append("------------")
         lines.append("")
+        lines.append(".. toctree::")
+        lines.append("   :maxdepth: 1")
+        lines.append("")
         for ne in interface.nested_enums:
-            lines.append(f":doc:`{ne.name}`")
-            if ne.comment:
-                lines.extend(render_comment(ne.comment, "   "))
-            lines.append("")
+            ref = _toctree_ref_from_page(ne.qualified_name, qname)
+            lines.append(f"   {ref}")
+        lines.append("")
     
     lines.append("")
     return "\n".join(lines)
@@ -331,17 +501,19 @@ def generate_enum_page(enum: Enum, schema_name: str, ctx: DocContext) -> str:
     """Generate an RST page for a single enum."""
     lines = []
     
-    # Title
-    lines.append(enum.name)
-    lines.append("=" * len(enum.name))
+    # Title: fully qualified name
+    qname = enum.qualified_name
+    lines.append(qname)
+    lines.append("=" * len(qname))
     lines.append("")
     
-    # Schema source info
+    # Schema source info - use absolute :doc: path
     lines.append(f".. rst-class:: schema-source")
     lines.append("")
-    lines.append(f"Schema: :doc:`{schema_name}/index`")
-    if enum.parent_interface:
-        lines.append(f"Parent: :doc:`{enum.parent_interface}`")
+    lines.append(f"Schema: :doc:`/_capnp/{schema_name}/index`")
+    if enum.parent:
+        parent_ref = _doc_ref_abs(enum.parent, ctx)
+        lines.append(f"Parent: :doc:`{parent_ref}`")
     lines.append("")
     
     # Comment if present
@@ -362,7 +534,11 @@ def generate_enum_page(enum: Enum, schema_name: str, ctx: DocContext) -> str:
 
 
 def generate_schema_index(schema: Schema, schema_name: str) -> str:
-    """Generate an index page for all types in a schema."""
+    """Generate an index page for all top-level types in a schema.
+    
+    Only lists top-level types (no parent). Nested types are linked
+    from their parent's page via toctree.
+    """
     lines = []
     
     title = f"{schema_name}.capnp"
@@ -374,43 +550,44 @@ def generate_schema_index(schema: Schema, schema_name: str) -> str:
         lines.extend(render_comment(schema.file_comment))
         lines.append("")
     
-    # Structs
-    if schema.structs:
+    # Top-level structs only (no parent)
+    top_structs = [s for s in schema.structs if not s.parent]
+    if top_structs:
         lines.append("Structs")
         lines.append("-------")
         lines.append("")
         lines.append(".. toctree::")
-        lines.append("   :maxdepth: 1")
+        lines.append("   :maxdepth: 2")
         lines.append("")
-        for s in schema.structs:
+        for s in top_structs:
             lines.append(f"   {s.name}")
         lines.append("")
     
-    # Interfaces
-    if schema.interfaces:
+    # Top-level interfaces only (no parent)
+    top_ifaces = [i for i in schema.interfaces if not i.parent]
+    if top_ifaces:
         lines.append("Interfaces")
         lines.append("----------")
         lines.append("")
         lines.append(".. toctree::")
-        lines.append("   :maxdepth: 1")
+        lines.append("   :maxdepth: 2")
         lines.append("")
-        for i in schema.interfaces:
+        for i in top_ifaces:
             lines.append(f"   {i.name}")
         lines.append("")
     
-    # Enums
-    if schema.enums:
-        top_enums = [e for e in schema.enums if not e.parent_interface]
-        if top_enums:
-            lines.append("Enums")
-            lines.append("-----")
-            lines.append("")
-            lines.append(".. toctree::")
-            lines.append("   :maxdepth: 1")
-            lines.append("")
-            for e in top_enums:
-                lines.append(f"   {e.name}")
-            lines.append("")
+    # Top-level enums only (no parent)
+    top_enums = [e for e in schema.enums if not e.parent]
+    if top_enums:
+        lines.append("Enums")
+        lines.append("-----")
+        lines.append("")
+        lines.append(".. toctree::")
+        lines.append("   :maxdepth: 1")
+        lines.append("")
+        for e in top_enums:
+            lines.append(f"   {e.name}")
+        lines.append("")
     
     return "\n".join(lines)
 
@@ -423,7 +600,7 @@ def generate_root_index(all_schema_names: List[str]) -> str:
     lines.append("=========================")
     lines.append("")
     lines.append(".. toctree::")
-    lines.append("   :maxdepth: 2")
+    lines.append("   :maxdepth: 3")
     lines.append("")
     for name in sorted(all_schema_names):
         lines.append(f"   {name}/index")
@@ -432,35 +609,66 @@ def generate_root_index(all_schema_names: List[str]) -> str:
     return "\n".join(lines)
 
 
+def _write_type_pages(type_obj, schema_dir: Path, schema_name: str, ctx: DocContext):
+    """Recursively write RST pages for a type and all its nested types."""
+    if isinstance(type_obj, Struct):
+        qname = type_obj.qualified_name
+        doc_path = _doc_path_for_type(qname)
+        
+        # Write the page
+        page_path = schema_dir / f"{doc_path}.rst"
+        page_path.parent.mkdir(parents=True, exist_ok=True)
+        page = generate_struct_page(type_obj, schema_name, ctx)
+        page_path.write_text(page)
+        print(f"Generated: {page_path}")
+        
+        # Recursively write nested types
+        for ns in type_obj.nested_structs:
+            _write_type_pages(ns, schema_dir, schema_name, ctx)
+        for ne in type_obj.nested_enums:
+            _write_type_pages(ne, schema_dir, schema_name, ctx)
+    
+    elif isinstance(type_obj, Interface):
+        qname = type_obj.qualified_name
+        doc_path = _doc_path_for_type(qname)
+        
+        page_path = schema_dir / f"{doc_path}.rst"
+        page_path.parent.mkdir(parents=True, exist_ok=True)
+        page = generate_interface_page(type_obj, schema_name, ctx)
+        page_path.write_text(page)
+        print(f"Generated: {page_path}")
+        
+        for ns in type_obj.nested_structs:
+            _write_type_pages(ns, schema_dir, schema_name, ctx)
+        for ne in type_obj.nested_enums:
+            _write_type_pages(ne, schema_dir, schema_name, ctx)
+    
+    elif isinstance(type_obj, Enum):
+        qname = type_obj.qualified_name
+        doc_path = _doc_path_for_type(qname)
+        
+        page_path = schema_dir / f"{doc_path}.rst"
+        page_path.parent.mkdir(parents=True, exist_ok=True)
+        page = generate_enum_page(type_obj, schema_name, ctx)
+        page_path.write_text(page)
+        print(f"Generated: {page_path}")
+
+
 def generate_complete_docs(input_files: List[str], output_path: Path) -> None:
     """Generate complete documentation from multiple schema files.
     
     Each schema gets its own subdirectory with per-type RST pages.
+    Nested types are placed in subdirectories matching their qualified name path.
     """
     all_schemas = []  # (schema_name, Schema)
     ctx = DocContext()
     
-    # First pass: parse all schemas and collect type names
+    # First pass: parse all schemas and register type names
     for input_file in input_files:
         schema = parse_schema_file(input_file)
         schema_name = Path(input_file).stem
         all_schemas.append((schema_name, schema))
-        
-        for s in schema.structs:
-            ctx.all_type_names.add(s.name)
-            ctx.type_to_schema[s.name] = schema_name
-        for i in schema.interfaces:
-            ctx.all_type_names.add(i.name)
-            ctx.type_to_schema[i.name] = schema_name
-            for ns in i.nested_structs:
-                ctx.all_type_names.add(ns.name)
-                ctx.type_to_schema[ns.name] = schema_name
-            for ne in i.nested_enums:
-                ctx.all_type_names.add(ne.name)
-                ctx.type_to_schema[ne.name] = schema_name
-        for e in schema.enums:
-            ctx.all_type_names.add(e.name)
-            ctx.type_to_schema[e.name] = schema_name
+        _register_all_types(schema, schema_name, ctx)
     
     # Create output directory
     output_path.mkdir(parents=True, exist_ok=True)
@@ -485,36 +693,17 @@ def generate_complete_docs(input_files: List[str], output_path: Path) -> None:
         (schema_dir / "index.rst").write_text(index_content)
         print(f"Generated: {schema_dir / 'index.rst'}")
         
-        # Per-struct pages
+        # Write pages for top-level structs (and their nested types recursively)
         for struct in schema.structs:
-            page = generate_struct_page(struct, schema_name, ctx)
-            (schema_dir / f"{struct.name}.rst").write_text(page)
-            print(f"Generated: {schema_dir / f'{struct.name}.rst'}")
+            _write_type_pages(struct, schema_dir, schema_name, ctx)
         
-        # Per-interface pages
+        # Write pages for top-level interfaces (and their nested types recursively)
         for interface in schema.interfaces:
-            page = generate_interface_page(interface, schema_name, ctx)
-            (schema_dir / f"{interface.name}.rst").write_text(page)
-            print(f"Generated: {schema_dir / f'{interface.name}.rst'}")
-            
-            # Nested struct pages
-            for ns in interface.nested_structs:
-                page = generate_struct_page(ns, schema_name, ctx, is_nested=True)
-                (schema_dir / f"{ns.name}.rst").write_text(page)
-                print(f"Generated: {schema_dir / f'{ns.name}.rst'}")
-            
-            # Nested enum pages
-            for ne in interface.nested_enums:
-                page = generate_enum_page(ne, schema_name, ctx)
-                (schema_dir / f"{ne.name}.rst").write_text(page)
-                print(f"Generated: {schema_dir / f'{ne.name}.rst'}")
+            _write_type_pages(interface, schema_dir, schema_name, ctx)
         
-        # Per-enum pages (top-level only)
+        # Write pages for top-level enums
         for enum in schema.enums:
-            if not enum.parent_interface:
-                page = generate_enum_page(enum, schema_name, ctx)
-                (schema_dir / f"{enum.name}.rst").write_text(page)
-                print(f"Generated: {schema_dir / f'{enum.name}.rst'}")
+            _write_type_pages(enum, schema_dir, schema_name, ctx)
 
 
 def main():

@@ -14,9 +14,59 @@ from typing import List, Optional, Dict, Any
 from pathlib import Path
 
 
+def _split_top_level(s: str, delimiter: str = ",") -> List[str]:
+    """Split a string on a delimiter, but only at the top level (not inside parens/brackets/angle brackets).
+    
+    This is used to split parameter/return type lists like:
+      "pos : List(Float64), axis : Data.Float64Tensor, meanField : Float64"
+    into individual "name : type" entries without splitting at the comma inside List(Float64).
+    """
+    parts = []
+    depth = 0
+    current = []
+    for ch in s:
+        if ch in ('(', '[', '<'):
+            depth += 1
+            current.append(ch)
+        elif ch in (')', ']', '>'):
+            depth -= 1
+            current.append(ch)
+        elif ch == delimiter and depth == 0:
+            parts.append(''.join(current).strip())
+            current = []
+        else:
+            current.append(ch)
+    remainder = ''.join(current).strip()
+    if remainder:
+        parts.append(remainder)
+    return parts
+
+
+def _parse_name_type_pairs(text: str) -> List[tuple]:
+    """Parse 'name : Type, name2 : Type2' pairs respecting nested parens.
+    
+    Returns list of (name, type_str) tuples.
+    """
+    parts = _split_top_level(text, ",")
+    result = []
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        colon_match = re.match(r'(\w+)\s*:\s*(.+)', part)
+        if colon_match:
+            result.append((colon_match.group(1), colon_match.group(2).strip()))
+    return result
+
+
 @dataclass
 class Field:
-    """Represents a struct field or method parameter."""
+    """Represents a struct field or method parameter.
+    
+    When used as a method parameter/return, is_struct_ref=True indicates
+    that this is a bare struct name reference (e.g., FLTRequest) rather
+    than an inline field with a name and type.
+    """
     name: str
     index: int
     type_: str
@@ -26,6 +76,7 @@ class Field:
     is_union_member: bool = False
     union_name: Optional[str] = None  # Name of the enclosing union (empty str for anonymous)
     group_name: Optional[str] = None  # Name of enclosing group (if nested in a group)
+    is_struct_ref: bool = False  # True when this represents a bare struct name (method param/return)
 
 
 @dataclass
@@ -40,11 +91,24 @@ class UnionGroup:
 
 @dataclass
 class Method:
-    """Represents an interface method."""
+    """Represents an interface method.
+    
+    Cap'n'Proto methods have two forms for parameters and return types:
+    
+    1. Named struct reference (bare name, no parens):
+         trace @0 FLTRequest -> FLTResponse;
+       Stored as a single Field with name="" and type_="FLTRequest"
+       (is_struct_ref=True on the Field).
+       
+    2. Inline struct (parenthesized name:type pairs):
+         findAxis @1 FindAxisRequest -> (pos : List(Float64), axis : Float64Tensor);
+       Stored as individual Fields with their names and types.
+    """
     name: str
     index: int
     parameters: List[Field] = field(default_factory=list)
-    return_type: str = "()"
+    return_type: str = "()"  # Kept for backward compat; return_fields is preferred
+    return_fields: List[Field] = field(default_factory=list)
     comment: Optional[str] = None
 
 
@@ -53,10 +117,19 @@ class Struct:
     """Represents a Cap'n'Proto struct."""
     name: str
     namespace: str
-    parent: Optional[str] = None  # Name of parent struct if nested
+    parent: Optional[str] = None  # Fully qualified name of parent (e.g., "LoadBalancerConfig.Rule")
     fields: List[Field] = field(default_factory=list)  # Non-union regular fields
     unions: List[UnionGroup] = field(default_factory=list)  # Top-level unions/groups
     comment: Optional[str] = None
+    nested_structs: List['Struct'] = field(default_factory=list)
+    nested_enums: List['Enum'] = field(default_factory=list)
+
+    @property
+    def qualified_name(self) -> str:
+        """Fully qualified name including parent path (e.g., LoadBalancerConfig.Backend)."""
+        if self.parent:
+            return f"{self.parent}.{self.name}"
+        return self.name
 
 
 @dataclass
@@ -69,6 +142,14 @@ class Interface:
     extends: List[str] = field(default_factory=list)
     nested_structs: List[Struct] = field(default_factory=list)
     nested_enums: List['Enum'] = field(default_factory=list)
+    parent: Optional[str] = None  # Fully qualified name of parent (if nested in struct/interface)
+
+    @property
+    def qualified_name(self) -> str:
+        """Fully qualified name including parent path."""
+        if self.parent:
+            return f"{self.parent}.{self.name}"
+        return self.name
 
 
 @dataclass
@@ -78,7 +159,14 @@ class Enum:
     namespace: str
     values: List[str] = field(default_factory=list)
     comment: Optional[str] = None
-    parent_interface: Optional[str] = None  # e.g., "FieldCalculator"
+    parent: Optional[str] = None  # Fully qualified name of parent (e.g., "FieldCalculator" or "LoadBalancerConfig.Rule")
+
+    @property
+    def qualified_name(self) -> str:
+        """Fully qualified name including parent path."""
+        if self.parent:
+            return f"{self.parent}.{self.name}"
+        return self.name
 
 
 @dataclass
@@ -524,7 +612,7 @@ def parse_schema(content: str, filename: str = "<string>") -> Schema:
     
     # --- Parse structs ---
     struct_pattern = r'struct\s+(\w+)'
-    struct_stack = []  # (name, start_pos, end_pos)
+    struct_stack = []  # (qualified_name, start_pos, end_pos)
     struct_positions = []
     
     for match in re.finditer(struct_pattern, clean_content):
@@ -546,13 +634,20 @@ def parse_schema(content: str, filename: str = "<string>") -> Schema:
                     body_end = i
                     break
         
-        # Determine parent
-        parent = None
-        for stack_name, stack_start, stack_end in struct_stack:
+        # Determine parent (fully qualified name) by checking what enclosing
+        # struct or interface contains this one.
+        parent_qualified = None
+        for stack_qname, stack_start, stack_end in struct_stack:
             if stack_start < start_pos and stack_end > body_end:
-                parent = stack_name
+                parent_qualified = stack_qname
         
-        struct_stack.append((name, start_pos, body_end))
+        # Build the qualified name for this struct
+        if parent_qualified:
+            qualified_name = f"{parent_qualified}.{name}"
+        else:
+            qualified_name = name
+        
+        struct_stack.append((qualified_name, start_pos, body_end))
         
         # Extract struct body
         struct_body = clean_content[body_start + 1:body_end]
@@ -564,14 +659,13 @@ def parse_schema(content: str, filename: str = "<string>") -> Schema:
         struct_start_line = len(content[:start_pos].split('\n')) - 1
         comment = extract_comment(lines, struct_start_line)
         
-        new_struct = Struct(name=name, namespace=schema.namespace, parent=parent, comment=comment)
+        new_struct = Struct(name=name, namespace=schema.namespace, parent=parent_qualified, comment=comment)
         
         # Parse fields and union/group definitions
         _parse_struct_body(new_struct, struct_body, lines, body_start_line)
         
-        # If this struct has a parent that is an interface, skip it here
-        # (it will be attached to the interface as a nested type)
-        # For now, we add all structs to the schema and filter later
+        # Parse nested types (structs, enums) inside this struct body
+        _parse_nested_types_in_struct(new_struct, struct_body, lines, body_start_line, schema)
         
         schema.structs.append(new_struct)
     
@@ -655,18 +749,20 @@ def parse_schema(content: str, filename: str = "<string>") -> Schema:
             enum_start_line = len(content[:start_pos].split('\n')) - 1
             comment = extract_comment(lines, enum_start_line)
             
-            # Check if this enum is nested inside an interface
-            parent_interface = None
+            # Determine if this enum is nested inside a struct or interface
+            # by checking position against all parsed types' body ranges
+            parent_qualified = None
+            
+            # Check structs (using the struct_stack for position info)
+            for stack_qname, stack_start, stack_end in struct_stack:
+                if stack_start < start_pos and stack_end > body_end:
+                    parent_qualified = stack_qname
+            
+            # Check interfaces
             for iface in schema.interfaces:
-                iface_body_start = len(content[:content.find('{', content.find(f'interface {iface.name}'))].split('\n')) - 1
-                # Check if enum start is between interface body start and end
-                if_iface_start = clean_content.find(f'interface {iface_name}')
-                # Simple check: does the enum appear inside this interface's braces?
-                # We check by finding the interface's body bounds
                 iface_match = re.search(rf'interface\s+{re.escape(iface.name)}(?:\s+extends\s*\([^)]*\))?\s*\{{', clean_content)
                 if iface_match:
                     iface_body_start_pos = iface_match.start()
-                    # Find interface end
                     ibc = 0
                     iface_body_end_pos = -1
                     for ci, ch in enumerate(clean_content[iface_body_start_pos:], iface_body_start_pos):
@@ -678,7 +774,8 @@ def parse_schema(content: str, filename: str = "<string>") -> Schema:
                                 iface_body_end_pos = ci
                                 break
                     if iface_body_end_pos > 0 and start_pos > iface_body_start_pos and start_pos < iface_body_end_pos:
-                        parent_interface = iface.name
+                        # Interface takes precedence or is the actual parent
+                        parent_qualified = iface.qualified_name
                         break
             
             enum = Enum(
@@ -686,23 +783,64 @@ def parse_schema(content: str, filename: str = "<string>") -> Schema:
                 namespace=schema.namespace,
                 values=values,
                 comment=comment,
-                parent_interface=parent_interface
+                parent=parent_qualified
             )
             schema.enums.append(enum)
     
-    # Remove structs/enums that are nested inside interfaces from the top-level lists
-    # (they are attached to their parent Interface objects instead)
-    nested_struct_names = set()
-    for iface in schema.interfaces:
-        for ns in iface.nested_structs:
-            nested_struct_names.add(ns.name)
-    schema.structs = [s for s in schema.structs if s.name not in nested_struct_names]
+    # --- Reorganize: move nested types into their parents ---
+    # Build lookup by qualified name for structs
+    struct_by_qname = {}
+    for s in schema.structs:
+        struct_by_qname[s.qualified_name] = s
     
-    nested_enum_names = set()
-    for iface in schema.interfaces:
-        for ne in iface.nested_enums:
-            nested_enum_names.add(ne.name)
-    schema.enums = [e for e in schema.enums if e.name not in nested_enum_names]
+    # Move child structs into their parent struct's nested_structs
+    # Process in reverse order so deeper-nested structs get moved first
+    top_level_structs = []
+    for s in schema.structs:
+        if s.parent:
+            # Find the parent struct or interface
+            if s.parent in struct_by_qname:
+                parent_struct = struct_by_qname[s.parent]
+                parent_struct.nested_structs.append(s)
+            else:
+                # Parent might be an interface
+                found_iface = False
+                for iface in schema.interfaces:
+                    if iface.qualified_name == s.parent:
+                        # Check if this struct was already parsed by _parse_interface_body
+                        already_nested = any(ns.name == s.name for ns in iface.nested_structs)
+                        if not already_nested:
+                            iface.nested_structs.append(s)
+                        found_iface = True
+                        break
+                if not found_iface:
+                    # Unknown parent, keep at top level
+                    top_level_structs.append(s)
+        else:
+            top_level_structs.append(s)
+    schema.structs = top_level_structs
+    
+    # Move child enums into their parent struct's or interface's nested_enums
+    top_level_enums = []
+    for e in schema.enums:
+        if e.parent:
+            if e.parent in struct_by_qname:
+                parent_struct = struct_by_qname[e.parent]
+                parent_struct.nested_enums.append(e)
+            else:
+                found_parent = False
+                for iface in schema.interfaces:
+                    if iface.qualified_name == e.parent:
+                        already_nested = any(ne.name == e.name for ne in iface.nested_enums)
+                        if not already_nested:
+                            iface.nested_enums.append(e)
+                        found_parent = True
+                        break
+                if not found_parent:
+                    top_level_enums.append(e)
+        else:
+            top_level_enums.append(e)
+    schema.enums = top_level_enums
     
     return schema
 
@@ -749,7 +887,7 @@ def _parse_interface_body(interface: Interface, body: str, original_lines: List[
                     nested_struct = Struct(
                         name=struct_name_match.group(1),
                         namespace=interface.namespace,
-                        parent=interface.name
+                        parent=interface.qualified_name
                     )
                     
                     nested_body_start_line = body_start_line + i
@@ -789,7 +927,7 @@ def _parse_interface_body(interface: Interface, body: str, original_lines: List[
                     namespace=interface.namespace,
                     values=values,
                     comment=comment,
-                    parent_interface=interface.name
+                    parent=interface.qualified_name
                 )
                 interface.nested_enums.append(nested_enum)
                 
@@ -798,6 +936,9 @@ def _parse_interface_body(interface: Interface, body: str, original_lines: List[
         
         # Parse method definition: name @index (params) -> return_type;
         # Also handles: name @index -> return_type;  (no params)
+        # Also handles: name @index StructName -> StructName;  (bare struct refs)
+        # Also handles: name @index StructName -> (field : Type, ...);  (mixed)
+        # Also handles: name @index (field : Type, ...) -> StructName;  (mixed)
         arrow_pos = stripped.find('->')
         if arrow_pos < 0:
             i += 1
@@ -827,22 +968,47 @@ def _parse_interface_body(interface: Interface, body: str, original_lines: List[
         
         method_idx = int(at_match.group(1))
         
-        # Extract parameters from before_arrow
-        paren_match = re.search(r'\(', before_arrow)
+        # Extract the parameter portion: everything after @index and before ->
+        after_at = before_arrow[at_match.end():].strip()
+        
+        # Extract parameters from after_at
+        # Two forms:
+        #   1. Bare struct name: after_at = "FLTRequest"  (no parens)
+        #   2. Inline params:    after_at = "(field : Type, ...)"
+        paren_match = re.search(r'\(', after_at)
         params = ""
+        param_struct_ref = ""  # For bare struct name like FLTRequest
         if paren_match:
             paren_start_pos = paren_match.start()
             paren_count = 1
             paren_end_pos = paren_start_pos + 1
-            while paren_end_pos < len(before_arrow) and paren_count > 0:
-                if before_arrow[paren_end_pos] == '(':
+            while paren_end_pos < len(after_at) and paren_count > 0:
+                if after_at[paren_end_pos] == '(':
                     paren_count += 1
-                elif before_arrow[paren_end_pos] == ')':
+                elif after_at[paren_end_pos] == ')':
                     paren_count -= 1
                 paren_end_pos += 1
             
             if paren_count == 0:
-                params = before_arrow[paren_start_pos + 1:paren_end_pos - 1]
+                params = after_at[paren_start_pos + 1:paren_end_pos - 1]
+        else:
+            # Bare struct name reference (e.g., "FLTRequest")
+            # Could also be empty (no params)
+            candidate = after_at.strip()
+            if candidate and re.match(r'^[\w.]+$', candidate):
+                param_struct_ref = candidate
+        
+        # Parse return type
+        # Two forms:
+        #   1. Bare struct name: after_arrow = "FLTResponse"  (no parens)
+        #   2. Inline return:    after_arrow = "(field : Type, ...)"
+        return_struct_ref = ""  # For bare struct name
+        return_inline = ""     # For inline return fields
+        if after_arrow.startswith('(') and after_arrow.endswith(')'):
+            return_inline = after_arrow[1:-1]
+        elif after_arrow and re.match(r'^[\w.]+$', after_arrow):
+            # Bare struct name reference (e.g., "FLTResponse")
+            return_struct_ref = after_arrow
         
         # Extract method comment from original lines
         method_comment = None
@@ -868,20 +1034,57 @@ def _parse_interface_body(interface: Interface, body: str, original_lines: List[
         )
         
         # Parse parameters
-        if params.strip():
-            # Handle generic params like [T] separately
-            param_pattern = r'(\w+)\s*:\s*([^,)]+)'
-            for param_match in re.finditer(param_pattern, params):
-                param_name = param_match.group(1)
-                param_type = param_match.group(2).strip()
+        if param_struct_ref:
+            # Bare struct reference as parameter
+            method.parameters.append(Field(
+                name="",
+                index=0,
+                type_=param_struct_ref,
+                is_struct_ref=True
+            ))
+        elif params.strip():
+            # Inline parameter fields (using paren-aware splitting)
+            for param_name, param_type in _parse_name_type_pairs(params):
                 method.parameters.append(Field(
                     name=param_name,
                     index=0,
                     type_=param_type
                 ))
         
+        # Parse return fields
+        if return_struct_ref:
+            method.return_fields.append(Field(
+                name="",
+                index=0,
+                type_=return_struct_ref,
+                is_struct_ref=True
+            ))
+        elif return_inline.strip():
+            # Inline return fields (using paren-aware splitting)
+            for ret_name, ret_type in _parse_name_type_pairs(return_inline):
+                method.return_fields.append(Field(
+                    name=ret_name,
+                    index=0,
+                    type_=ret_type
+                ))
+        else:
+            # No explicit return (or couldn't parse) - keep return_type as-is
+            pass
+        
         interface.methods.append(method)
         i += 1
+
+
+def _parse_nested_types_in_struct(parent_struct: Struct, body: str, original_lines: List[str],
+                                    body_start_line: int, schema: Schema):
+    """No-op: nested types are handled by the reorganization pass in parse_schema().
+    
+    The top-level struct/enum regex parsing in parse_schema() discovers all types,
+    and the reorganization code at the end moves child types into their parents'
+    nested_structs/nested_enums lists. This function exists for structural
+    consistency with _parse_interface_body but doesn't need to do additional work.
+    """
+    pass
 
 
 def parse_schema_file(filepath: str) -> Schema:
@@ -950,7 +1153,7 @@ if __name__ == "__main__":
             {
                 "name": e.name,
                 "values": e.values,
-                "parent_interface": e.parent_interface
+                "parent": e.parent
             }
             for e in schema.enums
         ]
