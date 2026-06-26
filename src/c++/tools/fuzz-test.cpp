@@ -90,9 +90,8 @@ struct MainCls {
 			RootService::Client rootService = createRoot(config.asReader());
 			
 			// Customize protocol
-			auto builders = kj::heapArray<kj::Own<capfuzz::InputBuilder>>({
-				kj::heap<DataPublisher>()
-			});
+			auto builders = kj::heapArray<kj::Own<capfuzz::InputBuilder>>(1);
+			builders[0] = kj::heap<DataPublisher>();
 			
 			capfuzz::ProtocolConfig protoConfig;
 			protoConfig.builders = mv(builders);
