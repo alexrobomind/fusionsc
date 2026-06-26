@@ -101,7 +101,7 @@ struct MainCls {
 			targets.add(rootService);
 			
 			// Run fuzzer
-			auto fuzzJob = capfuzz::runFuzzer(fuzzerData, targets.finish(), protoConfig).fork();
+			auto fuzzJob = capfuzz::runFuzzer(fuzzerData, targets.finish(), mv(protoConfig)).fork();
 			
 			// Wait until fuzzer job or timeout completes
 			//fuzzJob.addBranch()
