@@ -214,7 +214,13 @@ struct UnixProcessJobScheduler : public JobLauncher, kj::Refcounted, BaseDirProv
 				KJ_SYSCALL(chdir(workDir.cStr()), workDir);
 			}
 			
-			KJ_SYSCALL(execvp(path, args), path, args);
+			try {
+				KJ_SYSCALL(execvp(path, args), path, args);
+			} catch(kj::Exception& e) {
+				KJ_LOG(ERROR, "Failed to execute command", path, e);
+				exit(1);
+			}
+			
 			exit(-1);
 		}
 			

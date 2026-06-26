@@ -383,6 +383,18 @@ struct VmecRun {
 			// Wait for job to finish
 			auto actualJob = job.whenCompletedRequest().send()
 			.then(
+				[this, &launcher, absPath = workDir -> absPath.clone()](auto wcResponse) {
+					// Convert from legacy netCDF to netCDF4
+					JobRequest req;
+					req.command = kj::str("nccopy");
+					req.setArguments({"-k", "hdf5", "wout_inputFile.nc", "wout_nc4.nc"});
+					req.workDir = absPath.clone();
+					
+					auto job = launcher.launch(mv(req));
+					return job.whenCompletedRequest().send();
+				}
+			)
+			.then(
 				// Success
 				[this](auto wcResponse) {
 					auto& ds = getActiveThread().dataService();
@@ -391,15 +403,12 @@ struct VmecRun {
 					
 					// Read in wout.nc
 					tmp.setWoutNc(ds.publishFile(
-						*workDir -> dir -> openFile(kj::Path("wout_inputFile.nc")),
+						*workDir -> dir -> openFile(kj::Path("wout_nc4.nc")),
 						true
 					));
-					interpretOutputFile(workDir -> absPath.append("wout_inputFile.nc"), tmp);
+					interpretOutputFile(workDir -> absPath.append("wout_nc4.nc"), tmp);
 					
 					out.getResult().setOk(ds.publish(tmp.asReader()));
-					
-					// TODO: Parse file
-					KJ_LOG(WARNING, "Incomplete code: No parsing of VMEC result");
 				}
 			)
 			.catch_(
@@ -643,6 +652,7 @@ kj::String generateVmecInput(VmecRequest::Reader request, kj::PathPtr mgridFile)
 }
 
 void interpretOutputFile(kj::PathPtr path, VmecResult::Builder out) {
+	KJ_DBG(path, path.toNativeString(true));
 	H5::H5File file(path.toNativeString(true).cStr(), 0);
 	
 	uint32_t nTor = readScalar<uint32_t>(file.openDataSet("ntor"));

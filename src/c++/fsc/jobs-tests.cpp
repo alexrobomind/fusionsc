@@ -76,4 +76,23 @@ TEST_CASE("job-echo") {
 	KJ_REQUIRE(stdoutString == ECHO_STRING);
 }
 
+TEST_CASE("job-failure") {
+	auto l = newLibrary();
+	auto lt = l -> newThread();
+	
+	auto& ws = lt -> waitScope();
+	
+	// Start job
+	auto sched = newProcessScheduler(".");
+	Job::Client job = runJob(*sched, "thisisacommandthatshouldreallynotexist", {});
+	
+	// Wait for process to terminate
+	try {
+		job.whenCompletedRequest().send().wait(ws);
+	} catch(kj::Exception& e) {
+	}
+	
+	KJ_REQUIRE(job.getStateRequest().send().wait(ws).getState() == Job::State::FAILED);
+}
+
 }

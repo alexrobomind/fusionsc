@@ -118,10 +118,13 @@ TEST_CASE("vmec-run", "[.]") {
 	vmecRequest(req);
 	
 	auto resp = req.send().wait(ws);
+	
 	KJ_DBG(asYaml(resp));
 	KJ_DBG(resp.getInputFile());
 	KJ_DBG(resp.getStdout());
 	KJ_DBG(resp.getStderr());
+	
+	KJ_REQUIRE(resp.getResult().which() == VmecResponse::Result::OK);
 }
 
 TEST_CASE("vmec-run-fb", "[.]") {
@@ -140,6 +143,9 @@ TEST_CASE("vmec-run-fb", "[.]") {
 	KJ_DBG(resp.getInputFile());
 	KJ_DBG(resp.getStdout());
 	KJ_DBG(resp.getStderr());
+	
+	auto result = lt -> dataService().download(resp.getResult().getOk()).wait(ws);
+	KJ_DBG(result.get());
 }
 
 TEST_CASE("vmec-surf") {
