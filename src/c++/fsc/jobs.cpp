@@ -2,6 +2,7 @@
 #include "local.h"
 
 #include <atomic>
+#include <cstdlib>
 
 namespace fsc {
 
@@ -20,8 +21,10 @@ struct BaseJobDir : public JobDir, kj::Refcounted {
 	
 	~BaseJobDir() {
 		ud.catchExceptionsIfUnwinding([this]() {
-			KJ_DBG("Skipped releasing directory (debug behavior)", absPath);
-			// parent -> remove(kj::Path(name));
+			const char* rawVal = getenv("FUSIONSC_KEEP_JOB_DIRS");
+			
+			if(rawVal == 0 || kj::StringPtr(rawVal) == "0")
+				parent -> remove(kj::Path(name));
 		});
 	}
 	

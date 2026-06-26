@@ -342,7 +342,6 @@ struct VmecRun {
 	
 	Promise<void> run(JobLauncher& launcher) {
 		auto mgridPath = workDir -> absPath.append("vacField.nc");
-		KJ_DBG(mgridPath);
 		
 		Promise<void> prepareInput = READY_NOW;
 		
