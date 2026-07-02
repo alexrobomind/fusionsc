@@ -24,3 +24,14 @@ To verify the installation, validate that you can import the `fusionsc` python m
 ::
 
   >>> import fusionsc as fsc
+
+
+Installing external dependencies
+--------------------------------
+
+FusionSC itself does not require external dependencies to function, however some of its code drivers need external
+dependencies.
+
+* The VMEC driver requires **VMEC** and the **NetCDF binary programs** (specificially the *nccopy* tool to convert
+  VMEC's NetCDF classic output files into HDF5-based NetCDF 4 libraries, as FusionSC can not read classic files). Both
+  of these have to be present **on the server**.
