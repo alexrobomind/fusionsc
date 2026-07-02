@@ -493,6 +493,20 @@ def generate_interface_page(interface: Interface, schema_name: str,
             lines.append(f"   {ref}")
         lines.append("")
     
+    # Nested interfaces
+    if interface.nested_interfaces:
+        lines.append("")
+        lines.append("Nested Interfaces")
+        lines.append("-----------------")
+        lines.append("")
+        lines.append(".. toctree::")
+        lines.append("   :maxdepth: 1")
+        lines.append("")
+        for ni in interface.nested_interfaces:
+            ref = _toctree_ref_from_page(ni.qualified_name, qname)
+            lines.append(f"   {ref}")
+        lines.append("")
+    
     lines.append("")
     return "\n".join(lines)
 
@@ -557,7 +571,7 @@ def generate_schema_index(schema: Schema, schema_name: str) -> str:
         lines.append("-------")
         lines.append("")
         lines.append(".. toctree::")
-        lines.append("   :maxdepth: 2")
+        lines.append("   :maxdepth: 1")
         lines.append("")
         for s in top_structs:
             lines.append(f"   {s.name}")
@@ -570,7 +584,7 @@ def generate_schema_index(schema: Schema, schema_name: str) -> str:
         lines.append("----------")
         lines.append("")
         lines.append(".. toctree::")
-        lines.append("   :maxdepth: 2")
+        lines.append("   :maxdepth: 1")
         lines.append("")
         for i in top_ifaces:
             lines.append(f"   {i.name}")
@@ -642,6 +656,8 @@ def _write_type_pages(type_obj, schema_dir: Path, schema_name: str, ctx: DocCont
             _write_type_pages(ns, schema_dir, schema_name, ctx)
         for ne in type_obj.nested_enums:
             _write_type_pages(ne, schema_dir, schema_name, ctx)
+        for ni in type_obj.nested_interfaces:
+            _write_type_pages(ni, schema_dir, schema_name, ctx)
     
     elif isinstance(type_obj, Enum):
         qname = type_obj.qualified_name

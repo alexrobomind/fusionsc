@@ -142,6 +142,7 @@ class Interface:
     extends: List[str] = field(default_factory=list)
     nested_structs: List[Struct] = field(default_factory=list)
     nested_enums: List['Enum'] = field(default_factory=list)
+    nested_interfaces: List['Interface'] = field(default_factory=list)
     parent: Optional[str] = None  # Fully qualified name of parent (if nested in struct/interface)
 
     @property
@@ -202,19 +203,32 @@ def _strip_internal_markers(text: Optional[str]) -> Optional[str]:
 
 
 def remove_comments(text: str) -> str:
-    """Remove C++ style comments from text (for structure parsing)."""
-    text = re.sub(r'//.*?$', '', text, flags=re.MULTILINE)
-    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
+    """Remove C++ style comments from text (for structure parsing).
+    
+    Removes // style comments but preserves # style comments.
+    The # comments are kept because they contain struct/interface documentation
+    and are on their own lines, so they won't interfere with pattern matching
+    (which now uses multiline mode to anchor to start of line).
+    """
+    #text = re.sub(r'//.*?$', '', text, flags=re.MULTILINE)
+    #text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
+    # Remove #// style comments (often used for snippet markers)
+    text = re.sub(r'\\#//.*?$', '', text, flags=re.MULTILINE)
     return text
 
 
 def extract_comment(lines: List[str], start_idx: int) -> Optional[str]:
-    """Extract comment block before a definition (looking backwards from start_idx)."""
+    """Extract comment block before a definition (looking backwards from start_idx).
+    
+    Only includes regular comment lines (starting with #) that look like documentation.
+    Skips Doxygen snippet markers (starting with #//!) which are not documentation comments.
+    """
     comment_lines = []
     for i in range(start_idx - 1, max(-1, start_idx - 30), -1):
         line = lines[i].strip()
         if line.startswith('#//!'):
-            comment_lines.insert(0, line[4:].strip())
+            # Doxygen snippet marker - skip it (not a documentation comment)
+            continue
         elif line.startswith('#'):
             # Regular comment line -- include if it looks like documentation
             # (not just internal markers or bare #)
@@ -226,7 +240,7 @@ def extract_comment(lines: List[str], start_idx: int) -> Optional[str]:
             break
         elif line and not line.startswith('#'):
             break
-    
+
     if comment_lines:
         return _strip_internal_markers('\n'.join(comment_lines))
     return None
@@ -235,18 +249,16 @@ def extract_comment(lines: List[str], start_idx: int) -> Optional[str]:
 def _extract_field_comment(original_lines: List[str], field_line_idx: int) -> Optional[str]:
     """Extract comment lines for a field definition.
     
-    Cap'n'Proto schemas use two comment styles:
-    1. Comments AFTER the field (common in some schemas):
-        fieldName @0 : Type;
-        # Description of this field
-    2. Comments BEFORE the field (common in other schemas):
-        # Description of this field
-        fieldName @0 : Type;
+    According to Cap'n'Proto convention, field comments are placed strictly
+    BELOW the field definition. This function only checks for comments after
+    the field line, not before.
     
-    We check both directions and prefer the comment that actually exists.
+    Example:
+        fieldName @0 : Type;
+        # Description of this field
     """
-    # First, check for comments AFTER the field definition
-    # A comment "after" is only valid if it's directly after the field (no blank line gap)
+    # Only check for comments AFTER the field definition
+    # A comment is only valid if it's directly after the field (no blank line gap)
     after_comment_lines = []
     for i in range(field_line_idx + 1, min(field_line_idx + 20, len(original_lines))):
         stripped = original_lines[i].strip()
@@ -270,33 +282,8 @@ def _extract_field_comment(original_lines: List[str], field_line_idx: int) -> Op
         else:
             break
     
-    # Then, check for comments BEFORE the field definition
-    before_comment_lines = []
-    for i in range(field_line_idx - 1, max(field_line_idx - 20, -1), -1):
-        stripped = original_lines[i].strip()
-        if stripped.startswith('#'):
-            comment_text = stripped[1:].strip()
-            if comment_text.startswith('//!'):
-                comment_text = comment_text[3:].strip()
-            # Skip pure separator lines and section markers
-            if re.match(r'^=+\s*$', comment_text):
-                break
-            if re.match(r'^=+\s*\w[\w\s-]*\w\s*=+\s*$', comment_text):
-                break
-            before_comment_lines.insert(0, comment_text)
-        elif stripped == '':
-            # Blank line - could be separator, stop scanning before
-            break
-        else:
-            break
-    
-    # Prefer the comment that exists. If both exist, prefer "after" (traditional Cap'n'Proto style)
-    # but if only one exists, use that one.
     if after_comment_lines:
         result = ' '.join(after_comment_lines)
-        return _strip_internal_markers(result) if result else None
-    elif before_comment_lines:
-        result = ' '.join(before_comment_lines)
         return _strip_internal_markers(result) if result else None
     return None
 
@@ -567,7 +554,7 @@ def parse_schema(content: str, filename: str = "<string>") -> Schema:
         Schema object with parsed elements
     """
     clean_content = remove_comments(content)
-    lines = content.split('\n')
+    lines = clean_content.split('\n')
     
     schema = Schema(filename=filename)
     
@@ -611,7 +598,8 @@ def parse_schema(content: str, filename: str = "<string>") -> Schema:
         schema.type_aliases[alias] = qualified
     
     # --- Parse structs ---
-    struct_pattern = r'struct\s+(\w+)'
+    # Use multiline mode (^ anchors to start of line) to avoid matching in comments
+    struct_pattern = r'(?m)^struct\s+(\w+)'
     struct_stack = []  # (qualified_name, start_pos, end_pos)
     struct_positions = []
     
@@ -670,7 +658,8 @@ def parse_schema(content: str, filename: str = "<string>") -> Schema:
         schema.structs.append(new_struct)
     
     # --- Parse interfaces ---
-    interface_pattern = r'interface\s+(\w+)(?:\s+\$[^\{]+?)?(?:\s+extends\s*\(([^)]*)\))?\s*\{'
+    # Use multiline mode (^ anchors to start of line) to avoid matching in comments
+    interface_pattern = r'(?m)^interface\s+(\w+)(?:\s*\([^)]*\))?(?:\s+@0x[0-9a-fA-F]+)?(?:\s+\$[^\{]+?)?(?:\s+extends\s*\(([^)]*)\))?\s*\{'
     for match in re.finditer(interface_pattern, clean_content):
         iface_name = match.group(1)
         extends_str = match.group(2)  # May be None
@@ -934,18 +923,77 @@ def _parse_interface_body(interface: Interface, body: str, original_lines: List[
                 i = j
                 continue
         
+        # Detect nested interface definition
+        if stripped.startswith('interface '):
+            iface_name_match = re.match(r'interface\s+(\w+)', stripped)
+            if iface_name_match:
+                brace_count = stripped.count('{') - stripped.count('}')
+                j = i + 1
+                while j < len(lines) and brace_count > 0:
+                    brace_count += lines[j].count('{') - lines[j].count('}')
+                    j += 1
+                
+                # Parse the interface body lines
+                iface_lines = lines[i:j]
+                iface_body = '\n'.join(iface_lines)
+                
+                # Extract the content between braces
+                brace_start = iface_body.find('{')
+                brace_end = -1
+                if brace_start >= 0:
+                    bc = 0
+                    for idx, ch in enumerate(iface_body[brace_start:], brace_start):
+                        if ch == '{':
+                            bc += 1
+                        elif ch == '}':
+                            bc -= 1
+                            if bc == 0:
+                                brace_end = idx
+                                break
+                
+                if brace_end > 0:
+                    inner = iface_body[brace_start + 1:brace_end]
+                    
+                    iface_start_line_in_orig = body_start_line + i
+                    comment = extract_comment(original_lines, iface_start_line_in_orig)
+                    
+                    nested_interface = Interface(
+                        name=iface_name_match.group(1),
+                        namespace=interface.namespace,
+                        comment=comment,
+                        parent=interface.qualified_name
+                    )
+                    
+                    # Parse the nested interface body
+                    nested_body_start_line = body_start_line + i
+                    _parse_interface_body(nested_interface, inner, original_lines, nested_body_start_line, schema, clean_content)
+                    
+                    interface.nested_interfaces.append(nested_interface)
+                
+                i = j
+                continue
+        
         # Parse method definition: name @index (params) -> return_type;
         # Also handles: name @index -> return_type;  (no params)
         # Also handles: name @index StructName -> StructName;  (bare struct refs)
         # Also handles: name @index StructName -> (field : Type, ...);  (mixed)
         # Also handles: name @index (field : Type, ...) -> StructName;  (mixed)
+        # Also handles: name @index (params);  (no return type, defaults to empty struct)
         arrow_pos = stripped.find('->')
-        if arrow_pos < 0:
-            i += 1
-            continue
         
-        before_arrow = stripped[:arrow_pos].strip()
-        after_arrow = stripped[arrow_pos + 2:].strip().rstrip(';').strip()
+        if arrow_pos < 0:
+            # Check if this is a method without return type (ends with ; and has @index)
+            # e.g., "transmit @2 (start : UInt64, end : UInt64, receiver : Receiver);"
+            if stripped.endswith(';') and '@' in stripped:
+                # Try to parse as method without return type
+                before_arrow = stripped[:-1].strip()  # Remove trailing ; and whitespace
+                after_arrow = ''  # No return type - defaults to empty struct
+            else:
+                i += 1
+                continue
+        else:
+            before_arrow = stripped[:arrow_pos].strip()
+            after_arrow = stripped[arrow_pos + 2:].strip().rstrip(';').strip()
         
         # Must have @index
         at_match = re.search(r'@\s*(\d+)', before_arrow)
