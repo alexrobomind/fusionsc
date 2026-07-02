@@ -35,3 +35,6 @@ dependencies.
 * The VMEC driver requires **VMEC** and the **NetCDF binary programs** (specificially the *nccopy* tool to convert
   VMEC's NetCDF classic output files into HDF5-based NetCDF 4 libraries, as FusionSC can not read classic files). Both
   of these have to be present **on the server**.
+  
+  At default setting, VMEC is expected to be on the PATH as `xvmec2000`, but any other command can be set in the VMEC driver's
+  configuration.
