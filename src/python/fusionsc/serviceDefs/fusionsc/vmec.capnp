@@ -127,3 +127,7 @@ struct VmecKernelComm {
 	sValues @3 : List(Float64);
 }
 
+struct VmecConfig {
+	command @0 : Text = "xvmec2000";
+}
+

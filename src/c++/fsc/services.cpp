@@ -259,7 +259,13 @@ struct RootServer : public RootService::Server {
 	Promise<void> newVmecDriver(NewVmecDriverContext ctx) override {
 		return limiter.getToken()
 		.then([this, ctx](auto token) mutable {
-			ctx.initResults().setService(::fsc::createVmecDriver(device -> addRef(), selectScheduler()).attach(mv(token)));
+			ctx.initResults().setService(
+				::fsc::createVmecDriver(
+					device -> addRef(),
+					selectScheduler(),
+					config.getVmec()
+				).attach(mv(token))
+			);
 		});
 	}
 	

@@ -335,9 +335,12 @@ struct VmecRun {
 	VmecRequest::Reader in;
 	VmecResponse::Builder out;
 	
-	VmecRun(VmecRequest::Reader in, VmecResponse::Builder out, Own<JobDir> d) :
+	kj::StringPtr vmecCommand;
+	
+	VmecRun(VmecRequest::Reader in, VmecResponse::Builder out, Own<JobDir> d, kj::StringPtr cmd) :
 		workDir(mv(d)),
-		in(in), out(out)
+		in(in), out(out),
+		vmecCommand(cmd)
 	{}
 	
 	Promise<void> run(JobLauncher& launcher) {
@@ -360,7 +363,7 @@ struct VmecRun {
 		return prepareInput.then([this, &launcher]() {
 			// Launch the VMEC code
 			JobRequest req;
-			req.command = kj::str("xvmec2000");
+			req.command = kj::str(vmecCommand);
 			req.setArguments({"inputFile"});
 			req.workDir = workDir -> absPath.clone();
 			
@@ -382,14 +385,15 @@ struct VmecRun {
 			// Wait for job to finish
 			auto actualJob = job.whenCompletedRequest().send()
 			.then(
-				[this, &launcher, absPath = workDir -> absPath.clone()](auto wcResponse) {
+				[this, absPath = workDir -> absPath.clone()](auto wcResponse) {
 					// Convert from legacy netCDF to netCDF4
 					JobRequest req;
 					req.command = kj::str("nccopy");
 					req.setArguments({"-k", "hdf5", "wout_inputFile.nc", "wout_nc4.nc"});
 					req.workDir = absPath.clone();
 					
-					auto job = launcher.launch(mv(req));
+					// Use a default process launcher to run the nccopy task
+					auto job = newProcessScheduler(".") -> launch(mv(req));
 					return job.whenCompletedRequest().send();
 				}
 			)
@@ -432,13 +436,17 @@ struct VmecDriverImpl : public VmecDriver::Server {
 	Own<JobLauncher> launcher;
 	Own<DeviceBase> device;
 	
-	VmecDriverImpl(Own<DeviceBase> dev, Own<JobLauncher> l) :
+	kj::String vmecCommand;
+	
+	VmecDriverImpl(Own<DeviceBase> dev, Own<JobLauncher> l, VmecConfig::Reader config) :
 		launcher(mv(l)),
-		device(mv(dev))
+		device(mv(dev)),
+		
+		vmecCommand(kj::heapString(config.getCommand()))
 	{}
 	
 	Promise<void> run(RunContext ctx) override {
-		Shared<VmecRun> run(ctx.getParams(), ctx.initResults(), launcher -> createDir());
+		Shared<VmecRun> run(ctx.getParams(), ctx.initResults(), launcher -> createDir(), vmecCommand);
 		
 		// Wrap inside evalLater so that we don't get the bogus "unwind across heapHeld" warning
 		// when the inner part throws.
@@ -809,8 +817,8 @@ Promise<void> writeMGridFile(kj::PathPtr path, ComputedField::Reader cField) {
 	});
 }
 
-Own<VmecDriver::Server> createVmecDriver(Own<DeviceBase>&& dev, Own<JobLauncher>&& scheduler) {
-	return kj::heap<VmecDriverImpl>(mv(dev), mv(scheduler));
+Own<VmecDriver::Server> createVmecDriver(Own<DeviceBase>&& dev, Own<JobLauncher>&& scheduler, VmecConfig::Reader config) {
+	return kj::heap<VmecDriverImpl>(mv(dev), mv(scheduler), config);
 }
 
 }

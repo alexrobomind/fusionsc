@@ -4,6 +4,7 @@ This module contains the auto-configuration mechanism for fusionsc.
 
 from . import structio
 from . import asnc
+from . import service
 
 import pathlib
 import traceback
@@ -130,6 +131,11 @@ def configCli():
 	setBackendParser.add_argument("backend")
 	
 	resetBackendParser = subparsers.add_parser("reset-backend")
+	
+	localBackendParser = subparsers.add_parser("local-backend")
+	localBackendSubparsers = localBackendParser.add_subparsers(dest="localBackendCommand")
+	
+	localBackendShowConfigParser = localBackendSubparsers.add_parser("show-config")
 	
 	resolveParser = subparsers.add_parser("resolve")
 	resolveSubparsers = resolveParser.add_subparsers(dest="resolveCommand")
@@ -263,6 +269,19 @@ def configCli():
 		
 	if "resolve" in config and len(config["resolve"]) == 0:
 		del config["resolve"]
+	
+	if args.command == "local-backend":
+		if args.localBackendCommand == "show-config":
+			print("Local backend configuration:\n\n")
+			
+			rawConfig = config.get("localBackend", {})
+			asMessage = service.LocalConfig.newMessage(rawConfig)
+			
+			print(structio.dumps({"localBackend" : asMessage}, lang = "yaml"))
+			
+			sys.exit(0)
+		
+		pass
 			
 	print("New config:\n")
 	print(structio.dumps(config, lang = "yaml"))
