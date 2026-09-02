@@ -232,7 +232,7 @@ def extract_comment(lines: List[str], start_idx: int) -> Optional[str]:
         elif line.startswith('#'):
             # Regular comment line -- include if it looks like documentation
             # (not just internal markers or bare #)
-            content = line[1:].strip()
+            content = line[1:]
             if content:
                 comment_lines.insert(0, content)
         elif line == '' and comment_lines:
@@ -686,6 +686,8 @@ def parse_schema(content: str, filename: str = "<string>") -> Schema:
             # Find the line number for comment extraction
             iface_start_line = len(content[:start_pos].split('\n')) - 1
             comment = extract_comment(lines, iface_start_line)
+			
+            print("Interface comment: ", comment)
             
             # Parse extends list
             extends = []

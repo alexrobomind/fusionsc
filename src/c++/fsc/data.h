@@ -75,66 +75,6 @@ class LocalDataService;
 template<typename T>
 using References = typename internal::References_<T>::Type;
 
-// ============================================ API =============================================
-
-#ifdef DOXYGEN
-
-//! Cap'n'proto interface for data objects.
-/** 
- * \ingroup network
- * \tparam T Type of the root message stored in the data ref.
- *
- * The DataRef template is a special capability recognized all throughout the FSC library.
- * It represents a link to a data storage location (local or remote), associated with a
- * unique ID, which can be downloaded to local storage and accessed there. Locally downloaded
- * data are represented by the LocalDataRef class, which subclasses DataRef::Client.
- *
- * The stored data is expected to be in one of the two following formats:
- * - If T is any type except capnp::Data, it must correspond to a Cap'n'proto struct type. In
- *   this case, the DataRef holds a message with the corresponding root type, and
- *   a capability table that tracks any remote objects in use by this message
- *  (including other DataRef instances).
- * - If T is DataRef::Data, then the corresponding message can either be a raw binary or a
-     Cap'n'proto message with a capnp::Data object as its root (note that the library will
-	 default to raw storage because of the laxer size constraints)
- *
- * Once obtained, DataRefs can be freely passed around as part of RPC calls or data published
- * in other DataRef::Client instances. The fsc runtime will do all it possibly can to protect the integrity
- * of a DataRef. In the absence of hardware failure, data referenced via DataRef objects
- * can only go out of use once all referencing DataRef objects do so as well.
- *
- * DataRefs only represent a link to locally or remotely stored data. To access the underlying
- * data, they must be converted into LocalDataRef instances using LocalDataService::download() methods.
- *
- * \capnpinterface
- * \snippet data.capnp DataRef
- *
- */
-template <typename T = ::capnp::AnyPointer>
-struct DataRef {
-	//! Actual interface object class
-	struct Client : public virtual ::capnp::Capability::Client {
-		template <typename T2 = ::capnp::AnyPointer>
-		typename DataRef<T2>::Client asGeneric() {
-			return castAs<DataRef<T2>>();
-		}
-	};
-};
-
-//! Remote interface to data service
-/**
- * \ingroup network
- *
- * This interface serves as an access point to remotely download 
- *
- * \capnpinterface
- * \snippet data.capnp DataService
- */
-struct DataService {
-};
-
-#endif
-
 constexpr capnp::ReaderOptions READ_UNLIMITED { std::numeric_limits<uint64_t>::max(), std::numeric_limits<int>::max() };
 
 //! Checks if the object in question represents a DataRef object
@@ -481,14 +421,16 @@ struct Temporary : public T::Builder {
 	Own<capnp::MessageBuilder> holder;
 };
 
-template<typename T>
-struct _IsTemporary { constexpr static bool val = false; };
+namespace internal {
+	template<typename T>
+	struct _IsTemporary { constexpr static bool val = false; };
+
+	template<typename T>
+	struct _IsTemporary<fsc::Temporary<T>> { constexpr static bool val = true; };
+}
 
 template<typename T>
-struct _IsTemporary<fsc::Temporary<T>> { constexpr static bool val = true; };
-
-template<typename T>
-constexpr bool isTemporary() { return _IsTemporary<T>::val; }
+constexpr bool isTemporary() { return internal::_IsTemporary<T>::val; }
 
 template<typename T, typename Cap = capnp::FromClient<T>, typename... Attachments>
 typename Cap::Client attachToClient(T src, Attachments&&... attachments);

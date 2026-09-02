@@ -5,6 +5,8 @@ This section documents the C++ core library of FusionSC. The C++ API provides
 the high-performance computation kernels and services that the Python bindings
 wrap.
 
+*This section is still work in progress*
+
 .. toctree::
    :maxdepth: 2
    :caption: Core Modules:

@@ -22,7 +22,36 @@ struct DataRefMetadata {
 	}
 }
 
-#//! [DataRef]
+# The DataRef template is a special capability recognized all throughout the FusionSC library.
+# It represents a link to a data storage location (local or remote), associated with a
+# unique ID, whose contents can be downloaded to local storage and accessed there.
+#
+# The stored data is a binary blob in one of the two following formats:
+# - If T is any type except capnp::Data, it must correspond to a Cap'n'proto struct type. In
+#   this case, the DataRef holds a message with the corresponding root type, and
+#   a capability table that tracks any remote objects in use by this message
+#   (including other DataRef instances).
+# - If T is the Cap'n'proto builtin type "data", then the corresponding message can either be a raw binary or a
+#   Cap'n'proto message with a capnp::Data object as its root (note that the library will
+#   default to raw storage because of the laxer size constraints)
+#
+# Usage:
+#.. tabs::
+#   .. tab:: C++
+#
+#      Download DataRef<T>::Client using fsc::LocalDataService to obtain a LocalDataRef<T> instance.
+#
+#   .. tab:: Python
+#
+# Once obtained, DataRefs can be freely passed around as part of RPC calls or data published
+# in other DataRef::Client instances. The fsc runtime will do all it possibly can to protect the integrity
+# of a DataRef. In the absence of hardware failure, data referenced via DataRef objects
+# can only go out of use once all referencing DataRef objects do so as well.
+#
+#Locally downloaded data are represented by the fsc::LocalDataRef class, which subclasses DataRef::Client.
+#
+# DataRefs only represent a link to locally or remotely stored data. To access the underlying
+# data, they must be converted into LocalDataRef instances using LocalDataService::download() methods.
 interface DataRef (T) {
 	interface Receiver {
 		begin @0 (numBytes : UInt64) -> ();
@@ -34,7 +63,6 @@ interface DataRef (T) {
 	rawBytes @1 (start : UInt64, end : UInt64) -> (data : Data);
 	transmit @2 (start : UInt64, end : UInt64, receiver : Receiver);
 }
-#//! [DataRef]
 
 #//! [DataService]
 interface DataService @0xc6d48902ddb7e122 {

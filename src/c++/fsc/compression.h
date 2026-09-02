@@ -2,7 +2,10 @@
 
 #include "common.h"
 
-/** Simple interface module for ZLib */
+/**
+ * @file
+ * @brief Simple interface module for ZLib 
+ */
 
 namespace fsc {
 

@@ -56,7 +56,7 @@ def render_comment(comment: str, indent: str = "") -> list:
         return []
     result = []
     for cl in comment.strip().split('\n'):
-        result.append(f"{indent}{sanitize_rst(cl.strip())}")
+        result.append(f"{indent}{sanitize_rst(cl)}")
     return result
 
 

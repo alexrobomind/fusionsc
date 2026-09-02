@@ -1,5 +1,10 @@
 #pragma once
 
+/**
+ * @file
+ * @brief Common definitions used across the FusionSC library.
+ */
+
 #ifdef DOXYGEN
 #define FSC_WITH_CUDA
 #endif
@@ -35,7 +40,7 @@ namespace kj {
 }
 
 /**
- * The FSC library.
+ * Main namespace of the FusionSC C++ library.
  */
 namespace fsc {
 		
