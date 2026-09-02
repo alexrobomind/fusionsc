@@ -1,0 +1,45 @@
+﻿fusionsc.capnp.CapabilityClient
+===============================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: CapabilityClient
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~CapabilityClient.__init__
+  ~CapabilityClient.castAs_
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~CapabilityClient.executor_
+	~CapabilityClient.type_
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: CapabilityClient.__init__
+.. automethod:: CapabilityClient.castAs_
+
+
+
+
+

@@ -1,0 +1,36 @@
+StoredObject
+============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/warehouse/index`
+
+Fields
+------
+
+- asGeneric - GenericObject
+
+- anonymous union - union
+
+  - unresolved - Void
+
+  - nullValue - Void
+
+  - exception - Rpc.Exception
+
+  - folder - :doc:`/_capnp/warehouse/Folder`
+
+  - file - File
+
+  - dead - Void
+
+  - dataRef - group
+
+    - asRef - DataRef(AnyPointer)
+
+    - downloadStatus - union
+
+      - downloading - Void
+
+      - finished - Void
+

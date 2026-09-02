@@ -1,0 +1,25 @@
+KDTree.Node
+===========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/index/index`
+Parent: :doc:`/_capnp/index/KDTree`
+
+Fields
+------
+
+- anonymous union - union
+
+  - leaf - UInt64
+
+    Pointer into the list of leaves
+
+  - interior - group
+
+    - start - UInt64
+
+      Range of child nodes
+
+    - end - UInt64
+

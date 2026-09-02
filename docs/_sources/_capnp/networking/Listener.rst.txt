@@ -1,0 +1,14 @@
+Listener
+========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/networking/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+accept: () -> (client : Capability)
+

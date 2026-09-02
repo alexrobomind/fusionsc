@@ -1,0 +1,18 @@
+VmecResult
+==========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/vmec/index`
+
+Fields
+------
+
+- woutNc - :doc:`/_capnp/data/DataRef`\ (Data)
+
+- surfaces - :doc:`/_capnp/magnetics/FourierSurfaces`
+
+- volume - Float64
+
+- energy - Float64
+

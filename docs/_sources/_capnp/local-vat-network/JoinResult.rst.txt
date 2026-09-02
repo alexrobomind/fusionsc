@@ -1,0 +1,12 @@
+JoinResult
+==========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/local-vat-network/index`
+
+Fields
+------
+
+- vatKey - UInt64
+

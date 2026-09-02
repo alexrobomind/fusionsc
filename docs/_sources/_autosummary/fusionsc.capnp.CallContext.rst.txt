@@ -1,0 +1,47 @@
+﻿fusionsc.capnp.CallContext
+==========================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: CallContext
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~CallContext.__init__
+  ~CallContext.initResults
+  ~CallContext.tailCall
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~CallContext.params
+	~CallContext.results
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: CallContext.__init__
+.. automethod:: CallContext.initResults
+.. automethod:: CallContext.tailCall
+
+
+
+
+

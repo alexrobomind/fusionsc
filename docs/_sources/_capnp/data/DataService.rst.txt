@@ -1,0 +1,34 @@
+DataService
+===========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/data/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+store: (id: Data, data: T, schema: AnyPointer) -> (ref : :doc:`/_capnp/data/DataRef`\ (T))
+
+   Upload a message to the remote data service and have it publish it
+
+.. rst-class:: capnp-method
+
+clone: (source: :doc:`/_capnp/data/DataRef`\ (T)) -> (ref : :doc:`/_capnp/data/DataRef`\ (T))
+
+   Have the remote data service download a DataRef and re-publish it
+
+.. rst-class:: capnp-method
+
+hash: (source: :doc:`/_capnp/data/DataRef`\ (T)) -> (hash : Data)
+
+   Have the remote service inspect the linked tree of refs and their content tables and
+
+.. rst-class:: capnp-method
+
+cloneAllIntoMemory: (source: :doc:`/_capnp/data/DataRef`\ (T)) -> (ref : :doc:`/_capnp/data/DataRef`\ (T))
+
+   Have the remote data service download a complete copy
+

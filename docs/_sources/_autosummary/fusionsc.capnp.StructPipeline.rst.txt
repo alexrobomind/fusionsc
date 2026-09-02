@@ -1,0 +1,40 @@
+﻿fusionsc.capnp.StructPipeline
+=============================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: StructPipeline
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~StructPipeline.__init__
+  ~StructPipeline.clone_
+  ~StructPipeline.which_
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: StructPipeline.__init__
+.. automethod:: StructPipeline.clone_
+.. automethod:: StructPipeline.which_
+
+
+
+
+

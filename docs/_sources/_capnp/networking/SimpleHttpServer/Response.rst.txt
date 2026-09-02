@@ -1,0 +1,17 @@
+SimpleHttpServer.Response
+=========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/networking/index`
+Parent: :doc:`/_capnp/networking/SimpleHttpServer`
+
+Fields
+------
+
+- status - UInt16
+
+- body - Text
+
+- statusText - Text
+

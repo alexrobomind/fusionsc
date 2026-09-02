@@ -1,0 +1,20 @@
+FieldResolver
+=============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/magnetics/index`
+
+Interface for the resolution of device-specific information
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+resolveField: (field: :doc:`/_capnp/magnetics/MagneticField`, followRefs: Bool = false) -> :doc:`/_capnp/magnetics/MagneticField`
+
+.. rst-class:: capnp-method
+
+resolveFilament: (filament: :doc:`/_capnp/magnetics/Filament`, followRefs: Bool = false) -> :doc:`/_capnp/magnetics/Filament`
+

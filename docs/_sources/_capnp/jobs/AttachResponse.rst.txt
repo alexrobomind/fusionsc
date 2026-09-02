@@ -1,0 +1,16 @@
+AttachResponse
+==============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/jobs/index`
+
+Fields
+------
+
+- stdin - :doc:`/_capnp/streams/RemoteOutputStream`
+
+- stdout - :doc:`/_capnp/streams/RemoteInputStream`
+
+- stderr - :doc:`/_capnp/streams/RemoteInputStream`
+

@@ -1,0 +1,42 @@
+﻿fusionsc.capnp.TextReaderOrBuilder
+==================================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: TextReaderOrBuilder
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~TextReaderOrBuilder.__init__
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~TextReaderOrBuilder.type_
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: TextReaderOrBuilder.__init__
+
+
+
+
+

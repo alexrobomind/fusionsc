@@ -1,0 +1,62 @@
+DynamicObject.DType
+===================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/dynamic/index`
+Parent: :doc:`/_capnp/dynamic/DynamicObject`
+
+Fields
+------
+
+- anonymous union - union
+
+  - bool - Void
+
+  - numeric - group
+
+    - littleEndian - Bool
+
+    - numBytes - UInt8
+
+    - base - union
+
+      - float - Void
+
+      - unsignedInt - Void
+
+      - signedInt - Void
+
+      - complex - Void
+
+  - special - group
+
+    - littleEndian - Bool
+
+    - length - UInt64
+
+    - anonymous union - union
+
+      - byteArray - Void
+
+      - unicodeString - Void
+
+  - subArray - group
+
+    - itemType - :doc:`/_capnp/dynamic/DynamicObject/DType`
+
+    - shape - List(UInt32)
+
+  - struct - group
+
+    - fields - List(:doc:`/_capnp/dynamic/DynamicObject/DType/Field`)
+
+
+Nested Structs
+--------------
+
+.. toctree::
+   :maxdepth: 1
+
+   DType/Field
+

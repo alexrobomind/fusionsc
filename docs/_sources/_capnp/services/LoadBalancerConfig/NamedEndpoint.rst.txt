@@ -1,0 +1,15 @@
+LoadBalancerConfig.NamedEndpoint
+================================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/services/index`
+Parent: :doc:`/_capnp/services/LoadBalancerConfig`
+
+Fields
+------
+
+- name - Text
+
+- rules - List(:doc:`/_capnp/services/LoadBalancerConfig/Rule`)
+

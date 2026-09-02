@@ -1,0 +1,16 @@
+RFLMKernelData
+==============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+
+Fields
+------
+
+- states - List(:doc:`/_capnp/flt/ReversibleFieldlineMapping`.:doc:`/_capnp/jobs/Job/State`)
+
+- phiValues - List(Float64)
+
+- reconstructionErrors - List(Float64)
+

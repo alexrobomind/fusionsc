@@ -1,0 +1,13 @@
+DynamicObject.StructPointer
+===========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/dynamic/index`
+Parent: :doc:`/_capnp/dynamic/DynamicObject`
+
+Fields
+------
+
+- target - AnyStruct
+

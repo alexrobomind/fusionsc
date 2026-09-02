@@ -1,0 +1,15 @@
+OfflineData.Mapping
+===================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/offline/index`
+Parent: :doc:`/_capnp/offline/OfflineData`
+
+Fields
+------
+
+- key - T
+
+- val - T
+

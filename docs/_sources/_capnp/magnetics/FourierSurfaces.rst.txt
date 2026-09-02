@@ -1,0 +1,50 @@
+FourierSurfaces
+===============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/magnetics/index`
+
+Fields
+------
+
+- rCos - :doc:`/_capnp/data/Float64Tensor`
+
+  Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
+
+- zSin - :doc:`/_capnp/data/Float64Tensor`
+
+  Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
+
+- toroidalSymmetry - UInt32 = 1
+
+  Multiplier for toroidal mode number (e.g. 5 for W7-X)
+
+- nTurns - UInt32 = 1
+
+  Divisor for toroidal mode number. Usually 1, but can equal a different number if the surface has an nTurns \* 2pi periodic structure, such as a magnetic island (in this case this would be the island's m number
+
+- nTor - UInt32
+
+  Maximum toroidal mode number.
+
+- mPol - UInt32
+
+  Maximum poloidal mode number
+
+- anonymous union - union
+
+  - symmetric - Void
+
+    Indicator that the surfaces are Stellarator-symmetric
+
+  - nonSymmetric - group
+
+    - rSin - :doc:`/_capnp/data/Float64Tensor`
+
+      Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
+
+    - zCos - :doc:`/_capnp/data/Float64Tensor`
+
+      Tensor of shape [..., nToroidalCoeffs, nPoloidalCoeffs]
+

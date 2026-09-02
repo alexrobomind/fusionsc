@@ -1,0 +1,22 @@
+VmecResponse
+============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/vmec/index`
+
+Fields
+------
+
+- inputFile - Text
+
+- stdout - Text
+
+- stderr - Text
+
+- result - union
+
+  - failed - Text
+
+  - ok - :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/vmec/VmecResult`)
+

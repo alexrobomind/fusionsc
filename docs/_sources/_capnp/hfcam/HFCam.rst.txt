@@ -1,0 +1,32 @@
+HFCam
+=====
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/hfcam/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+clear: () -> ()
+
+.. rst-class:: capnp-method
+
+clone: () -> (cam : :doc:`/_capnp/hfcam/HFCam`)
+
+   points.shape = [3, ...]
+
+.. rst-class:: capnp-method
+
+addPoints: (points: :doc:`/_capnp/data/Float64Tensor`, r: Float64 = 0.005, depthTolerance: Float64 = 0.001) -> ()
+
+.. rst-class:: capnp-method
+
+get: () -> (image : :doc:`/_capnp/data/Float64Tensor`)
+
+.. rst-class:: capnp-method
+
+getData: () -> :doc:`/_capnp/hfcam/HFCamData`
+

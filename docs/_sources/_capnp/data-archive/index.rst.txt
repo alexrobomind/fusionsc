@@ -1,0 +1,10 @@
+data-archive.capnp
+==================
+
+Structs
+-------
+
+.. toctree::
+   :maxdepth: 1
+
+   ArchiveInfo

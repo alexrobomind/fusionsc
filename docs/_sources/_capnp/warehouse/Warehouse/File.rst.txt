@@ -1,0 +1,27 @@
+Warehouse.File
+==============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/warehouse/index`
+Parent: :doc:`/_capnp/warehouse/Warehouse`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+set: (ref: :doc:`/_capnp/data/DataRef`\ (StaticType)) -> ()
+
+.. rst-class:: capnp-method
+
+get: () -> (ref : :doc:`/_capnp/data/DataRef`\ (StaticType))
+
+.. rst-class:: capnp-method
+
+setAny: (value: Capability) -> ()
+
+.. rst-class:: capnp-method
+
+getAny: () -> :doc:`/_capnp/warehouse/Warehouse/StoredObject`
+

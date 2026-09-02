@@ -1,0 +1,15 @@
+IntersectResponse.TagEntry
+==========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+Parent: :doc:`/_capnp/geometry/IntersectResponse`
+
+Fields
+------
+
+- name - Text
+
+- values - :doc:`/_capnp/data/ShapedList`\ (List(:doc:`/_capnp/geometry/TagValue`))
+

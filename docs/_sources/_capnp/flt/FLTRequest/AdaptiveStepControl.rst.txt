@@ -1,0 +1,25 @@
+FLTRequest.AdaptiveStepControl
+==============================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+Parent: :doc:`/_capnp/flt/FLTRequest`
+
+Fields
+------
+
+- min - Float64 = 0
+
+- max - Float64 = inf
+
+- targetError - Float64 = 1e-6
+
+- relativeTolerance - Float64 = 1
+
+- errorUnit - union
+
+  - step - Void
+
+  - integratedOver - Float64 = 1e4
+

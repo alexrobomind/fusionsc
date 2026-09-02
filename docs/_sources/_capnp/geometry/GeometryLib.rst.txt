@@ -1,0 +1,56 @@
+GeometryLib
+===========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+merge: (:doc:`/_capnp/geometry/Geometry`) -> (ref : :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/geometry/MergedGeometry`))
+
+.. rst-class:: capnp-method
+
+index: (geometry: :doc:`/_capnp/geometry/Geometry`, grid: :doc:`/_capnp/geometry/CartesianGrid`) -> (indexed : :doc:`/_capnp/geometry/IndexedGeometry`)
+
+.. rst-class:: capnp-method
+
+planarCut: (geometry: :doc:`/_capnp/geometry/Geometry`, plane: :doc:`/_capnp/geometry/Plane`) -> (edges : :doc:`/_capnp/data/Float64Tensor`); # edges has shape [3, :, 2]
+
+.. rst-class:: capnp-method
+
+planarClip: (geometry: :doc:`/_capnp/geometry/Geometry`, plane: :doc:`/_capnp/geometry/Plane`) -> (ref : :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/geometry/MergedGeometry`))
+
+.. rst-class:: capnp-method
+
+reduce: (geometry: :doc:`/_capnp/geometry/Geometry`, maxVertices: UInt32 = 1000000, maxIndices: UInt32 = 1000000) -> (ref : :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/geometry/MergedGeometry`))
+
+.. rst-class:: capnp-method
+
+weightedSample: (geometry: :doc:`/_capnp/geometry/Geometry`, scale: Float64 = 0.01) -> (centers : :doc:`/_capnp/data/Float64Tensor`, areas : List(Float64))
+
+.. rst-class:: capnp-method
+
+intersect: (:doc:`/_capnp/geometry/GeometryLib/IntersectRequest`) -> :doc:`/_capnp/geometry/GeometryLib/IntersectResponse`
+
+.. rst-class:: capnp-method
+
+unroll: (geometry: :doc:`/_capnp/geometry/Geometry`, phi1: :doc:`/_capnp/geometry/Angle`, phi2: :doc:`/_capnp/geometry/Angle`, clip: Bool = true) -> (ref : :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/geometry/MergedGeometry`))
+
+.. rst-class:: capnp-method
+
+triangulate: (geometry: :doc:`/_capnp/geometry/Geometry`, maxEdgeLength: Float64) -> (ref : :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/geometry/MergedGeometry`))
+
+
+Nested Structs
+--------------
+
+.. toctree::
+   :maxdepth: 1
+
+   GeometryLib/IntersectRequest
+   GeometryLib/IntersectResponse
+

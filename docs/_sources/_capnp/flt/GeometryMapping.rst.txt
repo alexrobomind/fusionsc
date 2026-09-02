@@ -1,0 +1,14 @@
+GeometryMapping
+===============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+
+Fields
+------
+
+- base - :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/flt/ReversibleFieldlineMapping`)
+
+- data - :doc:`/_capnp/data/DataRef`\ (MappingData)
+

@@ -1,0 +1,17 @@
+ObjectGraph.ObjectRef
+=====================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/warehouse/index`
+Parent: :doc:`/_capnp/warehouse/ObjectGraph`
+
+Fields
+------
+
+- anonymous union - union
+
+  - null - Void
+
+  - object - UInt64
+

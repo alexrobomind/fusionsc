@@ -1,0 +1,31 @@
+Cap'n'Proto API Reference
+=========================
+
+.. toctree::
+   :maxdepth: 3
+
+   data/index
+   data-archive/index
+   data-test/index
+   dynamic/index
+   flt/index
+   geometry/index
+   geometry-test/index
+   hfcam/index
+   hint/index
+   http/index
+   index/index
+   java/index
+   jobs/index
+   local-vat-network/index
+   magnetics/index
+   magnetics-test/index
+   matcher/index
+   networking/index
+   offline/index
+   random/index
+   services/index
+   streams/index
+   vmec/index
+   warehouse/index
+   warehouse-internal/index

@@ -1,0 +1,17 @@
+DynamicObject.DType.Field
+=========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/dynamic/index`
+Parent: :doc:`/_capnp/dynamic/DynamicObject/DType`
+
+Fields
+------
+
+- name - Text
+
+- dType - :doc:`/_capnp/dynamic/DynamicObject/DType`
+
+- offset - Int32
+

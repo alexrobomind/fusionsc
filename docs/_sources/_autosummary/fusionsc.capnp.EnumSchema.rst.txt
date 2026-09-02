@@ -1,0 +1,55 @@
+﻿fusionsc.capnp.EnumSchema
+=========================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: EnumSchema
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~EnumSchema.__init__
+  ~EnumSchema.get
+  ~EnumSchema.listOf
+  ~EnumSchema.toProto
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~EnumSchema.Builder
+	~EnumSchema.Reader
+	~EnumSchema.ReaderOrBuilder
+	~EnumSchema.id_
+	~EnumSchema.jsonSchema
+	~EnumSchema.values
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: EnumSchema.__init__
+.. automethod:: EnumSchema.get
+.. automethod:: EnumSchema.listOf
+.. automethod:: EnumSchema.toProto
+
+
+
+
+

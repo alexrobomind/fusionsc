@@ -1,0 +1,25 @@
+SSHConnection
+=============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/networking/index`
+Extends: :doc:`/_capnp/networking/NetworkInterface`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+close: () -> ()
+
+.. rst-class:: capnp-method
+
+authenticatePassword: (user: Text, password: Text) -> ()
+
+.. rst-class:: capnp-method
+
+authenticateKeyFile: (user: Text, pubKeyFile: Text, privKeyFile: Text, keyPass: Text) -> ()
+
+   This function is not yet available due to a bug in the libssh2 library preventing encrypted keys
+

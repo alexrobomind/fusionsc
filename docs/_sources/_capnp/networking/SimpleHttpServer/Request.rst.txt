@@ -1,0 +1,15 @@
+SimpleHttpServer.Request
+========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/networking/index`
+Parent: :doc:`/_capnp/networking/SimpleHttpServer`
+
+Fields
+------
+
+- method - Text
+
+- url - Text
+

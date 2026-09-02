@@ -1,0 +1,14 @@
+FieldCalculator.FourierNormalization
+====================================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/magnetics/index`
+Parent: :doc:`/_capnp/magnetics/FieldCalculator`
+
+Values
+------
+
+- ``unnormalized``
+- ``l2Preserving``
+- ``normalized``

@@ -1,0 +1,18 @@
+FourierKernelData
+=================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/magnetics/index`
+
+THE FOLLOWING STRUCTURED ARE INTERNAL USE ONLY
+
+Fields
+------
+
+- field - :doc:`/_capnp/magnetics/ComputedField`
+
+- surfaces - :doc:`/_capnp/magnetics/FourierSurfaces`
+
+- pointData - List(Float64)
+

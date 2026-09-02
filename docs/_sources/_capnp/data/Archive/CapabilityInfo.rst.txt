@@ -1,0 +1,8 @@
+Archive.CapabilityInfo
+======================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/data/index`
+Parent: :doc:`/_capnp/data/Archive`
+

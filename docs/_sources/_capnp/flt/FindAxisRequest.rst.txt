@@ -1,0 +1,34 @@
+FindAxisRequest
+===============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+
+Fields
+------
+
+- startPoint - List(Float64)
+
+- field - :doc:`/_capnp/magnetics/ComputedField`
+
+- stepSize - Float64 = 0.001
+
+- nTurns - UInt32 = 10
+
+- nIterations - UInt32 = 10
+
+- nPhi - UInt64 = 20
+
+- mapping - :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/flt/ReversibleFieldlineMapping`)
+
+- geometryMapping - :doc:`/_capnp/flt/GeometryMapping`
+
+- islandM - UInt32 = 1
+
+- stepSizeControl - union
+
+  - fixed - Void
+
+  - adaptive - :doc:`/_capnp/flt/FLTRequest`.AdaptiveStepControl
+

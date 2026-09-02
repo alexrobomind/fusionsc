@@ -1,0 +1,15 @@
+local-vat-network.capnp
+=======================
+
+Structs
+-------
+
+.. toctree::
+   :maxdepth: 1
+
+   VatId
+   ProvisionId
+   RecipientId
+   ThirdPartyCapId
+   JoinKeyPart
+   JoinResult

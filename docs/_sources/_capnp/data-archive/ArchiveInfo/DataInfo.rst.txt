@@ -1,0 +1,15 @@
+ArchiveInfo.DataInfo
+====================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/data-archive/index`
+Parent: :doc:`/_capnp/data-archive/ArchiveInfo`
+
+Fields
+------
+
+- offsetWords - UInt64
+
+- sizeBytes - UInt64
+

@@ -1,0 +1,30 @@
+AxisymmetricEquilibrium
+=======================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/magnetics/index`
+
+Fields
+------
+
+- rMin - Float64
+
+- rMax - Float64
+
+- zMin - Float64
+
+- zMax - Float64
+
+- poloidalFlux - :doc:`/_capnp/data/Float64Tensor`
+
+- fluxAxis - Float64
+
+- fluxBoundary - Float64
+
+- normalizedToroidalField - List(Float64)
+
+- pressureProfile - List(Float64)
+
+- qProfile - List(Float64)
+

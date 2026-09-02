@@ -1,0 +1,16 @@
+ArchiveInfo
+===========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/data-archive/index`
+
+Fields
+------
+
+- objects - List(:doc:`/_capnp/warehouse-internal/ObjectInfo`)
+
+- data - List(DataInfo)
+
+- root - UInt64
+

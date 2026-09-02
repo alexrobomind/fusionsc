@@ -1,0 +1,14 @@
+ShapedList
+==========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/data/index`
+
+Fields
+------
+
+- shape - List(UInt64)
+
+- data - ListType
+

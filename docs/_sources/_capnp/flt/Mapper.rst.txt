@@ -1,0 +1,18 @@
+Mapper
+======
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+computeRFLM: (:doc:`/_capnp/flt/RFLMRequest`) -> (mapping : :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/flt/ReversibleFieldlineMapping`))
+
+.. rst-class:: capnp-method
+
+getSectionGeometry: (mapping: :doc:`/_capnp/flt/GeometryMapping`, section: UInt64) -> (geometry : :doc:`/_capnp/geometry/IndexedGeometry`)
+

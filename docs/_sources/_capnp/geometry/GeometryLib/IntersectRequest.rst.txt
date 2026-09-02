@@ -1,0 +1,17 @@
+GeometryLib.IntersectRequest
+============================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+Parent: :doc:`/_capnp/geometry/GeometryLib`
+
+Fields
+------
+
+- geometry - :doc:`/_capnp/geometry/IndexedGeometry`
+
+- pStart - :doc:`/_capnp/data/Float64Tensor`
+
+- pEnd - :doc:`/_capnp/data/Float64Tensor`
+

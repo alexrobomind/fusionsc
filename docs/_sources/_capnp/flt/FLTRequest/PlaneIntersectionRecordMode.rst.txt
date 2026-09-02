@@ -1,0 +1,13 @@
+FLTRequest.PlaneIntersectionRecordMode
+======================================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+Parent: :doc:`/_capnp/flt/FLTRequest`
+
+Values
+------
+
+- ``lastInTurn``
+- ``everyHit``

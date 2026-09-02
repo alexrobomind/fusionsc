@@ -1,0 +1,8 @@
+Warehouse.GenericObject
+=======================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/warehouse/index`
+Parent: :doc:`/_capnp/warehouse/Warehouse`
+

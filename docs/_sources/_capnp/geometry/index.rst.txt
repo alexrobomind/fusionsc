@@ -1,0 +1,29 @@
+geometry.capnp
+==============
+
+Structs
+-------
+
+.. toctree::
+   :maxdepth: 1
+
+   Plane
+   TagValue
+   Tag
+   CartesianGrid
+   Angle
+   Mesh
+   Transformed
+   GeometryFilter
+   Geometry
+   MergedGeometry
+   IndexedGeometry
+
+Interfaces
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   GeometryResolver
+   GeometryLib

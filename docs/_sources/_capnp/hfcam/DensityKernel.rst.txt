@@ -1,0 +1,16 @@
+DensityKernel
+=============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/hfcam/index`
+
+Fields
+------
+
+- anonymous union - union
+
+  - gaussian - Void
+
+  - ball - Void
+

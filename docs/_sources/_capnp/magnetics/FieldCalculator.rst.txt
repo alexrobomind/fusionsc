@@ -1,0 +1,52 @@
+FieldCalculator
+===============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/magnetics/index`
+
+Interface for the computation of magnetic fields
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+compute: (field: :doc:`/_capnp/magnetics/MagneticField`, grid: :doc:`/_capnp/magnetics/ToroidalGrid`) -> (computedField : :doc:`/_capnp/magnetics/ComputedField`)
+
+   Interpolate computed field at position. Points must be of shape [3, ...].
+
+.. rst-class:: capnp-method
+
+interpolateXyz: (field: :doc:`/_capnp/magnetics/ComputedField`, points: :doc:`/_capnp/data/Float64Tensor`) -> :doc:`/_capnp/magnetics/FieldCalculator/EvalResult`
+
+   Point-wise field evaluation
+
+.. rst-class:: capnp-method
+
+evaluateXyz: (field: :doc:`/_capnp/magnetics/MagneticField`, points: :doc:`/_capnp/data/Float64Tensor`) -> :doc:`/_capnp/magnetics/FieldCalculator/EvalResult`
+
+.. rst-class:: capnp-method
+
+evaluatePhizr: (field: :doc:`/_capnp/magnetics/MagneticField`, points: :doc:`/_capnp/data/Float64Tensor`) -> :doc:`/_capnp/magnetics/FieldCalculator/EvalResult`
+
+
+Nested Structs
+--------------
+
+.. toctree::
+   :maxdepth: 1
+
+   FieldCalculator/EvalResult
+
+
+Nested Enums
+------------
+
+.. toctree::
+   :maxdepth: 1
+
+   FieldCalculator/RadialModeQuantity
+   FieldCalculator/FourierConvention
+   FieldCalculator/FourierNormalization
+

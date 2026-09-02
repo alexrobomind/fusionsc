@@ -1,0 +1,22 @@
+LocalStore
+==========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/services/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+put: (ref: :doc:`/_capnp/data/DataRef`\ (T), download: Bool) -> (id : UInt64)
+
+.. rst-class:: capnp-method
+
+get: (id: UInt64) -> (ref : :doc:`/_capnp/data/DataRef`\ (AnyPointer))
+
+.. rst-class:: capnp-method
+
+erase: (id: UInt64) -> ()
+

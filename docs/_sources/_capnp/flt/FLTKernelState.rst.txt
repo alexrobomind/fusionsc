@@ -1,0 +1,41 @@
+FLTKernelState
+==============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+
+The following structures are internal and not intended to be used in network protocols
+They might change in incompatible versions throughout the library
+
+Fields
+------
+
+- position - List(Float64)
+
+- numSteps - UInt32
+
+- distance - Float64
+
+- turnCount - UInt32
+
+- phi0 - Float64
+
+- eventCount - UInt32
+
+- collisionCount - UInt32
+
+- forward - Bool = true
+
+- nextDisplacementAt - Float64
+
+- displacementCount - UInt32
+
+- rngState - :doc:`/_capnp/random/MT19937State`
+
+- phi - Float64
+
+- theta - Float64
+
+- stepSize - Float64
+

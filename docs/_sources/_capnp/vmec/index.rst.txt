@@ -1,0 +1,23 @@
+vmec.capnp
+==========
+
+Structs
+-------
+
+.. toctree::
+   :maxdepth: 1
+
+   VmecProfile
+   VmecRequest
+   VmecResult
+   VmecResponse
+   VmecKernelComm
+   VmecConfig
+
+Interfaces
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   VmecDriver

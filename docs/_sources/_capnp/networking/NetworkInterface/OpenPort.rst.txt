@@ -1,0 +1,31 @@
+NetworkInterface.OpenPort
+=========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/networking/index`
+Parent: :doc:`/_capnp/networking/NetworkInterface`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+getInfo: () -> (port : UInt64)
+
+.. rst-class:: capnp-method
+
+drain: () -> ()
+
+.. rst-class:: capnp-method
+
+stopListening: () -> ()
+
+.. rst-class:: capnp-method
+
+closeAll: () -> ()
+
+.. rst-class:: capnp-method
+
+unsafeCloseAllNow: () -> ()
+

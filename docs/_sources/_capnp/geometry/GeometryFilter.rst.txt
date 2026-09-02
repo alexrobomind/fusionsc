@@ -1,0 +1,26 @@
+GeometryFilter
+==============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+
+Fields
+------
+
+- anonymous union - union
+
+  - true - Void
+
+  - and - List(:doc:`/_capnp/geometry/GeometryFilter`)
+
+  - or - List(:doc:`/_capnp/geometry/GeometryFilter`)
+
+  - not - :doc:`/_capnp/geometry/GeometryFilter`
+
+  - isOneOf - group
+
+    - tagName - Text
+
+    - values - List(:doc:`/_capnp/geometry/TagValue`)
+

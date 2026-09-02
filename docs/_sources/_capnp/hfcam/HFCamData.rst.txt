@@ -1,0 +1,16 @@
+HFCamData
+=========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/hfcam/index`
+
+Fields
+------
+
+- projection - :doc:`/_capnp/hfcam/HFCamProjection`
+
+- determinantBuffer - :doc:`/_capnp/data/Float64Tensor`
+
+- depthBuffer - :doc:`/_capnp/data/Float64Tensor`
+

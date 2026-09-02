@@ -1,0 +1,15 @@
+DynamicObject.MappingEntry
+==========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/dynamic/index`
+Parent: :doc:`/_capnp/dynamic/DynamicObject`
+
+Fields
+------
+
+- key - :doc:`/_capnp/dynamic/DynamicObject`
+
+- value - :doc:`/_capnp/dynamic/DynamicObject`
+

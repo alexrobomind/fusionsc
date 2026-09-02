@@ -1,0 +1,12 @@
+HttpRoot
+========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/http/index`
+
+Fields
+------
+
+- entries - List(Entry)
+

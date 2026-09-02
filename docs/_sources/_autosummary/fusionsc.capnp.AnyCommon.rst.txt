@@ -1,0 +1,36 @@
+﻿fusionsc.capnp.AnyCommon
+========================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: AnyCommon
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~AnyCommon.__init__
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: AnyCommon.__init__
+
+
+
+
+

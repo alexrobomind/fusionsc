@@ -1,0 +1,19 @@
+KDTree.Chunk
+============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/index/index`
+Parent: :doc:`/_capnp/index/KDTree`
+
+Fields
+------
+
+- boundingBoxes - :doc:`/_capnp/data/Float64Tensor`
+
+  A [chunkSize, nDims, 2] array holding, for each node and dimension, minimum extent (0), maximum extent (1) and weighted center estimate (2) along that dimension.
+
+- nodes - List(:doc:`/_capnp/index/KDTree/Node`)
+
+  Structural information for nodes (interior pointer or leaf ID)
+

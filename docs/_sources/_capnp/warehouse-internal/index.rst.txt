@@ -1,0 +1,10 @@
+warehouse-internal.capnp
+========================
+
+Structs
+-------
+
+.. toctree::
+   :maxdepth: 1
+
+   ObjectInfo

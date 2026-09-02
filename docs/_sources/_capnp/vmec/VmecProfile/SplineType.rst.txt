@@ -1,0 +1,13 @@
+VmecProfile.SplineType
+======================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/vmec/index`
+Parent: :doc:`/_capnp/vmec/VmecProfile`
+
+Values
+------
+
+- ``akima``
+- ``cubic``

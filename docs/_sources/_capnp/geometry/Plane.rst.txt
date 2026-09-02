@@ -1,0 +1,18 @@
+Plane
+=====
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+
+Fields
+------
+
+- center - List(Float64)
+
+- orientation - union
+
+  - phi - Float64
+
+  - normal - List(Float64)
+

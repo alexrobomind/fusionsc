@@ -1,0 +1,17 @@
+FieldCalculator.RadialModeQuantity
+==================================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/magnetics/index`
+Parent: :doc:`/_capnp/magnetics/FieldCalculator`
+
+Evaluate points on Fourier surfaces
+Returns tensors of shape [3] + {surface shape} + {batch shape}
+with the remainder being the surfaces shape.
+
+Values
+------
+
+- ``field``
+- ``flux``

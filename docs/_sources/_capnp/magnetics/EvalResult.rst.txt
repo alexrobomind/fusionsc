@@ -1,0 +1,12 @@
+EvalResult
+==========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/magnetics/index`
+
+Fields
+------
+
+- values - :doc:`/_capnp/data/Float64Tensor`
+

@@ -1,0 +1,13 @@
+IndexedGeometry.IndexData
+=========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+Parent: :doc:`/_capnp/geometry/IndexedGeometry`
+
+Fields
+------
+
+- gridContents - :doc:`/_capnp/data/ShapedList`\ (List(List(:doc:`/_capnp/geometry/IndexedGeometry/ElementRef`)))
+

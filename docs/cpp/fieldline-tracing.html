@@ -1,0 +1,395 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Field Line Tracing &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Geometry" href="geometry.html" />
+    <link rel="prev" title="Magnetics" href="magnetics.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/index.html">Usage examples (How To …)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference.html">Reference</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">C++ Library Documentation</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="magnetics.html">Magnetics</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Field Line Tracing</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api-reference">API Reference</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#_CPPv43fsc"><code class="docutils literal notranslate"><span class="pre">fsc</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#_CPPv4N3fsc4RFLME"><code class="docutils literal notranslate"><span class="pre">fsc::RFLM</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="geometry.html">Geometry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data.html">Data Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="vmec.html">VMEC Interface</a></li>
+<li class="toctree-l2"><a class="reference internal" href="services.html">Services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#quick-start">Quick Start</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../_capnp/index.html">Cap’n’Proto API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">C++ Library Documentation</a></li>
+      <li class="breadcrumb-item active">Field Line Tracing</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/cpp/fieldline-tracing.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="field-line-tracing">
+<h1>Field Line Tracing<a class="headerlink" href="#field-line-tracing" title="Link to this heading"></a></h1>
+<p>The field line tracing module computes magnetic field line trajectories,
+Poincare plots, and connection lengths using reversible mapping techniques.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>The field line tracer supports:</p>
+<ul class="simple">
+<li><p>Computation of <strong>reversible field line mappings</strong> and usage of these mappings
+to accelerate all field line calculations</p></li>
+<li><p>Calculation of <strong>Poincare plots</strong> with forward- and backward-connection-lengths
+(at no extra cost)</p></li>
+<li><p><strong>Convective-diffusive</strong> and <strong>doubly-diffusive</strong> field line tracing</p></li>
+<li><p>Calculation of <strong>connection lengths</strong>, strike positions, and geometry tags
+(module numbers, finger IDs, etc.) on impact points</p></li>
+</ul>
+</section>
+<section id="api-reference">
+<h2>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading"></a></h2>
+<dl class="cpp type">
+<dt class="sig sig-object cpp" id="_CPPv43fsc">
+<span id="_CPPv33fsc"></span><span id="_CPPv23fsc"></span><span id="fsc"></span><span class="target" id="namespacefsc"></span><span class="k"><span class="pre">namespace</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">fsc</span></span></span><br /></dt>
+<dd><p>The FSC library.</p>
+<p>Simple interface module for <a class="reference internal" href="genapi.html#structfsc_1_1_z_lib"><span class="std std-ref">ZLib</span></a></p>
+</dd></dl>
+
+<dl class="cpp type">
+<dt class="sig sig-object cpp">
+<span class="target" id="namespacefsc"></span><span class="k"><span class="pre">namespace</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">fsc</span></span></span><br /></dt>
+<dd><p>The FSC library.</p>
+<p>Simple interface module for <a class="reference internal" href="genapi.html#structfsc_1_1_z_lib"><span class="std std-ref">ZLib</span></a></p>
+<dl class="cpp struct">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLME">
+<span id="_CPPv3N3fsc4RFLME"></span><span id="_CPPv2N3fsc4RFLME"></span><span id="fsc::RFLM"></span><span class="target" id="structfsc_1_1_r_f_l_m"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">RFLM</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLME" title="Link to this definition"></a><br /></dt>
+<dd><div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp">
+<span class="target" id="structfsc_1_1_r_f_l_m_1aec9cbe52de6eb384ba00efcaadf4b771"></span><span class="sig-name descname"><span class="pre">inline</span> <span class="pre">EIGEN_DEVICE_FUNC</span> <span class="pre">Vec3d</span> <span class="pre">unmap</span> <span class="pre">(double</span> <span class="pre">phi)</span></span></dt>
+<dd><p>Computes the real-space coordinates of the last-mapped position projected to the given phi plane. </p>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp">
+<span class="target" id="structfsc_1_1_r_f_l_m_1a88d50076bee70a1af41d06228ec69a85"></span><span class="sig-name descname"><span class="pre">inline</span> <span class="pre">EIGEN_DEVICE_FUNC</span> <span class="pre">Vec3d</span> <span class="pre">unmap</span> <span class="pre">(double</span> <span class="pre">phi,</span> <span class="pre">double</span> <span class="pre">u,</span> <span class="pre">double</span> <span class="pre">v)</span></span></dt>
+<dd><p>Computes the real-space coordinates of a phi-u-v coordinate in the current section. </p>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp">
+<span class="target" id="structfsc_1_1_r_f_l_m_1a856dc13db2ea9a769f5b5007ebf1cbd6"></span><span class="sig-name descname"><span class="pre">inline</span> <span class="pre">EIGEN_DEVICE_FUNC</span> <span class="pre">double</span> <span class="pre">map</span> <span class="pre">(const</span> <span class="pre">Vec3d</span> <span class="pre">&amp;x,</span> <span class="pre">bool</span> <span class="pre">goingCcw)</span></span></dt>
+<dd><p>Captures a position for mapping using the closest mapping filament. </p>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp">
+<span class="target" id="structfsc_1_1_r_f_l_m_1af1d49860b31385fa545205797fe23e1f"></span><span class="sig-name descname"><span class="pre">inline</span> <span class="pre">EIGEN_DEVICE_FUNC</span> <span class="pre">double</span> <span class="pre">mapInSection</span> <span class="pre">(uint64_t</span> <span class="pre">section,</span> <span class="pre">double</span> <span class="pre">phi,</span> <span class="pre">double</span> <span class="pre">z,</span> <span class="pre">double</span> <span class="pre">r)</span></span></dt>
+<dd><p>Maps using a pre-selected section. </p>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp">
+<span class="target" id="structfsc_1_1_r_f_l_m_1ae0bda92559624e9785360df338c88808"></span><span class="sig-name descname"><span class="pre">inline</span> <span class="pre">EIGEN_DEVICE_FUNC</span> <span class="pre">Vec3d</span> <span class="pre">advance</span> <span class="pre">(double</span> <span class="pre">newPhi,</span> <span class="pre">cupnp::List&lt;</span> <span class="pre">cu::FLTKernelEvent</span> <span class="pre">&gt;::Builder</span> <span class="pre">eventBuffer,</span> <span class="pre">uint32_t</span> <span class="pre">eventCount,</span> <span class="pre">uint32_t</span> <span class="pre">&amp;newEventCount,</span> <span class="pre">uint32_t</span> <span class="pre">collisionLimit)</span></span></dt>
+<dd><p>Advances to a new phi position, remapping if neccessary. Returns new real-space position. </p>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp">
+<span class="target" id="structfsc_1_1_r_f_l_m_1a6163b596e126db2c9fde6920a29f17b0"></span><span class="sig-name descname"><span class="pre">inline</span> <span class="pre">EIGEN_DEVICE_FUNC</span> <span class="pre">Vec3d</span> <span class="pre">advance</span> <span class="pre">(double</span> <span class="pre">newPhi)</span></span></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp">
+<span class="target" id="structfsc_1_1_r_f_l_m_1a2a2e24fbb41ac6c0d9ca301dcd3545af"></span><span class="sig-name descname"><span class="pre">inline</span> <span class="pre">EIGEN_DEVICE_FUNC</span> <span class="pre">double</span> <span class="pre">getFieldlinePosition</span> <span class="pre">(double</span> <span class="pre">phi)</span></span></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp">
+<span class="target" id="structfsc_1_1_r_f_l_m_1a7dabd1919bd87db048069c80435b3fcb"></span><span class="sig-name descname"><span class="pre">inline</span> <span class="pre">EIGEN_DEVICE_FUNC</span> <span class="pre">void</span> <span class="pre">setFieldlinePosition</span> <span class="pre">(double</span> <span class="pre">newValue)</span></span></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM4RFLMEN2cu26ReversibleFieldlineMapping6ReaderE">
+<span id="_CPPv3N3fsc4RFLM4RFLMEN2cu26ReversibleFieldlineMapping6ReaderE"></span><span id="_CPPv2N3fsc4RFLM4RFLMEN2cu26ReversibleFieldlineMapping6ReaderE"></span><span id="fsc::RFLM::RFLM__cu::ReversibleFieldlineMapping::Reader"></span><span class="target" id="structfsc_1_1_r_f_l_m_1acc4a4543e3fcfba7f7659a4575aa9c32"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">EIGEN_DEVICE_FUNC</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">RFLM</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">cu</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">ReversibleFieldlineMapping</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Reader</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">mapping</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc4RFLM4RFLMEN2cu26ReversibleFieldlineMapping6ReaderE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM4RFLMEN2cu26ReversibleFieldlineMapping6ReaderEN2cu15GeometryMapping11MappingData6ReaderE">
+<span id="_CPPv3N3fsc4RFLM4RFLMEN2cu26ReversibleFieldlineMapping6ReaderEN2cu15GeometryMapping11MappingData6ReaderE"></span><span id="_CPPv2N3fsc4RFLM4RFLMEN2cu26ReversibleFieldlineMapping6ReaderEN2cu15GeometryMapping11MappingData6ReaderE"></span><span id="fsc::RFLM::RFLM__cu::ReversibleFieldlineMapping::Reader.cu::GeometryMapping::MappingData::Reader"></span><span class="target" id="structfsc_1_1_r_f_l_m_1ab8f5281857d493f8ea544e0184c7fde4"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">EIGEN_DEVICE_FUNC</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">RFLM</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">cu</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">ReversibleFieldlineMapping</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Reader</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">mapping</span></span>, <span class="n"><span class="pre">cu</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">GeometryMapping</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">MappingData</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Reader</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc4RFLM4RFLMEN2cu26ReversibleFieldlineMapping6ReaderEN2cu15GeometryMapping11MappingData6ReaderE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM4RFLMERK4RFLM">
+<span id="_CPPv3N3fsc4RFLM4RFLMERK4RFLM"></span><span id="_CPPv2N3fsc4RFLM4RFLMERK4RFLM"></span><span id="fsc::RFLM::RFLM__RFLMCR"></span><span class="target" id="structfsc_1_1_r_f_l_m_1a045f8dc62b4041702e550faf9764555b"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">EIGEN_DEVICE_FUNC</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">RFLM</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N3fsc4RFLM4RFLMERK4RFLM" title="fsc::RFLM::RFLM"><span class="n"><span class="pre">RFLM</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">other</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="k"><span class="pre">default</span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM4RFLMERK4RFLM" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp">
+<span class="target" id="structfsc_1_1_r_f_l_m_1aaff8008e6b0367c7f0e49e96a3e4a433"></span><span class="sig-name descname"><span class="pre">inline</span> <span class="pre">EIGEN_DEVICE_FUNC</span> <span class="pre">void</span> <span class="pre">save</span> <span class="pre">(cu::ReversibleFieldlineMapping::State::Builder)</span></span></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp">
+<span class="target" id="structfsc_1_1_r_f_l_m_1a8a393729ef8abd6fa725f610e961fa10"></span><span class="sig-name descname"><span class="pre">inline</span> <span class="pre">EIGEN_DEVICE_FUNC</span> <span class="pre">void</span> <span class="pre">load</span> <span class="pre">(cu::ReversibleFieldlineMapping::State::Reader)</span></span></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM4saveEN26ReversibleFieldlineMapping5State7BuilderE">
+<span id="_CPPv3N3fsc4RFLM4saveEN26ReversibleFieldlineMapping5State7BuilderE"></span><span id="_CPPv2N3fsc4RFLM4saveEN26ReversibleFieldlineMapping5State7BuilderE"></span><span id="fsc::RFLM::save__ReversibleFieldlineMapping::State::Builder"></span><span class="target" id="structfsc_1_1_r_f_l_m_1a2508cab0518a08e3235c698c5fc9384c"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">save</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">ReversibleFieldlineMapping</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">State</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Builder</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc4RFLM4saveEN26ReversibleFieldlineMapping5State7BuilderE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM4loadEN26ReversibleFieldlineMapping5State6ReaderE">
+<span id="_CPPv3N3fsc4RFLM4loadEN26ReversibleFieldlineMapping5State6ReaderE"></span><span id="_CPPv2N3fsc4RFLM4loadEN26ReversibleFieldlineMapping5State6ReaderE"></span><span id="fsc::RFLM::load__ReversibleFieldlineMapping::State::Reader"></span><span class="target" id="structfsc_1_1_r_f_l_m_1a14688d13740f00451ced8459b8d6256d"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">load</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">ReversibleFieldlineMapping</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">State</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Reader</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc4RFLM4loadEN26ReversibleFieldlineMapping5State6ReaderE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM15activateSectionE8uint64_t">
+<span id="_CPPv3N3fsc4RFLM15activateSectionE8uint64_t"></span><span id="_CPPv2N3fsc4RFLM15activateSectionE8uint64_t"></span><span id="fsc::RFLM::activateSection__uint64_t"></span><span class="target" id="structfsc_1_1_r_f_l_m_1a151661d19eccf2ca1343183212c1695b"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">activateSection</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">uint64_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">iSection</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc4RFLM15activateSectionE8uint64_t" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM13activeSectionEv">
+<span id="_CPPv3N3fsc4RFLM13activeSectionEv"></span><span id="_CPPv2N3fsc4RFLM13activeSectionEv"></span><span id="fsc::RFLM::activeSection"></span><span class="target" id="structfsc_1_1_r_f_l_m_1a265e1246067a73c5d89849039ae89984"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">cu</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">ReversibleFieldlineMapping</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Section</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Reader</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">activeSection</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc4RFLM13activeSectionEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM16activeGeoSectionEv">
+<span id="_CPPv3N3fsc4RFLM16activeGeoSectionEv"></span><span id="_CPPv2N3fsc4RFLM16activeGeoSectionEv"></span><span id="fsc::RFLM::activeGeoSection"></span><span class="target" id="structfsc_1_1_r_f_l_m_1a41557fcefac0f3b3078cd1c0d405c9a9"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">cu</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">GeometryMapping</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">SectionData</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Reader</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">activeGeoSection</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc4RFLM16activeGeoSectionEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM7mappingE">
+<span id="_CPPv3N3fsc4RFLM7mappingE"></span><span id="_CPPv2N3fsc4RFLM7mappingE"></span><span id="fsc::RFLM::mapping__cu::ReversibleFieldlineMapping::Reader"></span><span class="target" id="structfsc_1_1_r_f_l_m_1a7c3516b7313d0f06e801e89455cc1927"></span><span class="n"><span class="pre">cu</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">ReversibleFieldlineMapping</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Reader</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">mapping</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM7mappingE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM10geoMappingE">
+<span id="_CPPv3N3fsc4RFLM10geoMappingE"></span><span id="_CPPv2N3fsc4RFLM10geoMappingE"></span><span id="fsc::RFLM::geoMapping__cu::GeometryMapping::MappingData::Reader"></span><span class="target" id="structfsc_1_1_r_f_l_m_1a588353ab67fe2ad857108fc9f1224d80"></span><span class="n"><span class="pre">cu</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">GeometryMapping</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">MappingData</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Reader</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">geoMapping</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM10geoMappingE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM2uvE">
+<span id="_CPPv3N3fsc4RFLM2uvE"></span><span id="_CPPv2N3fsc4RFLM2uvE"></span><span id="fsc::RFLM::uv__Vec2d"></span><span class="target" id="structfsc_1_1_r_f_l_m_1aa8c29c05778e8ffbcf3973cfc9278aa1"></span><a class="reference internal" href="genapi.html#_CPPv4N3fsc5Vec2dE" title="fsc::Vec2d"><span class="n"><span class="pre">Vec2d</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">uv</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM2uvE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM14currentSectionE">
+<span id="_CPPv3N3fsc4RFLM14currentSectionE"></span><span id="_CPPv2N3fsc4RFLM14currentSectionE"></span><span id="fsc::RFLM::currentSection__uint64_t"></span><span class="target" id="structfsc_1_1_r_f_l_m_1a07f1d092d0ef01f1cfeddfc923d0a2c9"></span><span class="n"><span class="pre">uint64_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">currentSection</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM14currentSectionE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM17currentSectionRawE">
+<span id="_CPPv3N3fsc4RFLM17currentSectionRawE"></span><span id="_CPPv2N3fsc4RFLM17currentSectionRawE"></span><span id="fsc::RFLM::currentSectionRaw__uint64_t"></span><span class="target" id="structfsc_1_1_r_f_l_m_1aa46e71ea76a6b046b35a75f55fa9a5b7"></span><span class="n"><span class="pre">uint64_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">currentSectionRaw</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM17currentSectionRawE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM3phiE">
+<span id="_CPPv3N3fsc4RFLM3phiE"></span><span id="_CPPv2N3fsc4RFLM3phiE"></span><span id="fsc::RFLM::phi__double"></span><span class="target" id="structfsc_1_1_r_f_l_m_1ad2360cc8607a30d4264013cc3a0d682f"></span><span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">phi</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM3phiE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM9lenOffsetE">
+<span id="_CPPv3N3fsc4RFLM9lenOffsetE"></span><span id="_CPPv2N3fsc4RFLM9lenOffsetE"></span><span id="fsc::RFLM::lenOffset__double"></span><span class="target" id="structfsc_1_1_r_f_l_m_1abc1cfa4cf882a6640d168526df61d41e"></span><span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">lenOffset</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM9lenOffsetE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM4nPadE">
+<span id="_CPPv3N3fsc4RFLM4nPadE"></span><span id="_CPPv2N3fsc4RFLM4nPadE"></span><span id="fsc::RFLM::nPad__uint32_t"></span><span class="target" id="structfsc_1_1_r_f_l_m_1a7eea5a2b42a50ad02f003063965008f4"></span><span class="n"><span class="pre">uint32_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">nPad</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM4nPadE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM4nPhiE">
+<span id="_CPPv3N3fsc4RFLM4nPhiE"></span><span id="_CPPv2N3fsc4RFLM4nPhiE"></span><span id="fsc::RFLM::nPhi__uint64_t"></span><span class="target" id="structfsc_1_1_r_f_l_m_1abc1107187fc66e7b93c5d30f6241e259"></span><span class="n"><span class="pre">uint64_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">nPhi</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM4nPhiE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM2nZE">
+<span id="_CPPv3N3fsc4RFLM2nZE"></span><span id="_CPPv2N3fsc4RFLM2nZE"></span><span id="fsc::RFLM::nZ__uint64_t"></span><span class="target" id="structfsc_1_1_r_f_l_m_1a72062861dbc0ad7c74b59d08a3e846cb"></span><span class="n"><span class="pre">uint64_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">nZ</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM2nZE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM2nRE">
+<span id="_CPPv3N3fsc4RFLM2nRE"></span><span id="_CPPv2N3fsc4RFLM2nRE"></span><span id="fsc::RFLM::nR__uint64_t"></span><span class="target" id="structfsc_1_1_r_f_l_m_1a478cfb596117918b91fa38f874eb1ba1"></span><span class="n"><span class="pre">uint64_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">nR</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM2nRE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM4phi1E">
+<span id="_CPPv3N3fsc4RFLM4phi1E"></span><span id="_CPPv2N3fsc4RFLM4phi1E"></span><span id="fsc::RFLM::phi1__double"></span><span class="target" id="structfsc_1_1_r_f_l_m_1a8060fc0159947a6442d21990e746f1be"></span><span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">phi1</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM4phi1E" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM4phi2E">
+<span id="_CPPv3N3fsc4RFLM4phi2E"></span><span id="_CPPv2N3fsc4RFLM4phi2E"></span><span id="fsc::RFLM::phi2__double"></span><span class="target" id="structfsc_1_1_r_f_l_m_1ad842589cbc246f0c4995ede065114866"></span><span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">phi2</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM4phi2E" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-static-attributes">Public Static Attributes</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM11SECTION_TOLE">
+<span id="_CPPv3N3fsc4RFLM11SECTION_TOLE"></span><span id="_CPPv2N3fsc4RFLM11SECTION_TOLE"></span><span id="fsc::RFLM::SECTION_TOL__double"></span><span class="target" id="structfsc_1_1_r_f_l_m_1a55be31af90274c8f7bee00da7fcbe366"></span><span class="k"><span class="pre">static</span></span><span class="w"> </span><span class="k"><span class="pre">constexpr</span></span><span class="w"> </span><span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">SECTION_TOL</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="m"><span class="pre">0.001</span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM11SECTION_TOLE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-private-functions">Private Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp">
+<span class="target" id="structfsc_1_1_r_f_l_m_1a1a15e216e2e75add182b6b7132d42424"></span><span class="sig-name descname"><span class="pre">inline</span> <span class="pre">EIGEN_DEVICE_FUNC</span> <span class="pre">void</span> <span class="pre">interpolate</span> <span class="pre">(double</span> <span class="pre">phi,</span> <span class="pre">Vec2d</span> <span class="pre">&amp;rz,</span> <span class="pre">Mat2d</span> <span class="pre">&amp;jacobian)</span></span></dt>
+<dd></dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-private-static-functions">Private Static Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM6unwrapEd">
+<span id="_CPPv3N3fsc4RFLM6unwrapEd"></span><span id="_CPPv2N3fsc4RFLM6unwrapEd"></span><span id="fsc::RFLM::unwrap__double"></span><span class="target" id="structfsc_1_1_r_f_l_m_1a13c6efc6c76f3fbf297efdd15750c360"></span><span class="k"><span class="pre">static</span></span><span class="w"> </span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">unwrap</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">phiWrapped</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc4RFLM6unwrapEd" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<dl class="cpp struct">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM11TensorFieldE">
+<span id="_CPPv3N3fsc4RFLM11TensorFieldE"></span><span id="_CPPv2N3fsc4RFLM11TensorFieldE"></span><span id="fsc::RFLM::TensorField"></span><span class="target" id="structfsc_1_1_r_f_l_m_1_1_tensor_field"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">TensorField</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM11TensorFieldE" title="Link to this definition"></a><br /></dt>
+<dd><div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM11TensorField11TensorFieldEN2cu13Float64Tensor6ReaderER4RFLM">
+<span id="_CPPv3N3fsc4RFLM11TensorField11TensorFieldEN2cu13Float64Tensor6ReaderER4RFLM"></span><span id="_CPPv2N3fsc4RFLM11TensorField11TensorFieldEN2cu13Float64Tensor6ReaderER4RFLM"></span><span id="fsc::RFLM::TensorField::TensorField__cu::Float64Tensor::Reader.RFLMR"></span><span class="target" id="structfsc_1_1_r_f_l_m_1_1_tensor_field_1aea41d44604677db2fa4aa0d1d9752420"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">TensorField</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">cu</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Float64Tensor</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Reader</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">reader</span></span>, <a class="reference internal" href="#_CPPv4N3fsc4RFLME" title="fsc::RFLM"><span class="n"><span class="pre">RFLM</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">parent</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc4RFLM11TensorField11TensorFieldEN2cu13Float64Tensor6ReaderER4RFLM" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK3fsc4RFLM11TensorFieldclEiii">
+<span id="_CPPv3NK3fsc4RFLM11TensorFieldclEiii"></span><span id="_CPPv2NK3fsc4RFLM11TensorFieldclEiii"></span><span id="fsc::RFLM::TensorField::call-operator__i.i.iC"></span><span class="target" id="structfsc_1_1_r_f_l_m_1_1_tensor_field_1a54de76ad1da9a6dc6de298bd4d430d0f"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="sig-name descname"><span class="k"><span class="pre">operator</span></span><span class="o"><span class="pre">()</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">iPhi</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">iZ</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">iR</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK3fsc4RFLM11TensorFieldclEiii" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM11TensorField6readerE">
+<span id="_CPPv3N3fsc4RFLM11TensorField6readerE"></span><span id="_CPPv2N3fsc4RFLM11TensorField6readerE"></span><span id="fsc::RFLM::TensorField::reader__cu::Float64Tensor::Reader"></span><span class="target" id="structfsc_1_1_r_f_l_m_1_1_tensor_field_1af6dee8960e4318dc3c9ffeeb0fd5474a"></span><span class="n"><span class="pre">cu</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Float64Tensor</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Reader</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">reader</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM11TensorField6readerE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc4RFLM11TensorField6parentE">
+<span id="_CPPv3N3fsc4RFLM11TensorField6parentE"></span><span id="_CPPv2N3fsc4RFLM11TensorField6parentE"></span><span id="fsc::RFLM::TensorField::parent__RFLMR"></span><span class="target" id="structfsc_1_1_r_f_l_m_1_1_tensor_field_1a5ba1a16c48fb01de3e4fefab9f09f5b2"></span><a class="reference internal" href="#_CPPv4N3fsc4RFLME" title="fsc::RFLM"><span class="n"><span class="pre">RFLM</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">parent</span></span></span><a class="headerlink" href="#_CPPv4N3fsc4RFLM11TensorField6parentE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="magnetics.html" class="btn btn-neutral float-left" title="Magnetics" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="geometry.html" class="btn btn-neutral float-right" title="Geometry" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

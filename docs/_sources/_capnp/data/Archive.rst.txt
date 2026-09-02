@@ -1,0 +1,17 @@
+Archive
+=======
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/data/index`
+
+
+Nested Structs
+--------------
+
+.. toctree::
+   :maxdepth: 1
+
+   Archive/CapabilityInfo
+   Archive/Entry
+

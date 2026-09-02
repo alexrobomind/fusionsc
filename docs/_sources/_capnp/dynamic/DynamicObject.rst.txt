@@ -1,0 +1,152 @@
+DynamicObject
+=============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/dynamic/index`
+
+Fields
+------
+
+- memoKey - UInt64
+
+- anonymous union - union
+
+  - text - Text
+
+  - data - Data
+
+  - bigData - :doc:`/_capnp/data/DataRef`\ (Data)
+
+  - mapping - List(MappingEntry)
+
+  - uint64 - UInt64
+
+  - int64 - Int64
+
+  - bool - Bool
+
+  - double - Float64
+
+  - pythonBigInt - Data
+
+  - memoized - Void
+
+  - nested - :doc:`/_capnp/dynamic/DynamicObject`
+
+  - memoizedParent - Void
+
+  - pythonObject - PythonObject
+
+  - pythonNone - Void
+
+  - unknownObject - :doc:`/_capnp/dynamic/DynamicObject`
+
+    Object that could previously not be resolved during deserialization and is being re-entered. Should be deserialized with its own memo dict as the previous values are likely invalid.
+
+  - pythonNotImplemented - Void
+
+  - pythonEllipsis - Void
+
+  - sequence - group
+
+    - contents - List(:doc:`/_capnp/dynamic/DynamicObject`)
+
+    - kind - union
+
+      - list - Void
+
+      - tuple - Void
+
+      - set - Void
+
+  - ref - group
+
+    - target - :doc:`/_capnp/data/DataRef`
+
+    - wrapped - Bool
+
+  - dynamicStruct - group
+
+    - schema - AnyStruct
+
+    - data - AnyStruct
+
+  - dynamicCapability - group
+
+    - schema - AnyStruct
+
+    - raw - Capability
+
+  - complex - group
+
+    - real - Float64
+
+    - imag - Float64
+
+  - dynamicEnum - group
+
+    - schema - AnyStruct
+
+    - value - UInt16
+
+  - array - group
+
+    - dType - DType
+
+    - shape - List(UInt64)
+
+    - anonymous union - union
+
+      - data - Data
+
+      - bigData - :doc:`/_capnp/data/DataRef`\ (Data)
+
+  - dynamicObjectArray - group
+
+    - shape - List(UInt64)
+
+    - data - List(:doc:`/_capnp/dynamic/DynamicObject`)
+
+  - enumArray - group
+
+    - schema - AnyStruct
+
+    - shape - List(UInt64)
+
+    - data - List(UInt16)
+
+  - structArray - group
+
+    - schema - AnyStruct
+
+    - shape - List(UInt64)
+
+    - data - List(StructPointer)
+
+  - pythonPickle - union
+
+    - data - Data
+
+    - bigData - :doc:`/_capnp/data/DataRef`\ (Data)
+
+  - pythonGlobal - group
+
+    - mod - Text
+
+    - name - Text
+
+  - pythonWrapper - group
+
+    - wrapped - :doc:`/_capnp/dynamic/DynamicObject`
+
+    - anonymous union - union
+
+      - bytes - Void
+
+      - bytearray - Void
+
+      - mutableArray - Void
+
+      - pickleBuffer - Void
+

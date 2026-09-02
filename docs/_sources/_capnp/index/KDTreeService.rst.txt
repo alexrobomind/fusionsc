@@ -1,0 +1,35 @@
+KDTreeService
+=============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/index/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+build: (chunks: List(:doc:`/_capnp/index/KDTreeService/Chunk`), leafSize: UInt32 = 1) -> :doc:`/_capnp/index/KDTree`
+
+.. rst-class:: capnp-method
+
+buildRef: (chunks: List(:doc:`/_capnp/index/KDTreeService/Chunk`), leafSize: UInt32 = 1) -> (ref : :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/index/KDTree`))
+
+.. rst-class:: capnp-method
+
+buildSimple: (points: :doc:`/_capnp/data/Float64Tensor`, leafSize: UInt32 = 1) -> (ref : :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/index/KDTree`))
+
+.. rst-class:: capnp-method
+
+sample: (ref: :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/index/KDTree`), scale: Float64 = 0) -> (points : :doc:`/_capnp/data/Float64Tensor`)
+
+
+Nested Structs
+--------------
+
+.. toctree::
+   :maxdepth: 1
+
+   KDTreeService/Chunk
+

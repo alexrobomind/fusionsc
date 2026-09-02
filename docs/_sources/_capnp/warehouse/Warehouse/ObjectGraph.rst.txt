@@ -1,0 +1,13 @@
+Warehouse.ObjectGraph
+=====================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/warehouse/index`
+Parent: :doc:`/_capnp/warehouse/Warehouse`
+
+Fields
+------
+
+- objects - List(List(Object))
+

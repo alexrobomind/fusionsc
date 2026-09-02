@@ -1,0 +1,14 @@
+Request
+=======
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/networking/index`
+
+Fields
+------
+
+- method - Text
+
+- url - Text
+

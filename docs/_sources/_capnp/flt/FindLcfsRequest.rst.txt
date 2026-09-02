@@ -1,0 +1,36 @@
+FindLcfsRequest
+===============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+
+Fields
+------
+
+- p1 - List(Float64)
+
+- p2 - List(Float64)
+
+- tolerance - Float64 = 0.001
+
+- nScan - UInt32 = 8
+
+- distanceLimit - Float64
+
+- stepSize - Float64 = 0.001
+
+- field - :doc:`/_capnp/magnetics/ComputedField`
+
+- geometry - :doc:`/_capnp/geometry/IndexedGeometry`
+
+- mapping - :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/flt/ReversibleFieldlineMapping`)
+
+- geometryMapping - :doc:`/_capnp/flt/GeometryMapping`
+
+- stepSizeControl - union
+
+  - fixed - Void
+
+  - adaptive - :doc:`/_capnp/flt/FLTRequest`.AdaptiveStepControl
+

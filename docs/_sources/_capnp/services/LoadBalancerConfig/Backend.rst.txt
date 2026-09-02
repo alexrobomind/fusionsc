@@ -1,0 +1,19 @@
+LoadBalancerConfig.Backend
+==========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/services/index`
+Parent: :doc:`/_capnp/services/LoadBalancerConfig`
+
+Fields
+------
+
+- url - Text
+
+- name - Text
+
+- persistent - Bool = false
+
+- compressed - Bool = true
+

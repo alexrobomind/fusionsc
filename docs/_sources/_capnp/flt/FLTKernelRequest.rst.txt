@@ -1,0 +1,12 @@
+FLTKernelRequest
+================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+
+Fields
+------
+
+- serviceRequest - :doc:`/_capnp/flt/FLTRequest`
+

@@ -1,0 +1,14 @@
+Chunk
+=====
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/index/index`
+
+Fields
+------
+
+- boxes - :doc:`/_capnp/data/Float64Tensor`
+
+- keys - List(UInt64)
+

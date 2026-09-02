@@ -1,0 +1,26 @@
+VmecDriver
+==========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/vmec/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+run: (:doc:`/_capnp/vmec/VmecRequest`) -> :doc:`/_capnp/vmec/VmecResponse`
+
+.. rst-class:: capnp-method
+
+computePhiEdge: (field: :doc:`/_capnp/magnetics/ComputedField`, surface: :doc:`/_capnp/magnetics/FourierSurfaces`) -> (phiEdge : Float64)
+
+.. rst-class:: capnp-method
+
+computePositions: (surfaces: :doc:`/_capnp/magnetics/FourierSurfaces`, sPhiTheta: FTensor, sValues: List(Float64)) -> (phiZR : FTensor)
+
+.. rst-class:: capnp-method
+
+invertPositions: (surfaces: :doc:`/_capnp/magnetics/FourierSurfaces`, phiZR: FTensor, sValues: List(Float64)) -> (sPhiTheta : FTensor)
+

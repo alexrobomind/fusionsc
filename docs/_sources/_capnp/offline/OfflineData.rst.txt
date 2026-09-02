@@ -1,0 +1,16 @@
+OfflineData
+===========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/offline/index`
+
+Fields
+------
+
+- coils - List(Mapping(:doc:`/_capnp/magnetics/Filament`))
+
+- fields - List(Mapping(:doc:`/_capnp/magnetics/MagneticField`))
+
+- geometries - List(Mapping(:doc:`/_capnp/geometry/Geometry`))
+

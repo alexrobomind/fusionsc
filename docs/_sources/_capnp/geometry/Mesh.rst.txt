@@ -1,0 +1,28 @@
+Mesh
+====
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+
+Fields
+------
+
+- vertices - :doc:`/_capnp/data/Float64Tensor`
+
+  2D buffer of vertices. First dimension is vertex count, second is dimension.
+
+- indices - List(UInt32)
+
+  Consecutive list of indices into the vertex buffer making up the polygons
+
+- anonymous union - union
+
+  - polyMesh - List(UInt32)
+
+    A buffer of length n\_polys+1, where the i-th polygon spans the range [ polyMesh[i], polyMesh[i+1] [ of the index buffer.
+
+  - triMesh - Void
+
+    Equivalent to polyMesh = [0, 3, 6, 9, ..., indices.size()]. Only valid if indices has a length which is multiple of 3
+

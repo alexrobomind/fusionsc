@@ -1,0 +1,24 @@
+Receiver
+========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/data/index`
+
+[DataRef]
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+begin: (numBytes: UInt64) -> ()
+
+.. rst-class:: capnp-method
+
+receive: (data: Data) -> stream
+
+.. rst-class:: capnp-method
+
+done: () -> ()
+

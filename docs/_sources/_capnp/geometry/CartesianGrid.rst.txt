@@ -1,0 +1,28 @@
+CartesianGrid
+=============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+
+Fields
+------
+
+- xMin - Float64
+
+- xMax - Float64
+
+- yMin - Float64
+
+- yMax - Float64
+
+- zMin - Float64
+
+- zMax - Float64
+
+- nX - UInt32
+
+- nY - UInt32
+
+- nZ - UInt32
+

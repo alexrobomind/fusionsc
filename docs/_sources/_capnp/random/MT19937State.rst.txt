@@ -1,0 +1,14 @@
+MT19937State
+============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/random/index`
+
+Fields
+------
+
+- index - UInt16
+
+- vector - List(UInt32)
+

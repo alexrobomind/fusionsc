@@ -1,0 +1,36 @@
+﻿fusionsc.kj.Array
+=================
+
+.. currentmodule:: fusionsc.kj
+
+.. autoclass:: Array
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~Array.__init__
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: Array.__init__
+
+
+
+
+

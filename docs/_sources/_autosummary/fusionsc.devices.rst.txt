@@ -1,0 +1,42 @@
+fusionsc.devices
+================
+
+.. automodule:: fusionsc.devices
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Modules
+
+.. autosummary::
+	:toctree:
+	:recursive:
+	:template: summary-module.rst
+
+
+	hsx
+
+
+	jtext
+
+
+	w7x
+
+

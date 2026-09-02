@@ -1,0 +1,225 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>&lt;no title&gt; &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/index.html">Usage examples (How To …)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference.html">Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cpp/index.html">C++ Library Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../_capnp/index.html">Cap’n’Proto API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">&lt;no title&gt;</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/showcase/TraceMPMToDivertor.ipynb.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">fusionsc</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">fsc</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fusionsc.devices</span><span class="w"> </span><span class="kn">import</span> <span class="n">w7x</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">geo</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">op21Geometry</span><span class="p">()</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">w7x</span><span class="o">.</span><span class="n">defaultGeometryGrid</span><span class="p">())</span>
+<span class="n">field</span> <span class="o">=</span> <span class="n">w7x</span><span class="o">.</span><span class="n">standard</span><span class="p">()</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">w7x</span><span class="o">.</span><span class="n">defaultGrid</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1">#mapping = w7x.computeMapping(field, toroidalSymmetry = 5).mapGeometry(geo.triangulate(0.02))</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">phi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="mf">200.8</span><span class="p">)</span>
+
+<span class="n">startR</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">5.5</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">150</span><span class="p">)</span>
+<span class="n">startZ</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mf">0.2</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.15</span><span class="p">,</span> <span class="mi">50</span><span class="p">)</span>
+
+<span class="n">startR</span><span class="p">,</span> <span class="n">startZ</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">startR</span><span class="p">,</span> <span class="n">startZ</span><span class="p">,</span> <span class="n">indexing</span> <span class="o">=</span> <span class="s2">&quot;ij&quot;</span><span class="p">)</span>
+
+<span class="n">x</span> <span class="o">=</span> <span class="n">startR</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">phi</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">startR</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phi</span><span class="p">)</span>
+<span class="n">z</span> <span class="o">=</span> <span class="n">startZ</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">traceResult</span> <span class="o">=</span> <span class="n">fsc</span><span class="o">.</span><span class="n">flt</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">],</span>
+    <span class="n">field</span><span class="p">,</span>
+    <span class="n">geometry</span> <span class="o">=</span> <span class="n">geo</span><span class="p">,</span>
+    <span class="c1">#mapping = mapping, stepSize = 13,</span>
+    <span class="n">minStepSize</span> <span class="o">=</span> <span class="mf">0.001</span><span class="p">,</span> <span class="n">maxStepSize</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">targetError</span> <span class="o">=</span> <span class="mf">1e-3</span><span class="p">,</span>
+    
+    <span class="n">collisionLimit</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">distanceLimit</span> <span class="o">=</span> <span class="mf">2e3</span><span class="p">,</span>
+
+    <span class="n">direction</span> <span class="o">=</span> <span class="s2">&quot;cw&quot;</span> <span class="c1"># Possible values: ccw, cw, forward (field direction), backward (against field direction)</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+<span class="c1"># This array has the same shape as the XYZ array you put in</span>
+<span class="c1"># as points</span>
+
+<span class="c1"># You can put in arrays of whatever dimensionality you want</span>
+<span class="c1"># except that on input the first dimension has to be 3 (X, Y, Z)</span>
+<span class="c1"># and on output you get the dimensions X, Y, Z, connection length</span>
+
+<span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">conLen</span> <span class="o">=</span> <span class="n">traceResult</span><span class="p">[</span><span class="s2">&quot;endPoints&quot;</span><span class="p">]</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">conLen</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">origin</span> <span class="o">=</span> <span class="s2">&quot;lower&quot;</span><span class="p">,</span> <span class="n">extent</span> <span class="o">=</span> <span class="p">[</span><span class="n">startR</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">startR</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="n">startZ</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">startZ</span><span class="o">.</span><span class="n">max</span><span class="p">()])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s2">&quot;R&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">&quot;Z&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Text(0, 0.5, &#39;Z&#39;)
+</pre></div>
+</div>
+<img alt="../_images/87d5e174e456ef01256d11f9cd987905479917189d45ebd7783c7d8247074e9c.png" src="../_images/87d5e174e456ef01256d11f9cd987905479917189d45ebd7783c7d8247074e9c.png" />
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pyvista</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pv</span>
+
+<span class="c1"># Filter field lines by whether they stopped due to hitting a geometry</span>
+<span class="n">mask</span> <span class="o">=</span> <span class="n">traceResult</span><span class="p">[</span><span class="s2">&quot;stopReasons&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;collisionLimit&quot;</span>
+
+<span class="n">xMasked</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+<span class="n">yMasked</span> <span class="o">=</span> <span class="n">y</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+<span class="n">zMasked</span> <span class="o">=</span> <span class="n">z</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+
+<span class="n">pl</span> <span class="o">=</span> <span class="n">pv</span><span class="o">.</span><span class="n">Plotter</span><span class="p">()</span>
+<span class="n">pl</span><span class="o">.</span><span class="n">add_points</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([</span><span class="n">xMasked</span><span class="p">,</span> <span class="n">yMasked</span><span class="p">,</span> <span class="n">zMasked</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">([</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+<span class="n">pl</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>C:\Users\Knieps\AppData\Local\Python\pythoncore-3.13-64\Lib\site-packages\pyvista\jupyter\notebook.py:36: UserWarning: Failed to use notebook backend: 
+
+No module named &#39;trame&#39;
+
+Falling back to a static output.
+  warnings.warn(
+</pre></div>
+</div>
+<img alt="../_images/c00fa398a4aa3b4311bc4586a12c3774e3af24a26f2478a3ac8f3cfc1ef987fd.png" src="../_images/c00fa398a4aa3b4311bc4586a12c3774e3af24a26f2478a3ac8f3cfc1ef987fd.png" />
+</div>
+</div>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

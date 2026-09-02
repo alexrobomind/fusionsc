@@ -1,0 +1,21 @@
+FrozenFolder
+============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/warehouse/index`
+
+Fields
+------
+
+- entries - List(:doc:`/_capnp/warehouse/Entry`)
+
+
+Nested Structs
+--------------
+
+.. toctree::
+   :maxdepth: 1
+
+   FrozenFolder/Entry
+

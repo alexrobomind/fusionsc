@@ -1,0 +1,23 @@
+ObjectGraph
+===========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/warehouse/index`
+
+Fields
+------
+
+- objects - List(List(:doc:`/_capnp/warehouse/ObjectGraph/Object`))
+
+
+Nested Structs
+--------------
+
+.. toctree::
+   :maxdepth: 1
+
+   ObjectGraph/ObjectRef
+   ObjectGraph/FolderEntry
+   ObjectGraph/Object
+

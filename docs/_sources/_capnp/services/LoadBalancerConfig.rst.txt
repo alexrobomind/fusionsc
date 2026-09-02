@@ -1,0 +1,18 @@
+LoadBalancerConfig
+==================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/services/index`
+
+Fields
+------
+
+- rules - List(Rule)
+
+- namedEndpoints - List(NamedEndpoint)
+
+- heartbeatIntervalSeconds - UInt64 = 60
+
+- reconnectIntervalSeconds - UInt64 = 60
+

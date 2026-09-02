@@ -1,0 +1,18 @@
+TagValue
+========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+
+Fields
+------
+
+- anonymous union - union
+
+  - notSet - Void
+
+  - uInt64 - UInt64
+
+  - text - Text
+

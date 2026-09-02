@@ -1,0 +1,38 @@
+﻿fusionsc.capnp.CapabilityServer
+===============================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: CapabilityServer
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~CapabilityServer.__init__
+  ~CapabilityServer.asClient
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: CapabilityServer.__init__
+.. automethod:: CapabilityServer.asClient
+
+
+
+
+

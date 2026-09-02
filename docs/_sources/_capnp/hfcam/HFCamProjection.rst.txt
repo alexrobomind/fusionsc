@@ -1,0 +1,14 @@
+HFCamProjection
+===============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/hfcam/index`
+
+Fields
+------
+
+- width - UInt32
+
+- height - UInt32
+

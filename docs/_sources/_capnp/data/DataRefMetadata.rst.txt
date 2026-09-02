@@ -1,0 +1,24 @@
+DataRefMetadata
+===============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/data/index`
+
+Fields
+------
+
+- id - Data
+
+- capTableSize - UInt64
+
+- dataSize - UInt64
+
+- dataHash - Data
+
+- format - union
+
+  - unknown - Void
+
+  - raw - Void
+

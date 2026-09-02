@@ -1,0 +1,17 @@
+ArchiveInfo.ObjectInfo
+======================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/data-archive/index`
+Parent: :doc:`/_capnp/data-archive/ArchiveInfo`
+
+Fields
+------
+
+- metadata - :doc:`/_capnp/data/DataRefMetadata`
+
+- dataId - UInt64
+
+- refs - List(:doc:`/_capnp/data-archive/ArchiveInfo/RefInfo`)
+

@@ -1,0 +1,10 @@
+jobs.capnp
+==========
+
+Interfaces
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   Job

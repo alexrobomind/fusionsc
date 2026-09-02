@@ -1,0 +1,42 @@
+﻿fusionsc.capnp.DataReaderOrBuilder
+==================================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: DataReaderOrBuilder
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~DataReaderOrBuilder.__init__
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~DataReaderOrBuilder.type_
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: DataReaderOrBuilder.__init__
+
+
+
+
+

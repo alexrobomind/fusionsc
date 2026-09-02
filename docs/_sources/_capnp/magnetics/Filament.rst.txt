@@ -1,0 +1,40 @@
+Filament
+========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/magnetics/index`
+
+Fields
+------
+
+- anonymous union - union
+
+  - inline - :doc:`/_capnp/data/Float64Tensor`
+
+  - ref - :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/magnetics/Filament`)
+
+  - nested - :doc:`/_capnp/magnetics/Filament`
+
+  - sum - List(:doc:`/_capnp/magnetics/Filament`)
+
+  - w7x - group
+
+    - coilsDb - UInt64
+
+  - jtext - group
+
+    - islandCoil - UInt8
+
+  - hsx - union
+
+    - mainCoil - UInt8
+
+    - auxCoil - UInt8
+
+  - custom - group
+
+    - device - Text
+
+    - name - Text
+

@@ -1,0 +1,51 @@
+C++ API Usage Examples
+======================
+
+All types are in the ``fsc`` namespace.
+
+Structs
+-------
+
+Creating ``ReversibleFieldlineMapping``:
+
+.. code-block:: c++
+
+    fsc::ReversibleFieldlineMapping message;
+    message.set_r(...);
+
+Creating ``Section``:
+
+.. code-block:: c++
+
+    fsc::Section message;
+    message.set_r(...);
+
+Creating ``Inverse``:
+
+.. code-block:: c++
+
+    fsc::Inverse message;
+    message.set_rMin(...);
+
+Interfaces
+----------
+
+Using ``FLT``:
+
+.. code-block:: c++
+
+    // Get interface reference
+    auto interface = connection.get<fsc::FLT>();
+
+    // Call method: trace
+    auto result = interface.trace().wait();
+
+Using ``Mapper``:
+
+.. code-block:: c++
+
+    // Get interface reference
+    auto interface = connection.get<fsc::Mapper>();
+
+    // Call method: computeRFLM
+    auto result = interface.computeRFLM().wait();

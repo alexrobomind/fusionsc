@@ -1,0 +1,59 @@
+fusionsc.flt.MappingWithGeometry
+================================
+
+.. currentmodule:: fusionsc.flt
+
+.. autoclass:: MappingWithGeometry
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~MappingWithGeometry.__init__
+  ~MappingWithGeometry.cache
+  ~MappingWithGeometry.getSection
+  ~MappingWithGeometry.graph
+  ~MappingWithGeometry.load
+  ~MappingWithGeometry.ptree
+  ~MappingWithGeometry.save
+  ~MappingWithGeometry.toYaml
+  ~MappingWithGeometry.upload
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~MappingWithGeometry.data
+	~MappingWithGeometry.type
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: MappingWithGeometry.__init__
+.. automethod:: MappingWithGeometry.cache
+.. automethod:: MappingWithGeometry.getSection
+.. automethod:: MappingWithGeometry.graph
+.. automethod:: MappingWithGeometry.load
+.. automethod:: MappingWithGeometry.ptree
+.. automethod:: MappingWithGeometry.save
+.. automethod:: MappingWithGeometry.toYaml
+.. automethod:: MappingWithGeometry.upload
+
+
+
+
+

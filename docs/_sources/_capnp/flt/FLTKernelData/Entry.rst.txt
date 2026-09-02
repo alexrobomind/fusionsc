@@ -1,0 +1,17 @@
+FLTKernelData.Entry
+===================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+Parent: :doc:`/_capnp/flt/FLTKernelData`
+
+Fields
+------
+
+- stopReason - :doc:`/_capnp/flt/FLTStopReason`
+
+- state - :doc:`/_capnp/flt/FLTKernelState`
+
+- events - List(:doc:`/_capnp/flt/FLTKernelEvent`)
+

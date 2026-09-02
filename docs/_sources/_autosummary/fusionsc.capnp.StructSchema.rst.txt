@@ -1,0 +1,73 @@
+﻿fusionsc.capnp.StructSchema
+===========================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: StructSchema
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~StructSchema.__init__
+  ~StructSchema.listOf
+  ~StructSchema.newMessage
+  ~StructSchema.toProto
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~StructSchema.Builder
+	~StructSchema.Pipeline
+	~StructSchema.Reader
+	~StructSchema.ReaderOrBuilder
+	~StructSchema.fields
+	~StructSchema.id_
+	~StructSchema.isGroup
+	~StructSchema.jsonSchema
+	~StructSchema.nonUnionFields
+	~StructSchema.unionFields
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: StructSchema.__init__
+.. automethod:: StructSchema.listOf
+.. automethod:: StructSchema.newMessage
+.. automethod:: StructSchema.toProto
+
+
+
+
+
+
+.. autosummary::
+  :recursive:
+  :template: summary-accessor.rst
+  :toctree:
+  
+  StructSchema.Builder
+  StructSchema.Reader
+  StructSchema.Pipeline
+ 
+.. toctree::
+   fusionsc.capnp.StructSchema.Builder
+   fusionsc.capnp.StructSchema.Reader
+   fusionsc.capnp.StructSchema.Pipeline

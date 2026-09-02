@@ -1,0 +1,98 @@
+Geometry
+========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+
+Fields
+------
+
+- tags - List(:doc:`/_capnp/geometry/Tag`)
+
+- anonymous union - union
+
+  - combined - List(:doc:`/_capnp/geometry/Geometry`)
+
+  - transformed - :doc:`/_capnp/geometry/Transformed`\ (:doc:`/_capnp/geometry/Geometry`)
+
+  - ref - :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/geometry/Geometry`)
+
+  - nested - :doc:`/_capnp/geometry/Geometry`
+
+  - mesh - :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/geometry/Mesh`)
+
+  - merged - :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/geometry/MergedGeometry`)
+
+  - indexed - :doc:`/_capnp/geometry/IndexedGeometry`
+
+  - wrapToroidally - group
+
+    - r - List(Float64)
+
+    - z - List(Float64)
+
+    - nPhi - UInt32
+
+    - anonymous union - union
+
+      - fullTorus - Void
+
+      - phiRange - group
+
+        - phiStart - :doc:`/_capnp/geometry/Angle`
+
+        - phiEnd - :doc:`/_capnp/geometry/Angle`
+
+        - close - Bool = true
+
+  - filter - group
+
+    - filter - :doc:`/_capnp/geometry/GeometryFilter`
+
+    - geometry - :doc:`/_capnp/geometry/Geometry`
+
+  - quadMesh - group
+
+    - vertices - :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/data/Float64Tensor`)
+
+    - wrapU - Bool
+
+    - wrapV - Bool
+
+  - w7x - union
+
+    - componentsDbMesh - UInt64
+
+    - componentsDbAssembly - UInt64
+
+    - op21HeatShield - Void
+
+    - op21Baffles - Void
+
+    - op21Divertor - Void
+
+  - jtext - union
+
+    - target - Void
+
+    - hfsLimiter - Void
+
+    - firstWall - Void
+
+    - lfsLimiter - Float64
+
+    - topLimiter - Float64
+
+    - bottomLimiter - Float64
+
+  - hsx - group
+
+    - firstWall - Void
+
+  - custom - group
+
+    - device - Text
+
+    - name - Text
+

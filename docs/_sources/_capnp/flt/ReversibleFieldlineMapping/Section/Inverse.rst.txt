@@ -1,0 +1,25 @@
+ReversibleFieldlineMapping.Section.Inverse
+==========================================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+Parent: :doc:`/_capnp/flt/ReversibleFieldlineMapping/Section`
+
+Fields
+------
+
+- rMin - Float64
+
+- rMax - Float64
+
+- zMin - Float64
+
+- zMax - Float64
+
+- u - :doc:`/_capnp/data/Float64Tensor`
+
+  Tensors of shape [nPhi, nZ, nR] containing U and V values on a slab grid with phi planes matching the section.
+
+- v - :doc:`/_capnp/data/Float64Tensor`
+

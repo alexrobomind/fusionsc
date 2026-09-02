@@ -1,0 +1,26 @@
+data.capnp
+==========
+
+Structs
+-------
+
+.. toctree::
+   :maxdepth: 1
+
+   DataRefMetadata
+   Float64Tensor
+   Float32Tensor
+   Int64Tensor
+   UInt64Tensor
+   Int32Tensor
+   UInt32Tensor
+   ShapedList
+
+Interfaces
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   DataRef
+   DataService

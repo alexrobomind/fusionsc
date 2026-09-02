@@ -1,0 +1,13 @@
+FieldCalculator.EvalResult
+==========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/magnetics/index`
+Parent: :doc:`/_capnp/magnetics/FieldCalculator`
+
+Fields
+------
+
+- values - :doc:`/_capnp/data/Float64Tensor`
+

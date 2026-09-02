@@ -1,0 +1,38 @@
+RFLMRequest
+===========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+
+Fields
+------
+
+- mappingPlanes - List(Float64)
+
+- gridR - List(Float64)
+
+- gridZ - List(Float64)
+
+- numPlanes - UInt32 = 20
+
+- numPaddingPlanes - UInt32 = 1
+
+- field - :doc:`/_capnp/magnetics/ComputedField`
+
+- distanceLimit - Float64 = 1e3
+
+- stepSize - Float64 = 0.001
+
+- u0 - List(Float64) = [0.5]
+
+- v0 - List(Float64) = [0.5]
+
+- nSym - UInt64 = 1
+
+- stepSizeControl - union
+
+  - fixed - Void
+
+  - adaptive - :doc:`/_capnp/flt/FLTRequest`.AdaptiveStepControl
+

@@ -1,0 +1,51 @@
+﻿fusionsc.geometry
+=================
+
+.. automodule:: fusionsc.geometry
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autosummary::
+
+	asTagValue
+	cuboid
+	fromTagValue
+	geometryLib
+	setDefaultGrid
+
+
+
+
+
+.. rubric:: Classes
+
+.. autosummary::
+  :toctree:
+  :template: summary-class.rst
+
+    Geometry
+
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autofunction:: asTagValue
+.. autofunction:: cuboid
+.. autofunction:: fromTagValue
+.. autofunction:: geometryLib
+.. autofunction:: setDefaultGrid
+
+
+
+

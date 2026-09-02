@@ -1,0 +1,50 @@
+FLTKernelEvent
+==============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+
+Fields
+------
+
+- x - Float64
+
+- y - Float64
+
+- z - Float64
+
+- step - UInt32
+
+- distance - Float64
+
+- anonymous union - union
+
+  - notSet - Void
+
+  - newTurn - UInt32
+
+  - phiPlaneIntersection - group
+
+    - planeNo - UInt32
+
+  - geometryHit - group
+
+    - meshIndex - UInt64
+
+    - elementIndex - UInt64
+
+    - geometrySource - union
+
+      - baseGeometry - Void
+
+      - mappingSection - UInt32
+
+  - record - group
+
+    - fieldStrength - Float64
+
+  - fourierPoint - group
+
+    - phi - Float64
+

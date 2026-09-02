@@ -1,0 +1,166 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Python API Usage Examples &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/index.html">Usage examples (How To …)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference.html">Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cpp/index.html">C++ Library Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../_capnp/index.html">Cap’n’Proto API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Python API Usage Examples</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/test_output/flt_python.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="python-api-usage-examples">
+<h1>Python API Usage Examples<a class="headerlink" href="#python-api-usage-examples" title="Link to this heading"></a></h1>
+<p>All types are in the <code class="docutils literal notranslate"><span class="pre">fsc</span></code> module.</p>
+<section id="structs">
+<h2>Structs<a class="headerlink" href="#structs" title="Link to this heading"></a></h2>
+<p>Creating <code class="docutils literal notranslate"><span class="pre">ReversibleFieldlineMapping</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fsc.capnp</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReversibleFieldlineMapping</span>
+
+<span class="n">message</span> <span class="o">=</span> <span class="n">ReversibleFieldlineMapping</span><span class="p">()</span>
+<span class="n">message</span><span class="o">.</span><span class="n">r</span> <span class="o">=</span> <span class="o">...</span>  <span class="c1"># Data.Float64Tensor</span>
+</pre></div>
+</div>
+<p>Creating <code class="docutils literal notranslate"><span class="pre">Section</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fsc.capnp</span><span class="w"> </span><span class="kn">import</span> <span class="n">Section</span>
+
+<span class="n">message</span> <span class="o">=</span> <span class="n">Section</span><span class="p">()</span>
+<span class="n">message</span><span class="o">.</span><span class="n">r</span> <span class="o">=</span> <span class="o">...</span>  <span class="c1"># Data.Float64Tensor</span>
+</pre></div>
+</div>
+<p>Creating <code class="docutils literal notranslate"><span class="pre">Inverse</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fsc.capnp</span><span class="w"> </span><span class="kn">import</span> <span class="n">Inverse</span>
+
+<span class="n">message</span> <span class="o">=</span> <span class="n">Inverse</span><span class="p">()</span>
+<span class="n">message</span><span class="o">.</span><span class="n">rMin</span> <span class="o">=</span> <span class="o">...</span>  <span class="c1"># Float64</span>
+</pre></div>
+</div>
+</section>
+<section id="interfaces">
+<h2>Interfaces<a class="headerlink" href="#interfaces" title="Link to this heading"></a></h2>
+<p>Using <code class="docutils literal notranslate"><span class="pre">FLT</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">capnp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fsc.capnp</span><span class="w"> </span><span class="kn">import</span> <span class="n">FLT</span>
+
+<span class="c1"># Connect to service</span>
+<span class="n">connection</span> <span class="o">=</span> <span class="n">capnp</span><span class="o">.</span><span class="n">TwoPartyClient</span><span class="p">(</span><span class="s1">&#39;localhost:12345&#39;</span><span class="p">,</span> <span class="n">bootstrap</span><span class="o">=</span><span class="s1">&#39;...&#39;</span><span class="p">)</span>
+<span class="n">service</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">as_capability</span><span class="p">(</span><span class="n">FLT</span><span class="p">)</span>
+
+<span class="c1"># Call method: trace</span>
+<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">service</span><span class="o">.</span><span class="n">trace</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Using <code class="docutils literal notranslate"><span class="pre">Mapper</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">capnp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fsc.capnp</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapper</span>
+
+<span class="c1"># Connect to service</span>
+<span class="n">connection</span> <span class="o">=</span> <span class="n">capnp</span><span class="o">.</span><span class="n">TwoPartyClient</span><span class="p">(</span><span class="s1">&#39;localhost:12345&#39;</span><span class="p">,</span> <span class="n">bootstrap</span><span class="o">=</span><span class="s1">&#39;...&#39;</span><span class="p">)</span>
+<span class="n">service</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">as_capability</span><span class="p">(</span><span class="n">Mapper</span><span class="p">)</span>
+
+<span class="c1"># Call method: computeRFLM</span>
+<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">service</span><span class="o">.</span><span class="n">computeRFLM</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

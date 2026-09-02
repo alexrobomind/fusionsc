@@ -1,0 +1,15 @@
+Folder.Entry
+============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/warehouse/index`
+Parent: :doc:`/_capnp/warehouse/Folder`
+
+Fields
+------
+
+- name - Text
+
+- value - :doc:`/_capnp/warehouse/StoredObject`
+

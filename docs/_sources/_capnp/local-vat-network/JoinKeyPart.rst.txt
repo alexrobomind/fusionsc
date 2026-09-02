@@ -1,0 +1,16 @@
+JoinKeyPart
+===========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/local-vat-network/index`
+
+Fields
+------
+
+- secretPiece - Data
+
+- secretHash - Data
+
+- numPieces - UInt64
+

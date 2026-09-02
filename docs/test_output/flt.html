@@ -1,0 +1,531 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>flt.capnp &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/index.html">Usage examples (How To …)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference.html">Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cpp/index.html">C++ Library Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../_capnp/index.html">Cap’n’Proto API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">flt.capnp</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/test_output/flt.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="flt-capnp">
+<h1>flt.capnp<a class="headerlink" href="#flt-capnp" title="Link to this heading"></a></h1>
+<p>Namespace: <code class="docutils literal notranslate"><span class="pre">fsc</span></code></p>
+<section id="schema-information">
+<h2>Schema Information<a class="headerlink" href="#schema-information" title="Link to this heading"></a></h2>
+<p>Imports:
+- Cxx: /capnp/c++.capnp
+- Java: java.capnp
+- Magnetics: magnetics.capnp
+- Geometry: geometry.capnp
+- Data: data.capnp
+- Index: index.capnp
+- Random: random.capnp</p>
+<section id="reversiblefieldlinemapping">
+<h3>ReversibleFieldlineMapping<a class="headerlink" href="#reversiblefieldlinemapping" title="Link to this heading"></a></h3>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">r</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">z</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">traceLen</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phiStart</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phiEnd</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">u0</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">v0</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rMin</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rMax</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">zMin</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">zMax</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">u</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">v</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">inverse</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">ReversibleFieldlineMapping.Section.Inverse</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">surfaces</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sections</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(ReversibleFieldlineMapping.Section)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nPad</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nSym</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt64</span></code>) = 1</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">u</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">v</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">section</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phi</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">lenOffset</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+</ul>
+</section>
+</section>
+<section id="reversiblefieldlinemapping-section">
+<h2>ReversibleFieldlineMapping.Section<a class="headerlink" href="#reversiblefieldlinemapping-section" title="Link to this heading"></a></h2>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">r</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">z</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">traceLen</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phiStart</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phiEnd</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">u0</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">v0</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rMin</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rMax</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">zMin</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">zMax</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">u</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">v</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">inverse</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">ReversibleFieldlineMapping.Section.Inverse</span></code>)</p></li>
+</ul>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">rMin</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rMax</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">zMin</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">zMax</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">u</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">v</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+</ul>
+</section>
+<section id="reversiblefieldlinemapping-state">
+<h2>ReversibleFieldlineMapping.State<a class="headerlink" href="#reversiblefieldlinemapping-state" title="Link to this heading"></a></h2>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">u</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">v</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">section</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phi</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">lenOffset</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+</ul>
+<section id="geometrymapping">
+<h3>GeometryMapping<a class="headerlink" href="#geometrymapping" title="Link to this heading"></a></h3>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">geometry</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Geometry.MergedGeometry</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">grid</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Geometry.CartesianGrid</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">index</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Geometry.IndexedGeometry.IndexData</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phi1</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phi2</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sections</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(GeometryMapping.SectionData)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nSym</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt64</span></code>) = 1</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">base</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.DataRef(ReversibleFieldlineMapping)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">data</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.DataRef(GeometryMapping.MappingData)</span></code>)</p></li>
+</ul>
+</section>
+</section>
+<section id="geometrymapping-sectiondata">
+<h2>GeometryMapping.SectionData<a class="headerlink" href="#geometrymapping-sectiondata" title="Link to this heading"></a></h2>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">geometry</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Geometry.MergedGeometry</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">grid</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Geometry.CartesianGrid</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">index</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Geometry.IndexedGeometry.IndexData</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phi1</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phi2</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+</ul>
+</section>
+<section id="geometrymapping-mappingdata">
+<h2>GeometryMapping.MappingData<a class="headerlink" href="#geometrymapping-mappingdata" title="Link to this heading"></a></h2>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">sections</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(GeometryMapping.SectionData)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nSym</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt64</span></code>) = 1</p></li>
+</ul>
+<section id="fltrequest">
+<h3>FLTRequest<a class="headerlink" href="#fltrequest" title="Link to this heading"></a></h3>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">min</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = 0</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">max</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = inf</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">targetError</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = 1e-6</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">relativeTolerance</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = 1</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">step</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Void</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">integratedOver</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = 1e4</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">startPoints</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">field</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Magnetics.ComputedField</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">geometry</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Geometry.IndexedGeometry</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">planes</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Geometry.Plane)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">planeIntersectionRecordMode</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">PlaneIntersectionRecordMode</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">turnLimit</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">distanceLimit</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stepLimit</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">collisionLimit</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">allowReversal</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Bool</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ignoreCollisionsBefore</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stepSize</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = 0.001</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fixed</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Void</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adaptive</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">FLTRequest.AdaptiveStepControl</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">meanFreePath</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">meanFreePathGrowth</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">convectiveVelocity</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">diffusionCoefficient</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">noDisplacement</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Void</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">isotropicDiffusionCoefficient</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rzDiffusionCoefficient</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rngSeed</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mapping</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.DataRef(ReversibleFieldlineMapping)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">geometryMapping</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">GeometryMapping</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">forward</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Bool</span></code>) = true</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">recordEvery</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">noTask</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Void</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">unwrapEvery</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">r</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">z</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">r</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">z</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">islandM</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>) = 1</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">unusedRAxis</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">unusedZAxis</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">iota</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nMax</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>) = 1</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mMax</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>) = 0</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">recordEvery</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>) = 1</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">modeAliasingThreshold</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = 0.001</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stellaratorSymmetric</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Bool</span></code>) = false</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">islandM</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>) = 1</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">field</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Void</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ccw</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Void</span></code>)</p></li>
+</ul>
+</section>
+</section>
+<section id="fltrequest-adaptivestepcontrol">
+<h2>FLTRequest.AdaptiveStepControl<a class="headerlink" href="#fltrequest-adaptivestepcontrol" title="Link to this heading"></a></h2>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">min</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = 0</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">max</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = inf</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">targetError</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = 1e-6</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">relativeTolerance</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = 1</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">step</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Void</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">integratedOver</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = 1e4</p></li>
+</ul>
+<section id="fltresponse">
+<h3>FLTResponse<a class="headerlink" href="#fltresponse" title="Link to this heading"></a></h3>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">nTurns</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">poincareHits</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">endPoints</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tagNames</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Text)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">endTags</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.ShapedList(List(Geometry.TagValue))</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stopReasons</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.ShapedList(List(FLTStopReason))</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fieldLines</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fieldStrengths</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">normals</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">noTask</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Void</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">iotas</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">surfaces</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Magnetics.FourierSurfaces</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">theta0</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mPol</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nTor</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">numSteps</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.UInt64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rngSeed</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt64</span></code>)</p></li>
+</ul>
+</section>
+<section id="findaxisrequest">
+<h3>FindAxisRequest<a class="headerlink" href="#findaxisrequest" title="Link to this heading"></a></h3>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">startPoint</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">field</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Magnetics.ComputedField</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stepSize</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = 0.001</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nTurns</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>) = 10</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nIterations</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>) = 10</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nPhi</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt64</span></code>) = 20</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mapping</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.DataRef(ReversibleFieldlineMapping)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">geometryMapping</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">GeometryMapping</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fixed</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Void</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adaptive</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">FLTRequest.AdaptiveStepControl</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">islandM</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>) = 1</p></li>
+</ul>
+</section>
+<section id="findlcfsrequest">
+<h3>FindLcfsRequest<a class="headerlink" href="#findlcfsrequest" title="Link to this heading"></a></h3>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">p1</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">p2</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tolerance</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = 0.001</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nScan</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>) = 8</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">distanceLimit</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stepSize</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = 0.001</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">field</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Magnetics.ComputedField</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">geometry</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Geometry.IndexedGeometry</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mapping</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.DataRef(ReversibleFieldlineMapping)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">geometryMapping</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">GeometryMapping</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fixed</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Void</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adaptive</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">FLTRequest.AdaptiveStepControl</span></code>)</p></li>
+</ul>
+</section>
+<section id="rflmrequest">
+<h3>RFLMRequest<a class="headerlink" href="#rflmrequest" title="Link to this heading"></a></h3>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">mappingPlanes</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">gridR</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">gridZ</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">numPlanes</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>) = 20</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">numPaddingPlanes</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>) = 1</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">field</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Magnetics.ComputedField</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">distanceLimit</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = 1e3</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stepSize</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>) = 0.001</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">u0</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>) = [0.5]</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">v0</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>) = [0.5]</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nSym</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt64</span></code>) = 1</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fixed</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Void</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adaptive</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">FLTRequest.AdaptiveStepControl</span></code>)</p></li>
+</ul>
+</section>
+<section id="fltconfig">
+<h3>FLTConfig<a class="headerlink" href="#fltconfig" title="Link to this heading"></a></h3>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">minSize</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>) = 100</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">maxSize</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>) = 2500</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">targetTotalMb</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt64</span></code>) = 500</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">defaultStepLimit</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">maxStepLimit</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt64</span></code>)</p></li>
+</ul>
+</section>
+<section id="fltkernelstate">
+<h3>FLTKernelState<a class="headerlink" href="#fltkernelstate" title="Link to this heading"></a></h3>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">position</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">numSteps</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">distance</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">turnCount</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phi0</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">eventCount</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">collisionCount</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">forward</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Bool</span></code>) = true</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nextDisplacementAt</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">displacementCount</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rngState</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Random.MT19937State</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phi</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">theta</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stepSize</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+</ul>
+</section>
+<section id="fltkernelevent">
+<h3>FLTKernelEvent<a class="headerlink" href="#fltkernelevent" title="Link to this heading"></a></h3>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">x</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">y</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">z</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">step</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">distance</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">notSet</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Void</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">planeNo</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">newTurn</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">meshIndex</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">elementIndex</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">baseGeometry</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Void</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mappingSection</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt32</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fieldStrength</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phi</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Float64</span></code>)</p></li>
+</ul>
+</section>
+<section id="fltkerneldata">
+<h3>FLTKernelData<a class="headerlink" href="#fltkerneldata" title="Link to this heading"></a></h3>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">stopReason</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">FLTStopReason</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">state</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">FLTKernelState</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">events</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(FLTKernelEvent)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">data</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(FLTKernelData.Entry)</span></code>)</p></li>
+</ul>
+</section>
+</section>
+<section id="fltkerneldata-entry">
+<h2>FLTKernelData.Entry<a class="headerlink" href="#fltkerneldata-entry" title="Link to this heading"></a></h2>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">stopReason</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">FLTStopReason</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">state</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">FLTKernelState</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">events</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(FLTKernelEvent)</span></code>)</p></li>
+</ul>
+<section id="fltkernelrequest">
+<h3>FLTKernelRequest<a class="headerlink" href="#fltkernelrequest" title="Link to this heading"></a></h3>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">serviceRequest</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">FLTRequest</span></code>)</p></li>
+</ul>
+</section>
+<section id="rflmkerneldata">
+<h3>RFLMKernelData<a class="headerlink" href="#rflmkerneldata" title="Link to this heading"></a></h3>
+<p><strong>Fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">states</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(ReversibleFieldlineMapping.State)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phiValues</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">reconstructionErrors</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">List(Float64)</span></code>)</p></li>
+</ul>
+</section>
+</section>
+<section id="interfaces">
+<h2>Interfaces<a class="headerlink" href="#interfaces" title="Link to this heading"></a></h2>
+</section>
+<section id="flt">
+<h2><code class="docutils literal notranslate"><span class="pre">FLT</span></code><a class="headerlink" href="#flt" title="Link to this heading"></a></h2>
+<p><strong>Methods:</strong></p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">trace()</span></code>
+- Returns: <code class="xref py py-class docutils literal notranslate"><span class="pre">FLTResponse</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">findAxis()</span></code>
+- Returns: <code class="xref py py-class docutils literal notranslate"><span class="pre">(pos</span> <span class="pre">:</span> <span class="pre">List(Float64),</span> <span class="pre">axis</span> <span class="pre">:</span> <span class="pre">Data.Float64Tensor,</span> <span class="pre">meanField</span> <span class="pre">:</span> <span class="pre">Float64)</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">findLcfs()</span></code>
+- Returns: <code class="xref py py-class docutils literal notranslate"><span class="pre">(pos</span> <span class="pre">:</span> <span class="pre">List(Float64))</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">findAxisBatch(points,</span> <span class="pre">request)</span></code>
+- Returns: <code class="xref py py-class docutils literal notranslate"><span class="pre">(pos</span> <span class="pre">:</span> <span class="pre">Data.Float64Tensor,</span> <span class="pre">axis</span> <span class="pre">:</span> <span class="pre">Data.Float64Tensor,</span> <span class="pre">meanField</span> <span class="pre">:</span> <span class="pre">Data.Float64Tensor)</span></code>
+- Parameters:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">points</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Data.Float64Tensor</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">request</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">FindAxisRequest</span></code>)</p></li>
+</ul>
+</div></blockquote>
+</li>
+</ul>
+</section>
+<section id="mapper">
+<h2><code class="docutils literal notranslate"><span class="pre">Mapper</span></code><a class="headerlink" href="#mapper" title="Link to this heading"></a></h2>
+<p><strong>Methods:</strong></p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">computeRFLM()</span></code>
+- Returns: <code class="xref py py-class docutils literal notranslate"><span class="pre">(mapping</span> <span class="pre">:</span> <span class="pre">Data.DataRef(ReversibleFieldlineMapping))</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">getSectionGeometry(mapping,</span> <span class="pre">section)</span></code>
+- Returns: <code class="xref py py-class docutils literal notranslate"><span class="pre">(geometry</span> <span class="pre">:</span> <span class="pre">Geometry.IndexedGeometry)</span></code>
+- Parameters:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">mapping</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">GeometryMapping</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">section</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UInt64</span></code>)</p></li>
+</ul>
+</div></blockquote>
+</li>
+</ul>
+</section>
+<section id="enums">
+<h2>Enums<a class="headerlink" href="#enums" title="Link to this heading"></a></h2>
+</section>
+<section id="fltstopreason">
+<h2><code class="docutils literal notranslate"><span class="pre">FLTStopReason</span></code><a class="headerlink" href="#fltstopreason" title="Link to this heading"></a></h2>
+<p>============================== Service interface ===================================</p>
+<p><strong>Values:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">unknown</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stepLimit</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">distanceLimit</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">turnLimit</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">eventBufferFull</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">outOfGrid</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nanEncountered</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">collisionLimit</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">couldNotStep</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fieldlineReversed</span></code></p></li>
+</ul>
+</section>
+<section id="planeintersectionrecordmode">
+<h2><code class="docutils literal notranslate"><span class="pre">PlaneIntersectionRecordMode</span></code><a class="headerlink" href="#planeintersectionrecordmode" title="Link to this heading"></a></h2>
+<p><strong>Values:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">lastInTurn</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">everyHit</span></code></p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

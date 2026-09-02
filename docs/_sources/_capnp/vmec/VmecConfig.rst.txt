@@ -1,0 +1,12 @@
+VmecConfig
+==========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/vmec/index`
+
+Fields
+------
+
+- command - Text = "xvmec2000"
+

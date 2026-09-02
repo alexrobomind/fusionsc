@@ -1,0 +1,21 @@
+ReversibleFieldlineMapping.State
+================================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+Parent: :doc:`/_capnp/flt/ReversibleFieldlineMapping`
+
+Fields
+------
+
+- u - Float64
+
+- v - Float64
+
+- section - UInt64
+
+- phi - Float64
+
+- lenOffset - Float64
+

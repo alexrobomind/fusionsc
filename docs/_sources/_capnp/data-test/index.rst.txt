@@ -1,0 +1,21 @@
+data-test.capnp
+===============
+
+Structs
+-------
+
+.. toctree::
+   :maxdepth: 1
+
+   DataHolder
+   DataRefHolder
+   TestStruct
+
+Interfaces
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   A
+   B

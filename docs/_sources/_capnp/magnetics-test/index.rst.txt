@@ -1,0 +1,2 @@
+magnetics-test.capnp
+====================

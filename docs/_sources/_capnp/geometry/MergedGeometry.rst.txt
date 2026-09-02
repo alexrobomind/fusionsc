@@ -1,0 +1,14 @@
+MergedGeometry
+==============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+
+Fields
+------
+
+- tagNames - List(Text)
+
+- entries - List(Entry)
+

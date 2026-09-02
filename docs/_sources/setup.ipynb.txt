@@ -1,0 +1,435 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "ef4d8194-b159-44ce-a523-be02cb1b0571",
+   "metadata": {
+    "tags": []
+   },
+   "source": [
+    "# Setting up FusionSC\n",
+    "\n",
+    "## Setting up component lookup (version 2.2 and above)\n",
+    "\n",
+    "While FusionSC can be used out of the box (`import fusionsc as fsc`), it doesn't bundle the part and coil geometries (partly due to size, partly to comply with data access policies). In order to run FusionSC with pre-defined geometries, the resolution subsystem needs to be hooked up with lookup tables / storage for these devices.\n",
+    "\n",
+    "The recommended way (available from version 2.2 onwards) is to use the user configuration file in \"~/.fusionsc.yaml\" (an alternative path can be specified by setting the FUSIONSC_CONFIG_PATH environment variable). The \"fusionsc-config\" command line (alternatively usable via \"python -m fusionsc.config\") can be used to manage this configuration file.\n",
+    "\n",
+    "### Wendelstein 7-X inside IPP network\n",
+    "\n",
+    "Use the \"ipp-hgw\" default profile, which will connect to a compute server and rely on the resolution database stored there.\n",
+    "\n",
+    "```\n",
+    "fusionsc-config default ipp-hgw\n",
+    "```\n",
+    "\n",
+    "### FZJ network\n",
+    "\n",
+    "Use the \"fzj\" default profile, which will connect to a compute server and rely on the resolution database stored there.\n",
+    "\n",
+    "```\n",
+    "fusionsc-config default fzj\n",
+    "```\n",
+    "\n",
+    "### J-TEXT\n",
+    "\n",
+    "Simplified J-TEXT geometries are bundled with FusionSC. No further configuration is required to use them.\n",
+    "\n",
+    "### Others\n",
+    "\n",
+    "You will have to manually add the neccessary resolution files. Usually this entails adding them with the  config tool\n",
+    "\n",
+    "```\n",
+    "fusionsc-config resolve add {file or url}\n",
+    "```\n",
+    "\n",
+    "### What if 'fusionsc-config' can not be found\n",
+    "\n",
+    "In a lot of python installations (environments, the py launcher) only the python executable is on the command line path, but not scripts like \"jupyter\" or \"fusionsc-config\". In this case, you can also call the configuration CLI as a python module instead of calling \"fusionsc-fonfig\":\n",
+    "\n",
+    "```\n",
+    "python -m fusionsc.config ...\n",
+    "```\n",
+    "\n",
+    "## Setting up component lookup with python methods (version 2.0 and above)\n",
+    "\n",
+    "For version 2.1 and below, and if you don't want to rely on the user configuration, you can always use the methods `fusionsc.resolve.importOfflineData` and `fusionsc.resolve.connectWarehouse`. Keep in mind that the changes by these methods are local to the current context.\n",
+    "\n",
+    "### Wendelstein 7-X inside IPP network\n",
+    "\n",
+    "On version 2.1 and above, you can use the `fusionsc.devices.w7x.connectIppSite` method to configure the computing server and resolution database, similar to the \"ipp-hgw\" configuration default profile."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "a26cef2f-11dd-4500-bf56-760dd5bec63a",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from fusionsc.devices import w7x\n",
+    "w7x.connectIppSite()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "9aaec9dc-e305-4411-9b60-bc27ed73aa5c",
+   "metadata": {},
+   "source": [
+    "### Original Coils- and Components-DB\n",
+    "\n",
+    "FusionSC uses a binary variant of the Coils- and Components-DB, which is periodically mirrored from the original webservices. If that mirror becomes stale or unavailable, you can also instruct FusionSC to download coils & components from the original CoilsDB and ComponentsDB webservices. **This will be slow**"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "7d352799-aa9f-49dc-8d07-d628c3ab0016",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [],
+   "source": [
+    "from fusionsc.devices import w7x\n",
+    "w7x.connectLegacyIPPSite()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "d3a67adf-e557-42ed-9ddc-5e01397d3292",
+   "metadata": {},
+   "source": [
+    "## (W7-X only) Pre-calculating fields for Biot-Savart calculation\n",
+    "\n",
+    "A generally expensive calculation is the Biot-Savart rule to obtain the magnetic field from the coil geometries. For W7-X\n",
+    ", there is a high-level support to precompute the coil fields. These fields can then be saved and loaded later for\n",
+    "usage. When using precomputed coil fields, the offline data files are not required (unless required for other reasons, such\n",
+    "as geometry data or other field information). W7-X has special support to pre-compute all coils so that they can be re-used\n",
+    "later.\n",
+    "\n",
+    "The precomputation is performed through the `devices.w7x.CoilPack` class, which can be used as a handle to override the coils\n",
+    "used in the generation of W7-X configurations."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "47c0a1ad-12b7-4c26-85fa-db0d7d3cb793",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from fusionsc.devices import w7x\n",
+    "\n",
+    "# Obtain default coils\n",
+    "coils = w7x.cadCoils()\n",
+    "\n",
+    "# Compute\n",
+    "coils = coils.computeFields(w7x.defaultGrid())\n",
+    "\n",
+    "# Use in configuration\n",
+    "config1 = w7x.standard(coils = coils)\n",
+    "config2 = w7x.highIota(coils = coils)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "f2cd2a39-9771-4a45-95ee-e6e74b6be93d",
+   "metadata": {},
+   "source": [
+    "The precalculated fields can be saved and loaded like other field or geometry classes."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "b12d163b-a012-4020-8dad-185f6db8b2c7",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Save\n",
+    "coils.save(\"coils.fsc\")\n",
+    "\n",
+    "# Restore\n",
+    "coils = w7x.CoilPack.load(\"coils.fsc\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "564fb827-1426-47e4-87ff-c1a582feada2",
+   "metadata": {},
+   "source": [
+    "## (Re-)Configuring the local backend\n",
+    "\n",
+    "While fusionsc is capable of connecting to remote servers for execution and data management, by default it uses a local backend started at import time. The backend is started with a default configuration (all services enabled, CPU execution, auto-detected no. of computation threads). Sometimes it is desirable to override this default behavior. You can use the `backends.reconfigureLocalBackend` function for this purpose.\n",
+    "\n",
+    "*Note*: This function creates a **new** backend to be used by all future calls. The old backend will be closed once all references to it coming from previous pending calls are dropped. If the local backend has been exposed (e.g. as a network service or by storing the result of backends.activeBackend) it will not shut down until these external references are dropped as well."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "3ff03968-d9b2-4df9-b461-1f29033cd8fe",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      " --- Default configuration --- \n",
+      "\n",
+      "preferredDeviceType: cpu\n",
+      "enableCompute: true\n",
+      "enableStorage: true\n",
+      "jobScheduler: system\n",
+      "flt:\n",
+      "  eventBuffer:\n",
+      "    minSize: 100\n",
+      "    maxSize: 2500\n",
+      "    targetTotalMb: 500\n",
+      "cpuBackend:\n",
+      "  numThreads: autoDetect\n",
+      "\n",
+      " --- Adjusted configuration --- \n",
+      "\n",
+      "preferredDeviceType: cpu\n",
+      "enableCompute: true\n",
+      "enableStorage: true\n",
+      "jobScheduler: system\n",
+      "flt:\n",
+      "  eventBuffer:\n",
+      "    minSize: 100\n",
+      "    maxSize: 2500\n",
+      "    targetTotalMb: 500\n",
+      "cpuBackend:\n",
+      "  numThreads:\n",
+      "    fixed: 2\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "# Get default configuration\n",
+    "config = fsc.service.LocalConfig.newMessage()\n",
+    "print(' --- Default configuration --- ')\n",
+    "print()\n",
+    "print(config)\n",
+    "print()\n",
+    "\n",
+    "# Adjust configuration\n",
+    "config.cpuBackend.numThreads.fixed = 2\n",
+    "\n",
+    "print(' --- Adjusted configuration --- ')\n",
+    "print()\n",
+    "print(config)\n",
+    "print()\n",
+    "\n",
+    "# Apply adjusted configuration\n",
+    "fsc.backends.reconfigureLocalBackend(config)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "fd5e54c2-7655-4942-b35e-872b5de26d94",
+   "metadata": {},
+   "source": [
+    "## Using verbose logging\n",
+    "\n",
+    "Sometimes it is desirable to enable the internal log output to see progress on the calculation. This can be achieved by setting the `FUSIONSC_VERBOSE` environment variable to any other value than `0`. This has to be done **before** importing the package."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "eff8e98a-91c6-4df8-b957-1bc159491222",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import os\n",
+    "os.environ['FUSIONSC_VERBOSE'] = '1'\n",
+    "\n",
+    "import fusionsc as fsc"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "bc3e54cd-ad08-4c69-b1ce-187d9b8bf9cb",
+   "metadata": {},
+   "source": [
+    "When using the standalone server, verbose logging can be activated through the `--verbose` command-line switch."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "22990444-7bb1-411e-ac44-71f2ead3fdc1",
+   "metadata": {},
+   "source": [
+    "## The user configuration (frontend configuration)\n",
+    "\n",
+    "Shown below is an example configuration file that shows you, which settings you can adapt. Every single configuration option is optional. FusionSC will look for such a file under `~/.fusionsc.yaml` (oder under `FUSIONSC_CONFIG_PATH` if that environment variable is set).\n",
+    "\n",
+    "The user configuration below is just a rough example. **It is not a valid default configuration file, do not just copy it into your home folder.**\n",
+    "\n",
+    "```yaml\n",
+    "backend: http://path-to-remote-backend\n",
+    "# Use this setting to use a remove backend for calculation and gain access to the warehouse databases stored there.\n",
+    "\n",
+    "resolve:\n",
+    "# This setting controls data sources for resolution of machine components and coils.\n",
+    "# Put references to local archive files, as well as local and remote warehouses here.\n",
+    "# The URL scheme \"remote:\" can be used to access warehouses in the \"warehouses\" entry\n",
+    "# of the backend configuration.\n",
+    "- warehouse: sqlite:///path/to/local/warehouse.db\n",
+    "- warehouse: \"sqlite:///path/to/local/warehouse.db#path/to/entry\"\n",
+    "- warehouse: http://remote-warehouse\n",
+    "- warehouse: remote:warehouse-on-backend\n",
+    "- archive: /path/to/local/archive.fsc\n",
+    "\n",
+    "w7x:\n",
+    "# This setting contains configuration options for the Wendelstein 7-X module\n",
+    "- defaultCoilsUrl: \"{warehouse URL}#path/to/coil/entry\"\n",
+    "  # When specified, FusionSC will use the coil pack stored here (as a W7XCoilPack struct) as the default coil set\n",
+    "  # for all W7-X configurations (if no coil pack is specified in the code).\n",
+    "  # When not specified, it uses the default W7-X coils in the components DB.\n",
+    "\n",
+    "localBackend:\n",
+    "# In here, you can override the default settings for the local backend. The local backend will\n",
+    "# always be available under fsc.backends.localBackend(), but will only be used by the frontend\n",
+    "# if the backend setting above is not specified.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "ad67d487-aeb8-45e8-892d-df9569b0bc2a",
+   "metadata": {},
+   "source": [
+    "## The backend configuration\n",
+    "\n",
+    "The compute backend has its own configuration settings. Below is a full rundown of the complete backend configuration. You can put this setting as the `localBackend` entry in the user configuration (when configuring the local backend on the client) or pass it to the `fusionsc server` command (either as a file or on its standard input stream). Note that this file corresponds to the `LocalConfig` struct defined in `service.capnp`\n",
+    "\n",
+    "```yaml\n",
+    "name: \"FusionSC Server\"\n",
+    "# A human-readable display name\n",
+    "\n",
+    "preferredDeviceType: \"cpu\"\n",
+    "# The preferred device to schedule on if possible. Options are \"cpu\", \"gpu\", and \"loop\" for running compute jobs directly in the main backend thread (mainly for testing).\n",
+    "\n",
+    "enableCompute: true\n",
+    "# Whether clients should be able to call compute tasks on this backend. Set this to \"false\" for nodes that should only\n",
+    "# launch remote compute tasks.\n",
+    "\n",
+    "enableStorage: true\n",
+    "# Whether this backend should be allowed to create intermediate storage buffers (such as caches)\n",
+    "\n",
+    "jobScheduler: system\n",
+    "# The main scheduler type to be used for launching external compute tasks. Possible values are:\n",
+    "# - system: Launch tasks via command line\n",
+    "# - mpi: Launch tasks via command line wrapped in \"mpiexec\" (unsupported at the moment)\n",
+    "# - slurm: Launch tasks through slurm (unsupported at the moment)\n",
+    "\n",
+    "jobDir: .\n",
+    "# A temporary directory that input and output files for external codes can be written into.\n",
+    "\n",
+    "cpuBackend:\n",
+    "# Configuration for the multi-threaded CPU compute device (the main workhorse)\n",
+    "  numThreads:\n",
+    "  # The number of threads to use for the CPU backend. Either set this to \"autoDetect\" to use std::hardware_concurrency(),\n",
+    "  # or indicate \"fixed: {number}: to use a fixed number of threads. Use exactly one of the options below.\n",
+    "    autoDetect\n",
+    "    # fixed: 1\n",
+    "\n",
+    "workerLauncher: ~\n",
+    "# Reserved option for a work-in-progress system to launch worker nodes on-demand. This system is not yet ready for client use.\n",
+    "\n",
+    "loadLimit: 100\n",
+    "# Maximum number of concurrently active jobs. Jobs exceeding this number will be held in a waiting queue.\n",
+    "\n",
+    "warehouses:\n",
+    "# FusionSC allows the backend to host warehouses (both read-only and read-write) that can be accessed on the client.\n",
+    "# When connected to a backend that uses this option, these warehouses can be navigated through the \"remote:{entry name}\" URL\n",
+    "# scheme on the client syde (python-only feature). When data stored in such a warehouse are passed by reference to the backend\n",
+    "# (e.g. to the DataRef mechanism, which is extensively employed by the resolution engine), then data round-trips from the backend\n",
+    "# to the client and back are completely avoided, and the data flow is handled by the backend completely. This can avoid a lot of\n",
+    "# unneccessary data transfer between client and server.\n",
+    " - name: main-data\n",
+    "   url: sqlite:///path/to/local?read-only\n",
+    " - name: user-data\n",
+    "   url: sqlite:///path/to/user\n",
+    "\n",
+    "flt:\n",
+    "# Configuration for the field line tracing engine.\n",
+    "  defaultStepLimit: 0\n",
+    "  # A step count limit that can be applied if no user-specified limits are requested.\n",
+    "\n",
+    "  maxStepLimit: 0\n",
+    "  # A hard step limit that can be enforced to prevent infinite runs. Note that this setting might cause jobs to\n",
+    "  # be hard-terminated instead of returning a stop code for the specific field line.\n",
+    "\n",
+    "  eventBuffer:\n",
+    "  # FusionSC uses a pre-allocated buffer to record event streams (such as turn count changes, plane- and geometry intersections).\n",
+    "  # in order to be compatible with GPU backends. These settings control the allocation strategy for the buffer. FusionSC will not\n",
+    "  # fail when running out of buffer space (as it uses a multi-round scheduler), but an excessively small buffer will cause many\n",
+    "  # calls to the backend kernel to be made.\n",
+    "\n",
+    "    minSize: 100\n",
+    "    maxSize: 2500\n",
+    "    # Minimum and maximum number of events per field line (and computation round) in the buffer.\n",
+    "\n",
+    "    targetTotalMb: 500\n",
+    "    # The total buffer size to aim for when creating the compute buffer for a single round.\n",
+    "\n",
+    "vmec:\n",
+    "# Configuration of the VMEC driver\n",
+    "  command: \"xvmec2000\"\n",
+    "  # The command to run VMEC. Is passed to the OS shell (or rather, the chosen process launcher) as command, so it can be either\n",
+    "  # an executable on your PATH or an absolute filename.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "ae9f28a4-b75c-43f1-8be3-4ddf37cb7023",
+   "metadata": {},
+   "source": [
+    "## Environment variables\n",
+    "\n",
+    "FusionSC uses the following environment variables:\n",
+    "\n",
+    "| Variable | Description |\n",
+    "| -------- | ----------- |\n",
+    "| FUSIONSC_KEEP_JOB_DIRS | Set this to anything other than `0` to keep the working directory of a job after it finished instead of cleaning it up. |\n",
+    "| FUSIONSC_RAM_OBJECT_LIMIT | Maximum size (in bytes) of objects to be stored in RAM by the data service. Larger objects are saved in file-backed memory to enable faster swapping of the memory. Defaults to 500MB.\n",
+    "| FUSIONSC_VERBOSE | Set this to anything other than `0` to enable verbose logging to the standard output **in the python library**. The server uses the `--verbose` command line option instead. |"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "e2e56b7a-b609-4210-97c3-f81537fbe626",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.13.5"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

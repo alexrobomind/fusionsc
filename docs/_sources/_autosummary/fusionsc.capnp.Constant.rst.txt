@@ -1,0 +1,43 @@
+﻿fusionsc.capnp.Constant
+=======================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: Constant
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~Constant.__init__
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~Constant.type
+	~Constant.value
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: Constant.__init__
+
+
+
+
+

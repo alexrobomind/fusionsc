@@ -1,0 +1,39 @@
+flt.capnp
+=========
+
+Structs
+-------
+
+.. toctree::
+   :maxdepth: 1
+
+   ReversibleFieldlineMapping
+   GeometryMapping
+   FLTRequest
+   FLTResponse
+   FindAxisRequest
+   FindLcfsRequest
+   RFLMRequest
+   FLTConfig
+   FLTKernelState
+   FLTKernelEvent
+   FLTKernelData
+   FLTKernelRequest
+   RFLMKernelData
+
+Interfaces
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   FLT
+   Mapper
+
+Enums
+-----
+
+.. toctree::
+   :maxdepth: 1
+
+   FLTStopReason

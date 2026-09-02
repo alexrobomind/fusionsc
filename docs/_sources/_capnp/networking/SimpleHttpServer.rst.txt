@@ -1,0 +1,24 @@
+SimpleHttpServer
+================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/networking/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+serve: (:doc:`/_capnp/networking/SimpleHttpServer/Request`) -> :doc:`/_capnp/networking/SimpleHttpServer/Response`
+
+
+Nested Structs
+--------------
+
+.. toctree::
+   :maxdepth: 1
+
+   SimpleHttpServer/Request
+   SimpleHttpServer/Response
+

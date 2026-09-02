@@ -1,0 +1,187 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Geometry &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Data Management" href="data.html" />
+    <link rel="prev" title="Field Line Tracing" href="fieldline-tracing.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/index.html">Usage examples (How To …)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference.html">Reference</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">C++ Library Documentation</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="magnetics.html">Magnetics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fieldline-tracing.html">Field Line Tracing</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Geometry</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api-reference">API Reference</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#_CPPv43fsc"><code class="docutils literal notranslate"><span class="pre">fsc</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="data.html">Data Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="vmec.html">VMEC Interface</a></li>
+<li class="toctree-l2"><a class="reference internal" href="services.html">Services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#quick-start">Quick Start</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../_capnp/index.html">Cap’n’Proto API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">C++ Library Documentation</a></li>
+      <li class="breadcrumb-item active">Geometry</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/cpp/geometry.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="geometry">
+<h1>Geometry<a class="headerlink" href="#geometry" title="Link to this heading"></a></h1>
+<p>The geometry module handles 3D mesh processing, PLY import/export,
+and spatial indexing for intersection calculations.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>FusionSC offers a high-level geometry representation based on meshes,
+declarative operations (2D to 3D extrusions, geometric operations on other
+geometries), and labeling support.</p>
+<p>Geometry processing is primarily handled through the <code class="docutils literal notranslate"><span class="pre">GeometryLib</span></code> service
+interface. Geometries are fully represented using Cap’n’Proto types.</p>
+</section>
+<section id="api-reference">
+<h2>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading"></a></h2>
+<dl class="cpp type">
+<dt class="sig sig-object cpp" id="_CPPv43fsc">
+<span id="_CPPv33fsc"></span><span id="_CPPv23fsc"></span><span id="fsc"></span><span class="target" id="namespacefsc"></span><span class="k"><span class="pre">namespace</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">fsc</span></span></span><br /></dt>
+<dd><p>The FSC library.</p>
+<p>Simple interface module for <a class="reference internal" href="genapi.html#structfsc_1_1_z_lib"><span class="std std-ref">ZLib</span></a></p>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-functions">Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp">
+<span class="target" id="namespacefsc_1ab87c5f2fb7f1d73be2c27d60532004b8"></span><span class="sig-name descname"><span class="pre">inline</span> <span class="pre">EIGEN_DEVICE_FUNC</span> <span class="pre">Vec3u</span> <span class="pre">locationInGrid</span> <span class="pre">(Vec3d</span> <span class="pre">point,</span> <span class="pre">Vec3d</span> <span class="pre">min,</span> <span class="pre">Vec3d</span> <span class="pre">max,</span> <span class="pre">Vec3u</span> <span class="pre">size)</span></span></dt>
+<dd></dd></dl>
+
+</div>
+<dl class="cpp struct">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc20GeometryResolverBaseE">
+<span id="_CPPv3N3fsc20GeometryResolverBaseE"></span><span id="_CPPv2N3fsc20GeometryResolverBaseE"></span><span id="fsc::GeometryResolverBase"></span><span class="target" id="structfsc_1_1_geometry_resolver_base"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">GeometryResolverBase</span></span></span><span class="w"> </span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="k"><span class="pre">public</span></span><span class="w"> </span><span class="n"><span class="pre">GeometryResolver</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Server</span></span><br /></dt>
+<dd><div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc20GeometryResolverBase15resolveGeometryE22ResolveGeometryContext">
+<span id="_CPPv3N3fsc20GeometryResolverBase15resolveGeometryE22ResolveGeometryContext"></span><span id="_CPPv2N3fsc20GeometryResolverBase15resolveGeometryE22ResolveGeometryContext"></span><span id="fsc::GeometryResolverBase::resolveGeometry__ResolveGeometryContext"></span><span class="target" id="structfsc_1_1_geometry_resolver_base_1a61ae348b2c48224e57c342aa0895f38d"></span><span class="n"><span class="pre">Promise</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">void</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">resolveGeometry</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">ResolveGeometryContext</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">context</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">override</span></span><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc20GeometryResolverBase15processGeometryEN8Geometry6ReaderEN8Geometry7BuilderE22ResolveGeometryContext">
+<span id="_CPPv3N3fsc20GeometryResolverBase15processGeometryEN8Geometry6ReaderEN8Geometry7BuilderE22ResolveGeometryContext"></span><span id="_CPPv2N3fsc20GeometryResolverBase15processGeometryEN8Geometry6ReaderEN8Geometry7BuilderE22ResolveGeometryContext"></span><span id="fsc::GeometryResolverBase::processGeometry__Geometry::Reader.Geometry::Builder.ResolveGeometryContext"></span><span class="target" id="structfsc_1_1_geometry_resolver_base_1a5697dd83b53a3a4dbc7019c4965d06ee"></span><span class="k"><span class="pre">virtual</span></span><span class="w"> </span><span class="n"><span class="pre">Promise</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">void</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">processGeometry</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">Geometry</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Reader</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">input</span></span>, <span class="n"><span class="pre">Geometry</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Builder</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">output</span></span>, <span class="n"><span class="pre">ResolveGeometryContext</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">context</span></span><span class="sig-paren">)</span><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc20GeometryResolverBase16processTransformEN11TransformedI8GeometryE6ReaderEN11TransformedI8GeometryE7BuilderE22ResolveGeometryContext">
+<span id="_CPPv3N3fsc20GeometryResolverBase16processTransformEN11TransformedI8GeometryE6ReaderEN11TransformedI8GeometryE7BuilderE22ResolveGeometryContext"></span><span id="_CPPv2N3fsc20GeometryResolverBase16processTransformEN11TransformedI8GeometryE6ReaderEN11TransformedI8GeometryE7BuilderE22ResolveGeometryContext"></span><span id="fsc::GeometryResolverBase::processTransform__Transformed:Geometry:::Reader.Transformed:Geometry:::Builder.ResolveGeometryContext"></span><span class="target" id="structfsc_1_1_geometry_resolver_base_1ab947216c1f0ab9a0732956228f0dc15e"></span><span class="n"><span class="pre">Promise</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">void</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">processTransform</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">Transformed</span></span><span class="p"><span class="pre">&lt;</span></span><span class="n"><span class="pre">Geometry</span></span><span class="p"><span class="pre">&gt;</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Reader</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">input</span></span>, <span class="n"><span class="pre">Transformed</span></span><span class="p"><span class="pre">&lt;</span></span><span class="n"><span class="pre">Geometry</span></span><span class="p"><span class="pre">&gt;</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Builder</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">output</span></span>, <span class="n"><span class="pre">ResolveGeometryContext</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">context</span></span><span class="sig-paren">)</span><br /></dt>
+<dd></dd></dl>
+
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="fieldline-tracing.html" class="btn btn-neutral float-left" title="Field Line Tracing" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="data.html" class="btn btn-neutral float-right" title="Data Management" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

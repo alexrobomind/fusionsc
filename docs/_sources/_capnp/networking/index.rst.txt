@@ -1,0 +1,12 @@
+networking.capnp
+================
+
+Interfaces
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   SimpleHttpServer
+   NetworkInterface
+   SSHConnection

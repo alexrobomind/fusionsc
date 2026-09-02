@@ -1,0 +1,58 @@
+﻿fusionsc.capnp.StructReader
+===========================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: StructReader
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~StructReader.__init__
+  ~StructReader.canonicalize_
+  ~StructReader.castAs_
+  ~StructReader.clone_
+  ~StructReader.has_
+  ~StructReader.toDict_
+  ~StructReader.toYaml_
+  ~StructReader.totalBytes_
+  ~StructReader.which_
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~StructReader.type_
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: StructReader.__init__
+.. automethod:: StructReader.canonicalize_
+.. automethod:: StructReader.castAs_
+.. automethod:: StructReader.clone_
+.. automethod:: StructReader.has_
+.. automethod:: StructReader.toDict_
+.. automethod:: StructReader.toYaml_
+.. automethod:: StructReader.totalBytes_
+.. automethod:: StructReader.which_
+
+
+
+
+

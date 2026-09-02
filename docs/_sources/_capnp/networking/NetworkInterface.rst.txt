@@ -1,0 +1,37 @@
+NetworkInterface
+================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/networking/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+connect: (url: Text, allowCompression: Bool = true) -> (connection : Connection)
+
+.. rst-class:: capnp-method
+
+listen: (host: Text = "0.0.0.0", portHint: UInt16, listener: Listener, fallback: :doc:`/_capnp/networking/SimpleHttpServer`) -> (openPort : OpenPort)
+
+.. rst-class:: capnp-method
+
+serve: (host: Text = "0.0.0.0", portHint: UInt16, server: Capability, fallback: :doc:`/_capnp/networking/SimpleHttpServer`) -> (openPort : OpenPort)
+
+.. rst-class:: capnp-method
+
+sshConnect: (host: Text, port: UInt16) -> (connection : :doc:`/_capnp/networking/SSHConnection`)
+
+
+Nested Interfaces
+-----------------
+
+.. toctree::
+   :maxdepth: 1
+
+   NetworkInterface/Connection
+   NetworkInterface/Listener
+   NetworkInterface/OpenPort
+

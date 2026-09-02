@@ -1,0 +1,38 @@
+ReversibleFieldlineMapping.Section
+==================================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+Parent: :doc:`/_capnp/flt/ReversibleFieldlineMapping`
+
+Fields
+------
+
+- r - :doc:`/_capnp/data/Float64Tensor`
+
+  Tensors of identical shape [nPhi, nZMap, nRMap] which contain R, Z, and forward length values of mapping points.
+
+- z - :doc:`/_capnp/data/Float64Tensor`
+
+- traceLen - :doc:`/_capnp/data/Float64Tensor`
+
+- phiStart - Float64
+
+- phiEnd - Float64
+
+- u0 - Float64
+
+- v0 - Float64
+
+- inverse - :doc:`/_capnp/flt/ReversibleFieldlineMapping/Section/Inverse`
+
+
+Nested Structs
+--------------
+
+.. toctree::
+   :maxdepth: 1
+
+   Section/Inverse
+

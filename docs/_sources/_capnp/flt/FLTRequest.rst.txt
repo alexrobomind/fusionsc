@@ -1,0 +1,129 @@
+FLTRequest
+==========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+
+Fields
+------
+
+- startPoints - :doc:`/_capnp/data/Float64Tensor`
+
+- field - :doc:`/_capnp/magnetics/ComputedField`
+
+- geometry - :doc:`/_capnp/geometry/IndexedGeometry`
+
+- planes - List(:doc:`/_capnp/geometry/Plane`)
+
+- planeIntersectionRecordMode - :doc:`/_capnp/flt/FLTRequest/PlaneIntersectionRecordMode`
+
+- turnLimit - UInt32
+
+- distanceLimit - Float64
+
+- stepLimit - UInt32
+
+- collisionLimit - UInt32
+
+- allowReversal - Bool
+
+- ignoreCollisionsBefore - Float64
+
+- stepSize - Float64 = 0.001
+
+- rngSeed - UInt64
+
+- mapping - :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/flt/ReversibleFieldlineMapping`)
+
+- geometryMapping - :doc:`/_capnp/flt/GeometryMapping`
+
+- forward - Bool = true
+
+- recordEvery - UInt32
+
+- stepSizeControl - union
+
+  - fixed - Void
+
+  - adaptive - AdaptiveStepControl
+
+- parallelModel - group
+
+  - meanFreePath - Float64
+
+  - meanFreePathGrowth - Float64
+
+  - anonymous union - union
+
+    - convectiveVelocity - Float64
+
+    - diffusionCoefficient - Float64
+
+- perpendicularModel - union
+
+  - noDisplacement - Void
+
+  - isotropicDiffusionCoefficient - Float64
+
+  - rzDiffusionCoefficient - Float64
+
+- fieldLineAnalysis - union
+
+  - noTask - Void
+
+  - calculateIota - group
+
+    - unwrapEvery - UInt32
+
+    - islandM - UInt32 = 1
+
+    - axis - union
+
+      - shared - group
+
+        - r - List(Float64)
+
+        - z - List(Float64)
+
+      - individual - group
+
+        - r - :doc:`/_capnp/data/Float64Tensor`
+
+        - z - :doc:`/_capnp/data/Float64Tensor`
+
+  - calculateFourierModes - group
+
+    - unusedRAxis - List(Float64)
+
+    - unusedZAxis - List(Float64)
+
+    - iota - :doc:`/_capnp/data/Float64Tensor`
+
+    - nMax - UInt32 = 1
+
+    - mMax - UInt32 = 0
+
+    - recordEvery - UInt32 = 1
+
+    - modeAliasingThreshold - Float64 = 0.001
+
+    - stellaratorSymmetric - Bool = false
+
+    - islandM - UInt32 = 1
+
+- forwardDirection - union
+
+  - field - Void
+
+  - ccw - Void
+
+
+Nested Enums
+------------
+
+.. toctree::
+   :maxdepth: 1
+
+   FLTRequest/PlaneIntersectionRecordMode
+

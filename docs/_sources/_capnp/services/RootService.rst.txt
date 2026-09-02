@@ -1,0 +1,60 @@
+RootService
+===========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/services/index`
+
+Main service interface that can be connected to by clients.
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+newFieldCalculator: () -> (service : :doc:`/_capnp/magnetics/FieldCalculator`)
+
+.. rst-class:: capnp-method
+
+newGeometryLib: () -> (service : :doc:`/_capnp/geometry/GeometryLib`)
+
+.. rst-class:: capnp-method
+
+newTracer: () -> (service : :doc:`/_capnp/flt/FLT`)
+
+.. rst-class:: capnp-method
+
+newHFCamProvider: () -> (service : :doc:`/_capnp/hfcam/HFCamProvider`)
+
+.. rst-class:: capnp-method
+
+newKDTreeService: () -> (service : :doc:`/_capnp/index/KDTreeService`)
+
+.. rst-class:: capnp-method
+
+newMapper: () -> (service : :doc:`/_capnp/flt/Mapper`)
+
+.. rst-class:: capnp-method
+
+newVmecDriver: () -> (service : :doc:`/_capnp/vmec/VmecDriver`)
+
+.. rst-class:: capnp-method
+
+dataService: () -> (service : :doc:`/_capnp/data/DataService`)
+
+.. rst-class:: capnp-method
+
+matcher: () -> (service : :doc:`/_capnp/matcher/Matcher`)
+
+.. rst-class:: capnp-method
+
+listWarehouses: () -> (names : List(Text))
+
+.. rst-class:: capnp-method
+
+getWarehouse: (name: Text) -> (warehouse : :doc:`/_capnp/warehouse/Warehouse`.Folder)
+
+.. rst-class:: capnp-method
+
+getInfo: () -> :doc:`/_capnp/services/NodeInfo`
+

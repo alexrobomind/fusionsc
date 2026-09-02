@@ -1,0 +1,420 @@
+=========
+flt.capnp
+=========
+
+Namespace: ``fsc``
+
+Schema Information
+------------------
+
+Imports:
+- Cxx: /capnp/c++.capnp
+- Java: java.capnp
+- Magnetics: magnetics.capnp
+- Geometry: geometry.capnp
+- Data: data.capnp
+- Index: index.capnp
+- Random: random.capnp
+
+ReversibleFieldlineMapping
+==========================
+
+**Fields:**
+
+- ``r`` (:class:`Data.Float64Tensor`)
+- ``z`` (:class:`Data.Float64Tensor`)
+- ``traceLen`` (:class:`Data.Float64Tensor`)
+- ``phiStart`` (:class:`Float64`)
+- ``phiEnd`` (:class:`Float64`)
+- ``u0`` (:class:`Float64`)
+- ``v0`` (:class:`Float64`)
+- ``rMin`` (:class:`Float64`)
+- ``rMax`` (:class:`Float64`)
+- ``zMin`` (:class:`Float64`)
+- ``zMax`` (:class:`Float64`)
+- ``u`` (:class:`Data.Float64Tensor`)
+- ``v`` (:class:`Data.Float64Tensor`)
+- ``inverse`` (:class:`ReversibleFieldlineMapping.Section.Inverse`)
+- ``surfaces`` (:class:`List(Float64)`)
+- ``sections`` (:class:`List(ReversibleFieldlineMapping.Section)`)
+- ``nPad`` (:class:`UInt64`)
+- ``nSym`` (:class:`UInt64`) = 1
+- ``u`` (:class:`Float64`)
+- ``v`` (:class:`Float64`)
+- ``section`` (:class:`UInt64`)
+- ``phi`` (:class:`Float64`)
+- ``lenOffset`` (:class:`Float64`)
+
+ReversibleFieldlineMapping.Section
+----------------------------------
+
+**Fields:**
+
+- ``r`` (:class:`Data.Float64Tensor`)
+- ``z`` (:class:`Data.Float64Tensor`)
+- ``traceLen`` (:class:`Data.Float64Tensor`)
+- ``phiStart`` (:class:`Float64`)
+- ``phiEnd`` (:class:`Float64`)
+- ``u0`` (:class:`Float64`)
+- ``v0`` (:class:`Float64`)
+- ``rMin`` (:class:`Float64`)
+- ``rMax`` (:class:`Float64`)
+- ``zMin`` (:class:`Float64`)
+- ``zMax`` (:class:`Float64`)
+- ``u`` (:class:`Data.Float64Tensor`)
+- ``v`` (:class:`Data.Float64Tensor`)
+- ``inverse`` (:class:`ReversibleFieldlineMapping.Section.Inverse`)
+
+ReversibleFieldlineMapping.Section.Inverse
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+**Fields:**
+
+- ``rMin`` (:class:`Float64`)
+- ``rMax`` (:class:`Float64`)
+- ``zMin`` (:class:`Float64`)
+- ``zMax`` (:class:`Float64`)
+- ``u`` (:class:`Data.Float64Tensor`)
+- ``v`` (:class:`Data.Float64Tensor`)
+
+ReversibleFieldlineMapping.State
+--------------------------------
+
+**Fields:**
+
+- ``u`` (:class:`Float64`)
+- ``v`` (:class:`Float64`)
+- ``section`` (:class:`UInt64`)
+- ``phi`` (:class:`Float64`)
+- ``lenOffset`` (:class:`Float64`)
+
+GeometryMapping
+===============
+
+**Fields:**
+
+- ``geometry`` (:class:`Geometry.MergedGeometry`)
+- ``grid`` (:class:`Geometry.CartesianGrid`)
+- ``index`` (:class:`Geometry.IndexedGeometry.IndexData`)
+- ``phi1`` (:class:`Float64`)
+- ``phi2`` (:class:`Float64`)
+- ``sections`` (:class:`List(GeometryMapping.SectionData)`)
+- ``nSym`` (:class:`UInt64`) = 1
+- ``base`` (:class:`Data.DataRef(ReversibleFieldlineMapping)`)
+- ``data`` (:class:`Data.DataRef(GeometryMapping.MappingData)`)
+
+GeometryMapping.SectionData
+---------------------------
+
+**Fields:**
+
+- ``geometry`` (:class:`Geometry.MergedGeometry`)
+- ``grid`` (:class:`Geometry.CartesianGrid`)
+- ``index`` (:class:`Geometry.IndexedGeometry.IndexData`)
+- ``phi1`` (:class:`Float64`)
+- ``phi2`` (:class:`Float64`)
+
+GeometryMapping.MappingData
+---------------------------
+
+**Fields:**
+
+- ``sections`` (:class:`List(GeometryMapping.SectionData)`)
+- ``nSym`` (:class:`UInt64`) = 1
+
+FLTRequest
+==========
+
+**Fields:**
+
+- ``min`` (:class:`Float64`) = 0
+- ``max`` (:class:`Float64`) = inf
+- ``targetError`` (:class:`Float64`) = 1e-6
+- ``relativeTolerance`` (:class:`Float64`) = 1
+- ``step`` (:class:`Void`)
+- ``integratedOver`` (:class:`Float64`) = 1e4
+- ``startPoints`` (:class:`Data.Float64Tensor`)
+- ``field`` (:class:`Magnetics.ComputedField`)
+- ``geometry`` (:class:`Geometry.IndexedGeometry`)
+- ``planes`` (:class:`List(Geometry.Plane)`)
+- ``planeIntersectionRecordMode`` (:class:`PlaneIntersectionRecordMode`)
+- ``turnLimit`` (:class:`UInt32`)
+- ``distanceLimit`` (:class:`Float64`)
+- ``stepLimit`` (:class:`UInt32`)
+- ``collisionLimit`` (:class:`UInt32`)
+- ``allowReversal`` (:class:`Bool`)
+- ``ignoreCollisionsBefore`` (:class:`Float64`)
+- ``stepSize`` (:class:`Float64`) = 0.001
+- ``fixed`` (:class:`Void`)
+- ``adaptive`` (:class:`FLTRequest.AdaptiveStepControl`)
+- ``meanFreePath`` (:class:`Float64`)
+- ``meanFreePathGrowth`` (:class:`Float64`)
+- ``convectiveVelocity`` (:class:`Float64`)
+- ``diffusionCoefficient`` (:class:`Float64`)
+- ``noDisplacement`` (:class:`Void`)
+- ``isotropicDiffusionCoefficient`` (:class:`Float64`)
+- ``rzDiffusionCoefficient`` (:class:`Float64`)
+- ``rngSeed`` (:class:`UInt64`)
+- ``mapping`` (:class:`Data.DataRef(ReversibleFieldlineMapping)`)
+- ``geometryMapping`` (:class:`GeometryMapping`)
+- ``forward`` (:class:`Bool`) = true
+- ``recordEvery`` (:class:`UInt32`)
+- ``noTask`` (:class:`Void`)
+- ``unwrapEvery`` (:class:`UInt32`)
+- ``r`` (:class:`List(Float64)`)
+- ``z`` (:class:`List(Float64)`)
+- ``r`` (:class:`Data.Float64Tensor`)
+- ``z`` (:class:`Data.Float64Tensor`)
+- ``islandM`` (:class:`UInt32`) = 1
+- ``unusedRAxis`` (:class:`List(Float64)`)
+- ``unusedZAxis`` (:class:`List(Float64)`)
+- ``iota`` (:class:`Data.Float64Tensor`)
+- ``nMax`` (:class:`UInt32`) = 1
+- ``mMax`` (:class:`UInt32`) = 0
+- ``recordEvery`` (:class:`UInt32`) = 1
+- ``modeAliasingThreshold`` (:class:`Float64`) = 0.001
+- ``stellaratorSymmetric`` (:class:`Bool`) = false
+- ``islandM`` (:class:`UInt32`) = 1
+- ``field`` (:class:`Void`)
+- ``ccw`` (:class:`Void`)
+
+FLTRequest.AdaptiveStepControl
+------------------------------
+
+**Fields:**
+
+- ``min`` (:class:`Float64`) = 0
+- ``max`` (:class:`Float64`) = inf
+- ``targetError`` (:class:`Float64`) = 1e-6
+- ``relativeTolerance`` (:class:`Float64`) = 1
+- ``step`` (:class:`Void`)
+- ``integratedOver`` (:class:`Float64`) = 1e4
+
+FLTResponse
+===========
+
+**Fields:**
+
+- ``nTurns`` (:class:`UInt32`)
+- ``poincareHits`` (:class:`Data.Float64Tensor`)
+- ``endPoints`` (:class:`Data.Float64Tensor`)
+- ``tagNames`` (:class:`List(Text)`)
+- ``endTags`` (:class:`Data.ShapedList(List(Geometry.TagValue))`)
+- ``stopReasons`` (:class:`Data.ShapedList(List(FLTStopReason))`)
+- ``fieldLines`` (:class:`Data.Float64Tensor`)
+- ``fieldStrengths`` (:class:`Data.Float64Tensor`)
+- ``normals`` (:class:`Data.Float64Tensor`)
+- ``noTask`` (:class:`Void`)
+- ``iotas`` (:class:`Data.Float64Tensor`)
+- ``surfaces`` (:class:`Magnetics.FourierSurfaces`)
+- ``theta0`` (:class:`Data.Float64Tensor`)
+- ``mPol`` (:class:`List(Float64)`)
+- ``nTor`` (:class:`List(Float64)`)
+- ``numSteps`` (:class:`Data.UInt64Tensor`)
+- ``rngSeed`` (:class:`UInt64`)
+
+FindAxisRequest
+===============
+
+**Fields:**
+
+- ``startPoint`` (:class:`List(Float64)`)
+- ``field`` (:class:`Magnetics.ComputedField`)
+- ``stepSize`` (:class:`Float64`) = 0.001
+- ``nTurns`` (:class:`UInt32`) = 10
+- ``nIterations`` (:class:`UInt32`) = 10
+- ``nPhi`` (:class:`UInt64`) = 20
+- ``mapping`` (:class:`Data.DataRef(ReversibleFieldlineMapping)`)
+- ``geometryMapping`` (:class:`GeometryMapping`)
+- ``fixed`` (:class:`Void`)
+- ``adaptive`` (:class:`FLTRequest.AdaptiveStepControl`)
+- ``islandM`` (:class:`UInt32`) = 1
+
+FindLcfsRequest
+===============
+
+**Fields:**
+
+- ``p1`` (:class:`List(Float64)`)
+- ``p2`` (:class:`List(Float64)`)
+- ``tolerance`` (:class:`Float64`) = 0.001
+- ``nScan`` (:class:`UInt32`) = 8
+- ``distanceLimit`` (:class:`Float64`)
+- ``stepSize`` (:class:`Float64`) = 0.001
+- ``field`` (:class:`Magnetics.ComputedField`)
+- ``geometry`` (:class:`Geometry.IndexedGeometry`)
+- ``mapping`` (:class:`Data.DataRef(ReversibleFieldlineMapping)`)
+- ``geometryMapping`` (:class:`GeometryMapping`)
+- ``fixed`` (:class:`Void`)
+- ``adaptive`` (:class:`FLTRequest.AdaptiveStepControl`)
+
+RFLMRequest
+===========
+
+**Fields:**
+
+- ``mappingPlanes`` (:class:`List(Float64)`)
+- ``gridR`` (:class:`List(Float64)`)
+- ``gridZ`` (:class:`List(Float64)`)
+- ``numPlanes`` (:class:`UInt32`) = 20
+- ``numPaddingPlanes`` (:class:`UInt32`) = 1
+- ``field`` (:class:`Magnetics.ComputedField`)
+- ``distanceLimit`` (:class:`Float64`) = 1e3
+- ``stepSize`` (:class:`Float64`) = 0.001
+- ``u0`` (:class:`List(Float64)`) = [0.5]
+- ``v0`` (:class:`List(Float64)`) = [0.5]
+- ``nSym`` (:class:`UInt64`) = 1
+- ``fixed`` (:class:`Void`)
+- ``adaptive`` (:class:`FLTRequest.AdaptiveStepControl`)
+
+FLTConfig
+=========
+
+**Fields:**
+
+- ``minSize`` (:class:`UInt32`) = 100
+- ``maxSize`` (:class:`UInt32`) = 2500
+- ``targetTotalMb`` (:class:`UInt64`) = 500
+- ``defaultStepLimit`` (:class:`UInt64`)
+- ``maxStepLimit`` (:class:`UInt64`)
+
+FLTKernelState
+==============
+
+**Fields:**
+
+- ``position`` (:class:`List(Float64)`)
+- ``numSteps`` (:class:`UInt32`)
+- ``distance`` (:class:`Float64`)
+- ``turnCount`` (:class:`UInt32`)
+- ``phi0`` (:class:`Float64`)
+- ``eventCount`` (:class:`UInt32`)
+- ``collisionCount`` (:class:`UInt32`)
+- ``forward`` (:class:`Bool`) = true
+- ``nextDisplacementAt`` (:class:`Float64`)
+- ``displacementCount`` (:class:`UInt32`)
+- ``rngState`` (:class:`Random.MT19937State`)
+- ``phi`` (:class:`Float64`)
+- ``theta`` (:class:`Float64`)
+- ``stepSize`` (:class:`Float64`)
+
+FLTKernelEvent
+==============
+
+**Fields:**
+
+- ``x`` (:class:`Float64`)
+- ``y`` (:class:`Float64`)
+- ``z`` (:class:`Float64`)
+- ``step`` (:class:`UInt32`)
+- ``distance`` (:class:`Float64`)
+- ``notSet`` (:class:`Void`)
+- ``planeNo`` (:class:`UInt32`)
+- ``newTurn`` (:class:`UInt32`)
+- ``meshIndex`` (:class:`UInt64`)
+- ``elementIndex`` (:class:`UInt64`)
+- ``baseGeometry`` (:class:`Void`)
+- ``mappingSection`` (:class:`UInt32`)
+- ``fieldStrength`` (:class:`Float64`)
+- ``phi`` (:class:`Float64`)
+
+FLTKernelData
+=============
+
+**Fields:**
+
+- ``stopReason`` (:class:`FLTStopReason`)
+- ``state`` (:class:`FLTKernelState`)
+- ``events`` (:class:`List(FLTKernelEvent)`)
+- ``data`` (:class:`List(FLTKernelData.Entry)`)
+
+FLTKernelData.Entry
+-------------------
+
+**Fields:**
+
+- ``stopReason`` (:class:`FLTStopReason`)
+- ``state`` (:class:`FLTKernelState`)
+- ``events`` (:class:`List(FLTKernelEvent)`)
+
+FLTKernelRequest
+================
+
+**Fields:**
+
+- ``serviceRequest`` (:class:`FLTRequest`)
+
+RFLMKernelData
+==============
+
+**Fields:**
+
+- ``states`` (:class:`List(ReversibleFieldlineMapping.State)`)
+- ``phiValues`` (:class:`List(Float64)`)
+- ``reconstructionErrors`` (:class:`List(Float64)`)
+
+Interfaces
+----------
+
+``FLT``
+-------
+
+**Methods:**
+
+- ``trace()``
+  - Returns: :class:`FLTResponse`
+
+- ``findAxis()``
+  - Returns: :class:`(pos : List(Float64), axis : Data.Float64Tensor, meanField : Float64)`
+
+- ``findLcfs()``
+  - Returns: :class:`(pos : List(Float64))`
+
+- ``findAxisBatch(points, request)``
+  - Returns: :class:`(pos : Data.Float64Tensor, axis : Data.Float64Tensor, meanField : Data.Float64Tensor)`
+  - Parameters:
+    - ``points`` (:class:`Data.Float64Tensor`)
+    - ``request`` (:class:`FindAxisRequest`)
+
+``Mapper``
+----------
+
+**Methods:**
+
+- ``computeRFLM()``
+  - Returns: :class:`(mapping : Data.DataRef(ReversibleFieldlineMapping))`
+
+- ``getSectionGeometry(mapping, section)``
+  - Returns: :class:`(geometry : Geometry.IndexedGeometry)`
+  - Parameters:
+    - ``mapping`` (:class:`GeometryMapping`)
+    - ``section`` (:class:`UInt64`)
+
+Enums
+-----
+
+``FLTStopReason``
+-----------------
+
+============================== Service interface ===================================
+
+**Values:**
+
+- ``unknown``
+- ``stepLimit``
+- ``distanceLimit``
+- ``turnLimit``
+- ``eventBufferFull``
+- ``outOfGrid``
+- ``nanEncountered``
+- ``collisionLimit``
+- ``couldNotStep``
+- ``fieldlineReversed``
+
+``PlaneIntersectionRecordMode``
+-------------------------------
+
+**Values:**
+
+- ``lastInTurn``
+- ``everyHit``

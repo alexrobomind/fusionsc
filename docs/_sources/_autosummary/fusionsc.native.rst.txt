@@ -1,0 +1,37 @@
+fusionsc.native
+===============
+
+.. automodule:: fusionsc.native
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autosummary::
+
+	connectLocal
+	connectSameThread
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Functions
+
+.. autofunction:: connectLocal
+.. autofunction:: connectSameThread
+
+
+
+

@@ -1,0 +1,19 @@
+ArchiveInfo.RefInfo
+===================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/data-archive/index`
+Parent: :doc:`/_capnp/data-archive/ArchiveInfo`
+
+Fields
+------
+
+- anonymous union - union
+
+  - null - Void
+
+  - exception - Rpc.Exception
+
+  - object - UInt64
+

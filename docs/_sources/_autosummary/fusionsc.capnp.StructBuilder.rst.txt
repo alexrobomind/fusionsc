@@ -1,0 +1,62 @@
+﻿fusionsc.capnp.StructBuilder
+============================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: StructBuilder
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~StructBuilder.__init__
+  ~StructBuilder.canonicalize_
+  ~StructBuilder.castAs_
+  ~StructBuilder.clone_
+  ~StructBuilder.disown_
+  ~StructBuilder.has_
+  ~StructBuilder.init_
+  ~StructBuilder.toDict_
+  ~StructBuilder.toYaml_
+  ~StructBuilder.totalBytes_
+  ~StructBuilder.which_
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~StructBuilder.type_
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: StructBuilder.__init__
+.. automethod:: StructBuilder.canonicalize_
+.. automethod:: StructBuilder.castAs_
+.. automethod:: StructBuilder.clone_
+.. automethod:: StructBuilder.disown_
+.. automethod:: StructBuilder.has_
+.. automethod:: StructBuilder.init_
+.. automethod:: StructBuilder.toDict_
+.. automethod:: StructBuilder.toYaml_
+.. automethod:: StructBuilder.totalBytes_
+.. automethod:: StructBuilder.which_
+
+
+
+
+

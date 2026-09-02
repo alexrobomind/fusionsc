@@ -1,0 +1,15 @@
+Job.State
+=========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/jobs/index`
+Parent: :doc:`/_capnp/jobs/Job`
+
+Values
+------
+
+- ``pending``
+- ``running``
+- ``failed``
+- ``completed``

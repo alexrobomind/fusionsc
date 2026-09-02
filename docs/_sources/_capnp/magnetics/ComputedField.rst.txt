@@ -1,0 +1,18 @@
+ComputedField
+=============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/magnetics/index`
+
+Fields
+------
+
+- grid - :doc:`/_capnp/magnetics/ToroidalGrid`
+
+  Grid on which the field is (or is being) computed.
+
+- data - :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/data/Float64Tensor`)
+
+  Reference to tensor holding the field data.  Data shape is [phi, z, r, 3], C (row-major) ordering with last index stride 1 When interpreting column-major, data shape is [3, r, z, phi] The field components are ordered Phi, Z, R  The data are stored as a reference to avoid repeated upload and download of computed field data between client and server computers. Most use cases pass the data directly from the calculation service to the field line tracer which are on the same machine.
+

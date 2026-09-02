@@ -1,0 +1,25 @@
+Warehouse.FrozenEntry
+=====================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/warehouse/index`
+Parent: :doc:`/_capnp/warehouse/Warehouse`
+
+Fields
+------
+
+- anonymous union - union
+
+  - unavailable - Void
+
+  - folder - :doc:`/_capnp/warehouse/Warehouse/FrozenFolder`
+
+  - dataRef - :doc:`/_capnp/data/DataRef`
+
+  - file - union
+
+    - nullValue - Void
+
+    - value - :doc:`/_capnp/warehouse/Warehouse/FrozenEntry`
+

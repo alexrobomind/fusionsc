@@ -1,0 +1,17 @@
+MergedGeometry.Entry
+====================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+Parent: :doc:`/_capnp/geometry/MergedGeometry`
+
+A processed geometry where all meshes are assembled in the same memory space.
+
+Fields
+------
+
+- tags - List(:doc:`/_capnp/geometry/TagValue`)
+
+- mesh - :doc:`/_capnp/geometry/Mesh`
+

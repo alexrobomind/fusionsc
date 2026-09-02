@@ -1,0 +1,13 @@
+IndexedGeometry.GridEntry
+=========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+Parent: :doc:`/_capnp/geometry/IndexedGeometry`
+
+Fields
+------
+
+- elements - List(:doc:`/_capnp/geometry/IndexedGeometry/ElementRef`)
+

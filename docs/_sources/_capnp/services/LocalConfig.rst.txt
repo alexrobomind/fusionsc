@@ -1,0 +1,52 @@
+LocalConfig
+===========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/services/index`
+
+Fields
+------
+
+- name - Text = "FusionSC Server"
+
+- preferredDeviceType - :doc:`/_capnp/services/ComputationDeviceType`
+
+- enableCompute - Bool = true
+
+- enableStorage - Bool = true
+
+- jobDir - Text = "."
+
+- flt - :doc:`/_capnp/flt/FLTConfig`
+
+- warehouses - List(:doc:`/_capnp/services/WarehouseConfig`)
+
+- loadLimit - UInt32 = 100
+
+- vmec - :doc:`/_capnp/vmec/VmecConfig`
+
+- jobScheduler - union
+
+  - system - Void
+
+  - slurm - Void
+
+  - mpi - Void
+
+- cpuBackend - group
+
+  - numThreads - union
+
+    - autoDetect - Void
+
+    - fixed - UInt32 = 1
+
+- workerLauncher - union
+
+  - off - Void
+
+  - manual - group
+
+    - coordinatorUrl - Text
+

@@ -1,0 +1,36 @@
+Transformed
+===========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+
+Fields
+------
+
+- anonymous union - union
+
+  - leaf - T
+
+  - shifted - group
+
+    - shift - List(Float64)
+
+    - node - :doc:`/_capnp/geometry/Transformed`\ (T)
+
+  - turned - group
+
+    - angle - :doc:`/_capnp/geometry/Angle`
+
+    - center - List(Float64) = [0, 0, 0]
+
+    - axis - List(Float64)
+
+    - node - :doc:`/_capnp/geometry/Transformed`\ (T)
+
+  - scaled - group
+
+    - node - :doc:`/_capnp/geometry/Transformed`\ (T)
+
+    - scale - List(Float64) = [1, 1, 1]
+

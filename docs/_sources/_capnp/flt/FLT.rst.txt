@@ -1,0 +1,28 @@
+FLT
+===
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+trace: (:doc:`/_capnp/flt/FLTRequest`) -> :doc:`/_capnp/flt/FLTResponse`
+
+.. rst-class:: capnp-method
+
+findAxis: (:doc:`/_capnp/flt/FindAxisRequest`) -> (pos : List(Float64), axis : :doc:`/_capnp/data/Float64Tensor`, meanField : Float64)
+
+   Method to find a magnetic axis for a single starting point.
+
+.. rst-class:: capnp-method
+
+findLcfs: (:doc:`/_capnp/flt/FindLcfsRequest`) -> (pos : List(Float64))
+
+.. rst-class:: capnp-method
+
+findAxisBatch: (points: :doc:`/_capnp/data/Float64Tensor`, request: :doc:`/_capnp/flt/FindAxisRequest`) -> (pos : :doc:`/_capnp/data/Float64Tensor`, axis : :doc:`/_capnp/data/Float64Tensor`, meanField : :doc:`/_capnp/data/Float64Tensor`)
+

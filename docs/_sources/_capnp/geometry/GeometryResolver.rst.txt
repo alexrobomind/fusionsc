@@ -1,0 +1,14 @@
+GeometryResolver
+================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+resolveGeometry: (geometry: :doc:`/_capnp/geometry/Geometry`, followRefs: Bool = false) -> :doc:`/_capnp/geometry/Geometry`
+

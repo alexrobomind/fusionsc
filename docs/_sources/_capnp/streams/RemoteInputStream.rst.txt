@@ -1,0 +1,22 @@
+RemoteInputStream
+=================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/streams/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+pumpTo: (target: :doc:`/_capnp/streams/RemoteOutputStream`) -> (pumpedBytes : UInt64)
+
+.. rst-class:: capnp-method
+
+readAllBinary: () -> (data : Data)
+
+.. rst-class:: capnp-method
+
+readAllString: () -> (text : Text)
+

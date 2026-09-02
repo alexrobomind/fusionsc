@@ -1,0 +1,10 @@
+random.capnp
+============
+
+Structs
+-------
+
+.. toctree::
+   :maxdepth: 1
+
+   MT19937State

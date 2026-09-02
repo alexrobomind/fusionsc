@@ -1,0 +1,48 @@
+FLTResponse
+===========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+
+Fields
+------
+
+- nTurns - UInt32
+
+- poincareHits - :doc:`/_capnp/data/Float64Tensor`
+
+- endPoints - :doc:`/_capnp/data/Float64Tensor`
+
+- tagNames - List(Text)
+
+- endTags - :doc:`/_capnp/data/ShapedList`\ (List(:doc:`/_capnp/geometry/TagValue`))
+
+- stopReasons - :doc:`/_capnp/data/ShapedList`\ (List(:doc:`/_capnp/flt/FLTStopReason`))
+
+- fieldLines - :doc:`/_capnp/data/Float64Tensor`
+
+- fieldStrengths - :doc:`/_capnp/data/Float64Tensor`
+
+- normals - :doc:`/_capnp/data/Float64Tensor`
+
+- numSteps - :doc:`/_capnp/data/UInt64Tensor`
+
+- rngSeed - UInt64
+
+- fieldLineAnalysis - union
+
+  - noTask - Void
+
+  - iotas - :doc:`/_capnp/data/Float64Tensor`
+
+  - fourierModes - group
+
+    - surfaces - :doc:`/_capnp/magnetics/FourierSurfaces`
+
+    - theta0 - :doc:`/_capnp/data/Float64Tensor`
+
+    - mPol - List(Float64)
+
+    - nTor - List(Float64)
+

@@ -1,0 +1,18 @@
+index.capnp
+===========
+
+Structs
+-------
+
+.. toctree::
+   :maxdepth: 1
+
+   KDTree
+
+Interfaces
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   KDTreeService

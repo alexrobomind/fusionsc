@@ -1,0 +1,16 @@
+DipoleCloud
+===========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/magnetics/index`
+
+Fields
+------
+
+- positions - :doc:`/_capnp/data/Float64Tensor`
+
+- magneticMoments - :doc:`/_capnp/data/Float64Tensor`
+
+- radii - List(Float64)
+

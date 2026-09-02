@@ -1,0 +1,13 @@
+ComputationDeviceType
+=====================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/services/index`
+
+Values
+------
+
+- ``cpu``
+- ``gpu``
+- ``loop``

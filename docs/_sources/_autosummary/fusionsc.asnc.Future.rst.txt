@@ -1,0 +1,56 @@
+fusionsc.asnc.Future
+====================
+
+.. currentmodule:: fusionsc.asnc
+
+.. autoclass:: Future
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~Future.__init__
+  ~Future.add_done_callback
+  ~Future.cancel
+  ~Future.cancelled
+  ~Future.done
+  ~Future.exception
+  ~Future.get_loop
+  ~Future.remove_done_callback
+  ~Future.result
+  ~Future.set_exception
+  ~Future.set_result
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: Future.__init__
+.. automethod:: Future.add_done_callback
+.. automethod:: Future.cancel
+.. automethod:: Future.cancelled
+.. automethod:: Future.done
+.. automethod:: Future.exception
+.. automethod:: Future.get_loop
+.. automethod:: Future.remove_done_callback
+.. automethod:: Future.result
+.. automethod:: Future.set_exception
+.. automethod:: Future.set_result
+
+
+
+
+

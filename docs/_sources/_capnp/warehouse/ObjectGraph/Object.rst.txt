@@ -1,0 +1,31 @@
+ObjectGraph.Object
+==================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/warehouse/index`
+Parent: :doc:`/_capnp/warehouse/ObjectGraph`
+
+Fields
+------
+
+- anonymous union - union
+
+  - unresolved - Void
+
+  - nullValue - Void
+
+  - exception - Rpc.Exception
+
+  - folder - List(:doc:`/_capnp/warehouse/ObjectGraph/FolderEntry`)
+
+  - file - :doc:`/_capnp/warehouse/ObjectGraph/ObjectRef`
+
+  - link - UInt64
+
+  - dataRef - group
+
+    - data - DataRef
+
+    - refs - List(:doc:`/_capnp/warehouse/ObjectGraph/ObjectRef`)
+

@@ -1,0 +1,12 @@
+streams.capnp
+=============
+
+Interfaces
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   RemoteInputStream
+   RemoteOutputStream
+   RemoteIoStream

@@ -1,0 +1,36 @@
+LoadBalancerConfig.Rule
+=======================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/services/index`
+Parent: :doc:`/_capnp/services/LoadBalancerConfig`
+
+Fields
+------
+
+- matches - union
+
+  - all - Void
+
+  - only - :doc:`/_capnp/services/LoadBalancerConfig/Rule/MethodSpec`
+
+  - anyOf - List(:doc:`/_capnp/services/LoadBalancerConfig/Rule/MethodSpec`)
+
+  - allExcept - List(:doc:`/_capnp/services/LoadBalancerConfig/Rule/MethodSpec`)
+
+- anonymous union - union
+
+  - backend - :doc:`/_capnp/services/LoadBalancerConfig/Backend`
+
+  - pool - List(:doc:`/_capnp/services/LoadBalancerConfig/Backend`)
+
+
+Nested Structs
+--------------
+
+.. toctree::
+   :maxdepth: 1
+
+   Rule/MethodSpec
+

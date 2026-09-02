@@ -1,0 +1,32 @@
+services.capnp
+==============
+
+Structs
+-------
+
+.. toctree::
+   :maxdepth: 1
+
+   WarehouseConfig
+   LocalConfig
+   LoadBalancerConfig
+   NodeInfo
+
+Interfaces
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   Ingress
+   RootService
+   LocalStore
+   LocalResources
+
+Enums
+-----
+
+.. toctree::
+   :maxdepth: 1
+
+   ComputationDeviceType

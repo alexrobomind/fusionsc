@@ -1,0 +1,46 @@
+﻿fusionsc.capnp.TextBuilder
+==========================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: TextBuilder
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~TextBuilder.__init__
+  ~TextBuilder.castAs
+  ~TextBuilder.clone
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~TextBuilder.type_
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: TextBuilder.__init__
+.. automethod:: TextBuilder.castAs
+.. automethod:: TextBuilder.clone
+
+
+
+
+

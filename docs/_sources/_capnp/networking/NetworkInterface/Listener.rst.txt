@@ -1,0 +1,15 @@
+NetworkInterface.Listener
+=========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/networking/index`
+Parent: :doc:`/_capnp/networking/NetworkInterface`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+accept: () -> (client : Capability)
+

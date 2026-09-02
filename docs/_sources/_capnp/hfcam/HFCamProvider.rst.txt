@@ -1,0 +1,14 @@
+HFCamProvider
+=============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/hfcam/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+makeCamera: (projection: :doc:`/_capnp/hfcam/HFCamProjection`, geometry: :doc:`/_capnp/geometry/Geometry`, edgeTolerance: Float64 = 0.5, depthTolerance: Float64) -> (cam : :doc:`/_capnp/hfcam/HFCam`)
+

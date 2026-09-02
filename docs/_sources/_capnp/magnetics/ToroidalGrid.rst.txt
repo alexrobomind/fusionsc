@@ -1,0 +1,28 @@
+ToroidalGrid
+============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/magnetics/index`
+
+Fields
+------
+
+- rMin - Float64
+
+- rMax - Float64
+
+- zMin - Float64
+
+- zMax - Float64
+
+- nSym - UInt32 = 1
+
+  Toroidal symmetry of the field (e.g. 5 for W7-X)
+
+- nR - UInt64
+
+- nZ - UInt64
+
+- nPhi - UInt64
+

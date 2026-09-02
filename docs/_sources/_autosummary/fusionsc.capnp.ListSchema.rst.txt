@@ -1,0 +1,52 @@
+﻿fusionsc.capnp.ListSchema
+=========================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: ListSchema
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~ListSchema.__init__
+  ~ListSchema.listOf
+  ~ListSchema.toProto
+
+
+
+
+
+
+This class represents a struct type. The accessor types are .Reader and .Builder (see below)
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~ListSchema.Builder
+	~ListSchema.Reader
+	~ListSchema.ReaderOrBuilder
+	~ListSchema.elementType
+	~ListSchema.jsonSchema
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: ListSchema.__init__
+.. automethod:: ListSchema.listOf
+.. automethod:: ListSchema.toProto
+
+
+
+
+

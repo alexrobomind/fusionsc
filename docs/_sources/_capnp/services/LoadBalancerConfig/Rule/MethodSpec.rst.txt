@@ -1,0 +1,8 @@
+LoadBalancerConfig.Rule.MethodSpec
+==================================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/services/index`
+Parent: :doc:`/_capnp/services/LoadBalancerConfig/Rule`
+

@@ -1,0 +1,12 @@
+Archive.Entry
+=============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/data/index`
+Parent: :doc:`/_capnp/data/Archive`
+
+Archive types
+struct Archive {
+struct CapabilityInfo {
+

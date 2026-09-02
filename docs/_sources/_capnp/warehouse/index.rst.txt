@@ -1,0 +1,10 @@
+warehouse.capnp
+===============
+
+Interfaces
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   Warehouse

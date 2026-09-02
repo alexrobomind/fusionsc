@@ -1,0 +1,10 @@
+offline.capnp
+=============
+
+Structs
+-------
+
+.. toctree::
+   :maxdepth: 1
+
+   OfflineData

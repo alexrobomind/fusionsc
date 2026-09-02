@@ -1,0 +1,46 @@
+﻿fusionsc.capnp.DataReader
+=========================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: DataReader
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~DataReader.__init__
+  ~DataReader.castAs
+  ~DataReader.clone
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~DataReader.type_
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: DataReader.__init__
+.. automethod:: DataReader.castAs
+.. automethod:: DataReader.clone
+
+
+
+
+

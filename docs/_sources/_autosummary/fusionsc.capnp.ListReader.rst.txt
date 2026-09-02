@@ -1,0 +1,44 @@
+﻿fusionsc.capnp.ListReader
+=========================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: ListReader
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~ListReader.__init__
+  ~ListReader.clone
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~ListReader.type_
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: ListReader.__init__
+.. automethod:: ListReader.clone
+
+
+
+
+

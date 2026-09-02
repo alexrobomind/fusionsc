@@ -1,0 +1,64 @@
+VmecRequest
+===========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/vmec/index`
+
+Fields
+------
+
+- startingPoint - :doc:`/_capnp/magnetics/FourierSurfaces`
+
+- gamma - Float64 = 0
+
+- massProfile - :doc:`/_capnp/vmec/VmecProfile`
+
+- phiEdge - Float64 = 0
+
+- mPol - UInt32 = 0
+
+- nTor - UInt32 = 0
+
+- anonymous union - union
+
+  - fixedBoundary - Void
+
+  - freeBoundary - group
+
+    - vacuumField - :doc:`/_capnp/magnetics/ComputedField`
+
+    - vacuumFieldHl - :doc:`/_capnp/magnetics/MagneticField`
+
+- iota - union
+
+  - iotaProfile - :doc:`/_capnp/vmec/VmecProfile`
+
+  - fromCurrent - group
+
+    - totalCurrent - Float64
+
+    - anonymous union - union
+
+      - currentProfile - :doc:`/_capnp/vmec/VmecProfile`
+
+      - currentDensityProfile - :doc:`/_capnp/vmec/VmecProfile`
+
+- runParams - group
+
+  - nGridToroidal - UInt32 = 0
+
+  - nGridPoloidal - UInt32 = 0
+
+  - nGridRadial - List(UInt32) = [4, 9, 28, 99]
+
+  - maxIterationsPerSequence - UInt32 = 6000
+
+  - convergenceSteps - UInt32 = 100
+
+  - vacuumCalcSteps - UInt32 = 6
+
+  - timeStep - Float32 = 0.9
+
+  - forceToleranceLevels - List(Float32) = [1.0E-5, 1.0E-7, 1.E-10, 1.E-15]
+

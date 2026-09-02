@@ -1,0 +1,38 @@
+ObjectInfo
+==========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/warehouse-internal/index`
+
+This class is used for internal storage inside the warehouse. Do not use.
+
+Fields
+------
+
+- anonymous union - union
+
+  - nullValue - Void
+
+  - exception - Rpc.Exception
+
+  - link - Capability
+
+  - file - Capability
+
+  - unresolved - group
+
+    - tag - Void
+
+  - dataRef - group
+
+    - metadata - :doc:`/_capnp/data/DataRefMetadata`
+
+    - capTable - List(Capability)
+
+    - downloadStatus - union
+
+      - downloading - Void
+
+      - finished - Void
+

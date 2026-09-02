@@ -1,0 +1,8 @@
+RemoteIoStream
+==============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/streams/index`
+Extends: :doc:`/_capnp/streams/RemoteInputStream`, :doc:`/_capnp/streams/RemoteOutputStream`
+

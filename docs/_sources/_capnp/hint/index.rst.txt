@@ -1,0 +1,10 @@
+hint.capnp
+==========
+
+Structs
+-------
+
+.. toctree::
+   :maxdepth: 1
+
+   HintEquilibrium

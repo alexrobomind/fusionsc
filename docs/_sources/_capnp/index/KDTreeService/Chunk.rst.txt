@@ -1,0 +1,15 @@
+KDTreeService.Chunk
+===================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/index/index`
+Parent: :doc:`/_capnp/index/KDTreeService`
+
+Fields
+------
+
+- boxes - :doc:`/_capnp/data/Float64Tensor`
+
+- keys - List(UInt64)
+

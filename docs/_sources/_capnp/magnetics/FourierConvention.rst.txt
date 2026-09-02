@@ -1,0 +1,12 @@
+FourierConvention
+=================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/magnetics/index`
+
+Values
+------
+
+- ``regular``
+- ``vmec``

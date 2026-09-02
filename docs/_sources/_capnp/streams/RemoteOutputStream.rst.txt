@@ -1,0 +1,22 @@
+RemoteOutputStream
+==================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/streams/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+write: (data: Data) -> stream
+
+.. rst-class:: capnp-method
+
+eof: () -> ()
+
+.. rst-class:: capnp-method
+
+flush: () -> ()
+

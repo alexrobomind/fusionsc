@@ -1,0 +1,18 @@
+Matcher
+=======
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/matcher/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+get: () -> (token : Data, cap : Capability)
+
+.. rst-class:: capnp-method
+
+put: (token: Data, cap: Capability) -> ()
+

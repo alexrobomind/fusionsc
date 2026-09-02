@@ -1,0 +1,20 @@
+FLTStopReason
+=============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+
+Values
+------
+
+- ``unknown``
+- ``stepLimit``
+- ``distanceLimit``
+- ``turnLimit``
+- ``eventBufferFull``
+- ``outOfGrid``
+- ``nanEncountered``
+- ``collisionLimit``
+- ``couldNotStep``
+- ``fieldlineReversed``

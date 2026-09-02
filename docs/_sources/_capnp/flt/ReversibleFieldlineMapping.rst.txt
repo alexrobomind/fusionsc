@@ -1,0 +1,18 @@
+ReversibleFieldlineMapping
+==========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+
+Fields
+------
+
+- surfaces - List(Float64)
+
+- sections - List(Section)
+
+- nPad - UInt64
+
+- nSym - UInt64 = 1
+

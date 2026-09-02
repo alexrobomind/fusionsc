@@ -1,0 +1,8 @@
+B
+=
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/data-test/index`
+Extends: :doc:`/_capnp/data-test/A`
+

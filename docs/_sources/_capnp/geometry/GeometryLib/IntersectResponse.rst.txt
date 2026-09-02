@@ -1,0 +1,17 @@
+GeometryLib.IntersectResponse
+=============================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+Parent: :doc:`/_capnp/geometry/GeometryLib`
+
+Fields
+------
+
+- position - :doc:`/_capnp/data/Float64Tensor`
+
+- lambda - :doc:`/_capnp/data/Float64Tensor`
+
+- tags - List(TagEntry)
+

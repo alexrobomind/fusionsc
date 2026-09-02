@@ -1,0 +1,14 @@
+BiotSavartSettings
+==================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/magnetics/index`
+
+Fields
+------
+
+- width - Float64
+
+- stepSize - Float64
+

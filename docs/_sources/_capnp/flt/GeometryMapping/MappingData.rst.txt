@@ -1,0 +1,15 @@
+GeometryMapping.MappingData
+===========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+Parent: :doc:`/_capnp/flt/GeometryMapping`
+
+Fields
+------
+
+- sections - List(:doc:`/_capnp/flt/GeometryMapping/SectionData`)
+
+- nSym - UInt64 = 1
+

@@ -1,0 +1,42 @@
+W7XCoilSet
+==========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/magnetics/index`
+
+Fields
+------
+
+- anonymous union - union
+
+  - coils - group
+
+    - invertMainCoils - Bool = true
+
+    - nWindMain - List(UInt32) = [108, 108, 108, 108, 108, 36, 36]
+
+    - nWindTrim - List(UInt32) = [48, 72, 48, 48, 48]
+
+    - nWindControl - List(UInt32) = [8, 8, 8, 8, 8, 8, 8, 8, 8, 8]
+
+    - anonymous union - union
+
+      - coilsDbSet - group
+
+        - mainCoilOffset - UInt32 = 160
+
+        - trimCoilIDs - List(UInt32) = [350, 241, 351, 352, 353]
+
+        - controlCoilOffset - UInt32 = 230
+
+      - customCoilSet - group
+
+  - fields - group
+
+    - mainFields - List(:doc:`/_capnp/magnetics/MagneticField`)
+
+    - trimFields - List(:doc:`/_capnp/magnetics/MagneticField`)
+
+    - controlFields - List(:doc:`/_capnp/magnetics/MagneticField`)
+

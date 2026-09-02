@@ -1,0 +1,45 @@
+﻿fusionsc.capnp.FieldDescriptor
+==============================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: FieldDescriptor
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~FieldDescriptor.__init__
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~FieldDescriptor.index
+	~FieldDescriptor.isInUnion
+	~FieldDescriptor.proto
+	~FieldDescriptor.type
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: FieldDescriptor.__init__
+
+
+
+
+

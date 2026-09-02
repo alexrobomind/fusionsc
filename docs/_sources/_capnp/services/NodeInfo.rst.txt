@@ -1,0 +1,26 @@
+NodeInfo
+========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/services/index`
+
+Fields
+------
+
+- deviceType - :doc:`/_capnp/services/ComputationDeviceType`
+
+- computeEnabled - Bool
+
+- warehouses - List(Text)
+
+- name - Text
+
+- commitHash - Text
+
+- activeCalls - UInt64
+
+- queuedCalls - UInt64
+
+- capacity - UInt64
+

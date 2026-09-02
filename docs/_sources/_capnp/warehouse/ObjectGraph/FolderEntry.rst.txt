@@ -1,0 +1,15 @@
+ObjectGraph.FolderEntry
+=======================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/warehouse/index`
+Parent: :doc:`/_capnp/warehouse/ObjectGraph`
+
+Fields
+------
+
+- name - Text
+
+- object - UInt64
+

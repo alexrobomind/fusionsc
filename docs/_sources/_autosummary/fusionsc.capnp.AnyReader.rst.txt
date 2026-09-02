@@ -1,0 +1,40 @@
+﻿fusionsc.capnp.AnyReader
+========================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: AnyReader
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~AnyReader.__init__
+  ~AnyReader.castAs
+  ~AnyReader.clone
+
+
+
+
+
+
+
+
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: AnyReader.__init__
+.. automethod:: AnyReader.castAs
+.. automethod:: AnyReader.clone
+
+
+
+
+

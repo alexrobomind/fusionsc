@@ -1,0 +1,46 @@
+﻿fusionsc.capnp.ListBuilder
+==========================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: ListBuilder
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~ListBuilder.__init__
+  ~ListBuilder.clone
+  ~ListBuilder.init
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~ListBuilder.type_
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: ListBuilder.__init__
+.. automethod:: ListBuilder.clone
+.. automethod:: ListBuilder.init
+
+
+
+
+

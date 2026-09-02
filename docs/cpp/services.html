@@ -1,0 +1,626 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Services &mdash; FusionSC 2.3.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Cap’n’Proto API Reference" href="../_capnp/index.html" />
+    <link rel="prev" title="VMEC Interface" href="vmec.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            FusionSC
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview &amp; Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../setup.html">Setting up FusionSC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/index.html">Usage examples (How To …)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dataspec.html">Specification of magnetic fields and geometries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">Licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference.html">Reference</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">C++ Library Documentation</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="magnetics.html">Magnetics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fieldline-tracing.html">Field Line Tracing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="geometry.html">Geometry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data.html">Data Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="vmec.html">VMEC Interface</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Services</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api-reference">API Reference</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#_CPPv43fsc"><code class="docutils literal notranslate"><span class="pre">fsc</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#_CPPv4N3fsc7LibraryE"><code class="docutils literal notranslate"><span class="pre">Library</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#_CPPv4N3fsc13LibraryThreadE"><code class="docutils literal notranslate"><span class="pre">LibraryThread</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#_CPPv4N3fsc10newLibraryE17StartupParameters"><code class="docutils literal notranslate"><span class="pre">newLibrary()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#_CPPv4N3fsc15getActiveThreadEv"><code class="docutils literal notranslate"><span class="pre">getActiveThread()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#_CPPv4N3fsc15hasActiveThreadEv"><code class="docutils literal notranslate"><span class="pre">hasActiveThread()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#_CPPv4N3fsc13LibraryHandleE"><code class="docutils literal notranslate"><span class="pre">fsc::LibraryHandle</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#_CPPv4N3fsc16NullErrorHandlerE"><code class="docutils literal notranslate"><span class="pre">fsc::NullErrorHandler</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#_CPPv4N3fsc17StartupParametersE"><code class="docutils literal notranslate"><span class="pre">fsc::StartupParameters</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#_CPPv4N3fsc13ThreadContextE"><code class="docutils literal notranslate"><span class="pre">fsc::ThreadContext</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#_CPPv4N3fsc13WorkerContextE"><code class="docutils literal notranslate"><span class="pre">fsc::WorkerContext</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#_CPPv4N3fsc15InProcessServerE"><code class="docutils literal notranslate"><span class="pre">fsc::InProcessServer</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#quick-start">Quick Start</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../_capnp/index.html">Cap’n’Proto API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">FusionSC</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">C++ Library Documentation</a></li>
+      <li class="breadcrumb-item active">Services</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/cpp/services.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="services">
+<h1>Services<a class="headerlink" href="#services" title="Link to this heading"></a></h1>
+<p>The services module implements the RPC service layer for remote computation
+and the local in-process server.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>FusionSC has first-class support for remote execution. Calculation and data
+handling requests can be delegated to a remote instance. The connection is
+established through a fast asynchronous RPC protocol based on HTTP and WebSocket,
+built on Cap’n’Proto.</p>
+</section>
+<section id="api-reference">
+<h2>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading"></a></h2>
+<dl class="cpp type">
+<dt class="sig sig-object cpp" id="_CPPv43fsc">
+<span id="_CPPv33fsc"></span><span id="_CPPv23fsc"></span><span id="fsc"></span><span class="target" id="namespacefsc"></span><span class="k"><span class="pre">namespace</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">fsc</span></span></span><br /></dt>
+<dd><p>The FSC library.</p>
+<p>Simple interface module for <a class="reference internal" href="genapi.html#structfsc_1_1_z_lib"><span class="std std-ref">ZLib</span></a></p>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-functions">Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc10createRootEN11LocalConfig6ReaderE">
+<span id="_CPPv3N3fsc10createRootEN11LocalConfig6ReaderE"></span><span id="_CPPv2N3fsc10createRootEN11LocalConfig6ReaderE"></span><span id="fsc::createRoot__LocalConfig::Reader"></span><span class="target" id="namespacefsc_1a1fae83a23de6c6b1fa3a27e81ade92d6"></span><span class="n"><span class="pre">Own</span></span><span class="p"><span class="pre">&lt;</span></span><span class="n"><span class="pre">RootService</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Server</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">createRoot</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">LocalConfig</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Reader</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">config</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc10createRootEN11LocalConfig6ReaderE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc20createLocalResourcesEN11LocalConfig6ReaderE">
+<span id="_CPPv3N3fsc20createLocalResourcesEN11LocalConfig6ReaderE"></span><span id="_CPPv2N3fsc20createLocalResourcesEN11LocalConfig6ReaderE"></span><span id="fsc::createLocalResources__LocalConfig::Reader"></span><span class="target" id="namespacefsc_1a8f287a7eae874b04fe1360dfe84354d0"></span><span class="n"><span class="pre">Own</span></span><span class="p"><span class="pre">&lt;</span></span><span class="n"><span class="pre">LocalResources</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Server</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">createLocalResources</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">LocalConfig</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Reader</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">config</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc20createLocalResourcesEN11LocalConfig6ReaderE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc19protectedInterfacesEv">
+<span id="_CPPv3N3fsc19protectedInterfacesEv"></span><span id="_CPPv2N3fsc19protectedInterfacesEv"></span><span id="fsc::protectedInterfaces"></span><span class="target" id="namespacefsc_1a5781c80a5e697a18ffa6517d06e39bbd"></span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">ArrayPtr</span></span><span class="p"><span class="pre">&lt;</span></span><span class="n"><span class="pre">uint64_t</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">protectedInterfaces</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc19protectedInterfacesEv" title="Link to this definition"></a><br /></dt>
+<dd><p>List of interface IDs that may not be called via network callss. </p>
+</dd></dl>
+
+</div>
+</dd></dl>
+
+<dl class="cpp type">
+<dt class="sig sig-object cpp">
+<span class="target" id="namespacefsc"></span><span class="k"><span class="pre">namespace</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">fsc</span></span></span><br /></dt>
+<dd><p>The FSC library.</p>
+<p>Simple interface module for <a class="reference internal" href="genapi.html#structfsc_1_1_z_lib"><span class="std std-ref">ZLib</span></a></p>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-typedefs">Typedefs</p>
+<dl class="cpp type">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc7LibraryE">
+<span id="_CPPv3N3fsc7LibraryE"></span><span id="_CPPv2N3fsc7LibraryE"></span><span class="target" id="namespacefsc_1a727e2c3983808068a482bfa97ff0e451"></span><span class="k"><span class="pre">using</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Library</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="n"><span class="pre">Own</span></span><span class="p"><span class="pre">&lt;</span></span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N3fsc13LibraryHandleE" title="fsc::LibraryHandle"><span class="n"><span class="pre">LibraryHandle</span></span></a><span class="p"><span class="pre">&gt;</span></span><a class="headerlink" href="#_CPPv4N3fsc7LibraryE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp type">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13LibraryThreadE">
+<span id="_CPPv3N3fsc13LibraryThreadE"></span><span id="_CPPv2N3fsc13LibraryThreadE"></span><span class="target" id="namespacefsc_1a16cb858628dbe33e9bad58b1199a4fdf"></span><span class="k"><span class="pre">using</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LibraryThread</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="n"><span class="pre">Own</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4N3fsc13ThreadContextE" title="fsc::ThreadContext"><span class="n"><span class="pre">ThreadContext</span></span></a><span class="p"><span class="pre">&gt;</span></span><a class="headerlink" href="#_CPPv4N3fsc13LibraryThreadE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-functions">Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc10newLibraryE17StartupParameters">
+<span id="_CPPv3N3fsc10newLibraryE17StartupParameters"></span><span id="_CPPv2N3fsc10newLibraryE17StartupParameters"></span><span id="fsc::newLibrary__StartupParameters"></span><span class="target" id="namespacefsc_1a0226766c7c6e131a4da1a84feb9acf47"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N3fsc7LibraryE" title="fsc::Library"><span class="n"><span class="pre">Library</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">newLibrary</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N3fsc17StartupParametersE" title="fsc::StartupParameters"><span class="n"><span class="pre">StartupParameters</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">params</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N3fsc17StartupParametersE" title="fsc::StartupParameters"><span class="n"><span class="pre">StartupParameters</span></span></a><span class="p"><span class="pre">(</span></span><span class="p"><span class="pre">)</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc10newLibraryE17StartupParameters" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc15getActiveThreadEv">
+<span id="_CPPv3N3fsc15getActiveThreadEv"></span><span id="_CPPv2N3fsc15getActiveThreadEv"></span><span id="fsc::getActiveThread"></span><span class="target" id="namespacefsc_1a75e862af5f938b5194ff711ef482935a"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N3fsc13ThreadContextE" title="fsc::ThreadContext"><span class="n"><span class="pre">ThreadContext</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">getActiveThread</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc15getActiveThreadEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc15hasActiveThreadEv">
+<span id="_CPPv3N3fsc15hasActiveThreadEv"></span><span id="_CPPv2N3fsc15hasActiveThreadEv"></span><span id="fsc::hasActiveThread"></span><span class="target" id="namespacefsc_1a39440697b10fb071725acfb39a6575e2"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">hasActiveThread</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc15hasActiveThreadEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<dl class="cpp struct">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13LibraryHandleE">
+<span id="_CPPv3N3fsc13LibraryHandleE"></span><span id="_CPPv2N3fsc13LibraryHandleE"></span><span id="fsc::LibraryHandle"></span><span class="target" id="structfsc_1_1_library_handle"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LibraryHandle</span></span></span><span class="w"> </span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="k"><span class="pre">public</span></span><span class="w"> </span><span class="n"><span class="pre">kj</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">AtomicRefcounted</span></span><a class="headerlink" href="#_CPPv4N3fsc13LibraryHandleE" title="Link to this definition"></a><br /></dt>
+<dd><p>“Global” libary handle. This class serves as the dependency injection context for objects that should be shared across all threads. Currently, this is only the local data store table and a shared daemon runner. </p>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13LibraryHandle13LibraryHandleE17StartupParameters">
+<span id="_CPPv3N3fsc13LibraryHandle13LibraryHandleE17StartupParameters"></span><span id="_CPPv2N3fsc13LibraryHandle13LibraryHandleE17StartupParameters"></span><span id="fsc::LibraryHandle::LibraryHandle__StartupParameters"></span><span class="target" id="structfsc_1_1_library_handle_1a362dc436b356bc87e484400801057240"></span><span class="sig-name descname"><span class="n"><span class="pre">LibraryHandle</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N3fsc17StartupParametersE" title="fsc::StartupParameters"><span class="n"><span class="pre">StartupParameters</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">params</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N3fsc17StartupParametersE" title="fsc::StartupParameters"><span class="n"><span class="pre">StartupParameters</span></span></a><span class="p"><span class="pre">(</span></span><span class="p"><span class="pre">)</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13LibraryHandle13LibraryHandleE17StartupParameters" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13LibraryHandleD0Ev">
+<span id="_CPPv3N3fsc13LibraryHandleD0Ev"></span><span id="_CPPv2N3fsc13LibraryHandleD0Ev"></span><span id="fsc::LibraryHandle::~LibraryHandle"></span><span class="target" id="structfsc_1_1_library_handle_1a391d4c4b6379f84f3ac56598530f814f"></span><span class="sig-name descname"><span class="n"><span class="pre">~LibraryHandle</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13LibraryHandleD0Ev" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK3fsc13LibraryHandle6addRefEv">
+<span id="_CPPv3NK3fsc13LibraryHandle6addRefEv"></span><span id="_CPPv2NK3fsc13LibraryHandle6addRefEv"></span><span id="fsc::LibraryHandle::addRefC"></span><span class="target" id="structfsc_1_1_library_handle_1a89477fa74103d716d96b1b86268f8849"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">kj</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Own</span></span><span class="p"><span class="pre">&lt;</span></span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N3fsc13LibraryHandleE" title="fsc::LibraryHandle"><span class="n"><span class="pre">LibraryHandle</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">addRef</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK3fsc13LibraryHandle6addRefEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK3fsc13LibraryHandle5storeEv">
+<span id="_CPPv3NK3fsc13LibraryHandle5storeEv"></span><span id="_CPPv2NK3fsc13LibraryHandle5storeEv"></span><span id="fsc::LibraryHandle::storeC"></span><span class="target" id="structfsc_1_1_library_handle_1a014f39dc9caeb887b5d068fe8d47448c"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="data.html#_CPPv4N3fsc9DataStoreE" title="fsc::DataStore"><span class="n"><span class="pre">DataStore</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">store</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK3fsc13LibraryHandle5storeEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK3fsc13LibraryHandle6workerEv">
+<span id="_CPPv3NK3fsc13LibraryHandle6workerEv"></span><span id="_CPPv2NK3fsc13LibraryHandle6workerEv"></span><span id="fsc::LibraryHandle::workerC"></span><span class="target" id="structfsc_1_1_library_handle_1a48801bc06443f4ee938a1e326b8f0f0b"></span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">kj</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Executor</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">worker</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK3fsc13LibraryHandle6workerEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK3fsc13LibraryHandle9newThreadE5MaybeIRN2kj9EventPortEE">
+<span id="_CPPv3NK3fsc13LibraryHandle9newThreadE5MaybeIRN2kj9EventPortEE"></span><span id="_CPPv2NK3fsc13LibraryHandle9newThreadE5MaybeIRN2kj9EventPortEE"></span><span id="fsc::LibraryHandle::newThread__Maybe:kj::EventPortR:C"></span><span class="target" id="structfsc_1_1_library_handle_1a7666ab49e858077b6537c29ea5143f47"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N3fsc13LibraryThreadE" title="fsc::LibraryThread"><span class="n"><span class="pre">LibraryThread</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">newThread</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">Maybe</span></span><span class="p"><span class="pre">&lt;</span></span><span class="n"><span class="pre">kj</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">EventPort</span></span><span class="p"><span class="pre">&amp;</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">eventPort</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="k"><span class="pre">nullptr</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK3fsc13LibraryHandle9newThreadE5MaybeIRN2kj9EventPortEE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK3fsc13LibraryHandle11defaultHashEv">
+<span id="_CPPv3NK3fsc13LibraryHandle11defaultHashEv"></span><span id="_CPPv2NK3fsc13LibraryHandle11defaultHashEv"></span><span id="fsc::LibraryHandle::defaultHashC"></span><span class="target" id="structfsc_1_1_library_handle_1a0b12e6c7decad71bbde936c7a0e4d9fc"></span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">unique_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><span class="n"><span class="pre">Botan</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">HashFunction</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">defaultHash</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK3fsc13LibraryHandle11defaultHashEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-private-functions">Private Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13LibraryHandle10runStewardEv">
+<span id="_CPPv3N3fsc13LibraryHandle10runStewardEv"></span><span id="_CPPv2N3fsc13LibraryHandle10runStewardEv"></span><span id="fsc::LibraryHandle::runSteward"></span><span class="target" id="structfsc_1_1_library_handle_1ad9b0f8cd161679bc29338d6a845d41fb"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">runSteward</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13LibraryHandle10runStewardEv" title="Link to this definition"></a><br /></dt>
+<dd><p>Executes the steward thread. </p>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-private-members">Private Members</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13LibraryHandle11sharedStoreE">
+<span id="_CPPv3N3fsc13LibraryHandle11sharedStoreE"></span><span id="_CPPv2N3fsc13LibraryHandle11sharedStoreE"></span><span id="fsc::LibraryHandle::sharedStore__DataStore"></span><span class="target" id="structfsc_1_1_library_handle_1aa57b58749dc48336b968f50563988f8b"></span><span class="k"><span class="pre">mutable</span></span><span class="w"> </span><a class="reference internal" href="data.html#_CPPv4N3fsc9DataStoreE" title="fsc::DataStore"><span class="n"><span class="pre">DataStore</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">sharedStore</span></span></span><a class="headerlink" href="#_CPPv4N3fsc13LibraryHandle11sharedStoreE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13LibraryHandle10workerPoolE">
+<span id="_CPPv3N3fsc13LibraryHandle10workerPoolE"></span><span id="_CPPv2N3fsc13LibraryHandle10workerPoolE"></span><span id="fsc::LibraryHandle::workerPool__internal::LightWorkerPool"></span><span class="target" id="structfsc_1_1_library_handle_1a3ef351898ba6757b5e47bcccdefc062b"></span><span class="n"><span class="pre">internal</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">LightWorkerPool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">workerPool</span></span></span><a class="headerlink" href="#_CPPv4N3fsc13LibraryHandle10workerPoolE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-private-static-functions">Private Static Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13LibraryHandle23createStoreFromSettingsER17StartupParameters">
+<span id="_CPPv3N3fsc13LibraryHandle23createStoreFromSettingsER17StartupParameters"></span><span id="_CPPv2N3fsc13LibraryHandle23createStoreFromSettingsER17StartupParameters"></span><span id="fsc::LibraryHandle::createStoreFromSettings__StartupParametersR"></span><span class="target" id="structfsc_1_1_library_handle_1a50be7cca62cbe08ccdf1350da99ef31e"></span><span class="k"><span class="pre">static</span></span><span class="w"> </span><a class="reference internal" href="data.html#_CPPv4N3fsc9DataStoreE" title="fsc::DataStore"><span class="n"><span class="pre">DataStore</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">createStoreFromSettings</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N3fsc17StartupParametersE" title="fsc::StartupParameters"><span class="n"><span class="pre">StartupParameters</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">params</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13LibraryHandle23createStoreFromSettingsER17StartupParameters" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-friends">Friends</p>
+<dl>
+<dt class="sig sig-object cpp">
+<em class="property"><span class="pre">friend</span> <span class="pre">class</span></em> <span class="pre">StewardContext</span></dt>
+</dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13LibraryHandle2kj16atomicRefcountedEv">
+<span id="_CPPv3N3fsc13LibraryHandle2kj16atomicRefcountedEv"></span><span id="_CPPv2N3fsc13LibraryHandle2kj16atomicRefcountedEv"></span><span id="fsc::LibraryHandle::kj::atomicRefcounted"></span><span class="target" id="structfsc_1_1_library_handle_1a82751b2e35c8471506b72215cc907dd8"></span><span class="k"><span class="pre">friend</span></span><span class="w"> </span><span class="n"><span class="pre">Own</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4N3fsc13LibraryHandleE" title="fsc::LibraryHandle"><span class="n"><span class="pre">LibraryHandle</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">atomicRefcounted</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13LibraryHandle2kj16atomicRefcountedEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+</dd></dl>
+
+<dl class="cpp struct">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc16NullErrorHandlerE">
+<span id="_CPPv3N3fsc16NullErrorHandlerE"></span><span id="_CPPv2N3fsc16NullErrorHandlerE"></span><span id="fsc::NullErrorHandler"></span><span class="target" id="structfsc_1_1_null_error_handler"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">NullErrorHandler</span></span></span><span class="w"> </span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="k"><span class="pre">public</span></span><span class="w"> </span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">TaskSet</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">ErrorHandler</span></span><a class="headerlink" href="#_CPPv4N3fsc16NullErrorHandlerE" title="Link to this definition"></a><br /></dt>
+<dd><div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc16NullErrorHandler10taskFailedERRN2kj9ExceptionE">
+<span id="_CPPv3N3fsc16NullErrorHandler10taskFailedERRN2kj9ExceptionE"></span><span id="_CPPv2N3fsc16NullErrorHandler10taskFailedERRN2kj9ExceptionE"></span><span id="fsc::NullErrorHandler::taskFailed__kj::ExceptionRR"></span><span class="target" id="structfsc_1_1_null_error_handler_1abc9f7acc3a22975198ccb40e289b8fbd"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">taskFailed</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Exception</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">e</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">override</span></span><a class="headerlink" href="#_CPPv4N3fsc16NullErrorHandler10taskFailedERRN2kj9ExceptionE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-static-attributes">Public Static Attributes</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc16NullErrorHandler8instanceE">
+<span id="_CPPv3N3fsc16NullErrorHandler8instanceE"></span><span id="_CPPv2N3fsc16NullErrorHandler8instanceE"></span><span id="fsc::NullErrorHandler::instance__NullErrorHandler"></span><span class="target" id="structfsc_1_1_null_error_handler_1a55536f59ef476aa56a755f92542031af"></span><span class="k"><span class="pre">static</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N3fsc16NullErrorHandlerE" title="fsc::NullErrorHandler"><span class="n"><span class="pre">NullErrorHandler</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">instance</span></span></span><a class="headerlink" href="#_CPPv4N3fsc16NullErrorHandler8instanceE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+</dd></dl>
+
+<dl class="cpp struct">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc17StartupParametersE">
+<span id="_CPPv3N3fsc17StartupParametersE"></span><span id="_CPPv2N3fsc17StartupParametersE"></span><span id="fsc::StartupParameters"></span><span class="target" id="structfsc_1_1_startup_parameters"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">StartupParameters</span></span></span><a class="headerlink" href="#_CPPv4N3fsc17StartupParametersE" title="Link to this definition"></a><br /></dt>
+<dd><div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc17StartupParameters9dataStoreE">
+<span id="_CPPv3N3fsc17StartupParameters9dataStoreE"></span><span id="_CPPv2N3fsc17StartupParameters9dataStoreE"></span><span id="fsc::StartupParameters::dataStore__Maybe:DataStore:"></span><span class="target" id="structfsc_1_1_startup_parameters_1a6d2dd32852bfd815285c8d581b973799"></span><span class="n"><span class="pre">Maybe</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="data.html#_CPPv4N3fsc9DataStoreE" title="fsc::DataStore"><span class="n"><span class="pre">DataStore</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dataStore</span></span></span><a class="headerlink" href="#_CPPv4N3fsc17StartupParameters9dataStoreE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc17StartupParameters16numWorkerThreadsE">
+<span id="_CPPv3N3fsc17StartupParameters16numWorkerThreadsE"></span><span id="_CPPv2N3fsc17StartupParameters16numWorkerThreadsE"></span><span id="fsc::StartupParameters::numWorkerThreads__s"></span><span class="target" id="structfsc_1_1_startup_parameters_1aa1d537816004011f1d290ca7c76d9104"></span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">numWorkerThreads</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="m"><span class="pre">0</span></span><a class="headerlink" href="#_CPPv4N3fsc17StartupParameters16numWorkerThreadsE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+</dd></dl>
+
+<dl class="cpp struct">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContextE">
+<span id="_CPPv3N3fsc13ThreadContextE"></span><span id="_CPPv2N3fsc13ThreadContextE"></span><span id="fsc::ThreadContext"></span><span class="target" id="structfsc_1_1_thread_context"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ThreadContext</span></span></span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContextE" title="Link to this definition"></a><br /></dt>
+<dd><p>Subclassed by <a class="reference internal" href="#structfsc_1_1_worker_context"><span class="std std-ref">fsc::WorkerContext</span></a></p>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext13ThreadContextE7Library5MaybeIRN2kj9EventPortEE">
+<span id="_CPPv3N3fsc13ThreadContext13ThreadContextE7Library5MaybeIRN2kj9EventPortEE"></span><span id="_CPPv2N3fsc13ThreadContext13ThreadContextE7Library5MaybeIRN2kj9EventPortEE"></span><span id="fsc::ThreadContext::ThreadContext__Library.Maybe:kj::EventPortR:"></span><span class="target" id="structfsc_1_1_thread_context_1a51fa51bbd8783ac77982d1926cc8b9f6"></span><span class="sig-name descname"><span class="n"><span class="pre">ThreadContext</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N3fsc7LibraryE" title="fsc::Library"><span class="n"><span class="pre">Library</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">lh</span></span>, <span class="n"><span class="pre">Maybe</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">EventPort</span></span><span class="p"><span class="pre">&amp;</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="k"><span class="pre">nullptr</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext13ThreadContextE7Library5MaybeIRN2kj9EventPortEE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContextD0Ev">
+<span id="_CPPv3N3fsc13ThreadContextD0Ev"></span><span id="_CPPv2N3fsc13ThreadContextD0Ev"></span><span id="fsc::ThreadContext::~ThreadContext"></span><span class="target" id="structfsc_1_1_thread_context_1af67901d16ac8f6df9e7a59996d7f3e90"></span><span class="sig-name descname"><span class="n"><span class="pre">~ThreadContext</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContextD0Ev" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK3fsc13ThreadContext8executorEv">
+<span id="_CPPv3NK3fsc13ThreadContext8executorEv"></span><span id="_CPPv2NK3fsc13ThreadContext8executorEv"></span><span id="fsc::ThreadContext::executorC"></span><span class="target" id="structfsc_1_1_thread_context_1ac8b68dedf2cda4768a51c5895c9d8ec8"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Executor</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">executor</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK3fsc13ThreadContext8executorEv" title="Link to this definition"></a><br /></dt>
+<dd><p>Access to executor from outside threads. </p>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK3fsc13ThreadContext7libraryEv">
+<span id="_CPPv3NK3fsc13ThreadContext7libraryEv"></span><span id="_CPPv2NK3fsc13ThreadContext7libraryEv"></span><span id="fsc::ThreadContext::libraryC"></span><span class="target" id="structfsc_1_1_thread_context_1a3c075df8eac30ca2da6f7eb898875edd"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N3fsc7LibraryE" title="fsc::Library"><span class="n"><span class="pre">Library</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">library</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK3fsc13ThreadContext7libraryEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext11dataServiceEv">
+<span id="_CPPv3N3fsc13ThreadContext11dataServiceEv"></span><span id="_CPPv2N3fsc13ThreadContext11dataServiceEv"></span><span id="fsc::ThreadContext::dataService"></span><span class="target" id="structfsc_1_1_thread_context_1a3f1c3b5617a4d402723e7afebdf03ccb"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="data.html#_CPPv4N3fsc16LocalDataServiceE" title="fsc::LocalDataService"><span class="n"><span class="pre">LocalDataService</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">dataService</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext11dataServiceEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext9ioContextEv">
+<span id="_CPPv3N3fsc13ThreadContext9ioContextEv"></span><span id="_CPPv2N3fsc13ThreadContext9ioContextEv"></span><span id="fsc::ThreadContext::ioContext"></span><span class="target" id="structfsc_1_1_thread_context_1ab70ff36f9f70cc8922bed0c7f5104738"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">AsyncIoContext</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">ioContext</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext9ioContextEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext9waitScopeEv">
+<span id="_CPPv3N3fsc13ThreadContext9waitScopeEv"></span><span id="_CPPv2N3fsc13ThreadContext9waitScopeEv"></span><span id="fsc::ThreadContext::waitScope"></span><span class="target" id="structfsc_1_1_thread_context_1a2dceb108a4f761d5c7742a534ad4b930"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">WaitScope</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">waitScope</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext9waitScopeEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext5timerEv">
+<span id="_CPPv3N3fsc13ThreadContext5timerEv"></span><span id="_CPPv2N3fsc13ThreadContext5timerEv"></span><span id="fsc::ThreadContext::timer"></span><span class="target" id="structfsc_1_1_thread_context_1ac51cb5cf3676645b40ab46205f240604"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Timer</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">timer</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext5timerEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext3rngEv">
+<span id="_CPPv3N3fsc13ThreadContext3rngEv"></span><span id="_CPPv2N3fsc13ThreadContext3rngEv"></span><span id="fsc::ThreadContext::rng"></span><span class="target" id="structfsc_1_1_thread_context_1a194236428ad0fef4584de60d81eda267"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="genapi.html#_CPPv4N3fsc6CSPRNGE" title="fsc::CSPRNG"><span class="n"><span class="pre">CSPRNG</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">rng</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext3rngEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext7networkEv">
+<span id="_CPPv3N3fsc13ThreadContext7networkEv"></span><span id="_CPPv2N3fsc13ThreadContext7networkEv"></span><span id="fsc::ThreadContext::network"></span><span class="target" id="structfsc_1_1_thread_context_1ad80cd74140197ee3c42c8631b9265c41"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Network</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">network</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext7networkEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext15streamConverterEv">
+<span id="_CPPv3N3fsc13ThreadContext15streamConverterEv"></span><span id="_CPPv2N3fsc13ThreadContext15streamConverterEv"></span><span id="fsc::ThreadContext::streamConverter"></span><span class="target" id="structfsc_1_1_thread_context_1aa8c9519af0c7723977473fd4ad9cfdff"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="genapi.html#_CPPv4N3fsc15StreamConverterE" title="fsc::StreamConverter"><span class="n"><span class="pre">StreamConverter</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">streamConverter</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext15streamConverterEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext10filesystemEv">
+<span id="_CPPv3N3fsc13ThreadContext10filesystemEv"></span><span id="_CPPv2N3fsc13ThreadContext10filesystemEv"></span><span id="fsc::ThreadContext::filesystem"></span><span class="target" id="structfsc_1_1_thread_context_1a89002a248e0a01181cd784be8f5bed0d"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Filesystem</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">filesystem</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext10filesystemEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK3fsc13ThreadContext5storeEv">
+<span id="_CPPv3NK3fsc13ThreadContext5storeEv"></span><span id="_CPPv2NK3fsc13ThreadContext5storeEv"></span><span id="fsc::ThreadContext::storeC"></span><span class="target" id="structfsc_1_1_thread_context_1ad338efc982ce44d3f18b00a93c009303"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="data.html#_CPPv4N3fsc9DataStoreE" title="fsc::DataStore"><span class="n"><span class="pre">DataStore</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">store</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK3fsc13ThreadContext5storeEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK3fsc13ThreadContext6workerEv">
+<span id="_CPPv3NK3fsc13ThreadContext6workerEv"></span><span id="_CPPv2NK3fsc13ThreadContext6workerEv"></span><span id="fsc::ThreadContext::workerC"></span><span class="target" id="structfsc_1_1_thread_context_1a25c96f189ef4a517b7363b58926acc5e"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Executor</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">worker</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK3fsc13ThreadContext6workerEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext8randomIDEv">
+<span id="_CPPv3N3fsc13ThreadContext8randomIDEv"></span><span id="_CPPv2N3fsc13ThreadContext8randomIDEv"></span><span id="fsc::ThreadContext::randomID"></span><span class="target" id="structfsc_1_1_thread_context_1ac4cceab2b825aed2a67d0f2819d71385"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Array</span></span><span class="p"><span class="pre">&lt;</span></span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="genapi.html#_CPPv4N3fsc4byteE" title="fsc::byte"><span class="n"><span class="pre">byte</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">randomID</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext8randomIDEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4I0EN3fsc13ThreadContext12uncancelableE7PromiseI1TE7PromiseI1TE">
+<span id="_CPPv3I0EN3fsc13ThreadContext12uncancelableE7PromiseI1TE"></span><span id="_CPPv2I0EN3fsc13ThreadContext12uncancelableE7PromiseI1TE"></span><span class="k"><span class="pre">template</span></span><span class="p"><span class="pre">&lt;</span></span><span class="k"><span class="pre">typename</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">T</span></span></span><span class="p"><span class="pre">&gt;</span></span><br /><span class="target" id="structfsc_1_1_thread_context_1a5f0cffda74d41c8006b216e0f88bc3e2"></span><span class="n"><span class="pre">Promise</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I0EN3fsc13ThreadContext12uncancelableE7PromiseI1TE7PromiseI1TE" title="fsc::ThreadContext::uncancelable::T"><span class="n"><span class="pre">T</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">uncancelable</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">Promise</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I0EN3fsc13ThreadContext12uncancelableE7PromiseI1TE7PromiseI1TE" title="fsc::ThreadContext::uncancelable::T"><span class="n"><span class="pre">T</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">p</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4I0EN3fsc13ThreadContext12uncancelableE7PromiseI1TE7PromiseI1TE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext12uncancelableE7PromiseIvE">
+<span id="_CPPv3N3fsc13ThreadContext12uncancelableE7PromiseIvE"></span><span id="_CPPv2N3fsc13ThreadContext12uncancelableE7PromiseIvE"></span><span id="fsc::ThreadContext::uncancelable__Promise:void:"></span><span class="target" id="structfsc_1_1_thread_context_1ad6cf03db2ae34e1d8178ba87d13f4032"></span><span class="n"><span class="pre">Promise</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">void</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">uncancelable</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">Promise</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">void</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">p</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext12uncancelableE7PromiseIvE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext6detachE7PromiseIvE">
+<span id="_CPPv3N3fsc13ThreadContext6detachE7PromiseIvE"></span><span id="_CPPv2N3fsc13ThreadContext6detachE7PromiseIvE"></span><span id="fsc::ThreadContext::detach__Promise:void:"></span><span class="target" id="structfsc_1_1_thread_context_1a47b144cd77db5d953b131abbf461b864"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">detach</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">Promise</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">void</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">p</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext6detachE7PromiseIvE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext5drainEv">
+<span id="_CPPv3N3fsc13ThreadContext5drainEv"></span><span id="_CPPv2N3fsc13ThreadContext5drainEv"></span><span id="fsc::ThreadContext::drain"></span><span class="target" id="structfsc_1_1_thread_context_1a5a8afd10d5f35655ae49c4af010ba137"></span><span class="n"><span class="pre">Promise</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">void</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">drain</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext5drainEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext13lifetimeScopeEv">
+<span id="_CPPv3N3fsc13ThreadContext13lifetimeScopeEv"></span><span id="_CPPv2N3fsc13ThreadContext13lifetimeScopeEv"></span><span id="fsc::ThreadContext::lifetimeScope"></span><span class="target" id="structfsc_1_1_thread_context_1a8fb587e126d67a71182f136938aa00e9"></span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Canceler</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">lifetimeScope</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext13lifetimeScopeEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-protected-attributes">Protected Attributes</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext13detachedTasksE">
+<span id="_CPPv3N3fsc13ThreadContext13detachedTasksE"></span><span id="_CPPv2N3fsc13ThreadContext13detachedTasksE"></span><span id="fsc::ThreadContext::detachedTasks__kj::TaskSet"></span><span class="target" id="structfsc_1_1_thread_context_1a09b1875c2b1b971b68ebc2ab6d17308f"></span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">TaskSet</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">detachedTasks</span></span></span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext13detachedTasksE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-private-functions">Private Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext23makeAsyncInfrastructureE5MaybeIRN2kj9EventPortEE">
+<span id="_CPPv3N3fsc13ThreadContext23makeAsyncInfrastructureE5MaybeIRN2kj9EventPortEE"></span><span id="_CPPv2N3fsc13ThreadContext23makeAsyncInfrastructureE5MaybeIRN2kj9EventPortEE"></span><span id="fsc::ThreadContext::makeAsyncInfrastructure__Maybe:kj::EventPortR:"></span><span class="target" id="structfsc_1_1_thread_context_1a884436dff95d3ebf6afc2ed64007259c"></span><span class="n"><span class="pre">OneOf</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">AsyncIoContext</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N3fsc13ThreadContext15CustomEventPortE" title="fsc::ThreadContext::CustomEventPort"><span class="n"><span class="pre">CustomEventPort</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">makeAsyncInfrastructure</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">Maybe</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">EventPort</span></span><span class="p"><span class="pre">&amp;</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">port</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext23makeAsyncInfrastructureE5MaybeIRN2kj9EventPortEE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-private-members">Private Members</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext8_libraryE">
+<span id="_CPPv3N3fsc13ThreadContext8_libraryE"></span><span id="_CPPv2N3fsc13ThreadContext8_libraryE"></span><span id="fsc::ThreadContext::_library__Library"></span><span class="target" id="structfsc_1_1_thread_context_1a0c42562b5542dbccf14e65c79b453fac"></span><a class="reference internal" href="#_CPPv4N3fsc7LibraryE" title="fsc::Library"><span class="n"><span class="pre">Library</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">_library</span></span></span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext8_libraryE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext19asyncInfrastructureE">
+<span id="_CPPv3N3fsc13ThreadContext19asyncInfrastructureE"></span><span id="_CPPv2N3fsc13ThreadContext19asyncInfrastructureE"></span><span id="fsc::ThreadContext::asyncInfrastructure__OneOf:kj::AsyncIoContext.CustomEventPort:"></span><span class="target" id="structfsc_1_1_thread_context_1aef1452e2d0dbcfc46d3e6c9209f1875b"></span><span class="n"><span class="pre">OneOf</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">AsyncIoContext</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N3fsc13ThreadContext15CustomEventPortE" title="fsc::ThreadContext::CustomEventPort"><span class="n"><span class="pre">CustomEventPort</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">asyncInfrastructure</span></span></span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext19asyncInfrastructureE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext4_rngE">
+<span id="_CPPv3N3fsc13ThreadContext4_rngE"></span><span id="_CPPv2N3fsc13ThreadContext4_rngE"></span><span id="fsc::ThreadContext::_rng__CSPRNG"></span><span class="target" id="structfsc_1_1_thread_context_1aa7fa46c01d46151e583632b6a4524b4f"></span><a class="reference internal" href="genapi.html#_CPPv4N3fsc6CSPRNGE" title="fsc::CSPRNG"><span class="n"><span class="pre">CSPRNG</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">_rng</span></span></span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext4_rngE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext11_filesystemE">
+<span id="_CPPv3N3fsc13ThreadContext11_filesystemE"></span><span id="_CPPv2N3fsc13ThreadContext11_filesystemE"></span><span id="fsc::ThreadContext::_filesystem__Own:kj::Filesystem:"></span><span class="target" id="structfsc_1_1_thread_context_1a999f92efc4a02a2b1b9dca4abd8b7cc6"></span><span class="n"><span class="pre">Own</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Filesystem</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">_filesystem</span></span></span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext11_filesystemE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext16_streamConverterE">
+<span id="_CPPv3N3fsc13ThreadContext16_streamConverterE"></span><span id="_CPPv2N3fsc13ThreadContext16_streamConverterE"></span><span id="fsc::ThreadContext::_streamConverter__Own:StreamConverter:"></span><span class="target" id="structfsc_1_1_thread_context_1a4d85d3153cbebdb9ca2e20f2d05ddbfb"></span><span class="n"><span class="pre">Own</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="genapi.html#_CPPv4N3fsc15StreamConverterE" title="fsc::StreamConverter"><span class="n"><span class="pre">StreamConverter</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">_streamConverter</span></span></span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext16_streamConverterE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext9_executorE">
+<span id="_CPPv3N3fsc13ThreadContext9_executorE"></span><span id="_CPPv2N3fsc13ThreadContext9_executorE"></span><span id="fsc::ThreadContext::_executor__kj::ExecutorCR"></span><span class="target" id="structfsc_1_1_thread_context_1aaeb7ee64d5febfa9cea6594ffe95a3f8"></span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Executor</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">_executor</span></span></span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext9_executorE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext12_dataServiceE">
+<span id="_CPPv3N3fsc13ThreadContext12_dataServiceE"></span><span id="_CPPv2N3fsc13ThreadContext12_dataServiceE"></span><span id="fsc::ThreadContext::_dataService__Own:LocalDataService:"></span><span class="target" id="structfsc_1_1_thread_context_1a20a7b50db985e1cc382d7ae2f4d694c0"></span><span class="n"><span class="pre">Own</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="data.html#_CPPv4N3fsc16LocalDataServiceE" title="fsc::LocalDataService"><span class="n"><span class="pre">LocalDataService</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">_dataService</span></span></span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext12_dataServiceE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext13scopeProviderE">
+<span id="_CPPv3N3fsc13ThreadContext13scopeProviderE"></span><span id="_CPPv2N3fsc13ThreadContext13scopeProviderE"></span><span id="fsc::ThreadContext::scopeProvider__kj::Canceler"></span><span class="target" id="structfsc_1_1_thread_context_1a87f6db51b67dddce99eef1b45a055bc6"></span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Canceler</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">scopeProvider</span></span></span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext13scopeProviderE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-private-static-attributes">Private Static Attributes</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext7currentE">
+<span id="_CPPv3N3fsc13ThreadContext7currentE"></span><span id="_CPPv2N3fsc13ThreadContext7currentE"></span><span id="fsc::ThreadContext::current__ThreadContextP"></span><span class="target" id="structfsc_1_1_thread_context_1af8121f37d66f6c2565d26c6a81542483"></span><span class="k"><span class="pre">static</span></span><span class="w"> </span><span class="k"><span class="pre">thread_local</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N3fsc13ThreadContextE" title="fsc::ThreadContext"><span class="n"><span class="pre">ThreadContext</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">current</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="k"><span class="pre">nullptr</span></span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext7currentE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-friends">Friends</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext15getActiveThreadEv">
+<span id="_CPPv3N3fsc13ThreadContext15getActiveThreadEv"></span><span id="_CPPv2N3fsc13ThreadContext15getActiveThreadEv"></span><span id="fsc::ThreadContext::getActiveThread"></span><span class="target" id="structfsc_1_1_thread_context_1a0e8a95dcd31d251bdafe38a86499352a"></span><span class="k"><span class="pre">friend</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N3fsc13ThreadContextE" title="fsc::ThreadContext"><span class="n"><span class="pre">ThreadContext</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">getActiveThread</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext15getActiveThreadEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext15hasActiveThreadEv">
+<span id="_CPPv3N3fsc13ThreadContext15hasActiveThreadEv"></span><span id="_CPPv2N3fsc13ThreadContext15hasActiveThreadEv"></span><span id="fsc::ThreadContext::hasActiveThread"></span><span class="target" id="structfsc_1_1_thread_context_1a8d107c3f5609582d833b34a3c118f8e8"></span><span class="k"><span class="pre">friend</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">hasActiveThread</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext15hasActiveThreadEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<dl class="cpp struct">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext15CustomEventPortE">
+<span id="_CPPv3N3fsc13ThreadContext15CustomEventPortE"></span><span id="_CPPv2N3fsc13ThreadContext15CustomEventPortE"></span><span id="fsc::ThreadContext::CustomEventPort"></span><span class="target" id="structfsc_1_1_thread_context_1_1_custom_event_port"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">CustomEventPort</span></span></span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext15CustomEventPortE" title="Link to this definition"></a><br /></dt>
+<dd><div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext15CustomEventPort15CustomEventPortERN2kj9EventPortE">
+<span id="_CPPv3N3fsc13ThreadContext15CustomEventPort15CustomEventPortERN2kj9EventPortE"></span><span id="_CPPv2N3fsc13ThreadContext15CustomEventPort15CustomEventPortERN2kj9EventPortE"></span><span id="fsc::ThreadContext::CustomEventPort::CustomEventPort__kj::EventPortR"></span><span class="target" id="structfsc_1_1_thread_context_1_1_custom_event_port_1aa25c272850c0659ba9d5603ff05bb2e3"></span><span class="sig-name descname"><span class="n"><span class="pre">CustomEventPort</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">EventPort</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">port</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext15CustomEventPort15CustomEventPortERN2kj9EventPortE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext15CustomEventPort4loopE">
+<span id="_CPPv3N3fsc13ThreadContext15CustomEventPort4loopE"></span><span id="_CPPv2N3fsc13ThreadContext15CustomEventPort4loopE"></span><span id="fsc::ThreadContext::CustomEventPort::loop__Own:kj::EventLoop:"></span><span class="target" id="structfsc_1_1_thread_context_1_1_custom_event_port_1a47b6e4e1f123d7cd8140c87d88465cee"></span><span class="n"><span class="pre">Own</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">EventLoop</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">loop</span></span></span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext15CustomEventPort4loopE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13ThreadContext15CustomEventPort9waitScopeE">
+<span id="_CPPv3N3fsc13ThreadContext15CustomEventPort9waitScopeE"></span><span id="_CPPv2N3fsc13ThreadContext15CustomEventPort9waitScopeE"></span><span id="fsc::ThreadContext::CustomEventPort::waitScope__Own:kj::WaitScope:"></span><span class="target" id="structfsc_1_1_thread_context_1_1_custom_event_port_1afb11b4852e34f29cf4c425787cf63606"></span><span class="n"><span class="pre">Own</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="data.html#_CPPv42kj" title="kj"><span class="n"><span class="pre">kj</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">WaitScope</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">waitScope</span></span></span><a class="headerlink" href="#_CPPv4N3fsc13ThreadContext15CustomEventPort9waitScopeE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="cpp struct">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13WorkerContextE">
+<span id="_CPPv3N3fsc13WorkerContextE"></span><span id="_CPPv2N3fsc13WorkerContextE"></span><span id="fsc::WorkerContext"></span><span class="target" id="structfsc_1_1_worker_context"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">WorkerContext</span></span></span><span class="w"> </span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="k"><span class="pre">public</span></span><span class="w"> </span><a class="reference internal" href="data.html#_CPPv43fsc" title="fsc"><span class="n"><span class="pre">fsc</span></span></a><span class="p"><span class="pre">::</span></span><a class="reference internal" href="#_CPPv4N3fsc13ThreadContextE" title="fsc::ThreadContext"><span class="n"><span class="pre">ThreadContext</span></span></a><a class="headerlink" href="#_CPPv4N3fsc13WorkerContextE" title="Link to this definition"></a><br /></dt>
+<dd><p>Thread context that cancels all long-running tasks. </p>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13WorkerContext13WorkerContextE7Library">
+<span id="_CPPv3N3fsc13WorkerContext13WorkerContextE7Library"></span><span id="_CPPv2N3fsc13WorkerContext13WorkerContextE7Library"></span><span id="fsc::WorkerContext::WorkerContext__Library"></span><span class="target" id="structfsc_1_1_worker_context_1ae8505c44d5077689f7f896a402a67349"></span><span class="sig-name descname"><span class="n"><span class="pre">WorkerContext</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N3fsc7LibraryE" title="fsc::Library"><span class="n"><span class="pre">Library</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">l</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13WorkerContext13WorkerContextE7Library" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc13WorkerContextD0Ev">
+<span id="_CPPv3N3fsc13WorkerContextD0Ev"></span><span id="_CPPv2N3fsc13WorkerContextD0Ev"></span><span id="fsc::WorkerContext::~WorkerContext"></span><span class="target" id="structfsc_1_1_worker_context_1a0448691d27218343bfde4436747152d5"></span><span class="sig-name descname"><span class="n"><span class="pre">~WorkerContext</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N3fsc13WorkerContextD0Ev" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="cpp type">
+<dt class="sig sig-object cpp">
+<span class="target" id="namespacefsc"></span><span class="k"><span class="pre">namespace</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">fsc</span></span></span><br /></dt>
+<dd><p>The FSC library.</p>
+<p>Simple interface module for <a class="reference internal" href="genapi.html#structfsc_1_1_z_lib"><span class="std std-ref">ZLib</span></a></p>
+<dl class="cpp struct">
+<dt class="sig sig-object cpp" id="_CPPv4N3fsc15InProcessServerE">
+<span id="_CPPv3N3fsc15InProcessServerE"></span><span id="_CPPv2N3fsc15InProcessServerE"></span><span id="fsc::InProcessServer"></span><span class="target" id="structfsc_1_1_in_process_server"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">InProcessServer</span></span></span><a class="headerlink" href="#_CPPv4N3fsc15InProcessServerE" title="Link to this definition"></a><br /></dt>
+<dd><div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK3fsc15InProcessServer6getHubEv">
+<span id="_CPPv3NK3fsc15InProcessServer6getHubEv"></span><span id="_CPPv2NK3fsc15InProcessServer6getHubEv"></span><span id="fsc::InProcessServer::getHubC"></span><span class="target" id="structfsc_1_1_in_process_server_1a97e3c8d9e84edf068bcd8b6d26ca1fd9"></span><span class="k"><span class="pre">virtual</span></span><span class="w"> </span><a class="reference internal" href="genapi.html#_CPPv4N3fsc11LocalVatHubE" title="fsc::LocalVatHub"><span class="n"><span class="pre">LocalVatHub</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">getHub</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="m"><span class="pre">0</span></span><a class="headerlink" href="#_CPPv4NK3fsc15InProcessServer6getHubEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK3fsc15InProcessServer6addRefEv">
+<span id="_CPPv3NK3fsc15InProcessServer6addRefEv"></span><span id="_CPPv2NK3fsc15InProcessServer6addRefEv"></span><span id="fsc::InProcessServer::addRefC"></span><span class="target" id="structfsc_1_1_in_process_server_1a0504099126845ab54f4a022e6ad0da6e"></span><span class="k"><span class="pre">virtual</span></span><span class="w"> </span><span class="n"><span class="pre">Own</span></span><span class="p"><span class="pre">&lt;</span></span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N3fsc15InProcessServerE" title="fsc::InProcessServer"><span class="n"><span class="pre">InProcessServer</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">addRef</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="m"><span class="pre">0</span></span><a class="headerlink" href="#_CPPv4NK3fsc15InProcessServer6addRefEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4I0ENK3fsc15InProcessServer7connectEN1T6ClientEv">
+<span id="_CPPv3I0ENK3fsc15InProcessServer7connectEv"></span><span id="_CPPv2I0ENK3fsc15InProcessServer7connectEv"></span><span class="k"><span class="pre">template</span></span><span class="p"><span class="pre">&lt;</span></span><span class="k"><span class="pre">typename</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">T</span></span></span><span class="p"><span class="pre">&gt;</span></span><br /><span class="target" id="structfsc_1_1_in_process_server_1a52aaf17a205ed593cfe4b097067d44ea"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I0ENK3fsc15InProcessServer7connectEN1T6ClientEv" title="fsc::InProcessServer::connect::T"><span class="n"><span class="pre">T</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Client</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">connect</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4I0ENK3fsc15InProcessServer7connectEN1T6ClientEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK3fsc15InProcessServer11connectBaseEv">
+<span id="_CPPv3NK3fsc15InProcessServer11connectBaseEv"></span><span id="_CPPv2NK3fsc15InProcessServer11connectBaseEv"></span><span id="fsc::InProcessServer::connectBaseC"></span><span class="target" id="structfsc_1_1_in_process_server_1a06a7b633a9d4b9e6b889951f73144e51"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">capnp</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Capability</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">Client</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">connectBase</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK3fsc15InProcessServer11connectBaseEv" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
+
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="cpp type">
+<dt class="sig sig-object cpp">
+<span class="target" id="namespacefsc"></span><span class="k"><span class="pre">namespace</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">fsc</span></span></span><br /></dt>
+<dd><p>The FSC library.</p>
+<p>Simple interface module for <a class="reference internal" href="genapi.html#structfsc_1_1_z_lib"><span class="std std-ref">ZLib</span></a></p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="vmec.html" class="btn btn-neutral float-left" title="VMEC Interface" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../_capnp/index.html" class="btn btn-neutral float-right" title="Cap’n’Proto API Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 - 2024, Forschungszentrum Jülich GmbH, Jülich, Germany.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

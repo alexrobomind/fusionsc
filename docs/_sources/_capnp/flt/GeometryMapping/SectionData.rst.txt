@@ -1,0 +1,21 @@
+GeometryMapping.SectionData
+===========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+Parent: :doc:`/_capnp/flt/GeometryMapping`
+
+Fields
+------
+
+- geometry - :doc:`/_capnp/geometry/MergedGeometry`
+
+- grid - :doc:`/_capnp/geometry/CartesianGrid`
+
+- index - :doc:`/_capnp/geometry/IndexedGeometry/IndexData`
+
+- phi1 - Float64
+
+- phi2 - Float64
+

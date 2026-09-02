@@ -1,0 +1,42 @@
+﻿fusionsc.capnp.Schema
+=====================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: Schema
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~Schema.__init__
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~Schema.id_
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: Schema.__init__
+
+
+
+
+

@@ -1,0 +1,31 @@
+DataRef
+=======
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/data/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+metaAndCapTable: () -> (metadata : :doc:`/_capnp/data/DataRefMetadata`, table : List(Capability))
+
+.. rst-class:: capnp-method
+
+rawBytes: (start: UInt64, end: UInt64) -> (data : Data)
+
+.. rst-class:: capnp-method
+
+transmit: (start: UInt64, end: UInt64, receiver: Receiver) -> ()
+
+
+Nested Interfaces
+-----------------
+
+.. toctree::
+   :maxdepth: 1
+
+   DataRef/Receiver
+

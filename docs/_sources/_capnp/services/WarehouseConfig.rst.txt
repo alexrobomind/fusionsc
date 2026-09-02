@@ -1,0 +1,16 @@
+WarehouseConfig
+===============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/services/index`
+
+Fields
+------
+
+- name - Text
+
+- url - Text
+
+- path - Text = ""
+

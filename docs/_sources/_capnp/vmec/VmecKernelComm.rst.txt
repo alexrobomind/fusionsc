@@ -1,0 +1,18 @@
+VmecKernelComm
+==============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/vmec/index`
+
+Fields
+------
+
+- surfaces - :doc:`/_capnp/magnetics/FourierSurfaces`
+
+- pzr - List(Float64)
+
+- spt - List(Float64)
+
+- sValues - List(Float64)
+

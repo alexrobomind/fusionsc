@@ -1,0 +1,37 @@
+Warehouse
+=========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/warehouse/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+getRoot: (name: Text = "root") -> (root : Folder)
+
+
+Nested Structs
+--------------
+
+.. toctree::
+   :maxdepth: 1
+
+   Warehouse/StoredObject
+   Warehouse/FrozenFolder
+   Warehouse/FrozenEntry
+   Warehouse/ObjectGraph
+
+
+Nested Interfaces
+-----------------
+
+.. toctree::
+   :maxdepth: 1
+
+   Warehouse/Folder
+   Warehouse/File
+   Warehouse/GenericObject
+

@@ -1,0 +1,23 @@
+NetworkInterface.Connection
+===========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/networking/index`
+Parent: :doc:`/_capnp/networking/NetworkInterface`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+getRemote: () -> (remote : Capability)
+
+.. rst-class:: capnp-method
+
+close: () -> ()
+
+.. rst-class:: capnp-method
+
+unsafeCloseNow: () -> ()
+

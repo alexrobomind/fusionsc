@@ -1,0 +1,22 @@
+FLTConfig
+=========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/flt/index`
+
+Fields
+------
+
+- defaultStepLimit - UInt64
+
+- maxStepLimit - UInt64
+
+- eventBuffer - group
+
+  - minSize - UInt32 = 100
+
+  - maxSize - UInt32 = 2500
+
+  - targetTotalMb - UInt64 = 500
+

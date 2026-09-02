@@ -1,0 +1,64 @@
+Warehouse.Folder
+================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/warehouse/index`
+Parent: :doc:`/_capnp/warehouse/Warehouse`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+ls: (path: Text) -> (entries : List(Text))
+
+.. rst-class:: capnp-method
+
+getAll: (path: Text) -> (entries : List(Entry))
+
+.. rst-class:: capnp-method
+
+get: (path: Text) -> :doc:`/_capnp/warehouse/Warehouse/StoredObject`
+
+.. rst-class:: capnp-method
+
+put: (path: Text, value: Capability) -> :doc:`/_capnp/warehouse/Warehouse/StoredObject`
+
+.. rst-class:: capnp-method
+
+rm: (path: Text) -> ()
+
+.. rst-class:: capnp-method
+
+mkdir: (path: Text) -> (folder : Folder)
+
+.. rst-class:: capnp-method
+
+createFile: (path: Text) -> (file : File)
+
+.. rst-class:: capnp-method
+
+freeze: (path: Text) -> (ref : :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/warehouse/Warehouse/FrozenFolder`))
+
+.. rst-class:: capnp-method
+
+exportGraph: (path: Text) -> (graph : :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/warehouse/Warehouse/ObjectGraph`))
+
+.. rst-class:: capnp-method
+
+importGraph: (path: Text, graph: :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/warehouse/Warehouse/ObjectGraph`), root: UInt64, merge: Bool) -> :doc:`/_capnp/warehouse/Warehouse/StoredObject`
+
+.. rst-class:: capnp-method
+
+deepCopy: (srcPath: Text, dstPath: Text) -> :doc:`/_capnp/warehouse/Warehouse/StoredObject`
+
+
+Nested Structs
+--------------
+
+.. toctree::
+   :maxdepth: 1
+
+   Folder/Entry
+

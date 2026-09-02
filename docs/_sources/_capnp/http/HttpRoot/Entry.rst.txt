@@ -1,0 +1,19 @@
+HttpRoot.Entry
+==============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/http/index`
+Parent: :doc:`/_capnp/http/HttpRoot`
+
+Fields
+------
+
+- loc - Text
+
+- anonymous union - union
+
+  - text - Text
+
+  - data - Data
+

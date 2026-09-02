@@ -1,0 +1,394 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "beb80bf5-7b24-4289-8c7b-d3b5c71e8eb1",
+   "metadata": {},
+   "source": [
+    "(dataspec)=\n",
+    "\n",
+    "# Specification of magnetic fields and geometries\n",
+    "\n",
+    "Magnetic fields and machine geometry parts form the most important inputs for calculations driven by fusionsc. During\n",
+    "computation, the descriptions for these information pieces undergo multiple states, which are useful to understand in\n",
+    "order to sequence calls successfully while conserving computation resources.\n",
+    "\n",
+    "## Magnetic fields\n",
+    "\n",
+    "The description of a magnetic field can be in one of 3 forms:\n",
+    "\n",
+    "### Abstract\n",
+    "\n",
+    "Upon initial specification, the magnetic field will often take the form of a very high-level description. This description\n",
+    "is minimal and human-readable, but can not be used directly by the underlying calculation machinery, since it references\n",
+    "device-specific information that is not included in the message tree."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "960d64c1-9651-4daa-a1ac-7b19ce2a6618",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "w7x:\n",
+       "  coilsAndCurrents:\n",
+       "    nonplanar: [15000, 15000, 15000, 15000, 15000]\n",
+       "    planar: [0, 0]\n",
+       "    trim: [0, 0, 0, 0, 0]\n",
+       "    control: [0, 0]\n",
+       "    coils:\n",
+       "      coils:\n",
+       "        invertMainCoils: true\n",
+       "        biotSavartSettings:\n",
+       "          width: 0.01\n",
+       "          stepSize: 0.01\n",
+       "        nWindMain: [108, 108, 108, 108, 108, 36, 36]\n",
+       "        nWindTrim: [48, 72, 48, 48, 48]\n",
+       "        nWindControl: [8, 8, 8, 8, 8, 8, 8, 8, 8, 8]\n",
+       "        invertControlCoils: [false, true, false, true, false, true, false, true, false, true]\n",
+       "        coilsDbSet:\n",
+       "          mainCoilOffset: 160\n",
+       "          trimCoilIDs: [350, 241, 351, 352, 353]\n",
+       "          controlCoilOffset: 230"
+      ]
+     },
+     "execution_count": 4,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "from fusionsc.devices import w7x\n",
+    "w7x.standard()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "1f54d315-88f6-4b57-9c0d-16dbc021e43d",
+   "metadata": {},
+   "source": [
+    "### Resolved\n",
+    "\n",
+    "A resolved field is a magnetic field structure that has device-specific nodes replaced by their generic equivalents.\n",
+    "For example, references to coil IDs or high-level field specifications will be replaced with data for the specific\n",
+    "coils. To minimize data footprint and prevent redundant data transfer, the concrete coil shapes will usually be linked\n",
+    "into the message tree by reference. Resolved fields hold all required data to compute the field at specific points\n",
+    "without additional data.\n",
+    "\n",
+    "Once set up with proper data providers, the resolution machinery does not require any further inputs to drive the\n",
+    "resolution process, since all nodes are completely self-describing without extra context (however, they might link\n",
+    "to information presently not available).\n",
+    "\n",
+    "The resolution process is invoked by calling the `MagneticConfig.resolve` method to acquire the resolved equivalent\n",
+    "of a field."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 21,
+   "id": "993e8fb4-e932-416a-a786-48a33ef457fb",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "sum:\n",
+      "  - scaleBy:\n",
+      "      field:\n",
+      "        sum:\n",
+      "          - filamentField:\n",
+      "              current: -1\n",
+      "              biotSavartSettings:\n",
+      "                width: 0.01\n",
+      "                stepSize: 0.01\n",
+      "              filament:\n",
+      "                ref: <capability>\n",
+      "              windingNo: 108\n",
+      "          - filamentField:\n",
+      "              current: -1\n",
+      "              biotSavartSettings:\n",
+      "                width: 0.01\n",
+      "                stepSize: 0.01\n",
+      "              filament:\n",
+      "                ref: <capability>\n",
+      "              windingNo: 108\n",
+      "\n",
+      "... 736 lines follow ...\n"
+     ]
+    }
+   ],
+   "source": [
+    "import fusionsc as fsc\n",
+    "fsc.resolve.importOfflineData('../w7x-op21.fsc')\n",
+    "\n",
+    "lines = str(w7x.standard().resolve()).split(\"\\n\")\n",
+    "for i in range(20):\n",
+    "    print(lines[i])\n",
+    "print()\n",
+    "print('... {} lines follow ...'.format(len(lines) - 20))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "efe27053-f8a8-4b7f-85de-65c9f24d422b",
+   "metadata": {},
+   "source": [
+    "### Computed\n",
+    "\n",
+    "The field line tracer requires the magnetic field to be calculated on a slab grid, so that its values can be quickly interpolated.\n",
+    "In contrast to the resolution process, the field computation depends on extra information in the form of the grid description.\n",
+    "\n",
+    "The computed field is obtained through the `MagneticField.compute(grid)` method (which will also kick off the resolution process\n",
+    "if needed). As a convenience feature, most tracing methods will optionally call this method for you if you specify the `grid = ...`\n",
+    "keyword argument. However, keep in mind that the intermediate result will not be stored in this case, and you should only do this\n",
+    "if you do not intend to run multiple calculations on the same field.\n",
+    "\n",
+    "*Note:* For obvious reasons, computed fields are also resolved."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "id": "a657a00c-2b39-4c30-9370-11b683797277",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "computedField:\n",
+      "  grid:\n",
+      "    rMin: 4\n",
+      "    rMax: 7\n",
+      "    zMin: -1.5\n",
+      "    zMax: 1.5\n",
+      "    nSym: 5\n",
+      "    nR: 4\n",
+      "    nZ: 4\n",
+      "    nPhi: 4\n"
+     ]
+    }
+   ],
+   "source": [
+    "import fusionsc as fsc\n",
+    "fsc.resolve.importOfflineData('../w7x-op21.fsc')\n",
+    "\n",
+    "grid = w7x.defaultGrid()\n",
+    "grid.nZ = 4\n",
+    "grid.nR = 4\n",
+    "grid.nPhi = 4\n",
+    "\n",
+    "print(w7x.standard().compute(grid))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e6b7005c-5e21-4df2-8211-43fb7f755c96",
+   "metadata": {},
+   "source": [
+    "## Machine geometries\n",
+    "\n",
+    "### Abstract & resolved\n",
+    "\n",
+    "In a similar way to magnetic field descriptions, geometry descriptions can be either abstract or resolved. In this state, geometries\n",
+    "contain nested nodes of grouping, transformation, tagging, and reference linking nodes that describe how to place and label meshes\n",
+    "in the final geometry."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 19,
+   "id": "d624366b-d0f6-4000-8422-fcd3670153e8",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "tags:\n",
+      "  - name: name\n",
+      "    value:\n",
+      "      text: OP2.1 Divertor\n",
+      "w7x: op21Divertor\n"
+     ]
+    }
+   ],
+   "source": [
+    "from fusionsc.devices import w7x\n",
+    "\n",
+    "print(w7x.divertor(\"OP21\"))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 23,
+   "id": "f0735c43-a76e-4228-b51c-65149269a1ec",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "tags:\n",
+      "  []\n",
+      "combined:\n",
+      "  - tags:\n",
+      "      - name: w7x-component-id\n",
+      "        value:\n",
+      "          uInt64: 14698\n",
+      "    mesh: <capability>\n",
+      "  - tags:\n",
+      "      - name: w7x-component-id\n",
+      "        value:\n",
+      "          uInt64: 14699\n",
+      "    mesh: <capability>\n",
+      "  - tags:\n",
+      "      - name: w7x-component-id\n",
+      "        value:\n",
+      "          uInt64: 14700\n",
+      "    mesh: <capability>\n",
+      "  - tags:\n",
+      "      - name: w7x-component-id\n",
+      "\n",
+      "... 8083 lines follow ...\n"
+     ]
+    }
+   ],
+   "source": [
+    "from fusionsc.devices import w7x\n",
+    "import fusionsc as fsc\n",
+    "\n",
+    "fsc.resolve.importOfflineData('../w7x-op21.fsc')\n",
+    "lines = str(w7x.divertor(\"OP21\").resolve()).split(\"\\n\")\n",
+    "for i in range(20):\n",
+    "    print(lines[i])\n",
+    "print()\n",
+    "print('... {} lines follow ...'.format(len(lines) - 20))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "6875ea8b-cc93-4e22-a6fa-245a5c2ae64d",
+   "metadata": {},
+   "source": [
+    "### Merged\n",
+    "\n",
+    "In its initial representation, a geometry description does not just include meshes, but also tagging and transformation operations\n",
+    "that can allow the same mesh to be placed in multiple locations / orientations at different scales (and to receive different labels).\n",
+    "Additionally, the mesh data do not have to be co-localized in memory, but can reference distributed data trees (with some nodes even\n",
+    "representing yet to be loaded or computed information).\n",
+    "\n",
+    "The *merging* process (accessible through `geometry.Geometry.merge()`) evaluates this initial description and produces a monolithic collection of individual meshes laid out together,\n",
+    "each with the correct tagging and transformation options applied. This representation is well suited for transfer to computation\n",
+    "devices (such as GPUs) and for monolithic storage and loading."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 26,
+   "id": "7defcd82-4855-44d2-8289-c5a2580e52e5",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "tags:\n",
+      "  []\n",
+      "merged: <capability>\n"
+     ]
+    }
+   ],
+   "source": [
+    "from fusionsc.devices import w7x\n",
+    "import fusionsc as fsc\n",
+    "\n",
+    "fsc.resolve.importOfflineData('../w7x-op21.fsc')\n",
+    "\n",
+    "print(w7x.divertor(\"OP21\").merge())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "0b2d922a-2663-4e95-9f0e-ea3cc43a37a9",
+   "metadata": {},
+   "source": [
+    "### Indexed\n",
+    "\n",
+    "While the merged representation can be accessed efficiently, many routines require further speedups for the frequently performed intersection tests.\n",
+    "For this purpose, geometry has to be indexed along a cartesian grid. Similarly to the magnetic field computation, this process can be either requested\n",
+    "ahead of time with the `geometry.Geometry.index(grid)` method, or by passing the `geometryGrid = ...` keyword argument to the tracing functions."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 27,
+   "id": "72ad553f-20a5-4cc3-b4c1-486a870240b9",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "tags:\n",
+      "  []\n",
+      "indexed:\n",
+      "  grid:\n",
+      "    xMin: -7\n",
+      "    xMax: 7\n",
+      "    yMin: -7\n",
+      "    yMax: 7\n",
+      "    zMin: -1.5\n",
+      "    zMax: 1.5\n",
+      "    nX: 280\n",
+      "    nY: 280\n",
+      "    nZ: 60\n"
+     ]
+    }
+   ],
+   "source": [
+    "from fusionsc.devices import w7x\n",
+    "import fusionsc as fsc\n",
+    "\n",
+    "fsc.resolve.importOfflineData('../w7x-op21.fsc')\n",
+    "\n",
+    "grid = w7x.defaultGeometryGrid()\n",
+    "\n",
+    "print(w7x.divertor(\"OP21\").index(grid))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "685c1633-bd87-4a3e-9492-cac5791d136a",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.10.4"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

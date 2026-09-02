@@ -1,0 +1,65 @@
+Python API Usage Examples
+=========================
+
+All types are in the ``fsc`` module.
+
+Structs
+-------
+
+Creating ``ReversibleFieldlineMapping``:
+
+.. code-block:: python
+
+    from fsc.capnp import ReversibleFieldlineMapping
+
+    message = ReversibleFieldlineMapping()
+    message.r = ...  # Data.Float64Tensor
+
+Creating ``Section``:
+
+.. code-block:: python
+
+    from fsc.capnp import Section
+
+    message = Section()
+    message.r = ...  # Data.Float64Tensor
+
+Creating ``Inverse``:
+
+.. code-block:: python
+
+    from fsc.capnp import Inverse
+
+    message = Inverse()
+    message.rMin = ...  # Float64
+
+Interfaces
+----------
+
+Using ``FLT``:
+
+.. code-block:: python
+
+    import capnp
+    from fsc.capnp import FLT
+
+    # Connect to service
+    connection = capnp.TwoPartyClient('localhost:12345', bootstrap='...')
+    service = connection.root.as_capability(FLT)
+
+    # Call method: trace
+    result = await service.trace()
+
+Using ``Mapper``:
+
+.. code-block:: python
+
+    import capnp
+    from fsc.capnp import Mapper
+
+    # Connect to service
+    connection = capnp.TwoPartyClient('localhost:12345', bootstrap='...')
+    service = connection.root.as_capability(Mapper)
+
+    # Call method: computeRFLM
+    result = await service.computeRFLM()

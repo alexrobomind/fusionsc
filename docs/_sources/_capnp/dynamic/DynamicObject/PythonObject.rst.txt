@@ -1,0 +1,43 @@
+DynamicObject.PythonObject
+==========================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/dynamic/index`
+Parent: :doc:`/_capnp/dynamic/DynamicObject`
+
+Fields
+------
+
+- listItems - List(:doc:`/_capnp/dynamic/DynamicObject`)
+
+- dictItems - List(:doc:`/_capnp/dynamic/DynamicObject/MappingEntry`)
+
+- createBy - union
+
+  - call - group
+
+    - func - :doc:`/_capnp/dynamic/DynamicObject`
+
+    - args - List(:doc:`/_capnp/dynamic/DynamicObject`)
+
+  - newobj - group
+
+    - cls - :doc:`/_capnp/dynamic/DynamicObject`
+
+    - args - List(:doc:`/_capnp/dynamic/DynamicObject`)
+
+    - kwargs - List(:doc:`/_capnp/dynamic/DynamicObject/MappingEntry`)
+
+- state - union
+
+  - noState - Void
+
+  - setState - :doc:`/_capnp/dynamic/DynamicObject`
+
+  - withSetter - group
+
+    - setter - :doc:`/_capnp/dynamic/DynamicObject`
+
+    - value - :doc:`/_capnp/dynamic/DynamicObject`
+

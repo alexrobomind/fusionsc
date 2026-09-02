@@ -1,0 +1,27 @@
+Cap'n'Proto API Documentation
+============================
+
+Overview
+--------
+
+This documentation covers the Cap'n'Proto schemas used in the ``fsc``
+project, including data structures and RPC interfaces.
+
+Contents
+--------
+
+.. toctree::
+   :maxdepth: 2
+
+   <schema_name>
+
+API Examples
+------------
+
+See the following sections for usage examples in different languages:
+
+.. toctree::
+   :maxdepth: 1
+
+   C++ Examples <cpp_examples>
+   Python Examples <python_examples>

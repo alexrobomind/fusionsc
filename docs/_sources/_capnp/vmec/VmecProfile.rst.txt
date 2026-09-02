@@ -1,0 +1,39 @@
+VmecProfile
+===========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/vmec/index`
+
+Fields
+------
+
+- anonymous union - union
+
+  - powerSeries - List(Float64)
+
+  - spline - group
+
+    - locations - List(Float64)
+
+    - values - List(Float64)
+
+    - type - :doc:`/_capnp/vmec/VmecProfile/SplineType`
+
+  - twoPower - group
+
+    - base - Float64
+
+    - inner - Float64
+
+    - outer - Float64
+
+
+Nested Enums
+------------
+
+.. toctree::
+   :maxdepth: 1
+
+   VmecProfile/SplineType
+

@@ -1,0 +1,38 @@
+magnetics.capnp
+===============
+
+Structs
+-------
+
+.. toctree::
+   :maxdepth: 1
+
+   FourierSurfaces
+   ToroidalGrid
+   ComputedField
+   BiotSavartSettings
+   Filament
+   DipoleCloud
+   AxisymmetricEquilibrium
+   W7XCoilSet
+   MagneticField
+   FourierKernelData
+
+Interfaces
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   FieldResolver
+   FieldCalculator
+
+Enums
+-----
+
+.. toctree::
+   :maxdepth: 1
+
+   RadialModeQuantity
+   FourierConvention
+   FourierNormalization

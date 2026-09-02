@@ -1,0 +1,12 @@
+DataRefHolder
+=============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/data-test/index`
+
+Fields
+------
+
+- ref - :doc:`/_capnp/data/DataRef`\ (T)
+

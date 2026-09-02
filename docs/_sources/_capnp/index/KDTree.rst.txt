@@ -1,0 +1,16 @@
+KDTree
+======
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/index/index`
+
+Fields
+------
+
+- chunks - List(:doc:`/_capnp/index/KDTreeService/Chunk`)
+
+- nTotal - UInt32
+
+- chunkSize - UInt32
+

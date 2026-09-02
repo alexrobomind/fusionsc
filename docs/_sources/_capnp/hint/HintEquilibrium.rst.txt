@@ -1,0 +1,18 @@
+HintEquilibrium
+===============
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/hint/index`
+
+Fields
+------
+
+- grid - :doc:`/_capnp/magnetics/ToroidalGrid`
+
+- field - :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/data/Float64Tensor`)
+
+- pressure - :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/data/Float64Tensor`)
+
+- velocity - :doc:`/_capnp/data/DataRef`\ (:doc:`/_capnp/data/Float64Tensor`)
+

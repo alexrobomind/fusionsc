@@ -1,0 +1,115 @@
+fusionsc.geometry.Geometry
+==========================
+
+.. currentmodule:: fusionsc.geometry
+
+.. autoclass:: Geometry
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~Geometry.__init__
+  ~Geometry.asPolyMesh
+  ~Geometry.asPyvista
+  ~Geometry.cache
+  ~Geometry.download
+  ~Geometry.exportTo
+  ~Geometry.filter
+  ~Geometry.from2D
+  ~Geometry.fromFieldAligned
+  ~Geometry.fromPyvista
+  ~Geometry.getMerged
+  ~Geometry.getTags
+  ~Geometry.graph
+  ~Geometry.importFrom
+  ~Geometry.index
+  ~Geometry.intersect
+  ~Geometry.load
+  ~Geometry.merge
+  ~Geometry.planarClip
+  ~Geometry.planarCut
+  ~Geometry.plotCut
+  ~Geometry.polyMesh
+  ~Geometry.ptree
+  ~Geometry.quadMesh
+  ~Geometry.reduce
+  ~Geometry.resolve
+  ~Geometry.rotate
+  ~Geometry.save
+  ~Geometry.scale
+  ~Geometry.toFieldAligned
+  ~Geometry.toYaml
+  ~Geometry.translate
+  ~Geometry.triangulate
+  ~Geometry.unroll
+  ~Geometry.upload
+  ~Geometry.weightedSample
+  ~Geometry.withTags
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~Geometry.data
+	~Geometry.type
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: Geometry.__init__
+.. automethod:: Geometry.asPolyMesh
+.. automethod:: Geometry.asPyvista
+.. automethod:: Geometry.cache
+.. automethod:: Geometry.download
+.. automethod:: Geometry.exportTo
+.. automethod:: Geometry.filter
+.. automethod:: Geometry.from2D
+.. automethod:: Geometry.fromFieldAligned
+.. automethod:: Geometry.fromPyvista
+.. automethod:: Geometry.getMerged
+.. automethod:: Geometry.getTags
+.. automethod:: Geometry.graph
+.. automethod:: Geometry.importFrom
+.. automethod:: Geometry.index
+.. automethod:: Geometry.intersect
+.. automethod:: Geometry.load
+.. automethod:: Geometry.merge
+.. automethod:: Geometry.planarClip
+.. automethod:: Geometry.planarCut
+.. automethod:: Geometry.plotCut
+.. automethod:: Geometry.polyMesh
+.. automethod:: Geometry.ptree
+.. automethod:: Geometry.quadMesh
+.. automethod:: Geometry.reduce
+.. automethod:: Geometry.resolve
+.. automethod:: Geometry.rotate
+.. automethod:: Geometry.save
+.. automethod:: Geometry.scale
+.. automethod:: Geometry.toFieldAligned
+.. automethod:: Geometry.toYaml
+.. automethod:: Geometry.translate
+.. automethod:: Geometry.triangulate
+.. automethod:: Geometry.unroll
+.. automethod:: Geometry.upload
+.. automethod:: Geometry.weightedSample
+.. automethod:: Geometry.withTags
+
+
+
+
+

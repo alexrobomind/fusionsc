@@ -1,0 +1,16 @@
+Angle
+=====
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+
+Fields
+------
+
+- anonymous union - union
+
+  - deg - Float64
+
+  - rad - Float64
+

@@ -1,0 +1,25 @@
+IntersectResponse
+=================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/geometry/index`
+
+Fields
+------
+
+- position - :doc:`/_capnp/data/Float64Tensor`
+
+- lambda - :doc:`/_capnp/data/Float64Tensor`
+
+- tags - List(:doc:`/_capnp/geometry/IntersectResponse/TagEntry`)
+
+
+Nested Structs
+--------------
+
+.. toctree::
+   :maxdepth: 1
+
+   IntersectResponse/TagEntry
+

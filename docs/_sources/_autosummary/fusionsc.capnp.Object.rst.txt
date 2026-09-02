@@ -1,0 +1,42 @@
+﻿fusionsc.capnp.Object
+=====================
+
+.. currentmodule:: fusionsc.capnp
+
+.. autoclass:: Object
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+
+  ~Object.__init__
+
+
+
+
+
+
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+
+	~Object.type_
+
+
+
+
+
+.. rubric:: Methods
+
+
+.. automethod:: Object.__init__
+
+
+
+
+

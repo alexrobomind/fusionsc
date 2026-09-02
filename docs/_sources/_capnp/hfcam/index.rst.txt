@@ -1,0 +1,21 @@
+hfcam.capnp
+===========
+
+Structs
+-------
+
+.. toctree::
+   :maxdepth: 1
+
+   HFCamProjection
+   HFCamData
+   DensityKernel
+
+Interfaces
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   HFCam
+   HFCamProvider

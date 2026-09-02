@@ -1,0 +1,14 @@
+Ingress
+=======
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/services/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+getNamedEndpoint: (name: Text) -> (endpoint : Capability)
+

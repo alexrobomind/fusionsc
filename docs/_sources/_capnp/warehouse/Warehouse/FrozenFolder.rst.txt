@@ -1,0 +1,13 @@
+Warehouse.FrozenFolder
+======================
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/warehouse/index`
+Parent: :doc:`/_capnp/warehouse/Warehouse`
+
+Fields
+------
+
+- entries - List(Entry)
+

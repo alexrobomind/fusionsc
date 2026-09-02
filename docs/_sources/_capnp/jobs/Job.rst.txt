@@ -1,0 +1,56 @@
+Job
+===
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/jobs/index`
+
+Methods
+-------
+
+.. rst-class:: capnp-method
+
+getState: () -> (state : :doc:`/_capnp/jobs/Job/State`)
+
+.. rst-class:: capnp-method
+
+cancel: () -> ()
+
+.. rst-class:: capnp-method
+
+detach: () -> ()
+
+.. rst-class:: capnp-method
+
+whenRunning: () -> ()
+
+.. rst-class:: capnp-method
+
+whenCompleted: () -> ()
+
+.. rst-class:: capnp-method
+
+attach: () -> :doc:`/_capnp/jobs/Job/AttachResponse`
+
+.. rst-class:: capnp-method
+
+eval: (stdIn: Data) -> (stdOut : Text, stdErr : Text)
+
+
+Nested Structs
+--------------
+
+.. toctree::
+   :maxdepth: 1
+
+   Job/AttachResponse
+
+
+Nested Enums
+------------
+
+.. toctree::
+   :maxdepth: 1
+
+   Job/State
+

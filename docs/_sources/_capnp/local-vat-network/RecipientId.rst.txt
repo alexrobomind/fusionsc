@@ -1,0 +1,14 @@
+RecipientId
+===========
+
+.. rst-class:: schema-source
+
+Schema: :doc:`/_capnp/local-vat-network/index`
+
+Fields
+------
+
+- recipientKey - UInt64
+
+- id - UInt64
+
