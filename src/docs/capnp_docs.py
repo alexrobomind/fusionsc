@@ -557,7 +557,7 @@ def generate_schema_index(schema: Schema, schema_name: str) -> str:
         lines.append("-------")
         lines.append("")
         lines.append(".. toctree::")
-        lines.append("   :maxdepth: 2")
+        lines.append("   :maxdepth: 1")
         lines.append("")
         for s in top_structs:
             lines.append(f"   {s.name}")
@@ -570,7 +570,7 @@ def generate_schema_index(schema: Schema, schema_name: str) -> str:
         lines.append("----------")
         lines.append("")
         lines.append(".. toctree::")
-        lines.append("   :maxdepth: 2")
+        lines.append("   :maxdepth: 1")
         lines.append("")
         for i in top_ifaces:
             lines.append(f"   {i.name}")
