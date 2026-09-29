@@ -391,6 +391,8 @@ EIGEN_DEVICE_FUNC inline void fltKernel(
 			tracingDirection = -tracingDirection;
 			nextDisplacementStep -= freePath;
 		}
+		
+		state.setForward(tracingDirection == 1);
 	}
 	
 	// ... do the work ...
