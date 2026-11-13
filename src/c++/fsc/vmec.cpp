@@ -576,7 +576,7 @@ kj::String generateVmecInput(VmecRequest::Reader request, kj::PathPtr mgridFile)
 		}
 	}
 	
-	uint32_t nGridPol = runParams.getNGridToroidal();
+	uint32_t nGridPol = runParams.getNGridPoloidal();
 	uint32_t nGridPolMin = 2 * (request.getMPol() + 1) + 6;
 	
 	if(nGridPol == 0)

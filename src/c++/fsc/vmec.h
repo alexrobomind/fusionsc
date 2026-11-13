@@ -16,7 +16,7 @@ namespace fsc {
  *
  * @param dev: Compute device for the surface inversion calculations.
  * @param launcher: Job launcher to use for the VMEC code (post-processing is done using the system launcher).
- * @param config: Configuration for the VMEC driver.
+ * @param config: Configuration for the VMEC driver. Uses default config if not specified.
  */
 Own<VmecDriver::Server> createVmecDriver(Own<DeviceBase>&& dev, Own<JobLauncher>&& launcher, VmecConfig::Reader config);
 

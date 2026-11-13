@@ -69,6 +69,8 @@ iota:
       powerSeries: [1]
 )"_kj;
 
+static VmecConfig::Reader DEFAULT_CONFIG = VmecConfig::Reader();
+
 static void vmecRequest(VmecRequest::Builder req) {
 	structio::load(vmecRequestYaml.asBytes(), *structio::createVisitor(req), structio::Dialect::YAML);
     
@@ -113,7 +115,7 @@ TEST_CASE("vmec-run", "[.]") {
     auto lt = l -> newThread();
     auto& ws = lt -> waitScope();
 	
-	VmecDriver::Client driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."));
+	VmecDriver::Client driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."), DEFAULT_CONFIG);
 	auto req = driver.runRequest();
 	vmecRequest(req);
 	
@@ -132,7 +134,7 @@ TEST_CASE("vmec-run-fb", "[.]") {
     auto lt = l -> newThread();
     auto& ws = lt -> waitScope();
 	
-	VmecDriver::Client driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."));
+	VmecDriver::Client driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."), DEFAULT_CONFIG);
 	auto req = driver.runRequest();
 	vmecRequest(req);
 	
@@ -153,7 +155,7 @@ TEST_CASE("vmec-surf") {
     auto lt = l -> newThread();
     auto& ws = lt -> waitScope();
 	
-	VmecDriver::Client driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."));
+	VmecDriver::Client driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."), DEFAULT_CONFIG);
 	auto req = driver.computePositionsRequest();
 	
 	auto surf = req.initSurfaces();
@@ -204,7 +206,7 @@ TEST_CASE("vmec-surf-inv") {
     auto lt = l -> newThread();
     auto& ws = lt -> waitScope();
 	
-	VmecDriver::Client driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."));
+	VmecDriver::Client driver = createVmecDriver(LoopDevice::create(), newProcessScheduler("."), DEFAULT_CONFIG);
 	auto req = driver.invertPositionsRequest();
 	
 	auto surf = req.initSurfaces();

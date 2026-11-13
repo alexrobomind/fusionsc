@@ -177,7 +177,7 @@ struct Win32ProcessJob : public JobServerBase {
 		return completionPromise.addBranch();
 	}
 	
-	Promise<void> attach(AttachContext ctx) {
+	Promise<void> attach(AttachContext ctx) override {
 		auto fork = [this](Own<kj::AsyncInputStream>& is) {
 			kj::Tee tee = kj::newTee(mv(is));
 			is = mv(tee.branches[0]);
@@ -191,6 +191,58 @@ struct Win32ProcessJob : public JobServerBase {
 		res.setStderr(fork(myStderr));
 		
 		res.setStdin(getActiveThread().streamConverter().toRemote(myStdin -> addRef()));
+		
+		return READY_NOW;
+	}
+};
+
+
+struct LaunchFailed : public JobServerBase {
+	kj::Exception exception;
+	
+	LaunchFailed(kj::Exception& reason) :
+		exception(reason)
+	{}
+	
+	Promise<void> getState(GetStateContext ctx) override {
+		ctx.initResults().setState(Job::State::FAILED);
+		return READY_NOW;
+	}
+	
+	Promise<void> cancel(CancelContext ctx) override {
+		return READY_NOW;
+	}
+	
+	Promise<void> detach(DetachContext ctx) override {
+		return READY_NOW;
+	}
+	
+	Promise<void> whenRunning(WhenRunningContext ctx) override {
+		return READY_NOW;
+	}
+	
+	Promise<void> whenCompleted(WhenCompletedContext ctx) override {
+		return kj::cp(exception);
+	}
+	
+	Promise<void> attach(AttachContext ctx) {
+		auto res = ctx.initResults();
+		auto& sc = getActiveThread().streamConverter();
+		
+		// Set empty stdout
+		auto stdoutPipe = kj::newOneWayPipe();
+		res.setStdout(sc.toRemote(mv(stdoutPipe.in)));
+		
+		// Write a constant string into stderr
+		auto stderrPipe = kj::newOneWayPipe();
+		
+		kj::String asStr = kj::str(exception);
+		auto writeProcess = stderrPipe.out -> write(asStr.begin(), asStr.size());
+		writeProcess = writeProcess.attach(kj::mv(asStr)).eagerlyEvaluate(nullptr); // On separate line to avoid move before use
+		
+		res.setStderr(sc.toRemote(stderrPipe.in.attach(mv(writeProcess))));
+		
+		res.setStdin(KJ_EXCEPTION(DISCONNECTED));
 		
 		return READY_NOW;
 	}
@@ -308,18 +360,22 @@ struct Win32ProcessJobScheduler : public JobLauncher, kj::Refcounted, BaseDirPro
 		
 		PROCESS_INFORMATION procInfo;
 		
-		KJ_WIN32(CreateProcessW(
-			nullptr, // lpApplicationName
-			kj::encodeWideString(cmdString, true).begin(), // lpCommandLine
-			nullptr, // lpSecurityAttributes
-			nullptr, // lpThreadAttributes
-			true,   // bInheritHandles
-			0, // dwCreationFlags
-			nullptr, // lpEnvironment
-			workDir.begin(), // lpCurrentDirectory (for no WD, this is nullptr)
-			&stInfo, // lpStartupInfo
-			&procInfo
-		));
+		try {
+			KJ_WIN32(CreateProcessW(
+				nullptr, // lpApplicationName
+				kj::encodeWideString(cmdString, true).begin(), // lpCommandLine
+				nullptr, // lpSecurityAttributes
+				nullptr, // lpThreadAttributes
+				true,   // bInheritHandles
+				0, // dwCreationFlags
+				nullptr, // lpEnvironment
+				workDir.begin(), // lpCurrentDirectory (for no WD, this is nullptr)
+				&stInfo, // lpStartupInfo
+				&procInfo
+			));
+		} catch(kj::Exception& e) {
+			return kj::heap<LaunchFailed>(e);
+		}
 				
 		CloseHandle(procInfo.hThread);
 		
