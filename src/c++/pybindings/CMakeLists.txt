@@ -8,6 +8,18 @@ if(FSC_WITH_PYTHON)
 	target_link_libraries(
 		fsc-servepy PUBLIC fsc
 	)
+
+	# -------------------------------------------------
+	# Profiling flags for fsc-servepy (modern CMake)
+	# -------------------------------------------------
+	if(FSC_ENABLE_PROFILING)
+	    if(MSVC)
+	        target_compile_options(fsc-servepy PRIVATE /Zi /O2)
+	        target_link_options(fsc-servepy PRIVATE /PROFILE)
+	    else()
+	        target_compile_options(fsc-servepy PRIVATE -g -O2 -pg)
+	    endif()
+	endif()
 	
 	target_include_directories(
 		fsc-servepy
@@ -49,6 +61,18 @@ if(FSC_WITH_PYTHON)
 		PRIVATE
 		fsc-servepy
 	)
+
+	# -------------------------------------------------
+	# Profiling flags for fsc-python-bindings (modern CMake)
+	# -------------------------------------------------
+	if(FSC_ENABLE_PROFILING)
+	    if(MSVC)
+	        target_compile_options(fsc-python-bindings PRIVATE /Zi /O2)
+	        target_link_options(fsc-python-bindings PRIVATE /PROFILE)
+	    else()
+	        target_compile_options(fsc-python-bindings PRIVATE -g -O2 -pg)
+	    endif()
+	endif()
 
 	set_target_properties(fsc-python-bindings PROPERTIES OUTPUT_NAME "native")
 	

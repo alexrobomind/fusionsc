@@ -27,6 +27,16 @@ include(src/cmake/OptimizeForTarget.cmake)
 # Enable auto-export of symbols to DLL
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
+# -------------------------------------------------
+# Profiling build option (modern CMake – applied per‑target later)
+# -------------------------------------------------
+option(FSC_ENABLE_PROFILING "Build FSC with profiling instrumentation (MSVC / Visual Studio Profiler)" OFF)
+
+# The actual compiler/linker flags are added to the relevant targets
+# (fsc library, fsc-servepy library, and the pybind11 module) using
+# target_compile_options() / target_link_options() in a modern CMake fashion.
+
+
 # ===================== Dependency setup =====================
 
 include(src/cmake/AddVendoredDependency.cmake)

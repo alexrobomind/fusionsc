@@ -119,7 +119,8 @@ inline EIGEN_DEVICE_FUNC double rayCastTriangle(const Vec3d point, const Vec3d d
 		m(all, 1) = triangle[1] - triangle[0];
 		m(all, 2) = triangle[2] - triangle[0];
 		
-		Vec3d vi = m.partialPivLu().solve(v);
+		// Vec3d vi = m.partialPivLu().solve(v);
+		Vec3d vi = m.inverse() * v;
 	#endif
 	
 	/* Mat3d m;

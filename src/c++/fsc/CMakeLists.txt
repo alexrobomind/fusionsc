@@ -253,6 +253,21 @@ if(MSVC)
 	target_compile_options(fsc PRIVATE /bigobj)
 endif()
 
+# -------------------------------------------------
+# Profiling flags per‑target (modern CMake)
+# -------------------------------------------------
+if(FSC_ENABLE_PROFILING)
+    if(MSVC)
+        # Debug info + optimisation + VS profiler support
+        target_compile_options(fsc PRIVATE /Zi /O2)
+        target_link_options(fsc PRIVATE /PROFILE)
+    else()
+        # GCC/Clang style profiling (gprof)
+        target_compile_options(fsc PRIVATE -g -O2 -pg)
+    endif()
+endif()
+
+
 # Built in src/c++/fsc
 INSTALL(TARGETS deps fsc EXPORT FSCTargets LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
