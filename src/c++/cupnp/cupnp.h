@@ -744,7 +744,7 @@ inline Location messageRoot(SegmentTable::Entry firstSegment, SegmentTable segme
 
 // Ensures that the location presented can hold enough data to support
 // the data and pointer section size specified in "structure".
-CUPNP_FUNCTION inline void validateStructPointer(uint64_t structure, Location data) {
+/*CUPNP_FUNCTION inline void validateStructPointer(uint64_t structure, Location data) {
 	uint8_t tag = structure & 3u;
 	CUPNP_REQUIRE(tag == 0);
 	
@@ -752,12 +752,15 @@ CUPNP_FUNCTION inline void validateStructPointer(uint64_t structure, Location da
 	uint16_t pointerSectionSize = structure >> 48;
 	
 	CUPNP_REQUIRE(data.isValid((dataSectionSizeInWords + pointerSectionSize) * sizeof(capnp::word)));
-}
+}*/
 
 // Ensures that the location presented can hold enough data to support
 // the data and pointer section size specified in "structure".
-CUPNP_FUNCTION inline void validateStructPointer(uint32_t dataSectionSize, uint16_t pointerSectionSize, Location data) {
-	CUPNP_REQUIRE(data.isValid(dataSectionSize + pointerSectionSize * sizeof(capnp::word)));
+CUPNP_FUNCTION inline void validateStructPointer(uint32_t& dataSectionSize, uint16_t& pointerSectionSize, Location data) {
+	CUPNP_REQUIRE(data.isValid(dataSectionSize + pointerSectionSize * sizeof(capnp::word))) {
+		dataSectionSize = 0;
+		pointerSectionSize = 0;
+	};
 }
 
 CUPNP_FUNCTION inline void validateInterfacePointer(uint64_t structure, Location data) {

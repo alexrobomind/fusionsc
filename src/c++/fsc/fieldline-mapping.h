@@ -78,8 +78,10 @@ struct RFLM {
 		cu::Float64Tensor::Reader reader;
 		RFLM& parent;
 		
+		cupnp::List<double>::Reader data;
+		
 		TensorField(cu::Float64Tensor::Reader reader, RFLM& parent) :
-			reader(reader), parent(parent)
+			reader(reader), parent(parent), data(reader.getData())
 		{}
 		
 		double operator()(int iPhi, int iZ, int iR) const {
@@ -94,11 +96,7 @@ struct RFLM {
 			
 			int iLinear = iR + parent.nR * (iZ + parent.nZ * iPhi);
 			
-			if(iLinear >= reader.getData().size()) {
-				KJ_DBG("Bad iLinear", iLinear, reader.getData().size(), iZ, iR, iPhi);
-			}
-			
-			return reader.getData()[iLinear];
+			return data[iLinear];
 		}
 	};
 	

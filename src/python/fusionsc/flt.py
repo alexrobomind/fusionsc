@@ -34,7 +34,7 @@ class FieldlineMapping(wrappers.RefWrapper):
 	async def mapGeometry(self,
 		geometry: geometry.Geometry,
 		toroidalSymmetry: int = 1,
-		nPhi: int = 1, nU: int = 10, nV: int = 10
+		nPhi: int = 1, nU: int = 50, nV: int = 50
 	):
 		"""
 		Pre-computes a field-aligned geometry mapping that can be used to enable

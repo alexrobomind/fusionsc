@@ -229,6 +229,8 @@ inline EIGEN_DEVICE_FUNC uint32_t intersectGeometryAllEvents(
 
 	int nFlatDims = (imin[0] == imax[0]) + (imin[1] == imax[1]) + (imin[2] == imax[2]);
 	
+	auto geoEntries = geometry.getEntries();
+	
 	for(size_t iX = imin[0]; iX <= imax[0]; ++iX) {
 	for(size_t iY = imin[1]; iY <= imax[1]; ++iY) {
 	for(size_t iZ = imin[2]; iZ <= imax[2]; ++iZ) {
@@ -248,7 +250,7 @@ inline EIGEN_DEVICE_FUNC uint32_t intersectGeometryAllEvents(
 			auto refElementIdx = elementRef.getElementIndex();
 			
 			// Load referenced mesh
-			auto refMesh = geometry.getEntries()[refMeshIdx].getMesh();
+			auto refMesh = geoEntries[refMeshIdx].getMesh();
 			auto meshIndices = refMesh.getIndices();
 			auto meshVertices = refMesh.getVertices().getData();
 			
@@ -326,6 +328,8 @@ inline EIGEN_DEVICE_FUNC IntersectResult intersectGeometryFirstHit(
 	
 	int nFlatDims = (imin[0] == imax[0]) + (imin[1] == imax[1]) + (imin[2] == imax[2]);
 	
+	auto geoEntries = geometry.getEntries();
+	
 	for(size_t iX = imin[0]; iX <= imax[0]; ++iX) {
 	for(size_t iY = imin[1]; iY <= imax[1]; ++iY) {
 	for(size_t iZ = imin[2]; iZ <= imax[2]; ++iZ) {
@@ -344,7 +348,7 @@ inline EIGEN_DEVICE_FUNC IntersectResult intersectGeometryFirstHit(
 			auto refElementIdx = elementRef.getElementIndex();
 			
 			// Load referenced mesh
-			auto refMesh = geometry.getEntries()[refMeshIdx].getMesh();
+			auto refMesh = geoEntries[refMeshIdx].getMesh();
 			auto meshIndices = refMesh.getIndices();
 			auto meshVertices = refMesh.getVertices().getData();
 			
