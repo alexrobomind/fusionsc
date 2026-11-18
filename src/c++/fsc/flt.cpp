@@ -596,8 +596,10 @@ struct FLTImpl : public FLT::Server {
 				
 				Tensor<double, 2> endPoints(nStartPoints, 4);
 				Tensor<double, 2> normals(nStartPoints, 3);
+				Tensor<uint32_t, 1> endElements(nStartPoints);
 				
 				normals.setConstant(std::numeric_limits<double>::quiet_NaN());
+				endElements.setConstant(0);
 				
 				applyPointShape(results.getStopReasons(), {}, {});
 				applyPointShape(results.getNumSteps(), {}, {});
@@ -765,6 +767,8 @@ struct FLTImpl : public FLT::Server {
 							uint32_t meshIdx = lastCollision.getGeometryHit().getMeshIndex();
 							uint32_t elementIdx = lastCollision.getGeometryHit().getElementIndex();
 							
+							endElements(iStartPoint) = elementIdx;
+							
 							auto tagValues = geometry.getEntries()[meshIdx].getTags();
 							
 							for(auto iTag : kj::indices(tagValues)) {
@@ -854,6 +858,9 @@ struct FLTImpl : public FLT::Server {
 				
 				writeTensor(normals, results.getNormals());
 				applyPointShape(results.getNormals(), {3}, {});
+				
+				writeTensor(endElements, results.getEndElementIndices());
+				applyPointShape(results.getEndElementIndices(), {}, {});
 				
 				if(nRecorded > 0) {
 					KJ_REQUIRE(

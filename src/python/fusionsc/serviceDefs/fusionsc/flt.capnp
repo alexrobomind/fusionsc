@@ -242,6 +242,9 @@ struct FLTResponse {
 	# Tensor of shape [len(tagNames)] + startPoints.shape[1:]
 	endTags @4 : Data.ShapedList(List(Geometry.TagValue));
 	
+	# Tensor of shape startPoints.shape[1:].
+	endElementIndices @17 : Data.UInt32Tensor;
+	
 	# Tensor of shape startPoints.shape[1:]
 	stopReasons @5 : Data.ShapedList(List(FLTStopReason));
 	

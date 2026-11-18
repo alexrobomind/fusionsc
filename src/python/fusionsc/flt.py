@@ -317,6 +317,8 @@ async def trace(
 			- *endTags*: A dict containing a numpy array of type fusionsc.service.TagValue for each tag name present in the geometry. Each array is
 			  of shape `startPoints.shape[1:]`, and its values indicate the tags associated with the final geometry hit. This gives information
 			  about the meshes impacted by the field lines.
+			- *endElementIndices*: A numpy array of shape startPoints.shape[1:]. For each field line terminated by a collision, the respective
+			  array element stores the index of the element inside the mesh that the field line collided with.
 			- *responseSize*: The total size of the response size in bytes (mainly for profiling purposes).
 		
 		-	If `resultFormat == 'raw'`:
@@ -552,7 +554,8 @@ def decodeTraceResponse(response: service.FLTResponse.ReaderOrBuilder, resultFor
 		"endTagsNice" : endTagsNice,
 		"numSteps" : np.asarray(response.numSteps),
 		"responseSize" : response.totalBytes_(),
-		"normals" : np.asarray(response.normals)
+		"normals" : np.asarray(response.normals),
+		"endElementIndices" : np.asarray(response.endElementIndices),
 	}
 	return result
 
