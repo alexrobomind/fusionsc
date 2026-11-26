@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common.h"
+
 #include <fsc/data.capnp.h>
 
 #include <capnp/any.h>
@@ -8,7 +10,6 @@
 #include <limits>
 //#include <kj/filesystem.h>
 
-#include "common.h"
 #include "local.h"
 
 /**
