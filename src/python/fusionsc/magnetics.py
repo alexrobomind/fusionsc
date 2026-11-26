@@ -8,6 +8,7 @@ from . import backends
 from . import efit
 from . import wrappers
 from . import serialize
+from . import logging
 
 from .asnc import asyncFunction
 from ._api_markers import unstableApi
@@ -445,7 +446,11 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 		if (nPhi != 2 * nMax + 1 or nTheta != 2 * mMax + 1) and useFFT:
 			import warnings
 			warnings.warn("calculateRadialModes can only use the FFT fast path if nPhi == 2 * nMax + 1 and nTheta == 2 * mMax + 1. Other values are not recommended")
+				
+		ts = logging.timestamp()
 		
+		await logging.log.asnc("magnetics", f"calls/{ts}-calcRadModes/field", resolved.data)
+		await logging.log.asnc("magnetics", f"calls/{ts}-calcRadModes/surfaces", surfaces.data)
 		response = await _calculator().calculateRadialModes(
 			resolved.data, background,
 			surfaces.data,
@@ -457,6 +462,7 @@ class MagneticConfig(wrappers.structWrapper(service.MagneticField)):
 			fourierConvention,
 			fourierNormalization
 		)
+		await logging.log.asnc("magnetics", f"calls/{ts}-calcRadModes/response", response)
 		
 		return {
 			"cosCoeffs" : np.asarray(response.cosCoeffs),
