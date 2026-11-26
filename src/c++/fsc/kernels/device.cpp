@@ -21,12 +21,20 @@ DeviceBase::DeviceBase(void* brand) :
 DeviceBase::~DeviceBase() {}
 
 Promise<void> DeviceBase::barrier() {
-	return getActiveThread().uncancelable(emplaceBarrier().attach(releaseAttachments(), addRef()));
+	// Capture pending attachments BEFORE enqueueing the barrier marker.
+	// Every captured attachment therefore belongs to device work that was
+	// already enqueued. The barrier marker is enqueued after that work and
+	// will only resolve once it has finished.
+	Own<int> pending = releaseAttachments();
+	
+	return getActiveThread().uncancelable(emplaceBarrier().attach(mv(pending), addRef()));
 }
 
 Own<int> DeviceBase::releaseAttachments() {
-	Own<int> result = mv(attachments);
-	attachments = kj::Own<int>(&PTR_SLOT, kj::NullDisposer::instance);
+	auto locked = attachments.lockExclusive();
+	
+	Own<int> result = mv(*locked);
+	*locked = kj::Own<int>(&PTR_SLOT, kj::NullDisposer::instance);
 	return result;
 }
 

@@ -3,6 +3,7 @@
 #include "../common.h"
 #include "../eigen.h"
 
+#include <kj/mutex.h>
 #include <type_traits>
 
 namespace Eigen {
@@ -24,7 +25,8 @@ struct DeviceBase {
 	//! Accepts arguments to be attached to the next barrier() promise
 	template<typename... T>
 	void addToBarrier(T&&... args) {
-		attachments = attachments.attach(kj::fwd<T>(args)...);
+		auto locked = attachments.lockExclusive();
+		*locked = kj::mv(*locked).attach(kj::fwd<T>(args)...);
 	}
 	
 	//! Returns a promise that resolves when all actions submitted to the device queue have finished.
@@ -81,7 +83,7 @@ protected:
 	Own<int> releaseAttachments();
 	
 private:
-	Own<int> attachments;
+	kj::MutexGuarded<Own<int>> attachments;
 };
 
 /**
