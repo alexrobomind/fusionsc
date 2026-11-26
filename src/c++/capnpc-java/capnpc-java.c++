@@ -22,6 +22,8 @@
 // This program is a code generator plugin for `capnp compile` which generates java code.
 // It is a modified version of the C++ code generator plugin, capnpc-c++.
 
+// Capnproto forgot to include this
+#include <cstddef>
 
 #include <capnp/schema.capnp.h>
 #include <capnp/serialize.h>

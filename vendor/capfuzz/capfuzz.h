@@ -2,6 +2,9 @@
 
 #include <cstdint>
 
+// Capnproto forgot to include this
+#include <cstddef>
+
 #include <kj/common.h>
 #include <kj/memory.h>
 #include <kj/async.h>

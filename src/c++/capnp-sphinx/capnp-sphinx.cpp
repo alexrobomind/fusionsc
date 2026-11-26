@@ -1,3 +1,6 @@
+// Capnproto forgot to include this
+#include <cstddef>
+
 #include <capnp/schema.capnp.h>
 #include <capnp/serialize.h>
 #include <capnp/serialize-text.h>
