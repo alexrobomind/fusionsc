@@ -1,9 +1,9 @@
 #pragma once
 
+#include "fscpy.h"
+
 #include <capnp/dynamic.h>
 #include <capnp/list.h>
-
-#include "fscpy.h"
 
 namespace fscpy {
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <fsc/common.h>
+
 #include <capnp/schema-loader.h>
 #include <capnp/schema.h>
 
