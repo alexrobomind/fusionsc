@@ -1,3 +1,5 @@
+#include "../common.h"
+
 #include <fsc/magnetics.capnp.h>
 #include <fsc/geometry.capnp.h>
 
