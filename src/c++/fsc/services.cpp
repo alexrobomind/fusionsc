@@ -44,7 +44,7 @@ Own<DeviceBase> selectDevice(LocalConfig::Reader config) {
 	
 	try {
 		if(config.getPreferredDeviceType() == ComputationDeviceType::GPU) {
-			return kj::refcounted<GPUDevice>();
+			return kj::atomicRefcounted<GPUDevice>();
 		}
 	} catch(kj::Exception& e) {
 	}

@@ -126,7 +126,7 @@ struct DeviceMapping<Own<capnp::MessageBuilder>> : public MessageMappingBase {
 	capnp::MessageBuilder& getHost();
 	
 	Own<DeviceMapping<Own<capnp::MessageBuilder>>> addRef() {
-		return kj::addRef(*this);
+		return kj::atomicAddRef(*this);
 	}
 	
 private:
@@ -148,7 +148,7 @@ struct DeviceMapping<Own<capnp::MessageReader>> : public MessageMappingBase {
 	capnp::MessageReader& getHost();
 	
 	Own<DeviceMapping<Own<capnp::MessageReader>>> addRef() {
-		return kj::addRef(*this);
+		return kj::atomicAddRef(*this);
 	}
 	
 private:
@@ -174,7 +174,7 @@ struct DeviceMapping<CuTypedMessageBuilder<HostType, CupnpType>> : public Device
 	typename HostType::Builder getHost() { return Parent::getHost().template getRoot<HostType>(); }
 	
 	Own<DeviceMapping<CuTypedMessageBuilder<HostType, CupnpType>>> addRef() {
-		return kj::addRef(*this);
+		return kj::atomicAddRef(*this);
 	}
 };
 
@@ -193,7 +193,7 @@ struct DeviceMapping<CuTypedMessageReader<HostType, CupnpType>> : public DeviceM
 	typename HostType::Reader getHost() { return Parent::getHost().template getRoot<HostType>(); }
 	
 	Own<DeviceMapping<CuTypedMessageReader<HostType, CupnpType>>> addRef() {
-		return kj::addRef(*this);
+		return kj::atomicAddRef(*this);
 	}
 };
 

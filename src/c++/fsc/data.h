@@ -362,6 +362,20 @@ public:
 	friend class LocalDataRef;
 };
 
+/**
+ * Creates a deep-forked copy of a Maybe-wrapped LocalDataRef.
+ *
+ * Useful when moving LocalDataRefs into worker-thread tasks; the fork
+ * uses its own non-atomic backend and is safe to pass across threads.
+ */
+template<typename T>
+Maybe<LocalDataRef<T>> deepFork(Maybe<LocalDataRef<T>>& ref) {
+	KJ_IF_MAYBE(p, ref) {
+		return p -> deepFork();
+	}
+	return nullptr;
+}
+
 //! Combined MessageBuilder and Struct::Builder
 /**
  * \tparam T Data type of the contained message.

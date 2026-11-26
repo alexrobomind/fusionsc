@@ -510,7 +510,7 @@ struct FLTImpl : public FLT::Server {
 			calc.run().wait(ws);	
 			
 			// TODO: This function is WAY TOO LONG. It needs to be broken up into pieces.
-			auto postProcessing = [ctx, &calc, request, startPointShape, nStartPoints, geometryData = mv(geometryData), geoMappingData = mv(geoMappingData)]() mutable {
+			auto postProcessing = [ctx, &calc, request, startPointShape, nStartPoints, geometryData = deepFork(geometryData), geoMappingData = deepFork(geoMappingData)]() mutable {
 				auto applyPointShape = [&](auto builder, kj::ArrayPtr<const int64_t> preShape, kj::ArrayPtr<const int64_t> postShape) {
 					const size_t shapeSize = startPointShape.size() - 1 + preShape.size() + postShape.size();
 					size_t shapeProd = nStartPoints;

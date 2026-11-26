@@ -57,7 +57,7 @@ void DeviceMappingBase::updateDevice() {
 }
 
 Own<DeviceMappingBase> DeviceMappingBase::addRef() {
-	return kj::addRef(*this);
+	return kj::atomicAddRef(*this);
 }
 
 // === CPUDeviceBase ===
@@ -119,7 +119,7 @@ CPUDevice::CPUDevice(kj::Badge<CPUDevice>, unsigned int numThreadsSet) :
 CPUDevice::~CPUDevice() {}
 
 Own<DeviceBase> CPUDevice::addRef() {
-	return kj::addRef(*this);
+	return kj::atomicAddRef(*this);
 }
 
 unsigned int CPUDevice::estimateNumThreads() {
@@ -127,7 +127,7 @@ unsigned int CPUDevice::estimateNumThreads() {
 }
 
 Own<CPUDevice> CPUDevice::create(unsigned int numThreads) {
-	return kj::refcounted<CPUDevice>(kj::Badge<CPUDevice>(), numThreads);
+	return kj::atomicRefcounted<CPUDevice>(kj::Badge<CPUDevice>(), numThreads);
 }
 
 Eigen::ThreadPoolDevice& CPUDevice::eigenDevice() {
@@ -147,11 +147,11 @@ LoopDevice::LoopDevice(kj::Badge<LoopDevice>) :
 {}
 
 Own<DeviceBase> LoopDevice::addRef() {
-	return kj::addRef(*this);
+	return kj::atomicAddRef(*this);
 }
 
 Own<LoopDevice> LoopDevice::create() {
-	return kj::refcounted<LoopDevice>(kj::Badge<LoopDevice>());
+	return kj::atomicRefcounted<LoopDevice>(kj::Badge<LoopDevice>());
 }
 
 #ifdef FSC_WITH_CUDA

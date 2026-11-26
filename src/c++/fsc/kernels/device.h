@@ -89,7 +89,7 @@ private:
 /**
  * \brief Base class for DeviceMapping implementations that handles barriers.
  */
-struct DeviceMappingBase : public kj::Refcounted {
+struct DeviceMappingBase : public kj::AtomicRefcounted {
 	DeviceMappingBase(DeviceBase& device);
 	virtual ~DeviceMappingBase();
 	
@@ -151,7 +151,7 @@ Own<DeviceMapping<T>> cloneMapping(Own<DeviceMapping<T>>& base) {
 
 template<typename T>
 Own<DeviceMapping<T>> mapToDevice(T t, DeviceBase& device, bool allowAlias) {
-	return kj::refcounted<DeviceMapping<T>>(mv(t), device, allowAlias);
+	return kj::atomicRefcounted<DeviceMapping<T>>(mv(t), device, allowAlias);
 }
 
 template<typename T>
@@ -185,7 +185,7 @@ struct CPUDeviceBase : public DeviceBase {
 	Promise<void> emplaceBarrier() override;
 };
 
-struct CPUDevice : public CPUDeviceBase, public kj::Refcounted {
+struct CPUDevice : public CPUDeviceBase, public kj::AtomicRefcounted {
 	static int BRAND;
 	
 	CPUDevice(kj::Badge<CPUDevice>, unsigned int numThreads);
@@ -204,7 +204,7 @@ private:
 	Maybe<Own<Eigen::ThreadPoolDevice>> ownDevice;// Own<Eigen::ThreadPoolDevice> eigenDevice;
 };
 
-struct LoopDevice : public CPUDeviceBase, public kj::Refcounted {
+struct LoopDevice : public CPUDeviceBase, public kj::AtomicRefcounted {
 	static int BRAND;
 	
 	LoopDevice(kj::Badge<LoopDevice>);
@@ -214,7 +214,7 @@ struct LoopDevice : public CPUDeviceBase, public kj::Refcounted {
 };
 
 /*
-struct GPUDevice : public DeviceBase, public kj::Refcounted {
+struct GPUDevice : public DeviceBase, public kj::AtomicRefcounted {
 };
 */
 
