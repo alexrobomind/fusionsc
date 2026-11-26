@@ -930,8 +930,12 @@ async def calculateIota(
 		adaptive.min = minStepSize
 		adaptive.max = maxStepSize
 		
-	errorEstimationDistance = min(turnCount * 2 * np.pi * field.data.computedField.grid.rMax, distanceLimit)
-	adaptive.errorUnit.integratedOver = errorEstimationDistance
+		errorEstimationDistance = turnCount * 2 * np.pi * field.data.computedField.grid.rMax
+		
+		if distanceLimit > 0:
+			errorEstimationDistance = min(errorEstimationDistance, distanceLimit)
+		
+		adaptive.errorUnit.integratedOver = errorEstimationDistance
 	
 	# Perform trace command
 	response = await _tracer().trace(request)
