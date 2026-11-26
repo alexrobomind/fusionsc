@@ -165,19 +165,19 @@ add_vendored_dependency(
 set(WITH_ZLIB OFF)
 set(WITH_FIBERS ON CACHE STRING "Whether or not to build libkj-async with fibers")
 
-# Currently, upstream Cap'n'proto
+# FIXED: Currently, upstream Cap'n'proto
 # has unfixed problems which prohibit
 # us from using it properly.
 # Until these are fixed, we need to
 # use the vendored Cap'n'proto
 
-#add_vendored_dependency(
-# 	PREFIX vendor/capnproto
-#	NAME CapnProto
-#	VERSION 0.11
-#)
-add_subdirectory(vendor/capnproto)
-set(CapnProto_VENDORED On)
+add_vendored_dependency(
+ 	PREFIX vendor/capnproto
+	NAME CapnProto
+	VERSION 0.15
+)
+#add_subdirectory(vendor/capnproto)
+#set(CapnProto_VENDORED On)
 
 unset(WITH_ZLIB)
 
