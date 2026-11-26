@@ -36,7 +36,7 @@ sdist.exclude = [
 	"/src/python/fusionsc/serviceDefs/fusionsc/devices/w7x-resources/compile-index.py"
 ]
 
-cmake.targets = ["fsc-skbuild-target"]
+build.targets = ["fsc-skbuild-target"]
 cmake.build-type = "Release"
 install.components = ["SKBUILD"]
 wheel.packages = ["src/python/fusionsc"]

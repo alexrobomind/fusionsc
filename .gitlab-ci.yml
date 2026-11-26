@@ -153,10 +153,13 @@ pybuild:pybuild-manylinux:
   stage: pybuild
   needs: []
 
-  image: quay.io/pypa/manylinux2014_x86_64
+  image: $BUILD_IMAGE
   parallel:
     matrix:
-      - PYTHON: [cp38-cp38, cp39-cp39, cp310-cp310, cp311-cp311, cp312-cp312, cp313-cp313, cp314-cp314]
+      - PYTHON: [cp39-cp39, cp310-cp310, cp311-cp311, cp312-cp312, cp313-cp313, cp314-cp314, cp315-cp315]
+        BUILD_IMAGE: quay.io/pypa/manylinux2014_x86_64:latest
+      - PYTHON: cp38-cp38
+        BUILD_IMAGE: quay.io/pypa/manylinux2014_x86_64:2026.05.02-2
 
   rules:
     - when: manual
@@ -188,7 +191,7 @@ pybuild:pybuild-windows:
 
   parallel:
     matrix:
-      - PYVERSION: ["7", "8", "9", "10", "11"]
+      - PYVERSION: ["7", "8", "9", "10", "11", "12", "13", "14", "15"]
 
   script:
     - py -3.$env:PYVERSION -m build -w
