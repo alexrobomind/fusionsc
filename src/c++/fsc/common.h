@@ -9,6 +9,9 @@
 #define FSC_WITH_CUDA
 #endif
 
+// Capnproto forgot to include this
+#include <cstddef>
+
 #include <capnp/common.h>
 #include <capnp/message.h>
 #include <kj/common.h>
