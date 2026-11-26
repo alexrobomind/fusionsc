@@ -1289,6 +1289,7 @@ void Executor::send(_::XThreadEvent& event, bool sync) const {
     loop = l;
   } else {
     event.setDisconnected();
+    event.setDoneState();
     return;
   }
 

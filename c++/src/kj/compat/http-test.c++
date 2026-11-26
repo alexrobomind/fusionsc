@@ -308,6 +308,104 @@ KJ_TEST("HttpHeaders parse invalid") {
   }
 }
 
+KJ_TEST("HttpHeaders reject whitespace before colon") {
+  // RFC 9112 section 5.1 requires rejecting a header with whitespace between the field name and the
+  // colon. Historically KJ silently stripped it, which -- paired with a peer that treats the space
+  // as part of the name -- could enable HTTP desync / request smuggling.
+  auto table = HttpHeaderTable::Builder().build();
+  HttpHeaders headers(*table);
+
+  // Space before the colon.
+  {
+    auto input = kj::heapString(
+        "POST   /some/path   HTTP/1.1\r\n"
+        "Host: example.com\r\n"
+        "Content-Length : 0\r\n"
+        "\r\n");
+
+    auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
+
+    KJ_EXPECT(protocolError.statusCode == 400, protocolError.statusCode);
+    KJ_EXPECT(protocolError.description == "The headers sent by your client are not valid.",
+        protocolError.description);
+  }
+
+  // Tab before the colon.
+  {
+    auto input = kj::heapString(
+        "POST   /some/path   HTTP/1.1\r\n"
+        "Host: example.com\r\n"
+        "Content-Length\t: 0\r\n"
+        "\r\n");
+
+    auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
+
+    KJ_EXPECT(protocolError.statusCode == 400, protocolError.statusCode);
+  }
+
+  // Whitespace *after* the colon (i.e. before the value) is still allowed and stripped.
+  {
+    auto input = kj::heapString(
+        "POST   /some/path   HTTP/1.1\r\n"
+        "Host: example.com\r\n"
+        "Content-Length:    123\r\n"
+        "\r\n");
+
+    auto result = headers.tryParseRequest(input).get<HttpHeaders::Request>();
+    KJ_EXPECT(result.method == HttpMethod::POST);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(HttpHeaderId::CONTENT_LENGTH)) == "123");
+  }
+}
+
+KJ_TEST("HttpHeaders reject obsolete line folding") {
+  // RFC 9112 section 7.1.4 deprecates line folding and allows rejecting it with 400 (Bad Request).
+  // Folding has historically been a source of HTTP desync when peers disagree about whether a
+  // folded line is a continuation or a new header, so KJ rejects it.
+  auto table = HttpHeaderTable::Builder().build();
+
+  // Folded value with a leading space on the continuation line.
+  {
+    HttpHeaders headers(*table);
+    auto input = kj::heapString(
+        "POST   /some/path   HTTP/1.1\r\n"
+        "Host: example.com\r\n"
+        "Some-Header: a really long\r\n"
+        "   header value\r\n"
+        "\r\n");
+
+    auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
+    KJ_EXPECT(protocolError.statusCode == 400, protocolError.statusCode);
+  }
+
+  // Folded value with a leading tab on the continuation line.
+  {
+    HttpHeaders headers(*table);
+    auto input = kj::heapString(
+        "POST   /some/path   HTTP/1.1\r\n"
+        "Host: example.com\r\n"
+        "Some-Header: a really long\r\n"
+        "\theader value\r\n"
+        "\r\n");
+
+    auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
+    KJ_EXPECT(protocolError.statusCode == 400, protocolError.statusCode);
+  }
+
+  // Folding used to smuggle what looks like a separate header.
+  {
+    HttpHeaders headers(*table);
+    auto input = kj::heapString(
+        "HTTP/1.1 200 OK\r\n"
+        "Host: example.com\r\n"
+        "Some-Header: value\r\n"
+        " Smuggled-Header: value\r\n"
+        "\r\n");
+
+    auto protocolError = headers.tryParseResponse(input).get<HttpHeaders::ProtocolError>();
+    KJ_EXPECT(protocolError.statusCode == 502, protocolError.statusCode);
+  }
+}
+
 KJ_TEST("HttpHeaders require valid HttpHeaderTable") {
   const auto ERROR_MESSAGE =
       "HttpHeaders object was constructed from HttpHeaderTable "
@@ -371,6 +469,52 @@ KJ_TEST("HttpHeaders validation") {
 
   KJ_EXPECT_THROW_MESSAGE("invalid header value", headers.set(HttpHeaderId::HOST, "in\nvalid"));
   KJ_EXPECT_THROW_MESSAGE("invalid header value", headers.add("Valid-Name", "in\nvalid"));
+}
+
+KJ_TEST("HttpHeaders serialization validation") {
+  // The serialization functions must reject request URLs and status texts containing characters
+  // that would allow HTTP desync / request smuggling (e.g. when http-over-capnp forwards untrusted
+  // metadata to a plain-HTTP connection). See GHSL-2026-146.
+  auto table = HttpHeaderTable::Builder().build();
+  HttpHeaders headers(*table);
+
+  // Valid values serialize fine.
+  KJ_EXPECT(headers.serializeRequest(HttpMethod::GET, "/some/path?query=1") ==
+      "GET /some/path?query=1 HTTP/1.1\r\n\r\n");
+  KJ_EXPECT(headers.serializeResponse(200, "OK") ==
+      "HTTP/1.1 200 OK\r\n\r\n");
+
+  // A CRLF in the URL could inject headers or an entire second request.
+  KJ_EXPECT_THROW_MESSAGE("invalid request URL",
+      headers.serializeRequest(HttpMethod::GET, "/foo\r\nX-Injected: 1"));
+
+  // A bare LF is equally dangerous.
+  KJ_EXPECT_THROW_MESSAGE("invalid request URL",
+      headers.serializeRequest(HttpMethod::GET, "/foo\nbar"));
+
+  // A space in the request-target would introduce an extra token into the request line.
+  KJ_EXPECT_THROW_MESSAGE("invalid request URL",
+      headers.serializeRequest(HttpMethod::GET, "/foo bar"));
+
+  // A NUL byte terminates the C string and could truncate the request line.
+  KJ_EXPECT_THROW_MESSAGE("invalid request URL",
+      headers.serializeRequest(HttpMethod::GET, kj::StringPtr("/foo\0bar", 8)));
+
+  // CONNECT authority is validated too.
+  KJ_EXPECT_THROW_MESSAGE("invalid request URL",
+      headers.serializeConnectRequest("example.com:443\r\nX-Injected: 1"));
+
+  // A CRLF in the status text could inject headers into the response.
+  KJ_EXPECT_THROW_MESSAGE("invalid status text",
+      headers.serializeResponse(200, "OK\r\nX-Injected: 1"));
+
+  // A bare LF is equally dangerous.
+  KJ_EXPECT_THROW_MESSAGE("invalid status text",
+      headers.serializeResponse(200, "OK\nfoo"));
+
+  // Status text may legitimately contain spaces.
+  KJ_EXPECT(headers.serializeResponse(418, "I'm a teapot") ==
+      "HTTP/1.1 418 I'm a teapot\r\n\r\n");
 }
 
 KJ_TEST("HttpHeaders Set-Cookie handling") {
@@ -4036,6 +4180,66 @@ KJ_TEST("HttpServer invalid method") {
       "ERROR: Unrecognized request method."_kj;
 
   KJ_EXPECT(expectedResponse == response, expectedResponse, response);
+}
+
+KJ_TEST("HttpServer rejects negative Content-Length") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  BrokenHttpService service;
+  HttpServer server(timer, table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  auto msg =
+      "POST / HTTP/1.1\r\n"
+      "Content-Length: -1\r\n"
+      "\r\n"
+      "foo"_kj.asBytes();
+
+  auto writePromise = pipe.ends[1]->write(msg.begin(), msg.size());
+  auto response = pipe.ends[1]->readAllText().wait(waitScope);
+
+  // The server should reject the negative Content-Length. The KJ_FAIL_REQUIRE in getEntityBody()
+  // gets caught by the server loop and turned into a 500 error.
+  KJ_EXPECT(response.startsWith("HTTP/1.1 500 Internal Server Error"), response);
+
+  KJ_EXPECT(writePromise.poll(waitScope));
+  writePromise.catch_([](kj::Exception&&) {}).wait(waitScope);
+}
+
+KJ_TEST("HttpServer rejects chunked body with overflowing chunk size") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  BrokenHttpService service;
+  HttpServer server(timer, table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // 17 hex digits: 0x10000000000000000 = 2^64, which overflows uint64_t.
+  auto msg =
+      "POST / HTTP/1.1\r\n"
+      "Transfer-Encoding: chunked\r\n"
+      "\r\n"
+      "10000000000000000\r\n"
+      "x\r\n"
+      "0\r\n"
+      "\r\n"_kj.asBytes();
+
+  auto writePromise = pipe.ends[1]->write(msg.begin(), msg.size());
+  auto response = pipe.ends[1]->readAllText().wait(waitScope);
+
+  // The chunk size overflow causes a KJ_REQUIRE failure during body reading, which the server
+  // catches and turns into a 500 error.
+  KJ_EXPECT(response.startsWith("HTTP/1.1 500 Internal Server Error"), response);
+
+  KJ_EXPECT(writePromise.poll(waitScope));
+  writePromise.catch_([](kj::Exception&&) {}).wait(waitScope);
 }
 
 // Ensure that HttpServerSettings can continue to be constexpr.

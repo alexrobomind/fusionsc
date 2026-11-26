@@ -499,6 +499,40 @@ static void requireValidHeaderValue(kj::StringPtr value) {
       kj::encodeCEscape(value));
 }
 
+static bool isValidRequestUrl(kj::StringPtr url) {
+  // The request-target (URL) appears in the request line as `METHOD SP request-target SP version`.
+  // It must not contain whitespace (which would introduce extra tokens into the request line) nor
+  // any control characters (in particular CR or LF, which would allow injecting additional headers
+  // or entire requests). We reject any byte <= 0x20 (this covers space, tab, CR, LF, and NUL) as
+  // well as 0x7f (DEL). Bytes >= 0x80 are permitted since some callers pass pre-encoded or
+  // non-ASCII targets; these cannot cause desync.
+  for (char c: url) {
+    if (static_cast<byte>(c) <= 0x20 || static_cast<byte>(c) == 0x7f) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static void requireValidRequestUrl(kj::StringPtr url) {
+  KJ_REQUIRE(isValidRequestUrl(url), "invalid request URL", kj::encodeCEscape(url));
+}
+
+static bool isValidStatusText(kj::StringPtr text) {
+  // The status text (reason-phrase) appears at the end of the response status line. It must not
+  // contain CR, LF, or NUL, which would allow injecting additional headers or corrupt the framing.
+  for (char c: text) {
+    if (c == '\0' || c == '\r' || c == '\n') {
+      return false;
+    }
+  }
+  return true;
+}
+
+static void requireValidStatusText(kj::StringPtr text) {
+  KJ_REQUIRE(isValidStatusText(text), "invalid status text", kj::encodeCEscape(text));
+}
+
 static const char* BUILTIN_HEADER_NAMES[] = {
   // Indexed by header ID, which includes connection headers, so we include those names too.
 #define HEADER_NAME(id, name) name,
@@ -824,7 +858,10 @@ static kj::Maybe<uint> consumeNumber(char*& ptr) {
   }
 }
 
-static kj::StringPtr consumeLine(char*& ptr) {
+static kj::StringPtr consumeLine(char*& ptr, bool* sawFolding = nullptr) {
+  // If `sawFolding` is non-null, it is set to true if an obsolete "line folding" continuation was
+  // encountered. Callers that parse header fields use this to reject the message (see
+  // parseHeaders()).
   char* start = skipSpace(ptr);
   char* p = start;
 
@@ -843,6 +880,7 @@ static kj::StringPtr consumeLine(char*& ptr) {
           // a space was treated as a continuation of the previous line. The behavior should be
           // the same as if the \r\n were replaced with spaces, so let's do that here to prevent
           // confusion later.
+          if (sawFolding != nullptr) *sawFolding = true;
           *end = ' ';
           p[-1] = ' ';
           break;
@@ -861,6 +899,7 @@ static kj::StringPtr consumeLine(char*& ptr) {
           // a space was treated as a continuation of the previous line. The behavior should be
           // the same as if the \n were replaced with spaces, so let's do that here to prevent
           // confusion later.
+          if (sawFolding != nullptr) *sawFolding = true;
           *end = ' ';
           break;
         }
@@ -886,7 +925,11 @@ static kj::Maybe<kj::StringPtr> consumeHeaderName(char*& ptr) {
   while (HTTP_HEADER_NAME_CHARS.contains(*p)) ++p;
   char* end = p;
 
-  p = skipSpace(p);
+  // Note: We intentionally do NOT skip whitespace between the header name and the colon. RFC 9112
+  // section 5.1 requires that no whitespace appear there, and that a message with such whitespace
+  // be rejected with 400 (Bad Request). Historically some HTTP implementations treated the
+  // trailing whitespace as part of the header name, which -- if a message passed through both such
+  // an implementation and a lenient one -- could lead to HTTP desync / request smuggling.
 
   if (end == start || *p != ':') return nullptr;
   ++p;
@@ -1030,7 +1073,15 @@ bool HttpHeaders::tryParse(kj::ArrayPtr<char> content) {
 bool HttpHeaders::parseHeaders(char* ptr, char* end) {
   while (*ptr != '\0') {
     KJ_IF_MAYBE(name, consumeHeaderName(ptr)) {
-      kj::StringPtr line = consumeLine(ptr);
+      bool sawFolding = false;
+      kj::StringPtr line = consumeLine(ptr, &sawFolding);
+      if (sawFolding) {
+        // Obsolete line folding (a continuation line beginning with whitespace). RFC 9112 section
+        // 7.1.4 says a server MUST either reject such a message with 400 (Bad Request) or replace
+        // the folding with spaces. Folding is never used legitimately and has historically been a
+        // source of HTTP desync, so we reject.
+        return false;
+      }
       addNoCheck(*name, line);
     } else {
       return false;
@@ -1045,18 +1096,22 @@ bool HttpHeaders::parseHeaders(char* ptr, char* end) {
 kj::String HttpHeaders::serializeRequest(
     HttpMethod method, kj::StringPtr url,
     kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
+  requireValidRequestUrl(url);
   return serialize(kj::toCharSequence(method), url, kj::StringPtr("HTTP/1.1"), connectionHeaders);
 }
 
 kj::String HttpHeaders::serializeConnectRequest(
     kj::StringPtr authority,
     kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
+  requireValidRequestUrl(authority);
   return serialize("CONNECT"_kj, authority, kj::StringPtr("HTTP/1.1"), connectionHeaders);
 }
 
 kj::String HttpHeaders::serializeResponse(
     uint statusCode, kj::StringPtr statusText,
     kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
+  requireValidStatusText(statusText);
+
   auto statusCodeStr = kj::toCharSequence(statusCode);
 
   return serialize(kj::StringPtr("HTTP/1.1"), statusCodeStr, statusText, connectionHeaders);
@@ -1406,16 +1461,20 @@ public:
 
       uint64_t value = 0;
       for (char c: text) {
+        uint64_t digit;
         if ('0' <= c && c <= '9') {
-          value = value * 16 + (c - '0');
+          digit = c - '0';
         } else if ('a' <= c && c <= 'f') {
-          value = value * 16 + (c - 'a' + 10);
+          digit = c - 'a' + 10;
         } else if ('A' <= c && c <= 'F') {
-          value = value * 16 + (c - 'A' + 10);
+          digit = c - 'A' + 10;
         } else {
           KJ_FAIL_REQUIRE("invalid HTTP chunk size", text, text.asBytes()) { break; }
           return value;
         }
+        KJ_REQUIRE(value <= (uint64_t(kj::maxValue) >> 4),
+            "HTTP chunk size overflow", text, text.asBytes()) { break; }
+        value = value * 16 + digit;
       }
 
       return value;
@@ -1942,7 +2001,15 @@ kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
       // Body elided.
       kj::Maybe<uint64_t> length;
       KJ_IF_MAYBE(cl, headers.get(HttpHeaderId::CONTENT_LENGTH)) {
-        length = strtoull(cl->cStr(), nullptr, 10);
+        // Validate that the Content-Length is a non-negative integer. Note that strtoull() accepts
+        // leading '-' signs and silently converts negative values to large unsigned values, so we
+        // must explicitly check for a leading digit.
+        char* end;
+        uint64_t parsedValue = strtoull(cl->cStr(), &end, 10);
+        if ((*cl)[0] >= '0' && (*cl)[0] <= '9' && end > cl->begin() && *end == '\0') {
+          length = parsedValue;
+        }
+        // If invalid, we just leave `length` as nullptr, since the body is elided anyway.
       } else if (headers.get(HttpHeaderId::TRANSFER_ENCODING) == nullptr) {
         // HACK: Neither Content-Length nor Transfer-Encoding header in response to HEAD
         //   request. Propagate this fact with a 0 expected body length.
@@ -1991,12 +2058,16 @@ kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
     //   "Content-Length: 5, 5, 5". Hopefully no one actually does that...
     char* end;
     uint64_t length = strtoull(cl->cStr(), &end, 10);
-    if (end > cl->begin() && *end == '\0') {
+    // Note that strtoull() accepts leading '-' signs and silently converts negative values to
+    // large unsigned values, so we must explicitly check for a leading digit.
+    if ((*cl)[0] >= '0' && (*cl)[0] <= '9' && end > cl->begin() && *end == '\0') {
       // #5
       return kj::heap<HttpFixedLengthEntityReader>(*this, length);
     } else {
       // #4 (bad content-length)
-      KJ_FAIL_REQUIRE("invalid Content-Length header value", *cl);
+      KJ_FAIL_REQUIRE("invalid Content-Length header value", *cl) { break; }
+      // To pass the -fno-exceptions test (but KJ-HTTP is really not safe to use in that mode).
+      return kj::heap<HttpNullEntityReader>(*this, uint64_t(0));
     }
   }
 
