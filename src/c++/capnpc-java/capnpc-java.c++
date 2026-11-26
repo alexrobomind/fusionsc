@@ -39,6 +39,7 @@
 #include <unordered_set>
 #include <map>
 #include <set>
+#include <cstdlib>
 #include <kj/main.h>
 #include <algorithm>
 //#include <sys/types.h>
@@ -2540,7 +2541,7 @@ private:
 
   kj::MainBuilder::Validity run() {
 
-    if (::getenv("CAPNP_LITE") != nullptr) {
+    if (std::getenv("CAPNP_LITE") != nullptr) {
       liteMode = true;
     }
 
