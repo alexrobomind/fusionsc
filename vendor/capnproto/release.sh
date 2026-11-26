@@ -68,14 +68,14 @@ build_packages() {
   cd c++
   doit autoreconf -i
   doit ./configure
-  doit make -j6 distcheck
+  doit make -j$(nproc) distcheck
   doit mv capnproto-c++-$VERSION.tar.gz ..
   doit make distclean
 
   # build windows executables
   doit ./configure --host=i686-w64-mingw32 --with-external-capnp \
       --disable-shared CXXFLAGS='-static-libgcc -static-libstdc++'
-  doit make -j6 capnp.exe capnpc-c++.exe capnpc-capnp.exe
+  doit make -j$(nproc) capnp.exe capnpc-c++.exe capnpc-capnp.exe
   doit i686-w64-mingw32-strip capnp.exe capnpc-c++.exe capnpc-capnp.exe
   doit mkdir capnproto-tools-win32-$VERSION
   doit mv capnp.exe capnpc-c++.exe capnpc-capnp.exe capnproto-tools-win32-$VERSION
@@ -152,6 +152,15 @@ case "${1-}:$BRANCH" in
     OLD_MAJOR=$(echo $HEAD_VERSION | cut -d. -f1)
     NEW_VERSION=$(( OLD_MAJOR + 1 )).0-dev
     update_version $HEAD_VERSION $NEW_VERSION "mainline"
+    ;;
+
+  bump-minor:* )
+    echo "Bump minor version number on HEAD."
+    HEAD_VERSION=$(get_version '^[0-9]+[.][0-9]+-dev$')
+    RELEASE_VERSION=${HEAD_VERSION%%-dev}.0
+    declare -a VERSION_ARR=(${RELEASE_VERSION//./ })
+    NEXT_VERSION=${VERSION_ARR[0]}.$((VERSION_ARR[1] + 1))
+    update_version $HEAD_VERSION $NEXT_VERSION-dev "mainline"
     ;;
 
   # ======================================================================================

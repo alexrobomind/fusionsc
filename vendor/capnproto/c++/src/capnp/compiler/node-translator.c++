@@ -2207,6 +2207,11 @@ void ValueTranslator::fillStructValue(DynamicStruct::Builder builder,
                 // the value has unambiguous type.
                 auto result = compileValueInner(value, field->getType());
 
+                if (result.getType() == DynamicValue::UNKNOWN) {
+                  // Error already reported.
+                  break;
+                }
+
                 // Does it match the first field?
                 if (matchesType(value, groupField.getType(), result)) {
                   groupBuilder.adopt(groupField, kj::mv(result));

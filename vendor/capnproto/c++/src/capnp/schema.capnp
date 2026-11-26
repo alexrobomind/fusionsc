@@ -367,8 +367,8 @@ struct Type {
         # This is actually a reference to a type parameter defined within this scope.
 
         scopeId @19 :Id;
-        # ID of the generic type whose parameter we're referencing. This should be a parent of the
-        # current scope.
+        # ID of the generic type whose parameter we're referencing. This is always either the
+        # current scope's type ID or one of its ancestors' IDs.
 
         parameterIndex @20 :UInt16;
         # Index of the parameter within the generic type's parameter list.
@@ -543,7 +543,7 @@ struct CodeGeneratorRequest {
       # (On Zooko's triangle, this is the import's petname according to the importing file.)
     }
     fileSourceInfo @3 :FileSourceInfo;
-    
+
     struct FileSourceInfo {
       identifiers @0 :List(Identifier);
 
