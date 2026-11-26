@@ -1,13 +1,13 @@
+#include "../common.h"
+#include "../magnetics.h"
+#include "../geometry.h"
+#include "../data.h"
+
 #include <fsc/magnetics.capnp.h>
 #include <fsc/devices/w7x.capnp.h>
 #include <fsc/offline.capnp.h>
 
 #include <kj/map.h>
-
-#include "../common.h"
-#include "../magnetics.h"
-#include "../geometry.h"
-#include "../data.h"
 
 
 namespace fsc {

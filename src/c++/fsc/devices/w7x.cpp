@@ -1,7 +1,8 @@
+#include "w7x.h"
+
 #include <kj/compat/http.h>
 #include <capnp/compat/json.h>
 
-#include "w7x.h"
 
 namespace fsc {
 
